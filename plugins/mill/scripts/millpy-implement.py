@@ -362,16 +362,14 @@ def main(argv=None) -> int:
     # Compute gate inputs used by both the finalize and full stages.
     # card_ids: the set of Card numbers declared in the batch file, read verbatim
     # from each "### Card N:" heading using the same heading shape _plan_validate
-    # uses. Card numbers are NOT assumed to be a contiguous 1..card_count range --
+    # uses. Card numbers are NOT assumed to be a contiguous 1..N range --
     # mill-plan numbers cards globally across all batches in a plan, so a later
-    # batch's cards may start at e.g. "Card 7". card_count (the cardinality of
-    # card_ids) is kept for the remaining call sites that only need a count; an
-    # empty card_ids set (docs-only batch) disables the completeness gate downstream.
+    # batch's cards may start at e.g. "Card 7". An empty card_ids set (docs-only
+    # batch) disables the completeness gate downstream.
     _batch_text = batch_file.read_text(encoding="utf-8")
     card_ids: set[int] = {
         int(n) for n in re.findall(r"(?m)^###\s+Card\s+(\d+)\s*:", _batch_text)
     }
-    card_count = len(card_ids)
 
     # parent_branch: resolve non-interactively from status.md; fall back to
     # None on failure (makes the dirty gate a safe no-op rather than crashing).
@@ -414,7 +412,6 @@ def main(argv=None) -> int:
             verify_cmd=verify_cmd,
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_verify_baseline=module_verify_baseline,
-            card_count=card_count,
             card_ids=card_ids,
             task_dir=status_path.parent,
             parent_branch=parent_branch,
@@ -641,7 +638,6 @@ def main(argv=None) -> int:
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
-        card_count=card_count,
         card_ids=card_ids,
         task_dir=status_path.parent,
         parent_branch=parent_branch,

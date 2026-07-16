@@ -935,7 +935,7 @@ def finalize_from_output(
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
-    card_count: int | None = None,
+    card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -962,7 +962,10 @@ def finalize_from_output(
             state for the module-wide gate, forwarded to _run_verify_gates. When
             "pre-existing-failures", the module-wide gate is skipped entirely. Defaults
             to None (run the module-wide gate strictly, as before this parameter existed).
-        card_count: Number of Card headings in the batch; enables the completeness gate.
+        card_ids: The set of Card numbers declared in the batch file; enables
+            the completeness gate. cards_done and already_complete (read from
+            the parsed success envelope, not accepted as parameters here) are
+            compared against this set inside _forward_output.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
         nits_only: When True, writes a nits-fixed marker on success.
@@ -993,7 +996,7 @@ def finalize_from_output(
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
-        card_count=card_count,
+        card_ids=card_ids,
         task_dir=task_dir,
         parent_branch=parent_branch,
         nits_only=nits_only,
@@ -1046,7 +1049,7 @@ def _forward_output(
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
-    card_count: int | None = None,
+    card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -1073,7 +1076,14 @@ def _forward_output(
     When "pre-existing-failures", the module-wide gate is skipped entirely regardless
     of module_wide_verify_cmd. "clean" and the default None both run the module-wide
     gate exactly as before this parameter existed.
-    When card_count is provided, the completeness gate checks that enough commits were made.
+    When card_ids is provided, the completeness gate checks that the declared card_ids are
+    all accounted for -- either by raw content-commit count (when the parsed success envelope's
+    cards_done field is absent or malformed) or by comparing card_ids against a self-reported
+    cards_done set (when present and valid). already_complete: true in the parsed envelope
+    short-circuits the gate entirely on a --resume-incomplete re-verification. Both cards_done
+    and already_complete are read from the parsed success envelope inside this function, not
+    accepted as separate parameters, since they are only ever meaningful alongside a
+    self-reported status: success.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
@@ -1099,6 +1109,13 @@ def _forward_output(
             # Hoisted above _run_verify_gates to avoid a NameError in
             # _reclassify_verify_failure when the gate fires.
             _gate_session_id = session_id or parsed.get("session_id")
+            # cards_done / already_complete: the implementer's own self-report of which
+            # declared card_ids this commit set addresses, and whether a --resume-incomplete
+            # re-verification found every card's requirements already satisfied with no new
+            # commit. Extracted here (before the gate calls) so both _reclassify_verify_failure
+            # and _batch_completeness_stuck see the identical self-reported state.
+            _cards_done = parsed.get("cards_done")
+            _already_complete = bool(parsed.get("already_complete", False))
 
             gate_result = _run_verify_gates(
                 project_root,
@@ -1113,7 +1130,12 @@ def _forward_output(
                 # Reclassify a verify failure that is really a partial-batch stop
                 # (stuck_type:transient) or a no-content stop (stuck_type:logic).
                 gate_result = _reclassify_verify_failure(
-                    gate_result, project_root, start_sha, card_count, _gate_session_id
+                    gate_result,
+                    project_root,
+                    start_sha,
+                    card_ids,
+                    _gate_session_id,
+                    cards_done=_cards_done,
                 )
                 # Add commit_sha only for verify/transient/incomplete results; logic (no-content)
                 # results match the sibling no-content gates that omit commit_sha.
@@ -1171,15 +1193,20 @@ def _forward_output(
 
             # _gate_session_id is already resolved above (hoisted before gate call).
 
-            # Completeness gate: demote to incomplete when fewer commits than cards.
-            # ignore_verify stays False here — on the explicit-success path a passing
-            # verify is conclusive evidence the batch is complete.
+            # Completeness gate: demote to incomplete when the declared card_ids are not
+            # all accounted for (by raw count when cards_done is absent/malformed, or by
+            # set difference against cards_done when present and valid). ignore_verify
+            # stays False here — on the explicit-success path a passing verify is
+            # conclusive evidence the batch is complete. already_complete short-circuits
+            # the gate entirely on a --resume-incomplete re-verification.
             _completeness_result = _batch_completeness_stuck(
                 project_root,
                 start_sha,
-                card_count,
+                card_ids,
                 _gate_session_id,
                 verify_cmd=verify_cmd,
+                cards_done=_cards_done,
+                already_complete=_already_complete,
             )
             if _completeness_result is not None:
                 _attach_commit_sha(_completeness_result, project_root)
@@ -1299,12 +1326,16 @@ def _forward_output(
                                         module_wide_cwd_override=module_wide_cwd_override,
                                     )
                                     if gate_result is not None:
+                                        # No parsed success JSON on this inference path -- there is
+                                        # nothing to self-report from, so cards_done is always None
+                                        # here (the absent-field fallback always applies).
                                         gate_result = _reclassify_verify_failure(
                                             gate_result,
                                             project_root,
                                             start_sha,
-                                            card_count,
+                                            card_ids,
                                             session_id,
+                                            cards_done=None,
                                         )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
@@ -1314,13 +1345,15 @@ def _forward_output(
                                     # ignore_verify=True forces the check even when verify passed --
                                     # on the no-JSON inference path the implementer never reported
                                     # success, so a passing verify does not mean the batch is complete.
+                                    # cards_done=None: no self-report exists on this inference path.
                                     _comp = _batch_completeness_stuck(
                                         project_root,
                                         start_sha,
-                                        card_count,
+                                        card_ids,
                                         session_id,
                                         verify_cmd=verify_cmd,
                                         ignore_verify=True,
+                                        cards_done=None,
                                     )
                                     if _comp is not None:
                                         _attach_commit_sha(_comp, project_root)
@@ -1395,8 +1428,15 @@ def _forward_output(
                         module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
+                        # No parsed success JSON on this inference path -- cards_done is
+                        # always None (the absent-field fallback always applies).
                         gate_result = _reclassify_verify_failure(
-                            gate_result, project_root, start_sha, card_count, session_id
+                            gate_result,
+                            project_root,
+                            start_sha,
+                            card_ids,
+                            session_id,
+                            cards_done=None,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -1406,13 +1446,15 @@ def _forward_output(
                     # ignore_verify=True forces the check even when verify passed --
                     # on the no-JSON inference path the implementer never reported
                     # success, so a passing verify does not mean the batch is complete.
+                    # cards_done=None: no self-report exists on this inference path.
                     _comp = _batch_completeness_stuck(
                         project_root,
                         start_sha,
-                        card_count,
+                        card_ids,
                         session_id,
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
+                        cards_done=None,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
@@ -1487,8 +1529,15 @@ def _forward_output(
                         module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
+                        # No parsed success JSON on this inference path -- cards_done is
+                        # always None (the absent-field fallback always applies).
                         gate_result = _reclassify_verify_failure(
-                            gate_result, project_root, start_sha, card_count, session_id
+                            gate_result,
+                            project_root,
+                            start_sha,
+                            card_ids,
+                            session_id,
+                            cards_done=None,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -1498,13 +1547,15 @@ def _forward_output(
                     # ignore_verify=True forces the check even when verify passed --
                     # on the no-JSON inference path the implementer never reported
                     # success, so a passing verify does not mean the batch is complete.
+                    # cards_done=None: no self-report exists on this inference path.
                     _comp = _batch_completeness_stuck(
                         project_root,
                         start_sha,
-                        card_count,
+                        card_ids,
                         session_id,
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
+                        cards_done=None,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
