@@ -348,10 +348,13 @@ Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <s
 
 Sets the `MILL_PYTHON` environment variable in the global Claude Code settings so every other mill skill can reference `"$MILL_PYTHON"` instead of the full venv path. This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` in its own commands because the variable is not yet active in the current CC session (CC reads `settings.json` at startup). All other mill skills use `"$MILL_PYTHON"`.
 
+This phase also merges the mill subagent's tool surface (`_claude_settings.MILL_SUBAGENT_TOOLS`) into `permissions.allow` in the same file, so a background `mill-implementer`/`mill-reviewer` dispatch doesn't stall on an interactive tool-permission prompt that nothing can answer (#631). Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
+
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 import json, os
 from pathlib import Path
+import sys; sys.path.insert(0, os.environ['CLAUDE_PLUGIN_ROOT'] + '/scripts'); import _claude_settings
 
 venv = Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv'
 mill_python = str(venv / 'Scripts' / 'python.exe') if os.name == 'nt' else str(venv / 'bin' / 'python')
@@ -365,10 +368,13 @@ else:
     env_block['MILL_PYTHON'] = mill_python
     settings_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
     print(f'MILL_PYTHON set: {mill_python}')
+
+_claude_settings.merge_permission_allowlist(settings_path, _claude_settings.MILL_SUBAGENT_TOOLS)
+print(f'Permission allowlist merged: {_claude_settings.MILL_SUBAGENT_TOOLS}')
 "
 ```
 
-Log the result. After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up.`
+Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line and the permission-allowlist merge outcome. After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
 
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
