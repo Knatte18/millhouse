@@ -52,7 +52,9 @@ batches:
     start_sha: 9d793cfe7b27344deca7ebd60572cd1b58339c8b
     commit_sha: f197b07c61944f59a9f6e1f1fd5dbe174231b709
   - name: go-build-tag-retiering-check
-    state: pending
+    state: running
+    implementer_session: 5ed86475-5c9f-4e51-a844-b0017738f438
+    start_sha: 0588a3d8d5ddf11aa3df5bfecd0e91ab7af29b8d
   - name: finalize-timeout-guidance-generalization
     state: pending
 ```
