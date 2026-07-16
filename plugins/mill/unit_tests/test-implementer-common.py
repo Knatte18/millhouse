@@ -17,6 +17,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _implementer_common import (  # noqa: E402
     _forward_output,
     _batch_completeness_stuck,
+    _reclassify_verify_failure,
     _content_commit_count,
     emit_prepare,
     emit_prepare_no_dispatch,
@@ -1232,7 +1233,7 @@ def main() -> int:
             errors += 1
 
     # Case 27: completeness gate (a) -- fewer commits than cards -> stuck/transient
-    # card_count=2 but only 1 commit since start_sha; self-reported success is demoted.
+    # card_ids={1,2} but only 1 commit since start_sha; self-reported success is demoted.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1250,7 +1251,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd=None,
-                card_count=2,
+                card_ids={1, 2},
             )
         )
         try:
@@ -1269,11 +1270,11 @@ def main() -> int:
             print(f"FAIL: case 27a ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27b: completeness gate (b) -- commit count >= card_count -> success preserved
+    # Case 27b: completeness gate (b) -- commit count >= len(card_ids) -> success preserved
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Make exactly 2 content commits since base_sha (matching card_count=2)
+        # Make exactly 2 content commits since base_sha (matching card_ids={1,2})
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
             check=True,
@@ -1291,7 +1292,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd=None,
-                card_count=2,
+                card_ids={1, 2},
             )
         )
         try:
@@ -1300,7 +1301,7 @@ def main() -> int:
                 f"case 27b: expected success, got {data}"
             )
             print(
-                "PASS: case 27b - completeness gate: commit count == card_count -> success preserved"
+                "PASS: case 27b - completeness gate: commit count == len(card_ids) -> success preserved"
             )
         except Exception as exc:
             print(f"FAIL: case 27b ({exc}) captured={captured!r}", file=sys.stderr)
@@ -1415,7 +1416,7 @@ def main() -> int:
             errors += 1
 
     # Case 29: backward compatibility (e) -- all new kwargs omitted -> no demotion
-    # Verifies that existing callers that do not pass card_count/task_dir/parent_branch
+    # Verifies that existing callers that do not pass card_ids/task_dir/parent_branch
     # still get success when the report is valid and HEAD != start_sha.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -1426,7 +1427,7 @@ def main() -> int:
             capture_output=True,
         )
         agent_output = '{"status":"success","commit_sha":"abc","session_id":"s5"}\n'
-        # Call without card_count, task_dir, parent_branch -- all default to None
+        # Call without card_ids, task_dir, parent_branch -- all default to None
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 agent_output,
@@ -1877,7 +1878,7 @@ def main() -> int:
                 agent_output,
                 project_root,
                 start_sha=pre_start_sha,
-                card_count=1,
+                card_ids={1},
                 session_id="test",
             )
         )
@@ -1945,7 +1946,7 @@ def main() -> int:
                 agent_output,
                 project_root,
                 start_sha=pre_start_sha,
-                card_count=1,
+                card_ids={1},
                 session_id="test",
             )
         )
@@ -2015,7 +2016,7 @@ def main() -> int:
                 agent_output,
                 project_root,
                 start_sha=start_sha_retry,
-                card_count=1,
+                card_ids={1},
                 session_id="test",
             )
         )
@@ -2081,12 +2082,12 @@ def main() -> int:
 
     # Case 40 -- Bug #548 (completeness gate disabled when verify_cmd is not None)
     # Calls _batch_completeness_stuck directly with verify_cmd set to a non-None value.
-    # Even though card_count=2 and only one commit was made (which would normally fire),
+    # Even though card_ids={1,2} and only one commit was made (which would normally fire),
     # the gate must return None because verify_cmd is present.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         start_sha_40 = _setup_fixture(project_root)
-        # Make one commit (card_count will be 2, so 1 < 2 would normally fire).
+        # Make one commit (card_ids will be {1,2}, so 1 < 2 would normally fire).
         subprocess.run(
             [
                 "git",
@@ -2104,7 +2105,7 @@ def main() -> int:
             result = _batch_completeness_stuck(
                 project_root,
                 start_sha_40,
-                card_count=2,
+                card_ids={1, 2},
                 session_id="test",
                 verify_cmd="should-not-be-called",
             )
@@ -2141,7 +2142,7 @@ def main() -> int:
             result = _batch_completeness_stuck(
                 project_root,
                 start_sha_41,
-                card_count=2,
+                card_ids={1, 2},
                 session_id="test",
                 verify_cmd=None,
             )
@@ -2166,7 +2167,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         start_sha_42 = _setup_fixture(project_root)
-        # Make exactly two commits since start_sha (card_count=3 so 2 < 3 fires).
+        # Make exactly two commits since start_sha (card_ids={1,2,3} so 2 < 3 fires).
         for msg in ("card-1", "card-2"):
             subprocess.run(
                 [
@@ -2185,7 +2186,7 @@ def main() -> int:
             result = _batch_completeness_stuck(
                 project_root,
                 start_sha_42,
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="test",
             )
             assert result is not None, f"case 42: expected stuck dict, got {result}"
@@ -2207,7 +2208,7 @@ def main() -> int:
             result = _batch_completeness_stuck(
                 project_root,
                 start_sha_43,
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="test",
             )
             assert result is not None, f"case 43: expected stuck dict, got {result}"
@@ -2244,14 +2245,14 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1 done"],
             check=True, capture_output=True,
         )
-        # card_count=3 so content=1 satisfies 0<1<3 -> reclassify to incomplete.
+        # card_ids={1,2,3} so content=1 satisfies 0<1<3 -> reclassify to incomplete.
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 "garbage output with no json",
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 1",
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="test-a",
             )
         )
@@ -2285,7 +2286,7 @@ def main() -> int:
              "-m", "mill-go: start batch test-batch"],
             check=True, capture_output=True,
         )
-        # 3 content commits matching card_count=3 -> content=3>=3 -> no reclassification.
+        # 3 content commits matching card_ids={1,2,3} -> content=3>=3 -> no reclassification.
         for msg in ("card-1", "card-2", "card-3"):
             subprocess.run(
                 ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
@@ -2297,7 +2298,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 1",
-                card_count=3,
+                card_ids={1, 2, 3},
             )
         )
         try:
@@ -2331,7 +2332,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 1",
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="test-c",
             )
         )
@@ -2373,7 +2374,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 0",
-                card_count=3,
+                card_ids={1, 2, 3},
             )
         )
         try:
@@ -2414,7 +2415,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 1",
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="caller-session",
             )
         )
@@ -2449,12 +2450,12 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
             check=True, capture_output=True,
         )
-        # raw range = 2, content = 1 (housekeeping subtracted); card_count=2 -> 1<2 -> stuck.
+        # raw range = 2, content = 1 (housekeeping subtracted); card_ids={1,2} -> 1<2 -> stuck.
         try:
             result = _batch_completeness_stuck(
                 project_root,
                 base_sha,
-                card_count=2,
+                card_ids={1, 2},
                 session_id="test",
             )
             assert result is not None, f"case 49f: expected stuck dict, got {result}"
@@ -2473,7 +2474,7 @@ def main() -> int:
             errors += 1
 
     # Case 50g -- one-card-short with housekeeping commit: content==N-1 now flags incomplete.
-    # Without the housekeeping exclusion, raw_count==N==card_count would NOT fire the gate.
+    # Without the housekeeping exclusion, raw_count==N==len(card_ids) would NOT fire the gate.
     # With exclusion, content==N-1<N fires it -> stuck_type:incomplete, commits_made=N-1.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -2483,7 +2484,7 @@ def main() -> int:
              "-m", "mill-go: start batch test-batch"],
             check=True, capture_output=True,
         )
-        # N=3, N-1=2 content commits; raw_count = 3 == card_count, content = 2 < card_count.
+        # N=3, N-1=2 content commits; raw_count = 3 == len(card_ids), content = 2 < len(card_ids).
         for msg in ("card-1", "card-2"):
             subprocess.run(
                 ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
@@ -2493,7 +2494,7 @@ def main() -> int:
             result = _batch_completeness_stuck(
                 project_root,
                 base_sha,
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="test",
             )
             assert result is not None, (
@@ -2514,7 +2515,7 @@ def main() -> int:
             errors += 1
 
     # Case 51: #574 regression -- no-JSON inference path, verify_cmd set and PASSES,
-    # content-commits < card_count -> stuck/incomplete with commits_made and commit_sha.
+    # content-commits < len(card_ids) -> stuck/incomplete with commits_made and commit_sha.
     # Before the fix, _batch_completeness_stuck was disabled when verify_cmd was set,
     # so a partial batch on the no-JSON path would slip through as inferred success.
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -2526,7 +2527,7 @@ def main() -> int:
              "-m", "mill-go: start batch my-batch"],
             check=True, capture_output=True,
         )
-        # One content commit (card_count=3, so content=1 < 3 -> partial batch).
+        # One content commit (card_ids={1,2,3}, so content=1 < 3 -> partial batch).
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
             check=True, capture_output=True,
@@ -2541,7 +2542,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 0",
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="s51",
             )
         )
@@ -2566,13 +2567,13 @@ def main() -> int:
             print(f"FAIL: case 51 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 52: explicit status:success JSON + verify passes + content < card_count -> success
+    # Case 52: explicit status:success JSON + verify passes + content < len(card_ids) -> success
     # preserved (not false incomplete). The explicit-success completeness gate is disabled
     # when verify_cmd is set (ignore_verify stays False on that path).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # One commit since base_sha; card_count=2 (fewer commits than cards), but verify passes.
+        # One commit since base_sha; card_ids={1,2} (fewer commits than cards), but verify passes.
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
             check=True, capture_output=True,
@@ -2586,7 +2587,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 0",
-                card_count=2,
+                card_ids={1, 2},
                 session_id="s52",
             )
         )
@@ -2699,7 +2700,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Housekeeping commit + one content commit -> content=1, card_count=3 -> partial.
+        # Housekeeping commit + one content commit -> content=1, card_ids={1,2,3} -> partial.
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty",
              "-m", "mill-go: start batch test-batch"],
@@ -2722,7 +2723,7 @@ def main() -> int:
                 project_root,
                 start_sha=base_sha,
                 verify_cmd="exit 1",
-                card_count=3,
+                card_ids={1, 2, 3},
                 session_id="s55",
             )
         )
@@ -3219,6 +3220,329 @@ def main() -> int:
             print("PASS: case 64 - emit_prepare threads nits_only through envelope")
         except Exception as exc:
             print(f"FAIL: case 64 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 65a -- cards_done covers all card_ids despite content < len(card_ids) -> no-stuck.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Only 1 content commit even though 3 cards are declared -- would fail the old
+        # raw-count heuristic, but cards_done self-reports all three as done (e.g. two
+        # cards were folded into this single commit per the "one combined commit" rule).
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "cards 1-3 combined"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1, 2, 3],
+            )
+            assert result is None, (
+                f"case 65a: expected None (cards_done covers all declared cards), got {result}"
+            )
+            print(
+                "PASS: case 65a - cards_done covers all card_ids despite fewer commits"
+                " than cards -> no-stuck"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65b -- cards_done present but missing entries from card_ids -> stuck/incomplete
+    # with the missing card IDs named in the reason.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1,2"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1, 2],
+            )
+            assert result is not None, f"case 65b: expected stuck dict, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 65b: expected incomplete, got {result}"
+            )
+            assert "3" in result.get("reason", ""), (
+                f"case 65b: expected missing card 3 named in reason, got {result}"
+            )
+            print(
+                "PASS: case 65b - cards_done missing declared card -> stuck/incomplete"
+                " with missing card named"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65c -- cards_done absent (None) with a batch that would pass the old count
+    # check -> no-stuck (absent-field fallback, passing case).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        for msg in ("card-1", "card-2"):
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", msg],
+                check=True, capture_output=True,
+            )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2},
+                session_id="test",
+                cards_done=None,
+            )
+            assert result is None, (
+                f"case 65c: expected None (2 commits >= 2 cards, old count check passes), got {result}"
+            )
+            print(
+                "PASS: case 65c - cards_done absent, commit count satisfies old check"
+                " -> no-stuck (fallback)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65c ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65d -- cards_done absent with a batch that would fail the old count check
+    # -> stuck/incomplete (fallback path, failing case).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=None,
+            )
+            assert result is not None, f"case 65d: expected stuck dict, got {result}"
+            assert result["stuck_type"] == "incomplete", (
+                f"case 65d: expected incomplete, got {result}"
+            )
+            print(
+                "PASS: case 65d - cards_done absent, commit count fails old check"
+                " -> stuck/incomplete (fallback)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65d ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65e -- cards_done as JSON string card numbers (e.g. ["7","8"]) matching
+    # integer card_ids (e.g. {7,8}) -> coerces and passes.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Only 1 commit for 2 declared cards -- would fail the raw-count check, but the
+        # string-coerced cards_done confirms both are done.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "cards 7,8 combined"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={7, 8},
+                session_id="test",
+                cards_done=["7", "8"],
+            )
+            assert result is None, (
+                f"case 65e: expected None (string card numbers coerce and match), got {result}"
+            )
+            print(
+                "PASS: case 65e - cards_done as JSON string numbers coerces to int"
+                " and matches card_ids -> no-stuck"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65e ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65f -- cards_done with one malformed non-numeric entry -> falls back to the
+    # count check rather than crashing.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-7"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={7, 8},
+                session_id="test",
+                cards_done=["7", "abc"],
+            )
+            assert result is not None, (
+                f"case 65f: expected stuck dict (fallback to count check: 1<2), got {result}"
+            )
+            assert result["stuck_type"] == "incomplete", (
+                f"case 65f: expected incomplete, got {result}"
+            )
+            print(
+                "PASS: case 65f - cards_done with malformed entry falls back to count"
+                " check, not a crash"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65f ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65g -- verify_cmd set and ignore_verify=False -> _batch_completeness_stuck
+    # still returns None regardless of cards_done/card_ids (verify-present short-circuit
+    # preserved).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                verify_cmd="should-not-be-called",
+                cards_done=[1],
+            )
+            assert result is None, (
+                f"case 65g: expected None (verify-present short-circuit), got {result}"
+            )
+            print(
+                "PASS: case 65g - verify_cmd present -> gate disabled regardless of"
+                " cards_done/card_ids"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65g ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65h -- already_complete=True short-circuits the gate to pass regardless of
+    # every other argument.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # Deliberately contradictory inputs: only 1 commit for 3 cards, cards_done
+        # missing entries -- would fire the gate on every other check.
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
+            check=True, capture_output=True,
+        )
+        try:
+            result = _batch_completeness_stuck(
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1],
+                already_complete=True,
+            )
+            assert result is None, (
+                f"case 65h: expected None (already_complete short-circuits), got {result}"
+            )
+            print(
+                "PASS: case 65h - already_complete=True short-circuits the gate"
+                " regardless of every other argument"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65h ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65i -- _reclassify_verify_failure's content==0 branch is unaffected by any
+    # cards_done value; still reclassifies to stuck_type:logic "no content commit".
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        # No content commits at all since base_sha.
+        verify_stuck = {"status": "stuck", "stuck_type": "verify", "reason": "tests failed"}
+        try:
+            result = _reclassify_verify_failure(
+                verify_stuck,
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1, 2, 3],
+            )
+            assert result["status"] == "stuck", f"case 65i: expected stuck, got {result}"
+            assert result["stuck_type"] == "logic", (
+                f"case 65i: expected logic (zero content, unaffected by cards_done), got {result}"
+            )
+            assert "no content commit" in result.get("reason", ""), (
+                f"case 65i: expected 'no content commit' in reason, got {result}"
+            )
+            print(
+                "PASS: case 65i - _reclassify_verify_failure content==0 branch"
+                " unaffected by cards_done -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65i ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 65j -- _reclassify_verify_failure mirrors cases (a) and (b) above on its own
+    # 0<content<len(card_ids)-equivalent trigger path.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "cards 1-3 combined"],
+            check=True, capture_output=True,
+        )
+        verify_stuck = {"status": "stuck", "stuck_type": "verify", "reason": "tests failed"}
+        try:
+            # Mirrors (a): cards_done covers all declared cards -> verify_stuck returned
+            # unchanged (not reclassified to incomplete).
+            result_a = _reclassify_verify_failure(
+                verify_stuck,
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1, 2, 3],
+            )
+            assert result_a is verify_stuck, (
+                f"case 65j-a: expected verify_stuck unchanged, got {result_a}"
+            )
+            # Mirrors (b): cards_done missing an entry -> reclassified to incomplete.
+            result_b = _reclassify_verify_failure(
+                verify_stuck,
+                project_root,
+                base_sha,
+                card_ids={1, 2, 3},
+                session_id="test",
+                cards_done=[1, 2],
+            )
+            assert result_b["status"] == "stuck", (
+                f"case 65j-b: expected stuck, got {result_b}"
+            )
+            assert result_b["stuck_type"] == "incomplete", (
+                f"case 65j-b: expected incomplete, got {result_b}"
+            )
+            assert "3" in result_b.get("reason", ""), (
+                f"case 65j-b: expected missing card 3 named in reason, got {result_b}"
+            )
+            print(
+                "PASS: case 65j - _reclassify_verify_failure mirrors (a)/(b) on its"
+                " own trigger path"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 65j ({exc})", file=sys.stderr)
             errors += 1
 
     if errors:
