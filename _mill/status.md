@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-orchestration-crash-hardening
 branch: hanf/mill-orchestration-crash-hardening
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-07-16T11:25:37Z'
 approved-psmux-cleanup-crash  '2026-07-16T11:31:20Z'
 approved-wiki-daemon-json-noise  '2026-07-16T11:34:45Z'
 holistic-reviewing  '2026-07-16T11:35:11Z'
+holistic-approved  '2026-07-16T11:37:07Z'
 ```
 
 ## Batches
