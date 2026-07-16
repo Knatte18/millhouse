@@ -841,6 +841,244 @@ def _run_verify_gates(
     return None
 
 
+# Recognized GOOS/GOARCH values for the removed-tag qualification check in
+# _go_build_tag_retiering_stuck. A small fixed set covering the common values,
+# not Go's exhaustive list -- see that function's docstring for why an
+# unrecognized-but-actually-GOOS value degrades safely rather than needing an
+# exhaustive list here.
+_GO_BUILD_TAG_GOOS = {"linux", "darwin", "windows", "freebsd"}
+_GO_BUILD_TAG_GOARCH = {"amd64", "arm64", "386"}
+
+_GO_BUILD_TAG_ADD_PREFIX = "+//go:build "
+_GO_BUILD_TAG_REMOVE_PREFIX = "-//go:build "
+
+
+def _parse_go_build_tag_diff(diff_text: str) -> dict[str, dict[str, list[str]]]:
+    """
+    Parse `git diff --unified=0 ... -- '*.go'` output into per-file //go:build deltas.
+
+    Returns a dict mapping each changed .go file's path (as reported by the diff's
+    "diff --git a/<path> b/<path>" header, using the post-change b/ path) to
+    {"added": [...], "removed": [...]}, where each list holds the raw
+    "//go:build ..." line content (with the leading +/- diff marker stripped) for
+    every modern-syntax build-constraint line touched in that file's hunks. Legacy
+    "// +build" lines are ignored -- out of scope for this gate. Diff lines that
+    are not build-constraint lines are ignored (unified=0 only shows changed
+    lines, so anything else touched by the same hunk is simply not tracked here).
+
+    Args:
+        diff_text: stdout of `git diff --unified=0 <range> -- '*.go'`.
+
+    Returns:
+        A dict as described above; empty when no build-constraint lines changed.
+    """
+    files: dict[str, dict[str, list[str]]] = {}
+    current_file: str | None = None
+    diff_git_re = re.compile(r"^diff --git a/(.*) b/(.*)$")
+    for line in diff_text.splitlines():
+        match = diff_git_re.match(line)
+        if match:
+            current_file = match.group(2)
+            continue
+        if current_file is None:
+            continue
+        if line.startswith(_GO_BUILD_TAG_ADD_PREFIX):
+            files.setdefault(current_file, {"added": [], "removed": []})
+            files[current_file]["added"].append(line[1:])
+        elif line.startswith(_GO_BUILD_TAG_REMOVE_PREFIX):
+            files.setdefault(current_file, {"added": [], "removed": []})
+            files[current_file]["removed"].append(line[1:])
+    return files
+
+
+def _go_build_tag_dir(file_path: str) -> str:
+    """
+    Return the POSIX-style parent directory of a diff-reported .go file path.
+
+    Go's one-package-per-directory convention means a changed file's "affected
+    package" is simply its immediate containing directory -- no import-graph
+    resolution needed. Returns "." for a file at the repo root.
+    """
+    posix_path = file_path.replace("\\", "/")
+    return posix_path.rsplit("/", 1)[0] if "/" in posix_path else "."
+
+
+def _go_build_pattern(dir_str: str) -> str:
+    """Build the `go build` package pattern for a directory ("./..." at the repo root)."""
+    return "./..." if dir_str == "." else f"./{dir_str}/..."
+
+
+def _is_qualifying_custom_tag(tag: str) -> bool:
+    """
+    Return True when a removed //go:build constraint is safe to translate to `-tags`.
+
+    Qualifies only when the constraint is a single bare identifier -- no boolean
+    operators (&&, ||, !) or parentheses, and no internal whitespace -- and is not
+    a recognized GOOS/GOARCH value. A compound/negated constraint risks compiling
+    under the wrong tag set if naively translated; an unrecognized-but-actually-
+    GOOS value degrades safely to "run it as a custom tag" (a false-custom-tag
+    build with an invalid -tags value fails closed as stuck/verify, the safe
+    direction).
+
+    Args:
+        tag: The removed //go:build line's content, with the "//go:build " prefix
+            already stripped and the remainder trimmed.
+
+    Returns:
+        True when the tag is a single, non-GOOS/GOARCH bare identifier.
+    """
+    if any(op in tag for op in ("&&", "||", "!", "(", ")")):
+        return False
+    if len(tag.split()) != 1:
+        return False
+    return tag not in _GO_BUILD_TAG_GOOS and tag not in _GO_BUILD_TAG_GOARCH
+
+
+def _go_build_tag_stuck_dict(
+    dir_str: str,
+    direction: str,
+    build_result: subprocess.CompletedProcess,
+    session_id: str | None,
+) -> dict:
+    """Build the stuck/verify dict for a failed go-build-tag-retiering compile check."""
+    output = ((build_result.stdout or "") + (build_result.stderr or "")).strip()
+    tail = output[-2000:] if len(output) > 2000 else output
+    return {
+        "status": "stuck",
+        "stuck_type": "verify",
+        "reason": (
+            f"go build-tag retiering check failed: {dir_str}"
+            f" ({direction}-tag transition): {tail}"
+        ),
+        "session_id": session_id or "unknown",
+    }
+
+
+def _go_build_tag_retiering_stuck(
+    project_root: Path,
+    start_sha: str | None,
+    session_id: str | None,
+) -> dict | None:
+    """
+    Detect and compile-check Tier-1 (default-build) membership transitions caused by
+    added or removed `//go:build` constraints in this batch's .go file changes.
+
+    Fixes #642: a batch that adds or removes a `//go:build` constraint on a .go file
+    can silently move that file into or out of the default (untagged) build without
+    any existing gate noticing -- the batch's own verify command was written before
+    the transition and has no reason to re-check the opposite build membership. This
+    gate diffs `*.go` files since start_sha, classifies each changed file's
+    `//go:build` line delta as an added-tag transition (file exits the default
+    build), a removed-tag transition (file enters the default build), or a
+    value-only edit (no membership change -- skipped), and runs the matching
+    `go build` compile check for each affected package directory.
+
+    Algorithm:
+      1. start_sha is None: nothing to diff against -- return None.
+      2. `git diff --unified=0 start_sha..HEAD -- '*.go'`; a failed subprocess or
+         empty output -- return None.
+      3. No '.go' files touched at all (no build-constraint lines parsed) -- return
+         None. This makes the gate a safe no-op for non-Go batches/repos with no
+         language-detection config needed.
+      4. Parse the diff for `+//go:build ` / `-//go:build ` lines per file (modern
+         syntax only; legacy `// +build` is out of scope). A `//go:build` line both
+         added and removed in the same file at different values is a value-only
+         edit, not a transition -- skipped, not treated as an added+removed pair.
+      5. Exactly one added and zero removed -> added-tag transition. Exactly one
+         removed and zero added -> removed-tag transition. Anything else
+         (including the value-only case) is not a transition -- skipped.
+      6. Affected package = the transitioned file's immediate directory. Multiple
+         transitioned files in the same directory dedupe to a single compile check.
+      7. Added-tag directories: `go build ./<dir>/...`.
+      8. Removed-tag directories: the removed constraint qualifies for a compile
+         check only when it is a single bare identifier that is not a recognized
+         GOOS/GOARCH value (see _is_qualifying_custom_tag); qualifying directories
+         run `go build -tags <tag> ./<dir>/...`. Non-qualifying (compound/negated/
+         GOOS/GOARCH) constraints are logged (ASCII-only, stderr) and skipped.
+      9. Any compile check exiting non-zero -- return a stuck_type="verify" dict
+         naming the directory, transition direction, and captured output tail.
+      10. All compile checks pass (or none were needed) -- return None.
+
+    Never raises to its caller: any subprocess/parsing failure is caught and
+    degrades to None (nothing to report), per this plan's "never raise from a new
+    gate/check function" Shared Decision. A deliberate compile-check failure (step
+    9) is a normal return, not an exception, so it is unaffected by that guard.
+
+    Args:
+        project_root: Path to the worktree root used as cwd for git/go subprocesses.
+        start_sha: The SHA recorded at batch start; None disables the gate.
+        session_id: Session identifier included in the returned stuck dict.
+
+    Returns:
+        A stuck dict with stuck_type="verify" on a compile-check failure, or None
+        (gate disabled, no transition detected, or all compile checks passed).
+    """
+    if start_sha is None:
+        return None
+
+    try:
+        diff_result = _subprocess_util.run(
+            ["git", "diff", "--unified=0", f"{start_sha}..HEAD", "--", "*.go"],
+            cwd=project_root,
+        )
+        if diff_result.returncode != 0 or not diff_result.stdout.strip():
+            return None
+
+        files_info = _parse_go_build_tag_diff(diff_result.stdout)
+        if not files_info:
+            return None
+
+        added_dirs: set[str] = set()
+        removed_dirs: dict[str, dict] = {}
+        for file_path, lines in files_info.items():
+            added = lines["added"]
+            removed = lines["removed"]
+            if len(added) == 1 and len(removed) == 0:
+                added_dirs.add(_go_build_tag_dir(file_path))
+            elif len(removed) == 1 and len(added) == 0:
+                dir_str = _go_build_tag_dir(file_path)
+                tag = removed[0][len("//go:build "):].strip()
+                entry = removed_dirs.setdefault(dir_str, {"tag": tag, "files": []})
+                entry["files"].append(file_path)
+            # else: value-only edit (or an otherwise-ambiguous delta) -- not a
+            # membership transition, skip.
+
+        for dir_str in sorted(added_dirs):
+            build_result = _subprocess_util.run(
+                ["go", "build", _go_build_pattern(dir_str)],
+                cwd=project_root,
+            )
+            if build_result.returncode != 0:
+                return _go_build_tag_stuck_dict(
+                    dir_str, "added", build_result, session_id
+                )
+
+        for dir_str, entry in sorted(removed_dirs.items()):
+            tag = entry["tag"]
+            if not _is_qualifying_custom_tag(tag):
+                print(
+                    f"[go-build-tag-retiering] skip: {', '.join(entry['files'])}"
+                    f" removed a //go:build constraint not safe to translate"
+                    f" to -tags (compound, negated, or GOOS/GOARCH): {tag}",
+                    file=sys.stderr,
+                )
+                continue
+            build_result = _subprocess_util.run(
+                ["go", "build", "-tags", tag, _go_build_pattern(dir_str)],
+                cwd=project_root,
+            )
+            if build_result.returncode != 0:
+                return _go_build_tag_stuck_dict(
+                    dir_str, "removed", build_result, session_id
+                )
+
+        return None
+    except Exception:
+        # Never raise to the caller -- any git/subprocess/parsing failure
+        # degrades to "nothing to report" per this batch's Shared Decision.
+        return None
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -1154,6 +1392,19 @@ def _forward_output(
                 print(json.dumps(gate_result))
                 return 0
 
+            # Go build-tag retiering gate: catches a Tier-1 (default-build) compile
+            # break introduced by an added/removed //go:build constraint (#642).
+            # Runs after the verify gate passes and before the no-content-commit
+            # and completeness checks, mirroring how the verify gate's own failure
+            # already short-circuits ahead of both.
+            _retiering_result = _go_build_tag_retiering_stuck(
+                project_root, start_sha, _gate_session_id
+            )
+            if _retiering_result is not None:
+                _attach_commit_sha(_retiering_result, project_root)
+                print(json.dumps(_retiering_result))
+                return 0
+
             # Check for no-content-commit success: reject if HEAD == start_sha or if
             # the only commit since start_sha is the batch-start housekeeping commit.
             # Skipped entirely when nits_only is True: a --nits-only pass that
@@ -1346,6 +1597,16 @@ def _forward_output(
                                             gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
                                         return 0
+                                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                                    # path's comment for rationale. This no-JSON inference path must
+                                    # match that same coverage.
+                                    _retiering_result = _go_build_tag_retiering_stuck(
+                                        project_root, start_sha, session_id
+                                    )
+                                    if _retiering_result is not None:
+                                        _attach_commit_sha(_retiering_result, project_root)
+                                        print(json.dumps(_retiering_result))
+                                        return 0
                                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                                     # ignore_verify=True forces the check even when verify passed --
                                     # on the no-JSON inference path the implementer never reported
@@ -1447,6 +1708,16 @@ def _forward_output(
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
+                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                    # path's comment for rationale. This no-JSON inference path must
+                    # match that same coverage.
+                    _retiering_result = _go_build_tag_retiering_stuck(
+                        project_root, start_sha, session_id
+                    )
+                    if _retiering_result is not None:
+                        _attach_commit_sha(_retiering_result, project_root)
+                        print(json.dumps(_retiering_result))
+                        return 0
                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                     # ignore_verify=True forces the check even when verify passed --
                     # on the no-JSON inference path the implementer never reported
@@ -1547,6 +1818,16 @@ def _forward_output(
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
+                        return 0
+                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                    # path's comment for rationale. This no-JSON inference path must
+                    # match that same coverage.
+                    _retiering_result = _go_build_tag_retiering_stuck(
+                        project_root, start_sha, session_id
+                    )
+                    if _retiering_result is not None:
+                        _attach_commit_sha(_retiering_result, project_root)
+                        print(json.dumps(_retiering_result))
                         return 0
                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                     # ignore_verify=True forces the check even when verify passed --
