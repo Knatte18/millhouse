@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-16T13:19:13Z'
+discussed  '2026-07-16T13:50:03Z'
 ```
