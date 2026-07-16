@@ -87,12 +87,18 @@ Decisions).
   `cfg = _config.load_config(_paths.resolve_hub_path(), git_root)`, then
   `if _agent_dispatch.resolve_dispatch_mode(cfg) != "psmux": return None`.
   `_agent_dispatch` is already imported at module level (line 42) — reference it directly, do
-  not re-import it locally. Wrap this whole new block in `except Exception: pass` so that on
-  any resolution failure (missing config, cwd outside a git worktree, etc.) execution falls
-  through to the existing psmux-cleanup logic below rather than raising or returning — this is
-  the deliberate inverse of `_get_via_psmux_flag`'s "return False on any error" contract:
-  `cleanup_session` must never silently skip cleanup just because dispatch-mode resolution
-  itself failed. Leave the existing `psmux_name = f"mill-{session_id[:12]}"` /
+  not re-import it locally. Wrap this whole new block in `except (Exception, SystemExit):
+  pass` — NOT bare `except Exception`, since `_paths.resolve_git_root()` raises `SystemExit`
+  (`_paths.py:130`, e.g. when cwd is outside a git worktree — the exact "resolution failure"
+  scenario this gate must survive) and `SystemExit` subclasses `BaseException`, not
+  `Exception`, so a bare `except Exception` would let it propagate uncaught. Mirror
+  `_get_via_psmux_flag`'s own `except (Exception, SystemExit): return False` (`_llm_claude.py`
+  ~line 114) exactly, except this gate falls through instead of returning. On any resolution
+  failure (missing config, cwd outside a git worktree, etc.) execution falls through to the
+  existing psmux-cleanup logic below rather than raising or returning — this is the deliberate
+  inverse of `_get_via_psmux_flag`'s "return False on any error" contract: `cleanup_session`
+  must never silently skip cleanup just because dispatch-mode resolution itself failed. Leave
+  the existing `psmux_name = f"mill-{session_id[:12]}"` /
   `existing = _psmux.list_sessions()` / `if psmux_name in existing: ...` /
   `except _psmux.PsmuxError: pass` block below completely unchanged — this card only adds the
   new gate above it.
