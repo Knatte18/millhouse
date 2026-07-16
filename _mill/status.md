@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-implement-prepare-reliability
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-07-16T13:57:34Z'
 plan-fix-r1  '2026-07-16T14:09:43Z'
 planned  '2026-07-16T14:10:00Z'
 implementing  '2026-07-16T14:21:20Z'
+approved-implement-prepare-reliability  '2026-07-16T14:28:37Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-07-16T14:21:20Z'
 ```yaml
 batches:
   - name: implement-prepare-reliability
-    state: running
+    state: approved
     implementer_session: b551b4e6-fdb1-43c3-8fcc-d770f42faa89
     start_sha: 5622285dad2cd7c65d42a1c811f8cf08a0c8570e
+    commit_sha: 22be968d83d6334e2aacd8c8e31dc7be753f3e61
   - name: permission-allowlist
     state: pending
   - name: effort-tier-implementer
