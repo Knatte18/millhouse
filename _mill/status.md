@@ -32,7 +32,9 @@ implementing  '2026-07-16T14:06:04Z'
 ```yaml
 batches:
   - name: fixer-tier-warning
-    state: pending
+    state: running
+    implementer_session: 1cef1610-997f-49bc-a391-11c0b3605145
+    start_sha: 47fe1b2e1057585a3074439be3cb7c076f12ec82
   - name: cleanliness-nested-hub-revert
     state: pending
   - name: golang-build-gopath-fallback
