@@ -3,7 +3,7 @@
 ```yaml
 task: Batch verify/baseline/completeness gates produce false positives or time out
 slug: mill-go-batch-verify-baseline-reliability
-approved: false
+approved: true
 started: 20260716-113649
 parent: hanf/linux-port-more
 root: ""
