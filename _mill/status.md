@@ -41,7 +41,9 @@ batches:
     start_sha: cafc5934b2b7bc326b971c07c4db23478b1ecec8
     commit_sha: 2a844bc7ca21882868af38dfa1bd10eee79f027f
   - name: merge-slug-check-and-pathspec
-    state: pending
+    state: running
+    implementer_session: 416a507b-e510-4470-b7d0-fce7592cd8d8
+    start_sha: 95e583adfc3bce2ac75c73591ca8b4d1058c9346
   - name: integration-test-coverage
     state: pending
 ```
