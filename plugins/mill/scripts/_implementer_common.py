@@ -169,54 +169,140 @@ def _reclassify_verify_failure(
     return verify_stuck
 
 
+def _cards_incomplete_reason(
+    card_ids: set[int],
+    cards_done,
+    content: int,
+) -> str | None:
+    """
+    Decide whether a batch is incomplete, sharing the identical rule between
+    _batch_completeness_stuck and _reclassify_verify_failure.
+
+    Two independent bases of evidence are considered, in order:
+      1. Absent or malformed cards_done: fall back to the pre-#660 heuristic --
+         compare the raw content-commit count against len(card_ids). This is the
+         fail-open path for implementer sessions that never populate cards_done
+         (old sessions, non-compliant models) -- behaves identically to the
+         count-only gate this function replaces.
+      2. Present and validly coercible cards_done: compare the declared card_ids
+         against the implementer's self-reported set via set difference. This is
+         what lets a batch that legitimately combined multiple cards into one
+         commit (fewer commits than cards, per the brief's "one combined commit"
+         allowance) still be recognized as complete -- the raw count check alone
+         cannot distinguish that from a genuinely stopped-early batch.
+
+    Args:
+        card_ids: The set of Card numbers declared in the batch file (read
+            verbatim from "### Card N:" headings, not assumed contiguous).
+        cards_done: The implementer's self-reported cards_done value straight
+            from parsed JSON -- may be None, a list of ints, a list of numeric
+            strings, or malformed (any type at all); this function is
+            responsible for validating and coercing it.
+        content: The content-commit count since start_sha (excluding the
+            batch-start housekeeping commit).
+
+    Returns:
+        The "batch incomplete: ..." reason string when incomplete, or None when
+        the batch is judged complete.
+    """
+
+    def _count_only_reason() -> str | None:
+        # Raw commit-count heuristic: cannot see which specific cards were
+        # combined, so it only knows "fewer commits than declared cards".
+        if content < len(card_ids):
+            return (
+                f"batch incomplete: {content} content commit(s) since start but"
+                f" {len(card_ids)} card(s) in batch -- implementer stopped before finishing all cards"
+            )
+        return None
+
+    if cards_done is None:
+        return _count_only_reason()
+
+    # Implementers may legitimately emit JSON string card numbers (e.g. ["7", "8"])
+    # rather than integers; coerce before comparing. A malformed entry means the
+    # self-report is untrusted, not partially trusted -- fall back exactly as if
+    # cards_done had been absent.
+    try:
+        coerced = {int(x) for x in cards_done}
+    except (ValueError, TypeError):
+        return _count_only_reason()
+
+    missing = card_ids - coerced
+    if missing:
+        return (
+            f"batch incomplete: cards {sorted(missing)} not reported done"
+            f" (cards_done={sorted(coerced)}, declared={sorted(card_ids)})"
+        )
+    return None
+
+
 def _batch_completeness_stuck(
     project_root: Path,
     start_sha: str | None,
-    card_count: int | None,
+    card_ids: set[int] | None,
     session_id: str | None,
     *,
     verify_cmd: str | None = None,
     ignore_verify: bool = False,
+    cards_done=None,
+    already_complete: bool = False,
 ) -> dict | None:
     """
-    Check whether enough commits exist since start_sha for the declared card_count.
+    Check whether the implementer's commits/self-report satisfy the declared card_ids.
 
-    Returns None (gate disabled) when verify_cmd is not None and ignore_verify is
-    False — a passing verify command is conclusive evidence of batch completeness on
-    the explicit-success path, so the heuristic commit-count check is unnecessary.
-    Pass ignore_verify=True on the no-JSON inference paths to force the completeness
-    check even when a verify command is present (the implementer never reported
-    success, so a passing verify command does not make the batch complete).
+    Returns None (gate disabled/satisfied) in any of these cases, checked in order:
+      1. already_complete is True: the resume-idempotent-confirmation backstop --
+         an implementer re-dispatched via --resume-incomplete that independently
+         re-verifies every card is already satisfied (and makes no new commit)
+         reports this explicitly, bypassing every check below.
+      2. verify_cmd is not None and ignore_verify is False: a passing verify
+         command is conclusive evidence of batch completeness on the
+         explicit-success path, so the heuristic checks below are unnecessary.
+         Pass ignore_verify=True on the no-JSON inference paths to force the
+         completeness check even when a verify command is present (the
+         implementer never reported success, so a passing verify command does
+         not make the batch complete).
+      3. start_sha is None, card_ids is None, or card_ids is empty: the gate has
+         nothing to check against (e.g. a docs-only batch with zero cards).
 
-    Also returns None when start_sha is None, card_count is None, or card_count <= 0.
-
-    Otherwise counts commits via `git rev-list --count start_sha..HEAD`. If the
-    subprocess fails or returns a non-numeric string, returns None rather than
-    crashing (callers such as test-millpy-implement.py mock _subprocess_util.run
-    to return non-numeric strings for all git calls). Only when a numeric count
-    is obtained and count < card_count is a stuck dict returned; otherwise returns None.
+    Otherwise counts content commits via _content_commit_count and delegates the
+    incomplete-or-not decision to _cards_incomplete_reason (shared with
+    _reclassify_verify_failure): an absent or malformed cards_done falls back to
+    comparing the raw commit count against len(card_ids); a present, validly
+    coercible cards_done instead compares card_ids against the self-reported set.
 
     Args:
         project_root: Path to the worktree root.
         start_sha: The SHA recorded at batch start; None disables the gate.
-        card_count: Number of Card headings in the batch file; None or 0 disables the gate.
+        card_ids: The set of Card numbers declared in the batch file; None or
+            empty disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
         verify_cmd: When not None and ignore_verify is False, the gate is disabled
             (verify is conclusive on the explicit-success path).
         ignore_verify: When True, run the check even when verify_cmd is not None.
             Used on the no-JSON inference paths where a partial batch is not made
             complete just because verify passes. Default False.
+        cards_done: The implementer's self-reported list of card numbers this
+            commit set addresses. None (the default) uses the absent-field
+            fallback so old/non-compliant implementer sessions never regress.
+        already_complete: When True, short-circuits the gate to "complete"
+            regardless of every other argument -- the resume backstop.
 
     Returns:
         A stuck dict with stuck_type="incomplete" and commits_made when incomplete, or None otherwise.
     """
+    # already_complete short-circuits every other check -- see docstring point 1.
+    if already_complete is True:
+        return None
+
     # When a verify command is present and we are NOT forcing the check, a passing
     # verify is conclusive on the explicit-success path; skip the heuristic gate.
     if verify_cmd is not None and not ignore_verify:
         return None
 
-    # Gate is a no-op when any required input is absent or card_count is zero/negative.
-    if start_sha is None or card_count is None or card_count <= 0:
+    # Gate is a no-op when any required input is absent or card_ids is empty.
+    if start_sha is None or card_ids is None or len(card_ids) <= 0:
         return None
 
     # Count content commits (excluding the start-batch housekeeping commit) since start_sha.
@@ -227,18 +313,17 @@ def _batch_completeness_stuck(
     if content is None:
         return None
 
-    if content < card_count:
-        return {
-            "status": "stuck",
-            "stuck_type": "incomplete",
-            "reason": (
-                f"batch incomplete: {content} content commit(s) since start but"
-                f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
-            ),
-            "session_id": session_id or "unknown",
-            "commits_made": content,
-        }
-    return None
+    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    if reason is None:
+        return None
+
+    return {
+        "status": "stuck",
+        "stuck_type": "incomplete",
+        "reason": reason,
+        "session_id": session_id or "unknown",
+        "commits_made": content,
+    }
 
 
 def _attach_commit_sha(stuck_dict: dict, project_root: Path) -> dict:
