@@ -50,7 +50,9 @@ batches:
     start_sha: e1b417984906601d5eab54d060ff4866b74406b7
     commit_sha: 6b305cd07240d9114fe460d82944f500a3bedb94
   - name: plan-overview-comment-fix
-    state: pending
+    state: running
+    implementer_session: b1e31b82-2a3e-423e-912e-8b2670303e90
+    start_sha: f4a3b42c86f2454d1008c2015ac16b0dd963840f
   - name: mill-plan-source-edit-guardrail
     state: pending
 ```
