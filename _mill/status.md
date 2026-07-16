@@ -44,7 +44,9 @@ batches:
     start_sha: 33e2aaec9201d796e4564e74a889f91c9f449f94
     commit_sha: cc05592cd9479aceda9f5d36eb3bfd90e959342a
   - name: golang-build-gopath-fallback
-    state: pending
+    state: running
+    implementer_session: c4ca6653-4892-4a5b-afe8-a3c20b17a46a
+    start_sha: e1b417984906601d5eab54d060ff4866b74406b7
   - name: plan-overview-comment-fix
     state: pending
   - name: mill-plan-source-edit-guardrail
