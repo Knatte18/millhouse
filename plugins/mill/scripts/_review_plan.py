@@ -334,7 +334,7 @@ def prepare(
             separate, non-prepare code path for plan review.
 
     Returns:
-        Dict with keys: prompt_text, model, round, reviews_dir, scope.
+        Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
     """
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
@@ -446,6 +446,7 @@ def prepare(
         return {
             "prompt_text": prompt_text,
             "model": batch_spec.get("model"),
+            "effort": batch_spec.get("effort"),
             "round": round_n,
             "reviews_dir": reviews_dir,
             "scope": scope,
@@ -537,6 +538,7 @@ def prepare(
         return {
             "prompt_text": prompt_text,
             "model": holistic_spec.get("model"),
+            "effort": holistic_spec.get("effort"),
             "round": round_n,
             "reviews_dir": reviews_dir,
             "scope": "holistic",
