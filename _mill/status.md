@@ -28,7 +28,9 @@ implementing  '2026-07-16T12:02:28Z'
 ```yaml
 batches:
   - name: completeness-recount-cards-done
-    state: pending
+    state: running
+    implementer_session: 694ed717-7c40-4499-8922-f6c7a74adc3c
+    start_sha: 2a5233ca113b3de9b233197659e6259ff64b02d1
   - name: batch-verify-list-validation
     state: pending
   - name: done-gate-baseline-preflight
