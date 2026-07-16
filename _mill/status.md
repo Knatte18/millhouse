@@ -40,7 +40,9 @@ batches:
     start_sha: a0cafe9857d54a2326c037c09ee7aad760129850
     commit_sha: ca60d2923e827d4c6541b885671fb79083aee157
   - name: done-gate-baseline-preflight
-    state: pending
+    state: running
+    implementer_session: a5dd4e89-e18b-4d6c-b236-b019f3031edb
+    start_sha: 0939a684cebe5e1fc9ae5b1da77d3eb6603fd79c
   - name: windows-long-path-mitigation
     state: pending
   - name: go-build-tag-retiering-check
