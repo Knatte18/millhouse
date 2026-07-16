@@ -539,6 +539,16 @@ def cleanup_session(session_id: str | None) -> None:
     if not session_id:
         return None
     try:
+        import _paths
+        import _config
+
+        git_root = _paths.resolve_git_root(Path.cwd())
+        cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+        if _agent_dispatch.resolve_dispatch_mode(cfg) != "psmux":
+            return None
+    except (Exception, SystemExit):
+        pass
+    try:
         import _psmux
 
         psmux_name = f"mill-{session_id[:12]}"

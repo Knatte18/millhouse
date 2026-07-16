@@ -139,7 +139,18 @@ class DaemonBase(abc.ABC):
                 chunks.append(chunk)
 
             msg_text = b"".join(chunks).decode("utf-8")
-            msg = json.loads(msg_text)
+            try:
+                msg = json.loads(msg_text)
+            except json.JSONDecodeError:
+                # Empty or malformed payload — this is the routine bare-connect
+                # reachability probe pattern (connect, send nothing, close), not a
+                # genuine protocol violation, so it is diagnostic-only noise and must
+                # not be logged at error severity. No response is attempted; the
+                # outer method's `finally: conn.close()` still runs on this return.
+                self._logger.debug(
+                    f"empty/malformed payload on connection ({len(msg_text)} chars)"
+                )
+                return
 
             if msg.get("token") != self._token:
                 resp = {
