@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fixer-tier-warning
 slug: mill-misc-tooling-and-docs-gaps
 branch: hanf/mill-misc-tooling-and-docs-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-07-16T13:54:30Z'
 plan-fix-r3  '2026-07-16T13:59:24Z'
 planned  '2026-07-16T13:59:33Z'
 implementing  '2026-07-16T14:06:04Z'
+approved-fixer-tier-warning  '2026-07-16T14:12:40Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-07-16T14:06:04Z'
 ```yaml
 batches:
   - name: fixer-tier-warning
-    state: running
+    state: approved
     implementer_session: 1cef1610-997f-49bc-a391-11c0b3605145
     start_sha: 47fe1b2e1057585a3074439be3cb7c076f12ec82
+    commit_sha: cbbbb4bce634f18527deec922276149dbcc76423
   - name: cleanliness-nested-hub-revert
     state: pending
   - name: golang-build-gopath-fallback
