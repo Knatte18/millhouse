@@ -1567,7 +1567,7 @@ class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
         self.mock_junction_create = _p(_verify_baseline._junction, "create")
         _p(_verify_baseline._worktree, "remove_safe")
         self.expected_tmp_path = (
-            self.project_root / ".scratch" / f"verify-baseline-{fixed_uuid.hex}"
+            self.project_root / ".scratch" / f"verify-baseline-{fixed_uuid.hex[:12]}"
         )
 
     def test_junction_and_verify_cwd_reanchored_when_cwd_override_relative_set(self):
