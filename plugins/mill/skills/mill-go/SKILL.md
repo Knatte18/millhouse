@@ -216,6 +216,30 @@ if not _client.health_check(wiki_path):
 }
 ```
 
+### 0.55. Done-gate baseline pre-flight (first batch of the task only)
+
+Immediately after "0. Wiki health-check" and before "0.5. Baseline pre-flight," for the task's **FIRST batch only** (not on every batch — only once per task run, same guard shape as "0.5. Baseline pre-flight" below), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`. If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "0.5. Baseline pre-flight." Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the Handoff-time "0. Pre-done gate" block):
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json
+import _paths, _config, _done_gate
+git_root = _paths.resolve_git_root()
+hub_root = _paths.resolve_hub_path()
+cfg = _config.load_config(hub_root, git_root)
+pipeline_cfg = cfg.get('pipeline') or {}
+if not pipeline_cfg.get('done_gate_baseline_preflight', False):
+    raise SystemExit(0)
+gate_cmd = pipeline_cfg.get('done_gate')
+if not gate_cmd:
+    raise SystemExit(0)
+result = _done_gate.run_preflight(gate_cmd, git_root)
+print(json.dumps(result))
+"
+```
+
+Parse stdout for a JSON line (absent when the flag/`done_gate` check above short-circuited via `SystemExit(0)` -- that is the normal skip path, not an error). If the JSON line's `result` is `blocked`, log the reason (ASCII-only) but do **NOT** halt — proceed to batch 1 regardless. This differs deliberately from the Handoff-time "0. Pre-done gate" gate, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable. This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the Handoff-time comparison). The Handoff-time "0. Pre-done gate" block (below, in the Handoff section) is unchanged and still halts on `blocked` there. Skip this step entirely for every batch after the first.
+
 ### 0.5. Baseline pre-flight (first batch of the task only)
 
 Immediately before "### 1. Implement" fires for the task's **FIRST batch only** (not on every batch — only once per task run), invoke the task-scoped module-wide verify baseline computation:
