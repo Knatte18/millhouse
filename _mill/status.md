@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-effort-tier-review-cli  '2026-07-16T14:44:39Z'
 approved-reviewer-model-audit-trail-backend  '2026-07-16T14:51:38Z'
 approved-reviewer-model-audit-trail-cli  '2026-07-16T15:16:24Z'
 holistic-reviewing  '2026-07-16T15:16:55Z'
+holistic-approved  '2026-07-16T15:20:21Z'
 ```
 
 ## Batches
