@@ -35,7 +35,9 @@ batches:
     start_sha: c4f8f5e6bb29156f46cc87ecffc6fc1d7b04bcf6
     commit_sha: edbcade30f8b495e37a1f9c2e2710b7f752bf5cb
   - name: finalize-step3-restore
-    state: pending
+    state: running
+    implementer_session: f762958c-8f25-4f13-8a74-c19ea1ad0a8a
+    start_sha: cafc5934b2b7bc326b971c07c4db23478b1ecec8
   - name: merge-slug-check-and-pathspec
     state: pending
   - name: integration-test-coverage
