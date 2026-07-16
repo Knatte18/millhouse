@@ -1114,6 +1114,11 @@ def _forward_output(
             # re-verification found every card's requirements already satisfied with no new
             # commit. Extracted here (before the gate calls) so both _reclassify_verify_failure
             # and _batch_completeness_stuck see the identical self-reported state.
+            # already_complete is threaded ONLY to _batch_completeness_stuck below -- it is a
+            # claim about card completeness meaningful solely on the explicit-status:success
+            # path, and _reclassify_verify_failure fires on a verify-failure trigger where
+            # "success" was never cleanly reported, so it deliberately has no
+            # already_complete parameter at all (passing one would raise TypeError).
             _cards_done = parsed.get("cards_done")
             _already_complete = bool(parsed.get("already_complete", False))
 
