@@ -14,10 +14,13 @@ Check coverage:
   verify cwd mapping form — verify-not-isolated/verify-full-suite accept the
                             {cwd, command} mapping and the overview-level
                             verify:; verify-malformed-cwd; verify-mixed-cwd
+  verify-unrelated-test-file — --only token untouched by its own batch and
+                            byte-identical to a non-main parent branch (#638)
   meta    — sorted output, missing overview
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -26,6 +29,9 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _plan_validate  # noqa: E402
+
+_UNIT_TESTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(_UNIT_TESTS))
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +177,50 @@ def _write_plan(plan_dir: Path, overview_text: str, batches: list[tuple[str, str
     (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
     for filename, content in batches:
         (plan_dir / filename).write_text(content, encoding="utf-8")
+
+
+def _make_verify_only_batch_text(
+    name: str,
+    verify_command: str,
+    *,
+    edits: list[str] | None = None,
+) -> str:
+    """Return a one-card batch file text with a caller-controlled verify: command.
+
+    ``_make_batch_file`` hardcodes ``verify: null``, which cannot express the
+    exact ``--only`` token list the verify-unrelated-test-file tests need to
+    control precisely.
+    """
+    edits_part = ", ".join(f"`{e}`" for e in edits) if edits else "none"
+    return (
+        f"# Batch: {name}\n\n"
+        "```yaml\n"
+        f"task: test\nbatch: {name}\ncards: 1\nverify: {verify_command}\ndepends-on: []\n"
+        "```\n\n"
+        "## Cards\n\n"
+        "### Card 1: card 1\n\n"
+        "- **Context:** none\n"
+        f"- **Edits:** {edits_part}\n"
+        "- **Creates:** none\n"
+        "- **Deletes:** none\n"
+        "- **Moves:** none\n"
+        "- **Requirements:**\n  See scope.\n"
+        f"- **Commit:** feat({name}): card 1\n"
+    )
+
+
+def _git_commit_new_file(repo_root: Path, rel_path: str, content: str, message: str) -> None:
+    """Write ``rel_path`` under ``repo_root`` and commit it onto the branch HEAD currently points to."""
+    target = repo_root / rel_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo_root), "add", rel_path], check=True, capture_output=True, text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_root), "commit", "-q", "-m", message],
+        check=True, capture_output=True, text=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3462,6 +3512,185 @@ def test_parallel_modifies_overlap_move_endpoint_fires() -> int:
 
 
 # ---------------------------------------------------------------------------
+# verify-unrelated-test-file check (#638)
+# ---------------------------------------------------------------------------
+
+def test_check_verify_unrelated_test_files_flagged_non_main_parent() -> int:
+    """(a) --only token untouched by the batch + byte-identical to a non-main parent branch -> flagged.
+
+    Exercises the exact discrepancy round 4 of discussion review flagged: this
+    task's own parent is 'hanf/linux-port-more', not 'main', so the fixture
+    deliberately uses a non-'main' parent branch name.
+    """
+    import _test_helpers  # noqa: E402 (local import; sys.path set up at module scope)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 1, f"expected 1 finding, got {len(errs)}: {errs}"
+            e = errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"wrong card: {e['card']!r}"
+            assert e["path"] == "unrelated_test.py", f"wrong path: {e['path']!r}"
+            assert "hanf/some-parent" in e["message"], f"message missing parent branch: {e['message']!r}"
+            print("PASS test_check_verify_unrelated_test_files_flagged_non_main_parent")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_unrelated_test_files_flagged_non_main_parent: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_unrelated_test_files_touched_not_flagged() -> int:
+    """(b) --only token IS in the batch's own Files Touched -> not flagged, regardless of parent-branch diff."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+            edits=["unrelated_test.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 0, f"expected no findings for a touched token, got: {errs}"
+            print("PASS test_check_verify_unrelated_test_files_touched_not_flagged")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_unrelated_test_files_touched_not_flagged: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_unrelated_test_files_differs_not_flagged() -> int:
+    """(c) --only token NOT in Files Touched but content DIFFERS from the parent branch -> not flagged."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+        # Working-tree content now diverges from the committed parent-branch blob --
+        # simulates a file that was legitimately changed by something else.
+        (git_root / "unrelated_test.py").write_text("print('changed')\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 0, f"expected no findings for a differing token, got: {errs}"
+            print("PASS test_check_verify_unrelated_test_files_differs_not_flagged")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_unrelated_test_files_differs_not_flagged: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_unrelated_test_files_parent_branch_none_no_findings() -> int:
+    """(d) parent_branch=None -> no findings at all, regardless of any other condition (fail-safe no-op)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        # Same fixture as the flagged case (a), but parent_branch=None must
+        # short-circuit to zero findings before any diff is even attempted.
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch=None,
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 0, f"expected no findings with parent_branch=None, got: {errs}"
+            print("PASS test_check_verify_unrelated_test_files_parent_branch_none_no_findings")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_unrelated_test_files_parent_branch_none_no_findings: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
+    """(e) verify: command with no --only segment -> no candidate tokens -> no findings."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py -k pattern",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 0, f"expected no findings with no --only segment, got: {errs}"
+            print("PASS test_check_verify_unrelated_test_files_no_only_segment_no_findings")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_unrelated_test_files_no_only_segment_no_findings: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -3569,6 +3798,12 @@ def main() -> int:
         test_non_existent_path_move_target_suppressed,
         test_all_files_touched_move_target_included,
         test_parallel_modifies_overlap_move_endpoint_fires,
+        # verify-unrelated-test-file check (#638)
+        test_check_verify_unrelated_test_files_flagged_non_main_parent,
+        test_check_verify_unrelated_test_files_touched_not_flagged,
+        test_check_verify_unrelated_test_files_differs_not_flagged,
+        test_check_verify_unrelated_test_files_parent_branch_none_no_findings,
+        test_check_verify_unrelated_test_files_no_only_segment_no_findings,
     ]
 
     errors = 0
