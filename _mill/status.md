@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-psmux-cleanup-crash
 slug: mill-orchestration-crash-hardening
 branch: hanf/mill-orchestration-crash-hardening
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-07-16T11:15:12Z'
 plan-fix-r1  '2026-07-16T11:15:21Z'
 planned  '2026-07-16T11:21:13Z'
 implementing  '2026-07-16T11:25:37Z'
+approved-psmux-cleanup-crash  '2026-07-16T11:31:20Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-07-16T11:25:37Z'
 ```yaml
 batches:
   - name: psmux-cleanup-crash
-    state: running
+    state: approved
     implementer_session: 57cf5339-180c-47e4-abfd-c3e7c97cfd68
     start_sha: ab83724e4148d84b554a0676a7310e44a8ea8cbd
+    commit_sha: b8c52afb5144d9a3ef9696588730c3aa72a80e7b
   - name: wiki-daemon-json-noise
     state: pending
 ```
