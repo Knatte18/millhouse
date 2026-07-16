@@ -103,8 +103,9 @@ def _reclassify_verify_failure(
     verify_stuck: dict,
     project_root: Path,
     start_sha: str | None,
-    card_count: int | None,
+    card_ids: set[int] | None,
     session_id: str | None,
+    cards_done=None,
 ) -> dict:
     """
     Reclassify a verify-failure stuck dict based on how many content commits exist.
@@ -116,17 +117,25 @@ def _reclassify_verify_failure(
     classified as logic (not retryable without human intervention).
 
     Classification rules (applied in order):
-      - content is None OR card_count is None OR card_count <= 0: return verify_stuck unchanged.
-      - content == 0: reclassify as stuck_type=logic "no content commit".
-      - 0 < content < card_count: reclassify as stuck_type=incomplete with commits_made=content.
-      - content >= card_count (full batch): return verify_stuck unchanged.
+      - content is None OR card_ids is None OR card_ids is empty: return verify_stuck unchanged.
+      - content == 0: reclassify as stuck_type=logic "no content commit" (orthogonal to
+        cards_done -- zero commits means zero work regardless of any self-report).
+      - Otherwise, delegate to _cards_incomplete_reason (the same helper
+        _batch_completeness_stuck uses): a non-None reason reclassifies as
+        stuck_type=incomplete with commits_made=content; None means the batch is
+        complete (either content >= len(card_ids), or cards_done confirms every
+        declared card is done) and verify_stuck is returned unchanged.
 
     Args:
         verify_stuck: The stuck dict produced by _run_verify_gates (stuck_type="verify").
         project_root: Path to the worktree root for _content_commit_count.
         start_sha: SHA recorded at batch start; None disables reclassification.
-        card_count: Number of Card headings in the batch file; None or 0 disables it.
+        card_ids: The set of Card numbers declared in the batch file; None or
+            empty disables reclassification.
         session_id: Session identifier included in reclassified dicts.
+        cards_done: The implementer's self-reported list of card numbers this
+            commit set addresses; forwarded to _cards_incomplete_reason. None
+            (the default) uses the absent-field fallback (raw commit-count check).
 
     Returns:
         Either verify_stuck unchanged, or a new dict with a different stuck_type.
@@ -134,11 +143,12 @@ def _reclassify_verify_failure(
     content = _content_commit_count(project_root, start_sha)
 
     # Inputs absent or gate disabled -- preserve original verify classification.
-    if content is None or card_count is None or card_count <= 0:
+    if content is None or card_ids is None or len(card_ids) <= 0:
         return verify_stuck
 
     if content == 0:
         # No content commits at all -- agent likely aborted before touching any files.
+        # Unaffected by cards_done: zero commits is zero work regardless of self-report.
         return {
             "status": "stuck",
             "stuck_type": "logic",
@@ -149,74 +159,159 @@ def _reclassify_verify_failure(
             "session_id": session_id or "unknown",
         }
 
-    if 0 < content < card_count:
-        # Partial batch -- implementer stopped after some cards. Reclassify as incomplete
-        # (not transient) so the orchestrator knows to resume rather than retry fresh.
+    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    if reason is not None:
+        # Partial batch -- implementer stopped after some cards (or self-reported fewer
+        # cards done than declared). Reclassify as incomplete (not transient) so the
+        # orchestrator knows to resume rather than retry fresh.
         return {
             "status": "stuck",
             "stuck_type": "incomplete",
-            "reason": (
-                f"batch incomplete: {content} content commit(s) since start but"
-                f" {card_count} card(s) in batch"
-                " -- implementer stopped before finishing all cards"
-            ),
+            "reason": reason,
             "session_id": session_id or "unknown",
             "commits_made": content,
         }
 
-    # content >= card_count: full batch completed, verify failure is a genuine
-    # test failure that needs to be fixed -- preserve the original classification.
+    # Batch is complete (raw count >= card count, or cards_done confirms every
+    # declared card is done): verify failure is a genuine test failure that needs
+    # to be fixed -- preserve the original classification.
     return verify_stuck
+
+
+def _cards_incomplete_reason(
+    card_ids: set[int],
+    cards_done,
+    content: int,
+) -> str | None:
+    """
+    Decide whether a batch is incomplete, sharing the identical rule between
+    _batch_completeness_stuck and _reclassify_verify_failure.
+
+    Two independent bases of evidence are considered, in order:
+      1. Absent or malformed cards_done: fall back to the pre-#660 heuristic --
+         compare the raw content-commit count against len(card_ids). This is the
+         fail-open path for implementer sessions that never populate cards_done
+         (old sessions, non-compliant models) -- behaves identically to the
+         count-only gate this function replaces.
+      2. Present and validly coercible cards_done: compare the declared card_ids
+         against the implementer's self-reported set via set difference. This is
+         what lets a batch that legitimately combined multiple cards into one
+         commit (fewer commits than cards, per the brief's "one combined commit"
+         allowance) still be recognized as complete -- the raw count check alone
+         cannot distinguish that from a genuinely stopped-early batch.
+
+    Args:
+        card_ids: The set of Card numbers declared in the batch file (read
+            verbatim from "### Card N:" headings, not assumed contiguous).
+        cards_done: The implementer's self-reported cards_done value straight
+            from parsed JSON -- may be None, a list of ints, a list of numeric
+            strings, or malformed (any type at all); this function is
+            responsible for validating and coercing it.
+        content: The content-commit count since start_sha (excluding the
+            batch-start housekeeping commit).
+
+    Returns:
+        The "batch incomplete: ..." reason string when incomplete, or None when
+        the batch is judged complete.
+    """
+
+    def _count_only_reason() -> str | None:
+        # Raw commit-count heuristic: cannot see which specific cards were
+        # combined, so it only knows "fewer commits than declared cards".
+        if content < len(card_ids):
+            return (
+                f"batch incomplete: {content} content commit(s) since start but"
+                f" {len(card_ids)} card(s) in batch -- implementer stopped before finishing all cards"
+            )
+        return None
+
+    if cards_done is None:
+        return _count_only_reason()
+
+    # Implementers may legitimately emit JSON string card numbers (e.g. ["7", "8"])
+    # rather than integers; coerce before comparing. A malformed entry means the
+    # self-report is untrusted, not partially trusted -- fall back exactly as if
+    # cards_done had been absent.
+    try:
+        coerced = {int(x) for x in cards_done}
+    except (ValueError, TypeError):
+        return _count_only_reason()
+
+    missing = card_ids - coerced
+    if missing:
+        return (
+            f"batch incomplete: cards {sorted(missing)} not reported done"
+            f" (cards_done={sorted(coerced)}, declared={sorted(card_ids)})"
+        )
+    return None
 
 
 def _batch_completeness_stuck(
     project_root: Path,
     start_sha: str | None,
-    card_count: int | None,
+    card_ids: set[int] | None,
     session_id: str | None,
     *,
     verify_cmd: str | None = None,
     ignore_verify: bool = False,
+    cards_done=None,
+    already_complete: bool = False,
 ) -> dict | None:
     """
-    Check whether enough commits exist since start_sha for the declared card_count.
+    Check whether the implementer's commits/self-report satisfy the declared card_ids.
 
-    Returns None (gate disabled) when verify_cmd is not None and ignore_verify is
-    False — a passing verify command is conclusive evidence of batch completeness on
-    the explicit-success path, so the heuristic commit-count check is unnecessary.
-    Pass ignore_verify=True on the no-JSON inference paths to force the completeness
-    check even when a verify command is present (the implementer never reported
-    success, so a passing verify command does not make the batch complete).
+    Returns None (gate disabled/satisfied) in any of these cases, checked in order:
+      1. already_complete is True: the resume-idempotent-confirmation backstop --
+         an implementer re-dispatched via --resume-incomplete that independently
+         re-verifies every card is already satisfied (and makes no new commit)
+         reports this explicitly, bypassing every check below.
+      2. verify_cmd is not None and ignore_verify is False: a passing verify
+         command is conclusive evidence of batch completeness on the
+         explicit-success path, so the heuristic checks below are unnecessary.
+         Pass ignore_verify=True on the no-JSON inference paths to force the
+         completeness check even when a verify command is present (the
+         implementer never reported success, so a passing verify command does
+         not make the batch complete).
+      3. start_sha is None, card_ids is None, or card_ids is empty: the gate has
+         nothing to check against (e.g. a docs-only batch with zero cards).
 
-    Also returns None when start_sha is None, card_count is None, or card_count <= 0.
-
-    Otherwise counts commits via `git rev-list --count start_sha..HEAD`. If the
-    subprocess fails or returns a non-numeric string, returns None rather than
-    crashing (callers such as test-millpy-implement.py mock _subprocess_util.run
-    to return non-numeric strings for all git calls). Only when a numeric count
-    is obtained and count < card_count is a stuck dict returned; otherwise returns None.
+    Otherwise counts content commits via _content_commit_count and delegates the
+    incomplete-or-not decision to _cards_incomplete_reason (shared with
+    _reclassify_verify_failure): an absent or malformed cards_done falls back to
+    comparing the raw commit count against len(card_ids); a present, validly
+    coercible cards_done instead compares card_ids against the self-reported set.
 
     Args:
         project_root: Path to the worktree root.
         start_sha: The SHA recorded at batch start; None disables the gate.
-        card_count: Number of Card headings in the batch file; None or 0 disables the gate.
+        card_ids: The set of Card numbers declared in the batch file; None or
+            empty disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
         verify_cmd: When not None and ignore_verify is False, the gate is disabled
             (verify is conclusive on the explicit-success path).
         ignore_verify: When True, run the check even when verify_cmd is not None.
             Used on the no-JSON inference paths where a partial batch is not made
             complete just because verify passes. Default False.
+        cards_done: The implementer's self-reported list of card numbers this
+            commit set addresses. None (the default) uses the absent-field
+            fallback so old/non-compliant implementer sessions never regress.
+        already_complete: When True, short-circuits the gate to "complete"
+            regardless of every other argument -- the resume backstop.
 
     Returns:
         A stuck dict with stuck_type="incomplete" and commits_made when incomplete, or None otherwise.
     """
+    # already_complete short-circuits every other check -- see docstring point 1.
+    if already_complete is True:
+        return None
+
     # When a verify command is present and we are NOT forcing the check, a passing
     # verify is conclusive on the explicit-success path; skip the heuristic gate.
     if verify_cmd is not None and not ignore_verify:
         return None
 
-    # Gate is a no-op when any required input is absent or card_count is zero/negative.
-    if start_sha is None or card_count is None or card_count <= 0:
+    # Gate is a no-op when any required input is absent or card_ids is empty.
+    if start_sha is None or card_ids is None or len(card_ids) <= 0:
         return None
 
     # Count content commits (excluding the start-batch housekeeping commit) since start_sha.
@@ -227,18 +322,17 @@ def _batch_completeness_stuck(
     if content is None:
         return None
 
-    if content < card_count:
-        return {
-            "status": "stuck",
-            "stuck_type": "incomplete",
-            "reason": (
-                f"batch incomplete: {content} content commit(s) since start but"
-                f" {card_count} card(s) in batch -- implementer stopped before finishing all cards"
-            ),
-            "session_id": session_id or "unknown",
-            "commits_made": content,
-        }
-    return None
+    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    if reason is None:
+        return None
+
+    return {
+        "status": "stuck",
+        "stuck_type": "incomplete",
+        "reason": reason,
+        "session_id": session_id or "unknown",
+        "commits_made": content,
+    }
 
 
 def _attach_commit_sha(stuck_dict: dict, project_root: Path) -> dict:
@@ -747,6 +841,255 @@ def _run_verify_gates(
     return None
 
 
+# Recognized GOOS/GOARCH values for the removed-tag qualification check in
+# _go_build_tag_retiering_stuck. A small fixed set covering the common values,
+# not Go's exhaustive list -- see that function's docstring for why an
+# unrecognized-but-actually-GOOS value degrades safely rather than needing an
+# exhaustive list here.
+_GO_BUILD_TAG_GOOS = {"linux", "darwin", "windows", "freebsd"}
+_GO_BUILD_TAG_GOARCH = {"amd64", "arm64", "386"}
+
+_GO_BUILD_TAG_ADD_PREFIX = "+//go:build "
+_GO_BUILD_TAG_REMOVE_PREFIX = "-//go:build "
+
+
+def _parse_go_build_tag_diff(diff_text: str) -> dict[str, dict[str, list[str]]]:
+    """
+    Parse `git diff --unified=0 ... -- '*.go'` output into per-file //go:build deltas.
+
+    Returns a dict mapping each changed .go file's path (as reported by the diff's
+    "diff --git a/<path> b/<path>" header, using the post-change b/ path) to
+    {"added": [...], "removed": [...]}, where each list holds the raw
+    "//go:build ..." line content (with the leading +/- diff marker stripped) for
+    every modern-syntax build-constraint line touched in that file's hunks. Legacy
+    "// +build" lines are ignored -- out of scope for this gate. Diff lines that
+    are not build-constraint lines are ignored (unified=0 only shows changed
+    lines, so anything else touched by the same hunk is simply not tracked here).
+
+    Args:
+        diff_text: stdout of `git diff --unified=0 <range> -- '*.go'`.
+
+    Returns:
+        A dict as described above; empty when no build-constraint lines changed.
+    """
+    files: dict[str, dict[str, list[str]]] = {}
+    current_file: str | None = None
+    diff_git_re = re.compile(r"^diff --git a/(.*) b/(.*)$")
+    for line in diff_text.splitlines():
+        match = diff_git_re.match(line)
+        if match:
+            current_file = match.group(2)
+            continue
+        if current_file is None:
+            continue
+        if line.startswith(_GO_BUILD_TAG_ADD_PREFIX):
+            files.setdefault(current_file, {"added": [], "removed": []})
+            files[current_file]["added"].append(line[1:])
+        elif line.startswith(_GO_BUILD_TAG_REMOVE_PREFIX):
+            files.setdefault(current_file, {"added": [], "removed": []})
+            files[current_file]["removed"].append(line[1:])
+    return files
+
+
+def _go_build_tag_dir(file_path: str) -> str:
+    """
+    Return the POSIX-style parent directory of a diff-reported .go file path.
+
+    Go's one-package-per-directory convention means a changed file's "affected
+    package" is simply its immediate containing directory -- no import-graph
+    resolution needed. Returns "." for a file at the repo root.
+    """
+    posix_path = file_path.replace("\\", "/")
+    return posix_path.rsplit("/", 1)[0] if "/" in posix_path else "."
+
+
+def _go_build_pattern(dir_str: str) -> str:
+    """Build the `go build` package pattern for a directory ("./..." at the repo root)."""
+    return "./..." if dir_str == "." else f"./{dir_str}/..."
+
+
+def _is_qualifying_custom_tag(tag: str) -> bool:
+    """
+    Return True when a removed //go:build constraint is safe to translate to `-tags`.
+
+    Qualifies only when the constraint is a single bare identifier -- no boolean
+    operators (&&, ||, !) or parentheses, and no internal whitespace -- and is not
+    a recognized GOOS/GOARCH value. A compound/negated constraint risks compiling
+    under the wrong tag set if naively translated; an unrecognized-but-actually-
+    GOOS value degrades safely to "run it as a custom tag" (a false-custom-tag
+    build with an invalid -tags value fails closed as stuck/verify, the safe
+    direction).
+
+    Args:
+        tag: The removed //go:build line's content, with the "//go:build " prefix
+            already stripped and the remainder trimmed.
+
+    Returns:
+        True when the tag is a single, non-GOOS/GOARCH bare identifier.
+    """
+    if any(op in tag for op in ("&&", "||", "!", "(", ")")):
+        return False
+    if len(tag.split()) != 1:
+        return False
+    return tag not in _GO_BUILD_TAG_GOOS and tag not in _GO_BUILD_TAG_GOARCH
+
+
+def _go_build_tag_stuck_dict(
+    dir_str: str,
+    direction: str,
+    build_result: subprocess.CompletedProcess,
+    session_id: str | None,
+) -> dict:
+    """Build the stuck/verify dict for a failed go-build-tag-retiering compile check."""
+    output = ((build_result.stdout or "") + (build_result.stderr or "")).strip()
+    tail = output[-2000:] if len(output) > 2000 else output
+    return {
+        "status": "stuck",
+        "stuck_type": "verify",
+        "reason": (
+            f"go build-tag retiering check failed: {dir_str}"
+            f" ({direction}-tag transition): {tail}"
+        ),
+        "session_id": session_id or "unknown",
+    }
+
+
+def _go_build_tag_retiering_stuck(
+    project_root: Path,
+    start_sha: str | None,
+    session_id: str | None,
+) -> dict | None:
+    """
+    Detect and compile-check Tier-1 (default-build) membership transitions caused by
+    added or removed `//go:build` constraints in this batch's .go file changes.
+
+    Fixes #642: a batch that adds or removes a `//go:build` constraint on a .go file
+    can silently move that file into or out of the default (untagged) build without
+    any existing gate noticing -- the batch's own verify command was written before
+    the transition and has no reason to re-check the opposite build membership. This
+    gate diffs `*.go` files since start_sha, classifies each changed file's
+    `//go:build` line delta as an added-tag transition (file exits the default
+    build), a removed-tag transition (file enters the default build), or a
+    value-only edit (no membership change -- skipped), and runs the matching
+    `go build` compile check for each affected package directory.
+
+    Algorithm:
+      1. start_sha is None: nothing to diff against -- return None.
+      2. `git diff --unified=0 start_sha..HEAD -- '*.go'`; a failed subprocess or
+         empty output -- return None.
+      3. No '.go' files touched at all (no build-constraint lines parsed) -- return
+         None. This makes the gate a safe no-op for non-Go batches/repos with no
+         language-detection config needed.
+      4. Parse the diff for `+//go:build ` / `-//go:build ` lines per file (modern
+         syntax only; legacy `// +build` is out of scope). A `//go:build` line both
+         added and removed in the same file at different values is a value-only
+         edit, not a transition -- skipped, not treated as an added+removed pair.
+      5. Exactly one added and zero removed -> added-tag transition. Exactly one
+         removed and zero added -> removed-tag transition. Anything else
+         (including the value-only case) is not a transition -- skipped.
+      6. Affected package = the transitioned file's immediate directory. Multiple
+         transitioned files in the same directory dedupe to a single compile check.
+      7. Added-tag directories: `go build ./<dir>/...`.
+      8. Removed-tag directories: the removed constraint qualifies for a compile
+         check only when it is a single bare identifier that is not a recognized
+         GOOS/GOARCH value (see _is_qualifying_custom_tag); qualifying directories
+         run `go build -tags <tag> ./<dir>/...`. Non-qualifying (compound/negated/
+         GOOS/GOARCH) constraints are logged (ASCII-only, stderr) and skipped.
+      9. Any compile check exiting non-zero -- return a stuck_type="verify" dict
+         naming the directory, transition direction, and captured output tail.
+      10. All compile checks pass (or none were needed) -- return None.
+
+    Never raises to its caller: any subprocess/parsing failure is caught and
+    degrades to None (nothing to report), per this plan's "never raise from a new
+    gate/check function" Shared Decision. A deliberate compile-check failure (step
+    9) is a normal return, not an exception, so it is unaffected by that guard.
+
+    Args:
+        project_root: Path to the worktree root used as cwd for git/go subprocesses.
+        start_sha: The SHA recorded at batch start; None disables the gate.
+        session_id: Session identifier included in the returned stuck dict.
+
+    Returns:
+        A stuck dict with stuck_type="verify" on a compile-check failure, or None
+        (gate disabled, no transition detected, or all compile checks passed).
+    """
+    if start_sha is None:
+        return None
+
+    try:
+        diff_result = _subprocess_util.run(
+            ["git", "diff", "--unified=0", f"{start_sha}..HEAD", "--", "*.go"],
+            cwd=project_root,
+        )
+        if diff_result.returncode != 0 or not diff_result.stdout.strip():
+            return None
+
+        files_info = _parse_go_build_tag_diff(diff_result.stdout)
+        if not files_info:
+            return None
+
+        added_dirs: set[str] = set()
+        removed_dirs: dict[str, dict] = {}
+        for file_path, lines in files_info.items():
+            added = lines["added"]
+            removed = lines["removed"]
+            if len(added) == 1 and len(removed) == 0:
+                added_dirs.add(_go_build_tag_dir(file_path))
+            elif len(removed) == 1 and len(added) == 0:
+                dir_str = _go_build_tag_dir(file_path)
+                tag = removed[0][len("//go:build "):].strip()
+                entry = removed_dirs.setdefault(dir_str, {"tag": tag, "files": [], "tag_mismatch": False})
+                if entry["tag"] != tag:
+                    # Multiple files in the same directory with different removed tags.
+                    # Mark this directory as conflicted and skip its compile check.
+                    entry["tag_mismatch"] = True
+                entry["files"].append(file_path)
+            # else: value-only edit (or an otherwise-ambiguous delta) -- not a
+            # membership transition, skip.
+
+        for dir_str in sorted(added_dirs):
+            build_result = _subprocess_util.run(
+                ["go", "build", _go_build_pattern(dir_str)],
+                cwd=project_root,
+            )
+            if build_result.returncode != 0:
+                return _go_build_tag_stuck_dict(
+                    dir_str, "added", build_result, session_id
+                )
+
+        for dir_str, entry in sorted(removed_dirs.items()):
+            if entry.get("tag_mismatch", False):
+                print(
+                    f"[go-build-tag-retiering] skip: {', '.join(entry['files'])}"
+                    f" removed different //go:build constraints in the same directory",
+                    file=sys.stderr,
+                )
+                continue
+            tag = entry["tag"]
+            if not _is_qualifying_custom_tag(tag):
+                print(
+                    f"[go-build-tag-retiering] skip: {', '.join(entry['files'])}"
+                    f" removed a //go:build constraint not safe to translate"
+                    f" to -tags (compound, negated, or GOOS/GOARCH): {tag}",
+                    file=sys.stderr,
+                )
+                continue
+            build_result = _subprocess_util.run(
+                ["go", "build", "-tags", tag, _go_build_pattern(dir_str)],
+                cwd=project_root,
+            )
+            if build_result.returncode != 0:
+                return _go_build_tag_stuck_dict(
+                    dir_str, "removed", build_result, session_id
+                )
+
+        return None
+    except Exception:
+        # Never raise to the caller -- any git/subprocess/parsing failure
+        # degrades to "nothing to report" per this batch's Shared Decision.
+        return None
+
+
 def emit_prepare(
     briefs_dir: Path,
     role: str,
@@ -841,7 +1184,7 @@ def finalize_from_output(
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
-    card_count: int | None = None,
+    card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -868,7 +1211,10 @@ def finalize_from_output(
             state for the module-wide gate, forwarded to _run_verify_gates. When
             "pre-existing-failures", the module-wide gate is skipped entirely. Defaults
             to None (run the module-wide gate strictly, as before this parameter existed).
-        card_count: Number of Card headings in the batch; enables the completeness gate.
+        card_ids: The set of Card numbers declared in the batch file; enables
+            the completeness gate. cards_done and already_complete (read from
+            the parsed success envelope, not accepted as parameters here) are
+            compared against this set inside _forward_output.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
         nits_only: When True, writes a nits-fixed marker on success.
@@ -899,7 +1245,7 @@ def finalize_from_output(
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
-        card_count=card_count,
+        card_ids=card_ids,
         task_dir=task_dir,
         parent_branch=parent_branch,
         nits_only=nits_only,
@@ -952,7 +1298,7 @@ def _forward_output(
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
-    card_count: int | None = None,
+    card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -979,7 +1325,14 @@ def _forward_output(
     When "pre-existing-failures", the module-wide gate is skipped entirely regardless
     of module_wide_verify_cmd. "clean" and the default None both run the module-wide
     gate exactly as before this parameter existed.
-    When card_count is provided, the completeness gate checks that enough commits were made.
+    When card_ids is provided, the completeness gate checks that the declared card_ids are
+    all accounted for -- either by raw content-commit count (when the parsed success envelope's
+    cards_done field is absent or malformed) or by comparing card_ids against a self-reported
+    cards_done set (when present and valid). already_complete: true in the parsed envelope
+    short-circuits the gate entirely on a --resume-incomplete re-verification. Both cards_done
+    and already_complete are read from the parsed success envelope inside this function, not
+    accepted as separate parameters, since they are only ever meaningful alongside a
+    self-reported status: success.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
@@ -1005,6 +1358,18 @@ def _forward_output(
             # Hoisted above _run_verify_gates to avoid a NameError in
             # _reclassify_verify_failure when the gate fires.
             _gate_session_id = session_id or parsed.get("session_id")
+            # cards_done / already_complete: the implementer's own self-report of which
+            # declared card_ids this commit set addresses, and whether a --resume-incomplete
+            # re-verification found every card's requirements already satisfied with no new
+            # commit. Extracted here (before the gate calls) so both _reclassify_verify_failure
+            # and _batch_completeness_stuck see the identical self-reported state.
+            # already_complete is threaded ONLY to _batch_completeness_stuck below -- it is a
+            # claim about card completeness meaningful solely on the explicit-status:success
+            # path, and _reclassify_verify_failure fires on a verify-failure trigger where
+            # "success" was never cleanly reported, so it deliberately has no
+            # already_complete parameter at all (passing one would raise TypeError).
+            _cards_done = parsed.get("cards_done")
+            _already_complete = bool(parsed.get("already_complete", False))
 
             gate_result = _run_verify_gates(
                 project_root,
@@ -1019,7 +1384,12 @@ def _forward_output(
                 # Reclassify a verify failure that is really a partial-batch stop
                 # (stuck_type:transient) or a no-content stop (stuck_type:logic).
                 gate_result = _reclassify_verify_failure(
-                    gate_result, project_root, start_sha, card_count, _gate_session_id
+                    gate_result,
+                    project_root,
+                    start_sha,
+                    card_ids,
+                    _gate_session_id,
+                    cards_done=_cards_done,
                 )
                 # Add commit_sha only for verify/transient/incomplete results; logic (no-content)
                 # results match the sibling no-content gates that omit commit_sha.
@@ -1031,6 +1401,19 @@ def _forward_output(
                     if result.returncode == 0:
                         gate_result["commit_sha"] = result.stdout.strip()
                 print(json.dumps(gate_result))
+                return 0
+
+            # Go build-tag retiering gate: catches a Tier-1 (default-build) compile
+            # break introduced by an added/removed //go:build constraint (#642).
+            # Runs after the verify gate passes and before the no-content-commit
+            # and completeness checks, mirroring how the verify gate's own failure
+            # already short-circuits ahead of both.
+            _retiering_result = _go_build_tag_retiering_stuck(
+                project_root, start_sha, _gate_session_id
+            )
+            if _retiering_result is not None:
+                _attach_commit_sha(_retiering_result, project_root)
+                print(json.dumps(_retiering_result))
                 return 0
 
             # Check for no-content-commit success: reject if HEAD == start_sha or if
@@ -1077,15 +1460,20 @@ def _forward_output(
 
             # _gate_session_id is already resolved above (hoisted before gate call).
 
-            # Completeness gate: demote to incomplete when fewer commits than cards.
-            # ignore_verify stays False here — on the explicit-success path a passing
-            # verify is conclusive evidence the batch is complete.
+            # Completeness gate: demote to incomplete when the declared card_ids are not
+            # all accounted for (by raw count when cards_done is absent/malformed, or by
+            # set difference against cards_done when present and valid). ignore_verify
+            # stays False here — on the explicit-success path a passing verify is
+            # conclusive evidence the batch is complete. already_complete short-circuits
+            # the gate entirely on a --resume-incomplete re-verification.
             _completeness_result = _batch_completeness_stuck(
                 project_root,
                 start_sha,
-                card_count,
+                card_ids,
                 _gate_session_id,
                 verify_cmd=verify_cmd,
+                cards_done=_cards_done,
+                already_complete=_already_complete,
             )
             if _completeness_result is not None:
                 _attach_commit_sha(_completeness_result, project_root)
@@ -1113,10 +1501,10 @@ def _forward_output(
         # own commit_sha injected here rather than the generic success-path commit_sha.
         if parsed.get("status") == "incomplete":
             # Count content commits for commits_made; fall back to the implementer's
-            # own cards_done field when git is unavailable.
+            # own cards_completed_count field when git is unavailable.
             _incomplete_commits = _content_commit_count(project_root, start_sha)
             if _incomplete_commits is None:
-                _incomplete_commits = parsed.get("cards_done")
+                _incomplete_commits = parsed.get("cards_completed_count")
             _incomplete_envelope: dict = {
                 "status": "stuck",
                 "stuck_type": "incomplete",
@@ -1205,28 +1593,44 @@ def _forward_output(
                                         module_wide_cwd_override=module_wide_cwd_override,
                                     )
                                     if gate_result is not None:
+                                        # No parsed success JSON on this inference path -- there is
+                                        # nothing to self-report from, so cards_done is always None
+                                        # here (the absent-field fallback always applies).
                                         gate_result = _reclassify_verify_failure(
                                             gate_result,
                                             project_root,
                                             start_sha,
-                                            card_count,
+                                            card_ids,
                                             session_id,
+                                            cards_done=None,
                                         )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
                                         return 0
+                                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                                    # path's comment for rationale. This no-JSON inference path must
+                                    # match that same coverage.
+                                    _retiering_result = _go_build_tag_retiering_stuck(
+                                        project_root, start_sha, session_id
+                                    )
+                                    if _retiering_result is not None:
+                                        _attach_commit_sha(_retiering_result, project_root)
+                                        print(json.dumps(_retiering_result))
+                                        return 0
                                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                                     # ignore_verify=True forces the check even when verify passed --
                                     # on the no-JSON inference path the implementer never reported
                                     # success, so a passing verify does not mean the batch is complete.
+                                    # cards_done=None: no self-report exists on this inference path.
                                     _comp = _batch_completeness_stuck(
                                         project_root,
                                         start_sha,
-                                        card_count,
+                                        card_ids,
                                         session_id,
                                         verify_cmd=verify_cmd,
                                         ignore_verify=True,
+                                        cards_done=None,
                                     )
                                     if _comp is not None:
                                         _attach_commit_sha(_comp, project_root)
@@ -1301,24 +1705,43 @@ def _forward_output(
                         module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
+                        # No parsed success JSON on this inference path -- cards_done is
+                        # always None (the absent-field fallback always applies).
                         gate_result = _reclassify_verify_failure(
-                            gate_result, project_root, start_sha, card_count, session_id
+                            gate_result,
+                            project_root,
+                            start_sha,
+                            card_ids,
+                            session_id,
+                            cards_done=None,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
+                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                    # path's comment for rationale. This no-JSON inference path must
+                    # match that same coverage.
+                    _retiering_result = _go_build_tag_retiering_stuck(
+                        project_root, start_sha, session_id
+                    )
+                    if _retiering_result is not None:
+                        _attach_commit_sha(_retiering_result, project_root)
+                        print(json.dumps(_retiering_result))
+                        return 0
                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                     # ignore_verify=True forces the check even when verify passed --
                     # on the no-JSON inference path the implementer never reported
                     # success, so a passing verify does not mean the batch is complete.
+                    # cards_done=None: no self-report exists on this inference path.
                     _comp = _batch_completeness_stuck(
                         project_root,
                         start_sha,
-                        card_count,
+                        card_ids,
                         session_id,
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
+                        cards_done=None,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
@@ -1393,24 +1816,43 @@ def _forward_output(
                         module_wide_cwd_override=module_wide_cwd_override,
                     )
                     if gate_result is not None:
+                        # No parsed success JSON on this inference path -- cards_done is
+                        # always None (the absent-field fallback always applies).
                         gate_result = _reclassify_verify_failure(
-                            gate_result, project_root, start_sha, card_count, session_id
+                            gate_result,
+                            project_root,
+                            start_sha,
+                            card_ids,
+                            session_id,
+                            cards_done=None,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
                         return 0
+                    # Go build-tag retiering gate (#642) -- see the explicit-success
+                    # path's comment for rationale. This no-JSON inference path must
+                    # match that same coverage.
+                    _retiering_result = _go_build_tag_retiering_stuck(
+                        project_root, start_sha, session_id
+                    )
+                    if _retiering_result is not None:
+                        _attach_commit_sha(_retiering_result, project_root)
+                        print(json.dumps(_retiering_result))
+                        return 0
                     # Completeness gate: incomplete batch demotes to stuck/incomplete.
                     # ignore_verify=True forces the check even when verify passed --
                     # on the no-JSON inference path the implementer never reported
                     # success, so a passing verify does not mean the batch is complete.
+                    # cards_done=None: no self-report exists on this inference path.
                     _comp = _batch_completeness_stuck(
                         project_root,
                         start_sha,
-                        card_count,
+                        card_ids,
                         session_id,
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
+                        cards_done=None,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
