@@ -102,13 +102,21 @@ If `verify: null` in the frontmatter, there is nothing to run; skip straight to 
 Your last line of output (after all work and commits) MUST be a single JSON object:
 
 ```json
-{"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>"}
+{"status":"success","commit_sha":"<last-HEAD-sha>","session_id":"<SESSION_ID>","cards_done":[<card numbers this commit set addresses>]}
 ```
 **Do not wrap the JSON in a code block. Output it as a bare line — no backticks, no fence. Anything other than a bare JSON line is treated as `stuck_type: logic`.**
 
 **`session_id` MUST be exactly `<SESSION_ID>` (the UUID shown in the example above — it was injected into this brief when it was rendered). Copy it verbatim.**
 
 **`commit_sha` MUST be a real content commit distinct from the batch start commit.** An implementer that made edits but did not run the per-card `git-commit` skill must report `status: stuck` instead.
+
+**`cards_done` MUST be a JSON array of the integer card numbers -- exactly as they appear in this batch's `### Card N:` headings, not renumbered from 1 -- that this commit set actually addresses.** Include every card you completed this turn, whether it got its own commit or was folded into a combined commit per the "one combined commit" allowance above. This self-report lets finalize recognize a legitimately-complete batch even when the raw commit count is lower than the declared card count (e.g. two cards combined into one commit) — the raw count alone cannot make that distinction.
+
+**On a `--resume-incomplete` re-dispatch specifically:** if you independently re-verify that every card's requirements are already satisfied by the existing commit(s) since `<START_SHA>` and you make no new commit this turn, report `status: success` with `"already_complete": true` in the envelope, **in addition to** (not instead of) a `cards_done` array covering every card declared in this batch:
+
+```json
+{"status":"success","commit_sha":"<HEAD-sha, unchanged from before this turn>","session_id":"<SESSION_ID>","cards_done":[<every card number declared in this batch>],"already_complete":true}
+```
 
 or, when stuck:
 
