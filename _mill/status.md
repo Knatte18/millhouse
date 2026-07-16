@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-daemon-json-noise
+phase: holistic-reviewing
 slug: mill-orchestration-crash-hardening
 branch: hanf/mill-orchestration-crash-hardening
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-07-16T11:21:13Z'
 implementing  '2026-07-16T11:25:37Z'
 approved-psmux-cleanup-crash  '2026-07-16T11:31:20Z'
 approved-wiki-daemon-json-noise  '2026-07-16T11:34:45Z'
+holistic-reviewing  '2026-07-16T11:35:11Z'
 ```
 
 ## Batches
