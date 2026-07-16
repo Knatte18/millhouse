@@ -17,6 +17,8 @@ pipeline:
   max_cards_per_batch: 10
   max_batch_context_tokens: 120000
   rename_detect_pct: 30
+  done_gate: null  # Repo-wide test command run from git_root before marking done. null = disabled.
+  done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
 merge:
   model: sonnethigh
 junctions:

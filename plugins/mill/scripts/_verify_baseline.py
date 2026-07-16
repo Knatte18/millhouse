@@ -147,7 +147,16 @@ def compute_baseline(
 
     scratch_dir = project_root / ".scratch"
     scratch_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex}"
+    # 12 hex characters (~2^48 combinations) is effectively collision-free for
+    # a short-lived per-invocation scratch directory, and reclaims path
+    # budget for Windows MAX_PATH on repos with deep fixture trees (#629).
+    # This is a best-effort mitigation, not a guaranteed fix -- the
+    # non-blocking fail-safe in `_run_baseline_stage` (which never raises; on
+    # any failure it leaves the baseline field unset and the next
+    # `_run_verify_gates` call runs the gate strictly) remains the actual
+    # safety net regardless of whether this shortening is sufficient for any
+    # given repo's fixture depth.
+    tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex[:12]}"
 
     # core.longpaths is scoped to this single invocation (via -c, not a
     # persistent git config write) so deep-path Windows repos don't hit a

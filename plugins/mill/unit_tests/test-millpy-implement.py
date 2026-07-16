@@ -1286,7 +1286,7 @@ class TestMillpyImplement(unittest.TestCase):
                 return subprocess.CompletedProcess(
                     args=argv,
                     returncode=0,
-                    stdout=f"feat(card1): implement\nmill-go: start batch test-batch\n",
+                    stdout="feat(card1): implement\nmill-go: start batch test-batch\n",
                     stderr="",
                 )
             return subprocess.CompletedProcess(
@@ -1307,6 +1307,49 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertNotEqual(data.get("stuck_type"), "incomplete")
 
+    def test_card_ids_extraction_non_contiguous_headings(self):
+        """card_ids extraction reads literal Card numbers, not a 1..N range (#660 repro).
+
+        Writes a batch file whose only headings are "### Card 7:" and "### Card 8:"
+        -- mirroring mill-plan's global-across-batches card numbering, where a later
+        batch's cards are not assumed to start at 1. main() must extract
+        card_ids={7, 8}, not {1, 2}, and thread it to _forward_output.
+        """
+        batch_file = self.tmp_path / "task" / "plan" / "01-test-batch.md"
+        batch_file.write_text(
+            "```yaml\ntask: Test\nverify: null\n```\n\n"
+            "### Card 7: first card\n\n"
+            "- **Requirements:** Implement it.\n"
+            "- **Commit:** feat(card7): implement\n\n"
+            "### Card 8: second card\n\n"
+            "- **Requirements:** Implement it too.\n"
+            "- **Commit:** feat(card8): implement\n",
+            encoding="utf-8",
+        )
+
+        captured_kwargs = {}
+
+        def _fake_forward_output(output, project_root, **kwargs):
+            captured_kwargs.update(kwargs)
+            return 0
+
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ):
+            with unittest.mock.patch.object(
+                millpy_implement, "_forward_output", side_effect=_fake_forward_output,
+            ):
+                rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(captured_kwargs.get("card_ids"), {7, 8})
+        # card_count itself is no longer a callee kwarg -- the stale keyword was
+        # dropped once finalize_from_output/_forward_output's signature was renamed.
+        self.assertNotIn("card_count", captured_kwargs)
 
     def test_prepare_stage_envelope_includes_start_sha_matching_head(self):
         """--stage prepare on a fresh (pending) batch: envelope start_sha matches the captured HEAD.
@@ -1664,7 +1707,7 @@ class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
         self.mock_junction_create = _p(_verify_baseline._junction, "create")
         _p(_verify_baseline._worktree, "remove_safe")
         self.expected_tmp_path = (
-            self.project_root / ".scratch" / f"verify-baseline-{fixed_uuid.hex}"
+            self.project_root / ".scratch" / f"verify-baseline-{fixed_uuid.hex[:12]}"
         )
 
     def test_junction_and_verify_cwd_reanchored_when_cwd_override_relative_set(self):

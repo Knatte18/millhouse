@@ -601,6 +601,65 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift owned-set ({type(exc).__name__}): {exc}")
 
+    # ROOD-5. revert_out_of_scope_drift: nested-hub layout rebases git-root-relative porcelain
+    # paths onto hub_root before reverting -- the double-prefix regression from #640.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            hub_root = git_root / "hub"
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M hub/out_of_scope.txt"],
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(
+                            hub_root, Path("_mill"), "main", git_root=git_root
+                        )
+            assert reverted == ["out_of_scope.txt"], (
+                f"expected ['out_of_scope.txt'] (hub-relative), got {reverted!r}"
+            )
+            assert remaining == [], f"expected [], got {remaining!r}"
+            call_args = mock_run.call_args[0][0]
+            assert call_args == ["git", "checkout", "HEAD", "--", "out_of_scope.txt"], (
+                f"expected hub-relative checkout path, got {call_args!r}"
+            )
+        print("PASS: revert_out_of_scope_drift: nested-hub layout rebases porcelain paths before revert")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift nested-hub porcelain: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift nested-hub porcelain ({type(exc).__name__}): {exc}")
+
+    # ROOD-6. revert_out_of_scope_drift: nested-hub layout rebases owned_paths (parent-diff set)
+    # before the in-scope check -- regression guard so a genuine task-owned file outside
+    # task_dir is not misclassified as out-of-scope drift and silently reverted.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            git_root = Path(tmp)
+            hub_root = git_root / "hub"
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M hub/owned.txt"],
+            ):
+                with unittest.mock.patch(
+                    "_cleanliness._parent_diff_names", return_value=["hub/owned.txt"]
+                ):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        mock_run.return_value = unittest.mock.Mock(returncode=0)
+                        reverted, remaining = revert_out_of_scope_drift(
+                            hub_root, Path("_mill"), "main", git_root=git_root
+                        )
+            assert reverted == [], f"expected [] (owned file must not be reverted), got {reverted!r}"
+            assert len(remaining) == 1 and "owned.txt" in remaining[0], (
+                f"expected 'owned.txt' kept as in-scope remaining, got {remaining!r}"
+            )
+        print("PASS: revert_out_of_scope_drift: nested-hub layout rebases owned_paths, owned file kept in-scope")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift nested-hub owned_paths: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift nested-hub owned_paths ({type(exc).__name__}): {exc}")
+
     # CESV-1. clean_ephemeral_scope_violations: allowlisted coverage.out is removed and reported
     try:
         with tempfile.TemporaryDirectory() as tmp:

@@ -41,7 +41,20 @@ The following tools are required and must be installed before running the build 
 - **golangci-lint** — comprehensive linter aggregator
   - Install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
 
-If either tool is not found when running the build workflow:
+Before running the build workflow, detect each tool with a bare `PATH` check first, then a
+`$GOPATH/bin` fallback — `go install` (the method recommended above) places binaries in
+`$(go env GOPATH)/bin`, which is not guaranteed to be on `PATH`:
+
+```bash
+command -v goimports >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/goimports"
+command -v golangci-lint >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/golangci-lint"
+```
+
+When a tool resolves only via the fallback (bare `command -v` failed but
+`$(go env GOPATH)/bin/<tool>` exists), invoke it via that full path
+(`"$(go env GOPATH)/bin/<tool>"`) for the remainder of the build workflow.
+
+Only when BOTH the bare check and the `$GOPATH/bin` fallback fail for a tool:
 - **Missing goimports**: Report "goimports not found — install with: `go install golang.org/x/tools/cmd/goimports@latest`" and stop.
 - **Missing golangci-lint**: Report "golangci-lint not found — install with: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`" and stop.
 

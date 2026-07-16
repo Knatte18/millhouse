@@ -156,7 +156,7 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    For the three **review** CLIs specifically, additionally pass `--actual-model <value>` using the model value the `effort-tier-review-cli` batch's step-3 `mill-go/SKILL.md` edit recorded as actually passed to this round's Agent tool call — this keeps the finalized review file's `reviewer_model` field accurate even when the Builder dispatched a different tier than the prepare envelope's `model` field named (a manual override) or the prepare-stage's own large-prompt auto-switch already changed it before the envelope was read. Implement/fix/merge-in CLIs' finalize calls do not take this flag (no `reviewer_model`-equivalent field exists on their side, per this task's earlier confirmed-absent decision).
 
-   For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope`, `--batch-name` (batch scope only), and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs. Give `millpy-fix.py --stage finalize` calls an extended Bash-tool timeout — recommend 600000ms (10 minutes) — because finalize replays every batch's `verify:` command sequentially as a regression guard, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites. This timeout note is scoped to fix-CLI finalize calls specifically (both `--nits-only` and full fix, both batch and holistic scope); review-CLI finalize calls don't run verify commands and aren't affected.
+   For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope`, `--batch-name` (batch scope only), and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs. Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms (10 minutes) — whenever that CLI's finalize stage replays a batch's `verify:` command as a regression guard: this currently applies to both `millpy-fix.py --stage finalize` and `millpy-implement.py --stage finalize`, each of which replays every batch's `verify:` command sequentially, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites. This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, both batch and holistic scope) and implementer-CLI; review-CLI finalize calls don't run verify commands and aren't affected.
 
 6.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 6 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all. Recover the existing session rather than retrying from scratch (Shared Decision `resume must preserve the original start_sha`; discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 
@@ -217,6 +217,32 @@ if not _client.health_check(wiki_path):
     exit 1
 }
 ```
+
+### 0.55. Done-gate baseline pre-flight (first batch of the task only)
+
+Immediately after "0. Wiki health-check" and before "0.5. Baseline pre-flight," for the task's **FIRST batch only** (not on every batch — only once per task run, same guard shape as "0.5. Baseline pre-flight" below), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`. If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "0.5. Baseline pre-flight." Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the Handoff-time "0. Pre-done gate" block):
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import json
+import _paths, _config, _done_gate
+git_root = _paths.resolve_git_root()
+hub_root = _paths.resolve_hub_path()
+cfg = _config.load_config(hub_root, git_root)
+pipeline_cfg = cfg.get('pipeline') or {}
+if not pipeline_cfg.get('done_gate_baseline_preflight', False):
+    raise SystemExit(0)
+gate_cmd = pipeline_cfg.get('done_gate')
+if not gate_cmd:
+    raise SystemExit(0)
+result = _done_gate.run_preflight(gate_cmd, git_root)
+print(json.dumps(result))
+"
+```
+
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `run_preflight` invokes the configured `done_gate` command, which is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+
+Parse stdout for a JSON line (absent when the flag/`done_gate` check above short-circuited via `SystemExit(0)` -- that is the normal skip path, not an error). If the JSON line's `result` is `blocked`, log the reason (ASCII-only) but do **NOT** halt — proceed to batch 1 regardless. This differs deliberately from the Handoff-time "0. Pre-done gate" gate, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable. This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the Handoff-time comparison). The Handoff-time "0. Pre-done gate" block (below, in the Handoff section) is unchanged and still halts on `blocked` there. Skip this step entirely for every batch after the first.
 
 ### 0.5. Baseline pre-flight (first batch of the task only)
 
@@ -301,13 +327,13 @@ Inline Python (in step 2b, before compute_new_dirt):
 import _parent_branch, _cleanliness
 parent_branch = _parent_branch.resolve(status_path, interactive=False)
 reverted_paths, remaining_in_scope_lines = _cleanliness.revert_out_of_scope_drift(
-    worktree_root, task_dir, parent_branch
+    worktree_root, task_dir, parent_branch, git_root
 )
 in_scope_dirt = remaining_in_scope_lines
 ```
 
 `signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
-`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str) -> tuple[list[str], list[str]]`
+`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None) -> tuple[list[str], list[str]]`
 
 If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task scope that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
@@ -794,6 +820,8 @@ if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
     subprocess.run(['dotnet', 'build-server', 'shutdown'], capture_output=True, timeout=30)
 "
 ```
+
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
 
 Parse stdout for a JSON line. If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can investigate the failure. `subprocess.run` with `capture_output=True` does not raise on non-zero exit code — check `result.returncode`.
 

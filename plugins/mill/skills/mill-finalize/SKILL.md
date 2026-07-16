@@ -31,7 +31,7 @@ Read these config keys from the deep-merged config (`cfg`):
 
 - `require_pr = bool(cfg.get("git", {}).get("require_pr_to_base", False))` — default false.
 - `base_branch = cfg.get("git", {}).get("base_branch", "main")` — default "main".
-- `parent_branch = _parent_branch.resolve(status_path, interactive=False)` — reads `parent:` from status.md. On `ParentBranchError` → halt with the error message.
+- `parent_branch = _parent_branch.resolve(status_path, interactive=False, expected_slug=slug)` — reads `parent:` from status.md. `expected_slug` is defense-in-depth: this read always runs before Step 3's own restore-path corruption within a single mill-finalize invocation, so it costs nothing to protect and only matters on an unusual re-run after a prior partial failure. On `ParentBranchError` → halt with the error message.
 
 **PR mode** activates when `require_pr is True`.
 
@@ -63,9 +63,20 @@ prevents PR diffs from being polluted with unrelated deletions on
 stacked-branch PRs.
 
 Call `_finalize_cleanup.base_tracks_task_dir(git_root, parent_branch, task_dir)`.
-If True (base tracks task_dir):
+If True (base tracks task_dir): restore it from the base — but a bare
+checkout only adds/updates paths, it never deletes, so we delete-then-restore
+instead. `git rm -r --ignore-unmatch <task_dir>` first empties `task_dir` of
+everything on the current (child) branch tip — a no-op, not an error, when
+nothing matches — then `git checkout <parent_branch> -- <task_dir>`
+repopulates `task_dir` with exactly `<parent_branch>`'s tree at that path.
+Any file present in the child's `task_dir` but absent from `<parent_branch>`'s
+tree there is now removed rather than left behind — this closes the #653
+orphaned-files gap a bare checkout left (it can only add/update paths present
+in the target ref, never delete paths that are exclusive to the current
+branch):
 
 ```bash
+git -C <worktree> rm -r --ignore-unmatch <task_dir>
 git -C <worktree> checkout <parent_branch> -- <task_dir>
 git commit -m "chore: pre-merge cleanup"
 ```
@@ -77,12 +88,15 @@ git -C <worktree> rm -r <task_dir>
 git commit -m "chore: pre-merge cleanup"
 ```
 
-Idempotency: On the restore path, if checkout fails (rare; base has no
-`<task_dir>`), skip the commit. On the rm path, if `<task_dir>` is already
-absent (re-run after partial failure), `git rm -r <task_dir>` prints "did
-not match any files" — treat as a no-op. If the working tree has nothing to
-commit, skip the commit. In both cases `task_dir` is either absent (rm path)
-or restored to base's version (restore path).
+Idempotency: On the restore path, re-running after a partial failure is still
+safe — `git rm -r --ignore-unmatch <task_dir>` is a no-op when `task_dir` is
+already empty/absent, and the subsequent checkout still succeeds (or is
+itself a no-op if `<parent_branch>` has nothing at that path). If checkout
+fails (rare; base has no `<task_dir>`), skip the commit. On the rm path, if
+`<task_dir>` is already absent (re-run after partial failure), `git rm -r
+<task_dir>` prints "did not match any files" — treat as a no-op. If the
+working tree has nothing to commit, skip the commit. In both cases `task_dir`
+is either absent (rm path) or restored to base's version (restore path).
 
 ### Step 4: Push task branch
 
