@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-reviewer-model-audit-trail-backend
+phase: approved-reviewer-model-audit-trail-cli
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-permission-allowlist  '2026-07-16T14:32:52Z'
 approved-effort-tier-implementer  '2026-07-16T14:39:15Z'
 approved-effort-tier-review-cli  '2026-07-16T14:44:39Z'
 approved-reviewer-model-audit-trail-backend  '2026-07-16T14:51:38Z'
+approved-reviewer-model-audit-trail-cli  '2026-07-16T15:16:24Z'
 ```
 
 ## Batches
@@ -58,7 +59,8 @@ batches:
     start_sha: 85b3babbd4ceeef09ee43208a8bc770a03ea492a
     commit_sha: a80876b58e1ddccaa65f6249e7e62008ccd8aea5
   - name: reviewer-model-audit-trail-cli
-    state: running
+    state: approved
     implementer_session: d0bddc2e-1ad2-431e-8678-fc7e3248b2b8
     start_sha: 732b423b716a9d2e0c65c3913d0078d817e52b0d
+    commit_sha: fe3528f4f9db7226764155afc1cf310c2c9edf1c
 ```
