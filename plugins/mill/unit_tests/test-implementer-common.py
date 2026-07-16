@@ -3221,6 +3221,51 @@ def main() -> int:
             print(f"FAIL: case 64 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 65: #628/#633 - emit_prepare threads effort through the prepare envelope.
+    # effort="high" must add "effort": "high"; the default (omitted) must leave
+    # the key entirely absent from the envelope, mirroring the start_sha pattern.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        briefs_dir = Path(tmpdir) / "briefs"
+        try:
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare(
+                    briefs_dir,
+                    "fix",
+                    "test-batch",
+                    1,
+                    "prompt text",
+                    "haiku",
+                    "session-abc",
+                    effort="high",
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert data["effort"] == "high", (
+                f"expected effort='high' in envelope, got {data}"
+            )
+
+            rc, captured = _capture_stdout(
+                lambda: emit_prepare(
+                    briefs_dir,
+                    "fix",
+                    "test-batch",
+                    2,
+                    "prompt text",
+                    "haiku",
+                    "session-abc",
+                )
+            )
+            assert rc == 0, f"expected rc=0, got {rc}"
+            data = json.loads(captured.strip())
+            assert "effort" not in data, (
+                f"expected effort key absent when omitted, got {data}"
+            )
+            print("PASS: case 65 - emit_prepare threads effort through envelope")
+        except Exception as exc:
+            print(f"FAIL: case 65 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

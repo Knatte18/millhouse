@@ -757,6 +757,7 @@ def emit_prepare(
     session_id: str,
     start_sha: str | None = None,
     nits_only: bool = False,
+    effort: str | None = None,
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
@@ -771,6 +772,9 @@ def emit_prepare(
             signalling that any finalize call re-invoking this scope/round
             must re-pass `--nits-only`. Omitted from the envelope (not
             emitted as `false`) when this stays at its default.
+        effort: Effort tier resolved from the reviewer/implementer registry
+            spec (e.g. "high"); included in the envelope as "effort" when
+            not None, omitted otherwise.
     """
     brief_path = _agent_dispatch.write_brief(
         briefs_dir, role, scope, round_n, prompt_text
@@ -789,6 +793,8 @@ def emit_prepare(
         envelope["start_sha"] = start_sha
     if nits_only:
         envelope["nits_only"] = True
+    if effort is not None:
+        envelope["effort"] = effort
     print(json.dumps(envelope))
     return 0
 
