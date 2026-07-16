@@ -1,0 +1,3 @@
+- Hub's own mill-config.yaml documents a `done_gate` key that isn't present: **Location:** `mill-config.yaml:20`
+- Same-directory removed-tag transitions with differing tag values silently pick one: **Location:** `plugins/mill/scripts/_implementer_common.py:1039-1042`
+- `_done_gate.run_preflight` only guards `OSError`, narrower than the "never raise" wording: **Location:** `plugins/mill/scripts/_done_gate.py:71-79`
