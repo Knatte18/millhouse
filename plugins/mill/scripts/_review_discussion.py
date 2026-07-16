@@ -8,7 +8,7 @@ review file; the LLM does not use Write.
 
 Public API:
     prepare(cfg, slug, mill_dir, project_root, wiki_root) -> dict
-        Render prompt and resolve spec; return prepare dict with prompt_text, model, round, reviews_dir, scope.
+        Render prompt and resolve spec; return prepare dict with prompt_text, model, effort, round, reviews_dir, scope.
     finalize(cfg, slug, raw_text, *, round_n, reviews_dir, mill_dir, project_root, wiki_root) -> ReviewResult
         Parse verdict from raw_text and return ReviewResult.
     run(cfg, slug, mill_dir, wiki_root, project_root, *, max_rounds=None) -> ReviewResult
@@ -60,7 +60,7 @@ def prepare(
             receiving today's non-agent rule unchanged.
 
     Returns:
-        Dict with keys: prompt_text, model, round, reviews_dir, scope.
+        Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
     """
     # 1. Resolve paths
     discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
@@ -120,6 +120,7 @@ def prepare(
     return {
         "prompt_text": prompt_text,
         "model": spec.get("model"),
+        "effort": spec.get("effort"),
         "round": round_n,
         "reviews_dir": reviews_dir,
         "scope": "holistic",
