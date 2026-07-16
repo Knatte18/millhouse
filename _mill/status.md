@@ -47,5 +47,7 @@ batches:
     start_sha: 95e583adfc3bce2ac75c73591ca8b4d1058c9346
     commit_sha: d8e410f768b7c7b83dda0b9665054602be81804e
   - name: integration-test-coverage
-    state: pending
+    state: running
+    implementer_session: f54263a2-fc47-446c-b366-fafd0a4d7958
+    start_sha: 9c331769fa299735aaa742102a3ab8c910497102
 ```
