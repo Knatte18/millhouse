@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-misc-tooling-and-docs-gaps
 branch: hanf/mill-misc-tooling-and-docs-gaps
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-golang-build-gopath-fallback  '2026-07-16T14:18:50Z'
 approved-plan-overview-comment-fix  '2026-07-16T14:20:35Z'
 approved-mill-plan-source-edit-guardrail  '2026-07-16T14:22:44Z'
 holistic-reviewing  '2026-07-16T14:23:10Z'
+holistic-approved  '2026-07-16T14:25:25Z'
 ```
 
 ## Batches
