@@ -28,10 +28,11 @@ bundled into one task purely because each is too small to justify its own task b
    fails, so the file stays dirty and blocks the batch instead of being auto-reverted.
    `compute_scope_violations` in the same file already solves this correctly via a
    `hub_prefix`-rebasing step; `revert_out_of_scope_drift` never got the equivalent fix.
-3. **#658** — `golang-build/SKILL.md`'s Tool Installation section tells the agent to run a
-   bare `which`/`command -v` check for `goimports`/`golangci-lint` and report "not found"
-   if it fails. Tools installed via `go install` (the method the skill itself recommends)
-   land in `$(go env GOPATH)/bin`, which is not guaranteed to be on `$PATH` for every shell
+3. **#658** — `golang-build/SKILL.md`'s Tool Installation section (lines 35-48) prescribes
+   no detection command at all — only prose ("If either tool is not found... report... and
+   stop"). In practice the agent following it runs a bare `which`/`command -v` check.
+   Tools installed via `go install` (the method the skill itself recommends) land in
+   `$(go env GOPATH)/bin`, which is not guaranteed to be on `$PATH` for every shell
    session — producing a false negative even though the tools are present.
 4. **#632** — `plugins/mill/templates/plan-overview.md`'s "All Files Touched" section
    comment claims "mill-go reads this to warn if two parallel batches touch the same file".
@@ -131,33 +132,52 @@ bundled into one task purely because each is too small to justify its own task b
   `compute_scope_violations` already does (`hub_prefix = worktree.relative_to(git_root).as_posix()`,
   empty string when they're equal — flat layout). Rebase every git-root-relative porcelain
   path onto the hub-relative form before the existing `task_dir_str`/`owned_paths`
-  in-scope/out-of-scope comparison runs, and pass the hub-relative form to the
-  `git checkout HEAD -- <path>` subprocess call (which continues to run with `cwd=worktree`,
-  unchanged). Update the sole production call site — `mill-go/SKILL.md` step 2b's inline
-  Python snippet and its `signature:` line — to pass `git_root` (already resolved earlier in
-  that skill session, per its Path Setup section). Add a nested-hub-layout regression test to
-  `plugins/mill/unit_tests/test-cleanliness.py` mirroring the existing `ROOD-*` test cases
-  but with `hub_root != git_root`.
+  in-scope/out-of-scope comparison runs. **`owned_paths` needs the same rebasing**:
+  `_parent_diff_names` runs `git diff --name-only <parent>...HEAD`, whose output is always
+  git-root-relative regardless of `cwd` — the same convention as the porcelain lines, and
+  the same mismatch `compute_scope_violations` already had to solve. `compute_scope_violations`
+  is not a full analog here because it never consults `owned_paths` at all; rebase
+  `owned_paths` entries onto hub-relative form (via the same `hub_prefix` stripping, dropping
+  entries outside `hub_prefix` exactly as the porcelain-path rebase already does) before the
+  `path in owned_paths` check runs, so both sides of every comparison share one convention.
+  `task_dir_str` is already hub-relative and needs no change. Pass the (now-rebased,
+  hub-relative) path to the `git checkout HEAD -- <path>` subprocess call (which continues to
+  run with `cwd=worktree`, unchanged). Update the sole production call site — `mill-go/SKILL.md`
+  step 2b's inline Python snippet and its `signature:` line — to pass `git_root` (already
+  resolved earlier in that skill session, per its Path Setup section). Add nested-hub-layout
+  regression tests to `plugins/mill/unit_tests/test-cleanliness.py` mirroring the existing
+  `ROOD-*` test cases but with `hub_root != git_root`, including one asserting a task-owned
+  modification outside `task_dir` (i.e. present in the rebased `owned_paths`) is correctly
+  treated as in-scope and NOT reverted.
 - Rationale: `compute_scope_violations`, in the same file, already documents and solves
   exactly this rebasing problem for a sibling function; using the same technique keeps the
   two path-handling conventions in `_cleanliness.py` consistent instead of introducing a
-  second, different one.
+  second, different one. Extending the rebase to `owned_paths` (not just the porcelain lines)
+  is required so the fix doesn't trade the double-prefix bug for a new failure mode: an
+  unrebased `owned_paths` would make a genuine task-owned, out-of-`task_dir` modification
+  (e.g. `src/csharp/NORCE.Models/foo.cs` in a nested-hub layout) fail its hub-relative
+  `foo.cs` membership check, get misclassified out-of-scope, and get silently
+  `git checkout`-reverted — losing real task work instead of fixing the revert.
 - Rejected: running `git checkout` with `cwd=git_root` instead of rebasing paths — would
   work but leaves the file's two "scope" functions using different path conventions
   (git-root-relative subprocess calls in one, hub-relative in the other), which is more
   confusing for future maintenance than mirroring the one correct pattern that already
-  exists.
+  exists. Rebasing only the porcelain lines and leaving `owned_paths` git-root-relative —
+  rejected because it silently reverts genuine in-scope work in nested-hub layouts (the GAP
+  this fix must close).
 
 ### golang-build-gopath-fallback (#658)
 
-- Decision: In `plugins/golang/skills/golang-build/SKILL.md`'s "Tool Installation" section,
-  change the detection step for each tool to first try the existing `command -v`/`which`
-  check, then fall back to checking `$(go env GOPATH)/bin/<tool>` directly (e.g.
-  `command -v goimports >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/goimports"`). If the
-  tool is found via the fallback, the build workflow should invoke it via that full path (or
-  prepend `$(go env GOPATH)/bin` to `PATH` for the remainder of the session) rather than
-  relying on the bare command name. Only emit the existing "not found — install with: ..."
-  message and stop when both checks fail.
+- Decision: `plugins/golang/skills/golang-build/SKILL.md`'s "Tool Installation" section
+  (lines 35-48) currently has no detection command at all — only prose ("If either tool is
+  not found when running the build workflow: ... report ... and stop"). Introduce the full
+  detection snippet (there is no existing check to append a fallback to): for each tool, try
+  `command -v <tool>` first, then fall back to checking `$(go env GOPATH)/bin/<tool>`
+  directly (e.g. `command -v goimports >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/goimports"`).
+  If the tool is found via the fallback, the build workflow should invoke it via that full
+  path (or prepend `$(go env GOPATH)/bin` to `PATH` for the remainder of the session) rather
+  than relying on the bare command name. Only emit the existing "not found — install with:
+  ..." message and stop when both checks fail.
 - Rationale: `go install` (the method the skill's own "Install:" instructions recommend)
   places binaries in `$GOPATH/bin`, which is commonly not on `PATH` for a fresh shell/tool
   session — the false negative is a direct consequence of the skill recommending an install
@@ -208,19 +228,20 @@ bundled into one task purely because each is too small to justify its own task b
   - **#651**: `plugins/mill/scripts/millpy-fix.py`, `plugins/mill/scripts/_reviewers.py`
     (new tier-compare helper + its unit tests in `test-reviewers.py`),
     `plugins/mill/templates/mill-config.yaml` (comment only), plus unit tests in
-    `test-millpy-fix.py` for the call-site wiring.
+    `test-millpy-fix.py` for the call-site wiring. **Does not touch `mill-go/SKILL.md`** —
+    `roles.fixer.model` is read directly by `millpy-fix.py`; the config-template comment
+    added by this fix lives in `mill-config.yaml`, not in mill-go's skill doc.
   - **#640**: `plugins/mill/scripts/_cleanliness.py`, `plugins/mill/skills/mill-go/SKILL.md`
     (step 2b's inline snippet + signature line only), `plugins/mill/unit_tests/test-cleanliness.py`.
   - **#658**: `plugins/golang/skills/golang-build/SKILL.md` only.
   - **#632**: `plugins/mill/templates/plan-overview.md` only.
   - **#623**: `plugins/mill/skills/mill-plan/SKILL.md` only.
-  - #651 and #640 both touch `plugins/mill/skills/mill-go/SKILL.md`, but in unrelated,
-    non-adjacent sections (an escalation-checklist comment vs. step 2b's cleanliness-gate
-    snippet). Mark these two batches as sequential with each other (not parallel) to avoid
-    a same-file parallel-edit conflict; #658, #632, and #623 touch no files shared with any
-    other batch and can run in parallel with everything else.
+  - All five batches are file-disjoint — #651 does not touch `mill-go/SKILL.md` (only #640
+    does; a prior draft of this section incorrectly claimed both touched it and marked them
+    sequential on that basis, which was wrong — corrected here). No sequential constraint is
+    needed between any pair; all five batches can run fully in parallel.
 - Rationale: the five issues are functionally unrelated; per-issue batches keep each code
-  review scoped to one problem and maximize safe parallelism given how file-disjoint most of
+  review scoped to one problem and maximize safe parallelism given how file-disjoint all of
   the fixes are.
 - Rejected: one combined batch — simpler DAG, but forces full serialization for fixes that
   don't need it and loses per-issue review granularity.
@@ -271,10 +292,13 @@ bundled into one task purely because each is too small to justify its own task b
   asserting the warning fires (stderr) when `--scope` selects a code-review scope whose
   reviewer resolves to a strictly higher tier than `fixer.model`, and does not fire when
   tiers are equal or the fixer is stronger.
-- **#640**: new nested-hub-layout test in `test-cleanliness.py` (`hub_root` a subdirectory of
-  a synthesized `git_root`) verifying the previously-failing revert now succeeds and returns
-  the reverted path; existing flat-layout `ROOD-*` tests must continue passing unchanged
-  (regression guard — the rebasing must be a no-op when `hub_prefix` is empty).
+- **#640**: new nested-hub-layout tests in `test-cleanliness.py` (`hub_root` a subdirectory of
+  a synthesized `git_root`): (1) an out-of-scope tracked modification is now correctly
+  reverted (the reported bug); (2) a task-owned modification outside `task_dir` (rebased into
+  `owned_paths`) is correctly treated as in-scope and NOT reverted (guards against the
+  owned_paths regression identified during discussion review). Existing flat-layout `ROOD-*`
+  tests must continue passing unchanged (regression guard — the rebasing must be a no-op when
+  `hub_prefix` is empty).
 - **#658**: no automated test — verified by plan/code review reading the bash fallback logic
   for correctness (see Decisions/Rejected).
 - **#632**: no automated test — a template comment wording change; `_plan_validate.py`'s
@@ -292,3 +316,5 @@ bundled into one task purely because each is too small to justify its own task b
 - **Q:** #623 — textual guardrail or mechanical enforcement for the mill-plan source-edit near-miss? **A:** [auto-pick] One explicit guardrail sentence in Phase: Plan Review, applied before steps 4b/4c/4d. **Why:** matches the issue's own suggested fix; no evidence the textual guardrail alone is insufficient.
 - **Q:** should #651's warning compare fixer.model against every configured reviewer role/scope, or only code-review? **A:** [auto-pick] Code-review only (batch and holistic), fired from `millpy-fix.py` at fix-dispatch time. **Why:** `roles.fixer.model` is only ever consumed by the code-review fixer dispatch path — comparing against discussion-review/plan-review reviewers would be comparing against a code path that doesn't use this key at all.
 - **Q:** should these 5 fixes be one combined plan batch or five separate batches? **A:** [auto-pick] Five separate batches, with #651 and #640 marked sequential with each other (both touch `mill-go/SKILL.md` in unrelated sections) and the other three parallel with everything. **Why:** maximizes safe parallelism given how file-disjoint most fixes are; keeps review scoped per issue.
+- **Q:** (round 1 review GAP) does rebasing only the porcelain paths in `revert_out_of_scope_drift` fully fix #640, or does `owned_paths` need the same treatment? **A:** `owned_paths` (from `_parent_diff_names`) is git-root-relative for the same reason the porcelain lines are — it must be rebased the same way, or a genuine task-owned out-of-`task_dir` modification gets misclassified out-of-scope and silently reverted. **Why:** `_parent_diff_names` runs `git diff --name-only`, whose output convention matches `git status --porcelain` (always relative to git root, regardless of cwd) — confirmed by reading `_cleanliness.py` directly.
+- **Q:** (round 1 review GAP) does #651 actually touch `mill-go/SKILL.md`, justifying the sequential constraint with #640 in batch-structure? **A:** No — #651's own file-ownership list only names `millpy-fix.py`, `_reviewers.py`, `mill-config.yaml`, and tests. The claimed overlap was wrong; corrected to state all five batches are file-disjoint and fully parallel. **Why:** re-checked #651's Decision/Scope-In against the batch-structure section and found no `mill-go/SKILL.md` reference in the former.
