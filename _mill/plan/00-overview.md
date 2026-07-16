@@ -3,7 +3,7 @@
 ```yaml
 task: "Agent-mode dispatch: envelope fields and session/runtime state are unreliable"
 slug: mill-go-agent-dispatch-reliability-gaps
-approved: false
+approved: true
 started: "20260716-135443"
 parent: hanf/linux-port-more
 root: ""
@@ -57,7 +57,7 @@ batches:
 ### Decision: verify command shape and scope
 
 - **Decision:** every batch's `verify:` starts with the literal `PYTHONPATH= ` prefix (Python project) and scopes to the specific test file(s) each batch's `Edits:`/`Creates:` touch, via `run-all.py --only <basenames>`. The overview's module-wide `verify:` also uses `--only`, scoped to the union of all eight test files this task touches across every batch (`test-agent-dispatch.py`, `test-millpy-implement.py`, `test-implementer-common.py`, `test-review-prepare-envelope.py`, `test-review-common.py`, `test-review-finalize.py`, `test-review-cli.py`, `test-claude-settings.py`) — an unfiltered `run-all.py` is rejected outright by the plan validator's `verify-full-suite` check.
-- **Rationale:** per-batch scoping keeps each implementer/fixer verify round fast. The module-wide check re-runs the full set of files this task touches (rather than just the current batch's own files) at every batch boundary — this still catches a later batch's changes silently breaking an earlier batch's already-passing tests (e.g. Batch 2's `millpy-implement.py` edit regressing a Batch 1 test case), which per-batch scoping alone would miss since each batch only re-verifies its own files.
+- **Rationale:** per-batch scoping keeps each implementer/fixer verify round fast. The module-wide check re-runs the full set of nine files this task touches (`test-agent-dispatch.py`, `test-millpy-implement.py`, `test-implementer-common.py`, `test-millpy-fix.py`, `test-review-prepare-envelope.py`, `test-review-common.py`, `test-review-finalize.py`, `test-review-cli.py`, `test-claude-settings.py` — rather than just the current batch's own files) at every batch boundary — this still catches a later batch's changes silently breaking an earlier batch's already-passing tests (e.g. Batch 2's `millpy-implement.py` edit regressing a Batch 1 test case), which per-batch scoping alone would miss since each batch only re-verifies its own files.
 - **Applies to:** all batches.
 
 ### Decision: no `mill-config.yaml` changes

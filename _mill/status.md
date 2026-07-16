@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-16T13:19:13Z'
 discussed  '2026-07-16T13:50:03Z'
 planning  '2026-07-16T13:57:34Z'
+plan-fix-r1  '2026-07-16T14:09:43Z'
 ```
