@@ -58,5 +58,7 @@ batches:
     start_sha: 0588a3d8d5ddf11aa3df5bfecd0e91ab7af29b8d
     commit_sha: 87dd203213e2c982ca442568d436e652e98abd26
   - name: finalize-timeout-guidance-generalization
-    state: pending
+    state: running
+    implementer_session: 636aecfc-416a-4ade-ae47-0f235275b94a
+    start_sha: 99bc9de06024f0fbf5b7c156c431807c15756be4
 ```
