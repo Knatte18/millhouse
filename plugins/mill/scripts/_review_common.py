@@ -1661,6 +1661,89 @@ def write_review_file(
     return out_path.resolve()
 
 
+# Horizontal whitespace only (`[ \t]`, not `\s`) between the colon and the
+# value -- `\s` also matches `\n`, which would let this pattern bleed across
+# a line boundary and swallow the line below when `reviewer_model:` has no
+# value of its own (e.g. a malformed `reviewer_model:\n` followed by a
+# non-blank line such as a closing yaml fence).
+_RE_REVIEWER_MODEL_LINE = re.compile(r"^reviewer_model:[ \t]*\S.*$", re.MULTILINE)
+
+
+def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
+    """
+    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output
+    so the persisted review file records the model that actually ran the
+    review, rather than the model the reviewer's own prompt-echoed text
+    claims it is (which is unreliable in agent-mode dispatch -- see #644).
+
+    Behavior:
+    1. If `actual_model` is None, the caller has no override to apply --
+       return `raw_text` completely unchanged (today's behavior).
+    2. Otherwise, search for a line matching `reviewer_model:[ \\t]*\\S.*`
+       (the line the review-prompt templates instruct the reviewer to echo,
+       e.g. `<REVIEWER_MODEL>` in review-code-batch.md). If found, replace
+       that line's value in place with `reviewer_model: {actual_model}`.
+    3. If no such line is found (the reviewer omitted or malformed it),
+       inject a new `reviewer_model: {actual_model}` line immediately after
+       the opening ` ```yaml ` fence of the fenced block that carries the
+       reviewer's `verdict:` line (the YAML header block). If no block
+       carries a `verdict:` line, fall back to the first ` ```yaml ` fence
+       in `raw_text`. If there is no ` ```yaml ` fence at all, there is
+       nowhere sensible to anchor the injection, so `raw_text` is returned
+       unchanged.
+
+    Args:
+        raw_text: Raw review output text, prior to verdict parsing or disk write.
+        actual_model: The model that actually produced this review, or None
+            to leave `raw_text` untouched.
+
+    Returns:
+        The (possibly rewritten) raw text.
+    """
+    if actual_model is None:
+        return raw_text
+
+    replacement_line = f"reviewer_model: {actual_model}"
+    if _RE_REVIEWER_MODEL_LINE.search(raw_text):
+        return _RE_REVIEWER_MODEL_LINE.sub(replacement_line, raw_text, count=1)
+
+    # No well-formed reviewer_model line exists to rewrite. Find the yaml
+    # fenced block that carries the reviewer's verdict -- that is the
+    # header block the new line belongs in -- and remember the first yaml
+    # fence encountered as a fallback anchor in case no block has a verdict.
+    lines = raw_text.splitlines(keepends=True)
+    first_fence_index: int | None = None
+    header_fence_index: int | None = None
+    index = 0
+    while index < len(lines):
+        if lines[index].rstrip("\n") != "```yaml":
+            index += 1
+            continue
+        if first_fence_index is None:
+            first_fence_index = index
+        block_end = index + 1
+        while block_end < len(lines) and lines[block_end].rstrip("\n") != "```":
+            block_end += 1
+        block_body = lines[index + 1 : block_end]
+        if any(re.match(r"^verdict:\s*\S", line) for line in block_body):
+            header_fence_index = index
+            break
+        index = block_end + 1
+
+    fence_index = (
+        header_fence_index if header_fence_index is not None else first_fence_index
+    )
+    if fence_index is None:
+        # No yaml fence anywhere in the text -- nothing to anchor to.
+        return raw_text
+
+    # Insert the new line directly after the chosen opening fence.
+    if not lines[fence_index].endswith("\n"):
+        lines[fence_index] = lines[fence_index] + "\n"
+    lines.insert(fence_index + 1, f"{replacement_line}\n")
+    return "".join(lines)
+
+
 def finalize_scope(
     reviews_dir: Path,
     review_type: str,
@@ -1668,11 +1751,13 @@ def finalize_scope(
     raw_text: str,
     *,
     scope: str | None = None,
+    actual_model: str | None = None,
 ) -> dict:
     """Finalize a single review scope by parsing verdict and writing the review file.
 
-    Runs parse_verdict, then write_review_file, and returns a dict
-    with the review entry plus blocking/nit counts for ReviewResult assembly.
+    Runs apply_actual_model_override, then parse_verdict, then
+    write_review_file, and returns a dict with the review entry plus
+    blocking/nit counts for ReviewResult assembly.
 
     Args:
         reviews_dir: Directory where review files are stored.
@@ -1680,6 +1765,9 @@ def finalize_scope(
         round_n: Round number (integer).
         raw_text: Raw review output text to parse and write.
         scope: Optional scope name ("holistic" or batch name); if None defaults to "holistic".
+        actual_model: The model that actually produced this review, used to
+            correct an unreliable self-reported `reviewer_model:` line before
+            parsing or writing; if None, `raw_text` is used unmodified.
 
     Returns:
         Dict with keys: scope, verdict, file, blocking_count, nit_count.
@@ -1687,6 +1775,7 @@ def finalize_scope(
     Raises:
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
+    raw_text = apply_actual_model_override(raw_text, actual_model)
     verdict = parse_verdict(raw_text)
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
