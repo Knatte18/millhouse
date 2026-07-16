@@ -38,7 +38,9 @@ batches:
     start_sha: 47fe1b2e1057585a3074439be3cb7c076f12ec82
     commit_sha: cbbbb4bce634f18527deec922276149dbcc76423
   - name: cleanliness-nested-hub-revert
-    state: pending
+    state: running
+    implementer_session: 5cd924fa-b55e-4b17-bc60-6e40666f81b6
+    start_sha: 33e2aaec9201d796e4564e74a889f91c9f449f94
   - name: golang-build-gopath-fallback
     state: pending
   - name: plan-overview-comment-fix
