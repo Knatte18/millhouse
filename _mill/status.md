@@ -58,5 +58,7 @@ batches:
     start_sha: 85b3babbd4ceeef09ee43208a8bc770a03ea492a
     commit_sha: a80876b58e1ddccaa65f6249e7e62008ccd8aea5
   - name: reviewer-model-audit-trail-cli
-    state: pending
+    state: running
+    implementer_session: d0bddc2e-1ad2-431e-8678-fc7e3248b2b8
+    start_sha: 732b423b716a9d2e0c65c3913d0078d817e52b0d
 ```
