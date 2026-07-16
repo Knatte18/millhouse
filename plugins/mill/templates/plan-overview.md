@@ -86,8 +86,11 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 _Full union of every `Creates:` / `Edits:` / `Moves:` **target** path
 across every batch, sorted alphabetically (Move **source** paths are
-excluded — they disappear, like `Deletes:` tokens). mill-go reads this
-to warn if two parallel batches touch the same file — a sign of a
-misplaced dependency._
+excluded — they disappear, like `Deletes:` tokens). Cards are the
+source of truth; this section is the input `_plan_validate.py`'s
+`all-files-touched-mismatch` check cross-references against the derived
+union of every card's `Edits:`/`Creates:`/Move-target paths, to catch
+drift between the hand/agent-maintained list here and that derived
+union._
 
 - `path/to/file.py`
