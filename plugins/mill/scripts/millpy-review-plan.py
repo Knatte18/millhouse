@@ -88,6 +88,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
     )
+    parser.add_argument(
+        "--actual-model",
+        default=None,
+        help=(
+            "Model tier actually dispatched via the Agent tool for this round, "
+            "when it diverges from the prepare envelope's `model` field (e.g. "
+            "an operator-directed override); threaded into the review file's "
+            "`reviewer_model` field. Omit to leave today's config-derived value "
+            "untouched."
+        ),
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -196,7 +207,8 @@ def main(argv: list[str] | None = None) -> int:
             review_entry = finalize(
                 cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
-                project_root=project_root, wiki_root=wiki_root, git_root=git_root
+                project_root=project_root, wiki_root=wiki_root, git_root=git_root,
+                actual_model=args.actual_model,
             )
             # Build ReviewResult from the single review entry
             result_dict = {

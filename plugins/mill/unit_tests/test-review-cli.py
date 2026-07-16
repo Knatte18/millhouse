@@ -641,6 +641,115 @@ def test_code_prepare_brief_path_uses_git_root() -> int:
         return failures
 
 
+def test_finalize_actual_model_flag_reflected_in_review_file() -> int:
+    """Test that `--stage finalize --actual-model <tier>` overrides the
+    written review file's `reviewer_model:` line for each of the three
+    review CLIs.
+
+    Uses an in-process `main(argv)` call against the real `_review_common`
+    and review-backend modules (only `_paths`/`_reviewers` are mocked),
+    mirroring the CLI-level real-backend pattern in test-review-finalize.py.
+    The raw reviewer output always echoes `reviewer_model: sonnetmax`;
+    passing `--actual-model haiku` must overwrite that line in the file
+    actually written to disk.
+    """
+    failures = 0
+    import importlib.util as _ilu
+    import unittest.mock as _mock
+    import _review_common as _rc
+
+    raw_text = (
+        "MILL_REVIEW_BEGIN\n"
+        "```yaml\n"
+        "verdict: APPROVE\n"
+        "reviewer_model: sonnetmax\n"
+        "```\n"
+        "MILL_REVIEW_END\n"
+    )
+
+    for cli_name, review_type in [
+        ("millpy-review-discussion.py", "discussion"),
+        ("millpy-review-plan.py", "plan"),
+        ("millpy-review-code.py", "code"),
+    ]:
+        _cli_path = HUB / "plugins" / "mill" / "scripts" / cli_name
+        _spec = _ilu.spec_from_file_location(f"{cli_name}_actual_model", str(_cli_path))
+        _mod = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+
+        with tempfile.TemporaryDirectory() as _tmpdir:
+            project_root = Path(_tmpdir)
+            reviews_dir = project_root / "_mill" / "reviews"
+            agent_output_path = project_root / "agent-output.out.md"
+            agent_output_path.write_text(raw_text, encoding="utf-8")
+
+            mock_paths = _mock.MagicMock()
+            mock_paths.resolve_git_root = _mock.MagicMock(return_value=project_root)
+            mock_paths.resolve_hub_path = _mock.MagicMock(return_value=project_root)
+            mock_paths.resolve_wiki_path = _mock.MagicMock(return_value=project_root)
+
+            mock_reviewers = _mock.MagicMock()
+            mock_reviewers.load = _mock.MagicMock(return_value={})
+            mock_reviewers.validate_role_refs = _mock.MagicMock()
+
+            orig_load_config = _rc.load_config
+            orig_resolve_path = _rc.resolve_path
+            try:
+                _rc.load_config = lambda *a, **kw: {"paths": {"reviews_dir": "_mill/reviews/"}}
+                _rc.resolve_path = lambda *a, **kw: reviews_dir
+
+                with _mock.patch.dict(sys.modules, {"_paths": mock_paths, "_reviewers": mock_reviewers}):
+                    stdout_buf = io.StringIO()
+                    with contextlib.redirect_stdout(stdout_buf):
+                        rc = _mod.main(
+                            [
+                                "--slug", "test-slug",
+                                "--stage", "finalize",
+                                "--round", "1",
+                                "--agent-output", str(agent_output_path),
+                                "--actual-model", "haiku",
+                            ]
+                        )
+            finally:
+                _rc.load_config = orig_load_config
+                _rc.resolve_path = orig_resolve_path
+
+            if rc != 0:
+                print(f"FAIL actual_model ({cli_name}/exit code): expected 0, got {rc}", file=sys.stderr)
+                failures += 1
+                continue
+
+            try:
+                envelope = json.loads(stdout_buf.getvalue().strip())
+            except json.JSONDecodeError as e:
+                print(f"FAIL actual_model ({cli_name}/JSON): {e}", file=sys.stderr)
+                failures += 1
+                continue
+
+            reviews = envelope.get("reviews", [])
+            if not reviews:
+                print(f"FAIL actual_model ({cli_name}/reviews empty): {envelope!r}", file=sys.stderr)
+                failures += 1
+                continue
+
+            written_path = Path(reviews[0]["file"])
+            if not written_path.exists():
+                print(f"FAIL actual_model ({cli_name}/file missing): {written_path}", file=sys.stderr)
+                failures += 1
+                continue
+
+            written_content = written_path.read_text(encoding="utf-8")
+            if "reviewer_model: haiku" not in written_content:
+                print(
+                    f"FAIL actual_model ({cli_name}/reviewer_model line): expected "
+                    f"'reviewer_model: haiku' in written file, got: {written_content!r}",
+                    file=sys.stderr,
+                )
+                failures += 1
+
+    return failures
+
+
 def main() -> int:
     failures = 0
 
@@ -652,6 +761,7 @@ def main() -> int:
     failures += test_discussion_prepare_brief_path_uses_hub_dir()
     failures += test_plan_prepare_brief_path_uses_git_root()
     failures += test_code_prepare_brief_path_uses_git_root()
+    failures += test_finalize_actual_model_flag_reflected_in_review_file()
 
     # (a) plain message — ERROR: prefix present, hint absent, trailing newline present
     buf = io.StringIO()
