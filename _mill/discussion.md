@@ -137,6 +137,15 @@ accumulate.
   the probe adds a full round-trip TCP connect/close for zero information (the value it would
   provide — "is the port reachable" — is a strict subset of what `_connect_send_recv` already
   answers).
+- **Scope note:** two sibling bare-connect probes exist elsewhere in `wiki/_client.py` —
+  `wait_for_socket_reachable()` (polls raw reachability right after spawning the daemon, before
+  a token exists to send an authenticated request) and `_is_stale()` (checks whether a
+  previously-recorded daemon is still alive). Unlike the `_ensure_daemon` probe, neither is
+  redundant with an adjacent real request — each is the *only* reachability check in its
+  context — so **both remain unchanged**, in scope here only as documented callers that will
+  keep hitting the daemon's empty-payload path. This is precisely why the
+  `_handle_connection` decision below is not merely defense-in-depth for a hypothetical future
+  client: it is required for two other call sites that already exist today.
 
 ### `_handle_connection` empty/malformed-payload handling
 
@@ -162,6 +171,17 @@ accumulate.
   rejected because a genuine `handle_request` failure (a real server-side bug) should still be
   visible to the daemon's log at error severity; only the specific "client sent nothing/garbage
   before we could even parse it" case should be downgraded.
+- **Response-drop scope note:** today's outer `except Exception` sends a `server_error` reply
+  even on a parse failure. The new `JSONDecodeError` branch deliberately drops that reply for
+  *both* sub-cases it covers — the fully-empty payload (`msg_text == ""`, from the three
+  bare-connect probes: the two documented in the previous decision's scope note, plus any
+  probe not yet removed) and a malformed-but-nonempty payload. This is intentional, not an
+  oversight to fix later: no known in-repo sender ever transmits malformed-but-nonempty JSON to
+  this port — the only senders are well-formed authenticated requests (which parse fine and
+  never reach this branch) and the zero-byte reachability probes. A plan writer must not
+  restore the old `sendall` inside this new branch on the theory that a "real" malformed client
+  might be waiting for a reply; if such a sender is ever identified, that would be a new,
+  separate decision.
 
 ## Technical context
 
