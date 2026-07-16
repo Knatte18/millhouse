@@ -6,6 +6,7 @@ slug: mill-go-agent-dispatch-reliability-gaps
 branch: hanf/mill-go-agent-dispatch-reliability-gaps
 plan: _mill/plan
 parent: hanf/linux-port-more
+module_verify_baseline: pre-existing-failures
 task: 'Agent-mode dispatch: envelope fields and session/runtime state are unreliable'
 task_description: |
   Agent-mode dispatch: envelope fields and session/runtime state are unreliable
@@ -27,7 +28,9 @@ implementing  '2026-07-16T14:21:20Z'
 ```yaml
 batches:
   - name: implement-prepare-reliability
-    state: pending
+    state: running
+    implementer_session: b551b4e6-fdb1-43c3-8fcc-d770f42faa89
+    start_sha: 5622285dad2cd7c65d42a1c811f8cf08a0c8570e
   - name: permission-allowlist
     state: pending
   - name: effort-tier-implementer
