@@ -21,7 +21,7 @@ Fixes #639 and #624: mill-go SKILL.md's extended-timeout note (recommending 6000
 
 ### Card 18: Generalize the extended-timeout note across all three call sites
 
-- **Context:** none beyond this batch's own Edits
+- **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none

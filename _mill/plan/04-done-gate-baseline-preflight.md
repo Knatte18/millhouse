@@ -41,6 +41,7 @@ Fixes #650: `pipeline.done_gate` has no pre-implementation baseline pre-flight, 
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** In both files' `pipeline:` section, add a new line immediately below the existing `done_gate: null  # ...` line: `done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)`. Match the existing comment style (inline `#` comment, same indentation as the sibling `done_gate` key) in both files exactly.
+- **Bootstrap-card justification (mill-config-mutation safety):** this is a new-key *addition*, not a removal or rename, with the sole consumer of the new key — the SKILL.md Prepare-phase block reading `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` — shipping in this same batch's Card 16. The key defaults to `false` in both the template and this hub's own config, so no existing task's behavior changes until an operator explicitly opts in. This satisfies the `wiki-config-mutation` validator's bootstrap-card condition (a): a card explaining why the mid-flight `mill-config.yaml` change is safe for the currently-shipping task.
 - **Commit:** `feat(config): add pipeline.done_gate_baseline_preflight key`
 
 ### Card 16: Wire the new Prepare-phase block into mill-go SKILL.md

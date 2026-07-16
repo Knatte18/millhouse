@@ -21,7 +21,7 @@ Mitigates #629: `_verify_baseline.compute_baseline`'s transient-worktree checkou
 
 ### Card 19: Shorten the transient-worktree directory name
 
-- **Context:** none beyond this batch's own Edits
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_verify_baseline.py`
 - **Creates:** none

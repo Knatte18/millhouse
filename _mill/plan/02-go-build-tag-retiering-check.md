@@ -44,7 +44,7 @@ Fixes #642: mill-go's finalize pipeline has no check for Tier-1 (default/untagge
 
 ### Card 9: Wire the retiering gate into the explicit-success pipeline
 
-- **Context:** none beyond this batch's own Edits (same function region Card 8 edits)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none

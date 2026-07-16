@@ -70,7 +70,6 @@ No module-wide `verify:` is set: each batch's own `verify:` scopes directly to t
 
 ## All Files Touched
 
-- `_mill/discussion.md` (read-only context; not edited by this plan)
 - `mill-config.yaml`
 - `plugins/mill/scripts/_done_gate.py`
 - `plugins/mill/scripts/_implementer_common.py`

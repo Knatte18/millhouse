@@ -33,8 +33,7 @@ Fixes #660: the finalize completeness gate compares raw commit count against dec
 
 ### Card 2: Rewrite `_batch_completeness_stuck` for card_ids + cards_done + absent-field fallback + type coercion
 
-- **Context:**
-  - `plugins/mill/scripts/_content_commit_count`-adjacent code in `plugins/mill/scripts/_implementer_common.py` (read via Card 2's own Edits entry below — no separate file to read)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none
@@ -53,7 +52,7 @@ Fixes #660: the finalize completeness gate compares raw commit count against dec
 
 ### Card 3: Update `_reclassify_verify_failure` in lockstep
 
-- **Context:** none beyond this batch's own Edits (same file as Card 2; read the helper Card 2 introduces)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none
@@ -64,7 +63,7 @@ Fixes #660: the finalize completeness gate compares raw commit count against dec
 
 ### Card 4: Thread card_ids/cards_done/already_complete through the four completeness-gate call sites
 
-- **Context:** none beyond this batch's own Edits (same file; the call sites are read as part of the Edits entry)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none
@@ -86,7 +85,7 @@ Fixes #660: the finalize completeness gate compares raw commit count against dec
 
 ### Card 6: Wire `already_complete` from the parsed success envelope
 
-- **Context:** none beyond this batch's own Edits (same file/call sites Card 4 already touches)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
 - **Creates:** none
