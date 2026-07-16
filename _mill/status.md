@@ -56,5 +56,7 @@ batches:
     start_sha: f4a3b42c86f2454d1008c2015ac16b0dd963840f
     commit_sha: 43d3db82f9af2b2575eb826daa2356c15c3b25c7
   - name: mill-plan-source-edit-guardrail
-    state: pending
+    state: running
+    implementer_session: b6da62f5-b5c3-4430-98c6-92bf61f32cda
+    start_sha: 486fcee1a41fcc3c62943eb1af2dfd7722b9af68
 ```
