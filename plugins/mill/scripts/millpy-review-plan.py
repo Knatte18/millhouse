@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
             )
-            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-plan", prepare_result["scope"],
                 prepare_result["round"], prepare_result["prompt_text"],
