@@ -299,13 +299,13 @@ Inline Python (in step 2b, before compute_new_dirt):
 import _parent_branch, _cleanliness
 parent_branch = _parent_branch.resolve(status_path, interactive=False)
 reverted_paths, remaining_in_scope_lines = _cleanliness.revert_out_of_scope_drift(
-    worktree_root, task_dir, parent_branch
+    worktree_root, task_dir, parent_branch, git_root
 )
 in_scope_dirt = remaining_in_scope_lines
 ```
 
 `signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
-`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str) -> tuple[list[str], list[str]]`
+`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None) -> tuple[list[str], list[str]]`
 
 If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task scope that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
