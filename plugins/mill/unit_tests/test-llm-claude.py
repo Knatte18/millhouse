@@ -22,6 +22,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _config as _config_mod  # noqa: E402
 import _llm_claude as _llm_claude_mod  # noqa: E402
+import _paths  # noqa: E402
 import _subprocess_util as _subprocess_util_mod  # noqa: E402
 from _llm_claude import (  # noqa: E402
     LLMError,
@@ -713,52 +714,105 @@ def main() -> int:
                     print(f"FAIL: K4 expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
 
     # K5: cleanup_session behavior
+    # Dispatch resolves to "psmux" for K5(i)-(iv) so control reaches the psmux
+    # cleanup logic under test, mirroring _get_via_psmux_flag Test 12(i) above.
     # K5(i): session exists and is killed
-    with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-abc-123-de-f", "mill-other"]):
-        with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
-            cleanup_session("abc-123-de-fghij-rest")
-            if mock_kill.called and mock_kill.call_args[0][0] == "mill-abc-123-de-f":
-                print("PASS: K5(i) cleanup_session kills existing psmux session")
-            else:
-                errors += 1
-                print(f"FAIL: K5(i) kill_session not called or wrong arg; got {mock_kill.call_args}", file=sys.stderr)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-abc-123-de-f", "mill-other"]):
+                with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
+                    cleanup_session("abc-123-de-fghij-rest")
+                    if mock_kill.called and mock_kill.call_args[0][0] == "mill-abc-123-de-f":
+                        print("PASS: K5(i) cleanup_session kills existing psmux session")
+                    else:
+                        errors += 1
+                        print(f"FAIL: K5(i) kill_session not called or wrong arg; got {mock_kill.call_args}", file=sys.stderr)
 
     # K5(ii): session not present, no kill attempted
-    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]):
-        with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
-            cleanup_session("not-present-id")
-            if not mock_kill.called:
-                print("PASS: K5(ii) cleanup_session handles missing session gracefully")
-            else:
-                errors += 1
-                print("FAIL: K5(ii) kill_session should not be called", file=sys.stderr)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]):
+                with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
+                    cleanup_session("not-present-id")
+                    if not mock_kill.called:
+                        print("PASS: K5(ii) cleanup_session handles missing session gracefully")
+                    else:
+                        errors += 1
+                        print("FAIL: K5(ii) kill_session should not be called", file=sys.stderr)
 
     # K5(iii): PsmuxError is swallowed
-    with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-id-xx-rest-y"]):
-        with mock.patch.object(_psmux_mod, "kill_session", side_effect=_psmux_mod.PsmuxError("boom")):
-            try:
-                cleanup_session("id-xx-rest-yy")
-                print("PASS: K5(iii) cleanup_session swallows PsmuxError")
-            except _psmux_mod.PsmuxError:
-                errors += 1
-                print("FAIL: K5(iii) PsmuxError should be swallowed", file=sys.stderr)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-id-xx-rest-y"]):
+                with mock.patch.object(_psmux_mod, "kill_session", side_effect=_psmux_mod.PsmuxError("boom")):
+                    try:
+                        cleanup_session("id-xx-rest-yy")
+                        print("PASS: K5(iii) cleanup_session swallows PsmuxError")
+                    except _psmux_mod.PsmuxError:
+                        errors += 1
+                        print("FAIL: K5(iii) PsmuxError should be swallowed", file=sys.stderr)
 
     # K5(iv): no-op on None/empty session_id
-    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
-        cleanup_session(None)
-        if not mock_list.called:
-            print("PASS: K5(iv) cleanup_session(None) is no-op")
-        else:
-            errors += 1
-            print("FAIL: K5(iv) cleanup_session(None) should not call list_sessions", file=sys.stderr)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
+                cleanup_session(None)
+                if not mock_list.called:
+                    print("PASS: K5(iv) cleanup_session(None) is no-op")
+                else:
+                    errors += 1
+                    print("FAIL: K5(iv) cleanup_session(None) should not call list_sessions", file=sys.stderr)
 
-    with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
-        cleanup_session("")
-        if not mock_list.called:
-            print("PASS: K5(iv) cleanup_session(\"\") is no-op")
-        else:
-            errors += 1
-            print("FAIL: K5(iv) cleanup_session(\"\") should not call list_sessions", file=sys.stderr)
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(_psmux_mod, "list_sessions", return_value=[]) as mock_list:
+                cleanup_session("")
+                if not mock_list.called:
+                    print("PASS: K5(iv) cleanup_session(\"\") is no-op")
+                else:
+                    errors += 1
+                    print("FAIL: K5(iv) cleanup_session(\"\") should not call list_sessions", file=sys.stderr)
+
+    # K5(v): dispatch mode "agent" short-circuits before list_sessions is ever called
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "agent"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(
+                _psmux_mod,
+                "list_sessions",
+                mock.Mock(side_effect=AssertionError("list_sessions should not be called in agent mode")),
+            ):
+                try:
+                    cleanup_session("any-session-id-here")
+                    print("PASS: K5(v) cleanup_session no-ops under dispatch: agent")
+                except Exception as e:
+                    errors += 1
+                    print(f"FAIL: K5(v) cleanup_session raised {type(e).__name__}: {e}", file=sys.stderr)
+
+    # K5(vi): dispatch mode "subprocess" short-circuits before list_sessions is ever called
+    with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "subprocess"}}}):
+        with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
+            with mock.patch.object(
+                _psmux_mod,
+                "list_sessions",
+                mock.Mock(side_effect=AssertionError("list_sessions should not be called in agent mode")),
+            ):
+                try:
+                    cleanup_session("any-session-id-here")
+                    print("PASS: K5(vi) cleanup_session no-ops under dispatch: subprocess")
+                except Exception as e:
+                    errors += 1
+                    print(f"FAIL: K5(vi) cleanup_session raised {type(e).__name__}: {e}", file=sys.stderr)
+
+    # K5(vii): dispatch-mode resolution failure -- cleanup still proceeds (falls through)
+    with mock.patch.object(_paths, "resolve_git_root", side_effect=SystemExit("no git root")):
+        with mock.patch.object(_psmux_mod, "list_sessions", return_value=["mill-abc-123-de-f"]):
+            with mock.patch.object(_psmux_mod, "kill_session", return_value=None) as mock_kill:
+                cleanup_session("abc-123-de-fghij-rest")
+                if mock_kill.called and mock_kill.call_args[0][0] == "mill-abc-123-de-f":
+                    print("PASS: K5(vii) cleanup_session proceeds when dispatch-mode resolution fails")
+                else:
+                    errors += 1
+                    print(f"FAIL: K5(vii) kill_session not called or wrong arg; got {mock_kill.call_args}", file=sys.stderr)
 
     # K6: cwd is passed through on psmux path
     _psmux_cwd_captured: list[str | None] = []
@@ -872,7 +926,6 @@ def main() -> int:
         print("FAIL: _parse_stream_json was called; psmux should skip parsing", file=sys.stderr)
 
     # Test 11: _get_via_psmux_flag() catches SystemExit and returns False
-    import _paths
     _get_via_psmux_result = None
     with mock.patch.object(_paths, "resolve_git_root", side_effect=SystemExit("test exit")):
         _get_via_psmux_result = _llm_claude_mod._get_via_psmux_flag()
