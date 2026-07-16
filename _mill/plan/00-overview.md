@@ -3,7 +3,7 @@
 ```yaml
 task: "Unhandled exceptions in mill-go orchestration components should degrade gracefully"
 slug: "mill-orchestration-crash-hardening"
-approved: false
+approved: true
 started: "20260716-110959"
 parent: "hanf/linux-port-more"
 root: ""

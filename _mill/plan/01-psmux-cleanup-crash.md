@@ -106,7 +106,10 @@ Decisions).
 
 ### Card 4: test coverage for the `cleanup_session()` dispatch-mode gate
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_llm_claude.py`
+  - `plugins/mill/scripts/_config.py`
+  - `plugins/mill/scripts/_paths.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-llm-claude.py`
 - **Creates:** none
@@ -170,11 +173,16 @@ Decisions).
   closing line from `" || true` to a bare `"` (the closing quote of the inline `-c` string,
   with `|| true` and its preceding space removed, no trailing whitespace introduced). Do not
   alter any other line in either fenced block, and do not alter the surrounding prose in either
-  "Per-batch session cleanup." or "Holistic session cleanup." paragraph — both already describe
-  the calls as "idempotent and failure-swallowing," which remains accurate after this change
-  (idempotent because `cleanup_session` is a safe no-op once nothing needs cleaning up;
-  failure-swallowing internally via its own `except _psmux.PsmuxError: pass` and, after Card 3,
-  the dispatch-mode gate — not via the shell-level `|| true`).
+  "Per-batch session cleanup." or "Holistic session cleanup." paragraph. The "Per-batch session
+  cleanup." paragraph (SKILL.md:180) already describes the per-batch block as "idempotent and
+  failure-swallowing" — this remains accurate after removing `|| true` (idempotent because
+  `cleanup_session` is a safe no-op once nothing needs cleaning up; failure-swallowing
+  internally via its own `except _psmux.PsmuxError: pass` and, after Card 3, the dispatch-mode
+  gate — not via the shell-level `|| true`). The "Holistic session cleanup." paragraph
+  (SKILL.md:531/544) does not use that phrase at all — it only describes when the block runs —
+  so no wording claim needs to hold there; the same underlying reasoning (the removed shell
+  fallback is redundant with the callee's own internal error-swallowing) still applies to why
+  the change is safe, it is just not asserted via that paragraph's prose.
 - **Commit:** `docs(mill-go): remove obsolete || true after cleanup_session hardening`
 
 ## Batch Tests
