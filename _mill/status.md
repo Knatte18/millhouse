@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanliness-nested-hub-revert
+phase: approved-golang-build-gopath-fallback
 slug: mill-misc-tooling-and-docs-gaps
 branch: hanf/mill-misc-tooling-and-docs-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-07-16T13:59:33Z'
 implementing  '2026-07-16T14:06:04Z'
 approved-fixer-tier-warning  '2026-07-16T14:12:40Z'
 approved-cleanliness-nested-hub-revert  '2026-07-16T14:16:48Z'
+approved-golang-build-gopath-fallback  '2026-07-16T14:18:50Z'
 ```
 
 ## Batches
@@ -44,9 +45,10 @@ batches:
     start_sha: 33e2aaec9201d796e4564e74a889f91c9f449f94
     commit_sha: cc05592cd9479aceda9f5d36eb3bfd90e959342a
   - name: golang-build-gopath-fallback
-    state: running
+    state: approved
     implementer_session: c4ca6653-4892-4a5b-afe8-a3c20b17a46a
     start_sha: e1b417984906601d5eab54d060ff4866b74406b7
+    commit_sha: 6b305cd07240d9114fe460d82944f500a3bedb94
   - name: plan-overview-comment-fix
     state: pending
   - name: mill-plan-source-edit-guardrail
