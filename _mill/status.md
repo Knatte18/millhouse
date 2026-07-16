@@ -29,7 +29,9 @@ implementing  '2026-07-16T11:25:45Z'
 ```yaml
 batches:
   - name: parent-branch-identity
-    state: pending
+    state: running
+    implementer_session: 2fde5ada-e4d8-4b37-9468-645ed2d8e805
+    start_sha: c4f8f5e6bb29156f46cc87ecffc6fc1d7b04bcf6
   - name: finalize-step3-restore
     state: pending
   - name: merge-slug-check-and-pathspec
