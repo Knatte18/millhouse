@@ -65,6 +65,7 @@ sys.path.insert(0, str(SCRIPTS))
 import _parent_branch  # noqa: E402
 import _plan_dag  # noqa: E402
 import _safe_rmtree  # noqa: E402
+import _status  # noqa: E402
 import _timestamp  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 
@@ -589,9 +590,85 @@ def main() -> int:
         print(f"PASS: mill-merge-in no-op check empty (MERGE_REF={merge_ref!r}, "
               f"parent has no new commits)")
 
+        # --- seed hub's own _mill/status.md on main (true worktree-mode #648 fixture) ---
+        # hub and worktree here are genuinely separate directories -- the true
+        # worktree-mode layout #648 was reported against, unlike
+        # _setup_nested_hub_scenario's same-directory branch-switching. hub has
+        # no _mill/ at all on main yet, and a bare `git checkout -- <pathspec>`
+        # fails with "pathspec ... did not match any file(s) known to git" when
+        # the target ref has nothing there -- independent of the worktree-mode
+        # bug this scenario targets -- so we seed a trivial, distinguishable
+        # status.md here, committed on main BEFORE the squash, so the restore
+        # commands below have something real to act on and to protect.
+        hub_mill_dir = hub / "_mill"
+        hub_mill_dir.mkdir()
+        hub_status_content = "phase: done\ntask: Unrelated hub task\n"
+        (hub_mill_dir / "status.md").write_text(hub_status_content, encoding="utf-8")
+        _run(["git", "-C", str(hub), "add", "_mill/status.md"], cwd=container)
+        _run(
+            ["git", "-C", str(hub), "commit", "-m", "hub: seed own _mill/status.md"],
+            cwd=container,
+        )
+
         # --- direct squash-merge child -> parent ---
         _run(["git", "-C", str(hub), "merge", "--squash", child_branch], cwd=container)
+
+        # --- Repro #648 first: OLD absolute, child-worktree-anchored pathspec ---
+        # An out-of-repo absolute pathspec is rejected by git before any
+        # pathspec-match check runs, so this reproduces the failure regardless
+        # of the seeded content above -- proving the fixture actually
+        # reproduces #648's failure before proving the fix resolves it. Both
+        # commands fail without touching hub's index/working tree, so no
+        # cleanup of hub's state is needed before the fix sub-step.
+        repro_reset = _run(
+            ["git", "-C", str(hub), "reset", "-q", "HEAD", "--", str(worktree / "_mill")],
+            cwd=container, check=False,
+        )
+        repro_checkout = _run(
+            ["git", "-C", str(hub), "checkout", "--", str(worktree / "_mill")],
+            cwd=container, check=False,
+        )
+        repro_combined = (
+            repro_reset.stdout + repro_reset.stderr
+            + repro_checkout.stdout + repro_checkout.stderr
+        )
+        _assert(
+            repro_reset.returncode != 0 and repro_checkout.returncode != 0,
+            f"expected both OLD absolute-pathspec restore commands to fail, "
+            f"got reset rc={repro_reset.returncode} checkout rc={repro_checkout.returncode}",
+        )
+        _assert(
+            "outside repository" in repro_combined,
+            f"expected 'outside repository' in restore-command output, got:\n{repro_combined}",
+        )
+        print(
+            "PASS: repro -- OLD absolute worktree-anchored pathspec fails "
+            "with 'outside repository' (#648)"
+        )
+
+        # --- Prove the fix: corrected repo-relative pathspec (Batch 3 Card 8) ---
+        fix_reset = _run(["git", "-C", str(hub), "reset", "-q", "HEAD", "--", "_mill"], cwd=container)
+        fix_checkout = _run(["git", "-C", str(hub), "checkout", "--", "_mill"], cwd=container)
+        _assert(
+            fix_reset.returncode == 0 and fix_checkout.returncode == 0,
+            f"expected corrected repo-relative restore commands to succeed, "
+            f"got reset rc={fix_reset.returncode} checkout rc={fix_checkout.returncode}",
+        )
+        print("PASS: fix -- repo-relative pathspec restores hub's own _mill/ (#648)")
+
         _run(["git", "-C", str(hub), "commit", "-m", "Demo merge"], cwd=container)
+
+        # --- hub's own _mill/status.md survives the squash byte-identical ---
+        # Mirrors _setup_nested_hub_scenario's existing "parent's own
+        # status.md survives the squash" assertion, but this time in the true
+        # separate-worktree layout that assertion never actually covered.
+        hub_status_after = (hub / "_mill" / "status.md").read_text(encoding="utf-8")
+        _assert(
+            hub_status_after == hub_status_content,
+            f"hub's own _mill/status.md was not preserved by the squash restore.\n"
+            f"Expected:\n{hub_status_content}\n\nGot:\n{hub_status_after}",
+        )
+        print("PASS: hub's own _mill/status.md preserved byte-identical (true worktree-mode #648)")
 
         # Parent HEAD now carries the squash.
         hub_log = _run(
@@ -650,6 +727,61 @@ def main() -> int:
         print(f"PASS: archive tag archive/{slug} present")
 
         print("PASS -- mill-merge end-to-end (flat-hub scenario)")
+
+        # === Phase-gate slug-mismatch fallback sub-scenario (#656/#659/#662) ===
+        # Simulates the post-Step-3-corruption state mill-finalize's restore
+        # path produces (this task's Batch 2 fix): a status.md belonging to a
+        # DIFFERENT, foreign task left behind at the worktree's _mill/ path --
+        # mirroring _setup_nested_hub_scenario's existing "other-task" foreign
+        # status.md pattern.
+        foreign_mill_dir = worktree / "_mill"
+        foreign_mill_dir.mkdir(exist_ok=True)
+        (foreign_mill_dir / "status.md").write_text(
+            "# Status\n"
+            "\n"
+            "```yaml\n"
+            "slug: other-task\n"
+            "phase: discussing\n"
+            "parent: main\n"
+            "```\n"
+            "\n"
+            "## Timeline\n"
+            "\n"
+            "```text\n"
+            "discussing  2026-04-22T12:00:00Z\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        # Mirror mill-merge's corrected Entry Step 5 phase-gate logic directly
+        # as plain test code (this logic is orchestration prose in SKILL.md,
+        # not an importable function, so the test replicates the same
+        # two-call sequence Batch 3 Card 7 documents). Read the raw `slug:`
+        # field -- NOT `_status.read_slug`, which falls back to the parent
+        # directory name (always literally "_mill" here) when the field is
+        # absent, so it can never distinguish "absent" from "present and
+        # different" the way this check needs to.
+        raw_slug = _status.read_full(foreign_mill_dir / "status.md")["yaml"].get("slug")
+        _assert(raw_slug is not None, "expected foreign status.md to carry a slug: field")
+        _assert(
+            raw_slug != slug,
+            f"expected foreign status.md's slug {raw_slug!r} to differ from {slug!r}",
+        )
+        print("PASS: raw slug: field detected as present and mismatched")
+
+        # On mismatch, the phase gate falls through to the wiki-lookup path
+        # instead of trusting the corrupted file's phase:/parent: fields --
+        # proving the documented wiki-fallback path resolves demo-merge's
+        # real state (flipped to "done" earlier in this scenario), not the
+        # foreign task's phase: discussing.
+        task = wiki.get_task(wiki_path, slug)
+        _assert(
+            task is not None and task.get("status") == "done",
+            f"expected wiki fallback to report demo-merge's real status 'done', got {task!r}",
+        )
+        print("PASS: wiki-fallback resolves demo-merge's real status, not foreign phase: discussing")
+
+        print("PASS -- mill-merge phase-gate slug-mismatch fallback (#656/#659/#662)")
 
         # === Run nested-hub scenario (new test for #497 bug 2) ===
         print(f"\n[test-merge] nested-hub scenario starting", file=sys.stderr)

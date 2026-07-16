@@ -55,6 +55,47 @@ def main() -> int:
             assert resolve_for_codeguide(sp) is None
             print("PASS: resolve_for_codeguide returns None on missing parent instead of raising")
 
+            sp.write_text(
+                "# Status\n"
+                "\n"
+                "```yaml\n"
+                "phase: done\n"
+                "task: Demo\n"
+                "slug: demo-task\n"
+                "parent: main\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            assert resolve(sp, interactive=False, expected_slug="demo-task") == "main"
+            print("PASS: resolve with matching expected_slug reads parent from status.md")
+
+            try:
+                resolve(sp, interactive=False, expected_slug="other-task")
+            except ParentBranchError as exc:
+                assert "No parent:" in str(exc)
+                print(f"PASS: resolve raises on mismatched expected_slug -- {exc}")
+            else:
+                raise AssertionError("expected ParentBranchError on slug mismatch")
+
+            assert resolve_for_codeguide(sp, expected_slug="demo-task") == "main"
+            print("PASS: resolve_for_codeguide with matching expected_slug reads parent from status.md")
+
+            assert resolve_for_codeguide(sp, expected_slug="other-task") is None
+            print("PASS: resolve_for_codeguide returns None on mismatched expected_slug instead of raising")
+
+            sp.write_text(
+                "# Status\n"
+                "\n"
+                "```yaml\n"
+                "phase: done\n"
+                "task: Demo\n"
+                "parent: main\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            assert resolve(sp, interactive=False, expected_slug="anything") == "main"
+            print("PASS: resolve with expected_slug is a no-op when status.md has no slug: row")
+
         print("All _parent_branch unit tests passed.")
         return 0
     except AssertionError as exc:

@@ -189,6 +189,13 @@ def main() -> int:
         assert result == []
     print("PASS: list_sessions returns empty list for 'no server running' error")
 
+    # Test list_sessions with FileNotFoundError (psmux binary missing)
+    with mock.patch.object(_psmux._subprocess_util, "run") as mock_run:
+        mock_run.side_effect = FileNotFoundError(2, "No such file or directory", "psmux")
+        result = list_sessions()
+        assert result == []
+    print("PASS: list_sessions returns empty list when psmux binary is missing (FileNotFoundError)")
+
     return errors
 
 
