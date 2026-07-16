@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-finalize-timeout-guidance-generalization
+phase: holistic-reviewing
 slug: mill-go-batch-verify-baseline-reliability
 branch: hanf/mill-go-batch-verify-baseline-reliability
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-done-gate-baseline-preflight  '2026-07-16T13:42:46Z'
 approved-windows-long-path-mitigation  '2026-07-16T13:46:21Z'
 approved-go-build-tag-retiering-check  '2026-07-16T13:57:11Z'
 approved-finalize-timeout-guidance-generalization  '2026-07-16T13:59:44Z'
+holistic-reviewing  '2026-07-16T14:00:07Z'
 ```
 
 ## Batches
