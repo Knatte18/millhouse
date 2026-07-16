@@ -42,7 +42,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
 2. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 3. *(Config already loaded in Step 1.)*
-4. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
+4. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>, expected_slug=slug)`. `slug` is already bound in Entry Step 1 as `active_data['slug']`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
 5. **Phase gate — also the re-entry point for PR-path recovery.**
 
    **Try `_mill/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `status_path` is absent: call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`). Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`. If `task["status"] == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>'; cannot determine merge state."
