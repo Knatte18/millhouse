@@ -964,6 +964,90 @@ def test_resolve_unknown_name_lists_available() -> None:
     print("PASS: resolve unknown name lists available names in error")
 
 
+def test_tier_rank_single_claude_returns_family_and_effort_rank() -> None:
+    """tier_rank returns (family_rank, effort_rank) for a resolved single/claude spec."""
+    spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
+    assert _reviewers.tier_rank(spec) == (2, 2)
+    print("PASS: tier_rank single claude returns family and effort rank")
+
+
+def test_tier_rank_missing_effort_defaults_to_zero() -> None:
+    """tier_rank defaults effort_rank to 0 when the spec has no 'effort' key at all."""
+    spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
+    assert _reviewers.tier_rank(spec) == (0, 0)
+    print("PASS: tier_rank missing effort defaults to zero")
+
+
+def test_tier_rank_non_claude_provider_returns_none() -> None:
+    """tier_rank returns None for a non-Claude provider spec."""
+    spec = {"type": "single", "provider": "gemini", "model": "gemini-2.5-flash", "effort": "high"}
+    assert _reviewers.tier_rank(spec) is None
+    print("PASS: tier_rank non-claude provider returns None")
+
+
+def test_tier_rank_cluster_type_returns_none() -> None:
+    """tier_rank returns None for a cluster-type spec."""
+    spec = {"type": "cluster"}
+    assert _reviewers.tier_rank(spec) is None
+    print("PASS: tier_rank cluster type returns None")
+
+
+def test_fixer_weaker_than_reviewer_warning_fires_when_reviewer_stronger() -> None:
+    """Warning fires and names both fixer and reviewer when the reviewer strictly outranks the fixer."""
+    fixer_spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
+    reviewer_spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
+    warning = _reviewers.fixer_weaker_than_reviewer_warning(
+        fixer_spec, reviewer_spec, fixer_name="haiku", reviewer_name="opushigh", scope="batch"
+    )
+    assert warning is not None
+    assert "roles.fixer.model='haiku'" in warning
+    assert "roles.code-review.batch.reviewer='opushigh'" in warning
+    print("PASS: fixer_weaker_than_reviewer_warning fires when reviewer stronger")
+
+
+def test_fixer_weaker_than_reviewer_warning_silent_when_equal() -> None:
+    """Warning is silent (returns None) when fixer and reviewer resolve to identical tiers."""
+    spec = {"type": "single", "provider": "claude", "model": "claude-sonnet-4-6", "effort": "medium"}
+    warning = _reviewers.fixer_weaker_than_reviewer_warning(
+        spec, dict(spec), fixer_name="sonnet", reviewer_name="sonnet", scope="batch"
+    )
+    assert warning is None
+    print("PASS: fixer_weaker_than_reviewer_warning silent when equal")
+
+
+def test_fixer_weaker_than_reviewer_warning_silent_when_fixer_stronger() -> None:
+    """Warning is silent when the fixer's tier already outranks the reviewer's."""
+    fixer_spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
+    reviewer_spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
+    warning = _reviewers.fixer_weaker_than_reviewer_warning(
+        fixer_spec, reviewer_spec, fixer_name="opushigh", reviewer_name="haiku", scope="batch"
+    )
+    assert warning is None
+    print("PASS: fixer_weaker_than_reviewer_warning silent when fixer stronger")
+
+
+def test_fixer_weaker_than_reviewer_warning_silent_when_either_not_comparable() -> None:
+    """Warning is silent when either side is non-Claude-provider or cluster-type, regardless of the other side's tier."""
+    haiku_spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
+    opus_spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
+    gemini_spec = {"type": "single", "provider": "gemini", "model": "gemini-2.5-pro", "effort": "high"}
+    cluster_spec = {"type": "cluster"}
+
+    # non-comparable reviewer, weak fixer -- still silent
+    assert _reviewers.fixer_weaker_than_reviewer_warning(
+        haiku_spec, gemini_spec, fixer_name="haiku", reviewer_name="g25pro", scope="batch"
+    ) is None
+    # non-comparable fixer, strong reviewer -- still silent
+    assert _reviewers.fixer_weaker_than_reviewer_warning(
+        gemini_spec, opus_spec, fixer_name="g25pro", reviewer_name="opushigh", scope="batch"
+    ) is None
+    # cluster reviewer -- still silent
+    assert _reviewers.fixer_weaker_than_reviewer_warning(
+        haiku_spec, cluster_spec, fixer_name="haiku", reviewer_name="mycluster", scope="batch"
+    ) is None
+    print("PASS: fixer_weaker_than_reviewer_warning silent when either side not comparable")
+
+
 def main() -> int:
     tests = [
         test_load_happy_path,
@@ -1004,6 +1088,14 @@ def main() -> int:
         test_bare_aliases_resolve_with_correct_spec,
         test_validate_role_refs_accepts_bare_aliases,
         test_resolve_unknown_name_lists_available,
+        test_tier_rank_single_claude_returns_family_and_effort_rank,
+        test_tier_rank_missing_effort_defaults_to_zero,
+        test_tier_rank_non_claude_provider_returns_none,
+        test_tier_rank_cluster_type_returns_none,
+        test_fixer_weaker_than_reviewer_warning_fires_when_reviewer_stronger,
+        test_fixer_weaker_than_reviewer_warning_silent_when_equal,
+        test_fixer_weaker_than_reviewer_warning_silent_when_fixer_stronger,
+        test_fixer_weaker_than_reviewer_warning_silent_when_either_not_comparable,
         # --- _reviewer_single tests merged from test-reviewer-single.py ---
         test_single_signature,
         test_single_cluster_spec_raises,
