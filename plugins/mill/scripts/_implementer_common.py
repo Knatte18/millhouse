@@ -103,8 +103,9 @@ def _reclassify_verify_failure(
     verify_stuck: dict,
     project_root: Path,
     start_sha: str | None,
-    card_count: int | None,
+    card_ids: set[int] | None,
     session_id: str | None,
+    cards_done=None,
 ) -> dict:
     """
     Reclassify a verify-failure stuck dict based on how many content commits exist.
@@ -116,17 +117,25 @@ def _reclassify_verify_failure(
     classified as logic (not retryable without human intervention).
 
     Classification rules (applied in order):
-      - content is None OR card_count is None OR card_count <= 0: return verify_stuck unchanged.
-      - content == 0: reclassify as stuck_type=logic "no content commit".
-      - 0 < content < card_count: reclassify as stuck_type=incomplete with commits_made=content.
-      - content >= card_count (full batch): return verify_stuck unchanged.
+      - content is None OR card_ids is None OR card_ids is empty: return verify_stuck unchanged.
+      - content == 0: reclassify as stuck_type=logic "no content commit" (orthogonal to
+        cards_done -- zero commits means zero work regardless of any self-report).
+      - Otherwise, delegate to _cards_incomplete_reason (the same helper
+        _batch_completeness_stuck uses): a non-None reason reclassifies as
+        stuck_type=incomplete with commits_made=content; None means the batch is
+        complete (either content >= len(card_ids), or cards_done confirms every
+        declared card is done) and verify_stuck is returned unchanged.
 
     Args:
         verify_stuck: The stuck dict produced by _run_verify_gates (stuck_type="verify").
         project_root: Path to the worktree root for _content_commit_count.
         start_sha: SHA recorded at batch start; None disables reclassification.
-        card_count: Number of Card headings in the batch file; None or 0 disables it.
+        card_ids: The set of Card numbers declared in the batch file; None or
+            empty disables reclassification.
         session_id: Session identifier included in reclassified dicts.
+        cards_done: The implementer's self-reported list of card numbers this
+            commit set addresses; forwarded to _cards_incomplete_reason. None
+            (the default) uses the absent-field fallback (raw commit-count check).
 
     Returns:
         Either verify_stuck unchanged, or a new dict with a different stuck_type.
@@ -134,11 +143,12 @@ def _reclassify_verify_failure(
     content = _content_commit_count(project_root, start_sha)
 
     # Inputs absent or gate disabled -- preserve original verify classification.
-    if content is None or card_count is None or card_count <= 0:
+    if content is None or card_ids is None or len(card_ids) <= 0:
         return verify_stuck
 
     if content == 0:
         # No content commits at all -- agent likely aborted before touching any files.
+        # Unaffected by cards_done: zero commits is zero work regardless of self-report.
         return {
             "status": "stuck",
             "stuck_type": "logic",
@@ -149,23 +159,22 @@ def _reclassify_verify_failure(
             "session_id": session_id or "unknown",
         }
 
-    if 0 < content < card_count:
-        # Partial batch -- implementer stopped after some cards. Reclassify as incomplete
-        # (not transient) so the orchestrator knows to resume rather than retry fresh.
+    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    if reason is not None:
+        # Partial batch -- implementer stopped after some cards (or self-reported fewer
+        # cards done than declared). Reclassify as incomplete (not transient) so the
+        # orchestrator knows to resume rather than retry fresh.
         return {
             "status": "stuck",
             "stuck_type": "incomplete",
-            "reason": (
-                f"batch incomplete: {content} content commit(s) since start but"
-                f" {card_count} card(s) in batch"
-                " -- implementer stopped before finishing all cards"
-            ),
+            "reason": reason,
             "session_id": session_id or "unknown",
             "commits_made": content,
         }
 
-    # content >= card_count: full batch completed, verify failure is a genuine
-    # test failure that needs to be fixed -- preserve the original classification.
+    # Batch is complete (raw count >= card count, or cards_done confirms every
+    # declared card is done): verify failure is a genuine test failure that needs
+    # to be fixed -- preserve the original classification.
     return verify_stuck
 
 
