@@ -19,6 +19,13 @@ Public API:
     validate_role_refs(cfg: dict, registry: dict) -> None
         Walk cfg.roles.<role>.<scope>.reviewer for every (role, scope) pair;
         confirm each non-null name resolves. Raises ReviewerError listing all failures.
+    tier_rank(spec: dict) -> tuple[int, int] | None
+        Rank a resolved single/claude spec as (family_rank, effort_rank) for comparison.
+        Returns None for cluster types, non-Claude providers, or unrecognized model families.
+    fixer_weaker_than_reviewer_warning(fixer_spec, reviewer_spec, *, fixer_name, reviewer_name, scope) -> str | None
+        Return a stderr-ready warning string when the reviewer's tier outranks the
+        fixer's tier; returns None when either side is not comparable or the fixer
+        is at least as strong as the reviewer.
 """
 from __future__ import annotations
 
@@ -33,6 +40,8 @@ import _paths
 from _config import deep_merge, resolve_plugin_template_path
 
 _NAME_REGEX = re.compile(r"^[a-z0-9_-]+$")
+_TIER_RANK = {"haiku": 0, "sonnet": 1, "opus": 2}
+_EFFORT_RANK = {"low": 0, "medium": 1, "high": 2, "max": 3}
 
 
 class ReviewerError(Exception):
@@ -472,3 +481,68 @@ def validate_role_refs(cfg: dict, registry: dict) -> None:
 
     if errors:
         raise ReviewerError("\n".join(errors))
+
+
+def tier_rank(spec: dict) -> tuple[int, int] | None:
+    """Rank a resolved single/claude spec as (family_rank, effort_rank).
+
+    Only type="single" + provider="claude" specs are comparable: cluster
+    types and non-Claude providers (e.g. the gemini-provider entries in
+    mill-agents.yaml) have no defined ordering. Family rank comes from
+    _agent_dispatch.model_to_tier (haiku < sonnet < opus); effort rank comes
+    from spec["effort"], defaulting to 0 ("low") when the key is absent --
+    the shipped haiku/haiku_bulk entries carry no effort: field at all.
+
+    Returns:
+        (family_rank, effort_rank) tuple, or None if the spec is not
+        comparable (wrong type/provider) or its model family is unrecognized.
+    """
+    import _agent_dispatch
+
+    if spec.get("type") != "single" or spec.get("provider") != "claude":
+        return None
+    try:
+        family = _agent_dispatch.model_to_tier(spec["model"])
+    except ValueError:
+        return None
+    return (_TIER_RANK[family], _EFFORT_RANK.get(spec.get("effort"), 0))
+
+
+def fixer_weaker_than_reviewer_warning(
+    fixer_spec: dict,
+    reviewer_spec: dict,
+    *,
+    fixer_name: str,
+    reviewer_name: str,
+    scope: str,
+) -> str | None:
+    """Return an advisory warning when the fixer is weaker than the reviewer it fixes for.
+
+    roles.fixer.model is a config key fully independent from
+    roles.code-review.<scope>.reviewer, so an operator escalating the
+    reviewer mid-task can silently leave the fixer on a weaker model. This
+    compares the two resolved tiers and flags the asymmetry.
+
+    Args:
+        fixer_spec: Resolved spec for roles.fixer.model.
+        reviewer_spec: Resolved spec for roles.code-review.<scope>.reviewer.
+        fixer_name: The raw reviewer-registry name configured for the fixer.
+        reviewer_name: The raw reviewer-registry name configured for the reviewer.
+        scope: The code-review scope being fixed (e.g. "batch").
+
+    Returns:
+        A one-line warning string when the reviewer strictly outranks the
+        fixer, or None when either side is not comparable or the fixer is
+        at least as strong as the reviewer.
+    """
+    fixer_tier = tier_rank(fixer_spec)
+    reviewer_tier = tier_rank(reviewer_spec)
+    if fixer_tier is None or reviewer_tier is None:
+        return None
+    if reviewer_tier <= fixer_tier:
+        return None
+    return (
+        f"[fixer-tier] roles.fixer.model={fixer_name!r} is weaker than "
+        f"roles.code-review.{scope}.reviewer={reviewer_name!r} -- consider escalating "
+        f"roles.fixer.model to match."
+    )

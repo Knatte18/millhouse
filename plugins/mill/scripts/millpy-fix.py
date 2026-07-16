@@ -241,6 +241,32 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
     fixer_model = fixer_spec["model"]
+
+    # Advisory-only: warn (stderr, non-blocking) when roles.fixer.model resolves
+    # weaker than the code-review reviewer configured for this invocation's
+    # scope. The two config keys are fully independent, so an operator
+    # escalating the reviewer mid-task can silently leave the fixer on a
+    # weaker model. An unresolvable reviewer name is validate_role_refs's
+    # concern elsewhere, not this warning's -- swallow and move on.
+    reviewer_name = (
+        cfg.get("roles", {}).get("code-review", {}).get(args.scope, {}).get("reviewer")
+    )
+    if reviewer_name is not None:
+        try:
+            reviewer_spec = _reviewers.resolve(registry, reviewer_name)
+        except _reviewers.ReviewerError:
+            pass
+        else:
+            warning = _reviewers.fixer_weaker_than_reviewer_warning(
+                fixer_spec,
+                reviewer_spec,
+                fixer_name=model_name,
+                reviewer_name=reviewer_name,
+                scope=args.scope,
+            )
+            if warning is not None:
+                print(warning, file=sys.stderr)
+
     fixer_effort = fixer_spec.get("effort")
     timeout = fixer_spec.get("timeout") or cfg.get("llm", {}).get(
         "implementer_timeout", 1800

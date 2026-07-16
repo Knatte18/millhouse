@@ -322,7 +322,7 @@ def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[li
 
 
 def revert_out_of_scope_drift(
-    worktree: Path, task_dir: Path, parent_branch: str
+    worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None
 ) -> tuple[list[str], list[str]]:
     """
     Revert out-of-scope formatter drift and return status.
@@ -332,24 +332,66 @@ def revert_out_of_scope_drift(
     reverted via `git checkout HEAD -- <path>`. Untracked files (`??`) and added
     files (`A `) are NOT reverted.
 
+    In a nested-hub layout (worktree is a subdirectory of git_root), both the
+    porcelain status lines and the parent-diff owned paths are git-root-relative,
+    while task_dir is hub-relative -- see compute_scope_violations's docstring in
+    this same file for the rebasing rationale. Both inputs are rebased onto
+    worktree (the hub root) before the in-scope/out-of-scope partition and the
+    `git checkout` subprocess call are performed.
+
     Args:
-        worktree: Path to the task worktree.
+        worktree: Path to the task worktree (the mill hub root).
         task_dir: Worktree-relative path to the task directory (e.g., Path("_mill")).
             If absolute, relativized to worktree.
         parent_branch: Name of the parent branch (e.g., "main").
+        git_root: Path to the git repository toplevel resolved via
+            _paths.resolve_git_root(). None means a flat-layout caller that never
+            resolved a git_root, treated identically to git_root == worktree
+            (i.e. hub_prefix = "").
 
     Returns:
         A tuple of (reverted_paths, remaining_in_scope_lines) where:
-        - reverted_paths: sorted list of file paths that were reverted.
-        - remaining_in_scope_lines: sorted list of in-scope porcelain lines still dirty
-          after revert.
+        - reverted_paths: sorted list of hub-relative file paths that were reverted.
+        - remaining_in_scope_lines: sorted list of in-scope porcelain lines (with
+          hub-relative paths) still dirty after revert.
     """
-    # Get current dirt
+    # Get current dirt (git-root-relative, regardless of the cwd passed to git)
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
 
-    # Get paths changed by the task
+    # Get paths changed by the task (also git-root-relative, same reason)
     parent_diff_names = _parent_diff_names(worktree, parent_branch)
     owned_paths = set(parent_diff_names)
+
+    # Compute the hub_prefix using the same technique as compute_scope_violations:
+    # empty for a flat layout (worktree == git_root) or an unresolved git_root.
+    if git_root is None:
+        hub_prefix = ""
+    else:
+        hub_prefix = worktree.relative_to(git_root).as_posix()
+        if hub_prefix == ".":
+            hub_prefix = ""
+
+    def _rebase_onto_hub(path: str) -> str | None:
+        """Rebase a git-root-relative path onto the hub root.
+
+        Returns the hub-relative remainder, or None if the path belongs to a
+        different subtree of the git root entirely (outside this hub's view).
+        """
+        if not hub_prefix:
+            return path
+        if path != hub_prefix and not path.startswith(hub_prefix + "/"):
+            return None
+        return path[len(hub_prefix) + 1 :] if path != hub_prefix else ""
+
+    # Rebase owned_paths before the membership check below, so a genuine
+    # task-owned file outside task_dir is not misclassified as out-of-scope
+    # drift and silently reverted.
+    owned_paths = {
+        rebased
+        for path in owned_paths
+        for rebased in (_rebase_onto_hub(path),)
+        if rebased is not None
+    }
 
     # Ensure task_dir is worktree-relative for path membership checks.
     task_dir_rel = task_dir.relative_to(worktree) if task_dir.is_absolute() else task_dir
@@ -362,7 +404,13 @@ def revert_out_of_scope_drift(
     for line in lines:
         # Extract status code and path from porcelain format "XY path"
         status_code = line[:2]
-        path = line[3:]
+        raw_path = line[3:]
+
+        # Rebase the git-root-relative path onto the hub root; drop lines that
+        # belong to a different subtree of the git root, not this hub.
+        path = _rebase_onto_hub(raw_path)
+        if path is None:
+            continue
 
         # Check if this path is in scope
         in_scope = (
@@ -372,14 +420,15 @@ def revert_out_of_scope_drift(
         )
 
         if in_scope:
-            # In-scope: keep it
-            remaining_in_scope_lines.append(line)
+            # In-scope: keep it, with the hub-relative path substituted back in
+            remaining_in_scope_lines.append(f"{status_code} {path}")
         else:
             # Out-of-scope: check if it's a tracked modification that should be reverted
             # Modified status codes: " M" (modified in worktree), "M " (modified in index),
             # "MM" (modified in both)
             if status_code in (" M", "M ", "MM"):
-                # Revert the file
+                # Revert the file (checkout runs with cwd=worktree, so the path
+                # passed here must be hub-relative)
                 result = _subprocess_util.run(
                     ["git", "checkout", "HEAD", "--", path],
                     cwd=worktree,
@@ -392,7 +441,7 @@ def revert_out_of_scope_drift(
                     )
                 else:
                     # Failed revert: treat as still-dirty in-scope so the gate sees it
-                    remaining_in_scope_lines.append(line)
+                    remaining_in_scope_lines.append(f"{status_code} {path}")
                     print(
                         f"[cleanliness] warning: failed to revert {path}: "
                         f"git checkout exited {result.returncode}",
