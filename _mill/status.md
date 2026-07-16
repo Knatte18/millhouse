@@ -35,5 +35,7 @@ batches:
     start_sha: ab83724e4148d84b554a0676a7310e44a8ea8cbd
     commit_sha: b8c52afb5144d9a3ef9696588730c3aa72a80e7b
   - name: wiki-daemon-json-noise
-    state: pending
+    state: running
+    implementer_session: 36127d0b-5b1b-422f-b910-7753d8c7206f
+    start_sha: ce0d0e1317f7ad5e698e967633d6ca8d44273185
 ```
