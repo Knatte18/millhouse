@@ -32,6 +32,7 @@ Checks performed (check keys):
     verify-full-suite        — per-batch or overview-level verify: invokes run-all.py without a -k/--only filter
     verify-malformed-cwd     — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd or missing command)
     verify-mixed-cwd         — batches in the plan resolve the {cwd, command} mapping form to more than one distinct cwd
+    verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and byte-identical to the parent branch
     wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
     move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
@@ -47,6 +48,7 @@ import yaml
 from pathlib import Path
 
 import _plan_dag
+import _subprocess_util
 from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
 from _review_common import (
     _load_root_from_overview,
@@ -85,6 +87,15 @@ _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Matches the "## Rename mechanic" heading in a batch that has non-empty Moves.
 _RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
+
+# Captures everything after "--only " in a verify: command string, so the
+# candidate test-file tokens can be split off the flag's argument list.
+_RE_VERIFY_ONLY = re.compile(r"--only\s+(.+)$")
+
+# A bare basename ending in .py or .go -- the shape a test-file token in a
+# verify: --only list takes. Naturally stops before the next --flag-shaped
+# token since flags don't match this pattern.
+_RE_TEST_FILE_TOKEN = re.compile(r"^[\w.-]+\.(py|go)$")
 
 # Required card fields.
 # "Moves" sits after "Deletes" and before "Requirements" per the moves-grammar Shared Decision.
@@ -1536,6 +1547,132 @@ def _check_verify_mixed_cwd(
                 f"different cwd: {conflicting_names}"
             ),
         })
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# verify-unrelated-test-file check
+# ---------------------------------------------------------------------------
+
+def _check_verify_unrelated_test_files(
+    batch_files: list[Path],
+    project_root: Path,
+    git_root: Path,
+    parent_branch: str | None,
+) -> list[dict]:
+    """
+    Flag verify: --only test-file tokens unrelated to their own batch.
+
+    Fixes #638: a batch's ``verify:`` ``--only`` test-file list can
+    accidentally include a test file that has nothing to do with that
+    batch's own cards. When such a stray token is also byte-identical to
+    the task's resolved parent branch, running it replays a pre-existing
+    (possibly already-failing) test unrelated to the batch, which can
+    falsely block a fully-correct batch with ``stuck_type: verify``.
+
+    Applies to every batch file's frontmatter, mirroring
+    ``_check_verify_not_isolated``'s string-vs-mapping handling and
+    malformed-mapping silence (see that function's docstring for the
+    shared rationale -- ``_check_verify_malformed_cwd`` is the sole
+    reporter for a malformed ``verify:`` mapping).
+
+    Fail-safe per the "never raise from a new gate/check function" Shared
+    Decision: ``parent_branch=None`` short-circuits to ``[]`` immediately
+    for every batch (no parent resolved, nothing to diff against -- never
+    guess or fall back to a literal branch name like ``"main"``), and any
+    subprocess or resolution failure for an individual token is treated
+    as "cannot confirm identical, don't flag" rather than a crash.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project; also doubles as the hub_root
+            argument to ``parse_verify_field`` since only the command
+            string is needed here, not the resolved cwd (mirrors
+            ``_check_verify_not_isolated``'s own call shape).
+        git_root: Repository toplevel used to resolve candidate tokens on
+            disk (via ``resolve_existing_paths``) and as the ``-C`` root
+            for the ``git diff`` subprocess call.
+        parent_branch: The task's resolved parent branch name (e.g.
+            ``hanf/linux-port-more``), or ``None`` when unresolved.
+
+    Returns:
+        List of error dicts, one per stray ``--only`` token confirmed
+        byte-identical to the parent branch.
+    """
+    if parent_branch is None:
+        return []
+
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        try:
+            frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+            command, _cwd = _plan_dag.parse_verify_field(
+                frontmatter, project_root, project_root
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+        except Exception:
+            # Never raise -- treat any other unexpected parse failure as
+            # "nothing to check" for this batch.
+            continue
+        if command is None:
+            continue
+
+        m = _RE_VERIFY_ONLY.search(command)
+        if not m:
+            continue
+        candidates = [
+            tok for tok in m.group(1).split() if _RE_TEST_FILE_TOKEN.match(tok)
+        ]
+        if not candidates:
+            continue
+
+        try:
+            touched = (
+                _parse_edits_only(batch_path)
+                | _parse_creates_only(batch_path)
+                | {dst for _, dst in parse_moves(batch_path)}
+            )
+        except Exception:
+            touched = set()
+        touched_basenames = {Path(t).name for t in touched}
+
+        for token in candidates:
+            if Path(token).name in touched_basenames:
+                continue
+            try:
+                resolved = resolve_existing_paths(
+                    [token], project_root, None, wiki_root=None, git_root=git_root,
+                )
+            except Exception:
+                continue
+            if len(resolved) != 1:
+                continue
+            try:
+                diff_result = _subprocess_util.run(
+                    ["git", "-C", str(git_root), "diff", parent_branch, "--", str(resolved[0])],
+                )
+            except Exception:
+                continue
+            if diff_result.returncode != 0:
+                continue
+            if diff_result.stdout.strip():
+                continue
+            errors.append({
+                "check": "verify-unrelated-test-file",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": token,
+                "message": (
+                    f"verify command includes '{token}', which is untouched by this "
+                    f"batch's own Files Touched and unchanged vs. parent branch "
+                    f"'{parent_branch}' -- likely an unrelated pre-existing test"
+                ),
+            })
+
     return errors
 
 
