@@ -681,6 +681,57 @@ class TestMillpyFix(unittest.TestCase):
         # A clean except clause must have caught this -- no raw unhandled traceback.
         self.assertNotIn("Traceback (most recent call last)", stderr_output)
 
+    def test_fixer_tier_warning_fires_when_reviewer_stronger(self):
+        """--stage prepare: reviewer configured stronger than fixer -> [fixer-tier] warning on stderr."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {
+                "implementer": {"self_fix_rounds": 2, "model": "sonnethigh"},
+                "fixer": {"model": "haiku"},
+                "code-review": {"batch": {"reviewer": "opushigh"}},
+            },
+            "llm": {"implementer_timeout": 1800},
+        }
+        self.mock_reviewers_resolve.side_effect = lambda registry, name: (
+            {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
+            if name == "opushigh"
+            else {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
+        )
+
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
+                with unittest.mock.patch("sys.stderr", stderr_buf):
+                    rc, out = self._run_main([
+                        "--scope", "batch",
+                        "--batch-name", "test-batch",
+                        "--review-file", str(self.review_file),
+                        "--stage", "prepare",
+                    ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        self.assertIn("[fixer-tier]", stderr_buf.getvalue())
+
+    def test_fixer_tier_warning_silent_by_default(self):
+        """--stage prepare, default fixture (no roles.code-review key, resolve mock unmodified) -> no [fixer-tier] warning."""
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
+                with unittest.mock.patch("sys.stderr", stderr_buf):
+                    rc, out = self._run_main([
+                        "--scope", "batch",
+                        "--batch-name", "test-batch",
+                        "--review-file", str(self.review_file),
+                        "--stage", "prepare",
+                    ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        self.assertNotIn("[fixer-tier]", stderr_buf.getvalue())
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
