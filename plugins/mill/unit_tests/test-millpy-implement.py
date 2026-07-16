@@ -1351,6 +1351,146 @@ class TestMillpyImplement(unittest.TestCase):
         # dropped once finalize_from_output/_forward_output's signature was renamed.
         self.assertNotIn("card_count", captured_kwargs)
 
+    def test_prepare_stage_envelope_includes_start_sha_matching_head(self):
+        """--stage prepare on a fresh (pending) batch: envelope start_sha matches the captured HEAD.
+
+        Card 2 (#625, #635, #643): the prepare envelope must carry start_sha so the next
+        batch's effort-tier work (which threads start_sha through the same emit_prepare call)
+        has a real value to build on, and so a re-dispatched prepare has something to reuse.
+        """
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        # The patched _subprocess_util.run default (set in setUp) returns "abc1234\n" for
+        # every call, including the fresh-mint branch's `git rev-parse HEAD` capture.
+        self.assertEqual(data["start_sha"], "abc1234")
+
+    def test_prepare_stage_envelope_includes_effort_from_implementer_spec(self):
+        """--stage prepare envelope carries the resolved implementer spec's effort tier.
+
+        #628/#633: the effort-tier-implementer batch threads impl_effort (already
+        resolved from the implementer registry spec, here "sonnethigh" -> effort
+        "high" per setUp's mock_reviewers_resolve) into the same emit_prepare call
+        Card 2's start_sha fix already extended.
+        """
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertEqual(data["effort"], "high")
+
+    def test_prepare_stage_reuses_session_on_rerun_of_running_batch(self):
+        """Second --stage prepare call against a batch already 'running' with a session reuses it.
+
+        Card 2 (#625, #635, #643): a re-dispatched prepare (e.g. after a transient dispatch
+        failure) must not re-mint state.md fields nor re-run capture_snapshot/commit/push --
+        only the fresh-mint (first) prepare call does that state-mutating work.
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        original_start_sha = "reuse_start_sha_123"
+        original_session = "reuse-session-uuid-456"
+        millpy_implement._status.set_batch_fields(
+            status_path,
+            "test-batch",
+            {
+                "state": "running",
+                "start_sha": original_start_sha,
+                "implementer_session": original_session,
+            },
+        )
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit"
+            ) as mock_git_commit:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["session_id"], original_session)
+        self.assertEqual(data["start_sha"], original_start_sha)
+
+        # No state-mutating work: capture_snapshot and git_commit must record zero calls, and
+        # no "git push" subprocess call may appear among the (still-patched) generic runs.
+        self.mock_capture_snapshot.assert_not_called()
+        mock_git_commit.assert_not_called()
+        push_calls = [
+            call for call in self.mock_subprocess_run.call_args_list
+            if call.args and list(call.args[0])[:2] == ["git", "push"]
+        ]
+        self.assertEqual(push_calls, [], "git push must not be invoked on the prepare-reuse path")
+
+        # The original values must remain untouched in status.md (no set_batch_fields call).
+        batches = millpy_implement._status.read_batches(status_path)
+        batch_entry = next(b for b in batches if b["name"] == "test-batch")
+        self.assertEqual(batch_entry["start_sha"], original_start_sha)
+        self.assertEqual(batch_entry["implementer_session"], original_session)
+
+    def test_prepare_stage_push_failure_nonfatal_but_commit_failure_still_fatal(self):
+        """Card 3 (#626): a failed git push is non-fatal (warning + envelope still emitted);
+        a failed git commit remains fatal (return 1, no envelope).
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+
+        # Sub-case 1: git push returns non-zero -> warning on stderr, envelope still printed.
+        # `git diff --cached --quiet` must return non-zero (staged) so the fresh-mint branch
+        # actually reaches the commit/push sequence, mirroring test_no_skip_start_commit_on_fresh_fire.
+        def push_fails_routing(argv, **kw):
+            if argv[1] == "diff":
+                return subprocess.CompletedProcess(args=argv, returncode=1, stdout="", stderr="")
+            if argv[1] == "push":
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=1, stdout="", stderr="push failed: connection reset"
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = push_fails_routing
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit",
+                return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ):
+                stderr_buf = io.StringIO()
+                with unittest.mock.patch("sys.stderr", stderr_buf):
+                    rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+        self.assertIn("push failed", stderr_buf.getvalue())
+        self.assertIn("warning", stderr_buf.getvalue().lower())
+
+        # Reset the batch back to "pending" so the next prepare call takes the fresh-mint
+        # branch again (rather than the running-batch reuse path exercised above).
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "pending")
+
+        # Sub-case 2: git commit fails -> still fatal, returns 1, never reaches emit_prepare.
+        # `git diff --cached --quiet` must again return non-zero (staged) so the fresh-mint
+        # branch reaches the commit step where the patched failure below fires.
+        def commit_fails_routing(argv, **kw):
+            if argv[1] == "diff":
+                return subprocess.CompletedProcess(args=argv, returncode=1, stdout="", stderr="")
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = commit_fails_routing
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "git_commit",
+                return_value=subprocess.CompletedProcess(
+                    args=[], returncode=1, stdout="", stderr="commit failed"
+                ),
+            ):
+                rc2, out2 = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc2, 1)
+        self.assertEqual(out2.strip(), "")
+
     def test_main_reports_clean_message_on_exhausted_wiki_startup_error(self):
         """slug_from_branch exhausting the cold-daemon retry -> clean stderr message, exit 1, no traceback."""
         self.mock_slug_from_branch.side_effect = millpy_implement.WikiStartupError(

@@ -105,6 +105,7 @@ from _review_common import (  # noqa: E402
     _load_root_from_overview,
     _read_for_bulk,
     aggregate_verdict,
+    apply_actual_model_override,
     build_deletes_section,
     build_manifest_section,
     build_reattached_section,
@@ -116,6 +117,7 @@ from _review_common import (  # noqa: E402
     compute_moves_union,
     detect_resume_round,
     discover_round,
+    finalize_scope,
     find_active_slug,
     load_config,
     load_task_title,
@@ -552,6 +554,50 @@ def main() -> int:
         path4 = write_review_file(reviews, "code", 1, "content", scope="foundation")
         assert "code-review-foundation-r1" in path4.name
         print(f"PASS: write_review_file code-batch: {path4.name}")
+
+    # apply_actual_model_override: rewrites an existing well-formed reviewer_model line
+    raw = "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
+    out = apply_actual_model_override(raw, "sonnet")
+    assert out == "```yaml\nverdict: APPROVE\nreviewer_model: sonnet\n```\n"
+    print("PASS: apply_actual_model_override rewrites existing reviewer_model line")
+
+    # apply_actual_model_override: injects a reviewer_model line right after the
+    # opening ```yaml fence of the block carrying the verdict, when the input
+    # text has no reviewer_model line at all
+    raw = "```yaml\nverdict: APPROVE\nreviewed_file: x\n```\n"
+    out = apply_actual_model_override(raw, "haiku")
+    assert out == "```yaml\nreviewer_model: haiku\nverdict: APPROVE\nreviewed_file: x\n```\n"
+    print("PASS: apply_actual_model_override injects reviewer_model line after opening fence")
+
+    # apply_actual_model_override: a malformed reviewer_model line (no value)
+    # is treated as not-found and does not swallow the rest of the block
+    raw = "```yaml\nverdict: APPROVE\nreviewer_model:\n```\n"
+    out = apply_actual_model_override(raw, "opus")
+    assert out == "```yaml\nreviewer_model: opus\nverdict: APPROVE\nreviewer_model:\n```\n"
+    print("PASS: apply_actual_model_override treats malformed reviewer_model line as not-found")
+
+    # apply_actual_model_override: identity when actual_model is None
+    raw = "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
+    assert apply_actual_model_override(raw, None) == raw
+    print("PASS: apply_actual_model_override identity when actual_model is None")
+
+    # finalize_scope: actual_model override is reflected in the written file
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir / "reviews"
+        raw = "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
+
+        overridden = finalize_scope(
+            reviews, "code", 1, raw, scope="01-setup", actual_model="sonnet"
+        )
+        overridden_content = Path(overridden["file"]).read_text(encoding="utf-8")
+        assert "reviewer_model: sonnet\n" in overridden_content
+        assert "sonnetmax" not in overridden_content
+        print("PASS: finalize_scope applies actual_model override to written file")
+
+        unmodified = finalize_scope(reviews, "code", 1, raw, scope="01-setup")
+        unmodified_content = Path(unmodified["file"]).read_text(encoding="utf-8")
+        assert unmodified_content == raw
+        print("PASS: finalize_scope without actual_model reproduces unmodified behavior")
 
     # bulk_files: nonexistent skipped
     with _test_helpers.safe_temp_dir() as tmpdir:

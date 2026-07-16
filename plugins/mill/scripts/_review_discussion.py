@@ -8,7 +8,7 @@ review file; the LLM does not use Write.
 
 Public API:
     prepare(cfg, slug, mill_dir, project_root, wiki_root) -> dict
-        Render prompt and resolve spec; return prepare dict with prompt_text, model, round, reviews_dir, scope.
+        Render prompt and resolve spec; return prepare dict with prompt_text, model, effort, round, reviews_dir, scope.
     finalize(cfg, slug, raw_text, *, round_n, reviews_dir, mill_dir, project_root, wiki_root) -> ReviewResult
         Parse verdict from raw_text and return ReviewResult.
     run(cfg, slug, mill_dir, wiki_root, project_root, *, max_rounds=None) -> ReviewResult
@@ -60,7 +60,7 @@ def prepare(
             receiving today's non-agent rule unchanged.
 
     Returns:
-        Dict with keys: prompt_text, model, round, reviews_dir, scope.
+        Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
     """
     # 1. Resolve paths
     discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
@@ -120,6 +120,7 @@ def prepare(
     return {
         "prompt_text": prompt_text,
         "model": spec.get("model"),
+        "effort": spec.get("effort"),
         "round": round_n,
         "reviews_dir": reviews_dir,
         "scope": "holistic",
@@ -136,6 +137,7 @@ def finalize(
     mill_dir: Path,
     project_root: Path,
     wiki_root: Path,
+    actual_model: str | None = None,
 ) -> ReviewResult:
     """Finalize a discussion review by parsing verdict and writing the review file.
 
@@ -143,6 +145,10 @@ def finalize(
         raw_text: Raw review output from the reviewer (should be extracted via extract_review_content).
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
+        actual_model: The model that actually produced this review, used to
+            correct an unreliable self-reported ``reviewer_model:`` line
+            before verdict parsing or disk write; passed through to
+            ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -152,7 +158,12 @@ def finalize(
     """
     try:
         review_entry = finalize_scope(
-            reviews_dir, "discussion", round_n, raw_text, scope="holistic"
+            reviews_dir,
+            "discussion",
+            round_n,
+            raw_text,
+            scope="holistic",
+            actual_model=actual_model,
         )
     except ReviewError as exc:
         path = write_review_file(reviews_dir, "discussion", round_n, raw_text, scope="holistic")

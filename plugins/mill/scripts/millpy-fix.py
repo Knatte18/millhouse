@@ -540,6 +540,7 @@ def main(argv=None) -> int:
             session_id,
             start_sha=start_sha,
             nits_only=args.nits_only,
+            effort=fixer_effort,
         )
 
     # Stage: full (default)

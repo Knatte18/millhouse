@@ -719,7 +719,15 @@ def _mock_paths_and_reviewers(project_root: Path):
     return mock_paths, mock_reviewers
 
 
-def _run_finalize_stage(cli_relpath: str, unique_name: str, agent_output_path: Path, reviews_dir: Path, project_root: Path) -> tuple[int, str]:
+def _run_finalize_stage(
+    cli_relpath: str,
+    unique_name: str,
+    agent_output_path: Path,
+    reviews_dir: Path,
+    project_root: Path,
+    *,
+    actual_model: str | None = None,
+) -> tuple[int, str]:
     """Run a review CLI's `--stage finalize` against a real backend.
 
     Patches ``load_config`` and ``resolve_path`` directly on the real,
@@ -729,6 +737,10 @@ def _run_finalize_stage(cli_relpath: str, unique_name: str, agent_output_path: P
     only ``_paths`` and ``_reviewers`` in ``sys.modules``, and leaves
     ``_agent_dispatch``, ``_review_cli``, ``_review_common``, and the review
     backend module genuinely real.
+
+    ``actual_model``, when given, is passed through as ``--actual-model``
+    so callers can exercise the audit-trail flag against a real backend and
+    inspect the resulting review file's ``reviewer_model:`` line.
 
     Returns (return_code, captured_stdout).
     """
@@ -751,16 +763,18 @@ def _run_finalize_stage(cli_relpath: str, unique_name: str, agent_output_path: P
             sys.modules[unique_name] = module
             spec.loader.exec_module(module)
 
+            argv = [
+                "--slug", "test-slug",
+                "--stage", "finalize",
+                "--round", "1",
+                "--agent-output", str(agent_output_path),
+            ]
+            if actual_model is not None:
+                argv += ["--actual-model", actual_model]
+
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
-                rc = module.main(
-                    [
-                        "--slug", "test-slug",
-                        "--stage", "finalize",
-                        "--round", "1",
-                        "--agent-output", str(agent_output_path),
-                    ]
-                )
+                rc = module.main(argv)
             return rc, buf.getvalue().strip()
     finally:
         _review_common.load_config = orig_load_config
@@ -850,6 +864,114 @@ def _stale_out_md_case(cli_relpath: str, unique_name: str, role: str) -> bool:
         except json.JSONDecodeError:
             return False
         return envelope.get("verdict") == "ERROR"
+
+
+# ---------------------------------------------------------------------------
+# --actual-model audit-trail flag (card 16): threaded from the CLI's argparse
+# flag through finalize() into the written review file's `reviewer_model:`
+# line, regardless of what the raw reviewer text originally echoed. Uses the
+# real backend (via _run_finalize_stage) so the assertion reads genuine file
+# content on disk rather than a mocked call_args.
+# ---------------------------------------------------------------------------
+
+_ACTUAL_MODEL_RAW_TEXT = (
+    "MILL_REVIEW_BEGIN\n"
+    "```yaml\n"
+    "verdict: APPROVE\n"
+    "reviewer_model: sonnetmax\n"
+    "```\n"
+    "MILL_REVIEW_END\n"
+)
+
+
+def _actual_model_case(cli_relpath: str, unique_name: str, *, actual_model: str | None, expected_line: str) -> bool:
+    """Run --stage finalize with (or without) --actual-model and assert the
+    written review file's `reviewer_model:` line matches `expected_line`.
+
+    `_ACTUAL_MODEL_RAW_TEXT` always echoes `reviewer_model: sonnetmax` --
+    passing `actual_model` must overwrite that line regardless; omitting it
+    (actual_model=None) must reproduce it unmodified.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        reviews_dir = project_root / "_mill" / "reviews"
+        agent_output_path = project_root / "agent-output.out.md"
+        agent_output_path.write_text(_ACTUAL_MODEL_RAW_TEXT, encoding="utf-8")
+
+        rc, stdout_text = _run_finalize_stage(
+            cli_relpath, unique_name, agent_output_path, reviews_dir, project_root,
+            actual_model=actual_model,
+        )
+        if rc != 0:
+            return False
+        try:
+            envelope = json.loads(stdout_text)
+        except json.JSONDecodeError:
+            return False
+        if envelope.get("verdict") != "APPROVE":
+            return False
+        reviews = envelope.get("reviews", [])
+        if not reviews:
+            return False
+        file_path = Path(reviews[0]["file"])
+        if not file_path.exists():
+            return False
+        written_content = file_path.read_text(encoding="utf-8")
+        return expected_line in written_content
+
+
+def test_review_discussion_finalize_actual_model_overrides_reviewer_model_line() -> bool:
+    return _actual_model_case(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_actual_model",
+        actual_model="haiku",
+        expected_line="reviewer_model: haiku",
+    )
+
+
+def test_review_discussion_finalize_omitted_actual_model_leaves_reviewer_model_unchanged() -> bool:
+    return _actual_model_case(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_actual_model_omitted",
+        actual_model=None,
+        expected_line="reviewer_model: sonnetmax",
+    )
+
+
+def test_review_plan_finalize_actual_model_overrides_reviewer_model_line() -> bool:
+    return _actual_model_case(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_actual_model",
+        actual_model="haiku",
+        expected_line="reviewer_model: haiku",
+    )
+
+
+def test_review_plan_finalize_omitted_actual_model_leaves_reviewer_model_unchanged() -> bool:
+    return _actual_model_case(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_actual_model_omitted",
+        actual_model=None,
+        expected_line="reviewer_model: sonnetmax",
+    )
+
+
+def test_review_code_finalize_actual_model_overrides_reviewer_model_line() -> bool:
+    return _actual_model_case(
+        "millpy-review-code.py",
+        "millpy_review_code_test_actual_model",
+        actual_model="haiku",
+        expected_line="reviewer_model: haiku",
+    )
+
+
+def test_review_code_finalize_omitted_actual_model_leaves_reviewer_model_unchanged() -> bool:
+    return _actual_model_case(
+        "millpy-review-code.py",
+        "millpy_review_code_test_actual_model_omitted",
+        actual_model=None,
+        expected_line="reviewer_model: sonnetmax",
+    )
 
 
 def test_review_discussion_finalize_missing_agent_output_returns_error() -> bool:
@@ -1043,6 +1165,25 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: test 6 ({exc})", file=sys.stderr)
         errors += 1
+
+    actual_model_cases = [
+        ("discussion", "override", test_review_discussion_finalize_actual_model_overrides_reviewer_model_line),
+        ("discussion", "omitted", test_review_discussion_finalize_omitted_actual_model_leaves_reviewer_model_unchanged),
+        ("plan", "override", test_review_plan_finalize_actual_model_overrides_reviewer_model_line),
+        ("plan", "omitted", test_review_plan_finalize_omitted_actual_model_leaves_reviewer_model_unchanged),
+        ("code", "override", test_review_code_finalize_actual_model_overrides_reviewer_model_line),
+        ("code", "omitted", test_review_code_finalize_omitted_actual_model_leaves_reviewer_model_unchanged),
+    ]
+    for review_type, case_label, test_fn in actual_model_cases:
+        try:
+            if test_fn():
+                print(f"PASS: review-{review_type} finalize --actual-model {case_label} case")
+            else:
+                print(f"FAIL: review-{review_type} finalize --actual-model {case_label} case", file=sys.stderr)
+                errors += 1
+        except Exception as exc:
+            print(f"FAIL: review-{review_type} finalize --actual-model {case_label} case ({exc})", file=sys.stderr)
+            errors += 1
 
     missing_empty_whitespace_cases = [
         ("discussion", "missing", test_review_discussion_finalize_missing_agent_output_returns_error),

@@ -87,6 +87,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Review round number from prepare envelope; required for finalize stage.",
     )
+    parser.add_argument(
+        "--actual-model",
+        default=None,
+        help=(
+            "Model tier actually dispatched via the Agent tool for this round, "
+            "when it diverges from the prepare envelope's `model` field (e.g. "
+            "an operator-directed override); threaded into the review file's "
+            "`reviewer_model` field. Omit to leave today's config-derived value "
+            "untouched."
+        ),
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -147,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
                 wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
                 max_rounds=args.max_rounds, prior_notes=prior_notes_path, agent_mode=True,
             )
-            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-code", prepare_result["scope"],
                 prepare_result["round"], prepare_result["prompt_text"],
@@ -164,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
                 "scope": prepare_result["scope"],
                 "round": prepare_result["round"],
             }
+            if prepare_result.get("effort") is not None:
+                envelope["effort"] = prepare_result["effort"]
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
@@ -193,7 +206,8 @@ def main(argv: list[str] | None = None) -> int:
             result = finalize(
                 cfg, slug, raw_text, scope=args.batch, round_n=args.round,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
-                project_root=project_root, wiki_root=wiki_root, git_root=git_root
+                project_root=project_root, wiki_root=wiki_root, git_root=git_root,
+                actual_model=args.actual_model,
             )
             print(json.dumps(result.to_dict()))
             return 0

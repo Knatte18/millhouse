@@ -615,6 +615,36 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertNotIn("nits_only", data)
 
+    def test_stage_prepare_batch_scope_includes_effort_from_fixer_spec(self):
+        """--stage prepare envelope carries the resolved fixer spec's effort tier (#628, #633).
+
+        Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style
+        spec that resolves effort:"high", mirroring the millpy-implement.py Card 5 test.
+        """
+        self.mock_reviewers_resolve.return_value = {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+            "effort": "high",
+        }
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        # LLM should not be called in prepare stage
+        mock_run.assert_not_called()
+        # Output should be prepare JSON envelope with the resolved effort tier
+        data = json.loads(out.strip())
+        self.assertEqual(data["effort"], "high")
+
     def test_stage_prepare_holistic_scope(self):
         """--stage prepare holistic scope: renders brief, calls emit_prepare, no LLM call."""
         with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):

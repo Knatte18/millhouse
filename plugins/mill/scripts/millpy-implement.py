@@ -427,6 +427,28 @@ def main(argv=None) -> int:
     # re-capturing it, preserving the original new-dirt baseline.
     snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
 
+    # A re-run of `--stage prepare` (never `--stage full`, whose fresh-mint/transient-retry
+    # contract per mill-go/SKILL.md step 2 must not change) against a batch that a prior
+    # prepare call already dispatched -- state "running" with a session recorded -- must reuse
+    # that session_id/start_sha rather than minting fresh state. Without this, a re-dispatched
+    # prepare (e.g. mill-go resuming after a transient dispatch failure) would overwrite
+    # implementer_session in status.md and make a second "mill-go: start batch" commit, both of
+    # which corrupt state the agent-mode dispatch loop and finalize's completeness recount rely
+    # on (#625, #635, #643). Resolved once, before the resume/fresh-mint branches below, so the
+    # three-way branch reads as: resume-after-incomplete, prepare-reuse, fresh-mint.
+    _prepare_reuse_entry = None
+    if args.stage == "prepare" and not args.resume_incomplete:
+        _prepare_batches = _status.read_batches(status_path)
+        _prepare_candidate = next(
+            (b for b in _prepare_batches if b.get("name") == args.batch_name), None
+        )
+        if (
+            _prepare_candidate is not None
+            and _prepare_candidate.get("state") == "running"
+            and _prepare_candidate.get("implementer_session")
+        ):
+            _prepare_reuse_entry = _prepare_candidate
+
     if args.resume_incomplete:
         # Resume path: read the original start_sha and implementer_session from status.md.
         # Re-capturing HEAD as start_sha would make the completeness recount under-count a
@@ -462,6 +484,14 @@ def main(argv=None) -> int:
         # Do NOT make a housekeeping commit: a second "mill-go: start batch" commit would
         # cause _content_commit_count to subtract two housekeeping commits, under-counting
         # the implementer's content commits and producing a false incomplete result.
+    elif _prepare_reuse_entry is not None:
+        # Prepare-reuse path: a prior `--stage prepare` call already captured start_sha,
+        # minted implementer_session, and made the "mill-go: start batch" commit for this
+        # batch. Reuse both values verbatim and do none of the state-mutating work the
+        # fresh-mint branch below does -- no capture_snapshot, no set_batch_fields, no
+        # git add/diff/commit, no push. This branch only reads already-recorded state.
+        session_id = _prepare_reuse_entry["implementer_session"]
+        start_sha = _prepare_reuse_entry["start_sha"]
     else:
         # Normal (first-pass) dispatch: capture HEAD as start_sha, generate a fresh
         # session_id, update status.md, take a cleanliness snapshot, and make the
@@ -530,8 +560,16 @@ def main(argv=None) -> int:
                 cwd=project_root,
             )
             if result.returncode != 0:
-                print(result.stderr, file=sys.stderr)
-                return 1
+                # A failed push here (network blip, transient remote error) must not abort
+                # the batch: the housekeeping commit is safely on the local branch, and
+                # mill-merge pushes the full branch at task end regardless. Aborting on a
+                # push failure would strand the batch in "running" state with no way to
+                # retry the prepare stage without also re-minting session_id (#626).
+                print(
+                    f"[millpy-implement] warning: git push failed ({result.stderr.strip()}); "
+                    "continuing -- mill-merge pushes the full branch at task end",
+                    file=sys.stderr,
+                )
 
     template_path = plugin_root / "templates" / "implementer-brief.md"
     prompt_text = _render.render(
@@ -587,6 +625,8 @@ def main(argv=None) -> int:
             prompt_text,
             model_tier,
             session_id,
+            start_sha=start_sha,
+            effort=impl_effort,
         )
 
     # Stage: full (default)

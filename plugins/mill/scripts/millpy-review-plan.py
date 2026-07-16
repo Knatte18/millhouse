@@ -88,6 +88,17 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
     )
+    parser.add_argument(
+        "--actual-model",
+        default=None,
+        help=(
+            "Model tier actually dispatched via the Agent tool for this round, "
+            "when it diverges from the prepare envelope's `model` field (e.g. "
+            "an operator-directed override); threaded into the review file's "
+            "`reviewer_model` field. Omit to leave today's config-derived value "
+            "untouched."
+        ),
+    )
     args = parser.parse_args(argv)
 
     import _agent_dispatch
@@ -155,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
             )
-            briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
+            briefs_dir = _paths.resolve_task_path(git_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
                 briefs_dir, "review-plan", prepare_result["scope"],
                 prepare_result["round"], prepare_result["prompt_text"],
@@ -172,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
                 "scope": prepare_result["scope"],
                 "round": prepare_result["round"],
             }
+            if prepare_result.get("effort") is not None:
+                envelope["effort"] = prepare_result["effort"]
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
@@ -204,7 +217,8 @@ def main(argv: list[str] | None = None) -> int:
             review_entry = finalize(
                 cfg, slug, raw_text, scope=None, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
-                project_root=project_root, wiki_root=wiki_root, git_root=git_root
+                project_root=project_root, wiki_root=wiki_root, git_root=git_root,
+                actual_model=args.actual_model,
             )
             # Build ReviewResult from the single review entry
             result_dict = {

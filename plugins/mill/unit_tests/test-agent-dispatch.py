@@ -1,7 +1,7 @@
 """Unit tests for plugins/mill/scripts/_agent_dispatch.py.
 
 Covers:
-  - resolve_dispatch_mode: defaults to subprocess, validates enum values
+  - resolve_dispatch_mode: defaults to agent, validates enum values
   - model_to_tier: maps model families, raises on unknown
   - write_brief: writes files, creates parents, overwrites, returns path
   - output_path_for: the ".md" -> ".out.md" mapping
@@ -21,12 +21,12 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 import _agent_dispatch  # noqa: E402
 
 
-def test_resolve_dispatch_mode_defaults_to_subprocess() -> None:
-    """resolve_dispatch_mode defaults to subprocess when dispatch is absent."""
+def test_resolve_dispatch_mode_defaults_to_agent() -> None:
+    """resolve_dispatch_mode defaults to agent when dispatch is absent."""
     cfg = {"llm": {"claude": {}}}
     mode = _agent_dispatch.resolve_dispatch_mode(cfg)
-    assert mode == "subprocess", f"Expected subprocess, got {mode!r}"
-    print("PASS resolve_dispatch_mode -- defaults to subprocess")
+    assert mode == "agent", f"Expected agent, got {mode!r}"
+    print("PASS resolve_dispatch_mode -- defaults to agent")
 
 
 def test_resolve_dispatch_mode_returns_configured_value() -> None:
@@ -254,7 +254,7 @@ def test_write_brief_truncates_stale_out_md() -> None:
 
 def main() -> int:
     tests = [
-        test_resolve_dispatch_mode_defaults_to_subprocess,
+        test_resolve_dispatch_mode_defaults_to_agent,
         test_resolve_dispatch_mode_returns_configured_value,
         test_resolve_dispatch_mode_raises_on_unknown,
         test_model_to_tier_sonnet,

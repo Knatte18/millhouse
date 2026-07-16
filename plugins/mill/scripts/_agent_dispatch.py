@@ -5,7 +5,7 @@ Exports
 -------
 resolve_dispatch_mode(cfg: dict) -> str
     Read cfg["llm"]["claude"]["dispatch"], validate it is one of
-    {"subprocess","psmux","agent"}, and return it. Defaults to "subprocess".
+    {"subprocess","psmux","agent"}, and return it. Defaults to "agent".
     Raises ValueError on unrecognized value.
 
 model_to_tier(model: str) -> str
@@ -77,7 +77,7 @@ def resolve_dispatch_mode(cfg: dict) -> str:
     """
     llm_cfg = cfg.get("llm", {})
     claude_cfg = llm_cfg.get("claude", {})
-    mode = claude_cfg.get("dispatch", "subprocess")
+    mode = claude_cfg.get("dispatch", "agent")
 
     if mode not in VALID_DISPATCH_MODES:
         raise ValueError(f"Unknown dispatch mode: {mode!r}")
