@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: _mill/plan
@@ -30,6 +30,7 @@ holistic-reviewing  '2026-07-16T12:03:32Z'
 holistic-fixing  '2026-07-16T12:08:49Z'
 nits-fixed-holistic  '2026-07-16T12:21:34Z'
 holistic-approved  '2026-07-16T12:21:48Z'
+done  '2026-07-16T12:22:20Z'
 ```
 
 ## Batches
