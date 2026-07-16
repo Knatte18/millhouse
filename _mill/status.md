@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-16T10:54:00Z'
+discussion-fix-r1  '2026-07-16T11:06:05Z'
 ```

@@ -81,6 +81,19 @@ and consolidated into this one wiki task since they share root cause and code pa
 - No changes to `_status.read_status()` / `read_full()` signatures — the slug check
   stays scoped to the specific call sites that resolve parent/phase for merge routing,
   not the general-purpose status reader used by mill-go and other unrelated callers.
+- **Accepted residual risk:** Step 3's live-worktree corruption of `_mill/status.md`
+  is not eliminated, only guarded at the merge-routing read sites in scope above. If a
+  finalize run is interrupted or halted mid-way through PR Steps (after Step 3's restore
+  commit but before teardown), any *other* tool reading `_status.read_status`/`read_full`
+  directly against that same worktree (e.g. `mill-go`, `mill-inspect`) still observes the
+  parent's phase/task fields, not the child's, because those readers are not part of the
+  merge-routing paths this task hardens. This is accepted rather than fixed here because:
+  those tools have no analogous "fall back to the wiki" recovery today (unlike mill-merge
+  and `_parent_branch`, which already had one), so closing this window would mean
+  designing new fallback behavior for callers this task was not scoped to touch. The
+  practical exposure window is also narrow — normal completion reaches Step 4 (push) and
+  Step 5 (PR creation) within the same finalize invocation, after which the operator is
+  expected to run `/mill-merge`, not `/mill-go`, against that worktree.
 
 ## Decisions
 
@@ -168,6 +181,13 @@ and consolidated into this one wiki task since they share root cause and code pa
   per the issue, happen to be harmless in that one observed run), but it silently
   disables the #497 bug-2 protection in the common worktree-mode case rather than fixing
   it.
+- **Note for mill-plan:** `plugins/mill/skills/mill-merge/SKILL.md:163` currently states
+  `<task_dir>` "may be passed as either an absolute path ... or a repo-relative path.
+  `git reset` and `git checkout` accept both forms within the repo root" — this directly
+  contradicts #648's premise (the absolute child-anchored form is *never* within the
+  parent's repo root in worktree mode) and must be corrected/removed in the same change
+  that introduces the relative pathspec, so the skill doc doesn't ship self-contradictory
+  after the fix.
 
 ## Technical context
 
