@@ -218,7 +218,7 @@ def prepare(
             receiving today's non-agent rule unchanged.
 
     Returns:
-        Dict with keys: prompt_text, model, round, reviews_dir, scope.
+        Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
     """
     # 1. Paths + round counter
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
@@ -375,6 +375,7 @@ def prepare(
     return {
         "prompt_text": prompt_text,
         "model": spec.get("model"),
+        "effort": spec.get("effort"),
         "round": round_n,
         "reviews_dir": reviews_dir,
         "scope": scope_label,
