@@ -191,7 +191,7 @@ status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.
 batches = _status.read_batches(status_path)
 sid = next((b.get('implementer_session') for b in batches if b['name'] == '<batch_name>'), None)
 _llm_claude.cleanup_session(sid)
-" || true
+"
 ```
 
 **Why not fork?** Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent(subagent_type: "fork")`. A fork inherits the parent's context, but that inheritance costs three things every role above depends on: (1) a fork always runs on the **parent's model** and ignores a `model` override, breaking mill's per-role model assignment — implementer-class roles carry a literal `model:` key (`roles.implementer.model: sonnethigh`, `roles.fixer.model: haiku`, and merge-in's `model: haiku`, all in `plugins/mill/templates/mill-config.yaml`), while reviewer roles instead name a *reviewer* from `agents.yaml` (e.g. `roles.discussion-review.holistic.reviewer: sonnetmax` in the shipped template) whose model is resolved from that registry and mapped to an Agent tier by `_agent_dispatch.model_to_tier` — fork breaks both mechanisms, since it ignores the `model` argument either way; (2) a fork inherits the **parent's tools**, so a reviewer forked from mill-go would hold `Edit`, `Write`, and `Bash` beyond its briefs-scoped grant and lose its read-only guarantee; (3) a fork has **no on-disk brief**, so a forked dispatch cannot be resumed after a crash the way `--resume-incomplete` resumes a briefed dispatch. Fork is therefore used only in mill-start's Explore phase (see `mill-start/SKILL.md`), where none of these three disqualifiers apply. Fork's advertised "the child's tool output stays out of the parent" is **not** a differentiator here either — an ordinary fresh Agent call already keeps a subagent's tool output out of the parent's context.
@@ -538,7 +538,7 @@ import sys
 sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
 import _llm_claude
 _llm_claude.cleanup_session('${holistic_sid}')
-" || true
+"
 ```
 
 If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a documented no-op — the implementer brief contract guarantees the id is emitted on the happy path.

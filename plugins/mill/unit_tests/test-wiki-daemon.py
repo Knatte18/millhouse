@@ -640,6 +640,48 @@ def main() -> int:
     except Exception as exc:
         fail("SPAWN_TIMEOUT platform-guarded assertion", exc)
 
+    # --- (w) _handle_connection empty payload -> debug log, no response, no crash ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            daemon = TestDaemon("test", tmp / "state.json", 30)
+            daemon._token = "tok"
+            mock_conn = MagicMock()
+            mock_conn.recv.return_value = b""
+            with patch.object(daemon._logger, "debug") as mock_debug, \
+                 patch.object(daemon._logger, "error") as mock_error:
+                daemon._handle_connection(mock_conn)
+            assert not mock_conn.sendall.called, "no response should be attempted"
+            assert mock_conn.close.called, "connection should still be closed"
+            assert mock_debug.called, "empty payload should be logged at debug"
+            assert not mock_error.called, "empty payload should NOT be logged at error"
+            ok("_handle_connection empty payload -> debug log, no response, no crash")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_handle_connection empty payload -> debug log, no response, no crash", exc)
+
+    # --- (x) _handle_connection malformed-nonempty payload -> debug log, no response, no crash ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            daemon = TestDaemon("test", tmp / "state.json", 30)
+            daemon._token = "tok"
+            mock_conn = MagicMock()
+            mock_conn.recv.side_effect = [b"not valid json", b""]
+            with patch.object(daemon._logger, "debug") as mock_debug, \
+                 patch.object(daemon._logger, "error") as mock_error:
+                daemon._handle_connection(mock_conn)
+            assert not mock_conn.sendall.called, "no response should be attempted"
+            assert mock_conn.close.called, "connection should still be closed"
+            assert mock_debug.called, "malformed payload should be logged at debug"
+            assert not mock_error.called, "malformed payload should NOT be logged at error"
+            ok("_handle_connection malformed-nonempty payload -> debug log, no response, no crash")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_handle_connection malformed-nonempty payload -> debug log, no response, no crash", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)

@@ -640,23 +640,15 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
                     time.sleep(0.1)
                 state_file.unlink(missing_ok=True)
             else:
+                req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {}}
                 try:
-                    sock = socket.create_connection(
-                        (state["host"], state["port"]), timeout=0.5
-                    )
-                    sock.close()
-                    req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {}}
-                    try:
-                        resp = _connect_send_recv(state["host"], state["port"], req, timeout=1.0)
-                        if resp.get(FIELD_OK) is True:
-                            return (state["host"], state["port"], state["token"])
-                    except OSError:
-                        pass
-                    if _is_stale(state):
-                        state_file.unlink(missing_ok=True)
+                    resp = _connect_send_recv(state["host"], state["port"], req, timeout=1.0)
+                    if resp.get(FIELD_OK) is True:
+                        return (state["host"], state["port"], state["token"])
                 except OSError:
-                    if _is_stale(state):
-                        state_file.unlink(missing_ok=True)
+                    pass
+                if _is_stale(state):
+                    state_file.unlink(missing_ok=True)
 
     _spawn_server(wiki_path)
 

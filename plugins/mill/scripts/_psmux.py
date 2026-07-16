@@ -135,6 +135,8 @@ def list_sessions() -> list[str]:
         if "no server running" in str(e).lower():
             return []
         raise
+    except FileNotFoundError:
+        return []
 
     if not result.stdout:
         return []
