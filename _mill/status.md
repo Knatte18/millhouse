@@ -29,7 +29,9 @@ implementing  '2026-07-16T11:25:37Z'
 ```yaml
 batches:
   - name: psmux-cleanup-crash
-    state: pending
+    state: running
+    implementer_session: 57cf5339-180c-47e4-abfd-c3e7c97cfd68
+    start_sha: ab83724e4148d84b554a0676a7310e44a8ea8cbd
   - name: wiki-daemon-json-noise
     state: pending
 ```
