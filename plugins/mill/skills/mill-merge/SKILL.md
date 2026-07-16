@@ -30,7 +30,7 @@ You are an integration engineer. Your job is to merge a completed task branch ba
    - `git.require_pr_to_base` (bool, default false) — read for the branch-protection fallback message only; PR dispatch itself is handled by mill-finalize.
    - `git.base_branch` (string) — the repo's canonical base (usually `main`). Falls back to `main` if absent. Used in the branch-protection fallback to set the PR `--base` target correctly.
 
-   **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 4 (Direct path), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
+   **In-place mode bypass:** when `mode == 'inplace'`, the existing Steps 1 (acquire merge lock on parent) and 2 (invoke `mill-merge-in`) are SKIPPED. There is no separate parent worktree to lock; the merge is purely local. Continue from Step 3 (capture child branch) onward, but treat "child" and "parent" as branches in the same working tree (cwd is the hub). For the squash merge in Step 5 (Direct squash), omit the `-C <parent-path>` flag — the merge runs against the current working tree directly.
 
 1.5. **Path Setup.** `cfg` was loaded in step 1; `container_path` and `slug` are in scope from Step 1. Derive:
    ```python
@@ -42,10 +42,16 @@ You are an integration engineer. Your job is to merge a completed task branch ba
 
 2. Slug already resolved in Step 1; reuse `active_data['slug']` — no second read needed.
 3. *(Config already loaded in Step 1.)*
-4. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>)`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
+4. Resolve parent branch via `_parent_branch.resolve(status_path, interactive=<True unless called non-interactively>, expected_slug=slug)`. `slug` is already bound in Entry Step 1 as `active_data['slug']`. `status_path` is resolved via `_paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (set in Path Setup step 1.5) and `task_dir = status_path.parent` — state lives in `task_dir` on the task branch, not in the wiki.
 5. **Phase gate — also the re-entry point for PR-path recovery.**
 
-   **Try `_mill/status.md` first.** If `status_path.exists()`, read `phase:` from it and apply the table below. If `status_path` is absent: call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`). Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`. If `task["status"] == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>'; cannot determine merge state."
+   **Try `_mill/status.md` first.** If `status_path.exists()`, try to read the raw `slug:` field via `_status.read_full(status_path)["yaml"].get("slug")`, wrapped in a try/except to handle malformed status.md files (e.g., missing yaml fence) gracefully — on parse error, treat the field as absent and fall through to the wiki lookup below (mirroring `_parent_branch._read_parent_from_status`'s tolerance). Read raw field, NOT `_status.read_slug()`, which falls back to `status_path.parent.name` (always literally `_mill` in this layout) when the field is absent, so it can never tell "field absent" apart from "field present and different"; reading the raw field keeps this check's absent-field semantics consistent with `_parent_branch.py`'s `expected_slug` check (an absent `slug:` row is a no-op there, not a mismatch). Compare the result against `slug` (the already-resolved `active_data['slug']` from Entry Step 1) ONLY when the raw field is not `None`.
+
+   If the raw `slug:` field is present AND does not match `slug`: do not read `phase:` from the table below at all. Instead, fall through to the exact branch below for "`status_path` is absent".
+
+   Otherwise (slugs match, or the raw field is absent) read `phase:` from `status_path` and apply the table below.
+
+   If `status_path` is absent (or the slug mismatch above triggered fallthrough): call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`). Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`. If `task["status"] == "pr-pending"` → treat as `pr-pending` below. Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>'; cannot determine merge state. (status.md slug did not match task slug '<slug>')" -- append the parenthetical only when a slug mismatch (not a genuinely absent file) triggered this branch.
 
    | phase | action |
    | --- | --- |
@@ -152,17 +158,23 @@ PR dispatch lives in mill-finalize. This step is direct path only.
 
 - **Direct path:**
 
+  Compute a repo-relative pathspec once, before this bash block, and reuse it for the two middle commands:
+
+  ```python
+  TASK_DIR_REL = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md']).parent.relative_to(worktree_root).as_posix()
+  ```
+
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
-  git -C <parent-path> reset -q HEAD -- <task_dir>
-  git -C <parent-path> checkout -- <task_dir>
+  git -C <parent-path> reset -q HEAD -- "$TASK_DIR_REL"
+  git -C <parent-path> checkout -- "$TASK_DIR_REL"
   git -C <parent-path> commit -m "<cached_task>"
   git -C <parent-path> push
   ```
 
-  Note: `<task_dir>` may be passed as either an absolute path (when `_paths.resolve_task_path` derives it from `worktree_root`) or a repo-relative path. `git reset` and `git checkout` accept both forms within the repo root.
+  Note: these two commands specifically require the relative form, because they run with `-C <parent-path>` and a relative pathspec resolves against that `-C` target -- the absolute, child-anchored `<task_dir>` value is never inside the parent's repo root when parent and child are separate worktree directories, and would resolve outside the parent's repo root and fail with "outside repository" (the exact #648 symptom). `$TASK_DIR_REL` is derived once and reused for both commands for this reason. Every other reference to `<task_dir>` in this skill (e.g. Step 4's `git -C <worktree> rm -r <task_dir>`, run against the child worktree) is unaffected and keeps its existing absolute form -- that one already resolves correctly within the child's own repo root.
 
-  **Why:** The child cleanup commit deletes `task_dir`, so a parent that independently tracks `task_dir/_mill/status.md` at the same relative path would otherwise have its file deleted by the squash diff (the #497 bug-2 corruption). The restore step unstages and restores the parent's own `task_dir` from its pre-squash HEAD, ensuring the squash only stages the intended production files. This is a clean no-op when the parent tracks nothing at `task_dir`.
+  **Why:** The child cleanup commit deletes `task_dir`, so a parent that independently tracks `task_dir/_mill/status.md` at the same relative path would otherwise have its file deleted by the squash diff (the #497 bug-2 corruption). The restore step unstages and restores the parent's own `task_dir` from its pre-squash HEAD, using the `$TASK_DIR_REL` relative pathspec so the restore resolves inside the parent's own repo root rather than the child's, ensuring the squash only stages the intended production files. This is a clean no-op when the parent tracks nothing at `task_dir`.
 
   After the restore, re-inspect the staged changes via `git -C <parent-path> diff --cached --stat` and proceed to commit only the intended production files.
 

@@ -10,7 +10,7 @@ Merge the parent branch into the current branch. Creates a rollback checkpoint f
 ## Entry
 
 1. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-2. Resolve the parent branch. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True)` where `status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError`.
+2. Resolve the parent branch. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True, expected_slug=slug)` where `status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")` and `slug` is already resolved in Entry step 1 via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. Config does not carry a parent-branch override (YAGNI as of v2.0). If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError` -- `expected_slug=slug` applies in both the interactive and non-interactive forms of the call.
 3. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt. This is for ad-hoc syncing from some other branch than the task's declared parent.
 
 ## Steps
