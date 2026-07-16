@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: _mill/plan
@@ -21,4 +21,19 @@ planning  '2026-07-16T11:14:57Z'
 plan-review-r1  '2026-07-16T11:19:17Z'
 plan-fix-r1  '2026-07-16T11:20:54Z'
 planned  '2026-07-16T11:21:34Z'
+implementing  '2026-07-16T11:25:45Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: parent-branch-identity
+    state: pending
+  - name: finalize-step3-restore
+    state: pending
+  - name: merge-slug-check-and-pathspec
+    state: pending
+  - name: integration-test-coverage
+    state: pending
 ```
