@@ -33,17 +33,20 @@ self-contained and does not export anything another batch consumes.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add `import _agent_dispatch` to the existing import block (alongside
-  `import _paths` and `from _config import deep_merge, resolve_plugin_template_path`, at
-  lines 25-33). Add two module-level rank dicts directly below the existing
+- **Requirements:** Add two module-level rank dicts directly below the existing
   `_NAME_REGEX = re.compile(...)` line (line 35): `_TIER_RANK = {"haiku": 0, "sonnet": 1,
   "opus": 2}` and `_EFFORT_RANK = {"low": 0, "medium": 1, "high": 2, "max": 3}`. Add
   `def tier_rank(spec: dict) -> tuple[int, int] | None:` that: returns `None` immediately
   when `spec.get("type") != "single"` or `spec.get("provider") != "claude"` (cluster types
   and non-Claude providers — e.g. the `gemini`-provider entries in `mill-agents.yaml` — have
   no defined ordering); otherwise resolves the model family by calling
-  `_agent_dispatch.model_to_tier(spec["model"])` inside a `try/except ValueError:
-  return None` guard (an unrecognized model family is also "not comparable"); on success,
+  `_agent_dispatch.model_to_tier(spec["model"])` (import `_agent_dispatch` locally inside
+  `tier_rank`, e.g. `import _agent_dispatch` as the function's first line — NOT a top-level
+  module import — this avoids closing an import cycle: `_reviewers -> _agent_dispatch ->
+  _review_common -> _reviewers`; `_review_common` only references `_reviewers` inside
+  function bodies today, so a top-level import here would be fragile against any future
+  top-level use in that cycle) inside a `try/except ValueError: return None` guard (an
+  unrecognized model family is also "not comparable"); on success,
   returns `(_TIER_RANK[family], _EFFORT_RANK.get(spec.get("effort"), 0))` — the `.get(...,
   0)` default means a spec with no `"effort"` key at all (e.g. the shipped `haiku`/
   `haiku_bulk` entries in `mill-agents.yaml`, which carry no `effort:` field) ranks as `0`
@@ -143,18 +146,28 @@ self-contained and does not export anything another batch consumes.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add a test that extends this file's existing fixture config string
-  (currently `"roles:\n  implementer:\n    self_fix_rounds: 2\n  fixer:\n    model:
-  haiku\n"`, used by the happy-path tests) with a `code-review:` block naming a
-  strictly-stronger reviewer for the scope under test, e.g.
-  `"roles:\n  implementer:\n    self_fix_rounds: 2\n  fixer:\n    model: haiku\n
-  code-review:\n    batch:\n      reviewer: opushigh\n"` for a `--scope batch` invocation
-  (match whichever scope the existing happy-path fixture already dispatches — mirror
-  `test_batch_happy_path`'s end-to-end `millpy_fix.main` invocation and stderr-capture
-  pattern). Assert the captured stderr contains `"[fixer-tier]"`. Add a second test using a
-  config where `roles.code-review.<scope>.reviewer` is absent (matching today's default
-  fixture) and assert `"[fixer-tier]"` does NOT appear in captured stderr — the
-  no-reviewer-configured case must stay silent.
+- **Requirements:** `setUp` mocks `_review_common.load_config` (`self.mock_load_config`,
+  returning a hardcoded dict with no `code-review` key by default) and `_reviewers.resolve`
+  (`self.mock_reviewers_resolve`, a fixed `return_value` regardless of the name passed in) —
+  neither reads any YAML string, so the new test must override both mocks directly, mirroring
+  `TestMillpyFixBriefSizeGuard.test_1_brief_size_guard_fires`'s
+  `self.mock_load_config.return_value = {...}` per-test override pattern. Add a test that
+  sets `self.mock_load_config.return_value` to a dict shaped like the existing default
+  (`paths`, `roles.implementer`, `roles.fixer.model: "haiku"`, `llm.implementer_timeout`)
+  plus `roles.code-review.batch.reviewer: "opushigh"` (match whichever `--scope` the test
+  dispatches — `batch` mirrors `test_batch_happy_path`'s existing end-to-end pattern), AND
+  gives `self.mock_reviewers_resolve` a name-aware `side_effect` (replacing its fixed
+  `return_value` for this test only, e.g. via
+  `self.mock_reviewers_resolve.side_effect = lambda registry, name: {"type": "single",
+  "provider": "claude", "model": "claude-opus-4-7", "effort": "high"} if name == "opushigh"
+  else {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}`) so
+  the reviewer resolves strictly stronger than the haiku fixer. Run the CLI end-to-end via
+  `self._run_main([...])` capturing stderr (`unittest.mock.patch("sys.stderr", ...)`,
+  mirroring `_run_main`'s existing stdout-capture pattern for the new capture), and assert
+  the captured stderr contains `"[fixer-tier]"`. Add a second test using the default
+  `self.mock_load_config.return_value` (no `code-review` key, i.e. `setUp`'s unmodified
+  fixture) and the default `self.mock_reviewers_resolve.return_value` (both sides resolve
+  identically) and assert `"[fixer-tier]"` does NOT appear in captured stderr.
 - **Commit:** `test(fix): cover fixer-tier warning wiring in millpy-fix.py`
 
 ## Batch Tests
