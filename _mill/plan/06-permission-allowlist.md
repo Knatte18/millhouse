@@ -3,7 +3,7 @@
 ```yaml
 task: "Agent-mode dispatch: envelope fields and session/runtime state are unreliable"
 batch: permission-allowlist
-number: 4
+number: 6
 cards: 2
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-claude-settings.py
 depends-on: []
@@ -24,9 +24,10 @@ This batch closes #631: a background `mill-implementer`/`mill-reviewer` subagent
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/scripts/_claude_settings.py`
+  - `plugins/mill/unit_tests/test-claude-settings.py`
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Create `plugins/mill/scripts/_claude_settings.py` with a module docstring (mirroring `_vscode.py`'s style) and a public function `merge_permission_allowlist(settings_path: Path, tool_names: list[str]) -> dict`. Behavior: read `settings_path` as JSON if it exists (`json.loads(settings_path.read_text(encoding="utf-8"))`), else start from `{}`. Get or create `data.setdefault("permissions", {})`, then `permissions.setdefault("allow", [])`. For each name in `tool_names`, append it to `allow` only if not already present (preserve existing order, append new entries at the end, no duplicates) — do not touch `permissions["deny"]`, `permissions["additionalDirectories"]`, or any other top-level key (`env`, `model`, `hooks`, etc.) if present. Write the updated `data` back to `settings_path` via `settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")` only if the `allow` list actually changed (idempotent no-op write-skip when every name was already present, mirroring Phase 4.8's existing `if env_block.get('MILL_PYTHON') == mill_python: print('already correct')` early-exit pattern). Return the final `data` dict. Define a module-level constant `MILL_SUBAGENT_TOOLS = ["Bash", "Read", "Edit", "Write", "Grep", "Glob", "Skill"]` — the alphabetically-sorted union of `mill-implementer.md`'s (`Read, Edit, Write, Bash, Grep, Glob, Skill`) and `mill-reviewer.md`'s (`Read, Grep, Glob, Write`) `tools:` frontmatter — as the single source of truth Phase 4.8 (Card 19) imports and passes as `tool_names`, so the allowlist and the two agent definitions cannot silently drift apart.
+- **Requirements:** Create `plugins/mill/scripts/_claude_settings.py` with a module docstring (mirroring `_vscode.py`'s style) and a public function `merge_permission_allowlist(settings_path: Path, tool_names: list[str]) -> dict`. Behavior: read `settings_path` as JSON if it exists (`json.loads(settings_path.read_text(encoding="utf-8"))`), else start from `{}`. Get or create `data.setdefault("permissions", {})`, then `permissions.setdefault("allow", [])`. For each name in `tool_names`, append it to `allow` only if not already present (preserve existing order, append new entries at the end, no duplicates) — do not touch `permissions["deny"]`, `permissions["additionalDirectories"]`, or any other top-level key (`env`, `model`, `hooks`, etc.) if present. Write the updated `data` back to `settings_path` via `settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")` only if the `allow` list actually changed (idempotent no-op write-skip when every name was already present, mirroring Phase 4.8's existing `if env_block.get('MILL_PYTHON') == mill_python: print('already correct')` early-exit pattern). Return the final `data` dict. Define a module-level constant `MILL_SUBAGENT_TOOLS = ["Bash", "Read", "Edit", "Write", "Grep", "Glob", "Skill"]` — the alphabetically-sorted union of `mill-implementer.md`'s (`Read, Edit, Write, Bash, Grep, Glob, Skill`) and `mill-reviewer.md`'s (`Read, Grep, Glob, Write`) `tools:` frontmatter — as the single source of truth Phase 4.8 (Card 19) imports and passes as `tool_names`, so the allowlist and the two agent definitions cannot silently drift apart. Create `plugins/mill/unit_tests/test-claude-settings.py` (new file, following this repo's existing in-memory/tempfile fixture convention) with the four cases described in this batch's `## Batch Tests` section below.
 - **Commit:** `feat(claude-settings): add permission-allowlist merge helper (#631)`
 
 ### Card 19: `mill-setup` Phase 4.8 merges the mill subagent tool allowlist

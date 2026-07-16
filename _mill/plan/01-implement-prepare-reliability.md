@@ -18,7 +18,7 @@ This batch fixes three independent reliability bugs in `millpy-implement.py`'s `
 ### Card 1: fix `resolve_dispatch_mode`'s wrong default
 
 - **Context:**
-  - `plugins/mill/mill-config.yaml`
+  - `mill-config.yaml`
   - `plugins/mill/templates/mill-config.yaml`
 - **Edits:**
   - `plugins/mill/scripts/_agent_dispatch.py`
@@ -49,10 +49,11 @@ This batch fixes three independent reliability bugs in `millpy-implement.py`'s `
 - **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In the fresh-mint `else` block's push call (`millpy-implement.py`, the `["git", "push", "origin", branch]` `_subprocess_util.run` call currently at lines 524–530), change the failure handling: instead of `print(result.stderr, file=sys.stderr); return 1` on `result.returncode != 0`, print a warning to stderr (e.g. `f"[millpy-implement] warning: git push failed ({result.stderr.strip()}); continuing -- mill-merge pushes the full branch at task end"`) and fall through to the template render / `emit_prepare` call below, exactly as if the push had succeeded. Do not change the commit step above it (the local `git commit` must still succeed and return 1 on failure — only the push is made non-fatal) or any other step in the fresh-mint branch.
+- **Requirements:** In the fresh-mint `else` block's push call (`millpy-implement.py`, the `["git", "push", "origin", branch]` `_subprocess_util.run` call currently at lines 524–530), change the failure handling: instead of `print(result.stderr, file=sys.stderr); return 1` on `result.returncode != 0`, print a warning to stderr (e.g. `f"[millpy-implement] warning: git push failed ({result.stderr.strip()}); continuing -- mill-merge pushes the full branch at task end"`) and fall through to the template render / `emit_prepare` call below, exactly as if the push had succeeded. Do not change the commit step above it (the local `git commit` must still succeed and return 1 on failure — only the push is made non-fatal) or any other step in the fresh-mint branch. In `plugins/mill/unit_tests/test-millpy-implement.py`, extend `TestMillpyImplement` (the `main()`-level test class, following its existing patched-subprocess fixture pattern) with three new cases covering this batch's Cards 2 and 3 together: (a) a `--stage prepare` call on a fresh batch produces an envelope whose `start_sha` matches the patched `git rev-parse HEAD` output; (b) a second `--stage prepare` call against a batch whose `_status` entry already has `state: "running"` and a non-null `implementer_session` reuses that session_id and start_sha in the envelope, and the patched `capture_snapshot`/commit/push mocks record zero additional calls; (c) a patched `git push` subprocess returning a non-zero code still reaches the envelope print with a warning line on stderr, while a patched `git commit` failure still returns 1 without reaching `emit_prepare`.
 - **Commit:** `fix(millpy-implement): make prepare-stage git push non-fatal (#626)`
 
 ## Batch Tests

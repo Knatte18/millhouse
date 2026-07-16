@@ -7,7 +7,7 @@ approved: false
 started: "20260716-135443"
 parent: hanf/linux-port-more
 root: ""
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-millpy-implement.py test-implementer-common.py test-millpy-fix.py test-review-prepare-envelope.py test-review-common.py test-review-finalize.py test-review-cli.py test-claude-settings.py
 ```
 
 ## Batch Index
@@ -20,18 +20,28 @@ batches:
     depends-on: []
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-agent-dispatch.py test-millpy-implement.py
   - number: 2
-    name: effort-tier-envelope
-    file: 02-effort-tier-envelope.md
+    name: effort-tier-implementer
+    file: 02-effort-tier-implementer.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-review-prepare-envelope.py test-millpy-implement.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-millpy-implement.py test-millpy-fix.py
   - number: 3
-    name: reviewer-model-audit-trail
-    file: 03-reviewer-model-audit-trail.md
+    name: effort-tier-review-cli
+    file: 03-effort-tier-review-cli.md
     depends-on: [2]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-common.py test-review-finalize.py test-review-cli.py test-review-prepare-envelope.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-prepare-envelope.py
   - number: 4
+    name: reviewer-model-audit-trail-backend
+    file: 04-reviewer-model-audit-trail-backend.md
+    depends-on: [3]
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-common.py
+  - number: 5
+    name: reviewer-model-audit-trail-cli
+    file: 05-reviewer-model-audit-trail-cli.md
+    depends-on: [4]
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-finalize.py test-review-cli.py
+  - number: 6
     name: permission-allowlist
-    file: 04-permission-allowlist.md
+    file: 06-permission-allowlist.md
     depends-on: []
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-claude-settings.py
 ```
@@ -40,14 +50,14 @@ batches:
 
 ### Decision: batch ordering follows the shared-call-site chain, not the discussion's grouping order alone
 
-- **Decision:** Batch 2 (`depends-on: [1]`) and Batch 3 (`depends-on: [2]`) form a strict chain even though discussion.md's three fix-surface groups (implement-prepare / effort-tier+audit-trail / permission-allowlist) suggested only two independent groups. Batch 4 (`depends-on: []`) is fully independent of 1–3.
-- **Rationale:** Batch 1's Card 2 and Batch 2's Card 5 both edit the exact same `emit_prepare(...)` call site in `millpy-implement.py`'s `--stage prepare` branch (Batch 1 adds `start_sha=`, Batch 2 adds `effort=` to the same call) — the `parallel-modifies-overlap` validator requires a dependency edge for any two batches editing the same file, and Batch 2 building on Batch 1's already-corrected call site is the natural order. Batch 3's audit-trail fix (`--actual-model` threading) is a direct extension of Batch 2's `mill-go/SKILL.md` step-3 model-recording addition (Batch 3's step-6 threading instruction refers back to the variable Batch 2's step-3 edit introduces) and both touch the same three review-CLI files (`millpy-review-code.py`, `millpy-review-plan.py`, `millpy-review-discussion.py`), so Batch 3 depends on Batch 2 for the same file-overlap reason. Batch 4 touches only a new `_claude_settings.py` module and `mill-setup/SKILL.md`, neither touched elsewhere — no dependency needed.
+- **Decision:** Batches 2 through 5 form a strict `depends-on` chain (`2←1`, `3←2`, `4←3`, `5←4`) even though discussion.md's three fix-surface groups (implement-prepare / effort-tier+audit-trail / permission-allowlist) suggested only two dependent groups plus one independent one. Batch 6 (`depends-on: []`) is fully independent of 1–5.
+- **Rationale:** Batch 1's Card 2 and Batch 2's Card 5 both edit the exact same `emit_prepare(...)` call site in `millpy-implement.py`'s `--stage prepare` branch (Batch 1 adds `start_sha=`, Batch 2 adds `effort=` to the same call) — the `parallel-modifies-overlap` validator requires a dependency edge for any two batches editing the same file, and Batch 2 building on Batch 1's already-corrected call site is the natural order. Discussion.md's second group (effort-tier envelope work plus the `reviewer_model` audit-trail fix) was originally planned as two batches, but each individually exceeded `pipeline.max_batch_context_tokens` (120000) once every card's touched-file byte sum was computed — `_plan_validate`'s `batch-oversized` check rejected both, since several touched files are large (`mill-go/SKILL.md` at ~95KB, and `test-implementer-common.py`/`test-review-common.py` each ~140KB). Each was re-split on its most natural internal seam — implementer/fixer-side vs. review-CLI-side for the effort-tier group (Batches 2/3), and shared-helper-backend vs. CLI-flag-wiring for the audit-trail group (Batches 4/5) — producing four batches chained in sequence, matching the order the underlying fixes actually build on each other (Batch 3's `mill-go/SKILL.md` step-3 edit introduces the recorded-model variable Batch 5's step-6 edit consumes). Batch 6 touches only a new `_claude_settings.py` module and `mill-setup/SKILL.md`, neither touched elsewhere — no dependency needed.
 - **Applies to:** all batches (Batch Index `depends-on:` above).
 
 ### Decision: verify command shape and scope
 
-- **Decision:** every batch's `verify:` starts with the literal `PYTHONPATH= ` prefix (Python project) and scopes to the specific test file(s) each batch's `Edits:`/`Creates:` touch, via `run-all.py --only <basenames>`. The overview's module-wide `verify:` runs the full unscoped `run-all.py` suite.
-- **Rationale:** per-batch scoping keeps each implementer/fixer verify round fast (seconds, not the multi-minute full-suite cost `CLAUDE.md` warns about). The module-wide check is deliberately unscoped despite that cost warning because Batches 2 and 3 both edit widely-shared helpers (`_implementer_common.py`, `_review_common.py`) that other, untouched test files also import — a full-suite regression net at each batch boundary is the safety margin those shared-helper edits warrant.
+- **Decision:** every batch's `verify:` starts with the literal `PYTHONPATH= ` prefix (Python project) and scopes to the specific test file(s) each batch's `Edits:`/`Creates:` touch, via `run-all.py --only <basenames>`. The overview's module-wide `verify:` also uses `--only`, scoped to the union of all eight test files this task touches across every batch (`test-agent-dispatch.py`, `test-millpy-implement.py`, `test-implementer-common.py`, `test-review-prepare-envelope.py`, `test-review-common.py`, `test-review-finalize.py`, `test-review-cli.py`, `test-claude-settings.py`) — an unfiltered `run-all.py` is rejected outright by the plan validator's `verify-full-suite` check.
+- **Rationale:** per-batch scoping keeps each implementer/fixer verify round fast. The module-wide check re-runs the full set of files this task touches (rather than just the current batch's own files) at every batch boundary — this still catches a later batch's changes silently breaking an earlier batch's already-passing tests (e.g. Batch 2's `millpy-implement.py` edit regressing a Batch 1 test case), which per-batch scoping alone would miss since each batch only re-verifies its own files.
 - **Applies to:** all batches.
 
 ### Decision: no `mill-config.yaml` changes
@@ -75,6 +85,7 @@ batches:
 - `plugins/mill/unit_tests/test-agent-dispatch.py`
 - `plugins/mill/unit_tests/test-claude-settings.py`
 - `plugins/mill/unit_tests/test-implementer-common.py`
+- `plugins/mill/unit_tests/test-millpy-fix.py`
 - `plugins/mill/unit_tests/test-millpy-implement.py`
 - `plugins/mill/unit_tests/test-review-cli.py`
 - `plugins/mill/unit_tests/test-review-common.py`
