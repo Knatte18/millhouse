@@ -34,7 +34,9 @@ batches:
     start_sha: 5622285dad2cd7c65d42a1c811f8cf08a0c8570e
     commit_sha: 22be968d83d6334e2aacd8c8e31dc7be753f3e61
   - name: permission-allowlist
-    state: pending
+    state: running
+    implementer_session: b56d2387-0a65-4ca5-b5b4-7d94d1f339e1
+    start_sha: 41c8c3e1e03c2bb3f3fa7d051479a45afc03a5fb
   - name: effort-tier-implementer
     state: pending
   - name: effort-tier-review-cli
