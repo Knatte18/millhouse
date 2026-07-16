@@ -46,7 +46,9 @@ batches:
     start_sha: 0939a684cebe5e1fc9ae5b1da77d3eb6603fd79c
     commit_sha: 937bbff4326311bd5d0a2b5c6c6e72a11586b45f
   - name: windows-long-path-mitigation
-    state: pending
+    state: running
+    implementer_session: e8598928-d27f-41b7-8d89-e453797fe599
+    start_sha: 9d793cfe7b27344deca7ebd60572cd1b58339c8b
   - name: go-build-tag-retiering-check
     state: pending
   - name: finalize-timeout-guidance-generalization
