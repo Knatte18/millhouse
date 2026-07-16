@@ -77,19 +77,28 @@ def _mock_paths_and_reviewers(project_root: Path, briefs_dir: Path):
     return mock_paths, mock_reviewers
 
 
-def _success_prepare_result(scope: str) -> dict:
+def _success_prepare_result(scope: str, effort: str | None = None) -> dict:
     """A static backend.prepare() return value for the success-envelope cases.
 
     model is a real model id (matching the claude-opus-* family) so the real
     _agent_dispatch.model_to_tier resolves it to "opus" instead of raising.
+
+    effort mirrors card 7-9's addition to the real backends' prepare() return
+    dicts: present (non-None) when the configured reviewer spec has an
+    effort tier, absent (key omitted, matching a spec with no effort key)
+    otherwise -- both shapes must round-trip correctly through the CLI's
+    conditional envelope inclusion (card 10).
     """
-    return {
+    result = {
         "prompt_text": "irrelevant prompt body for envelope-shape testing",
         "model": "claude-opus-4-1",
         "round": 1,
         "reviews_dir": Path("unused-by-prepare-branch"),
         "scope": scope,
     }
+    if effort is not None:
+        result["effort"] = effort
+    return result
 
 
 def _run_prepare_stage(
@@ -217,6 +226,60 @@ def test_code_prepare_envelope_has_output_path() -> bool:
     return _assert_success_envelope_shape("code")
 
 
+def _assert_effort_envelope(review_type: str, effort: str | None) -> bool:
+    """Card 10: effort is forwarded into the prepare envelope only when the
+    resolved spec's effort tier (as surfaced by the backend's prepare()
+    return dict, per cards 7-9) is non-null.
+
+    When effort is None, the envelope must omit the "effort" key entirely
+    (not include it with a null value) -- matching the conditional-inclusion
+    convention _implementer_common.emit_prepare already establishes for
+    start_sha/effort on the implement/fix CLIs.
+    """
+    backend_prepare = unittest.mock.MagicMock(
+        return_value=_success_prepare_result("holistic", effort=effort)
+    )
+    argv_extra = ["--skip-validate"] if review_type == "plan" else []
+
+    rc, stdout_text = _run_prepare_stage(
+        review_type, f"effort-{effort}", argv_extra, backend_prepare
+    )
+    if rc != 0:
+        return False
+    try:
+        envelope = json.loads(stdout_text)
+    except json.JSONDecodeError:
+        return False
+
+    if effort is None:
+        return "effort" not in envelope
+    return envelope.get("effort") == effort
+
+
+def test_discussion_prepare_envelope_has_effort() -> bool:
+    return _assert_effort_envelope("discussion", "high")
+
+
+def test_discussion_prepare_envelope_omits_effort_when_absent() -> bool:
+    return _assert_effort_envelope("discussion", None)
+
+
+def test_plan_prepare_envelope_has_effort() -> bool:
+    return _assert_effort_envelope("plan", "high")
+
+
+def test_plan_prepare_envelope_omits_effort_when_absent() -> bool:
+    return _assert_effort_envelope("plan", None)
+
+
+def test_code_prepare_envelope_has_effort() -> bool:
+    return _assert_effort_envelope("code", "high")
+
+
+def test_code_prepare_envelope_omits_effort_when_absent() -> bool:
+    return _assert_effort_envelope("code", None)
+
+
 def _assert_error_envelope_has_no_output_path(review_type: str) -> bool:
     """Converse carve-out: print_error_envelope's --stage prepare output
     carries no output_path -- it fires before any brief is rendered."""
@@ -296,6 +359,12 @@ def main() -> int:
         ("discussion prepare envelope has output_path + all pre-existing keys", test_discussion_prepare_envelope_has_output_path),
         ("plan prepare envelope has output_path + all pre-existing keys", test_plan_prepare_envelope_has_output_path),
         ("code prepare envelope has output_path + all pre-existing keys", test_code_prepare_envelope_has_output_path),
+        ("discussion prepare envelope has effort when spec's effort is non-null", test_discussion_prepare_envelope_has_effort),
+        ("discussion prepare envelope omits effort when spec has no effort", test_discussion_prepare_envelope_omits_effort_when_absent),
+        ("plan prepare envelope has effort when spec's effort is non-null", test_plan_prepare_envelope_has_effort),
+        ("plan prepare envelope omits effort when spec has no effort", test_plan_prepare_envelope_omits_effort_when_absent),
+        ("code prepare envelope has effort when spec's effort is non-null", test_code_prepare_envelope_has_effort),
+        ("code prepare envelope omits effort when spec has no effort", test_code_prepare_envelope_omits_effort_when_absent),
         ("discussion print_error_envelope carries no output_path", test_discussion_error_envelope_has_no_output_path),
         ("plan print_error_envelope carries no output_path", test_plan_error_envelope_has_no_output_path),
         ("code print_error_envelope carries no output_path", test_code_error_envelope_has_no_output_path),

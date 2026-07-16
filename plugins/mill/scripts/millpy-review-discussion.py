@@ -123,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
                 "scope": prepare_result["scope"],
                 "round": prepare_result["round"],
             }
+            if prepare_result.get("effort") is not None:
+                envelope["effort"] = prepare_result["effort"]
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
