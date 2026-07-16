@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-finalize-step3-restore
+phase: approved-merge-slug-check-and-pathspec
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-07-16T11:21:34Z'
 implementing  '2026-07-16T11:25:45Z'
 approved-parent-branch-identity  '2026-07-16T11:29:33Z'
 approved-finalize-step3-restore  '2026-07-16T11:32:33Z'
+approved-merge-slug-check-and-pathspec  '2026-07-16T11:35:05Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: cafc5934b2b7bc326b971c07c4db23478b1ecec8
     commit_sha: 2a844bc7ca21882868af38dfa1bd10eee79f027f
   - name: merge-slug-check-and-pathspec
-    state: running
+    state: approved
     implementer_session: 416a507b-e510-4470-b7d0-fce7592cd8d8
     start_sha: 95e583adfc3bce2ac75c73591ca8b4d1058c9346
+    commit_sha: d8e410f768b7c7b83dda0b9665054602be81804e
   - name: integration-test-coverage
     state: pending
 ```
