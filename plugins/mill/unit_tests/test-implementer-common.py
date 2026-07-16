@@ -27,9 +27,11 @@ from _implementer_common import (  # noqa: E402
     _run_verify_gate,
     _run_verify_gates,
     _is_benign_windows_cleanup,
+    _go_build_tag_retiering_stuck,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
+import _subprocess_util  # noqa: E402
 
 
 def _capture_stdout(fn):
@@ -37,6 +39,31 @@ def _capture_stdout(fn):
     with contextlib.redirect_stdout(buf):
         rc = fn()
     return rc, buf.getvalue()
+
+
+def _go_gate_mock(build_returncode=0, build_stdout="", build_stderr=""):
+    """Build a _subprocess_util.run side_effect that mocks 'go' invocations only.
+
+    Every non-'go' argv (git, etc.) delegates to the real _subprocess_util.run so
+    the git diff/status plumbing _go_build_tag_retiering_stuck depends on still
+    works against the tempfile git fixture -- no real Go toolchain is invoked.
+
+    Returns (side_effect, calls): side_effect is passed to
+    unittest.mock.patch.object(_subprocess_util, "run", side_effect=...); calls
+    accumulates every mocked 'go' argv for assertions.
+    """
+    real_run = _subprocess_util.run
+    calls: list[list[str]] = []
+
+    def _side_effect(argv, **kwargs):
+        if argv and argv[0] == "go":
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(
+                argv, build_returncode, build_stdout, build_stderr
+            )
+        return real_run(argv, **kwargs)
+
+    return _side_effect, calls
 
 
 def _setup_fixture(project_root: Path) -> str:
@@ -3543,6 +3570,380 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 65j ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66a -- _go_build_tag_retiering_stuck: added-tag transition (file exits
+    # the default build) -> gate invokes (mocked) `go build ./<dir>/...`.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "foo.go").write_text("package pkg\n\nfunc Foo() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/foo.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged foo.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: add a //go:build constraint -- file now exits the default build.
+        (pkg_dir / "foo.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Foo() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag foo.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-a")
+            assert result is None, f"case 66a: expected None (compile passed), got {result}"
+            assert len(calls) == 1, f"case 66a: expected exactly one go build call, got {calls}"
+            assert calls[0] == ["go", "build", "./pkg/..."], (
+                f"case 66a: expected untagged build of ./pkg/..., got {calls[0]}"
+            )
+            print(
+                "PASS: case 66a - added-tag transition invokes go build ./<dir>/... for the directory"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66b -- removed-tag transition (single custom tag) -> gate invokes
+    # (mocked) `go build -tags <tag> ./<dir>/...`.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "bar.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Bar() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/bar.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add tagged bar.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: remove the //go:build constraint -- file now enters the default build.
+        (pkg_dir / "bar.go").write_text("package pkg\n\nfunc Bar() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "untag bar.go"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-b")
+            assert result is None, f"case 66b: expected None (compile passed), got {result}"
+            assert len(calls) == 1, f"case 66b: expected exactly one go build call, got {calls}"
+            assert calls[0] == ["go", "build", "-tags", "integration", "./pkg/..."], (
+                f"case 66b: expected tagged build of ./pkg/..., got {calls[0]}"
+            )
+            print(
+                "PASS: case 66b - removed-tag transition invokes go build -tags <tag> ./<dir>/..."
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66c -- removed compound/negated/GOOS-only constraints are logged and
+    # skipped, never translated to a -tags compile check.
+    for _label, _constraint in (
+        ("compound", "a && b"),
+        ("negated", "!a"),
+        ("GOOS-only", "linux"),
+    ):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            _setup_fixture(project_root)
+            pkg_dir = project_root / "pkg"
+            pkg_dir.mkdir()
+            (pkg_dir / "qux.go").write_text(
+                f"//go:build {_constraint}\n\npackage pkg\n\nfunc Qux() {{}}\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "pkg/qux.go"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "add tagged qux.go"],
+                check=True, capture_output=True,
+            )
+            start_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            (pkg_dir / "qux.go").write_text(
+                "package pkg\n\nfunc Qux() {}\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-am", "untag qux.go"],
+                check=True, capture_output=True,
+            )
+            side_effect, calls = _go_gate_mock(build_returncode=0)
+            stderr_buf = io.StringIO()
+            try:
+                with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                    with contextlib.redirect_stderr(stderr_buf):
+                        result = _go_build_tag_retiering_stuck(
+                            project_root, start_sha, "sess-c"
+                        )
+                assert result is None, (
+                    f"case 66c ({_label}): expected None (no compile check run), got {result}"
+                )
+                assert calls == [], (
+                    f"case 66c ({_label}): expected no go build call, got {calls}"
+                )
+                assert "skip" in stderr_buf.getvalue().lower(), (
+                    f"case 66c ({_label}): expected a skip log line,"
+                    f" got {stderr_buf.getvalue()!r}"
+                )
+                print(
+                    f"PASS: case 66c ({_label}) - unparseable removed constraint"
+                    " is logged and skipped"
+                )
+            except Exception as exc:
+                print(f"FAIL: case 66c ({_label}) ({exc})", file=sys.stderr)
+                errors += 1
+
+    # Case 66d -- a //go:build line whose value changes but is present both before
+    # and after (value-only edit) -> gate does not fire (not a membership transition).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "value.go").write_text(
+            "//go:build alpha\n\npackage pkg\n\nfunc Value() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/value.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add value.go (alpha)"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (pkg_dir / "value.go").write_text(
+            "//go:build beta\n\npackage pkg\n\nfunc Value() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "retag value.go (beta)"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-d")
+            assert result is None, f"case 66d: expected None (value-only edit), got {result}"
+            assert calls == [], f"case 66d: expected no go build call, got {calls}"
+            print("PASS: case 66d - value-only //go:build edit is not a membership transition")
+        except Exception as exc:
+            print(f"FAIL: case 66d ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66e -- no .go files changed, or a .go file changed with no //go:build
+    # lines touched -> gate returns None silently (no compile check, no log line).
+    # (i) no .go files changed at all.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        (project_root / "README.md").write_text("seed v2", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "readme only"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, base_sha, "sess-e1")
+            assert result is None, f"case 66e-i: expected None (no .go changes), got {result}"
+            assert calls == [], f"case 66e-i: expected no go build call, got {calls}"
+            print("PASS: case 66e (i) - no .go files changed -> gate is a silent no-op")
+        except Exception as exc:
+            print(f"FAIL: case 66e (i) ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (ii) a .go file changed but no //go:build lines were touched.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "plain.go").write_text(
+            "package pkg\n\nfunc Plain() int { return 1 }\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/plain.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add plain.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (pkg_dir / "plain.go").write_text(
+            "package pkg\n\nfunc Plain() int { return 2 }\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "change plain.go body"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-e2")
+            assert result is None, (
+                f"case 66e-ii: expected None (no build-tag lines touched), got {result}"
+            )
+            assert calls == [], f"case 66e-ii: expected no go build call, got {calls}"
+            print(
+                "PASS: case 66e (ii) - .go file changed with no //go:build delta"
+                " -> gate is a no-op"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66e (ii) ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66f -- mocked compile-check failure (non-zero exit) -> gate returns a
+    # stuck_type=verify dict naming the directory and transition direction.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "broken.go").write_text(
+            "package pkg\n\nfunc Broken() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/broken.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged broken.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (pkg_dir / "broken.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Broken() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag broken.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(
+            build_returncode=1, build_stdout="", build_stderr="pkg/broken.go:1: syntax error"
+        )
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-f")
+            assert result is not None, "case 66f: expected a stuck dict, got None"
+            assert result["status"] == "stuck", f"case 66f: expected stuck, got {result}"
+            assert result["stuck_type"] == "verify", (
+                f"case 66f: expected stuck_type=verify, got {result}"
+            )
+            assert "pkg" in result.get("reason", ""), (
+                f"case 66f: expected directory 'pkg' named in reason, got {result}"
+            )
+            assert "added-tag transition" in result.get("reason", ""), (
+                f"case 66f: expected 'added-tag transition' in reason, got {result}"
+            )
+            assert "syntax error" in result.get("reason", ""), (
+                f"case 66f: expected captured output tail in reason, got {result}"
+            )
+            assert result["session_id"] == "sess-f", (
+                f"case 66f: expected session_id passthrough, got {result}"
+            )
+            print(
+                "PASS: case 66f - mocked compile failure -> stuck/verify naming dir + transition"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66f ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66g -- case 66f's scenario reached via the no-snapshot no-JSON inference
+    # path in _forward_output (not the explicit-success path) -- confirms the gate
+    # is wired into all four call sites (Card 9), not just the explicit-success one.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "baz.go").write_text("package pkg\n\nfunc Baz() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/baz.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged baz.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        (pkg_dir / "baz.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Baz() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag baz.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(
+            build_returncode=1, build_stdout="", build_stderr="pkg/baz.go:1: syntax error"
+        )
+        captured = ""
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        "garbage output with no json",
+                        project_root,
+                        start_sha=start_sha,
+                        # No snapshot_path -> exercises the no-snapshot inference path.
+                        session_id="sess-g",
+                    )
+                )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 66g: expected stuck, got {data}"
+            assert data["stuck_type"] == "verify", (
+                f"case 66g: expected stuck_type=verify, got {data}"
+            )
+            assert "go build-tag retiering check failed" in data.get("reason", ""), (
+                f"case 66g: expected retiering-gate reason, got {data}"
+            )
+            assert "commit_sha" in data, f"case 66g: expected commit_sha attached, got {data}"
+            print(
+                "PASS: case 66g - retiering-gate failure reached via the no-snapshot"
+                " no-JSON inference path (Card 9 all-four-paths wiring)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66g ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:
