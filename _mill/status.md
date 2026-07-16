@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-windows-long-path-mitigation
+phase: approved-go-build-tag-retiering-check
 slug: mill-go-batch-verify-baseline-reliability
 branch: hanf/mill-go-batch-verify-baseline-reliability
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-completeness-recount-cards-done  '2026-07-16T12:21:39Z'
 approved-batch-verify-list-validation  '2026-07-16T13:37:12Z'
 approved-done-gate-baseline-preflight  '2026-07-16T13:42:46Z'
 approved-windows-long-path-mitigation  '2026-07-16T13:46:21Z'
+approved-go-build-tag-retiering-check  '2026-07-16T13:57:11Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     start_sha: 9d793cfe7b27344deca7ebd60572cd1b58339c8b
     commit_sha: f197b07c61944f59a9f6e1f1fd5dbe174231b709
   - name: go-build-tag-retiering-check
-    state: running
+    state: approved
     implementer_session: 5ed86475-5c9f-4e51-a844-b0017738f438
     start_sha: 0588a3d8d5ddf11aa3df5bfecd0e91ab7af29b8d
+    commit_sha: 87dd203213e2c982ca442568d436e652e98abd26
   - name: finalize-timeout-guidance-generalization
     state: pending
 ```
