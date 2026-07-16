@@ -137,6 +137,7 @@ def finalize(
     mill_dir: Path,
     project_root: Path,
     wiki_root: Path,
+    actual_model: str | None = None,
 ) -> ReviewResult:
     """Finalize a discussion review by parsing verdict and writing the review file.
 
@@ -144,6 +145,10 @@ def finalize(
         raw_text: Raw review output from the reviewer (should be extracted via extract_review_content).
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
+        actual_model: The model that actually produced this review, used to
+            correct an unreliable self-reported ``reviewer_model:`` line
+            before verdict parsing or disk write; passed through to
+            ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -153,7 +158,12 @@ def finalize(
     """
     try:
         review_entry = finalize_scope(
-            reviews_dir, "discussion", round_n, raw_text, scope="holistic"
+            reviews_dir,
+            "discussion",
+            round_n,
+            raw_text,
+            scope="holistic",
+            actual_model=actual_model,
         )
     except ReviewError as exc:
         path = write_review_file(reviews_dir, "discussion", round_n, raw_text, scope="holistic")
