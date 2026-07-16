@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-merge-stacked-branch-status-corruption
 branch: hanf/mill-merge-stacked-branch-status-corruption
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-07-16T11:06:28Z'
 planning  '2026-07-16T11:14:57Z'
 plan-review-r1  '2026-07-16T11:19:17Z'
 plan-fix-r1  '2026-07-16T11:20:54Z'
+planned  '2026-07-16T11:21:34Z'
 ```
