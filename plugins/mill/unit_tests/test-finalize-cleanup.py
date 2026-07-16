@@ -1,6 +1,8 @@
 """Unit tests for _finalize_cleanup.base_tracks_task_dir detection.
 
-Covers: base branch tracking task_dir/status.md; base branch without _mill/.
+Covers: base branch tracking task_dir/status.md; base branch without _mill/;
+Step 3's delete-then-restore mechanic removing orphaned child-only files
+under task_dir that a bare checkout would leave behind (#653).
 
 Uses a real tempfile bare repo + working clone (fast, deterministic, no mocks).
 """
@@ -151,6 +153,86 @@ def main() -> int:
         except Exception as exc:
             fail(
                 "base_tracks_task_dir returns False when base does not track _mill/status.md", exc
+            )
+
+        # --- (c) Step 3 delete-then-restore removes orphaned child-only files (#653) ---
+        try:
+            # Return to main (base) before branching off the "child" branch.
+            subprocess.run(
+                ["git", "-C", str(clone), "checkout", "main"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone), "checkout", "-b", "child-stack"],
+                check=True,
+                capture_output=True,
+            )
+
+            # Child branch has a superset _mill/ tree: status.md (inherited
+            # from main) plus discussion.md and plan/00-overview.md that
+            # main never had.
+            (mill_dir / "discussion.md").write_text(
+                "discussion placeholder\n", encoding="utf-8"
+            )
+            plan_dir = mill_dir / "plan"
+            plan_dir.mkdir(parents=True)
+            (plan_dir / "00-overview.md").write_text("plan placeholder\n", encoding="utf-8")
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(clone),
+                    "add",
+                    "_mill/discussion.md",
+                    "_mill/plan/00-overview.md",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone), "commit", "-m", "child: add discussion.md and plan/"],
+                check=True,
+                capture_output=True,
+            )
+
+            # Card 3's exact two-command sequence: delete-then-restore.
+            subprocess.run(
+                ["git", "-C", str(clone), "rm", "-r", "--ignore-unmatch", "_mill"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone), "checkout", "main", "--", "_mill"],
+                check=True,
+                capture_output=True,
+            )
+
+            discussion_gone = not (mill_dir / "discussion.md").exists()
+            plan_gone = not plan_dir.exists()
+            status_matches_main = (mill_dir / "status.md").read_text(
+                encoding="utf-8"
+            ) == "# Status\nphase: done\n"
+
+            if discussion_gone and plan_gone and status_matches_main:
+                ok(
+                    "delete-then-restore removes orphaned child-only files "
+                    "and restores status.md to main's version"
+                )
+            else:
+                fail(
+                    "delete-then-restore removes orphaned child-only files "
+                    "and restores status.md to main's version",
+                    Exception(
+                        f"discussion_gone={discussion_gone} plan_gone={plan_gone} "
+                        f"status_matches_main={status_matches_main}"
+                    ),
+                )
+        except Exception as exc:
+            fail(
+                "delete-then-restore removes orphaned child-only files "
+                "and restores status.md to main's version",
+                exc,
             )
 
     finally:
