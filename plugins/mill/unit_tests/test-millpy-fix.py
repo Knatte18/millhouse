@@ -902,6 +902,131 @@ class TestMillpyFix(unittest.TestCase):
             stderr_buf.getvalue(),
         )
 
+    def test_holistic_full_stage_status_path_filters_pending_batch_and_logs_skip(self):
+        """Card 5: non-finalize holistic (--stage full) path also threads status_path into
+        iter_batch_verifies, filtering out a pending batch and logging the skip to stderr."""
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 1'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 0'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+
+        status_path = self.tmp_path / "_mill" / "status.md"
+        millpy_fix._status.init_batches(status_path, ["batch1", "batch2"])
+        millpy_fix._status.set_batch_field(status_path, "batch1", "state", "pending")
+        millpy_fix._status.set_batch_field(status_path, "batch2", "state", "approved")
+
+        # Initialize git repo in the temp directory before running the test
+        git_dir = self.tmp_path / ".git"
+        subprocess.run(
+            ["git", "-C", str(self.tmp_path), "init"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.tmp_path), "config", "user.email", "test@test.com"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.tmp_path), "config", "user.name", "Test"],
+            check=True, capture_output=True,
+        )
+        # Create an initial commit
+        (self.tmp_path / "README.md").write_text("initial", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(self.tmp_path), "add", "README.md"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.tmp_path), "commit", "-m", "initial"],
+            check=True, capture_output=True,
+        )
+
+        captured = {}
+        rev_parse_calls = [0]
+
+        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
+            captured["prompt_text"] = prompt_text
+            # Make a commit so HEAD != start_sha
+            subprocess.run(
+                ["git", "-C", str(self.tmp_path), "commit", "--allow-empty", "-m", "fixer commit"],
+                check=True, capture_output=True,
+            )
+            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
+
+        def mock_subprocess_run(argv, **kwargs):
+            # All git commands are handled specially
+            if argv[0] == "git":
+                if argv[1:3] == ["rev-parse", "HEAD"]:
+                    rev_parse_calls[0] += 1
+                    if rev_parse_calls[0] == 1:
+                        # First call: start_sha - return a fixed SHA
+                        return subprocess.CompletedProcess(
+                            args=argv, returncode=0, stdout="abc1234567890abcdef1234567890abcdef123456\n", stderr=""
+                        )
+                    else:
+                        # Subsequent calls: final HEAD (after mock_run makes a commit)
+                        result = subprocess.run(argv, capture_output=True, text=True, **kwargs)
+                        return result
+                elif argv[1:4] == ["config", "--global", "--get"]:
+                    # Mock git config calls
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="Test User\n", stderr=""
+                    )
+                elif argv[1] == "push":
+                    # Mock git push - always succeed
+                    return subprocess.CompletedProcess(
+                        args=argv, returncode=0, stdout="", stderr=""
+                    )
+                else:
+                    # Other git commands (add, commit, etc) - use real subprocess
+                    return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+            # For all other subprocess calls, use real subprocess
+            return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch.object(
+            millpy_fix._subprocess_util, "run",
+            side_effect=mock_subprocess_run,
+        ):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run",
+                side_effect=mock_run,
+            ):
+                with unittest.mock.patch("sys.stderr", stderr_buf):
+                    rc, out = self._run_main([
+                        "--scope", "holistic",
+                        "--review-file", str(self.review_file),
+                        "--round", "1",
+                    ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip().splitlines()[-1])
+        self.assertEqual(data["status"], "success")
+        # Verify that batch1 (pending) was skipped with the correct reason
+        self.assertIn(
+            "[millpy-fix] skipped batch1: batch not approved",
+            stderr_buf.getvalue(),
+        )
+
 
 class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
