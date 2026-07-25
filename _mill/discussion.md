@@ -27,7 +27,19 @@ mill-start agent-dispatch runs, both making healthy operations look broken:
    (#684), `millpy-implement.py --stage finalize` (#687), review-discussion
    prepare (#688) — always the exact string
    `[wiki] exception in _handle_connection: JSONDecodeError('Expecting value: line 1 column 1 (char 0)')`,
-   always during stages that can trigger a daemon cold-start.
+   always during stages that can trigger a daemon cold-start. **Caveat:**
+   the inner guard is confirmed present in current code, correctly scoped
+   to exactly this exception/call-site — so it's possible some or all of
+   #684/#687/#688 (filed against `loomyard`, an external consumer repo) or
+   even #677 itself (per this project's own CLAUDE.md, `${CLAUDE_PLUGIN_ROOT}`
+   always resolves to the installed plugin cache, never the dev tree, even
+   for scripts run from within a millhouse dev checkout) reflect a daemon
+   that was still running pre-guard cache/publish-lag code rather than a
+   live gap in the guard as written today — the same cache-rollout-lag
+   mechanism bug 2 exists to fix. The fixes in this task face the identical
+   rollout-lag exposure until the plugin cache picks them up; this is
+   consistent with the existing Scope §Out note that cache-refresh timing
+   itself is not this task's concern.
 
 2. **Stale plugin-cache config validation.** `_config.load_config` was
    patched on 2026-05-31 (commit `22e2d3f5`) to augment its unknown-key

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r3
 slug: mill-background-noise-and-stale-config
 branch: hanf/mill-background-noise-and-stale-config
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-25T11:00:46Z'
+discussion-fix-r3  '2026-07-25T11:30:11Z'
 ```
