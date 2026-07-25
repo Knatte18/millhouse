@@ -54,7 +54,9 @@ batches:
     start_sha: dc8c21c62a2b175ea5da96c9d73c1e57904b5572
     commit_sha: 3597c17bbe4844de36759adda15be5004fa7faf3
   - name: paths-skip-slug-validation
-    state: pending
+    state: running
+    implementer_session: de3fc31d-b825-46c3-874b-05a706d069d8
+    start_sha: 6906e2d3920b2e2f1e6a629c7a1e106578285111
   - name: project-root-rebinding-implement-side
     state: pending
   - name: project-root-rebinding-review-side
