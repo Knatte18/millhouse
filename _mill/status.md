@@ -45,5 +45,7 @@ batches:
     start_sha: dc1cb985ca7856e6e1c04624d22640d520678806
     commit_sha: d6a2a4213feb290449b4b229930144225fd7599f
   - name: verify-replay-callers-wiring
-    state: pending
+    state: running
+    implementer_session: f54740ff-3253-4c63-96eb-2b6487b34025
+    start_sha: f9f2a5667157c6dd7e5bae8aad8ebcb68e8d3491
 ```
