@@ -15,19 +15,21 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
 
 ## Cards
 
-### Card 3: Make find_active_slug try the on-disk *.active glob before the daemon path
+### Card 3: Make find_active_slug skip the daemon only when a cheap branch check confirms the on-disk marker
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_pygit2_util.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_common.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In `find_active_slug(hub_root, wiki_path, cfg)` (`_review_common.py`), reorder so the existing `_mill/*.active` glob fallback is tried FIRST, before `_marker.slug_from_branch`, and only fall through to `slug_from_branch` when the glob does not yield exactly one match:
+- **Requirements:** **Corrected design (plan-review round 1 BLOCKING finding):** a naive "glob-first, unconditionally trust a single match" reorder is a correctness regression — a stale leftover `_mill/<slug>.active` marker (e.g. from an aborted claim; `millpy-cleanup.py`'s own comments acknowledge these can go stale) would be silently returned even if the current branch has since moved to a different, valid task, whereas today's branch-first `slug_from_branch` would correctly detect the branch change. The fast path must therefore only short-circuit when the on-disk marker **agrees** with a cheap, daemon-free, branch-derived slug — not merely when the glob has exactly one match:
 
   ```python
   def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
-      """Detect active slug via _mill/*.active glob, falling back to branch name.
+      """Detect active slug via branch name; skip the daemon round-trip only
+      when a cheap branch check confirms a single _mill/*.active on-disk marker.
 
       Raises ReviewError (wrapping MarkerError or glob-fallback errors).
       """
@@ -36,7 +38,14 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
       except OSError:
           matches = []
       if len(matches) == 1:
-          return matches[0].stem
+          try:
+              branch = _pygit2_util.current_branch(hub_root) or ""
+          except _pygit2_util.GitOpsError:
+              branch = ""
+          prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+          branch_slug = branch.removeprefix(prefix) if branch.startswith(prefix) else None
+          if branch_slug == matches[0].stem:
+              return matches[0].stem
       try:
           return _marker.slug_from_branch(hub_root, wiki_path, cfg)
       except _marker.MarkerError as exc:
@@ -51,8 +60,8 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
           ) from exc
   ```
 
-  This preserves every existing observable outcome (single-match glob → that slug; zero-match glob → `slug_from_branch` result or its `ReviewError` translation; multi-match glob → `ReviewError` listing the slugs, now raised from inside the `except _marker.MarkerError` branch with `exc` as the cause — only reachable if `slug_from_branch` ALSO fails, matching today's behavior where the multi-match case only reports after `slug_from_branch` already failed). The only behavior change is that a single-match glob now short-circuits before ever calling `slug_from_branch`, avoiding the daemon round-trip in the common case. Update the docstring's first line to reflect the new order (see the replacement above).
-- **Commit:** `fix(review-common): try on-disk .active marker before daemon in find_active_slug`
+  `_pygit2_util` is already imported in `_review_common.py`; no new import is needed for that call. Also update the module-level "Public API" summary near the top of the file — the line `find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback` is now inaccurate (it describes the pre-fix order); change it to reflect that a matching on-disk marker skips the daemon, otherwise branch-based detection runs as before (e.g. `find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch`). This preserves every existing observable outcome exactly: the fast path only fires when the on-disk marker AND a cheap branch-prefix-derived slug agree — a case where `slug_from_branch`'s full (daemon-validated) resolution would provably return the identical slug, since the branch really is on that task's branch. Any disagreement (stale marker, prefix mismatch, unreadable branch) falls through to the unchanged, fully-validated `slug_from_branch` path, exactly like today. Multi-match and zero-match handling is entirely unchanged from the original code. Update the docstring to describe this "confirm, don't just trust" behavior (see the replacement above) — do not describe it as "glob-first" or "on-disk-first" in the docstring, since branch validation still gates the fast path.
+- **Commit:** `fix(review-common): skip daemon in find_active_slug only when on-disk marker matches current branch`
 
 ### Card 4: Make load_task_title read status.md before the daemon path
 
@@ -102,11 +111,12 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** In `test-review-common.py`'s `main()`, add new test blocks following the file's existing style (`with _test_helpers.safe_temp_dir() as tmpdir:` / `with unittest.mock.patch(...)`, `assert`, `print("PASS: ...")`, incrementing the local `errors` counter on failure — match the existing blocks immediately surrounding the current `find_active_slug`/`load_task_title` tests around line 225-272):
-  1. **`find_active_slug` daemon-skip on single on-disk marker:** create a tmpdir with a `_mill/<slug>.active` file present, patch `_marker.slug_from_branch` (via `unittest.mock.patch("_marker.slug_from_branch")`) to raise `AssertionError("daemon should not be called")` if invoked, call `find_active_slug(tmpdir, wiki_path, cfg)`, and assert it returns the slug WITHOUT the patched `slug_from_branch` ever being called.
-  2. **`find_active_slug` multi-marker still resolves via existing behavior:** reuse the existing "multiple .active files -> ReviewError" test's fixture shape (already present later in the file, look for "find_active_slug glob fallback: multiple .active files") to confirm this batch's reorder didn't change that outcome — this may already be fully covered by the existing test; only add a new assertion if the existing one doesn't already exercise the multi-match-then-daemon-also-fails path introduced by the reorder.
-  3. **`load_task_title` daemon-skip on present status.md:** create a tmpdir with a `.millhouse` dir absent (or a minimal one) and a `status.md` at a path matching a `cfg["paths"]["status_md"]` you set explicitly in the test's `cfg` dict (e.g. `cfg = {"paths": {"status_md": "status.md"}}`), containing a YAML frontmatter block with `task: "My On-Disk Title"`, patch `_marker.task_data` to raise `AssertionError("daemon should not be called")` if invoked, call `load_task_title(tmpdir, wiki_path, cfg, "some-slug")`, and assert it returns `"My On-Disk Title"` without the patched `task_data` ever being called.
-  4. **`load_task_title` falls through on missing/malformed status.md:** confirm the existing "load_task_title: task_title present in Home.md" and "load_task_title: non-task branch -> falls back to slug" tests (already in the file, unmodified) still pass — these exercise exactly the `KeyError`/`TaskHubError` fallback paths Card 4's `except` clause exists for. Do not weaken or remove these tests; they are regression coverage for Card 4's fallback correctness.
-  5. **`_review_plan.py`'s `run()` benefits too (regression for the round-2 discussion-review correction):** this is verified by the batch's `verify:` command including `test-review-plan-flow.py` in its `--only` list — no new test is required in THIS card if that file's existing flow tests already exercise `run()`'s `load_task_title` call path end-to-end; only add a targeted test here if a review of `test-review-plan-flow.py` (read it, do not edit it — it's covered by `on-disk-first-resolution`'s `verify:` as a regression check, not a target of this card's edits) shows no such coverage exists today.
+  1. **`find_active_slug` daemon-skip when on-disk marker agrees with current branch:** create a tmpdir that is a real git repo checked out on branch `<prefix><slug>` (reuse `_test_helpers._make_task_worktree` or an equivalent minimal fixture) with a `_mill/<slug>.active` file present, patch `_marker.slug_from_branch` to raise `AssertionError("daemon should not be called")` if invoked, call `find_active_slug(tmpdir, wiki_path, cfg)` with `cfg["spawn"]["branch_prefix"]` matching the fixture, and assert it returns the slug WITHOUT the patched `slug_from_branch` ever being called.
+  2. **`find_active_slug` falls through to the daemon when the on-disk marker is stale (branch mismatch) — regression test for the plan-review round 1 correctness fix:** create a tmpdir that is a real git repo checked out on a DIFFERENT branch than the one named by a leftover `_mill/<stale-slug>.active` marker, patch `_marker.slug_from_branch` to return a distinct, branch-correct slug (do NOT raise from this mock — it must be callable and return a value), call `find_active_slug(tmpdir, wiki_path, cfg)`, and assert it returns the branch-derived slug from the mock, NOT the stale marker's slug — proving the fast path does not blindly trust a lone on-disk marker when the current branch disagrees.
+  3. **`find_active_slug` multi-marker still resolves via existing behavior:** reuse the existing "multiple .active files -> ReviewError" test's fixture shape (already present later in the file, look for "find_active_slug glob fallback: multiple .active files") to confirm this batch's change didn't alter that outcome — this may already be fully covered by the existing test; only add a new assertion if the existing one doesn't already exercise the multi-match-then-daemon-also-fails path.
+  4. **`load_task_title` daemon-skip on present status.md:** create a tmpdir with a `.millhouse` dir absent (or a minimal one) and a `status.md` at a path matching a `cfg["paths"]["status_md"]` you set explicitly in the test's `cfg` dict (e.g. `cfg = {"paths": {"status_md": "status.md"}}`), containing a YAML frontmatter block with `task: "My On-Disk Title"`, patch `_marker.task_data` to raise `AssertionError("daemon should not be called")` if invoked, call `load_task_title(tmpdir, wiki_path, cfg, "some-slug")`, and assert it returns `"My On-Disk Title"` without the patched `task_data` ever being called.
+  5. **`load_task_title` falls through on missing/malformed status.md:** confirm the existing "load_task_title: task_title present in Home.md" and "load_task_title: non-task branch -> falls back to slug" tests (already in the file, unmodified) still pass — these exercise exactly the `KeyError`/`TaskHubError` fallback paths Card 4's `except` clause exists for. Do not weaken or remove these tests; they are regression coverage for Card 4's fallback correctness.
+  6. **`_review_plan.py`'s `run()` benefits too (regression for the round-2 discussion-review correction):** this is verified by the batch's `verify:` command including `test-review-plan-flow.py` in its `--only` list — no new test is required in THIS card if that file's existing flow tests already exercise `run()`'s `load_task_title` call path end-to-end; only add a targeted test here if a review of `test-review-plan-flow.py` (read it, do not edit it — it's covered by `on-disk-first-resolution`'s `verify:` as a regression check, not a target of this card's edits) shows no such coverage exists today.
 - **Commit:** `test(review-common): cover on-disk-first find_active_slug/load_task_title`
 
 ## Batch Tests
