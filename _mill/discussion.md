@@ -151,7 +151,17 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   daemon's later stderr writes bleed into that command's own
   output/log — this is true independent of what triggers the daemon to log
   at all, so it must be fixed even if the exception-classification fix
-  above eliminates the specific JSONDecodeError case.
+  above eliminates the specific JSONDecodeError case. **Unverified
+  assumption (Windows):** the POSIX branch's `Popen(cmd, stdout=DEVNULL,
+  stderr=DEVNULL, ...)` unambiguously redirects the daemon. The Windows
+  branch instead wraps the real command in `cmd /c start "" /B /MIN
+  <cmd>` — whether `stdout=`/`stderr=DEVNULL` on that *outer* `Popen` call
+  actually propagates to the process `start` launches, or gets reset by
+  `start`'s own console/handle handling, was not confirmed by any repro
+  during discussion (no Windows environment available). Treat this as an
+  assumption to verify manually on Windows post-implementation; the
+  Testing section's Windows-branch case only asserts the kwargs are passed
+  to `Popen`, not that output is actually suppressed end-to-end.
 - Rejected: Leaving fd inheritance as-is and relying solely on the
   exception-classification fix — would still let any future genuine
   daemon-side ERROR bleed into an unrelated client's output, which is the
@@ -164,16 +174,47 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   `"wiki-server"` logger's rotating file handler at
   `<wiki_path>/.wiki-daemon.log`), rather than maintaining a second,
   independently-configured logger (`"wiki"`, root-`basicConfig`, stderr).
-  The generic `DaemonBase` should accept a logger (or a logger-name hook)
-  from its subclass instead of hardcoding `logging.getLogger(self._name)`
-  wired to root config.
+  **Mechanism: rename, not inject.** `WikiServer.__init__` calls
+  `super().__init__("wiki", ...)` (`wiki/_server.py:58`) *before*
+  constructing its own `"wiki-server"` logger/handler
+  (`wiki/_server.py:64-85`) — but `logging.getLogger(name)` returns the
+  same process-wide singleton regardless of construction order, and no
+  other code in the repo references `logging.getLogger("wiki")` by that
+  literal name (grep confirmed, repo-wide; the only reference to the name
+  is `_daemon.py:29`'s `logging.getLogger(self._name)`, parameterized by
+  whatever the subclass passes in). So the fix is simply: `WikiServer`
+  passes `"wiki-server"` instead of `"wiki"` to `super().__init__(...)`'s
+  existing `name` parameter. No `DaemonBase.__init__` signature change,
+  no new logger-injection parameter — `self._logger` inside
+  `_handle_connection` then resolves to the exact same `Logger` object
+  `WikiServer` already configured with the rotating file handler,
+  automatically. Additionally, delete `DaemonBase.run()`'s
+  `logging.basicConfig(level=logging.INFO, format="[%(name)s]
+  %(message)s")` call (`_daemon.py:62-65`) as dead code: it becomes a
+  no-op once the connection-level logger shares `"wiki-server"`'s
+  `propagate=False` handler, `WikiServer` is the only `DaemonBase`
+  subclass that exists today, and nothing else in `wiki/_server.py`'s
+  process makes a bare root-level `logging.*` call that depends on it
+  (grep confirmed) — keeping it around as a "future subclass" fallback
+  would be designing for a hypothetical that doesn't exist yet.
 - Rationale: This split is what makes connection-level daemon logs visible
   externally *at all* once `_spawn_server`'s fd-inheritance bug is fixed —
   without it, an operator loses ALL daemon diagnostics (including genuine
   ERROR-level ones) the moment stdio redirection lands, since nothing else
   would print them anywhere reachable. Consolidating onto the existing
   rotating-file pattern keeps genuine errors discoverable (in the log file)
-  while guaranteeing they never again leak into unrelated CLI output.
+  while guaranteeing they never again leak into unrelated CLI output. The
+  rename-only mechanism was chosen over a heavier logger-injection
+  redesign because it is provably sufficient (verified via grep that no
+  other code depends on the `"wiki"` name or on construction order) and
+  needs no `DaemonBase` API change — the smaller change that fully solves
+  the problem beats a broader one that doesn't add anything beyond it.
+- Rejected: Have `DaemonBase.__init__` accept an injected `Logger` object
+  (or a logger-name hook parameter) from its subclass — would require
+  reordering `WikiServer.__init__` (build the logger/handler before
+  calling `super().__init__`) and widens `DaemonBase`'s public API for a
+  generality no current or planned subclass needs; the rename achieves the
+  identical runtime result with a one-line change and zero API surface.
 - Rejected: Leave the two loggers separate — would silently swallow all
   daemon-side ERROR-level diagnostics once stdio redirection lands, trading
   "loud in the wrong place" for "invisible everywhere," which is worse for
@@ -189,7 +230,21 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   `_review_common`'s two extra behaviors on top: raise `ReviewError` when
   neither the plugin template nor a repo-layer config exists at all, and
   warn on stale top-level `review:` keys found in
-  `mill_dir / "config.local.yaml"`.
+  `mill_dir / "config.local.yaml"`. **Missing-source check mechanism:**
+  `_config.load_config` never raises and carries no "was a source found"
+  signal in its return value — it returns `{}` both when nothing exists
+  AND when a legitimately-present template/config happens to be empty
+  (confirmed: `_config.py:215`'s `yaml.safe_load(...) or {}`). The wrapper
+  must therefore NOT infer "missing" from an empty returned dict — that
+  would misfire on the legitimately-empty case. Instead it performs its
+  own existence check before/alongside delegating, using
+  `resolve_plugin_template_path` and `resolve_repo_config_path` — both
+  already imported in `_review_common.py` (lines 71-72, currently used
+  only by the duplicate being deleted) — and raises `ReviewError` itself
+  when both `resolve_plugin_template_path("mill-config.yaml").exists()`
+  is false and `resolve_repo_config_path(hub_root, mill_dir.parent)` is
+  `None`, mirroring the duplicate's existing lines 1880-1885 check but
+  performed independently of (not inferred from) the delegate's return.
 - Rationale: The bug that caused #676/#670 was exactly this — a second copy
   of `load_config` drifting out of sync after `_config.load_config` was
   patched. Point-fixing `_review_common.load_config` again just recreates
@@ -374,3 +429,27 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   rationale says this routing is load-bearing (it's what keeps errors
   discoverable once stdio redirection ships), so it needs direct test
   coverage, not just an assumption that the other cases exercise it.
+- **Q:** [round 2 review, GAP] How does the `_review_common.load_config`
+  wrapper determine "no config source found" post-delegation, given
+  `_config.load_config` never raises and returns `{}` for both "nothing
+  found" and "found but empty"? **A:** [auto-pick] The wrapper performs
+  its own existence check via the already-imported
+  `resolve_plugin_template_path`/`resolve_repo_config_path`, independent
+  of the delegate's return value, and raises `ReviewError` itself when
+  both report absent. **Why:** confirmed via code reading that both
+  functions are already imported in `_review_common.py` (lines 71-72) and
+  that `_config.load_config` genuinely carries no found/missing signal
+  (`_config.py:215`'s `yaml.safe_load(...) or {}`) — inferring "missing"
+  from an empty dict would misfire on a legitimately-empty config.
+- **Q:** [round 2 review, GAP] What is the concrete mechanism for routing
+  `DaemonBase`'s connection-level logger to `WikiServer`'s existing
+  rotating-file destination — inject a `Logger` object, add a
+  logger-name hook, or something else? **A:** [auto-pick] Rename only —
+  `WikiServer` passes `"wiki-server"` instead of `"wiki"` to
+  `super().__init__(...)`'s existing `name` parameter; no `DaemonBase`
+  API change. **Why:** confirmed via grep that no other code references
+  `logging.getLogger("wiki")` by that literal name, and that
+  `logging.getLogger(name)` returns the same singleton regardless of
+  construction order — so the rename alone makes `_handle_connection`'s
+  logger resolve to the exact same configured `Logger` `WikiServer`
+  already builds, with a one-line change and no widened API surface.
