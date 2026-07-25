@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: nits-fixed-holistic
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-commit-none-backend-gate  '2026-07-25T14:25:03Z'
 holistic-reviewing  '2026-07-25T14:25:28Z'
 holistic-fixing  '2026-07-25T14:31:25Z'
 holistic-approved  '2026-07-25T14:34:56Z'
+nits-fixed-holistic  '2026-07-25T14:35:19Z'
 ```
 
 ## Batches
