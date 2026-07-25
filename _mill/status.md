@@ -42,7 +42,9 @@ batches:
     start_sha: f866191588c52ad2336e09f00d06cecb00ef0017
     commit_sha: 27b467f6cea911c01b7a86d97bad01323307b813
   - name: commit-none-validator
-    state: pending
+    state: running
+    implementer_session: 86c98460-cee1-4646-b845-80d751177577
+    start_sha: aded126abc0f9e5c03de842d8d37f0dcbc289abb
   - name: commit-none-implementer-brief
     state: pending
   - name: severity-failloud-legacy-callsites
