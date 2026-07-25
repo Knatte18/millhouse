@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-code-moves-suppression
+phase: approved-review-common-parse-deletes
 slug: mill-review-verify-pipeline-state-gaps
 branch: hanf/mill-review-verify-pipeline-state-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-07-25T12:05:51Z'
 planned  '2026-07-25T12:06:26Z'
 implementing  '2026-07-25T12:10:40Z'
 approved-review-code-moves-suppression  '2026-07-25T12:24:36Z'
+approved-review-common-parse-deletes  '2026-07-25T12:28:16Z'
 ```
 
 ## Batches
@@ -33,9 +34,10 @@ batches:
     start_sha: 201311bf5eeb30f3601cb67bf3abc375ddd8161f
     commit_sha: 6b70aed4e97cef6dd66652f985bf8c9f300b4d7a
   - name: review-common-parse-deletes
-    state: running
+    state: approved
     implementer_session: f50111eb-867a-4a6e-b2f7-b8ae9d570ae0
     start_sha: d29b28008ca5d931b1f1050a8506e71c96692edc
+    commit_sha: ef70458fdd241f1ecadad917dbe8361b9b450873
   - name: iter-batch-verifies-cross-batch-filter
     state: pending
   - name: verify-replay-callers-wiring
