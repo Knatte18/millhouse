@@ -85,6 +85,15 @@ Decisions` in the overview.
      the docstring note at lines 355-361, or the internal self-call `cfg =
      load_config(hub_dir, hub_dir / ".millhouse")` at line 376 — the public signature is
      unchanged so all three remain correct as-is.
+  6. This delegation knowingly inherits two `_config.load_config` behaviors the current
+     `_review_common.load_config` does not have: step 7's `_interpolate_env(cfg)`
+     (`_config.py:271`), which can raise `ConfigError` for an unset `${VAR}` with no
+     default, and step 3's `[_config] note: no repo-layer mill-config.yaml found...`
+     stderr print (`_config.py:243-246`) when the template exists but no repo-layer config
+     does. Both are acceptable: mill configs don't use `${VAR}`/`${VAR:-default}` patterns
+     today (so `_interpolate_env` is a no-op in practice), and the note is informational,
+     matching this task's stated goal of inheriting `_config.load_config`'s current and
+     future fixes rather than re-diverging from it.
 - **Commit:** `refactor(review-common): delegate load_config to _config.load_config, drop duplicate merge logic`
 
 ### Card 6: Test coverage for the delegation

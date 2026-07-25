@@ -3,7 +3,7 @@
 ```yaml
 task: "Wiki daemon error-log leak and stale plugin-cache config validation produce misleading noise"
 slug: "mill-background-noise-and-stale-config"
-approved: false
+approved: true
 started: "2026-07-25T12:07:50Z"
 parent: "hanf/linux-port-more"
 root: ""
