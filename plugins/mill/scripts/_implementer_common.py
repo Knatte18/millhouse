@@ -1238,6 +1238,7 @@ def finalize_from_output(
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -1268,6 +1269,10 @@ def finalize_from_output(
             the completeness gate. cards_done and already_complete (read from
             the parsed success envelope, not accepted as parameters here) are
             compared against this set inside _forward_output.
+        commit_none_card_ids: card numbers whose Commit: field is the literal
+            none, computed by the caller from the batch plan file (never
+            self-reported); when the coerced cards_done is a non-empty subset
+            of this set, the content==0 reclassification below is skipped.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
         nits_only: When True, writes a nits-fixed marker on success.
@@ -1299,6 +1304,7 @@ def finalize_from_output(
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
         card_ids=card_ids,
+        commit_none_card_ids=commit_none_card_ids,
         task_dir=task_dir,
         parent_branch=parent_branch,
         nits_only=nits_only,
@@ -1352,6 +1358,7 @@ def _forward_output(
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -1386,6 +1393,9 @@ def _forward_output(
     and already_complete are read from the parsed success envelope inside this function, not
     accepted as separate parameters, since they are only ever meaningful alongside a
     self-reported status: success.
+    commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by
+    the caller from the batch plan file (never self-reported); when the coerced cards_done is
+    a non-empty subset of this set, the content==0 reclassification below is skipped.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
@@ -1443,6 +1453,7 @@ def _forward_output(
                     card_ids,
                     _gate_session_id,
                     cards_done=_cards_done,
+                    commit_none_card_ids=commit_none_card_ids,
                 )
                 # Add commit_sha only for verify/transient/incomplete results; logic (no-content)
                 # results match the sibling no-content gates that omit commit_sha.
@@ -1480,7 +1491,11 @@ def _forward_output(
                     ["git", "rev-parse", "HEAD"],
                     cwd=project_root,
                 )
-                if result.returncode == 0 and result.stdout.strip() == start_sha:
+                if (
+                    result.returncode == 0
+                    and result.stdout.strip() == start_sha
+                    and not _cards_done_all_commit_none(_cards_done, commit_none_card_ids)
+                ):
                     # Implementer reported success but no content commit was made
                     print(
                         json.dumps(
@@ -1496,8 +1511,10 @@ def _forward_output(
                 # Guard against the start-batch-commit-only case (Bug #557): prepare makes a
                 # "mill-go: start batch" commit, so HEAD != start_sha even when the implementer
                 # wrote zero code commits. Detect this and demote to stuck/logic.
-                if result.returncode == 0 and _is_only_start_batch_commit(
-                    project_root, start_sha
+                if (
+                    result.returncode == 0
+                    and _is_only_start_batch_commit(project_root, start_sha)
+                    and not _cards_done_all_commit_none(_cards_done, commit_none_card_ids)
                 ):
                     print(
                         json.dumps(
