@@ -30,6 +30,8 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
   def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
       """Detect active slug via branch name; skip the daemon round-trip only
       when a cheap branch check confirms a single _mill/*.active on-disk marker.
+      On daemon failure, an unconfirmed lone marker is still trusted, exactly
+      as before this fast path existed.
 
       Raises ReviewError (wrapping MarkerError or glob-fallback errors).
       """
@@ -49,6 +51,8 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
       try:
           return _marker.slug_from_branch(hub_root, wiki_path, cfg)
       except _marker.MarkerError as exc:
+          if len(matches) == 1:
+              return matches[0].stem
           if len(matches) > 1:
               slugs = sorted(m.stem for m in matches)
               raise ReviewError(
@@ -60,7 +64,7 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
           ) from exc
   ```
 
-  `_pygit2_util` is already imported in `_review_common.py`; no new import is needed for that call. Also update the module-level "Public API" summary near the top of the file — the line `find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback` is now inaccurate (it describes the pre-fix order); change it to reflect that a matching on-disk marker skips the daemon, otherwise branch-based detection runs as before (e.g. `find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch`). This preserves every existing observable outcome exactly: the fast path only fires when the on-disk marker AND a cheap branch-prefix-derived slug agree — a case where `slug_from_branch`'s full (daemon-validated) resolution would provably return the identical slug, since the branch really is on that task's branch. Any disagreement (stale marker, prefix mismatch, unreadable branch) falls through to the unchanged, fully-validated `slug_from_branch` path, exactly like today. Multi-match and zero-match handling is entirely unchanged from the original code. Update the docstring to describe this "confirm, don't just trust" behavior (see the replacement above) — do not describe it as "glob-first" or "on-disk-first" in the docstring, since branch validation still gates the fast path.
+  **Correction (plan-review round 2 BLOCKING finding):** the round-1 fix's exception handler only special-cased `len(matches) > 1`, silently dropping the pre-existing "daemon fails, exactly one on-disk marker exists (regardless of branch confirmation) → trust it anyway" fallback that today's (pre-this-batch) code has unconditionally. The `if len(matches) == 1: return matches[0].stem` line inside the `except _marker.MarkerError` block (added above) restores this exactly — it is what the existing, unmodified test `find_active_slug glob fallback: one .active file -> returns slug` in `test-review-common.py` (a non-git tmpdir, `slug_from_branch` mocked to raise `MarkerError`, one marker present) already exercises and requires. Behavior is now: **confirmed** single marker (branch agrees) → daemon skipped entirely (new fast path); **unconfirmed** single marker → daemon tried first (branch-validated result wins if it succeeds), and only trusted as a fallback if the daemon call itself fails — identical to pre-batch behavior in that fallback case. `_pygit2_util` is already imported in `_review_common.py`; no new import is needed for that call. Also update the module-level "Public API" summary near the top of the file — the line `find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback` is now inaccurate (it describes the pre-fix order); change it to reflect that a matching on-disk marker skips the daemon, otherwise branch-based detection runs as before with the on-disk marker as a last-resort fallback on daemon failure (e.g. `find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to the marker only if the daemon call fails`). This preserves every existing observable outcome exactly — the only NEW behavior is the confirmed-marker fast path skipping the daemon; every other branch (unconfirmed-marker-then-daemon-succeeds, unconfirmed-marker-then-daemon-fails-trust-marker, multi-match, zero-match) is byte-for-byte identical to today. Update the docstring to describe this "confirm-first, trust-as-last-resort" behavior (see the replacement above) — do not describe it as "glob-first" or "on-disk-first," since branch validation still gates the fast path and the daemon-failure fallback is unconditional.
 - **Commit:** `fix(review-common): skip daemon in find_active_slug only when on-disk marker matches current branch`
 
 ### Card 4: Make load_task_title read status.md before the daemon path
