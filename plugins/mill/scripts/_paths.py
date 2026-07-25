@@ -53,7 +53,7 @@ Public API:
         returns ``worktree_root / hub_subpath`` (trailing slash normalised).
         Absolute values raise ``ValueError``.
 
-    resolve_active_worktree(container_path, slug, *, cfg, git_root)
+    resolve_active_worktree(container_path, slug, *, cfg, git_root, skip_slug_validation=False)
         Return the git checkout root for the active task with the given slug.
         Detection order: (1) in-place mode — when the current branch of
         ``git_root`` yields a slug (via ``_marker.slug_from_branch``) matching
@@ -63,16 +63,20 @@ Public API:
         Raises ``ActiveWorktreeNotFound`` when neither mode applies.
         Raises ``ActiveWorktreeSlugMismatch`` when the worktree dir exists but
         its branch-derived slug differs.
+        ``skip_slug_validation=True`` skips the daemon-backed
+        ``_marker.slug_from_branch`` call in favor of a cheap, git-only
+        branch-prefix comparison — see the function's own docstring.
 
-    resolve_active_hub(container_path, slug, *, cfg, git_root)
+    resolve_active_hub(container_path, slug, *, cfg, git_root, skip_slug_validation=False)
         Return the hub directory (where ``.millhouse/`` and ``_mill/`` live)
         for the active task with the given slug. Calls
-        ``resolve_active_worktree`` then resolves ``hub_relative_path`` with
-        a two-tier lookup: (1) default from ``cfg.get("hub_relative_path",
-        ".")``; (2) override from the resolved worktree's own
-        ``.millhouse/config.local.yaml`` when it declares
-        ``hub_relative_path:``. Propagates ``ActiveWorktreeNotFound`` and
-        ``ActiveWorktreeSlugMismatch`` from the inner call.
+        ``resolve_active_worktree`` (threading ``skip_slug_validation``
+        through) then resolves ``hub_relative_path`` with a two-tier lookup:
+        (1) default from ``cfg.get("hub_relative_path", ".")``; (2) override
+        from the resolved worktree's own ``.millhouse/config.local.yaml``
+        when it declares ``hub_relative_path:``. Propagates
+        ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch`` from
+        the inner call.
 
     resolve_hub_path(cwd)
         Return the hub directory — assumes CC's cwd equals the hub when mill
@@ -377,6 +381,7 @@ def resolve_active_worktree(
     *,
     cfg: dict,
     git_root: Path,
+    skip_slug_validation: bool = False,
 ) -> Path:
     """Return the git checkout root for the active task with the given slug.
 
@@ -387,6 +392,25 @@ def resolve_active_worktree(
     2. Worktree mode: when ``container_path / "wts" / slug`` exists and its
        current branch-derived slug matches ``slug``, return that path.
 
+    Args:
+        skip_slug_validation: When True, skip the daemon-backed
+            ``_marker.slug_from_branch`` call used to determine in-place
+            mode's marker slug, and instead derive it with a cheap,
+            daemon-free branch comparison: strip ``cfg["spawn"]["branch_prefix"]``
+            (default ``""``) off the current branch of ``git_root`` and
+            compare directly to ``slug``. This is for callers that already
+            hold a ``slug`` validated by some other means (e.g. an on-disk
+            source) and want to avoid the round-trip ``slug_from_branch``
+            makes to the wiki daemon's ``_dispatch()`` retry loop. It trades
+            ``slug_from_branch``'s full validation (including its
+            non-standard-branch-name fallbacks against Home.md) for a
+            simple prefix-strip comparison, which is correct for the
+            standard ``<branch_prefix><slug>`` branch-naming convention
+            every ``mill-spawn``/``mill-claim`` worktree uses, but will not
+            detect in-place mode for a non-standard branch name — an
+            acceptable trade-off since this parameter is only used by
+            callers in the standard dispatch path.
+
     Raises:
         ActiveWorktreeNotFound: neither mode applies.
         ActiveWorktreeSlugMismatch: worktree-dir exists but branch-derived slug differs.
@@ -394,11 +418,19 @@ def resolve_active_worktree(
     import _inplace
     import _marker
 
-    try:
-        wiki_path = resolve_wiki_path(git_root)
-        marker_slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
-    except (_marker.MarkerError, SystemExit):
-        marker_slug = None
+    if skip_slug_validation:
+        try:
+            branch = _pygit2_util.current_branch(git_root) or ""
+        except _pygit2_util.GitOpsError:
+            branch = ""
+        prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+        marker_slug = branch.removeprefix(prefix) if branch.startswith(prefix) else None
+    else:
+        try:
+            wiki_path = resolve_wiki_path(git_root)
+            marker_slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
+        except (_marker.MarkerError, SystemExit):
+            marker_slug = None
     if marker_slug == slug and _inplace.is_inplace(slug, git_root, cfg):
         return git_root
 
@@ -425,11 +457,12 @@ def resolve_active_hub(
     *,
     cfg: dict,
     git_root: Path,
+    skip_slug_validation: bool = False,
 ) -> Path:
     """Return the hub directory (where ``.millhouse/`` and ``_mill/`` live) for the slug.
 
-    Calls ``resolve_active_worktree`` then resolves ``hub_relative_path``.
-    Resolution order:
+    Calls ``resolve_active_worktree`` (threading ``skip_slug_validation``
+    through) then resolves ``hub_relative_path``. Resolution order:
     1. Default from the caller's cfg: ``cfg.get("hub_relative_path", ".")``.
     2. Override from the resolved worktree's own ``.millhouse/config.local.yaml``
        when that file exists and declares ``hub_relative_path:``.
@@ -444,12 +477,22 @@ def resolve_active_hub(
       cross-worktree consumers (cleanup, status) that have no cfg about the
       target can still resolve correctly.
 
+    Args:
+        skip_slug_validation: Forwarded to ``resolve_active_worktree`` — see
+            that function's docstring for the daemon-free fast-path tradeoff.
+
     Propagates ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch``
     from the inner call.
     """
     import yaml
 
-    wt = resolve_active_worktree(container_path, slug, cfg=cfg, git_root=git_root)
+    wt = resolve_active_worktree(
+        container_path,
+        slug,
+        cfg=cfg,
+        git_root=git_root,
+        skip_slug_validation=skip_slug_validation,
+    )
     hub_subpath = cfg.get("hub_relative_path", ".")
     stub_path = wt / ".millhouse" / "config.local.yaml"
     if stub_path.exists():
