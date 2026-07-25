@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-skill-docs-and-tooling-accuracy
 branch: hanf/mill-skill-docs-and-tooling-accuracy
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-07-25T12:05:04Z'
 implementing  '2026-07-25T12:11:07Z'
 approved-doc-tooling-fixes  '2026-07-25T12:14:20Z'
 holistic-reviewing  '2026-07-25T12:14:30Z'
+holistic-fixing  '2026-07-25T12:16:08Z'
 ```
 
 ## Batches
