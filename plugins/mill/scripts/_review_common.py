@@ -1842,6 +1842,14 @@ def finalize_scope(
         blocking_severity, nit_severity = "BLOCKING", "NIT"
     blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
     nit_count = parse_blocking_count(raw_text, severity=nit_severity)
+    # Fail loud on unrecognized severity labels rather than silently
+    # dropping them from both counters -- fold them into the
+    # blocking-equivalent bucket so an auto-approve round can never
+    # ignore a real finding just because the reviewer used an
+    # off-vocabulary label (e.g. [MAJOR] instead of [BLOCKING]).
+    blocking_count += count_unrecognized_severity_findings(
+        raw_text, blocking_severity=blocking_severity, nit_severity=nit_severity
+    )
 
     effective_scope = scope if scope else "holistic"
 
