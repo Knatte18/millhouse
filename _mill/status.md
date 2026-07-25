@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-verify-pipeline-state-gaps
 branch: hanf/mill-review-verify-pipeline-state-gaps
 plan: _mill/plan
@@ -19,4 +19,19 @@ discussed  '2026-07-25T11:22:23Z'
 planning  '2026-07-25T11:29:56Z'
 plan-fix-r1  '2026-07-25T12:05:51Z'
 planned  '2026-07-25T12:06:26Z'
+implementing  '2026-07-25T12:10:40Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-code-moves-suppression
+    state: pending
+  - name: review-common-parse-deletes
+    state: pending
+  - name: iter-batch-verifies-cross-batch-filter
+    state: pending
+  - name: verify-replay-callers-wiring
+    state: pending
 ```
