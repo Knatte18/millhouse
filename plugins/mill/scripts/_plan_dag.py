@@ -48,9 +48,13 @@ list are rejected.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 import yaml
+
+import _status
+from _review_common import parse_deletes, parse_moves
 
 
 class PlanDAGError(Exception):
@@ -433,17 +437,114 @@ def parse_verify_field(
     raise ValueError(f"verify must be null, a string, or a mapping; got {verify!r}")
 
 
+def _normalize_removal_token(token: str) -> str:
+    """Normalize a ``Deletes:``/``Moves:`` source token for exact-match comparison.
+
+    Strips one leading ``"./"`` and any trailing ``"/"`` so that the
+    plan-authoring variations ``"tools/x/"``, ``"./tools/x"``, and
+    ``"tools/x"`` all collapse to the same comparison key. This is
+    purely lexical string normalization -- no filesystem resolution and
+    no awareness of ``cwd``/``root`` coordinate spaces.
+    """
+    if token.startswith("./"):
+        token = token[2:]
+    return token.rstrip("/")
+
+
+def _is_path_candidate_verify_token(token: str) -> bool:
+    """Return whether a shlex-split ``verify:`` command token could name a path.
+
+    Deliberately conservative, to avoid false-positive suppressions:
+    excludes flag-form tokens (``-o``, ``--dir=x``), tokens with no path
+    separator (bare subcommand names like ``go`` or ``build``), and
+    globby/ellipsis tokens (``./...``, ``./pkg/...``, ``*.go``) that are
+    Go-style wildcard build targets a ``Deletes:``/``Moves:`` entry could
+    never name verbatim.
+    """
+    if token.startswith("-"):
+        return False
+    if "/" not in token:
+        return False
+    if "*" in token or "?" in token or "..." in token:
+        return False
+    return True
+
+
+def _verify_command_targets_later_removal(
+    command: str,
+    later_batch_names: list[str],
+    removed_by_batch: dict[str, set[str]],
+) -> bool:
+    """Return whether ``command`` names a target one of ``later_batch_names`` removes.
+
+    Tokenizes ``command`` with ``shlex.split`` and checks every
+    path-candidate token (see :func:`_is_path_candidate_verify_token`),
+    normalized the same way as the removal-map tokens, for an exact match
+    against any later batch's declared removal set. The check is
+    existential and all-or-nothing over the whole command: a single
+    matching token is enough to report the command as stale, even when
+    the command also names other targets that remain valid.
+    """
+    tokens = shlex.split(command)
+    for token in tokens:
+        if not _is_path_candidate_verify_token(token):
+            continue
+        normalized = _normalize_removal_token(token)
+        for later_name in later_batch_names:
+            if normalized in removed_by_batch.get(later_name, set()):
+                return True
+    return False
+
+
 def iter_batch_verifies(
-    plan_dir: Path, hub_root: Path, git_root: Path
+    plan_dir: Path, hub_root: Path, git_root: Path, *, status_path: Path | None = None
 ) -> list[tuple[str, str, Path | None]]:
     """Return ``(batch_name, verify_cmd, cwd)`` triples in DAG order.
 
-    mill-merge-in's Verify step replays exactly the checks that ran
-    during implementation: each batch's ``verify:`` from its
+    mill-merge-in's Verify step (and ``millpy-fix.py``'s holistic
+    prepare/finalize) replays exactly the checks that still matter given
+    the plan's current state: each surviving batch's ``verify:`` from its
     frontmatter, in the same order mill-go dispatched them
-    (``topo_order``). Batches whose ``verify:`` is ``null`` or missing
-    are skipped silently — pure-docs batches have no runnable surface
-    and forcing a sentinel command there would be noise.
+    (``topo_order``). Three independent reasons drop a batch's verify
+    out of the returned list:
+
+    1. ``verify:`` is ``null`` or missing -- pure-docs batches have no
+       runnable surface and forcing a sentinel command there would be
+       noise (pre-existing behavior).
+    2. A strictly-later batch (higher index in ``order``) declares, via
+       its own ``Deletes:``/``Moves:`` bullets, that it removes a path
+       this batch's ``verify:`` command references -- replaying the
+       command would just fail on a target the plan itself says is gone.
+       Detection matches normalized command tokens against normalized
+       ``Deletes:``/``Moves:``-source tokens (never live filesystem
+       state -- see the "metadata-driven cross-batch verify suppression"
+       Shared Decision). A batch's own removals, and any earlier batch's,
+       never suppress it -- only strictly-later removals count, so a
+       batch never suppresses itself even when it deletes a path its own
+       ``verify:`` references.
+    3. When ``status_path`` is given: the batch itself has not reached
+       ``"approved"`` state yet (its verify hasn't actually been
+       validated/settled), or the only later batch that would otherwise
+       suppress it (reason 2) has not reached ``"approved"`` either (that
+       later batch has not actually executed its declared removal yet,
+       so the target still exists and this batch's verify still runs).
+
+    Known limitations of reason 2's matching (accepted trade-offs, see
+    ``_mill/discussion.md`` Decision 2):
+    - Exact-match only, no directory-containment: ``Deletes: tools/x/``
+      does NOT suppress a verify referencing ``tools/x/cmd/app``.
+    - All-or-nothing per command: a multi-target command is fully
+      suppressed if any single target matches.
+    - Purely lexical, no ``cwd``/``root`` coordinate resolution: a verify
+      authored in a different coordinate space than the
+      ``Deletes:``/``Moves:`` tokens may fail to match and will simply
+      keep running -- it is never falsely suppressed.
+    - ``shlex.split`` uses its default ``posix=True`` tokenization, which
+      treats backslash as an escape character regardless of host OS. A
+      verify command containing a Windows-style backslash path may have
+      its tokens corrupted before the path-candidate check runs, so such
+      a command will not be reliably suppressed even when its target is
+      genuinely removed later.
 
     Each batch's raw ``verify:`` value is routed through
     :func:`parse_verify_field` to resolve the plain-string vs.
@@ -458,10 +559,19 @@ def iter_batch_verifies(
             ``parse_verify_field`` for ``cwd: hub`` resolution.
         git_root: The git repository toplevel, passed through to
             ``parse_verify_field`` for ``cwd: git_root`` resolution.
+        status_path: Optional path to the task's ``status.md``. When
+            ``None`` (the default), reason 3 above never applies and
+            this function's behavior is byte-for-byte identical to
+            before this parameter existed -- strictly additive, per the
+            "``status_path`` kwarg is strictly additive" Shared
+            Decision. When provided, batch states are read via
+            ``_status.read_batches``; a ``ValueError`` from a malformed
+            ``## Batches`` block degrades to returning ``[]`` (mirroring
+            the malformed-overview branch below) rather than raising.
 
     Returns:
         A list of ``(batch_name, command, cwd)`` triples, one per batch
-        whose ``verify:`` resolves to a non-null command.
+        that survives all three filters above.
 
     If the plan overview is missing or malformed, returns ``[]`` and
     the caller falls back to "nothing to verify".
@@ -481,15 +591,65 @@ def iter_batch_verifies(
 
     file_by_name = {entry["name"]: entry.get("file") for entry in batches}
 
+    # Resolve per-batch approval state up front (reason 3). Left as None
+    # when status_path is omitted so the filters below skip that reason
+    # entirely -- the strictly-additive contract from the Shared Decision.
+    states: dict[str, str] | None = None
+    if status_path is not None:
+        states = {}
+        try:
+            for b in _status.read_batches(status_path):
+                states[b.get("name")] = b.get("state")
+        except ValueError:
+            # Malformed `## Batches` block (missing/unterminated fenced
+            # yaml, or bad yaml) -- degrade to "nothing to verify" rather
+            # than let the corruption propagate to the caller.
+            return []
+
+    # Build a per-batch removal map (reason 2) from each batch's own
+    # Deletes:/Moves: declarations, so the main loop below can look up
+    # "what did batch X declare gone" without re-parsing per lookup.
+    # Iterates every batch in `batches`, not just `order`, per contract.
+    removed_by_batch: dict[str, set[str]] = {}
+    for entry in batches:
+        name = entry["name"]
+        file_ref = file_by_name.get(name)
+        if not file_ref:
+            continue
+        batch_path = plan_dir / file_ref
+        removed = {_normalize_removal_token(t) for t in parse_deletes(batch_path)}
+        removed |= {
+            _normalize_removal_token(src) for src, _dst in parse_moves(batch_path)
+        }
+        removed_by_batch[name] = removed
+
     commands: list[tuple[str, str, Path | None]] = []
-    for name in order:
+    for index, name in enumerate(order):
+        # Reason 3a: this batch itself hasn't reached "approved" yet.
+        if states is not None and states.get(name) != "approved":
+            continue
         file_ref = file_by_name.get(name)
         if not file_ref:
             continue
         frontmatter = _read_batch_frontmatter(plan_dir / file_ref)
         command, cwd = parse_verify_field(frontmatter, hub_root, git_root)
-        if command is not None:
-            commands.append((name, command, cwd))
+        if command is None:
+            continue
+        # Reason 2 (narrowed by reason 3b when status_path is given): only
+        # a strictly-later batch that has actually executed its removal
+        # (state == "approved", when states is tracked) counts as a
+        # remover -- a later batch still pending has not removed anything
+        # yet, so its declared target still exists.
+        later_batch_names = [
+            later_name
+            for later_name in order[index + 1 :]
+            if states is None or states.get(later_name) == "approved"
+        ]
+        if _verify_command_targets_later_removal(
+            command, later_batch_names, removed_by_batch
+        ):
+            continue
+        commands.append((name, command, cwd))
     return commands
 
 

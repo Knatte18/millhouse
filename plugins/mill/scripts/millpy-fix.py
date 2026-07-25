@@ -120,6 +120,107 @@ def _resolve_holistic_verify(
     return joined_command, cwd_override
 
 
+def _report_skipped_verifies(
+    plan_base: Path,
+    project_root: Path,
+    git_root: Path,
+    status_path: Path,
+    batch_verifies: list[tuple[str, str, Path | None]],
+) -> None:
+    """
+    Print a stderr line for every batch `iter_batch_verifies` silently dropped.
+
+    `iter_batch_verifies` (see `_plan_dag.py`) already returns the correctly
+    filtered "what still matters" list, but a filtered-out batch and a batch
+    that ran-and-passed would otherwise look identical to whoever reads the
+    holistic fixer's output -- both are simply absent from the joined verify
+    command. This is the "visible, counted skips" Shared Decision's
+    attribution mechanism: independently recompute the raw, unfiltered
+    batch-with-verify set, diff it against what `iter_batch_verifies` actually
+    returned, and attribute each missing batch's reason.
+
+    Steps:
+    1. Re-derive the raw set of batch names that declare a runnable `verify:`
+       command, with zero filtering -- the same `extract_batch_index` +
+       `topo_order` + `_read_batch_frontmatter` + `parse_verify_field` chain
+       `iter_batch_verifies` uses internally, just without its cross-batch and
+       approval-state filters.
+    2. Diff that raw set against the names present in `batch_verifies` (the
+       actual, already-filtered return value of the `iter_batch_verifies` call
+       this helper follows) to find every batch that got dropped.
+    3. Attribute each dropped batch's reason via a single `_status.read_batches`
+       lookup (reused across all missing names, not repeated per name): a
+       batch whose own state isn't `"approved"` was skipped because it hasn't
+       been approved yet; an approved batch that is still missing was skipped
+       because a later batch's declared removal suppressed it.
+    4. Print `[millpy-fix] skipped <batch_name>: <reason>` to stderr for each,
+       in the same order as the raw (unfiltered) set.
+
+    Never raises: a missing/malformed overview or a malformed `## Batches`
+    block in `status_path` degrades to "nothing to report" rather than
+    crashing the fixer dispatch over a reporting nicety.
+
+    Args:
+        plan_base: Directory containing `00-overview.md` and the batch files
+            it references.
+        project_root: The mill project root, passed through to
+            `parse_verify_field` for `cwd: hub` resolution.
+        git_root: The git repository toplevel, passed through to
+            `parse_verify_field` for `cwd: git_root` resolution.
+        status_path: Path to the task's `status.md`, used to resolve each
+            batch's approval state.
+        batch_verifies: The actual, already-filtered `(name, command, cwd)`
+            triples returned by the `iter_batch_verifies` call this helper
+            follows.
+    """
+    overview_path = plan_base / "00-overview.md"
+    if not overview_path.exists():
+        return
+    try:
+        raw_batches = _plan_dag.extract_batch_index(
+            overview_path.read_text(encoding="utf-8")
+        )
+    except _plan_dag.PlanDAGError:
+        return
+    try:
+        order = _plan_dag.topo_order(raw_batches)
+    except _plan_dag.PlanDAGError:
+        return
+
+    file_by_name = {entry["name"]: entry.get("file") for entry in raw_batches}
+    raw_names: list[str] = []
+    for name in order:
+        file_ref = file_by_name.get(name)
+        if not file_ref:
+            continue
+        frontmatter = _plan_dag._read_batch_frontmatter(plan_base / file_ref)
+        command, _cwd = _plan_dag.parse_verify_field(
+            frontmatter, project_root, git_root
+        )
+        if command is not None:
+            raw_names.append(name)
+
+    actual_names = {name for name, _command, _cwd in batch_verifies}
+    missing = [name for name in raw_names if name not in actual_names]
+    if not missing:
+        return
+
+    try:
+        states = {b.get("name"): b.get("state") for b in _status.read_batches(status_path)}
+    except ValueError:
+        # Malformed `## Batches` block -- skip attribution/logging entirely
+        # rather than crash the fixer dispatch over a reporting nicety.
+        return
+
+    for name in missing:
+        reason = (
+            "batch not approved"
+            if states.get(name) != "approved"
+            else "target removed by later batch"
+        )
+        print(f"[millpy-fix] skipped {name}: {reason}", file=sys.stderr)
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a fixer session for code review findings."
@@ -330,7 +431,10 @@ def main(argv=None) -> int:
         elif args.scope == "holistic":
             # Derive concatenated verify_cmd from all batch verify commands in DAG order
             batch_verifies = _plan_dag.iter_batch_verifies(
-                plan_base, project_root, git_root
+                plan_base, project_root, git_root, status_path=status_path
+            )
+            _report_skipped_verifies(
+                plan_base, project_root, git_root, status_path, batch_verifies
             )
             if batch_verifies:
                 verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
@@ -450,7 +554,10 @@ def main(argv=None) -> int:
         # Holistic fixer dispatch
         # Derive concatenated verify_cmd from all batch verify commands in DAG order
         batch_verifies = _plan_dag.iter_batch_verifies(
-            plan_base, project_root, git_root
+            plan_base, project_root, git_root, status_path=status_path
+        )
+        _report_skipped_verifies(
+            plan_base, project_root, git_root, status_path, batch_verifies
         )
         verify_cmd, cwd_override = (
             _resolve_holistic_verify(batch_verifies) if batch_verifies else (None, None)
