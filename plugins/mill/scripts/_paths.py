@@ -423,8 +423,7 @@ def resolve_active_worktree(
             branch = _pygit2_util.current_branch(git_root) or ""
         except _pygit2_util.GitOpsError:
             branch = ""
-        prefix = cfg.get("spawn", {}).get("branch_prefix", "")
-        marker_slug = branch.removeprefix(prefix) if branch.startswith(prefix) else None
+        marker_slug = _pygit2_util.strip_branch_prefix(branch, cfg)
     else:
         try:
             wiki_path = resolve_wiki_path(git_root)

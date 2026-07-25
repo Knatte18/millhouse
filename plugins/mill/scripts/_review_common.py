@@ -319,8 +319,7 @@ def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
             branch = _pygit2_util.current_branch(hub_root) or ""
         except _pygit2_util.GitOpsError:
             branch = ""
-        prefix = cfg.get("spawn", {}).get("branch_prefix", "")
-        branch_slug = branch.removeprefix(prefix) if branch.startswith(prefix) else None
+        branch_slug = _pygit2_util.strip_branch_prefix(branch, cfg)
         if branch_slug == matches[0].stem:
             return matches[0].stem
     try:
