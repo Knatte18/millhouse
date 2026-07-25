@@ -18,6 +18,7 @@ sys.path.insert(0, str(_UNIT_TESTS))
 import _test_helpers  # noqa: E402
 from _test_helpers import _make_task_worktree  # noqa: E402
 from _paths import ActiveWorktreeSlugMismatch  # noqa: E402
+import _config  # noqa: E402
 import _marker  # noqa: E402
 
 
@@ -876,6 +877,61 @@ def main() -> int:
         )
         print(
             "PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning"
+        )
+
+    # load_config delegation inherits _config.load_config's worktree-template
+    # cache-lag augmentation (regression test for #676/#670: the old duplicate
+    # load_config had no augmentation logic at all, so this exact scenario
+    # would have printed the unknown-key warning under the pre-refactor code).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        mill = tmpdir_path / ".millhouse"
+        mill.mkdir()
+
+        # Fake installed-cache template missing pipeline.max_cards_per_batch.
+        cache_template_dir = tmpdir_path / "cache_templates"
+        cache_template_dir.mkdir(parents=True, exist_ok=True)
+        cache_template_path = cache_template_dir / "mill-config.yaml"
+        cache_template_path.write_text(
+            "roles:\n  plan-review:\n    batch:\n      reviewer: sonnetmax\n",
+            encoding="utf-8",
+        )
+
+        # Worktree-local source-tree template that already carries the new key.
+        wt_template_dir = tmpdir_path / "plugins" / "mill" / "templates"
+        wt_template_dir.mkdir(parents=True, exist_ok=True)
+        (wt_template_dir / "mill-config.yaml").write_text(
+            "pipeline:\n  max_cards_per_batch: 10\n",
+            encoding="utf-8",
+        )
+
+        # Repo-layer config also sets the new key.
+        (tmpdir_path / "mill-config.yaml").write_text(
+            "pipeline:\n  max_cards_per_batch: 10\n",
+            encoding="utf-8",
+        )
+
+        _err_buf = _io.StringIO()
+        with (
+            _cl.redirect_stderr(_err_buf),
+            patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=cache_template_path,
+            ),
+            patch(
+                "_review_common.resolve_plugin_template_path",
+                return_value=cache_template_path,
+            ),
+        ):
+            cfg = load_config(tmpdir_path, mill)
+        _warning = _err_buf.getvalue()
+        assert "unknown key: pipeline.max_cards_per_batch" not in _warning, (
+            f"unexpected unknown-key warning; stderr: {_warning!r}"
+        )
+        assert cfg["pipeline"]["max_cards_per_batch"] == 10
+        print(
+            "PASS: load_config delegation inherits _config.load_config's "
+            "worktree-template cache-lag augmentation"
         )
 
     # parse_batch_refs: multi-line bullet form returns all sub-bullet paths

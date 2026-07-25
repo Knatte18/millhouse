@@ -14,15 +14,14 @@ Claude proposes; you decide; nothing is written until you type `approve`.
 
 ## Entry checks
 
-1. Verify `.millhouse/wiki/` junction exists. If not, stop:
-   > `.millhouse/wiki/` junction missing. Run `/mill-setup` first.
-2. Resolve the wiki path:
+1. Resolve the wiki path:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
    "
    ```
-   Store as `<WIKI_PATH>`.
+   Store the returned path as `<WIKI_PATH>`. If the call raises or exits non-zero, stop:
+   > wiki path could not be resolved. Run `/mill-setup` first.
 
 ## Step 1 — Read config
 

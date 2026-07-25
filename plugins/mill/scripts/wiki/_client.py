@@ -689,9 +689,18 @@ def _spawn_server(wiki_path: Path) -> None:
             env=env,
             close_fds=True,
             creationflags=CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     else:
-        subprocess.Popen(cmd, env=env, close_fds=True, start_new_session=True)
+        subprocess.Popen(
+            cmd,
+            env=env,
+            close_fds=True,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
 
 def _connect_send_recv(
