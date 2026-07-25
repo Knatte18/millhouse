@@ -253,6 +253,83 @@ def main() -> int:
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
+    # find_active_slug: daemon-skip when a confirmed on-disk marker agrees
+    # with the current branch (on-disk-first fast path).
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            wt, wiki = _make_task_worktree(
+                Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/"
+            )
+            mill_dir = wt / "_mill"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            (mill_dir / "my-task.active").write_text("", encoding="utf-8")
+            cfg = {"spawn": {"branch_prefix": "hanf/"}}
+
+            def _fail_if_called(*args, **kwargs):
+                raise AssertionError("daemon should not be called")
+
+            with patch(
+                "_review_common._marker.slug_from_branch", side_effect=_fail_if_called
+            ):
+                result = find_active_slug(wt, wiki, cfg)
+
+            assert result == "my-task", f"Expected 'my-task', got {result!r}"
+            print(
+                "PASS: find_active_slug daemon-skip — confirmed on-disk marker -> 'my-task'"
+            )
+    except AssertionError as exc:
+        print(
+            f"FAIL: find_active_slug daemon-skip confirmed marker: {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: find_active_slug daemon-skip confirmed marker (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+
+    # find_active_slug: a stale on-disk marker (branch mismatch) must NOT
+    # short-circuit the daemon call -- regression test for the plan-review
+    # round 1 correctness fix.
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            wt, wiki = _make_task_worktree(
+                Path(tmpdir), "actual-slug", "Actual Slug", branch_prefix="hanf/"
+            )
+            mill_dir = wt / "_mill"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            # Leftover marker from an aborted claim, naming a DIFFERENT slug
+            # than the branch the worktree is actually on.
+            (mill_dir / "stale-slug.active").write_text("", encoding="utf-8")
+            cfg = {"spawn": {"branch_prefix": "hanf/"}}
+
+            with patch(
+                "_review_common._marker.slug_from_branch",
+                return_value="actual-slug",
+            ) as mocked:
+                result = find_active_slug(wt, wiki, cfg)
+
+            assert (
+                mocked.called
+            ), "expected slug_from_branch to be called since the stale marker did not confirm"
+            assert result == "actual-slug", f"Expected 'actual-slug', got {result!r}"
+            print(
+                "PASS: find_active_slug stale marker (branch mismatch) -> falls through to branch-derived slug"
+            )
+    except AssertionError as exc:
+        print(
+            f"FAIL: find_active_slug stale marker fallthrough: {exc}", file=sys.stderr
+        )
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: find_active_slug stale marker fallthrough (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+
     # load_task_title: task_title present in Home.md
     with _test_helpers.safe_temp_dir() as tmpdir:
         wt, wiki = _make_task_worktree(
@@ -270,6 +347,52 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmpdir:
         assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
         print("PASS: load_task_title non-task branch -> fallback to slug")
+
+    # load_task_title: daemon-skip when status.md is present and well-formed
+    # (on-disk-first fast path).
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            git_root = Path(tmpdir)
+            status_path = git_root / "status.md"
+            status_path.write_text(
+                "```yaml\n"
+                'task: "My On-Disk Title"\n'
+                "```\n"
+                "\n"
+                "## Timeline\n"
+                "\n"
+                "```text\n"
+                "discussing  '2026-01-01T00:00:00Z'\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            cfg = {"paths": {"status_md": "status.md"}}
+
+            def _fail_if_called(*args, **kwargs):
+                raise AssertionError("daemon should not be called")
+
+            with patch(
+                "_review_common._marker.task_data", side_effect=_fail_if_called
+            ):
+                result = load_task_title(
+                    git_root, git_root / "wiki", cfg, "some-slug"
+                )
+
+            assert (
+                result == "My On-Disk Title"
+            ), f"Expected 'My On-Disk Title', got {result!r}"
+            print(
+                "PASS: load_task_title daemon-skip — status.md present -> 'My On-Disk Title'"
+            )
+    except AssertionError as exc:
+        print(f"FAIL: load_task_title daemon-skip status.md: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: load_task_title daemon-skip status.md (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
 
     # resolve_path: discussion.md -> worktree root
     with _test_helpers.safe_temp_dir() as tmp:
