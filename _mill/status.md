@@ -33,5 +33,7 @@ implementing  '2026-07-25T12:11:07Z'
 ```yaml
 batches:
   - name: doc-tooling-fixes
-    state: pending
+    state: running
+    implementer_session: 0e48b063-4fbd-40d7-b1fb-5fbbcae66dab
+    start_sha: 851e35a5f8dfe4a718cf4a7c87207ca5a76345ce
 ```
