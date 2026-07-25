@@ -58,13 +58,19 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
 - `_daemon.py`: `_handle_connection`'s exception classification — treat
   connection-level exceptions (`OSError`, `ConnectionResetError`,
   `BrokenPipeError`, `json.JSONDecodeError`, `UnicodeDecodeError`) raised
-  anywhere in the per-connection try block as debug-level noise, not just
-  the single `json.loads(msg_text)` line. Exceptions raised from within
-  `self.handle_request(msg)` that are NOT one of these benign types must
-  still log at ERROR (genuine business-logic bugs must stay visible).
+  in the recv/decode region — between the start of the recv loop and the
+  point where `self.handle_request(msg)` is entered — as debug-level
+  noise, not just the single `json.loads(msg_text)` line. The benign-type
+  list applies only to that pre-dispatch region: ANY exception raised from
+  within `self.handle_request(msg)` itself — including one of these same
+  types, e.g. a genuine `OSError` from a real git/file failure inside
+  request handling — still logs at ERROR. Classification is by source
+  region first, exception type second; it is never type-only.
 - `wiki/_client.py`: `_spawn_server`'s `subprocess.Popen` call — redirect
-  the detached daemon's stdout/stderr away from the spawning client (do not
-  inherit).
+  the detached daemon's stdout/stderr to `subprocess.DEVNULL` (not to a
+  file of its own; the daemon-logger-consolidation decision below already
+  makes the rotating log file the one place daemon diagnostics land, so
+  raw stdout/stderr capture would be redundant).
 - `_daemon.py` / `wiki/_server.py`: collapse `DaemonBase`'s connection-level
   logger (`logging.getLogger("wiki")`, root-`basicConfig`-configured,
   stderr-bound) and `WikiServer`'s business-logic logger
@@ -76,7 +82,11 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   template/repo/local merge (including the 2026-05-31 cache-lag
   augmentation), preserving `_review_common`'s two review-specific
   behaviors on top: raising `ReviewError` when no config source is found at
-  all, and warning on stale `review:` keys in local config.
+  all, and warning on stale `review:` keys in local config. Callers of the
+  duplicate that must keep working post-refactor: every script listed
+  above, plus `millpy-review-discussion.py:92` (imports `load_config` from
+  `_review_common` at line 82) and `_review_common.py`'s own internal
+  self-call at line 376 (inside the active-hub path resolver).
 - Unit test coverage for both fixes (see Testing).
 
 **Out:**
@@ -97,17 +107,21 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
 ### daemon-exception-classification
 
 - Decision: Broaden `_handle_connection`'s benign-vs-genuine exception
-  split to cover the whole per-connection try block, not just the literal
+  split to cover the whole recv/decode region, not just the literal
   `json.loads(msg_text)` line. A tuple of benign types
   (`OSError, json.JSONDecodeError, UnicodeDecodeError`) — note
   `ConnectionResetError`/`BrokenPipeError` are `OSError` subclasses, so
   listing `OSError` covers them — raised ANYWHERE between the recv loop and
   the point where `self.handle_request(msg)` is entered should log at
   debug and return cleanly, without attempting to construct/send an error
-  response (matching the existing inner-guard behavior). Exceptions
-  surfaced specifically from within `self.handle_request(msg)` (i.e. an
-  actual business-logic failure) keep today's behavior: log at ERROR and
-  attempt to send a `server_error` response.
+  response (matching the existing inner-guard behavior). This benign-type
+  list does NOT extend into `self.handle_request(msg)`: ANY exception
+  surfaced from within `handle_request` — including one of the same benign
+  types, e.g. a real `OSError` from a git/file failure during request
+  handling — keeps today's behavior, logging at ERROR and attempting a
+  `server_error` response. The split is by source region (pre-dispatch vs.
+  dispatch-and-beyond) first; exception type only narrows within the
+  pre-dispatch region.
 - Rationale: The exact original escaping line was not conclusively
   reproduced during discussion (a hand-rolled bare-connect-close probe
   against a live in-process daemon did NOT reproduce the leak — see
@@ -124,9 +138,11 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
 ### daemon-stdio-redirection
 
 - Decision: `_spawn_server`'s `subprocess.Popen(...)` call must redirect
-  the detached daemon's `stdout`/`stderr` (e.g. `subprocess.DEVNULL`, or
-  ideally to the daemon's own log file) instead of inheriting the spawning
-  client's file descriptors.
+  the detached daemon's `stdout`/`stderr` to `subprocess.DEVNULL` instead
+  of inheriting the spawning client's file descriptors. Not redirected to
+  a file of its own — the daemon-logger-consolidation decision below
+  already makes the rotating log file the one destination for daemon
+  diagnostics, so a second raw-stdio capture file would be redundant.
 - Rationale: Confirmed by reading `_spawn_server` — no `stdout=`/`stderr=`
   kwargs are passed to `Popen`, so the daemon (a detached, long-lived
   background process) writes to whatever fd 1/2 happened to be at spawn
@@ -243,25 +259,45 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
 - `_review_common.py` callers to verify still work post-refactor:
   `millpy-implement.py`, `millpy-abandon.py`, `millpy-review-code.py`,
   `millpy-validate-plan.py`, `millpy-fix.py`,
-  `millpy-merge-in-subagent.py`, `millpy-review-plan.py`.
+  `millpy-merge-in-subagent.py`, `millpy-review-plan.py`,
+  `millpy-review-discussion.py:92` (imports `load_config` from
+  `_review_common` at line 82), and `_review_common.py`'s own internal
+  self-call at line 376 (inside the active-hub path resolver — see the
+  docstring at lines 355-361 explaining why `cfg` is sourced from the
+  hub's own `.millhouse/` there).
 
 ## Testing
 
 - `plugins/mill/unit_tests/test-wiki-daemon.py`: existing checks (w)/(x)
   at lines ~643-683 already cover the literal empty/malformed top-level
-  payload → debug, no error. Add: (1) a fake `handle_request` that raises
-  one of the benign types (e.g. `OSError`/`json.JSONDecodeError`) from
-  inside `self.handle_request(msg)` — must log debug, no ERROR, no crash;
-  (2) a fake `handle_request` that raises a non-benign type (e.g.
-  `KeyError`) — must still log ERROR and attempt the `server_error`
-  response, confirming genuine bugs stay visible. TDD candidate: write (2)
-  first against current code to confirm it already passes (baseline), then
-  (1) to confirm it currently fails before the fix.
+  `json.loads(msg_text)` payload → debug, no error. Add: (1) a mocked
+  `conn.recv()` that raises a benign type (e.g. `OSError`/
+  `ConnectionResetError`) from the recv loop itself, i.e. before
+  `handle_request` is ever entered — must log debug, no ERROR, no crash
+  (this is the recv-loop half of the widened pre-dispatch region the (w)/
+  (x) checks don't cover, since those only exercise the `json.loads` line);
+  (2) a fake `handle_request` that raises a benign type (e.g. `OSError`) —
+  must still log ERROR and attempt the `server_error` response, proving
+  the benign-type list does not extend past the dispatch boundary; (3) a
+  fake `handle_request` that raises a non-benign type (e.g. `KeyError`) —
+  must also log ERROR, confirming genuine bugs of any type stay visible
+  once inside `handle_request`. TDD candidates: (2) and (3) should already
+  pass against current code (baseline, since today everything from
+  `handle_request` already logs ERROR); (1) should fail before the fix
+  (today an `OSError` from `recv()` is uncaught by the inner guard and
+  falls through to the outer ERROR handler).
+- `_daemon.py` / `wiki/_server.py` (daemon-logger-consolidation): add a
+  case asserting that after consolidation, a debug- or error-level
+  connection log emitted via `DaemonBase`'s logger reaches the same
+  `wiki-server` rotating-file destination `WikiServer` already uses — not
+  root/`basicConfig`-configured stderr. This is the test the review found
+  missing: none of the other cases above verify *where* the log lands,
+  only whether it's emitted at all.
 - `wiki/_client.py`/`_spawn_server`: add a test (likely in
   `test-wiki-daemon.py` alongside the existing `_spawn_server`-mocking
   tests at lines ~232/274/316/570, or a new section) that patches
   `subprocess.Popen` directly and asserts the call's `stdout`/`stderr`
-  kwargs redirect away from inheritance, for both the POSIX and Windows
+  kwargs are `subprocess.DEVNULL`, for both the POSIX and Windows
   branches.
 - `plugins/mill/unit_tests/test-config.py`: `test_worktree_template_augments_template_cfg`
   (line 749) is the existing reference case for `_config.load_config`'s
@@ -320,3 +356,21 @@ mill-go/mill-start run reading its own logs) to trust genuine error output.
   conventions and TDD expectations; the relevant files and reference test
   cases (e.g. `test_worktree_template_augments_template_cfg`) already
   exist to mirror.
+- **Q:** [round 1 review, GAP] Does the affected/verify caller list for the
+  `_review_common.load_config` refactor cover every call site of the
+  duplicate being deleted? **A:** [auto-pick] No — it was missing
+  `millpy-review-discussion.py:92` (imports `load_config` from
+  `_review_common` at line 82) and `_review_common.py`'s own internal
+  self-call at line 376. Added both to Scope §In and Technical context.
+  **Why:** confirmed by grep — both are real, unlisted callers of the
+  function being deleted; omitting them would have left the refactor
+  incomplete.
+- **Q:** [round 1 review, GAP] Does Testing cover the
+  daemon-logger-consolidation decision? **A:** [auto-pick] No — none of
+  the listed cases verified *where* a connection-level log lands post-
+  consolidation, only whether it's emitted. Added a case asserting
+  `DaemonBase` connection logs reach the `wiki-server` rotating-file
+  destination, not root/stderr. **Why:** the consolidation decision's own
+  rationale says this routing is load-bearing (it's what keeps errors
+  discoverable once stdio redirection ships), so it needs direct test
+  coverage, not just an assumption that the other cases exercise it.
