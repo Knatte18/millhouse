@@ -124,7 +124,12 @@ class TestMillpyImplement(unittest.TestCase):
             return_value={
                 "paths": {"status_md": "_mill/status.md"},
                 "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
-                "llm": {"implementer_timeout": 1800},
+                # dispatch is pinned to "subprocess" (not the _agent_dispatch.resolve_dispatch_mode
+                # default of "agent") so every pre-existing bare/full-stage test in this file --
+                # none of which has an opinion on dispatch mode -- keeps exercising the non-agent
+                # path unaffected by the fail-fast guard added in Card 1. Agent-mode-specific tests
+                # override this per-test.
+                "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
             },
         )
         self.mock_slug_from_branch = _p(
@@ -268,6 +273,68 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "logic")
 
+    def test_agent_mode_full_stage_guard_bare_invocation(self):
+        """dispatch: agent + bare invocation (implicit --stage full) -> fail-fast guard fires."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        mock_run.assert_not_called()
+
+    def test_agent_mode_full_stage_guard_explicit_full(self):
+        """dispatch: agent + explicit --stage full -> fail-fast guard fires."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch", "--stage", "full"])
+
+        self.assertEqual(rc, 1)
+        mock_run.assert_not_called()
+
+    def test_agent_mode_prepare_stage_not_guarded(self):
+        """dispatch: agent + --stage prepare -> guard does not fire; prepare proceeds normally."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+
+    def test_subprocess_mode_full_stage_not_guarded(self):
+        """dispatch: subprocess (setUp's shared default) + bare invocation -> guard does not fire."""
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_called_once()
+
     def test_9_model_and_effort_from_config(self):
         """Initial dispatch: model and effort read from config and passed to implementer."""
         with unittest.mock.patch.object(
@@ -289,7 +356,10 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2}},
-            "llm": {"implementer_timeout": 1800},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # model-default-fallback test -- which has no opinion on dispatch mode --
+            # is not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
         }
         with unittest.mock.patch.object(
             millpy_implement._implementer_claude, "run",
@@ -311,7 +381,14 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 10},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # brief-size-guard test -- which has no opinion on dispatch mode -- is
+            # not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {
+                "claude": {"dispatch": "subprocess"},
+                "implementer_timeout": 1800,
+                "max_implementer_prompt_chars": 10,
+            },
         }
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
             with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
@@ -329,7 +406,14 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 0},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # brief-size-guard test -- which has no opinion on dispatch mode -- is
+            # not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {
+                "claude": {"dispatch": "subprocess"},
+                "implementer_timeout": 1800,
+                "max_implementer_prompt_chars": 0,
+            },
         }
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
             with unittest.mock.patch.object(
