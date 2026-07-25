@@ -615,6 +615,66 @@ def parse_moves(batch_path: Path) -> list[tuple[str, str]]:
     return list(seen.keys())
 
 
+def parse_deletes(batch_path: Path) -> set[str]:
+    """
+    Extract Deletes: tokens from a single batch file.
+
+    Scans every ``- **Deletes:**`` header in the file. Two forms are
+    supported: the single-line inline form (``- **Deletes:** a, b``)
+    and the multi-line sub-bullet form (``- **Deletes:**`` followed by
+    ``  - a`` / ``  - b`` sub-bullets, each a backtick-quoted path).
+    Tokens whose lowercase form equals ``'none'`` (case-insensitive) are
+    filtered out, so a card that declares no deletions contributes nothing.
+
+    A malformed or absent ``Deletes:`` header simply contributes nothing to
+    the returned set; this function never raises except for I/O errors
+    propagated from ``read_text``.
+
+    Args:
+        batch_path: Path to a single batch markdown file (e.g. ``01-foo.md``).
+
+    Returns:
+        Set of raw token strings (NOT resolved Paths) declared under every
+        ``Deletes:`` header in this file. Empty set when the file declares
+        no deletions or every ``Deletes:`` header carries the ``none``
+        sentinel.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    deletes: set[str] = set()
+    lines = text.splitlines()
+
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Deletes":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                tokens = (
+                    backtick_tokens
+                    if backtick_tokens
+                    else [t.strip() for t in inline.split(",") if t.strip()]
+                )
+            else:
+                tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        tokens.extend(bt)
+                    j += 1
+            for t in tokens:
+                if t.lower() != "none":
+                    deletes.add(t)
+        i += 1
+
+    return deletes
+
+
 def compute_creates_union(plan_dir: Path) -> set[str]:
     """Return the union of all Creates: tokens across every batch in plan_dir.
 
@@ -678,36 +738,7 @@ def compute_deletes_union(plan_dir: Path) -> set[str]:
     for batch_path in sorted(plan_dir.glob("??-*.md")):
         if batch_path.name == "00-overview.md":
             continue
-        text = batch_path.read_text(encoding="utf-8")
-        lines = text.splitlines()
-        i = 0
-        while i < len(lines):
-            m = _RE_REFS_HEADER.match(lines[i])
-            if m and m.group(1) == "Deletes":
-                inline = m.group("inline").strip()
-                if inline:
-                    backtick_tokens = re.findall(r"`([^`]+)`", inline)
-                    tokens = (
-                        backtick_tokens
-                        if backtick_tokens
-                        else [t.strip() for t in inline.split(",") if t.strip()]
-                    )
-                else:
-                    tokens = []
-                    j = i + 1
-                    while j < len(lines):
-                        sm = _RE_REFS_SUB.match(lines[j])
-                        if not sm:
-                            break
-                        rest = sm.group(1).strip()
-                        bt = re.findall(r"`([^`]+)`", rest)
-                        if bt:
-                            tokens.extend(bt)
-                        j += 1
-                for t in tokens:
-                    if t.lower() != "none":
-                        deletes.add(t)
-            i += 1
+        deletes |= parse_deletes(batch_path)
     return deletes
 
 

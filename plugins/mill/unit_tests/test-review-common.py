@@ -123,6 +123,7 @@ from _review_common import (  # noqa: E402
     load_task_title,
     parse_batch_refs,
     parse_blocking_count,
+    parse_deletes,
     parse_missing_context,
     parse_moves,
     parse_verdict,
@@ -3235,6 +3236,69 @@ def main() -> int:
         ], f"Got {result}"
         print(
             "PASS: parse_moves duplicate pairs deduplicated, first-seen order preserved"
+        )
+
+    # ---------------------------------------------------------------------------
+    # parse_deletes
+    # ---------------------------------------------------------------------------
+
+    # Single-line inline form.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text("- **Deletes:** `a`, `b`\n", encoding="utf-8")
+        result = parse_deletes(batch)
+        assert result == {"a", "b"}, f"Got {result}"
+        print("PASS: parse_deletes single-line inline form returns set of tokens")
+
+    # Multi-line sub-bullet form.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Deletes:**\n  - `old/a.py`\n  - `old/b.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_deletes(batch)
+        assert result == {"old/a.py", "old/b.py"}, f"Got {result}"
+        print("PASS: parse_deletes multi-line sub-bullet form returns set of tokens")
+
+    # 'none' sentinel (case-insensitive) returns empty set.
+    for sentinel in ("none", "None", "NONE"):
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            batch = Path(tmpdir) / "batch.md"
+            batch.write_text(f"- **Deletes:** {sentinel}\n", encoding="utf-8")
+            result = parse_deletes(batch)
+            assert result == set(), f"Got {result} for sentinel {sentinel!r}"
+        print(f"PASS: parse_deletes '{sentinel}' sentinel returns empty set")
+
+    # Deletes field mixed among other card fields (Context/Edits/Creates/Moves).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "### Card 1\n\n"
+            "- **Context:** `plugins/mill/scripts/_review_common.py`\n"
+            "- **Edits:** `plugins/mill/scripts/_review_plan.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** `old/seam.py`\n"
+            "- **Moves:** none\n"
+            "- **Requirements:** ...\n",
+            encoding="utf-8",
+        )
+        result = parse_deletes(batch)
+        assert result == {"old/seam.py"}, f"Got {result}"
+        print("PASS: parse_deletes Deletes field mixed among other card fields")
+
+    # Malformed sub-bullet (no backtick path) is tolerated without raising.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch = Path(tmpdir) / "batch.md"
+        batch.write_text(
+            "- **Deletes:**\n  - no-backticks-here\n  - `good.py`\n",
+            encoding="utf-8",
+        )
+        result = parse_deletes(batch)
+        # The malformed bullet (no backtick-quoted token) contributes nothing.
+        assert result == {"good.py"}, f"Got {result}"
+        print(
+            "PASS: parse_deletes malformed sub-bullet (no backtick path) tolerated without raising"
         )
 
     # ---------------------------------------------------------------------------
