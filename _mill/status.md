@@ -33,7 +33,9 @@ batches:
     start_sha: 201311bf5eeb30f3601cb67bf3abc375ddd8161f
     commit_sha: 6b70aed4e97cef6dd66652f985bf8c9f300b4d7a
   - name: review-common-parse-deletes
-    state: pending
+    state: running
+    implementer_session: f50111eb-867a-4a6e-b2f7-b8ae9d570ae0
+    start_sha: d29b28008ca5d931b1f1050a8506e71c96692edc
   - name: iter-batch-verifies-cross-batch-filter
     state: pending
   - name: verify-replay-callers-wiring
