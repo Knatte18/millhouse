@@ -30,7 +30,9 @@ implementing  '2026-07-25T13:45:37Z'
 ```yaml
 batches:
   - name: severity-failloud-core
-    state: pending
+    state: running
+    implementer_session: 9e076cb9-f6c4-4b44-b639-3060f55e4efc
+    start_sha: bbd237bc0dd56b0b6807a4f5c9cd59f98d94c8a3
   - name: severity-vocabulary-docs
     state: pending
   - name: commit-none-validator
