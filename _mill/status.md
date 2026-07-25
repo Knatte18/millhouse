@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r5
+phase: planned
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -27,4 +27,5 @@ plan-fix-r3  '2026-07-25T14:25:15Z'
 plan-review-r4  '2026-07-25T14:33:44Z'
 plan-fix-r4  '2026-07-25T14:33:44Z'
 plan-fix-r5  '2026-07-25T14:40:57Z'
+planned  '2026-07-25T14:41:16Z'
 ```
