@@ -61,9 +61,6 @@ class DaemonBase(abc.ABC):
 
     def run(self) -> None:
         """Main entry point: O_EXCL claim, bind, accept loop, idle-exit."""
-        if not logging.root.handlers:
-            logging.basicConfig(level=logging.INFO, format="[%(name)s] %(message)s")
-
         claimed = False
         try:
             if not self._claim_state_file():
