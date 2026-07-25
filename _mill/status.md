@@ -36,7 +36,9 @@ batches:
     start_sha: bbd237bc0dd56b0b6807a4f5c9cd59f98d94c8a3
     commit_sha: 21ae5464630368e19e330583b22b86137541cbec
   - name: severity-vocabulary-docs
-    state: pending
+    state: running
+    implementer_session: b2ce2b7d-8ee4-44f0-8300-885cfe70bc0b
+    start_sha: f866191588c52ad2336e09f00d06cecb00ef0017
   - name: commit-none-validator
     state: pending
   - name: commit-none-implementer-brief
