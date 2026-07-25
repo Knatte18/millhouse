@@ -57,6 +57,14 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             millpy_merge_in_subagent._paths, "resolve_git_root",
             return_value=self.tmp_path,
         )
+        self.mock_resolve_container_path = _p(
+            millpy_merge_in_subagent._paths, "resolve_container_path",
+            return_value=self.tmp_path.parent,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_merge_in_subagent._paths, "resolve_active_hub",
+            return_value=self.tmp_path,
+        )
         self.mock_resolve_wiki = _p(
             millpy_merge_in_subagent._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
@@ -340,10 +348,17 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     # ---- shared ----
 
     def test_9_missing_mode(self):
-        """--mode absent -> argparse SystemExit(2)."""
-        with self.assertRaises(SystemExit) as cm:
-            millpy_merge_in_subagent.main([])
-        self.assertEqual(cm.exception.code, 2)
+        """--mode absent (and --recompute-baseline not set) -> exit 1, no SystemExit.
+
+        --mode is not an argparse-required flag (--recompute-baseline is a valid
+        alternative), so main() validates this manually with a print + return 1
+        rather than raising SystemExit -- unlike an argparse-required argument.
+        """
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc = millpy_merge_in_subagent.main([])
+        self.assertEqual(rc, 1)
+        self.assertIn("--mode is required unless --recompute-baseline is set", stderr_buf.getvalue())
 
     def test_10_missing_slug(self):
         """MarkerError from slug_from_branch -> exit 1."""
@@ -370,6 +385,34 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["role"], "merge")
         self.assertEqual(data["scope"], "conflicts")
+
+    def test_project_root_rebind_uses_resolve_active_hub_not_raw_cwd(self):
+        """project_root rebinds to resolve_active_hub's value, not the raw Path.cwd() this file used before.
+
+        This file's pre-fix project_root binding was a raw Path.cwd() -- no
+        .millhouse walk at all. Overriding resolve_active_hub to a decoy directory
+        distinct from self.tmp_path (the value Path.cwd() would still resolve to,
+        since setUp chdir's there) simulates the corrected active task worktree.
+        briefs_dir (surfaced via --stage prepare conflicts mode's brief_path in
+        the envelope) must resolve under the decoy, proving project_root was
+        rebound via the captured slug and resolve_active_hub, not left at cwd.
+        """
+        corrected_root = self.tmp_path / "corrected-worktree"
+        (corrected_root / "_mill" / "briefs").mkdir(parents=True, exist_ok=True)
+        self.mock_resolve_active_hub.return_value = corrected_root
+
+        with unittest.mock.patch.object(millpy_merge_in_subagent._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_merge_in_subagent._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["--mode", "conflicts", "--files", "f.py", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        brief_path = Path(data["brief_path"])
+        self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
+        self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
     def test_13_stage_prepare_verify_fix_passes(self):
         """--stage prepare verify-fix mode: verify passes -> dispatch_needed:false with embedded envelope."""

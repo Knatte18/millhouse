@@ -17,6 +17,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 import _implementer_claude  # noqa: E402
 import _implementer_common  # noqa: E402
 import _marker  # noqa: E402
+import _paths  # noqa: E402
 import _review_common  # noqa: E402
 import _subprocess_util  # noqa: E402
 
@@ -88,8 +89,14 @@ def main() -> int:
             }
 
         try:
-            with unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch):
-                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config):
+            with (
+                unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
+                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
+            ):
+                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
+                        unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
                     # Mock subprocess.run to return success for verify command
                     original_run = subprocess.run
 
@@ -142,8 +149,14 @@ def main() -> int:
             }
 
         try:
-            with unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch):
-                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config):
+            with (
+                unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
+                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
+            ):
+                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
+                        unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
                     # Mock subprocess.run: first verify fails, then finalize verify passes
                     call_count = [0]
                     original_run = subprocess.run
@@ -217,8 +230,14 @@ def main() -> int:
             }
 
         try:
-            with unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch):
-                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config):
+            with (
+                unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
+                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
+            ):
+                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
+                        unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
                     # Mock subprocess.run: verify always fails
                     original_run = subprocess.run
 
@@ -287,8 +306,14 @@ def main() -> int:
             }
 
         try:
-            with unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch):
-                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config):
+            with (
+                unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
+                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
+            ):
+                with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
+                        unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
                     original_run = subprocess.run
 
                     def mock_subprocess_run(cmd, *args, **kwargs):

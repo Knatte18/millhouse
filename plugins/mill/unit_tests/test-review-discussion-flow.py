@@ -469,6 +469,12 @@ def main() -> int:
     # ------------------------------------------------------------------
     errors += test_brief_path_nested_layout()
 
+    # ------------------------------------------------------------------
+    # project_root/hub_dir rebind: briefs_dir resolves under resolve_active_hub,
+    # not resolve_hub_path's decoy (#675)
+    # ------------------------------------------------------------------
+    errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
@@ -521,6 +527,13 @@ def test_brief_path_nested_layout() -> int:
         mock_paths.resolve_hub_path.return_value = hub_dir
         mock_paths.resolve_git_root.return_value = git_root
         mock_paths.resolve_wiki_path.return_value = git_root / "wiki"
+        # The project_root/hub_dir rebind (Card 15) calls resolve_container_path
+        # and resolve_active_hub after slug resolution, superseding hub_dir for
+        # every subsequent use -- mock them to the same hub_dir this test
+        # already exercises so the pre-existing assertions below (which compare
+        # against the local hub_dir variable) keep passing after the rebind.
+        mock_paths.resolve_container_path.return_value = git_root.parent
+        mock_paths.resolve_active_hub.return_value = hub_dir
         # side_effect records calls and returns a real Path so downstream code can str() it.
         mock_paths.resolve_task_path.side_effect = lambda root, path: (
             Path(str(root)) / path.lstrip("/")
@@ -615,6 +628,162 @@ def test_brief_path_nested_layout() -> int:
 
         print(
             "PASS: discussion-review brief path is under hub_dir not git_root in nested layout"
+        )
+        return 0
+
+
+def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
+    """hub_dir rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
+
+    Modeled on test_brief_path_nested_layout, but instead of hub_dir vs.
+    git_root, this test distinguishes resolve_hub_path's (decoy) return value
+    from resolve_active_hub's (corrected active task worktree) return value --
+    the two values the Card 15 rebind is meant to keep distinct. resolve_hub_path
+    returns a decoy directory standing in for the pre-rebind escape (e.g. the
+    main worktree resolve_hub_path() falls back to); resolve_active_hub returns
+    a separate, real task-worktree directory. briefs_dir must resolve under the
+    resolve_active_hub value, proving hub_dir/project_root was rebound after
+    slug resolution and not left at resolve_hub_path's original value.
+
+    A reversion of the Card 15 fix (never calling resolve_active_hub) causes
+    the assertion to fail because resolve_task_path is called with the decoy
+    directory instead.
+
+    Returns 0 on success, 1 on failure (matching the errors-accumulator
+    convention used throughout this file).
+    """
+    import importlib.util
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import MagicMock, patch
+
+    scripts_dir = HUB / "plugins" / "mill" / "scripts"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        decoy_dir = tmp / "decoy-hub-path"
+        decoy_dir.mkdir(parents=True)
+        corrected_dir = tmp / "corrected-active-worktree"
+        corrected_dir.mkdir(parents=True)
+
+        minimal_cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "reviews_dir": "_mill/reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 1},
+                },
+            },
+        }
+
+        mock_paths = MagicMock()
+        mock_paths.resolve_hub_path.return_value = decoy_dir
+        mock_paths.resolve_git_root.return_value = decoy_dir
+        mock_paths.resolve_wiki_path.return_value = decoy_dir / "wiki"
+        mock_paths.resolve_container_path.return_value = tmp
+        mock_paths.resolve_active_hub.return_value = corrected_dir
+        mock_paths.resolve_task_path.side_effect = lambda root, path: (
+            Path(str(root)) / path.lstrip("/")
+        )
+
+        mock_review_common = MagicMock()
+        mock_review_common.load_config.return_value = minimal_cfg
+        mock_review_common.discover_round.return_value = 1
+        mock_review_common.find_active_slug.return_value = "test-slug"
+        mock_review_common.ReviewError = Exception
+
+        mock_review_discussion = MagicMock()
+        mock_review_discussion.prepare.return_value = {
+            "scope": "holistic",
+            "round": 1,
+            "prompt_text": "prompt",
+            "model": "default",
+        }
+
+        mock_agent_dispatch = MagicMock()
+        mock_agent_dispatch.write_brief.return_value = corrected_dir / "_mill/briefs/brief.md"
+        mock_agent_dispatch.SUBAGENT_REVIEWER = "reviewer"
+        mock_agent_dispatch.model_to_tier.return_value = "default"
+
+        mock_reviewers = MagicMock()
+        mock_reviewers.ReviewerError = Exception
+
+        mock_review_cli = MagicMock()
+
+        injected_modules = {
+            "_paths": mock_paths,
+            "_review_common": mock_review_common,
+            "_review_discussion": mock_review_discussion,
+            "_agent_dispatch": mock_agent_dispatch,
+            "_reviewers": mock_reviewers,
+            "_review_cli": mock_review_cli,
+        }
+
+        with patch.dict(sys.modules, injected_modules):
+            spec = importlib.util.spec_from_file_location(
+                "millpy_review_discussion",
+                scripts_dir / "millpy-review-discussion.py",
+            )
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+            with patch("sys.argv", ["prog", "--stage", "prepare"]):
+                try:
+                    mod.main()
+                except (TypeError, SystemExit, Exception):
+                    # json.dumps(envelope) may raise TypeError on a bare
+                    # MagicMock field; the resolve_active_hub/resolve_task_path
+                    # calls are already recorded before any such crash.
+                    pass
+
+        # Confirm resolve_active_hub was actually invoked (the rebind's call).
+        if not mock_paths.resolve_active_hub.called:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " _paths.resolve_active_hub was never called",
+                file=sys.stderr,
+            )
+            return 1
+
+        call_args_list = mock_paths.resolve_task_path.call_args_list
+        briefs_call = None
+        for call in call_args_list:
+            positional = call[0]
+            if len(positional) >= 2 and str(positional[1]).startswith("_mill/briefs/"):
+                briefs_call = positional
+                break
+
+        if briefs_call is None:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " resolve_task_path was never called with a '_mill/briefs/' path argument",
+                file=sys.stderr,
+            )
+            return 1
+
+        actual_root = briefs_call[0]
+        if actual_root != corrected_dir:
+            print(
+                f"FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                f" expected resolve_task_path first arg to be resolve_active_hub's return"
+                f" value ({corrected_dir}), got {actual_root}",
+                file=sys.stderr,
+            )
+            return 1
+
+        if actual_root == decoy_dir:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " first arg equals resolve_hub_path's decoy value (rebind did not supersede it)",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(
+            "PASS: discussion-review briefs_dir resolves under resolve_active_hub's value,"
+            " not resolve_hub_path's decoy"
         )
         return 0
 

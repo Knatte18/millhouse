@@ -6,7 +6,6 @@ different modules re-raise as their layer's exception type.
 """
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pygit2
@@ -307,14 +306,33 @@ def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
         raise GitOpsError(f"could not list worktrees for {cwd}: {error_msg}") from e
 
 
+def strip_branch_prefix(branch: str, cfg: dict) -> str | None:
+    """Extract task slug from a branch by removing the configured prefix.
+
+    If branch starts with the configured prefix, returns branch with prefix
+    removed. Otherwise returns None.
+
+    Args:
+        branch: The branch name.
+        cfg: Configuration dict (uses cfg["spawn"]["branch_prefix"]).
+
+    Returns:
+        The branch name with prefix removed, or None if the branch doesn't
+        start with the prefix.
+    """
+    prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+    return branch.removeprefix(prefix) if branch.startswith(prefix) else None
+
+
 __all__ = [
     "GitOpsError",
-    "open_repo",
-    "discover_workdir",
-    "resolve_common_dir_parent",
-    "head_sha",
     "current_branch",
-    "status_porcelain",
+    "discover_workdir",
+    "head_sha",
     "is_ancestor",
     "list_worktrees",
+    "open_repo",
+    "resolve_common_dir_parent",
+    "status_porcelain",
+    "strip_branch_prefix",
 ]

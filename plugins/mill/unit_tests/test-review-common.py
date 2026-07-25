@@ -254,6 +254,83 @@ def main() -> int:
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
+    # find_active_slug: daemon-skip when a confirmed on-disk marker agrees
+    # with the current branch (on-disk-first fast path).
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            wt, wiki = _make_task_worktree(
+                Path(tmpdir), "my-task", "My Task", branch_prefix="hanf/"
+            )
+            mill_dir = wt / "_mill"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            (mill_dir / "my-task.active").write_text("", encoding="utf-8")
+            cfg = {"spawn": {"branch_prefix": "hanf/"}}
+
+            def _fail_if_called(*args, **kwargs):
+                raise AssertionError("daemon should not be called")
+
+            with patch(
+                "_review_common._marker.slug_from_branch", side_effect=_fail_if_called
+            ):
+                result = find_active_slug(wt, wiki, cfg)
+
+            assert result == "my-task", f"Expected 'my-task', got {result!r}"
+            print(
+                "PASS: find_active_slug daemon-skip — confirmed on-disk marker -> 'my-task'"
+            )
+    except AssertionError as exc:
+        print(
+            f"FAIL: find_active_slug daemon-skip confirmed marker: {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: find_active_slug daemon-skip confirmed marker (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+
+    # find_active_slug: a stale on-disk marker (branch mismatch) must NOT
+    # short-circuit the daemon call -- regression test for the plan-review
+    # round 1 correctness fix.
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            wt, wiki = _make_task_worktree(
+                Path(tmpdir), "actual-slug", "Actual Slug", branch_prefix="hanf/"
+            )
+            mill_dir = wt / "_mill"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            # Leftover marker from an aborted claim, naming a DIFFERENT slug
+            # than the branch the worktree is actually on.
+            (mill_dir / "stale-slug.active").write_text("", encoding="utf-8")
+            cfg = {"spawn": {"branch_prefix": "hanf/"}}
+
+            with patch(
+                "_review_common._marker.slug_from_branch",
+                return_value="actual-slug",
+            ) as mocked:
+                result = find_active_slug(wt, wiki, cfg)
+
+            assert (
+                mocked.called
+            ), "expected slug_from_branch to be called since the stale marker did not confirm"
+            assert result == "actual-slug", f"Expected 'actual-slug', got {result!r}"
+            print(
+                "PASS: find_active_slug stale marker (branch mismatch) -> falls through to branch-derived slug"
+            )
+    except AssertionError as exc:
+        print(
+            f"FAIL: find_active_slug stale marker fallthrough: {exc}", file=sys.stderr
+        )
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: find_active_slug stale marker fallthrough (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+
     # load_task_title: task_title present in Home.md
     with _test_helpers.safe_temp_dir() as tmpdir:
         wt, wiki = _make_task_worktree(
@@ -272,6 +349,52 @@ def main() -> int:
         assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
         print("PASS: load_task_title non-task branch -> fallback to slug")
 
+    # load_task_title: daemon-skip when status.md is present and well-formed
+    # (on-disk-first fast path).
+    try:
+        with _test_helpers.safe_temp_dir() as tmpdir:
+            git_root = Path(tmpdir)
+            status_path = git_root / "status.md"
+            status_path.write_text(
+                "```yaml\n"
+                'task: "My On-Disk Title"\n'
+                "```\n"
+                "\n"
+                "## Timeline\n"
+                "\n"
+                "```text\n"
+                "discussing  '2026-01-01T00:00:00Z'\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            cfg = {"paths": {"status_md": "status.md"}}
+
+            def _fail_if_called(*args, **kwargs):
+                raise AssertionError("daemon should not be called")
+
+            with patch(
+                "_review_common._marker.task_data", side_effect=_fail_if_called
+            ):
+                result = load_task_title(
+                    git_root, git_root / "wiki", cfg, "some-slug"
+                )
+
+            assert (
+                result == "My On-Disk Title"
+            ), f"Expected 'My On-Disk Title', got {result!r}"
+            print(
+                "PASS: load_task_title daemon-skip — status.md present -> 'My On-Disk Title'"
+            )
+    except AssertionError as exc:
+        print(f"FAIL: load_task_title daemon-skip status.md: {exc}", file=sys.stderr)
+        errors += 1
+    except Exception as exc:
+        print(
+            f"FAIL: load_task_title daemon-skip status.md (unexpected {type(exc).__name__}): {exc}",
+            file=sys.stderr,
+        )
+        errors += 1
+
     # resolve_path: discussion.md -> worktree root
     with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
@@ -285,6 +408,30 @@ def main() -> int:
         expected = worktree / "discussion.md"
         assert p == expected, f"Expected {expected}, got {p}"
         print("PASS: resolve_path('discussion.md', slug) -> worktree/discussion.md")
+
+    # resolve_path: skip_slug_validation=True (its own resolve_active_hub call) avoids
+    # the daemon-backed _marker.slug_from_branch round-trip -- resolve_path is always
+    # called with an already-resolved slug, so it never needs slug_from_branch's
+    # re-validation.
+    with _test_helpers.safe_temp_dir() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            with patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ):
+                p = resolve_path("discussion.md", slug)
+        finally:
+            os.chdir(original_cwd)
+        expected = worktree / "discussion.md"
+        assert p == expected, f"Expected {expected}, got {p}"
+        print(
+            "PASS: resolve_path resolves without calling the daemon-backed "
+            "_marker.slug_from_branch (skip_slug_validation=True)"
+        )
 
     # resolve_path: plan/ and reviews/ templates
     with _test_helpers.safe_temp_dir() as tmp:
@@ -381,9 +528,17 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        git_root.mkdir()
+        # Real git repo (not a bare mkdir'd dir) -- resolve_path's internal
+        # resolve_active_hub call now passes skip_slug_validation=True, whose
+        # fast path calls _pygit2_util.current_branch(git_root) against the
+        # real filesystem instead of the daemon-backed _marker.slug_from_branch.
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root
         slug = "my-inplace-task"
+        # cfg has no spawn.branch_prefix (neither the wiki config.yaml below nor
+        # the hub's config.local.yaml sets one), so the cheap prefix-strip check
+        # compares the raw branch name against slug with an empty prefix.
+        _test_helpers.checkout_new_branch(repo, slug)
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -402,7 +557,10 @@ def main() -> int:
         worktrees_dir.mkdir()
 
         with (
-            patch("_marker.slug_from_branch", return_value=slug),
+            patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ),
             patch("_paths.resolve_git_root", return_value=git_root),
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),
@@ -421,9 +579,13 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        git_root.mkdir()
+        # Real git repo -- same reasoning as the M2 in-place case above: the
+        # branch-derived slug now comes from a real _pygit2_util.current_branch
+        # call, not the (patched-out) daemon-backed _marker.slug_from_branch.
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root / "src" / "Models"
         slug = "my-subdir-inplace-task"
+        _test_helpers.checkout_new_branch(repo, slug)
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -442,7 +604,10 @@ def main() -> int:
         worktrees_dir.mkdir()
 
         with (
-            patch("_marker.slug_from_branch", return_value=slug),
+            patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ),
             patch("_paths.resolve_git_root", return_value=git_root),
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),

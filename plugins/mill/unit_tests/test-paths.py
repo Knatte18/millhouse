@@ -808,6 +808,80 @@ def main() -> int:
                     pass
         print("PASS: resolve_active_worktree — nothing exists raises ActiveWorktreeNotFound")
 
+        # resolve_active_worktree skip_slug_validation fast path
+        # Card 6 replaces the daemon-backed _marker.slug_from_branch call with a
+        # cheap git-only branch-prefix comparison when skip_slug_validation=True.
+        import _test_helpers  # noqa: E402
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            # A real git repo is required here (unlike the M2 fixture above) --
+            # skip_slug_validation=True calls _pygit2_util.current_branch(git_root)
+            # against the real filesystem, which raises GitOpsError on a bare
+            # mkdir'd directory and would never reach the in-place check.
+            repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+            # cfg has no spawn.branch_prefix key, so the cheap prefix-strip check
+            # compares the raw branch name directly against slug with an empty prefix.
+            _test_helpers.checkout_new_branch(repo, "my-task")
+            with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"), \
+                 patch(
+                     "_marker.slug_from_branch",
+                     side_effect=AssertionError("daemon should not be called"),
+                 ):
+                got = _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={},
+                    git_root=git_root,
+                    skip_slug_validation=True,
+                )
+            assert got == git_root, f"skip_slug_validation in-place: got {got}"
+        print(
+            "PASS: resolve_active_worktree skip_slug_validation=True in-place "
+            "returns git_root without daemon call"
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            _make_active_marker(worktree, branch="hanf/my-task")
+            with patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ):
+                got = _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"spawn": {"branch_prefix": "hanf/"}},
+                    git_root=tmp_path / "other-git-root",
+                    skip_slug_validation=True,
+                )
+            assert got == worktree, f"skip_slug_validation worktree mode: got {got}"
+        print(
+            "PASS: resolve_active_worktree skip_slug_validation=True worktree mode "
+            "returns container_path/wts/slug without daemon call"
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            worktree = wts_dir / "my-task"
+            _make_active_marker(worktree, branch="hanf/my-task")
+            with patch("_marker.slug_from_branch", side_effect=_marker.MarkerError("not task")):
+                got = _paths.resolve_active_worktree(
+                    tmp_path, "my-task",
+                    cfg={"spawn": {"branch_prefix": "hanf/"}},
+                    git_root=tmp_path / "other-git-root",
+                    skip_slug_validation=False,
+                )
+            assert got == worktree, f"skip_slug_validation=False default: got {got}"
+        print(
+            "PASS: resolve_active_worktree skip_slug_validation=False explicit matches "
+            "default (unchanged) behavior"
+        )
+
         # resolve_active_hub
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -894,6 +968,29 @@ def main() -> int:
             except _paths.ActiveWorktreeNotFound:
                 pass
         print("PASS: resolve_active_hub — propagates ActiveWorktreeNotFound")
+
+        # resolve_active_hub threads skip_slug_validation through to resolve_active_worktree
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            git_root = tmp_path / "hub"
+            repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+            _test_helpers.checkout_new_branch(repo, "my-task")
+            with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"), \
+                 patch(
+                     "_marker.slug_from_branch",
+                     side_effect=AssertionError("daemon should not be called"),
+                 ):
+                got = _paths.resolve_active_hub(
+                    tmp_path, "my-task",
+                    cfg={"hub_relative_path": "."},
+                    git_root=git_root,
+                    skip_slug_validation=True,
+                )
+            assert got == git_root, f"resolve_active_hub skip_slug_validation in-place: got {got}"
+        print(
+            "PASS: resolve_active_hub skip_slug_validation=True in-place resolves hub "
+            "path without daemon call"
+        )
 
         # resolve_container_path
 

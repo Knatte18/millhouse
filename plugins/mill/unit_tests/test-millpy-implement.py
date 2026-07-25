@@ -115,6 +115,14 @@ class TestMillpyImplement(unittest.TestCase):
             millpy_implement._paths, "resolve_hub_path",
             return_value=self.tmp_path,
         )
+        self.mock_resolve_container_path = _p(
+            millpy_implement._paths, "resolve_container_path",
+            return_value=self.tmp_path.parent,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_implement._paths, "resolve_active_hub",
+            return_value=self.tmp_path,
+        )
         self.mock_resolve_wiki = _p(
             millpy_implement._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
@@ -124,7 +132,12 @@ class TestMillpyImplement(unittest.TestCase):
             return_value={
                 "paths": {"status_md": "_mill/status.md"},
                 "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
-                "llm": {"implementer_timeout": 1800},
+                # dispatch is pinned to "subprocess" (not the _agent_dispatch.resolve_dispatch_mode
+                # default of "agent") so every pre-existing bare/full-stage test in this file --
+                # none of which has an opinion on dispatch mode -- keeps exercising the non-agent
+                # path unaffected by the fail-fast guard added in Card 1. Agent-mode-specific tests
+                # override this per-test.
+                "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
             },
         )
         self.mock_slug_from_branch = _p(
@@ -268,6 +281,68 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "logic")
 
+    def test_agent_mode_full_stage_guard_bare_invocation(self):
+        """dispatch: agent + bare invocation (implicit --stage full) -> fail-fast guard fires."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        mock_run.assert_not_called()
+
+    def test_agent_mode_full_stage_guard_explicit_full(self):
+        """dispatch: agent + explicit --stage full -> fail-fast guard fires."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run"
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch", "--stage", "full"])
+
+        self.assertEqual(rc, 1)
+        mock_run.assert_not_called()
+
+    def test_agent_mode_prepare_stage_not_guarded(self):
+        """dispatch: agent + --stage prepare -> guard does not fire; prepare proceeds normally."""
+        self.mock_load_config.return_value = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+            "llm": {"claude": {"dispatch": "agent"}, "implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["stage"], "prepare")
+
+    def test_subprocess_mode_full_stage_not_guarded(self):
+        """dispatch: subprocess (setUp's shared default) + bare invocation -> guard does not fire."""
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=(
+                '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
+                "fake-session",
+            ),
+        ) as mock_run:
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_called_once()
+
     def test_9_model_and_effort_from_config(self):
         """Initial dispatch: model and effort read from config and passed to implementer."""
         with unittest.mock.patch.object(
@@ -289,7 +364,10 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2}},
-            "llm": {"implementer_timeout": 1800},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # model-default-fallback test -- which has no opinion on dispatch mode --
+            # is not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
         }
         with unittest.mock.patch.object(
             millpy_implement._implementer_claude, "run",
@@ -311,7 +389,14 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 10},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # brief-size-guard test -- which has no opinion on dispatch mode -- is
+            # not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {
+                "claude": {"dispatch": "subprocess"},
+                "implementer_timeout": 1800,
+                "max_implementer_prompt_chars": 10,
+            },
         }
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
             with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
@@ -329,7 +414,14 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            "llm": {"implementer_timeout": 1800, "max_implementer_prompt_chars": 0},
+            # dispatch pinned to "subprocess" (see setUp's own default) so this
+            # brief-size-guard test -- which has no opinion on dispatch mode -- is
+            # not tripped up by the agent-mode full-stage fail-fast guard.
+            "llm": {
+                "claude": {"dispatch": "subprocess"},
+                "implementer_timeout": 1800,
+                "max_implementer_prompt_chars": 0,
+            },
         }
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="x" * 20):
             with unittest.mock.patch.object(
@@ -363,6 +455,35 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["scope"], "test-batch")
         self.assertEqual(data["round"], 1)
         self.assertTrue(data["brief_path"])
+
+    def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path(self):
+        """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
+
+        Simulates resolve_hub_path()'s main-worktree-fallback escape: resolve_hub_path
+        still returns self.tmp_path (the stale/escaped value), but resolve_active_hub --
+        called after slug resolution, per the rebind fix -- returns a distinct decoy
+        directory standing in for the corrected active task worktree. briefs_dir (surfaced
+        via --stage prepare's brief_path in the envelope) must resolve under the decoy,
+        proving project_root was rebound to resolve_active_hub's return value and not left
+        at resolve_hub_path's original, escaped one.
+        """
+        corrected_root = self.tmp_path / "corrected-worktree"
+        corrected_root.mkdir(parents=True, exist_ok=True)
+        _make_fixture(corrected_root)
+        self.mock_resolve_active_hub.return_value = corrected_root
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        brief_path = Path(data["brief_path"])
+        self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
+        self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
     def test_14_stage_finalize_reads_agent_output(self):
         """--stage finalize: reads agent output file, calls finalize_from_output."""
@@ -842,6 +963,12 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_implement, "finalize_from_output", return_value=0
             ) as mock_finalize,
@@ -899,6 +1026,12 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_implement, "finalize_from_output", return_value=0
             ) as mock_finalize,
@@ -949,6 +1082,12 @@ class TestMillpyImplement(unittest.TestCase):
             ),
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
             unittest.mock.patch.object(
                 millpy_implement._status, "get_module_verify_baseline", return_value=None
@@ -1004,6 +1143,12 @@ class TestMillpyImplement(unittest.TestCase):
             ),
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
             unittest.mock.patch.object(
                 millpy_implement._status, "get_module_verify_baseline", return_value=None

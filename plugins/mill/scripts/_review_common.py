@@ -12,8 +12,8 @@ Public API:
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback
-    load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
+    find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to the marker only if the daemon call fails
+    load_task_title()    — read status.md on disk first; fall back to _marker.task_data for task_title, then to slug on MarkerError
     worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
@@ -64,6 +64,7 @@ import _paths
 import _pygit2_util
 import _render
 import _reviewers
+import _status
 from _config import (
     load_config as _core_load_config,
     resolve_plugin_template_path,
@@ -303,17 +304,28 @@ class ReviewResult:
 
 
 def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
-    """Detect active slug via branch name, falling back to _mill/*.active glob.
+    """Detect active slug via branch name; skip the daemon round-trip only
+    when a cheap branch check confirms a single _mill/*.active on-disk marker.
+    On daemon failure, an unconfirmed lone marker is still trusted, exactly
+    as before this fast path existed.
 
     Raises ReviewError (wrapping MarkerError or glob-fallback errors).
     """
     try:
+        matches = list((hub_root / "_mill").glob("*.active"))
+    except OSError:
+        matches = []
+    if len(matches) == 1:
+        try:
+            branch = _pygit2_util.current_branch(hub_root) or ""
+        except _pygit2_util.GitOpsError:
+            branch = ""
+        branch_slug = _pygit2_util.strip_branch_prefix(branch, cfg)
+        if branch_slug == matches[0].stem:
+            return matches[0].stem
+    try:
         return _marker.slug_from_branch(hub_root, wiki_path, cfg)
     except _marker.MarkerError as exc:
-        try:
-            matches = list((hub_root / "_mill").glob("*.active"))
-        except OSError:
-            matches = []
         if len(matches) == 1:
             return matches[0].stem
         if len(matches) > 1:
@@ -328,7 +340,20 @@ def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
 
 
 def load_task_title(git_root: Path, wiki_path: Path, cfg: dict, slug: str) -> str:
-    """Delegate to _marker.task_data for task_title; fall back to slug on MarkerError."""
+    """Read task_title from status.md on disk; fall back to the wiki daemon.
+
+    The first parameter is named git_root for historical reasons, but every
+    call site passes the hub-resolved project_root -- status.md is read
+    relative to whichever value is actually passed in.
+    """
+    try:
+        status_path = _paths.require_status_path(git_root, cfg)
+        full = _status.read_full(status_path)
+        title = full["yaml"].get("task")
+        if title:
+            return title
+    except (_paths.TaskHubError, ValueError, KeyError):
+        pass
     try:
         data = _marker.task_data(git_root, wiki_path, cfg)
     except _marker.MarkerError:
@@ -364,6 +389,16 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
 
     Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
+    ``slug`` is always an already-resolved value here — every caller of
+    ``resolve_path`` (``_review_code.py``, ``_review_plan.py``,
+    ``_review_discussion.py``, and the ``millpy-review-*.py`` CLIs) obtains
+    ``slug`` from its own flow (``find_active_slug`` or a ``--slug``
+    override) before calling this function, so ``resolve_path`` never needs
+    ``resolve_active_hub``'s inner ``slug_from_branch`` re-validation.
+    ``skip_slug_validation=True`` is passed accordingly, avoiding a daemon
+    round-trip on every call — this function runs on both the ``prepare``
+    and ``finalize`` stage of every review round, at least twice per round.
+
     Raises:
         _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch:
             propagated from the inner resolve_active_hub call.
@@ -377,6 +412,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
         slug,
         cfg=cfg,
         git_root=git_root,
+        skip_slug_validation=True,
     )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
     return _paths.resolve_task_path(active_hub, resolved_tmpl)

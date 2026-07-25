@@ -80,33 +80,37 @@ def main() -> int:
             with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
                 with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
                     with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
-                        with unittest.mock.patch("_review_common.load_config") as mock_cfg:
-                            with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
-                                with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
-                                        with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
-                                            with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
-                                                mock_hub.return_value = tmp
-                                                mock_git.return_value = tmp
-                                                mock_wiki.return_value = tmp
-                                                mock_cfg.return_value = _stub_cfg(reviews_dir)
-                                                mock_slug.return_value = "test-slug"
-                                                mock_reviewers_load.return_value = {}
-                                                mock_resolve.return_value = reviews_dir
-                                                mock_finalize.return_value = stub_review_entry
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
+                                                        mock_hub.return_value = tmp
+                                                        mock_git.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.return_value = stub_review_entry
 
-                                                rc = millpy_review_plan.main([
-                                                    "--stage", "finalize",
-                                                    "--agent-output", str(stub_out)
-                                                ])
+                                                        rc = millpy_review_plan.main([
+                                                            "--stage", "finalize",
+                                                            "--agent-output", str(stub_out)
+                                                        ])
 
-                                                assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
-                                                assert mock_finalize.called, "expected finalize to be called"
-                                                call_args = mock_finalize.call_args
-                                                assert call_args[1]["round_n"] == 1, \
-                                                    f"expected round_n=1 (empty reviews), got {call_args[1]['round_n']}"
-                                                print("[case] (a) review-plan-finalize-round-empty")
-                                                pass_count += 1
+                                                        assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
+                                                        assert mock_finalize.called, "expected finalize to be called"
+                                                        call_args = mock_finalize.call_args
+                                                        assert call_args[1]["round_n"] == 1, \
+                                                            f"expected round_n=1 (empty reviews), got {call_args[1]['round_n']}"
+                                                        print("[case] (a) review-plan-finalize-round-empty")
+                                                        pass_count += 1
     except Exception as exc:
         print(f"[fail] review-plan-finalize-round-empty: {exc}", file=sys.stderr)
         fail_count += 1
@@ -133,32 +137,36 @@ def main() -> int:
             with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
                 with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
                     with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
-                        with unittest.mock.patch("_review_common.load_config") as mock_cfg:
-                            with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
-                                with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
-                                        with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
-                                            with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
-                                                mock_hub.return_value = tmp
-                                                mock_git.return_value = tmp
-                                                mock_wiki.return_value = tmp
-                                                mock_cfg.return_value = _stub_cfg(reviews_dir)
-                                                mock_slug.return_value = "test-slug"
-                                                mock_reviewers_load.return_value = {}
-                                                mock_resolve.return_value = reviews_dir
-                                                mock_finalize.return_value = stub_review_entry
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
+                                                        mock_hub.return_value = tmp
+                                                        mock_git.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.return_value = stub_review_entry
 
-                                                rc = millpy_review_plan.main([
-                                                    "--stage", "finalize",
-                                                    "--agent-output", str(stub_out)
-                                                ])
+                                                        rc = millpy_review_plan.main([
+                                                            "--stage", "finalize",
+                                                            "--agent-output", str(stub_out)
+                                                        ])
 
-                                                assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
-                                                call_args = mock_finalize.call_args
-                                                assert call_args[1]["round_n"] == 2, \
-                                                    f"expected round_n=2 (existing r1), got {call_args[1]['round_n']}"
-                                                print("[case] (b) review-plan-finalize-round-with-existing")
-                                                pass_count += 1
+                                                        assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
+                                                        call_args = mock_finalize.call_args
+                                                        assert call_args[1]["round_n"] == 2, \
+                                                            f"expected round_n=2 (existing r1), got {call_args[1]['round_n']}"
+                                                        print("[case] (b) review-plan-finalize-round-with-existing")
+                                                        pass_count += 1
     except Exception as exc:
         print(f"[fail] review-plan-finalize-round-with-existing: {exc}", file=sys.stderr)
         fail_count += 1
@@ -183,33 +191,37 @@ def main() -> int:
             with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
                 with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
                     with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
-                        with unittest.mock.patch("_review_common.load_config") as mock_cfg:
-                            with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
-                                with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
-                                        with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
-                                            with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
-                                                mock_git.return_value = tmp
-                                                mock_hub.return_value = tmp
-                                                mock_wiki.return_value = tmp
-                                                mock_cfg.return_value = _stub_cfg(reviews_dir)
-                                                mock_slug.return_value = "test-slug"
-                                                mock_reviewers_load.return_value = {}
-                                                mock_resolve.return_value = reviews_dir
-                                                mock_finalize.return_value = stub_review_entry
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
+                                                        mock_git.return_value = tmp
+                                                        mock_hub.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.return_value = stub_review_entry
 
-                                                rc = millpy_review_discussion.main([
-                                                    "--stage", "finalize",
-                                                    "--agent-output", str(stub_out)
-                                                ])
+                                                        rc = millpy_review_discussion.main([
+                                                            "--stage", "finalize",
+                                                            "--agent-output", str(stub_out)
+                                                        ])
 
-                                                assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
-                                                assert mock_finalize.called, "expected finalize to be called"
-                                                call_args = mock_finalize.call_args
-                                                assert call_args[1]["round_n"] == 1, \
-                                                    f"expected round_n=1 (empty reviews), got {call_args[1]['round_n']}"
-                                                print("[case] (c) review-discussion-finalize-round-empty")
-                                                pass_count += 1
+                                                        assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
+                                                        assert mock_finalize.called, "expected finalize to be called"
+                                                        call_args = mock_finalize.call_args
+                                                        assert call_args[1]["round_n"] == 1, \
+                                                            f"expected round_n=1 (empty reviews), got {call_args[1]['round_n']}"
+                                                        print("[case] (c) review-discussion-finalize-round-empty")
+                                                        pass_count += 1
     except Exception as exc:
         print(f"[fail] review-discussion-finalize-round-empty: {exc}", file=sys.stderr)
         fail_count += 1
@@ -237,32 +249,36 @@ def main() -> int:
             with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
                 with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
                     with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
-                        with unittest.mock.patch("_review_common.load_config") as mock_cfg:
-                            with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
-                                with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
-                                    with unittest.mock.patch("_reviewers.validate_role_refs"):
-                                        with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
-                                            with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
-                                                mock_git.return_value = tmp
-                                                mock_hub.return_value = tmp
-                                                mock_wiki.return_value = tmp
-                                                mock_cfg.return_value = _stub_cfg(reviews_dir)
-                                                mock_slug.return_value = "test-slug"
-                                                mock_reviewers_load.return_value = {}
-                                                mock_resolve.return_value = reviews_dir
-                                                mock_finalize.return_value = stub_review_entry
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
+                                                        mock_git.return_value = tmp
+                                                        mock_hub.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.return_value = stub_review_entry
 
-                                                rc = millpy_review_discussion.main([
-                                                    "--stage", "finalize",
-                                                    "--agent-output", str(stub_out)
-                                                ])
+                                                        rc = millpy_review_discussion.main([
+                                                            "--stage", "finalize",
+                                                            "--agent-output", str(stub_out)
+                                                        ])
 
-                                                assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
-                                                call_args = mock_finalize.call_args
-                                                assert call_args[1]["round_n"] == 2, \
-                                                    f"expected round_n=2 (existing r1), got {call_args[1]['round_n']}"
-                                                print("[case] (d) review-discussion-finalize-round-with-existing")
-                                                pass_count += 1
+                                                        assert rc != 1, f"expected not 1 (--round is required error), got {rc}"
+                                                        call_args = mock_finalize.call_args
+                                                        assert call_args[1]["round_n"] == 2, \
+                                                            f"expected round_n=2 (existing r1), got {call_args[1]['round_n']}"
+                                                        print("[case] (d) review-discussion-finalize-round-with-existing")
+                                                        pass_count += 1
     except Exception as exc:
         print(f"[fail] review-discussion-finalize-round-with-existing: {exc}", file=sys.stderr)
         fail_count += 1

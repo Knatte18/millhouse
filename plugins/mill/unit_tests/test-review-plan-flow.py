@@ -1658,6 +1658,12 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # project_root rebind: briefs_dir resolves under resolve_active_hub,
+    # not resolve_hub_path's decoy (#675)
+    # ------------------------------------------------------------------
+    errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
+
+    # ------------------------------------------------------------------
     # Test 29 — fail-loud unrecognized severity in synchronous per-batch
     # dispatch (line 284 call site). A per-batch reviewer response with
     # ONLY a "### [MAJOR]" heading (no "### [BLOCKING]" heading at all)
@@ -1698,6 +1704,177 @@ def main() -> int:
         return 1
     print("All _review_plan flow tests passed.")
     return 0
+
+
+def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
+    """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's decoy.
+
+    millpy-review-plan.py's main() imports every module it needs (_agent_dispatch,
+    _parent_branch, _paths, _reviewers, _review_cli, _review_common, _review_plan)
+    inline, so this test loads the CLI script via importlib.util.spec_from_file_location
+    and injects MagicMock stand-ins for each of those names into sys.modules before
+    exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout
+    and test-review-code-flow.py's counterpart do. --skip-validate is passed so the
+    real (unmocked) _plan_validate module is never imported by the prepare branch.
+
+    resolve_hub_path returns a decoy directory standing in for a stale/escaped
+    resolve_hub_path() fallback; resolve_active_hub -- called after slug
+    resolution, per the Card 14 rebind -- returns a distinct directory standing
+    in for the corrected active task worktree. briefs_dir must resolve under the
+    resolve_active_hub value (checked via the recorded resolve_task_path and
+    write_brief call args), proving project_root was rebound and not left at
+    resolve_hub_path's original value.
+
+    A reversion of the Card 14 fix (never calling resolve_active_hub) causes the
+    assertion to fail because resolve_task_path is called with the decoy
+    directory instead.
+
+    Returns 0 on success, 1 on failure (matching the errors-accumulator
+    convention used throughout this file).
+    """
+    import importlib.util
+    import tempfile
+    from unittest.mock import MagicMock, patch
+
+    scripts_dir = HUB / "plugins" / "mill" / "scripts"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        decoy_dir = tmp / "decoy-hub-path"
+        decoy_dir.mkdir(parents=True)
+        corrected_dir = tmp / "corrected-active-worktree"
+        corrected_dir.mkdir(parents=True)
+
+        mock_paths = MagicMock()
+        mock_paths.resolve_hub_path.return_value = decoy_dir
+        mock_paths.resolve_git_root.return_value = decoy_dir
+        mock_paths.resolve_wiki_path.return_value = decoy_dir / "wiki"
+        mock_paths.resolve_container_path.return_value = tmp
+        mock_paths.resolve_active_hub.return_value = corrected_dir
+        mock_paths.resolve_task_path.side_effect = lambda root, path: (
+            Path(str(root)) / path.lstrip("/")
+        )
+
+        mock_review_common = MagicMock()
+        mock_review_common.load_config.return_value = {"paths": {}}
+        mock_review_common.find_active_slug.return_value = "test-slug"
+        mock_review_common.ReviewError = Exception
+
+        mock_review_plan = MagicMock()
+        mock_review_plan.prepare.return_value = {
+            "scope": "holistic",
+            "round": 1,
+            "prompt_text": "prompt",
+            "model": "default",
+        }
+
+        mock_agent_dispatch = MagicMock()
+        mock_agent_dispatch.write_brief.return_value = corrected_dir / "_mill/briefs/brief.md"
+        mock_agent_dispatch.output_path_for.return_value = corrected_dir / "_mill/briefs/brief.out.md"
+        mock_agent_dispatch.SUBAGENT_REVIEWER = "reviewer"
+        mock_agent_dispatch.model_to_tier.return_value = "default"
+
+        mock_reviewers = MagicMock()
+        mock_reviewers.ReviewerError = Exception
+
+        mock_review_cli = MagicMock()
+        mock_parent_branch = MagicMock()
+
+        injected_modules = {
+            "_paths": mock_paths,
+            "_review_common": mock_review_common,
+            "_review_plan": mock_review_plan,
+            "_agent_dispatch": mock_agent_dispatch,
+            "_reviewers": mock_reviewers,
+            "_review_cli": mock_review_cli,
+            "_parent_branch": mock_parent_branch,
+        }
+
+        with patch.dict(sys.modules, injected_modules):
+            spec = importlib.util.spec_from_file_location(
+                "millpy_review_plan",
+                scripts_dir / "millpy-review-plan.py",
+            )
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+
+            # --skip-validate bypasses the real (unmocked) _plan_validate import
+            # this test does not inject; --stage prepare enters the branch
+            # where the rebind's project_root value drives briefs_dir.
+            with patch("sys.argv", ["prog", "--stage", "prepare", "--skip-validate"]):
+                try:
+                    mod.main()
+                except (TypeError, SystemExit, Exception):
+                    # The resolve_active_hub/resolve_task_path calls are
+                    # already recorded before any crash on a bare MagicMock
+                    # field reaching json.dumps(envelope).
+                    pass
+
+        if not mock_paths.resolve_active_hub.called:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " _paths.resolve_active_hub was never called",
+                file=sys.stderr,
+            )
+            return 1
+
+        call_args_list = mock_paths.resolve_task_path.call_args_list
+        briefs_call = None
+        for call in call_args_list:
+            positional = call[0]
+            if len(positional) >= 2 and str(positional[1]).startswith("_mill/briefs/"):
+                briefs_call = positional
+                break
+
+        if briefs_call is None:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " resolve_task_path was never called with a '_mill/briefs/' path argument",
+                file=sys.stderr,
+            )
+            return 1
+
+        actual_root = briefs_call[0]
+        if actual_root != corrected_dir:
+            print(
+                f"FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                f" expected resolve_task_path first arg to be resolve_active_hub's return"
+                f" value ({corrected_dir}), got {actual_root}",
+                file=sys.stderr,
+            )
+            return 1
+
+        if actual_root == decoy_dir:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " first arg equals resolve_hub_path's decoy value (rebind did not supersede it)",
+                file=sys.stderr,
+            )
+            return 1
+
+        write_brief_call = mock_agent_dispatch.write_brief.call_args
+        if write_brief_call is None or not write_brief_call[0]:
+            print(
+                "FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                " _agent_dispatch.write_brief was never called",
+                file=sys.stderr,
+            )
+            return 1
+        write_brief_briefs_dir = write_brief_call[0][0]
+        if write_brief_briefs_dir != corrected_dir / "_mill/briefs":
+            print(
+                f"FAIL: test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path:"
+                f" write_brief's briefs_dir arg expected {corrected_dir / '_mill/briefs'},"
+                f" got {write_brief_briefs_dir}",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(
+            "PASS: plan-review briefs_dir resolves under resolve_active_hub's value,"
+            " not resolve_hub_path's decoy"
+        )
+        return 0
 
 
 if __name__ == "__main__":

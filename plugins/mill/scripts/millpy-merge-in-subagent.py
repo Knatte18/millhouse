@@ -261,10 +261,16 @@ def main(argv=None) -> int:
         return 1
 
     try:
-        _marker.slug_from_branch(git_root, wiki_path, cfg)
+        slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as e:
         print(str(e), file=sys.stderr)
         return 1
+
+    container_path = _paths.resolve_container_path(git_root)
+    project_root = _paths.resolve_active_hub(
+        container_path, slug, cfg=cfg, git_root=git_root, skip_slug_validation=True
+    )
+    mill_dir = project_root / ".millhouse"
 
     if args.recompute_baseline:
         return _run_recompute_baseline(project_root, git_root, cfg)
