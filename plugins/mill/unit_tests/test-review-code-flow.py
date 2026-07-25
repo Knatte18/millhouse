@@ -7,6 +7,7 @@ with no real LLM, no network calls. Covers the bugs fixed in batches 01-05:
   - creates_union suppression (#60)
   - Hard-fail on missing refs (#41/#43)
   - NEED_CONTEXT resume fallback (#5/#7 recovery)
+  - moves_sources_union suppression of stale cross-batch Context: refs (#686)
 """
 from __future__ import annotations
 
@@ -1473,6 +1474,144 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test22 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 23 — Moves: source suppresses a stale cross-batch Context: ref
+    # (#686). Batch "alpha"'s Card 1 Context: references docs/old-name.md.
+    # Batch "beta" (later in the plan, depends on alpha) relocates that
+    # exact path via Moves:. Post-implementation, docs/new-name.md exists
+    # on disk and docs/old-name.md does not. Before the fix, prepare()
+    # discarded the moves-sources half of compute_moves_union()'s return
+    # value, so the stale ref hard-failed resolve_ref_paths with
+    # ReviewError instead of being suppressed the same way an
+    # already-deleted path is (mirrors test3's creates_union-suppression
+    # baseline and test4's confirmation that an unsuppressed missing path
+    # still hard-fails).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        worktree = tmpdir / "container" / "wts" / SLUG
+        worktree.mkdir(parents=True)
+        _repo = _test_helpers.init_minimal_git_repo(worktree, branch="main")
+        _test_helpers.checkout_new_branch(_repo, f"hanf/{SLUG}")
+        (worktree / ".gitignore").write_text("\n", encoding="utf-8")
+        mill_dir = worktree / ".millhouse"
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        wiki_root = tmpdir / "wiki"
+        wiki_root.mkdir(parents=True, exist_ok=True)
+        seed_wiki_config(wiki_root)
+        (wiki_root / "Home.md").write_text(f"## Test Task\n[[{SLUG}]] [active]\n\n_body_\n", encoding="utf-8")
+        (mill_dir / "config.local.yaml").write_text(
+            f"paths:\n  wiki: '{wiki_root.as_posix()}'\n"
+            f"spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
+        )
+        project_root = worktree
+        plan_dir = worktree / "plan"
+        plan_dir.mkdir(parents=True)
+
+        def _make_batch_with_context_and_moves(
+            name: str,
+            *,
+            context: list[str] | None = None,
+            moves: list[tuple[str, str]] | None = None,
+        ) -> str:
+            """Return minimal batch file text with Context:/Moves: fields."""
+            context_part = ", ".join(f"`{c}`" for c in (context or [])) if context else "none"
+            if moves:
+                moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+                moves_part = f"\n{moves_lines}"
+            else:
+                moves_part = " none"
+            return (
+                f"# Batch: {name}\n\n"
+                "```yaml\n"
+                f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
+                "```\n\n"
+                "## Cards\n\n### Card 1\n\n"
+                f"- **Context:** {context_part}\n"
+                "- **Edits:** none\n"
+                "- **Creates:** none\n"
+                "- **Deletes:** none\n"
+                f"- **Moves:**{moves_part}\n"
+            )
+
+        # Batch A ("alpha"): Card 1's Context: references docs/old-name.md.
+        (plan_dir / "00-overview.md").write_text(
+            _make_overview([("alpha", "01-alpha.md"), ("beta", "02-beta.md")]),
+            encoding="utf-8",
+        )
+        (plan_dir / "01-alpha.md").write_text(
+            _make_batch_with_context_and_moves("alpha", context=["docs/old-name.md"]),
+            encoding="utf-8",
+        )
+        # Batch B ("beta"), later in the plan and depending on alpha, relocates
+        # the exact path alpha's Context: still references.
+        (plan_dir / "02-beta.md").write_text(
+            _make_batch_with_context_and_moves(
+                "beta", moves=[("docs/old-name.md", "docs/new-name.md")]
+            ),
+            encoding="utf-8",
+        )
+        # Post-implementation disk state: the move landed -- target present,
+        # source absent -- so alpha's stale Context: ref cannot resolve to a
+        # file on disk and must fall back to deletes_union-style suppression.
+        (project_root / "docs").mkdir(parents=True)
+        (project_root / "docs" / "new-name.md").write_text("# relocated\n", encoding="utf-8")
+
+        cfg23 = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir":        "plan/",
+                "reviews_dir":     "reviews/",
+            },
+            "llm": {"bulk_timeout": None, "holistic_timeout": None},
+            "roles": {
+                "code-review": {
+                    "batch":   {"rounds": 3, "reviewer": "test_stub"},
+                    "holistic": {"rounds": 3, "reviewer": "test_stub"},
+                },
+            },
+        }
+        _test_registry.write_to(wiki_root)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        _seed_approve(1)
+        try:
+            r = code_run(cfg23, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            prompts = stub.captured_prompts()
+            assert prompts, "expected at least one captured prompt"
+            first_prompt = prompts[0][0]
+            # File-content delimiters bulk the *resolved absolute* path, not
+            # the raw plan-relative token. docs/old-name.md still appears as
+            # literal text inside beta's own bulked batch-file content (its
+            # Moves: declaration names both sides of the relocation) -- that
+            # is expected and not what this assertion is about. What must
+            # NOT happen is a bulked "file contents" delimiter for the
+            # moved-away source, which is what resolve_ref_paths would have
+            # produced had it not suppressed the stale ref (and what a
+            # hard-fail ReviewError would have pre-empted entirely before
+            # any prompt was ever built).
+            old_path = project_root / "docs" / "old-name.md"
+            new_path = project_root / "docs" / "new-name.md"
+            assert f"--- FILE: {old_path} ---" not in first_prompt, (
+                "moved-away source path must be suppressed from the resolved "
+                "source-file list, not bulked in as its own FILE section"
+            )
+            assert f"--- FILE: {new_path} ---" in first_prompt, (
+                "move target should still be resolved onto disk and bulked normally"
+            )
+            print("PASS test23: Moves: source suppresses a stale cross-batch Context: ref (#686)")
+        except ReviewError as exc:
+            errors += 1
+            print(f"FAIL test23: prepare() raised ReviewError instead of suppressing: {exc}", file=sys.stderr)
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test23: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test23 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
