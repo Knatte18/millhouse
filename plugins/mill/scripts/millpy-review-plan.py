@@ -140,8 +140,8 @@ def main(argv: list[str] | None = None) -> int:
                 from _plan_validate import run as validate_run
                 plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
                 root = _load_root_from_overview(plan_dir / "00-overview.md")
-                status_path = _paths.require_status_path(project_root, cfg)
                 try:
+                    status_path = _paths.require_status_path(project_root, cfg)
                     parent_branch = _parent_branch.resolve(status_path, interactive=False)
                 except Exception:
                     parent_branch = None
@@ -240,8 +240,8 @@ def main(argv: list[str] | None = None) -> int:
                 from _plan_validate import run as validate_run
                 plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
                 root = _load_root_from_overview(plan_dir / "00-overview.md")
-                status_path = _paths.require_status_path(project_root, cfg)
                 try:
+                    status_path = _paths.require_status_path(project_root, cfg)
                     parent_branch = _parent_branch.resolve(status_path, interactive=False)
                 except Exception:
                     parent_branch = None
