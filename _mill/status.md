@@ -36,7 +36,9 @@ implementing  '2026-07-25T15:17:35Z'
 ```yaml
 batches:
   - name: fail-fast-guard
-    state: pending
+    state: running
+    implementer_session: 18ae4c05-7df8-4e85-b257-7d6ae4757065
+    start_sha: 51223fa5d8690a90e4611055a0969d79430db78d
   - name: on-disk-first-resolution
     state: pending
   - name: mill-go-resume-fix
