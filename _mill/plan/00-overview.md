@@ -3,7 +3,7 @@
 ```yaml
 task: Batch review/verify pipeline doesn't account for cross-batch state changes
 slug: mill-review-verify-pipeline-state-gaps
-approved: false
+approved: true
 started: "20260725-112456"
 parent: hanf/linux-port-more
 root: ""
