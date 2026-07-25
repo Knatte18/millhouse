@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-review-verify-pipeline-state-gaps
 branch: hanf/mill-review-verify-pipeline-state-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-review-common-parse-deletes  '2026-07-25T12:28:16Z'
 approved-iter-batch-verifies-cross-batch-filter  '2026-07-25T12:34:13Z'
 approved-verify-replay-callers-wiring  '2026-07-25T12:42:40Z'
 holistic-reviewing  '2026-07-25T12:42:47Z'
+holistic-fixing  '2026-07-25T12:46:50Z'
 ```
 
 ## Batches
