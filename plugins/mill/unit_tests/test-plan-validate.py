@@ -100,6 +100,7 @@ def _make_batch_file(
     deletes: list[str] | None = None,
     moves: list[tuple[str, str]] | None = None,
     missing_fields: set[str] | None = None,
+    commit: str | None = None,
 ) -> str:
     """Return a well-formed batch file with one card.
 
@@ -108,6 +109,11 @@ def _make_batch_file(
     moves: list of (src, dst) tuples for Moves: sub-bullets, or None/[] to
         write the "none" sentinel.  Each tuple is formatted as `src` -> `dst`.
     missing_fields: set of field names to omit (for check 2 tests).
+    commit: optional literal text for the Commit: field's inline value
+        (e.g. "none" for a verification-only card). When None (the
+        default), the Commit: line keeps its pre-existing hardcoded
+        shape (`feat({name}): card {card_num}`) unchanged, so every
+        existing call site that omits this argument is unaffected.
     """
     missing_fields = missing_fields or set()
 
@@ -144,7 +150,8 @@ def _make_batch_file(
     if "Requirements" not in missing_fields:
         parts.append("- **Requirements:**\n  See scope.\n")
     if "Commit" not in missing_fields:
-        parts.append(f"- **Commit:** feat({name}): card {card_num}\n")
+        commit_value = commit if commit is not None else f"feat({name}): card {card_num}"
+        parts.append(f"- **Commit:** {commit_value}\n")
     return "".join(parts)
 
 
@@ -325,6 +332,160 @@ def test_check_card_missing_field_dirty() -> int:
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_card_missing_field_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_commit_none_with_content_clean_all_none() -> int:
+    """Clean: Commit: none with every other field also none -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", commit="none")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "commit-none-with-content"]
+        try:
+            assert check == [], f"expected no errors, got: {check}"
+            print("PASS test_check_commit_none_with_content_clean_all_none")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_commit_none_with_content_clean_all_none: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_commit_none_with_content_dirty_edits() -> int:
+    """Dirty: Commit: none with a non-none Edits: -> one error mentioning Edits."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", commit="none", edits=["src/a.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "commit-none-with-content"]
+        try:
+            assert len(check) == 1, f"expected 1 error, got {len(check)}: {check}"
+            assert check[0]["card"] == 1, f"wrong card: {check[0]['card']}"
+            assert "Edits" in check[0]["message"], (
+                f"message should mention 'Edits': {check[0]['message']!r}"
+            )
+            print("PASS test_check_commit_none_with_content_dirty_edits")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_commit_none_with_content_dirty_edits: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_commit_none_with_content_dirty_edits_and_creates() -> int:
+    """Dirty: Commit: none with non-none Edits: AND Creates: -> two errors, one per field."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha", commit="none", edits=["src/a.py"], creates=["src/b.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "commit-none-with-content"]
+        try:
+            assert len(check) == 2, f"expected 2 errors, got {len(check)}: {check}"
+            fields_mentioned = {
+                field for field in ("Edits", "Creates")
+                if any(field in e["message"] for e in check)
+            }
+            assert fields_mentioned == {"Edits", "Creates"}, (
+                f"expected one error per offending field, got messages: "
+                f"{[e['message'] for e in check]}"
+            )
+            print("PASS test_check_commit_none_with_content_dirty_edits_and_creates")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_commit_none_with_content_dirty_edits_and_creates: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_commit_none_with_content_regression_real_commit_unaffected() -> int:
+    """Regression: a real Commit: message with real edits fires zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["src/a.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "commit-none-with-content"]
+        try:
+            assert check == [], f"expected no errors, got: {check}"
+            print("PASS test_check_commit_none_with_content_regression_real_commit_unaffected")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_commit_none_with_content_regression_real_commit_unaffected: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_commit_none_with_content_missing_commit_field_independent() -> int:
+    """A card missing Commit: entirely fires card-missing-field, not commit-none-with-content."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", missing_fields={"Commit"})
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        commit_none_check = [e for e in result if e["check"] == "commit-none-with-content"]
+        missing_field_check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert commit_none_check == [], (
+                f"expected no commit-none-with-content errors, got: {commit_none_check}"
+            )
+            assert len(missing_field_check) == 1, (
+                f"expected 1 card-missing-field error, got {len(missing_field_check)}: "
+                f"{missing_field_check}"
+            )
+            assert "Commit" in missing_field_check[0]["message"], (
+                f"message should mention 'Commit': {missing_field_check[0]['message']!r}"
+            )
+            print("PASS test_check_commit_none_with_content_missing_commit_field_independent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_commit_none_with_content_missing_commit_field_independent: {exc}",
+                file=sys.stderr,
+            )
             return 1
 
 
@@ -3700,6 +3861,12 @@ def main() -> int:
         test_check_non_existent_path_dirty,
         test_check_card_missing_field_clean,
         test_check_card_missing_field_dirty,
+        # commit-none-with-content check (issue #664)
+        test_check_commit_none_with_content_clean_all_none,
+        test_check_commit_none_with_content_dirty_edits,
+        test_check_commit_none_with_content_dirty_edits_and_creates,
+        test_check_commit_none_with_content_regression_real_commit_unaffected,
+        test_check_commit_none_with_content_missing_commit_field_independent,
         test_check_card_numbering_clean,
         test_check_card_numbering_dirty_gap,
         test_check_card_numbering_dirty_cross_batch,

@@ -18,6 +18,7 @@ from _plan_dag import (  # noqa: E402
     PlanDAGError,
     extract_batch_index,
     iter_batch_verifies,
+    parse_commit_none_card_ids,
     parse_verify_field,
     topo_order,
     validate,
@@ -350,6 +351,65 @@ batches:
     print("PASS: old string name deps still valid (backward compat)")
 
 
+def test_parse_commit_none_card_ids_real_message_returns_empty_set() -> None:
+    text = """
+### Card 1: do something
+
+- **Commit:** feat(x): real commit message
+"""
+    assert parse_commit_none_card_ids(text) == set()
+    print("PASS: parse_commit_none_card_ids ignores a real commit message")
+
+
+def test_parse_commit_none_card_ids_none_sentinel_included() -> None:
+    text = """
+### Card 1: verify earlier work
+
+- **Commit:** none
+"""
+    assert parse_commit_none_card_ids(text) == {1}
+    print("PASS: parse_commit_none_card_ids includes a lowercase none sentinel")
+
+
+def test_parse_commit_none_card_ids_mixed_case_included() -> None:
+    for sentinel in ("None", "NONE"):
+        text = f"""
+### Card 1: verify earlier work
+
+- **Commit:** {sentinel}
+"""
+        assert parse_commit_none_card_ids(text) == {1}, sentinel
+    print("PASS: parse_commit_none_card_ids matches Commit: none case-insensitively")
+
+
+def test_parse_commit_none_card_ids_only_middle_card_none() -> None:
+    text = """
+### Card 1: first
+
+- **Commit:** feat(a): first card
+
+### Card 2: verify earlier work
+
+- **Commit:** none
+
+### Card 3: third
+
+- **Commit:** feat(c): third card
+"""
+    assert parse_commit_none_card_ids(text) == {2}
+    print("PASS: parse_commit_none_card_ids picks out only the none card among three")
+
+
+def test_parse_commit_none_card_ids_missing_field_not_included() -> None:
+    text = """
+### Card 1: missing commit field entirely
+
+- **Context:** none
+"""
+    assert parse_commit_none_card_ids(text) == set()
+    print("PASS: parse_commit_none_card_ids excludes a card with no Commit: line")
+
+
 def main() -> int:
     try:
         test_good_plan_accepted()
@@ -365,6 +425,11 @@ def main() -> int:
         test_number_dep_duplicate_rejected()
         test_mixed_dep_type_rejected()
         test_old_name_deps_still_valid()
+        test_parse_commit_none_card_ids_real_message_returns_empty_set()
+        test_parse_commit_none_card_ids_none_sentinel_included()
+        test_parse_commit_none_card_ids_mixed_case_included()
+        test_parse_commit_none_card_ids_only_middle_card_none()
+        test_parse_commit_none_card_ids_missing_field_not_included()
         print("All _plan_dag unit tests passed.")
         return 0
     except AssertionError as exc:
