@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -36,6 +36,7 @@ approved-paths-skip-slug-validation  '2026-07-25T15:50:12Z'
 approved-project-root-rebinding-implement-side  '2026-07-25T16:01:08Z'
 approved-project-root-rebinding-review-side  '2026-07-25T16:38:45Z'
 holistic-reviewing  '2026-07-25T16:39:01Z'
+holistic-fixing  '2026-07-25T16:41:51Z'
 ```
 
 ## Batches
