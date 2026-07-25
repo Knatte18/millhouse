@@ -34,5 +34,7 @@ batches:
     start_sha: b75962a6b0191be88041a9cd960a1eec3fae486b
     commit_sha: 680b46329f81963d20c18b7da63a7e78621ce99d
   - name: review-common-load-config-dedup
-    state: pending
+    state: running
+    implementer_session: 442479e7-d65f-40cf-a51c-a18dbb7781f3
+    start_sha: ab3bb587d5d8a4c8a65af83921decf2829c4c005
 ```
