@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-skill-docs-and-tooling-accuracy
 branch: hanf/mill-skill-docs-and-tooling-accuracy
-plan: null
+plan: _mill/plan
 parent: hanf/linux-port-more
 task: Skill doc/table accuracy gaps across mill-groom, mill-start/mill-plan, and implementer-brief
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-25T11:01:00Z'
 discussion-fix-r2  '2026-07-25T11:15:50Z'
 discussed  '2026-07-25T11:15:58Z'
+planning  '2026-07-25T11:19:14Z'
 ```
