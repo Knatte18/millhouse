@@ -44,11 +44,21 @@ documentation — which gives a concrete, already-available mechanism to close t
   `mill:mill-reviewer` / `mill:mill-implementer` literal.
 - Extending `plugins/mill/unit_tests/test-agents-defs.py` with parametrized coverage
   for the 6 new files.
+- `plugins/mill/scripts/millpy-merge-in-subagent.py`: its two Agent-mode
+  `--stage prepare` calls (`emit_prepare` at lines 356 and 437) never pass
+  `effort=impl_effort` into the envelope, even though `impl_effort` is already
+  computed at line 328 and correctly forwarded to the non-agent-mode subprocess path
+  (`_implementer_claude.run(..., effort=impl_effort, ...)` at lines 363/444). This
+  means merge-in's Agent-mode envelope never carries an effort tier at all today —
+  a second, narrower instance of the same class of bug this task fixes. Add
+  `effort=impl_effort` to both `emit_prepare` calls so merge-in's envelope is
+  consistent with the other four implementer-class/review envelope constructors
+  before `mill-go` step 3 is taught to consume the field.
 
 **Out:**
-- No `mill-agents.yaml` schema change — `effort` is already present and already
-  correctly resolved into every review/implement/fix/merge-in envelope. Only the
-  Agent-tool-call consumption side was missing.
+- No `mill-agents.yaml` schema change — `effort` is already present in the catalogue;
+  this task only wires its consumption into envelope construction (merge-in, per the
+  fix above) and Agent-tool-call consumption (`mill-go` step 3).
 - No change to gemini-provider dispatch — Agent-mode dispatch is already
   Claude-provider-only (`_agent_dispatch.resolve_dispatch_mode`); gemini reviewers use
   subprocess/psmux dispatch, which reads `effort` differently and is unaffected.
@@ -110,14 +120,17 @@ documentation — which gives a concrete, already-available mechanism to close t
 ## Technical context
 
 - `plugins/mill/skills/mill-go/SKILL.md` (Agent-mode dispatch, step 3) documents the
-  exact gap this task closes — search for "has no corresponding Agent-tool call
-  parameter to forward it to".
-- Envelope construction already resolves `effort` correctly in five places; no
+  exact gap this task closes — search for "has no corresponding Agent-tool parameter
+  to forward it to" (verbatim text, no "call" between "Agent-tool" and "parameter").
+- Envelope construction already resolves `effort` correctly in four places; no
   script-side change is needed there, only the Builder's consumption of the value:
   - `plugins/mill/scripts/_review_discussion.py:123`
   - `plugins/mill/scripts/_review_plan.py:453` (per-batch) and `:545` (holistic)
   - `plugins/mill/scripts/_review_code.py:382`
   - `plugins/mill/scripts/_implementer_common.py:1187`
+  A fifth site, `plugins/mill/scripts/millpy-merge-in-subagent.py:356,437`, does NOT
+  yet resolve it correctly (see Scope > In) — this task's implementation must fix
+  that site too, not just consume from it.
 - `plugins/mill/templates/mill-agents.yaml` — canonical list of `effort:`-bearing
   aliases: `opusmedium`/`opus` (medium), `opushigh` (high), `opusmax` (max),
   `sonnetmedium`/`sonnet` (medium), `sonnethigh` (high), `sonnetmax` (max). `haiku`,
@@ -189,3 +202,14 @@ documentation — which gives a concrete, already-available mechanism to close t
   `test-agents-defs.py` already covers exactly this surface (frontmatter invariants)
   for the two base files; extending it is near-zero marginal cost and catches
   copy-paste drift across 6 near-duplicate files that manual read-through could miss.
+- **Q:** Discussion-review round 1 found that `millpy-merge-in-subagent.py`'s two
+  Agent-mode prepare calls never pass `effort=impl_effort` into the envelope (unlike
+  the four other envelope constructors and unlike its own non-agent-mode subprocess
+  path), so merge-in's Agent-mode envelope silently drops effort today regardless of
+  this task's fix — should this be brought into scope, or left as accurately-documented
+  out-of-scope? **A:** [auto-pick] Bring it into scope: add `effort=impl_effort` to
+  both `emit_prepare` calls. **Why:** this task's own Decisions already commit to
+  covering "implementer, fixer, or merge-in CLIs" uniformly as implementer-class
+  dispatches; leaving merge-in's envelope construction broken while fixing its
+  Agent-tool-call consumption would ship a fix that still does nothing for merge-in,
+  defeating the stated scope.
