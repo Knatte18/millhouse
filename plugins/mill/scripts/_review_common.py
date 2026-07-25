@@ -1634,9 +1634,13 @@ def count_unrecognized_severity_findings(
     unrecognized_count = 0
 
     # Markdown headings: same "### [<label>]" shape parse_blocking_count
-    # matches, generalized to capture any bracketed label rather than one
-    # fixed severity, so every heading in the document is inspected.
-    heading_pattern = re.compile(r"^###\s+\[([^\]]+)\]\s+", re.MULTILINE)
+    # matches, generalized to capture any all-uppercase bracketed label
+    # (the severity-vocabulary convention every known severity follows --
+    # BLOCKING, NIT, GAP, NOTE, MAJOR, MINOR, ...) rather than one fixed
+    # severity, so every heading in the document is inspected. A mixed-case
+    # bracket like "[Major]" is not a severity-shaped label at all and is
+    # deliberately not matched, case-sensitive like parse_blocking_count.
+    heading_pattern = re.compile(r"^###\s+\[([A-Z]+)\]\s+", re.MULTILINE)
     for match in heading_pattern.finditer(raw_output):
         label = match.group(1)
         if label != blocking_severity and label != nit_severity:
