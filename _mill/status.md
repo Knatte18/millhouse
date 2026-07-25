@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-agent-effort-gap
 branch: hanf/mill-agent-effort-gap
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-25T17:22:18Z'
+discussed  '2026-07-25T17:36:43Z'
 ```
