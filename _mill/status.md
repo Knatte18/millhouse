@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fail-fast-guard
+phase: approved-on-disk-first-resolution
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ plan-fix-r5  '2026-07-25T14:40:57Z'
 planned  '2026-07-25T14:41:16Z'
 implementing  '2026-07-25T15:17:35Z'
 approved-fail-fast-guard  '2026-07-25T15:22:16Z'
+approved-on-disk-first-resolution  '2026-07-25T15:41:57Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: 51223fa5d8690a90e4611055a0969d79430db78d
     commit_sha: 027db4f8a036e9e57e0b9396cbe22a4838bf8ba5
   - name: on-disk-first-resolution
-    state: running
+    state: approved
     implementer_session: 4ba84bee-c779-4451-b3b7-8f63ff460f9c
     start_sha: d5c11126942e9e03613dbad4ead0528c809ba9d5
+    commit_sha: 04b85c39f336d332f67fd02c002e408aa571980b
   - name: mill-go-resume-fix
     state: pending
   - name: paths-skip-slug-validation
