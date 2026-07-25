@@ -1,7 +1,0 @@
-1 of 1 card committed — matches the batch file's single declared card (Card 2).
-
-{"status":"success","commit_sha":"ef70458f","session_id":"f50111eb-867a-4a6e-b2f7-b8ae9d570ae0","cards_done":[2]}
-
-Summary: 1 of 1 cards committed (Card 2). I added `parse_deletes(batch_path: Path) -> set[str]` to `plugins/mill/scripts/_review_common.py` (placed right after `parse_moves`, before `compute_creates_union`), extracting the exact per-batch-file token-extraction logic that was previously inlined inside `compute_deletes_union()`'s loop. `compute_deletes_union()` was refactored to call `parse_deletes(batch_path)` per batch file and union results via `deletes |= parse_deletes(batch_path)` — its public signature, docstring, and external behavior are unchanged. I added new test functions to `plugins/mill/unit_tests/test-review-common.py` mirroring `parse_moves`'s per-function test shape (single-line inline form, multi-line bullet form, `none`/`None`/`NONE` sentinel, mixed card fields, malformed sub-bullet tolerance) and left all pre-existing `compute_deletes_union` test bodies/assertions untouched as the regression guard. Full verify (`PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-review-common.py`) passes. Working tree is clean (only the untracked brief file remains, which is out of scope). Commit `ef70458f` pushed to `hanf/mill-review-verify-pipeline-state-gaps`.
-
-{"status":"success","commit_sha":"ef70458f","session_id":"f50111eb-867a-4a6e-b2f7-b8ae9d570ae0","cards_done":[2]}
