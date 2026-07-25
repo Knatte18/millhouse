@@ -28,7 +28,9 @@ implementing  '2026-07-25T12:21:36Z'
 ```yaml
 batches:
   - name: daemon-noise-fixes
-    state: pending
+    state: running
+    implementer_session: 931801b4-5607-4463-8b6f-83d56d448f64
+    start_sha: b75962a6b0191be88041a9cd960a1eec3fae486b
   - name: review-common-load-config-dedup
     state: pending
 ```
