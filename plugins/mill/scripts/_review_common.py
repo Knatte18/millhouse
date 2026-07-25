@@ -12,8 +12,8 @@ Public API:
     ReviewResult         — dataclass; serialised to the CLI's stdout JSON
     RE_SIMPLE            — regex matching simple review filenames
     RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — branch-based slug detection with _mill/*.active glob fallback
-    load_task_title()    — delegate to _marker.task_data for task_title; fall back to slug on MarkerError
+    find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to the marker only if the daemon call fails
+    load_task_title()    — read status.md on disk first; fall back to _marker.task_data for task_title, then to slug on MarkerError
     worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
@@ -302,17 +302,29 @@ class ReviewResult:
 
 
 def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
-    """Detect active slug via branch name, falling back to _mill/*.active glob.
+    """Detect active slug via branch name; skip the daemon round-trip only
+    when a cheap branch check confirms a single _mill/*.active on-disk marker.
+    On daemon failure, an unconfirmed lone marker is still trusted, exactly
+    as before this fast path existed.
 
     Raises ReviewError (wrapping MarkerError or glob-fallback errors).
     """
     try:
+        matches = list((hub_root / "_mill").glob("*.active"))
+    except OSError:
+        matches = []
+    if len(matches) == 1:
+        try:
+            branch = _pygit2_util.current_branch(hub_root) or ""
+        except _pygit2_util.GitOpsError:
+            branch = ""
+        prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+        branch_slug = branch.removeprefix(prefix) if branch.startswith(prefix) else None
+        if branch_slug == matches[0].stem:
+            return matches[0].stem
+    try:
         return _marker.slug_from_branch(hub_root, wiki_path, cfg)
     except _marker.MarkerError as exc:
-        try:
-            matches = list((hub_root / "_mill").glob("*.active"))
-        except OSError:
-            matches = []
         if len(matches) == 1:
             return matches[0].stem
         if len(matches) > 1:
