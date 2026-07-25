@@ -115,6 +115,14 @@ class TestMillpyImplement(unittest.TestCase):
             millpy_implement._paths, "resolve_hub_path",
             return_value=self.tmp_path,
         )
+        self.mock_resolve_container_path = _p(
+            millpy_implement._paths, "resolve_container_path",
+            return_value=self.tmp_path.parent,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_implement._paths, "resolve_active_hub",
+            return_value=self.tmp_path,
+        )
         self.mock_resolve_wiki = _p(
             millpy_implement._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
@@ -447,6 +455,35 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["scope"], "test-batch")
         self.assertEqual(data["round"], 1)
         self.assertTrue(data["brief_path"])
+
+    def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path(self):
+        """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
+
+        Simulates resolve_hub_path()'s main-worktree-fallback escape: resolve_hub_path
+        still returns self.tmp_path (the stale/escaped value), but resolve_active_hub --
+        called after slug resolution, per the rebind fix -- returns a distinct decoy
+        directory standing in for the corrected active task worktree. briefs_dir (surfaced
+        via --stage prepare's brief_path in the envelope) must resolve under the decoy,
+        proving project_root was rebound to resolve_active_hub's return value and not left
+        at resolve_hub_path's original, escaped one.
+        """
+        corrected_root = self.tmp_path / "corrected-worktree"
+        corrected_root.mkdir(parents=True, exist_ok=True)
+        _make_fixture(corrected_root)
+        self.mock_resolve_active_hub.return_value = corrected_root
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_implement._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        brief_path = Path(data["brief_path"])
+        self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
+        self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
     def test_14_stage_finalize_reads_agent_output(self):
         """--stage finalize: reads agent output file, calls finalize_from_output."""
@@ -926,6 +963,12 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_implement, "finalize_from_output", return_value=0
             ) as mock_finalize,
@@ -983,6 +1026,12 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_implement, "finalize_from_output", return_value=0
             ) as mock_finalize,
@@ -1033,6 +1082,12 @@ class TestMillpyImplement(unittest.TestCase):
             ),
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
             unittest.mock.patch.object(
                 millpy_implement._status, "get_module_verify_baseline", return_value=None
@@ -1088,6 +1143,12 @@ class TestMillpyImplement(unittest.TestCase):
             ),
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
+            ),
+            # The rebind (Card 9) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
             unittest.mock.patch.object(
                 millpy_implement._status, "get_module_verify_baseline", return_value=None

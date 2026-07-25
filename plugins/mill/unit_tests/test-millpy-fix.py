@@ -119,6 +119,14 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._paths, "resolve_git_root",
             return_value=self.tmp_path,
         )
+        self.mock_resolve_container_path = _p(
+            millpy_fix._paths, "resolve_container_path",
+            return_value=self.tmp_path.parent,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_fix._paths, "resolve_active_hub",
+            return_value=self.tmp_path,
+        )
         self.mock_resolve_wiki = _p(
             millpy_fix._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
@@ -573,6 +581,42 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["role"], "fix")
         self.assertEqual(data["scope"], "test-batch")
+
+    def test_project_root_rebind_uses_resolve_active_hub_not_original_hub_path(self):
+        """project_root rebinds to resolve_active_hub's value, not the file's original (escaped) resolution.
+
+        This file resolves project_root via a real, unmocked resolve_hub_path() call
+        (setUp mocks only resolve_git_root -- see the per-file description in Card 12)
+        that succeeds because cwd is chdir'd to self.tmp_path, which has its own
+        .millhouse/config.local.yaml. Overriding resolve_active_hub to a decoy directory
+        distinct from self.tmp_path simulates the "escaped to main worktree" scenario:
+        the original resolution still points at self.tmp_path, but the corrected
+        resolve_active_hub call (added by the rebind fix) returns the right place.
+        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must
+        resolve under the decoy, proving project_root was rebound.
+        """
+        corrected_root = self.tmp_path / "corrected-worktree"
+        corrected_root.mkdir(parents=True, exist_ok=True)
+        _make_fixture(corrected_root)
+        self.mock_resolve_active_hub.return_value = corrected_root
+
+        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        brief_path = Path(data["brief_path"])
+        self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
+        self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
     def test_stage_prepare_batch_scope_with_nits_only(self):
         """--stage prepare --nits-only: prepare envelope carries nits_only:true (#619)."""
@@ -1048,6 +1092,14 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
         self.mock_resolve_git_root = _p(
             millpy_fix._paths, "resolve_git_root",
+            return_value=self.tmp_path,
+        )
+        self.mock_resolve_container_path = _p(
+            millpy_fix._paths, "resolve_container_path",
+            return_value=self.tmp_path.parent,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_fix._paths, "resolve_active_hub",
             return_value=self.tmp_path,
         )
         self.mock_resolve_wiki = _p(
@@ -1671,6 +1723,12 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
             ),
+            # The rebind (Card 10) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_fix, "_forward_output", side_effect=mock_forward_output
             ),
@@ -1748,6 +1806,12 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
             ),
+            # The rebind (Card 10) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
+            ),
             unittest.mock.patch.object(
                 millpy_fix, "_forward_output", side_effect=mock_forward_output
             ),
@@ -1819,6 +1883,12 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         with (
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
+            ),
+            # The rebind (Card 10) supersedes resolve_hub_path's value with
+            # resolve_active_hub's for project_root -- override it here too so
+            # this nested-hub simulation still resolves project_root to nested_hub.
+            unittest.mock.patch.object(
+                millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
             ),
             unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run",
