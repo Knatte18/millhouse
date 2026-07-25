@@ -131,25 +131,26 @@ class DaemonBase(abc.ABC):
     def _handle_connection(self, conn: socket.socket) -> None:
         """Handle one connection: read JSON, auth, dispatch, respond."""
         try:
-            chunks = []
-            while True:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-
-            msg_text = b"".join(chunks).decode("utf-8")
             try:
+                # Recv loop and decode/parse are all pre-dispatch: a peer that
+                # connects, sends nothing or a partial/malformed payload, and
+                # disconnects (the routine bare-connect reachability probe
+                # pattern) triggers one of these exception types, not a genuine
+                # protocol violation. Treat the whole region as diagnostic-only
+                # noise rather than the dispatch-and-beyond errors handled below.
+                chunks = []
+                while True:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+
+                msg_text = b"".join(chunks).decode("utf-8")
                 msg = json.loads(msg_text)
-            except json.JSONDecodeError:
-                # Empty or malformed payload — this is the routine bare-connect
-                # reachability probe pattern (connect, send nothing, close), not a
-                # genuine protocol violation, so it is diagnostic-only noise and must
-                # not be logged at error severity. No response is attempted; the
-                # outer method's `finally: conn.close()` still runs on this return.
-                self._logger.debug(
-                    f"empty/malformed payload on connection ({len(msg_text)} chars)"
-                )
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                # No response is attempted; the outer method's
+                # `finally: conn.close()` still runs on this return.
+                self._logger.debug(f"benign connection error before dispatch: {exc!r}")
                 return
 
             if msg.get("token") != self._token:
