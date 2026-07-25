@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-project-root-rebinding-implement-side
+phase: approved-project-root-rebinding-review-side
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-on-disk-first-resolution  '2026-07-25T15:41:57Z'
 approved-mill-go-resume-fix  '2026-07-25T15:43:38Z'
 approved-paths-skip-slug-validation  '2026-07-25T15:50:12Z'
 approved-project-root-rebinding-implement-side  '2026-07-25T16:01:08Z'
+approved-project-root-rebinding-review-side  '2026-07-25T16:38:45Z'
 ```
 
 ## Batches
@@ -66,7 +67,8 @@ batches:
     start_sha: f528ad7f41070bcc199c74e678791810f2eb4f2a
     commit_sha: dcacd1259fd73aef926b078e5783624e487f0826
   - name: project-root-rebinding-review-side
-    state: running
+    state: approved
     implementer_session: 30f0b09f-ad0e-4b9e-91da-1597a9fedb6f
     start_sha: 36f88f8eaf5a93d8139912ea686aced110a1f3a9
+    commit_sha: bdbcc0a028c25c81773d06bbc9a0ac658a327386
 ```
