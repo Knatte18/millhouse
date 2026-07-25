@@ -15,7 +15,7 @@ Closes #680. `mill-go/SKILL.md`'s `## Resume` section, `state=running` case, sub
 
 ## Cards
 
-### Card 16: Use --resume-incomplete in mill-go's subprocess/psmux Resume path
+### Card 17: Use --resume-incomplete in mill-go's subprocess/psmux Resume path
 
 - **Context:**
   - `plugins/mill/scripts/millpy-implement.py`

@@ -17,7 +17,7 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
 
 ## Cards
 
-### Card 8: Rebind project_root in millpy-implement.py
+### Card 9: Rebind project_root in millpy-implement.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -52,7 +52,7 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
   Every use of `project_root` from this point forward in the function (`status_path = _paths.require_status_path(project_root, cfg)`, `plan_base = _paths.resolve_task_path(project_root, plan_dir)`, the cleanliness-snapshot paths, every `cwd=project_root` git subprocess call, the `"PROJECT_ROOT": str(project_root)` template token, and `briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")`) now resolves against the corrected worktree. The earlier `mill_dir`/`project_root` binding at the top of `main()` (used only to bootstrap `cfg` via `_review_common.load_config`) is left unchanged — see the overview's Shared Decision on why.
 - **Commit:** `fix(millpy-implement): rebind project_root to the active task worktree after slug resolution`
 
-### Card 9: Rebind project_root in millpy-fix.py
+### Card 10: Rebind project_root in millpy-fix.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -61,7 +61,7 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Identical pattern to Card 8. Immediately after the existing
+- **Requirements:** Identical pattern to Card 9. Immediately after the existing
 
   ```python
   try:
@@ -87,7 +87,7 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
   Every subsequent use of `project_root` (`status_path`, `plan_base = _paths.resolve_task_path(project_root, "_mill/plan/")`, `fixer_snapshot_path`, git `cwd=project_root` calls, the `"PROJECT_ROOT": str(project_root)` template token, and `briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")`) resolves against the corrected worktree.
 - **Commit:** `fix(millpy-fix): rebind project_root to the active task worktree after slug resolution`
 
-### Card 10: Capture slug and rebind project_root in millpy-merge-in-subagent.py
+### Card 11: Capture slug and rebind project_root in millpy-merge-in-subagent.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -125,7 +125,7 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
   placed immediately before `if args.recompute_baseline: return _run_recompute_baseline(project_root, git_root, cfg)`. This ensures `_run_recompute_baseline` and every later call in this file that receives `project_root` as a parameter (`_run_conflicts`, `_run_verify_fix`, and their internal `briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")` at all 3 call sites) receives the corrected value — no changes are needed inside `_run_conflicts`/`_run_verify_fix` themselves, since they already take `project_root` as a parameter from their caller.
 - **Commit:** `fix(millpy-merge-in-subagent): capture slug and rebind project_root to the active task worktree`
 
-### Card 11: Add regression tests for the implementer/fixer-family rebinds
+### Card 12: Add regression tests for the implementer/fixer-family rebinds
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -136,7 +136,13 @@ Half of closing #675 (the other half is `project-root-rebinding-review-side`, sp
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** For each of the 3 test files listed under Edits, add one focused regression test matching that file's existing mocking conventions (e.g. `test-millpy-implement.py`'s `setUp`/`_p(...)`/`_run_main` pattern): mock `_paths.resolve_hub_path` (or, for `test-millpy-merge-in-subagent.py`, mock `Path.cwd`) to return a decoy directory simulating the "escaped to main worktree" failure mode (a tmpdir distinct from the fixture's real task worktree), and mock `_paths.resolve_active_hub` to return the fixture's real task worktree path, then assert that `briefs_dir` (or `status_path`, whichever is the simplest observable surface in that file's existing test harness) ends up resolving under the real task worktree, not the decoy. The assertion should fail against the pre-Card-8-through-10 code (which would resolve everything under the decoy) and pass after. Do not weaken or remove any existing test in these 3 files; this card only adds new regression coverage.
+- **Requirements:** **Prerequisite fix required before this card's own new test will pass, and before ANY pre-existing test in these 3 files will still pass (plan-review round 3 BLOCKING finding):** Cards 9-11 add an unguarded `container_path = _paths.resolve_container_path(git_root)` call. `resolve_container_path` → `resolve_main_worktree_root` → `_pygit2_util` performs real git operations against `git_root`; none of the 3 files' existing test fixtures use a real git repo (`test-millpy-implement.py`'s `_make_fixture` and the equivalent fixtures in the other two files create plain tempdir trees with no `git init`, and `setUp` mocks only `_paths.resolve_git_root`/`resolve_hub_path`/`resolve_wiki_path`/`slug_from_branch` — never `resolve_container_path` or `resolve_active_hub`). Left unmocked, `resolve_main_worktree_root` raises an uncaught `SystemExit` against the fake `git_root`, crashing every pre-existing test in all 3 files, not just new ones.
+
+  **Fix, applied to each of the 3 files' shared `setUp`:** add two new mocks, following the same `_p(...)` (or equivalent) pattern already used for `resolve_git_root`/`resolve_hub_path`:
+  - `_paths.resolve_container_path` → return a stable decoy value (e.g. `self.tmp_path.parent`, or any fixed path — its value is never asserted on directly).
+  - `_paths.resolve_active_hub` → return `self.tmp_path` (i.e. the **same** directory `resolve_hub_path` was already mocked to return). This keeps every pre-existing test's `project_root`-derived assertions byte-for-byte unchanged, since the rebind now resolves to the identical value the old code path did in these fixtures.
+
+  **Then**, for each of the 3 test files, add one new, focused regression test that OVERRIDES `resolve_active_hub`'s return value specifically for that one test (via `unittest.mock.patch.object` scoped to the test method, or by temporarily reassigning the shared mock's `return_value`) to a decoy directory DISTINCT from `self.tmp_path`, while `resolve_hub_path` still returns `self.tmp_path` (simulating "escaped to main worktree" — `resolve_hub_path` returns the wrong place, but the corrected `resolve_active_hub` call returns the right one). Assert that `briefs_dir` (or `status_path`, whichever is the simplest observable surface in that file's existing test harness) ends up resolving under the value `resolve_active_hub` returns (the "corrected" one), not `resolve_hub_path`'s. The assertion should fail against the pre-Card-9-through-11 code (which never calls `resolve_active_hub` and would resolve everything under `resolve_hub_path`'s value) and pass after. Do not weaken or remove any existing test in these 3 files; this card only adds the two new shared mocks plus one new regression test per file.
 - **Commit:** `test(dispatch-path-gaps): cover project_root rebinding for implement/fix/merge-in-subagent`
 
 ## Batch Tests

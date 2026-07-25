@@ -17,7 +17,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
 
 ## Cards
 
-### Card 12: Rebind project_root in millpy-review-code.py
+### Card 13: Rebind project_root in millpy-review-code.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -49,7 +49,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
   Every subsequent use of `project_root` (the `require_status_path` guard, the `prepare(...)` call's `project_root=project_root` keyword argument, and **`briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")`** — corrected per plan-review round 1: this line reads `project_root`, not `git_root`; an earlier draft of this card misstated it as already `git_root`-based, which was a factual error against the actual current source — it IS fixed by this rebind, the same as the other review-CLI files) resolves against the corrected worktree.
 - **Commit:** `fix(millpy-review-code): rebind project_root to the active task worktree after slug resolution`
 
-### Card 13: Rebind project_root in millpy-review-plan.py
+### Card 14: Rebind project_root in millpy-review-plan.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -58,7 +58,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Same pattern and same caveat as Card 12 (do not change the `find_active_slug(project_root, wiki_root, cfg)` call). Immediately after the existing
+- **Requirements:** Same pattern and same caveat as Card 13 (do not change the `find_active_slug(project_root, wiki_root, cfg)` call). Immediately after the existing
 
   ```python
   try:
@@ -78,10 +78,10 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
   mill_dir = project_root / ".millhouse"
   ```
 
-  Every subsequent use of `project_root` in the `prepare`-stage branch (both `require_status_path` calls, the `prepare(...)` call's `project_root=project_root` argument, and `briefs_dir`) resolves against the corrected worktree.
+  The insertion point is before the `if args.stage == "prepare": / elif "finalize": / else:` stage dispatch, so every subsequent use of `project_root` — in ALL three stage branches, not just `prepare` (plan-review round 3 NIT: an earlier draft of this card said "in the prepare-stage branch," which understated the fix's reach) — resolves against the corrected worktree: both `require_status_path` calls, the `prepare(...)` call's `project_root=project_root` argument, `briefs_dir`, and equally the `finalize`/`full`-stage branches' own uses of `project_root` (e.g. their `run(...)`/`finalize(...)` calls).
 - **Commit:** `fix(millpy-review-plan): rebind project_root to the active task worktree after slug resolution`
 
-### Card 14: Rebind hub_dir in millpy-review-discussion.py
+### Card 15: Rebind hub_dir in millpy-review-discussion.py
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -90,7 +90,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** This file uses `hub_dir` as the primary variable with `project_root = hub_dir` as an alias — same caveat as Cards 12-13 (slug resolved via `find_active_slug(project_root, wiki_root, cfg)`; do not change that call's argument). Immediately after the existing
+- **Requirements:** This file uses `hub_dir` as the primary variable with `project_root = hub_dir` as an alias — same caveat as Cards 13-14 (slug resolved via `find_active_slug(project_root, wiki_root, cfg)`; do not change that call's argument). Immediately after the existing
 
   ```python
   try:
@@ -114,7 +114,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
   Every subsequent use of `hub_dir`/`project_root` (the `prepare(...)` call and `briefs_dir`) resolves against the corrected worktree.
 - **Commit:** `fix(millpy-review-discussion): rebind hub_dir to the active task worktree after slug resolution`
 
-### Card 15: Add regression tests for the review-CLI-family rebinds
+### Card 16: Add regression tests for the review-CLI-family rebinds
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
@@ -125,7 +125,13 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** For each of the 3 test files listed under Edits, add one focused regression test matching that file's existing mocking conventions: mock `_paths.resolve_hub_path` to return a decoy directory simulating the "escaped to main worktree" failure mode (a tmpdir distinct from the fixture's real task worktree), and mock `_paths.resolve_active_hub` to return the fixture's real task worktree path, then assert that `briefs_dir` ends up resolving under the real task worktree, not the decoy, for all three files (`millpy-review-code.py`'s `briefs_dir` is fixed by this batch's rebind exactly like the other two — see the correction on Card 12; do not treat it as already-correct or exempt it from this test). The assertion should fail against the pre-Card-12-through-14 code (which would resolve everything under the decoy) and pass after. Do not weaken or remove any existing test in these 3 files; this card only adds new regression coverage.
+- **Requirements:** **Corrected scope (plan-review round 3 BLOCKING finding):** an earlier draft of this card said to add a test "matching that file's existing mocking conventions" for all 3 files — this is only true for `test-review-discussion-flow.py`, which already has a CLI-`main()`-level test (`test_brief_path_nested_layout`, using `importlib.util.spec_from_file_location` + `unittest.mock.patch.dict(sys.modules, ...)` to inject `MagicMock` stand-ins for every module `millpy-review-discussion.py`'s `main()` imports inline, then invoking `mod.main()` directly and asserting on the mocks' recorded calls). `test-review-code-flow.py` and `test-review-plan-flow.py` have **no such harness at all** — they only exercise `_review_code.run()`/`_review_plan.run()` (the backend functions), never `millpy-review-code.py`'s/`millpy-review-plan.py`'s own `main()`, which is where Cards 13/14's rebind actually lives. Testing the rebind in those two files requires building the same importlib/`sys.modules`-injection harness from scratch, not extending an existing convention.
+
+  For **`test-review-discussion-flow.py`** (existing harness, extend it): add one new test, modeled directly on `test_brief_path_nested_layout`, that additionally injects a `MagicMock` for `_paths` whose `resolve_hub_path` returns a decoy directory and whose `resolve_active_hub` returns the fixture's real task-worktree directory (distinct from the decoy), then asserts (via the injected mock's recorded call args, same technique `test_brief_path_nested_layout` already uses for `resolve_task_path`) that `briefs_dir` resolves under the value `resolve_active_hub` returned, not `resolve_hub_path`'s.
+
+  For **`test-review-code-flow.py`** and **`test-review-plan-flow.py`** (no existing harness — build one): add one new test to each, following `test_brief_path_nested_layout`'s exact technique: use `importlib.util.spec_from_file_location` to load `millpy-review-code.py` / `millpy-review-plan.py` respectively; build `MagicMock` stand-ins for every module each file's `main()` imports inline (for `millpy-review-code.py`: `_agent_dispatch`, `_paths`, `_reviewers`, `_review_cli`, `_review_common` — providing `ReviewError`, `find_active_slug`, `load_config`, `resolve_path`, and `_review_code` — providing `prepare`, `finalize`, `run`; for `millpy-review-plan.py`: the same set plus `_parent_branch`, and `_review_common` additionally providing `_load_root_from_overview`, `discover_round`, and `_review_plan` providing `prepare`, `finalize`, `run`); inject them via `unittest.mock.patch.dict(sys.modules, injected_modules)` before `exec_module`; patch `sys.argv` to enter the `--stage prepare` branch; call `mod.main()`; and assert, via the mocked `_paths.resolve_active_hub`'s recorded call (mock its return value to a fixture directory distinct from `resolve_hub_path`'s mocked return value) and the mocked `_agent_dispatch.write_brief`'s recorded `briefs_dir` argument, that `briefs_dir` resolves under `resolve_active_hub`'s value, not `resolve_hub_path`'s.
+
+  For all 3 files, the new test's assertion should fail against the pre-Card-13-through-15 code (which never calls `resolve_active_hub` and would resolve `briefs_dir` under `resolve_hub_path`'s decoy value) and pass after. Do not weaken or remove any existing test in these 3 files.
 - **Commit:** `test(dispatch-path-gaps): cover project_root/hub_dir rebinding for the review-CLI family`
 
 ## Batch Tests
