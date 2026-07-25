@@ -29,6 +29,7 @@ Public API:
     render_prompt()      — render a template from plugins/mill/templates/
     parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
     parse_blocking_count() — count "### [<severity>]" headings in review output
+    count_unrecognized_severity_findings() — count findings whose severity matches neither of the two recognized labels, scanning both headings and YAML fallback
     write_review_file()  — write a review file with a canonical timestamp name
     aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
     load_config()        — load mill-config.yaml + optional config.local.yaml
@@ -1624,6 +1625,60 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
 
     _warn_if_prose_diverges(raw_output, severity, yaml_count)
     return yaml_count
+
+
+def count_unrecognized_severity_findings(
+    raw_output: str, *, blocking_severity: str, nit_severity: str
+) -> int:
+    """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md)."""
+    unrecognized_count = 0
+
+    # Markdown headings: same "### [<label>]" shape parse_blocking_count
+    # matches, generalized to capture any bracketed label rather than one
+    # fixed severity, so every heading in the document is inspected.
+    heading_pattern = re.compile(r"^###\s+\[([^\]]+)\]\s+", re.MULTILINE)
+    for match in heading_pattern.finditer(raw_output):
+        label = match.group(1)
+        if label != blocking_severity and label != nit_severity:
+            unrecognized_count += 1
+
+    # Fenced yaml findings blocks: reuse parse_blocking_count's own
+    # fenced-block-scanning approach, but check every entry's severity
+    # against both known labels (case-insensitive) instead of one.
+    blocking_upper = blocking_severity.upper()
+    nit_upper = nit_severity.upper()
+    lines = raw_output.splitlines()
+    index = 0
+    while index < len(lines):
+        # Locate the opening fence of a yaml block.
+        if lines[index].rstrip() == "```yaml":
+            body_lines: list[str] = []
+            index += 1
+            # Collect lines until the closing fence; skip unclosed blocks silently.
+            while index < len(lines) and lines[index].rstrip() != "```":
+                body_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                # Closing fence found -- try to parse the block as YAML.
+                try:
+                    parsed = yaml.safe_load("\n".join(body_lines))
+                except yaml.YAMLError:
+                    # Malformed yaml block -- skip and continue scanning.
+                    index += 1
+                    continue
+                # Only inspect blocks that carry a findings list.
+                if isinstance(parsed, dict) and isinstance(
+                    parsed.get("findings"), list
+                ):
+                    for entry in parsed["findings"]:
+                        if not isinstance(entry, dict):
+                            continue
+                        entry_severity = entry.get("severity", "").upper()
+                        if entry_severity != blocking_upper and entry_severity != nit_upper:
+                            unrecognized_count += 1
+        index += 1
+
+    return unrecognized_count
 
 
 def write_review_file(
