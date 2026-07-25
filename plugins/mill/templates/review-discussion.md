@@ -70,6 +70,8 @@ Severity rules (discussion-specific, per v1 convention):
 - `GAP` — must resolve before plan writing can proceed.
 - `NOTE` — record but do not block.
 
+**Severity vocabulary is closed.** Use ONLY `GAP` or `NOTE` as the bracketed label in a finding heading -- never invent another word. If a finding's severity feels ambiguous, default to `GAP`, never `NOTE`.
+
 Verdict rules:
 - `APPROVE` — zero GAPs. NOTEs fine.
 - `GAPS_FOUND` — one or more GAPs.
