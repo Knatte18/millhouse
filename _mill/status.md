@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-background-noise-and-stale-config
 branch: hanf/mill-background-noise-and-stale-config
 plan: _mill/plan
@@ -20,4 +20,15 @@ discussed  '2026-07-25T11:30:21Z'
 planning  '2026-07-25T12:10:30Z'
 plan-fix-r1  '2026-07-25T12:16:24Z'
 planned  '2026-07-25T12:16:33Z'
+implementing  '2026-07-25T12:21:36Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: daemon-noise-fixes
+    state: pending
+  - name: review-common-load-config-dedup
+    state: pending
 ```
