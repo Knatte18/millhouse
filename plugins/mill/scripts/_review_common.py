@@ -63,6 +63,7 @@ import _paths
 import _pygit2_util
 import _render
 import _reviewers
+import _status
 from _config import (
     load_config as _core_load_config,
     resolve_plugin_template_path,
@@ -339,7 +340,20 @@ def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
 
 
 def load_task_title(git_root: Path, wiki_path: Path, cfg: dict, slug: str) -> str:
-    """Delegate to _marker.task_data for task_title; fall back to slug on MarkerError."""
+    """Read task_title from status.md on disk; fall back to the wiki daemon.
+
+    The first parameter is named git_root for historical reasons, but every
+    call site passes the hub-resolved project_root -- status.md is read
+    relative to whichever value is actually passed in.
+    """
+    try:
+        status_path = _paths.require_status_path(git_root, cfg)
+        full = _status.read_full(status_path)
+        title = full["yaml"].get("task")
+        if title:
+            return title
+    except (_paths.TaskHubError, ValueError, KeyError):
+        pass
     try:
         data = _marker.task_data(git_root, wiki_path, cfg)
     except _marker.MarkerError:
