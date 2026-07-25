@@ -408,6 +408,30 @@ def main() -> int:
         assert p == expected, f"Expected {expected}, got {p}"
         print("PASS: resolve_path('discussion.md', slug) -> worktree/discussion.md")
 
+    # resolve_path: skip_slug_validation=True (its own resolve_active_hub call) avoids
+    # the daemon-backed _marker.slug_from_branch round-trip -- resolve_path is always
+    # called with an already-resolved slug, so it never needs slug_from_branch's
+    # re-validation.
+    with _test_helpers.safe_temp_dir() as tmp:
+        slug = "my-task"
+        container, worktree = _make_worktree_fixture(tmp, slug)
+        original_cwd = Path.cwd()
+        os.chdir(worktree)
+        try:
+            with patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ):
+                p = resolve_path("discussion.md", slug)
+        finally:
+            os.chdir(original_cwd)
+        expected = worktree / "discussion.md"
+        assert p == expected, f"Expected {expected}, got {p}"
+        print(
+            "PASS: resolve_path resolves without calling the daemon-backed "
+            "_marker.slug_from_branch (skip_slug_validation=True)"
+        )
+
     # resolve_path: plan/ and reviews/ templates
     with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
@@ -503,9 +527,17 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        git_root.mkdir()
+        # Real git repo (not a bare mkdir'd dir) -- resolve_path's internal
+        # resolve_active_hub call now passes skip_slug_validation=True, whose
+        # fast path calls _pygit2_util.current_branch(git_root) against the
+        # real filesystem instead of the daemon-backed _marker.slug_from_branch.
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root
         slug = "my-inplace-task"
+        # cfg has no spawn.branch_prefix (neither the wiki config.yaml below nor
+        # the hub's config.local.yaml sets one), so the cheap prefix-strip check
+        # compares the raw branch name against slug with an empty prefix.
+        _test_helpers.checkout_new_branch(repo, slug)
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -524,7 +556,10 @@ def main() -> int:
         worktrees_dir.mkdir()
 
         with (
-            patch("_marker.slug_from_branch", return_value=slug),
+            patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ),
             patch("_paths.resolve_git_root", return_value=git_root),
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),
@@ -543,9 +578,13 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        git_root.mkdir()
+        # Real git repo -- same reasoning as the M2 in-place case above: the
+        # branch-derived slug now comes from a real _pygit2_util.current_branch
+        # call, not the (patched-out) daemon-backed _marker.slug_from_branch.
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root / "src" / "Models"
         slug = "my-subdir-inplace-task"
+        _test_helpers.checkout_new_branch(repo, slug)
 
         wiki_root = tmp_path / "wiki"
         wiki_root.mkdir()
@@ -564,7 +603,10 @@ def main() -> int:
         worktrees_dir.mkdir()
 
         with (
-            patch("_marker.slug_from_branch", return_value=slug),
+            patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ),
             patch("_paths.resolve_git_root", return_value=git_root),
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),

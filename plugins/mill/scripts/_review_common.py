@@ -389,6 +389,16 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
 
     Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
+    ``slug`` is always an already-resolved value here — every caller of
+    ``resolve_path`` (``_review_code.py``, ``_review_plan.py``,
+    ``_review_discussion.py``, and the ``millpy-review-*.py`` CLIs) obtains
+    ``slug`` from its own flow (``find_active_slug`` or a ``--slug``
+    override) before calling this function, so ``resolve_path`` never needs
+    ``resolve_active_hub``'s inner ``slug_from_branch`` re-validation.
+    ``skip_slug_validation=True`` is passed accordingly, avoiding a daemon
+    round-trip on every call — this function runs on both the ``prepare``
+    and ``finalize`` stage of every review round, at least twice per round.
+
     Raises:
         _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch:
             propagated from the inner resolve_active_hub call.
@@ -402,6 +412,7 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
         slug,
         cfg=cfg,
         git_root=git_root,
+        skip_slug_validation=True,
     )
     resolved_tmpl = path_tmpl.replace("<SLUG>", slug)
     return _paths.resolve_task_path(active_hub, resolved_tmpl)
