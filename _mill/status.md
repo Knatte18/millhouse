@@ -60,5 +60,7 @@ batches:
     start_sha: 48fd363b39cf370ba70fe85b8e9ee06e4ae06962
     commit_sha: 56a26dc70937c3cf96c33db2379f977421e05321
   - name: commit-none-backend-gate
-    state: pending
+    state: running
+    implementer_session: 84eb3604-3dc6-47de-ba4b-5255ad35f59b
+    start_sha: e47258121b6d8ae95a3d4b910818b35e68e9abca
 ```
