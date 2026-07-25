@@ -66,5 +66,7 @@ batches:
     start_sha: f528ad7f41070bcc199c74e678791810f2eb4f2a
     commit_sha: dcacd1259fd73aef926b078e5783624e487f0826
   - name: project-root-rebinding-review-side
-    state: pending
+    state: running
+    implementer_session: 30f0b09f-ad0e-4b9e-91da-1597a9fedb6f
+    start_sha: 36f88f8eaf5a93d8139912ea686aced110a1f3a9
 ```
