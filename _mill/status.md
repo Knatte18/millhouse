@@ -42,7 +42,9 @@ batches:
     start_sha: 51223fa5d8690a90e4611055a0969d79430db78d
     commit_sha: 027db4f8a036e9e57e0b9396cbe22a4838bf8ba5
   - name: on-disk-first-resolution
-    state: pending
+    state: running
+    implementer_session: 4ba84bee-c779-4451-b3b7-8f63ff460f9c
+    start_sha: d5c11126942e9e03613dbad4ead0528c809ba9d5
   - name: mill-go-resume-fix
     state: pending
   - name: paths-skip-slug-validation
