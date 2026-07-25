@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fail-fast-guard
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r4  '2026-07-25T14:33:44Z'
 plan-fix-r5  '2026-07-25T14:40:57Z'
 planned  '2026-07-25T14:41:16Z'
 implementing  '2026-07-25T15:17:35Z'
+approved-fail-fast-guard  '2026-07-25T15:22:16Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ implementing  '2026-07-25T15:17:35Z'
 ```yaml
 batches:
   - name: fail-fast-guard
-    state: running
+    state: approved
     implementer_session: 18ae4c05-7df8-4e85-b257-7d6ae4757065
     start_sha: 51223fa5d8690a90e4611055a0969d79430db78d
+    commit_sha: 027db4f8a036e9e57e0b9396cbe22a4838bf8ba5
   - name: on-disk-first-resolution
     state: pending
   - name: mill-go-resume-fix
