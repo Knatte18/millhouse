@@ -87,6 +87,8 @@ Severity:
 - `BLOCKING` — must fix before batch is approved.
 - `NIT` — record but do not block.
 
+**Severity vocabulary is closed.** Use ONLY `BLOCKING` or `NIT` as the bracketed label in a finding heading -- never invent another word (e.g. `MAJOR`, `MINOR`, `CRITICAL`, `MEDIUM`, `HIGH`). If a finding's severity feels ambiguous, default to `BLOCKING`, never `NIT` -- an over-cautious BLOCKING can be pushed back on by the orchestrator; a mislabeled NIT (or an unrecognized label) can silently skip review entirely.
+
 Verdict:
 - `APPROVE` — zero BLOCKINGs.
 - `REQUEST_CHANGES` — one or more BLOCKINGs.

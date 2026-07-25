@@ -1208,6 +1208,171 @@ def main() -> int:
             print(f"FAIL: case 27 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 27c: commit-none exemption fires -- a zero-commit batch whose reported
+    # cards_done are entirely Commit: none cards is not demoted to stuck/logic.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha
+        verify_cmd = "exit 0"
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session",'
+            '"cards_done":[1,2]}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+                card_ids={1, 2},
+                commit_none_card_ids={1, 2},
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 27c: expected status=success, got {data}"
+            )
+            print(
+                "PASS: case 27c - commit-none exemption fires: zero commits +"
+                " cards_done subset of commit_none_card_ids -> success"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 27c ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 27d: commit-none exemption does not overfire on a mixed batch -- card 2
+    # is a real card falsely reported alongside a commit-none card 1, with no
+    # actual commit made. The exemption requires a subset, not mere overlap.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha
+        verify_cmd = "exit 0"
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session",'
+            '"cards_done":[1,2]}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+                card_ids={1, 2},
+                commit_none_card_ids={1},
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 27d: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 27d: expected stuck_type=logic, got {data}"
+            )
+            assert "no content commit" in data.get("reason", "").lower(), (
+                f"case 27d: expected 'no content commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 27d - commit-none exemption does not overfire:"
+                " cards_done not a subset of commit_none_card_ids -> stuck/logic"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 27d ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 27e: commit_none_card_ids absent (default None) behaves exactly as
+    # today -- regression-proves the new parameter is opt-in. Repeats case 27's
+    # exact setup and assertions, without passing commit_none_card_ids at all.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha
+        verify_cmd = "exit 0"
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=verify_cmd,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 27e: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 27e: expected stuck_type=logic, got {data}"
+            )
+            assert "no content commit" in data.get("reason", "").lower(), (
+                f"case 27e: expected 'no content commit' in reason, got {data}"
+            )
+            print(
+                "PASS: case 27e - commit_none_card_ids absent -> unchanged"
+                " zero-commit-report behavior"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 27e ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 27f: _reclassify_verify_failure exemption -- called directly with a
+    # synthetic verify_stuck dict, zero content commits, and cards_done entirely
+    # covered by commit_none_card_ids. The premature content==0 "no content
+    # commit" hard-fail must be skipped (either verify_stuck is returned
+    # unchanged, or an incomplete reclassification occurs per
+    # _cards_incomplete_reason -- either way, NOT the content==0 dict).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        # No commit since start_sha -- fresh fixture, HEAD is the base commit.
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        verify_stuck = {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": "synthetic verify failure",
+        }
+        try:
+            result = _reclassify_verify_failure(
+                verify_stuck,
+                project_root,
+                start_sha,
+                {3},
+                "sess-27f",
+                cards_done=[3],
+                commit_none_card_ids={3},
+            )
+            is_no_content_dict = (
+                result.get("stuck_type") == "logic"
+                and "no content commit" in result.get("reason", "").lower()
+            )
+            assert not is_no_content_dict, (
+                f"case 27f: exemption should skip the content==0 hard-fail, got {result}"
+            )
+            print(
+                "PASS: case 27f - _reclassify_verify_failure exemption:"
+                " content==0 hard-fail skipped when cards_done subset of"
+                " commit_none_card_ids"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 27f ({exc})", file=sys.stderr)
+            errors += 1
+
     # Case 28: #499/#502 regression (a) - API error markers classified as transient
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)

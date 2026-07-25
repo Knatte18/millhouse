@@ -1663,6 +1663,42 @@ def main() -> int:
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
+    # ------------------------------------------------------------------
+    # Test 29 — fail-loud unrecognized severity in synchronous per-batch
+    # dispatch (line 284 call site). A per-batch reviewer response with
+    # ONLY a "### [MAJOR]" heading (no "### [BLOCKING]" heading at all)
+    # must still surface as blocking_count == 1, proving the synchronous
+    # subprocess dispatch path -- the path most divergent from batch 1's
+    # finalize_scope() fix -- is fail-loud rather than silently dropping
+    # the unrecognized severity from both counters.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            major_only = (
+                "# Review\n\n"
+                "### [MAJOR] compile break\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([
+                (major_only,   "sid-major"),
+                (APPROVE_TEXT, "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.blocking_count == 1, f"expected blocking_count=1, got {r.blocking_count}"
+            print("PASS test29: unrecognized [MAJOR] severity fail-loud in synchronous per-batch dispatch")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test29: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test29 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
