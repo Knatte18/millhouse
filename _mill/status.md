@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: mill-skill-docs-and-tooling-accuracy
+branch: hanf/mill-skill-docs-and-tooling-accuracy
+plan: null
+parent: hanf/linux-port-more
+task: Skill doc/table accuracy gaps across mill-groom, mill-start/mill-plan, and implementer-brief
+task_description: |
+  Skill doc/table accuracy gaps across mill-groom, mill-start/mill-plan, and implementer-brief
+```
+
+## Timeline
+
+```text
+discussing  '2026-07-25T11:01:00Z'
+```
