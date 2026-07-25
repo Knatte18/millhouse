@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: _mill/plan
@@ -28,4 +28,23 @@ plan-review-r4  '2026-07-25T14:33:44Z'
 plan-fix-r4  '2026-07-25T14:33:44Z'
 plan-fix-r5  '2026-07-25T14:40:57Z'
 planned  '2026-07-25T14:41:16Z'
+implementing  '2026-07-25T15:17:35Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fail-fast-guard
+    state: pending
+  - name: on-disk-first-resolution
+    state: pending
+  - name: mill-go-resume-fix
+    state: pending
+  - name: paths-skip-slug-validation
+    state: pending
+  - name: project-root-rebinding-implement-side
+    state: pending
+  - name: project-root-rebinding-review-side
+    state: pending
 ```
