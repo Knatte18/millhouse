@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -22,4 +22,23 @@ plan-review-r1  '2026-07-25T13:34:41Z'
 plan-fix-r1  '2026-07-25T13:34:41Z'
 plan-fix-r2  '2026-07-25T13:43:12Z'
 planned  '2026-07-25T13:43:35Z'
+implementing  '2026-07-25T13:45:37Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: severity-failloud-core
+    state: pending
+  - name: severity-vocabulary-docs
+    state: pending
+  - name: commit-none-validator
+    state: pending
+  - name: commit-none-implementer-brief
+    state: pending
+  - name: severity-failloud-legacy-callsites
+    state: pending
+  - name: commit-none-backend-gate
+    state: pending
 ```
