@@ -12,6 +12,7 @@ import json
 import logging
 import logging.handlers
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -681,6 +682,133 @@ def main() -> int:
             _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
     except Exception as exc:
         fail("_handle_connection malformed-nonempty payload -> debug log, no response, no crash", exc)
+
+    # --- (y) _handle_connection recv-loop benign error -> debug log, no response, no crash ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            daemon = TestDaemon("test", tmp / "state.json", 30)
+            daemon._token = "tok"
+            mock_conn = MagicMock()
+            mock_conn.recv.side_effect = OSError("connection reset")
+            with patch.object(daemon._logger, "debug") as mock_debug, \
+                 patch.object(daemon._logger, "error") as mock_error:
+                daemon._handle_connection(mock_conn)
+            assert not mock_conn.sendall.called, "no response should be attempted"
+            assert mock_conn.close.called, "connection should still be closed"
+            assert mock_debug.called, "recv-loop OSError should be logged at debug"
+            assert not mock_error.called, "recv-loop OSError should NOT be logged at error"
+            ok("_handle_connection recv-loop benign error -> debug log, no response, no crash")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_handle_connection recv-loop benign error -> debug log, no response, no crash", exc)
+
+    # --- (z) handle_request raising benign OSError -> still ERROR + response attempt ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            daemon = TestDaemon("test", tmp / "state.json", 30)
+            daemon._token = "tok"
+            mock_conn = MagicMock()
+            mock_conn.recv.side_effect = [json.dumps({"token": "tok"}).encode("utf-8"), b""]
+            with patch.object(daemon, "handle_request", side_effect=OSError("disk full")), \
+                 patch.object(daemon._logger, "debug") as mock_debug, \
+                 patch.object(daemon._logger, "error") as mock_error:
+                daemon._handle_connection(mock_conn)
+            assert mock_conn.sendall.called, "server_error response should be attempted"
+            assert mock_error.called, "dispatch-region OSError should be logged at error"
+            assert not mock_debug.called, "dispatch-region OSError should NOT be logged at debug"
+            ok("handle_request raising benign OSError -> still ERROR + response attempt")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("handle_request raising benign OSError -> still ERROR + response attempt", exc)
+
+    # --- (aa) handle_request raising non-benign KeyError -> ERROR (baseline, unaffected) ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            daemon = TestDaemon("test", tmp / "state.json", 30)
+            daemon._token = "tok"
+            mock_conn = MagicMock()
+            mock_conn.recv.side_effect = [json.dumps({"token": "tok"}).encode("utf-8"), b""]
+            with patch.object(daemon, "handle_request", side_effect=KeyError("missing")), \
+                 patch.object(daemon._logger, "debug") as mock_debug, \
+                 patch.object(daemon._logger, "error") as mock_error:
+                daemon._handle_connection(mock_conn)
+            assert mock_conn.sendall.called, "server_error response should be attempted"
+            assert mock_error.called, "dispatch-region KeyError should be logged at error"
+            assert not mock_debug.called, "dispatch-region KeyError should NOT be logged at debug"
+            ok("handle_request raising non-benign KeyError -> ERROR (baseline, unaffected)")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("handle_request raising non-benign KeyError -> ERROR (baseline, unaffected)", exc)
+
+    # --- (ab) logger consolidation: connection-level logger reaches wiki-server rotating file ---
+    try:
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+            # Force the production code path so the real RotatingFileHandler is
+            # exercised, matching case (g)'s SKIP_GIT pop/restore.
+            prev_skip = os.environ.pop("WIKI_DAEMON_SKIP_GIT", None)
+            try:
+                wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            finally:
+                if prev_skip is not None:
+                    os.environ["WIKI_DAEMON_SKIP_GIT"] = prev_skip
+
+            assert wiki_server._logger is wiki_server._log, \
+                "DaemonBase's connection-level logger and WikiServer's business-logic " \
+                "logger should now be the identical Logger singleton"
+            assert wiki_server._logger.name == "wiki-server", \
+                f"expected logger name 'wiki-server', got {wiki_server._logger.name!r}"
+            ok("logger consolidation: connection-level logger reaches wiki-server rotating file")
+    except Exception as exc:
+        fail("logger consolidation: connection-level logger reaches wiki-server rotating file", exc)
+
+    # --- (ac) _spawn_server stdio redirection, both platform branches ---
+    try:
+        from wiki import _client
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+
+            with patch("wiki._client.subprocess.Popen") as mock_popen:
+                with patch.object(sys, "platform", "linux"):
+                    _client._spawn_server(wiki_path)
+                assert mock_popen.called, "Popen should be called"
+                call_args, call_kwargs = mock_popen.call_args
+                assert call_args[0] == [
+                    sys.executable, "-m", _client._SERVER_MODULE, str(wiki_path)
+                ], f"expected plain cmd list on POSIX, got {call_args[0]}"
+                assert call_kwargs.get("stdout") is subprocess.DEVNULL
+                assert call_kwargs.get("stderr") is subprocess.DEVNULL
+                assert call_kwargs.get("close_fds") is True
+                assert call_kwargs.get("start_new_session") is True
+
+                mock_popen.reset_mock()
+
+                with patch.object(sys, "platform", "win32"):
+                    _client._spawn_server(wiki_path)
+                assert mock_popen.called, "Popen should be called"
+                call_args, call_kwargs = mock_popen.call_args
+                launch_cmd = call_args[0]
+                assert launch_cmd[:6] == ["cmd", "/c", "start", "", "/B", "/MIN"], \
+                    f"expected cmd /c start ... /B /MIN prefix, got {launch_cmd[:6]}"
+                assert call_kwargs.get("stdout") is subprocess.DEVNULL
+                assert call_kwargs.get("stderr") is subprocess.DEVNULL
+                assert call_kwargs.get("close_fds") is True
+                assert "creationflags" in call_kwargs, "Windows branch must still set creationflags"
+            ok("_spawn_server stdio redirection, both platform branches")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("_spawn_server stdio redirection, both platform branches", exc)
 
     print("", file=sys.stderr)
     if failed:
