@@ -34,7 +34,7 @@ External interface the next batch consumes: the new function `count_unrecognized
 
 ### Card 2: Wire the fail-loud helper into `finalize_scope()`
 
-- **Context:** none (covered by Card 1's Edits)
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_review_common.py`
 - **Creates:** none
