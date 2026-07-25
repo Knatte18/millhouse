@@ -275,11 +275,15 @@ def prepare(
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
     # Move targets exist post-implementation; the code reviewer should see the
-    # relocated file so it can verify the rename landed correctly.
-    _, moves_targets_union = compute_moves_union(plan_dir)
+    # relocated file so it can verify the rename landed correctly. Move
+    # sources no longer exist post-implementation -- fold them into
+    # deletes_union so a stale Context: ref pointing at a path a later batch
+    # relocates is silently suppressed rather than hard-failing (#686).
+    moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
     referenced = resolve_ref_paths(
         list(all_raw_refs.keys()), project_root, root,
-        creates_union=creates_union, deletes_union=deletes_union, wiki_root=wiki_root, git_root=git_root,
+        creates_union=creates_union, deletes_union=deletes_union | moves_sources_union,
+        wiki_root=wiki_root, git_root=git_root,
     )
 
     # Deduplicate while preserving order across the three lists.
