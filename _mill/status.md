@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-background-noise-and-stale-config
 branch: hanf/mill-background-noise-and-stale-config
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-daemon-noise-fixes  '2026-07-25T12:26:08Z'
 approved-review-common-load-config-dedup  '2026-07-25T12:31:04Z'
 holistic-reviewing  '2026-07-25T12:31:21Z'
 holistic-approved  '2026-07-25T12:33:50Z'
+done  '2026-07-25T12:34:10Z'
 ```
 
 ## Batches
