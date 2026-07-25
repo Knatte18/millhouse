@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-dispatch-path-gaps
 branch: hanf/mill-go-dispatch-path-gaps
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-07-25T13:06:21Z'
+discussion-fix-r3  '2026-07-25T13:36:12Z'
+discussed  '2026-07-25T13:36:12Z'
 ```
