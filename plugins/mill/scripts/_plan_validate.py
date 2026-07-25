@@ -39,6 +39,8 @@ Checks performed (check keys):
     move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
     move-target-collision    — Move target already exists, is targeted by multiple batches, or collides with a Creates: in another batch
     move-mechanic-missing    — batch has non-empty Moves: but is missing a '## Rename mechanic' section
+    commit-none-with-content — a card's Commit: is the literal 'none' sentinel but its
+                               Edits:/Creates:/Deletes:/Moves: has non-none content
 """
 from __future__ import annotations
 
@@ -710,6 +712,101 @@ def _check_card_missing_field(batch_files: list[Path]) -> list[dict]:
                         "card": card_num,
                         "path": None,
                         "message": f"card {card_num} missing required field: {field}:",
+                    })
+    return errors
+
+
+def _card_field_is_none(card_text: str, field: str) -> bool:
+    """Return True if ``field:`` in a single card's text has zero content.
+
+    ``field`` is one of ``"Edits"``, ``"Creates"``, ``"Deletes"`` (matched
+    via ``_RE_REFS_HEADER``) or ``"Moves"`` (matched via
+    ``_RE_MOVES_HEADER``, since its sub-bullets use the two-path
+    ``src`` -> ``dst`` grammar rather than the other fields' bare-path
+    grammar). Mirrors ``_parse_edits_only``'s single-line-vs-multi-line
+    sub-bullet logic, but scoped to one already-extracted card's text
+    rather than a whole batch file.
+
+    A field counts as "all none" when its inline value is the literal
+    ``none`` (case-insensitive). Any other inline value, or any
+    sub-bullet at all under an empty inline value, counts as content.
+    A card with no matching header line at all also counts as "all
+    none" here -- a missing field is ``_check_card_missing_field``'s
+    concern, not this helper's.
+    """
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        if field == "Moves":
+            m = _RE_MOVES_HEADER.match(lines[i])
+        else:
+            m = _RE_REFS_HEADER.match(lines[i])
+            if m and m.group(1) != field:
+                m = None
+        if m:
+            inline = m.group("inline").strip()
+            if inline:
+                return inline.lower() == "none"
+            # Empty inline value: content (if any) lives in sub-bullets.
+            # The "none" sentinel is always written inline, never as a
+            # sub-bullet, so any sub-bullet at all means non-none content.
+            j = i + 1
+            has_sub_bullet = _RE_REFS_SUB.match(lines[j]) is not None if j < len(lines) else False
+            return not has_sub_bullet
+        i += 1
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Check 2b — commit-none-with-content
+# ---------------------------------------------------------------------------
+
+def _check_commit_none_with_content(batch_files: list[Path]) -> list[dict]:
+    """
+    Reject `Commit: none` cards that still declare real Edits/Creates/Deletes/Moves.
+
+    `Commit: none` marks a verification-only card (issue #664) whose sole
+    job is confirming earlier work (e.g. a grep confirming an earlier
+    card's edits landed) -- it must produce zero diff of its own. For
+    each batch file, ``_plan_dag.parse_commit_none_card_ids`` finds the
+    cards declaring `Commit: none`; for each such card, this check
+    re-parses the card's own text via ``_parse_cards`` and inspects its
+    Edits:/Creates:/Deletes:/Moves: fields, scoped to just that card via
+    ``_card_field_is_none``. Any field with non-none content yields one
+    error per offending field, matching ``_check_card_missing_field``'s
+    one-error-per-offense convention.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per offending field on a `Commit: none` card.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        none_card_ids = _plan_dag.parse_commit_none_card_ids(text)
+        if not none_card_ids:
+            continue
+        cards_by_num = dict(_parse_cards(text))
+        for card_num in sorted(none_card_ids):
+            card_lines = cards_by_num.get(card_num)
+            if card_lines is None:
+                continue
+            card_text = "\n".join(card_lines)
+            for field in ("Edits", "Creates", "Deletes", "Moves"):
+                if not _card_field_is_none(card_text, field):
+                    errors.append({
+                        "check": "commit-none-with-content",
+                        "batch": batch_path.stem,
+                        "card": card_num,
+                        "path": None,
+                        "message": (
+                            f"card {card_num} has Commit: none but non-none {field}: "
+                            f"-- verification-only cards must have zero diff"
+                        ),
                     })
     return errors
 
@@ -1817,9 +1914,9 @@ def run(
     Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
     verify-not-isolated, verify-full-suite, verify-malformed-cwd,
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target,
-    batch-oversized, and five Move-specific checks (move-format,
-    move-redundant, move-source-missing, move-target-collision,
-    move-mechanic-missing).
+    batch-oversized, commit-none-with-content, and five Move-specific
+    checks (move-format, move-redundant, move-source-missing,
+    move-target-collision, move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -1874,6 +1971,7 @@ def run(
         git_root=git_root,
     ))
     errors.extend(_check_card_missing_field(batch_files))
+    errors.extend(_check_commit_none_with_content(batch_files))
     errors.extend(_check_card_numbering(batch_files))
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
