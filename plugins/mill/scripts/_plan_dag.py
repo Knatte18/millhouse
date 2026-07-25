@@ -21,6 +21,9 @@ Public API:
         ``batch_files`` is the list of batch filenames present in the
         plan dir (relative names, e.g. ``["01-foundation.md", ...]``),
         used to check ``file:`` references resolve.
+    parse_commit_none_card_ids(batch_text) -> set[int]
+        Return the card numbers in a batch file whose ``Commit:`` field
+        is the literal ``none`` sentinel (verification-only cards).
 
 Structure expected inside the fenced block:
 
@@ -102,6 +105,80 @@ def extract_batch_index(overview_text: str) -> list[dict]:
     if not isinstance(batches, list):
         raise PlanDAGError("`batches:` must be a list")
     return batches
+
+
+# Matches a card-start line, e.g. "### Card 9: Add a helper". Used both to
+# split card blocks and (via re.findall elsewhere, e.g. millpy-implement.py)
+# to collect the plain set of declared card numbers.
+_CARD_START_RE = re.compile(r"^###\s+Card\s+(\d+)\s*:")
+
+# Matches the inline value of a card's ``Commit:`` field bullet, mirroring
+# _plan_validate.py's `_RE_REFS_HEADER`-style card-field bullets but scoped
+# to this one field.
+_CARD_COMMIT_RE = re.compile(r"^-\s*\*\*Commit:\*\*(?P<inline>.*)$", re.MULTILINE)
+
+
+def parse_commit_none_card_ids(batch_text: str) -> set[int]:
+    """Return card numbers whose ``Commit:`` field is the literal ``none``.
+
+    ``Commit: none`` marks a verification-only card (issue #664): a card
+    whose sole job is confirming earlier work (e.g. a grep-and-confirm
+    gate) rather than producing its own diff. Both this module's callers
+    need to identify these cards without depending on each other:
+
+    - ``_plan_validate.py``'s ``commit-none-with-content`` check uses this
+      to find which cards must have zero content in Edits:/Creates:/
+      Deletes:/Moves:.
+    - ``millpy-implement.py``'s no-content-commit gate uses this as the
+      carve-out signal that a zero-commit turn for these specific cards is
+      expected, not a stuck implementer.
+
+    Card blocks are split the same way ``_plan_validate._parse_cards``
+    bounds them: from a ``### Card N:`` line up to the next ``### ``
+    heading or end of file. This is re-implemented here (rather than
+    imported from ``_plan_validate``) because this module's own docstring
+    states callers import ``_plan_dag``, never the reverse.
+
+    Args:
+        batch_text: Full contents of a batch markdown file.
+
+    Returns:
+        The set of card numbers (as declared in ``### Card N:``, not
+        batch-relative indices) whose ``Commit:`` field, stripped and
+        lowercased, equals ``"none"``. A card with no ``Commit:`` line at
+        all is NOT included -- that omission is
+        ``_plan_validate``'s ``card-missing-field`` check's job, not this
+        function's.
+    """
+    # Split the batch text into card blocks: each runs from its
+    # "### Card N:" line up to (but not including) the next "### " heading.
+    lines = batch_text.splitlines()
+    none_card_ids: set[int] = set()
+    current_num: int | None = None
+    current_lines: list[str] = []
+    card_blocks: list[tuple[int, str]] = []
+    for line in lines:
+        m = _CARD_START_RE.match(line)
+        if m:
+            if current_num is not None:
+                card_blocks.append((current_num, "\n".join(current_lines)))
+            current_num = int(m.group(1))
+            current_lines = [line]
+        elif current_num is not None:
+            if line.startswith("### "):
+                card_blocks.append((current_num, "\n".join(current_lines)))
+                current_num = None
+                current_lines = []
+            else:
+                current_lines.append(line)
+    if current_num is not None:
+        card_blocks.append((current_num, "\n".join(current_lines)))
+
+    for card_num, card_block_text in card_blocks:
+        commit_match = _CARD_COMMIT_RE.search(card_block_text)
+        if commit_match and commit_match.group("inline").strip().lower() == "none":
+            none_card_ids.add(card_num)
+    return none_card_ids
 
 
 def _check_shapes(batches: list[dict]) -> None:

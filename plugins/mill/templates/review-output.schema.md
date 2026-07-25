@@ -75,6 +75,8 @@ Required section. Each finding uses this structure:
 - `BLOCKING` — must be resolved before the artefact can be approved. Causes `verdict: REQUEST_CHANGES`.
 - `NIT` — optional quality improvement. Does not block approval.
 
+**Severity vocabulary is closed, and unrecognized labels fail loud, not silent.** Each review type recognizes exactly two severity labels: `BLOCKING`/`NIT` for plan and code reviews, `GAP`/`NOTE` for discussion reviews. The reviewer prompt templates instruct reviewers to use ONLY these labels — never an invented word (e.g. `MAJOR`, `MINOR`, `CRITICAL`, `MEDIUM`, `HIGH`) — and to default an ambiguous finding to the blocking-equivalent label (`BLOCKING` or `GAP`) rather than the non-blocking one. As a code-level backstop against a reviewer LLM emitting an off-vocabulary label anyway, `count_unrecognized_severity_findings()` in `_review_common.py` scans every finding in a review's output — whether expressed as a markdown `### [XXX]` heading OR as a `severity:` entry inside a fenced ` ```yaml ` `findings:` block — and, for any label matching neither of the review type's two recognized labels, folds it into the blocking-equivalent counter (`blocking_count`) instead of silently dropping it from both `blocking_count` and `nit_count`. This runs inside `finalize_scope()` for every review, covering both output formats unconditionally so a mixed-format document (e.g. real `### [NIT]` headings alongside an unrecognized label expressed only in a YAML `findings:` entry) cannot hide an off-vocabulary finding in whichever format the two known severities did not use.
+
 If there are no findings, write `(no findings)` under `## Findings`.
 
 ### `## Verdict`

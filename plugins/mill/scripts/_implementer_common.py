@@ -99,13 +99,53 @@ def _content_commit_count(project_root: Path, start_sha: str | None) -> int | No
     return count
 
 
+def _cards_done_all_commit_none(cards_done, commit_none_card_ids: set[int] | None) -> bool:
+    """
+    Return True when every self-reported done card is a ``Commit: none`` card.
+
+    This is the code-derived no-content-commit-gate carve-out check (issue #664):
+    a batch whose reported cards_done are all verification-only ``Commit: none``
+    cards is expected to make zero content commits, so the zero-commit gates
+    must not demote it to stuck/logic. commit_none_card_ids itself is always
+    computed by the caller from the batch plan file on disk, never trusted from
+    the implementer's own self-report (see the plan's "code-derived, never
+    self-reported" Shared Decision).
+
+    Args:
+        cards_done: The implementer's self-reported cards_done value straight
+            from parsed JSON -- may be None, a list of ints, a list of numeric
+            strings, or malformed; coerced the same way _cards_incomplete_reason
+            coerces it.
+        commit_none_card_ids: The set of card numbers whose Commit: field is
+            the literal none, computed from the batch file on disk. None or
+            empty means no carve-out applies.
+
+    Returns:
+        True only when cards_done is present, coercible, non-empty, and every
+        coerced card number is a member of commit_none_card_ids.
+    """
+    if not commit_none_card_ids:
+        return False
+    if cards_done is None:
+        return False
+    try:
+        coerced = {int(x) for x in cards_done}
+    except (ValueError, TypeError):
+        return False
+    if not coerced:
+        return False
+    return coerced.issubset(commit_none_card_ids)
+
+
 def _reclassify_verify_failure(
     verify_stuck: dict,
     project_root: Path,
     start_sha: str | None,
     card_ids: set[int] | None,
     session_id: str | None,
+    *,
     cards_done=None,
+    commit_none_card_ids: set[int] | None = None,
 ) -> dict:
     """
     Reclassify a verify-failure stuck dict based on how many content commits exist.
@@ -118,8 +158,10 @@ def _reclassify_verify_failure(
 
     Classification rules (applied in order):
       - content is None OR card_ids is None OR card_ids is empty: return verify_stuck unchanged.
-      - content == 0: reclassify as stuck_type=logic "no content commit" (orthogonal to
-        cards_done -- zero commits means zero work regardless of any self-report).
+      - content == 0 and cards_done is not entirely covered by commit_none_card_ids:
+        reclassify as stuck_type=logic "no content commit" (orthogonal to cards_done
+        otherwise -- zero commits means zero work regardless of any self-report, unless
+        every reported card is a verification-only Commit: none card).
       - Otherwise, delegate to _cards_incomplete_reason (the same helper
         _batch_completeness_stuck uses): a non-None reason reclassifies as
         stuck_type=incomplete with commits_made=content; None means the batch is
@@ -136,6 +178,10 @@ def _reclassify_verify_failure(
         cards_done: The implementer's self-reported list of card numbers this
             commit set addresses; forwarded to _cards_incomplete_reason. None
             (the default) uses the absent-field fallback (raw commit-count check).
+        commit_none_card_ids: card numbers whose Commit: field is the literal
+            none, computed by the caller from the batch plan file (never
+            self-reported); when the coerced cards_done is a non-empty subset
+            of this set, the content==0 reclassification below is skipped.
 
     Returns:
         Either verify_stuck unchanged, or a new dict with a different stuck_type.
@@ -146,9 +192,10 @@ def _reclassify_verify_failure(
     if content is None or card_ids is None or len(card_ids) <= 0:
         return verify_stuck
 
-    if content == 0:
+    if content == 0 and not _cards_done_all_commit_none(cards_done, commit_none_card_ids):
         # No content commits at all -- agent likely aborted before touching any files.
-        # Unaffected by cards_done: zero commits is zero work regardless of self-report.
+        # Unaffected by cards_done: zero commits is zero work regardless of self-report,
+        # unless every reported card is a verification-only Commit: none card.
         return {
             "status": "stuck",
             "stuck_type": "logic",
@@ -1191,6 +1238,7 @@ def finalize_from_output(
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -1221,6 +1269,10 @@ def finalize_from_output(
             the completeness gate. cards_done and already_complete (read from
             the parsed success envelope, not accepted as parameters here) are
             compared against this set inside _forward_output.
+        commit_none_card_ids: card numbers whose Commit: field is the literal
+            none, computed by the caller from the batch plan file (never
+            self-reported); when the coerced cards_done is a non-empty subset
+            of this set, the content==0 reclassification below is skipped.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
         nits_only: When True, writes a nits-fixed marker on success.
@@ -1252,6 +1304,7 @@ def finalize_from_output(
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
         card_ids=card_ids,
+        commit_none_card_ids=commit_none_card_ids,
         task_dir=task_dir,
         parent_branch=parent_branch,
         nits_only=nits_only,
@@ -1305,6 +1358,7 @@ def _forward_output(
     module_wide_verify_cmd: str | None = None,
     module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
     parent_branch: str | None = None,
     nits_only: bool = False,
@@ -1339,6 +1393,9 @@ def _forward_output(
     and already_complete are read from the parsed success envelope inside this function, not
     accepted as separate parameters, since they are only ever meaningful alongside a
     self-reported status: success.
+    commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by
+    the caller from the batch plan file (never self-reported); when the coerced cards_done is
+    a non-empty subset of this set, the content==0 reclassification below is skipped.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
     When nits_only is True and status_path and nits_scope are not None, on the parsed-success
     emit path (where a fixer's own reported status == "success" is about to be printed),
@@ -1396,6 +1453,7 @@ def _forward_output(
                     card_ids,
                     _gate_session_id,
                     cards_done=_cards_done,
+                    commit_none_card_ids=commit_none_card_ids,
                 )
                 # Add commit_sha only for verify/transient/incomplete results; logic (no-content)
                 # results match the sibling no-content gates that omit commit_sha.
@@ -1433,7 +1491,11 @@ def _forward_output(
                     ["git", "rev-parse", "HEAD"],
                     cwd=project_root,
                 )
-                if result.returncode == 0 and result.stdout.strip() == start_sha:
+                if (
+                    result.returncode == 0
+                    and result.stdout.strip() == start_sha
+                    and not _cards_done_all_commit_none(_cards_done, commit_none_card_ids)
+                ):
                     # Implementer reported success but no content commit was made
                     print(
                         json.dumps(
@@ -1449,8 +1511,10 @@ def _forward_output(
                 # Guard against the start-batch-commit-only case (Bug #557): prepare makes a
                 # "mill-go: start batch" commit, so HEAD != start_sha even when the implementer
                 # wrote zero code commits. Detect this and demote to stuck/logic.
-                if result.returncode == 0 and _is_only_start_batch_commit(
-                    project_root, start_sha
+                if (
+                    result.returncode == 0
+                    and _is_only_start_batch_commit(project_root, start_sha)
+                    and not _cards_done_all_commit_none(_cards_done, commit_none_card_ids)
                 ):
                     print(
                         json.dumps(

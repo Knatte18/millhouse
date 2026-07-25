@@ -45,6 +45,7 @@ from _review_common import (
     compute_creates_union,
     compute_deletes_union,
     compute_moves_union,
+    count_unrecognized_severity_findings,
     detect_resume_round,
     discover_round,
     finalize_scope,
@@ -282,6 +283,9 @@ def _review_one_batch(
                 # Second NEED_CONTEXT propagates to caller untouched.
 
         blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+        blocking_count += count_unrecognized_severity_findings(
+            raw, blocking_severity="BLOCKING", nit_severity="NIT"
+        )
         path = write_review_file(
             reviews_dir, "plan", round_n, raw, scope=batch_path.stem
         )
@@ -732,6 +736,9 @@ def run(
                             except ReviewError:
                                 _parsed_verdict = "ERROR"
                             _parsed_blocking = parse_blocking_count(_file_text, severity="BLOCKING")
+                            _parsed_blocking += count_unrecognized_severity_findings(
+                                _file_text, blocking_severity="BLOCKING", nit_severity="NIT"
+                            )
                             _disk_reviews.append({
                                 "scope": _batch_stem,
                                 "round": resume_round,
@@ -945,6 +952,9 @@ def run(
                                 verdict = parse_verdict(raw)
                                 # Second NEED_CONTEXT propagates to caller untouched.
                                 blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+                                blocking_count += count_unrecognized_severity_findings(
+                                    raw, blocking_severity="BLOCKING", nit_severity="NIT"
+                                )
                                 path = write_review_file(
                                     reviews_dir, "plan", round_n, raw, scope="holistic"
                                 )
@@ -963,6 +973,9 @@ def run(
                         else:
                             # No resolvable paths to re-attach — propagate NEED_CONTEXT.
                             blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+                            blocking_count += count_unrecognized_severity_findings(
+                                raw, blocking_severity="BLOCKING", nit_severity="NIT"
+                            )
                             path = write_review_file(
                                 reviews_dir, "plan", round_n, raw, scope="holistic"
                             )
@@ -980,6 +993,9 @@ def run(
                             })
                     else:
                         blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+                        blocking_count += count_unrecognized_severity_findings(
+                            raw, blocking_severity="BLOCKING", nit_severity="NIT"
+                        )
                         path = write_review_file(
                             reviews_dir, "plan", round_n, raw, scope="holistic"
                         )
