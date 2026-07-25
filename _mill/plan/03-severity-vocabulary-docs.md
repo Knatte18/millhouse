@@ -37,7 +37,8 @@ Defense-in-depth for the severity-vocabulary blind spot (batches 1-2 are the pri
 
 ### Card 8: Document the fail-loud behavior in the canonical review-output schema
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/templates/review-output.schema.md`
 - **Creates:** none

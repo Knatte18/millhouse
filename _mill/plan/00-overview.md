@@ -3,7 +3,7 @@
 ```yaml
 task: mill-plan review severity counting and validation schema gaps
 slug: mill-plan-review-validation-gaps
-approved: false
+approved: true
 started: 20260725-132313
 parent: hanf/linux-port-more
 root: ""
