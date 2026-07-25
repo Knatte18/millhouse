@@ -122,6 +122,7 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
   - `plugins/mill/unit_tests/test-review-code-flow.py`
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
   - `plugins/mill/unit_tests/test-review-discussion-flow.py`
+  - `plugins/mill/unit_tests/test-review-plan-finalize-round.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
@@ -132,6 +133,8 @@ The other half of closing #675 (split from `project-root-rebinding-implement-sid
   For **`test-review-code-flow.py`** and **`test-review-plan-flow.py`** (no existing harness — build one): add one new test to each, following `test_brief_path_nested_layout`'s exact technique: use `importlib.util.spec_from_file_location` to load `millpy-review-code.py` / `millpy-review-plan.py` respectively; build `MagicMock` stand-ins for every module each file's `main()` imports inline (for `millpy-review-code.py`: `_agent_dispatch`, `_paths`, `_reviewers`, `_review_cli`, `_review_common` — providing `ReviewError`, `find_active_slug`, `load_config`, `resolve_path`, and `_review_code` — providing `prepare`, `finalize`, `run`; for `millpy-review-plan.py`: the same set plus `_parent_branch`, and `_review_common` additionally providing `_load_root_from_overview`, `discover_round`, and `_review_plan` providing `prepare`, `finalize`, `run`); inject them via `unittest.mock.patch.dict(sys.modules, injected_modules)` before `exec_module`; patch `sys.argv` to enter the `--stage prepare` branch; call `mod.main()`; and assert, via the mocked `_paths.resolve_active_hub`'s recorded call (mock its return value to a fixture directory distinct from `resolve_hub_path`'s mocked return value) and the mocked `_agent_dispatch.write_brief`'s recorded `briefs_dir` argument, that `briefs_dir` resolves under `resolve_active_hub`'s value, not `resolve_hub_path`'s.
 
   For all 3 files, the new test's assertion should fail against the pre-Card-13-through-15 code (which never calls `resolve_active_hub` and would resolve `briefs_dir` under `resolve_hub_path`'s decoy value) and pass after. Do not weaken or remove any existing test in these 3 files.
+
+  **Scope extension (discovered during implementation, not part of the original card):** `test-review-plan-finalize-round.py` patches `_paths.resolve_hub_path`/`resolve_git_root`/`resolve_wiki_path` directly on the real `_paths` module (not via `sys.modules` injection) to drive `millpy-review-plan.py`'s and `millpy-review-discussion.py`'s `main()` through the `--stage finalize` branch, but never mocked `_paths.resolve_container_path`/`resolve_active_hub`. Cards 14/15's rebind now calls those for real inside every one of its 4 test cases, which fails against the tests' plain-tempdir fixture (`not a git repository`). Add `unittest.mock.patch("_paths.resolve_container_path")` and `unittest.mock.patch("_paths.resolve_active_hub")` (returning the same `tmp` value already used for `resolve_hub_path`/`resolve_git_root`) to all 4 test cases' mock stacks.
 - **Commit:** `test(dispatch-path-gaps): cover project_root/hub_dir rebinding for the review-CLI family`
 
 ## Batch Tests
