@@ -48,7 +48,9 @@ batches:
     start_sha: d5c11126942e9e03613dbad4ead0528c809ba9d5
     commit_sha: 04b85c39f336d332f67fd02c002e408aa571980b
   - name: mill-go-resume-fix
-    state: pending
+    state: running
+    implementer_session: 4e8848e8-35c3-455c-ba75-0a49434672c9
+    start_sha: dc8c21c62a2b175ea5da96c9d73c1e57904b5572
   - name: paths-skip-slug-validation
     state: pending
   - name: project-root-rebinding-implement-side
