@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
-plan: null
+plan: _mill/plan
 parent: hanf/linux-port-more
 task: mill-plan review severity counting and validation schema gaps
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-07-25T12:45:40Z'
 discussion-fix-r5  '2026-07-25T13:14:43Z'
 discussed  '2026-07-25T13:14:59Z'
+planning  '2026-07-25T13:29:24Z'
 ```
