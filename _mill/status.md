@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-iter-batch-verifies-cross-batch-filter
+phase: approved-verify-replay-callers-wiring
 slug: mill-review-verify-pipeline-state-gaps
 branch: hanf/mill-review-verify-pipeline-state-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-07-25T12:10:40Z'
 approved-review-code-moves-suppression  '2026-07-25T12:24:36Z'
 approved-review-common-parse-deletes  '2026-07-25T12:28:16Z'
 approved-iter-batch-verifies-cross-batch-filter  '2026-07-25T12:34:13Z'
+approved-verify-replay-callers-wiring  '2026-07-25T12:42:40Z'
 ```
 
 ## Batches
@@ -45,7 +46,8 @@ batches:
     start_sha: dc1cb985ca7856e6e1c04624d22640d520678806
     commit_sha: d6a2a4213feb290449b4b229930144225fd7599f
   - name: verify-replay-callers-wiring
-    state: running
+    state: approved
     implementer_session: f54740ff-3253-4c63-96eb-2b6487b34025
     start_sha: f9f2a5667157c6dd7e5bae8aad8ebcb68e8d3491
+    commit_sha: bdd1e23e677bdf387713658b8827ca2d6886e28b
 ```
