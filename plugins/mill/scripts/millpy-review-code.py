@@ -141,6 +141,12 @@ def main(argv: list[str] | None = None) -> int:
         print_error_envelope("code", str(exc))
         return 1
 
+    container_path = _paths.resolve_container_path(git_root)
+    project_root = _paths.resolve_active_hub(
+        container_path, slug, cfg=cfg, git_root=git_root, skip_slug_validation=True
+    )
+    mill_dir = project_root / ".millhouse"
+
     # Guard for per-batch reviews: ensure status.md exists before calling review backend
     if args.batch is not None:
         try:
