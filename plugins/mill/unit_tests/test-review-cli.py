@@ -400,12 +400,19 @@ def test_discussion_prepare_brief_path_uses_hub_dir() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            with _mock.patch("_review_common.load_config", return_value=cfg_dict):
-                                with _mock.patch("_reviewers.load", return_value={}):
-                                    with _mock.patch("_reviewers.validate_role_refs"):
-                                        with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
-                                            with _mock.patch("_review_discussion.prepare", return_value=fake_prepare):
-                                                _rc = _mod.main(["--stage", "prepare"])
+                            # The hub_dir rebind (Card 15) calls resolve_container_path/
+                            # resolve_active_hub for real after slug resolution; mock both
+                            # to keep hub_dir at hub_root -- the nested-layout value this
+                            # test asserts brief_path resolves under -- instead of hitting
+                            # real git against this fixture's plain (non-git) task_root.
+                            with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
+                                with _mock.patch("_paths.resolve_active_hub", return_value=hub_root):
+                                    with _mock.patch("_review_common.load_config", return_value=cfg_dict):
+                                        with _mock.patch("_reviewers.load", return_value={}):
+                                            with _mock.patch("_reviewers.validate_role_refs"):
+                                                with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
+                                                    with _mock.patch("_review_discussion.prepare", return_value=fake_prepare):
+                                                        _rc = _mod.main(["--stage", "prepare"])
         finally:
             _os.chdir(_orig_cwd)
 
@@ -492,16 +499,23 @@ def test_plan_prepare_brief_path_uses_git_root() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            with _mock.patch("_review_common.load_config", return_value=cfg_dict):
-                                with _mock.patch("_reviewers.load", return_value={}):
-                                    with _mock.patch("_reviewers.validate_role_refs"):
-                                        with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
-                                            with _mock.patch("_review_plan.prepare", return_value=fake_prepare):
-                                                # Pass --skip-validate to bypass the pre-review plan
-                                                # validator; mocking _plan_validate.run does not work
-                                                # because the CLI binds it via 'from ... import run'
-                                                # inside the function scope before the mock can intercept.
-                                                _rc = _mod.main(["--stage", "prepare", "--skip-validate"])
+                            # The project_root rebind (Card 14) calls resolve_container_path/
+                            # resolve_active_hub for real after slug resolution; mock both to
+                            # keep project_root at task_root -- the corrected value this test
+                            # asserts brief_path resolves under -- instead of hitting real git
+                            # against this fixture's plain (non-git) task_root.
+                            with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
+                                with _mock.patch("_paths.resolve_active_hub", return_value=task_root):
+                                    with _mock.patch("_review_common.load_config", return_value=cfg_dict):
+                                        with _mock.patch("_reviewers.load", return_value={}):
+                                            with _mock.patch("_reviewers.validate_role_refs"):
+                                                with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
+                                                    with _mock.patch("_review_plan.prepare", return_value=fake_prepare):
+                                                        # Pass --skip-validate to bypass the pre-review plan
+                                                        # validator; mocking _plan_validate.run does not work
+                                                        # because the CLI binds it via 'from ... import run'
+                                                        # inside the function scope before the mock can intercept.
+                                                        _rc = _mod.main(["--stage", "prepare", "--skip-validate"])
         finally:
             _os.chdir(_orig_cwd)
 
@@ -598,12 +612,19 @@ def test_code_prepare_brief_path_uses_git_root() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            with _mock.patch("_review_common.load_config", return_value=cfg_dict):
-                                with _mock.patch("_reviewers.load", return_value={}):
-                                    with _mock.patch("_reviewers.validate_role_refs"):
-                                        with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
-                                            with _mock.patch("_review_code.prepare", return_value=fake_prepare):
-                                                _rc = _mod.main(["--stage", "prepare"])
+                            # The project_root rebind (Card 13) calls resolve_container_path/
+                            # resolve_active_hub for real after slug resolution; mock both to
+                            # keep project_root at task_root -- the corrected value this test
+                            # asserts brief_path resolves under -- instead of hitting real git
+                            # against this fixture's plain (non-git) task_root.
+                            with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
+                                with _mock.patch("_paths.resolve_active_hub", return_value=task_root):
+                                    with _mock.patch("_review_common.load_config", return_value=cfg_dict):
+                                        with _mock.patch("_reviewers.load", return_value={}):
+                                            with _mock.patch("_reviewers.validate_role_refs"):
+                                                with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
+                                                    with _mock.patch("_review_code.prepare", return_value=fake_prepare):
+                                                        _rc = _mod.main(["--stage", "prepare"])
         finally:
             _os.chdir(_orig_cwd)
 
