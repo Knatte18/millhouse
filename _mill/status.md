@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r5
+phase: discussed
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-25T12:45:40Z'
 discussion-fix-r5  '2026-07-25T13:14:43Z'
+discussed  '2026-07-25T13:14:59Z'
 ```
