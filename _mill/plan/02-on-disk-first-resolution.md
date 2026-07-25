@@ -19,6 +19,7 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
 
 - **Context:**
   - `plugins/mill/scripts/_pygit2_util.py`
+  - `plugins/mill/scripts/_marker.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_common.py`
 - **Creates:** none
@@ -72,6 +73,7 @@ Closes #665, #683, #693, #691. `_review_common.find_active_slug` and `_review_co
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/scripts/_marker.py`
 - **Edits:**
   - `plugins/mill/scripts/_review_common.py`
 - **Creates:** none

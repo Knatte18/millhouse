@@ -1,0 +1,27 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go CLI dispatch robustness, wiki-RPC stalls, and briefs_dir path-resolution gaps — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnetmax
+reviewed_file: plan/
+date: 2026-07-25
+```
+
+## Findings
+
+### [NIT] Card 12 mis-describes millpy-fix.py/millpy-merge-in-subagent.py setUp mocking
+**Location:** batch 4 (project-root-rebinding-implement-side), Card 12
+**Issue:** Card 12 states all 3 files' setUp "mocks only `_paths.resolve_git_root`/`resolve_hub_path`/`resolve_wiki_path`/`slug_from_branch`," but verified against source: `test-millpy-fix.py`'s setUp never mocks `resolve_hub_path` (it works only via `resolve_hub_path`'s internal `SystemExit`/`GitOpsError` fallback to `Path.cwd()`), and `test-millpy-merge-in-subagent.py` never calls `resolve_hub_path` at all (its CLI binds `project_root = Path.cwd()` directly).
+**Fix:** Correct the narrative to describe each file's actual setUp precisely; the prescribed fix (add `resolve_container_path` + `resolve_active_hub` mocks returning `self.tmp_path`) is unaffected and still produces the intended regression coverage.
+
+### [NIT] Cards 3/4 omit `_marker.py` from Context despite referencing its API
+**Location:** batch 2 (on-disk-first-resolution), Card 3 and Card 4
+**Issue:** Card 3's Context lists only `_pygit2_util.py`, and Card 4's lists only `_paths.py`/`_status.py`, yet both cards' Requirements snippets reference `_marker.slug_from_branch`, `_marker.MarkerError`, and `_marker.task_data`. Per the Context-completeness criterion this is a candidate BLOCKING gap; mitigated in practice since `_review_common.py` (the Edits: file) already imports `_marker` and calls these exact functions in the pre-existing code the cards modify in place, and the full replacement call is given verbatim.
+**Fix:** Add `plugins/mill/scripts/_marker.py` to both cards' Context: lists for completeness, even though the verbatim snippets make cold-start exploration unnecessary in practice.
+
+## Verdict
+
+APPROVE
+Plan is internally consistent, decisions are faithfully implemented, and all cross-checked source claims verified accurate against current code.
+MILL_REVIEW_END

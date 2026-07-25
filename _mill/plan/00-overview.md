@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go CLI dispatch robustness, wiki-RPC stalls, and briefs_dir path-resolution gaps"
 slug: mill-go-dispatch-path-gaps
-approved: false
+approved: true
 started: "20260725-134500"
 parent: hanf/linux-port-more
 root: ""
