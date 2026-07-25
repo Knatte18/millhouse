@@ -39,7 +39,9 @@ batches:
     start_sha: d29b28008ca5d931b1f1050a8506e71c96692edc
     commit_sha: ef70458fdd241f1ecadad917dbe8361b9b450873
   - name: iter-batch-verifies-cross-batch-filter
-    state: pending
+    state: running
+    implementer_session: bd1e7974-2c4e-4f9d-b412-b912b9a8a925
+    start_sha: dc1cb985ca7856e6e1c04624d22640d520678806
   - name: verify-replay-callers-wiring
     state: pending
 ```
