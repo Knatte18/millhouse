@@ -3,7 +3,7 @@
 ```yaml
 task: "Skill doc/table accuracy gaps across mill-groom, mill-start/mill-plan, and implementer-brief"
 slug: mill-skill-docs-and-tooling-accuracy
-approved: false
+approved: true
 started: "20260725-111826"
 parent: hanf/linux-port-more
 root: ""

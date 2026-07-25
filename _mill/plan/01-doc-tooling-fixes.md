@@ -23,12 +23,13 @@ This batch delivers all four consolidated doc/tooling accuracy fixes from `discu
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Replace the current two-step `## Entry checks` section (step 1: hardcoded `.millhouse/wiki/` existence test with the message `` `.millhouse/wiki/` junction missing. Run `/mill-setup` first. ``; step 2: a separate `_paths.resolve_wiki_path()` call storing the result as `<WIKI_PATH>`) with a single step that calls `_paths.resolve_wiki_path(_paths.resolve_git_root())` directly. On failure (the call raises or exits non-zero), stop and report exactly: "wiki path could not be resolved. Run `/mill-setup` first." On success, store the returned path as `<WIKI_PATH>`, matching the existing downstream usage of `<WIKI_PATH>` later in the file (`## Step 2 — Read task list` and elsewhere). Remove every reference to the literal path `.millhouse/wiki/` from the `## Entry checks` section — no junction path is checked anymore.
+- **Requirements:** Replace the current two-step `## Entry checks` section (step 1: hardcoded `.millhouse/wiki/` existence test with the message `` `.millhouse/wiki/` junction missing. Run `/mill-setup` first. ``; step 2: a separate `_paths.resolve_wiki_path()` call storing the result as `<WIKI_PATH>`) with a single step that calls `_paths.resolve_wiki_path(_paths.resolve_git_root())` directly. On failure (the call raises or exits non-zero), stop and report exactly: "wiki path could not be resolved. Run `/mill-setup` first." On success, store the returned path as `<WIKI_PATH>`, matching the existing downstream usage of `<WIKI_PATH>` later in the file (`## Step 4 — Per-task action menu` and `## Step 6 — Apply (on approve)`). Remove every reference to the literal path `.millhouse/wiki/` from the `## Entry checks` section — no junction path is checked anymore.
 - **Commit:** `docs(mill-groom): drop stale .millhouse/wiki/ junction check, resolve via _paths.resolve_wiki_path`
 
 ### Card 2: mill-start — name required `--agent-output` flag in finalize dispatch text
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/skills/mill-go/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-start/SKILL.md`
 - **Creates:** none
