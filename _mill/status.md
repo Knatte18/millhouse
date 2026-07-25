@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-review-code-moves-suppression
 slug: mill-review-verify-pipeline-state-gaps
 branch: hanf/mill-review-verify-pipeline-state-gaps
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-07-25T11:29:56Z'
 plan-fix-r1  '2026-07-25T12:05:51Z'
 planned  '2026-07-25T12:06:26Z'
 implementing  '2026-07-25T12:10:40Z'
+approved-review-code-moves-suppression  '2026-07-25T12:24:36Z'
 ```
 
 ## Batches
@@ -27,9 +28,10 @@ implementing  '2026-07-25T12:10:40Z'
 ```yaml
 batches:
   - name: review-code-moves-suppression
-    state: running
+    state: approved
     implementer_session: a98b8e42-5ab1-4034-a321-0eca01104d83
     start_sha: 201311bf5eeb30f3601cb67bf3abc375ddd8161f
+    commit_sha: 6b70aed4e97cef6dd66652f985bf8c9f300b4d7a
   - name: review-common-parse-deletes
     state: pending
   - name: iter-batch-verifies-cross-batch-filter
