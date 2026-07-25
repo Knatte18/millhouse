@@ -54,7 +54,9 @@ batches:
     start_sha: a07ccec99fa7ee80387cef79907a5a31023af962
     commit_sha: bc3401331380c8ce65c2b0917a745279e096fd3c
   - name: severity-failloud-legacy-callsites
-    state: pending
+    state: running
+    implementer_session: ec6109e5-97c3-4790-b422-91265ca991af
+    start_sha: 48fd363b39cf370ba70fe85b8e9ee06e4ae06962
   - name: commit-none-backend-gate
     state: pending
 ```
