@@ -116,6 +116,7 @@ from _review_common import (  # noqa: E402
     compute_creates_union,
     compute_deletes_union,
     compute_moves_union,
+    count_unrecognized_severity_findings,
     detect_resume_round,
     discover_round,
     finalize_scope,
@@ -2014,6 +2015,168 @@ def main() -> int:
     result = parse_blocking_count(raw, severity="BLOCKING")
     assert result == 1, f"expected 1 (case-insensitive), got {result}"
     print("PASS: parse_blocking_count yaml severity is case-insensitive")
+
+    # ---------------------------------------------------------------------------
+    # count_unrecognized_severity_findings
+    # ---------------------------------------------------------------------------
+
+    # Empty input -> 0, no crash
+    result = count_unrecognized_severity_findings(
+        "", blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: count_unrecognized_severity_findings empty input -> 0")
+
+    # One unrecognized heading -> 1
+    result = count_unrecognized_severity_findings(
+        "### [MAJOR] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: count_unrecognized_severity_findings one [MAJOR] heading -> 1")
+
+    # Other off-vocabulary words count identically to MAJOR -- no
+    # special-casing by which word the reviewer used.
+    for word in ("MEDIUM", "HIGH", "MINOR"):
+        result = count_unrecognized_severity_findings(
+            f"### [{word}] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
+        )
+        assert result == 1, f"expected 1 for [{word}], got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings [MEDIUM]/[HIGH]/[MINOR] each count as 1"
+    )
+
+    # A recognized BLOCKING heading is not double-counted by this helper --
+    # parse_blocking_count(severity="BLOCKING") already counts it elsewhere.
+    result = count_unrecognized_severity_findings(
+        "### [BLOCKING] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: count_unrecognized_severity_findings [BLOCKING] heading -> 0")
+
+    # A recognized NIT heading is never counted by this helper.
+    result = count_unrecognized_severity_findings(
+        "### [NIT] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 0, f"expected 0, got {result}"
+    print("PASS: count_unrecognized_severity_findings [NIT] heading -> 0")
+
+    # Heading matching is case-sensitive, consistent with parse_blocking_count's
+    # existing case-sensitive heading behavior -- mixed-case spellings of a
+    # recognized severity are not "unrecognized findings" here, they simply
+    # fail to match anything (neither known nor counted as unrecognized).
+    result = count_unrecognized_severity_findings(
+        "### [Major] foo\n### [major] bar\n",
+        blocking_severity="BLOCKING",
+        nit_severity="NIT",
+    )
+    assert result == 0, f"expected 0, got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings mixed-case [Major]/[major] -> 0"
+    )
+
+    # YAML-only unrecognized severity, no markdown headings at all -> 1
+    raw = "```yaml\nfindings:\n  - severity: MAJOR\n    title: foo\n```\n"
+    result = count_unrecognized_severity_findings(
+        raw, blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print("PASS: count_unrecognized_severity_findings yaml-only MAJOR entry -> 1")
+
+    # YAML severity matching is case-insensitive, mirroring parse_blocking_count's
+    # existing YAML-path case-insensitivity.
+    raw = "```yaml\nfindings:\n  - severity: major\n    title: foo\n```\n"
+    result = count_unrecognized_severity_findings(
+        raw, blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings yaml-only lowercase 'major' entry -> 1"
+    )
+
+    # Unconditional scan proof #1: a document has a real [MAJOR] heading AND a
+    # real [NIT] heading (heading_count > 0 for NIT, so parse_blocking_count's
+    # own YAML fallback would never fire for NIT) -- the helper must still find
+    # the [MAJOR] heading rather than skipping the heading scan.
+    raw = "### [MAJOR] foo\n### [NIT] bar\n"
+    result = count_unrecognized_severity_findings(
+        raw, blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings finds [MAJOR] heading alongside a real [NIT] heading"
+    )
+
+    # Unconditional scan proof #2: same document as above, plus an ADDITIONAL
+    # unrecognized severity expressed ONLY as a yaml findings: entry (no
+    # corresponding heading) -- the helper must count both the [MAJOR] heading
+    # AND the yaml-only entry, proving the scan is never gated on which
+    # mechanism the known severities happened to use.
+    raw = (
+        "### [MAJOR] foo\n"
+        "### [NIT] bar\n"
+        "```yaml\n"
+        "findings:\n"
+        "  - severity: MEDIUM\n"
+        "    title: baz\n"
+        "```\n"
+    )
+    result = count_unrecognized_severity_findings(
+        raw, blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 2, f"expected 2, got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings counts both a heading-only and a yaml-only unrecognized entry"
+    )
+
+    # The helper is not hardcoded to BLOCKING/NIT -- it works for the
+    # discussion review type's GAP/NOTE pair too.
+    result = count_unrecognized_severity_findings(
+        "### [MAJOR] foo\n", blocking_severity="GAP", nit_severity="NOTE"
+    )
+    assert result == 1, f"expected 1, got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings works for the GAP/NOTE severity pair"
+    )
+
+    # Double-counting is accepted, documented behavior (see the "Accepted
+    # risk" note in _mill/discussion.md), not a bug: a heading and a
+    # mirroring yaml entry for what a human would consider "the same
+    # finding" are counted twice because the two mechanisms are scanned
+    # unconditionally and independently, with no dedup logic.
+    raw = "### [MAJOR] foo\n```yaml\nfindings:\n  - severity: MAJOR\n    title: foo\n```\n"
+    result = count_unrecognized_severity_findings(
+        raw, blocking_severity="BLOCKING", nit_severity="NIT"
+    )
+    assert result == 2, f"expected 2 (deliberately not deduplicated), got {result}"
+    print(
+        "PASS: count_unrecognized_severity_findings double-counts a heading + mirroring yaml entry (accepted risk, not a bug)"
+    )
+
+    # finalize_scope integration: unrecognized-severity findings fold into
+    # blocking_count alongside the existing BLOCKING count, while a
+    # recognized NIT heading still lands in nit_count only.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir / "reviews"
+        raw = (
+            "```yaml\n"
+            "verdict: REQUEST_CHANGES\n"
+            "reviewed_file: 01-setup.md\n"
+            "date: 2026-01-01\n"
+            "```\n"
+            "### [BLOCKING] foo\n"
+            "### [MAJOR] bar\n"
+            "### [NIT] baz\n"
+        )
+        result = finalize_scope(reviews, "plan", 1, raw, scope="01-setup")
+        assert result["blocking_count"] == 2, (
+            f"expected blocking_count 2, got {result['blocking_count']}"
+        )
+        assert result["nit_count"] == 1, (
+            f"expected nit_count 1, got {result['nit_count']}"
+        )
+        print(
+            "PASS: finalize_scope folds unrecognized-severity findings into blocking_count"
+        )
 
     # ---------------------------------------------------------------------------
     # parse_blocking_count divergence warning
