@@ -55,7 +55,7 @@ class WikiServer(DaemonBase):
             idle_timeout: Seconds before idle-exit.
             refresh_interval: Seconds between lazy pulls.
         """
-        super().__init__("wiki", wiki_path / ".wiki-daemon.json", idle_timeout)
+        super().__init__("wiki-server", wiki_path / ".wiki-daemon.json", idle_timeout)
         self._wiki_path = wiki_path
         self._refresh_interval = refresh_interval
         self._store = Store(wiki_path / "tasks.json")

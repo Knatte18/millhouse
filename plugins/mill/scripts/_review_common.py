@@ -47,7 +47,6 @@ Public API:
 
 from __future__ import annotations
 
-import copy
 import json
 import re
 import _subprocess_util
@@ -65,9 +64,7 @@ import _pygit2_util
 import _render
 import _reviewers
 from _config import (
-    _apply_dispatch_shim,
-    apply_env_overrides,
-    warn_unknown_keys,
+    load_config as _core_load_config,
     resolve_plugin_template_path,
     resolve_repo_config_path,
 )
@@ -1826,65 +1823,63 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
     return "APPROVE"
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge override into base. override wins on conflict."""
-    result = base.copy()
-    for key, val in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
-            result[key] = _deep_merge(result[key], val)
-        elif val is None and isinstance(result.get(key), dict):
-            continue
-        else:
-            result[key] = val
-    return result
-
-
 def load_config(hub_root: Path, mill_dir: Path) -> dict:
-    """Load mill config with overlay from plugin template, repo layer, and local layer.
+    """Load mill config, delegating the core template/repo/local merge to
+    ``_config.load_config`` and layering two review-specific behaviors on top.
 
-    Merge order (lowest to highest precedence):
-    1. Plugin template (mill-config.yaml)
-    2. Hub layer (mill-config.yaml at hub root)
-    3. Local layer (mill_dir / config.local.yaml)
-    4. Environment variable overrides
+    ``_config.load_config`` owns the merge order (plugin template -> hub/repo
+    layer -> local stub -> real config -> env overrides), including its
+    2026-05-31 worktree-template cache-lag augmentation (source-tree template
+    keys not yet landed in the installed plugin cache are folded into the
+    unknown-key check's baseline before the delegate's own unknown-key
+    warning fires). Delegating here means this function automatically
+    inherits that fix and any future fix to the shared merge logic, instead
+    of re-diverging with its own copy.
 
-    Raises ReviewError if no sources are found (strict form for reviews).
+    On top of the delegate this wrapper adds:
+    1. Missing-source strictness: raises ``ReviewError`` when neither the
+       plugin template nor any repo-layer mill-config.yaml exists. This must
+       be checked independently of the delegate's return value, because
+       ``_config.load_config`` never raises and returns ``{}`` both when
+       nothing is found and when a legitimately-present source is empty.
+    2. A stale-``review:``-key warning: peeks at ``mill_dir /
+       config.local.yaml`` (read-only, alongside the delegate's own internal
+       read of the same file) and warns to stderr when it carries an
+       orphaned top-level ``review:`` block that should have been renamed to
+       ``roles:``.
 
     Args:
         hub_root: Absolute path to the hub directory.
         mill_dir: Absolute path to the .millhouse directory.
 
     Returns:
-        Merged configuration dict.
+        Merged configuration dict, as produced by ``_config.load_config``.
+
+    Raises:
+        ReviewError: If neither the plugin template nor a repo-layer
+            mill-config.yaml source exists.
     """
-    # 1. Load plugin template
+    worktree_root = mill_dir.parent
+
+    # Missing-source check, independent of the delegate's return value: an
+    # empty dict from the delegate does not distinguish "nothing found" from
+    # "a source was found but happened to be empty".
     template_path = resolve_plugin_template_path("mill-config.yaml")
-    if template_path.exists():
-        with template_path.open(encoding="utf-8") as fh:
-            cfg = yaml.safe_load(fh) or {}
-    else:
-        cfg = {}
-    template_cfg = copy.deepcopy(cfg)
-
-    # 2. Resolve hub-layer sources
-    mill_cfg_path = resolve_repo_config_path(hub_root, mill_dir.parent)
-
-    # 3. Apply repo-layer merge logic
-    found_repo_layer = False
-    if mill_cfg_path is not None:
-        with mill_cfg_path.open(encoding="utf-8") as fh:
-            repo_cfg = yaml.safe_load(fh) or {}
-        cfg = _deep_merge(cfg, repo_cfg)
-        found_repo_layer = True
-
-    # 4. Strict-missing semantics: require at least one source
-    if not template_path.exists() and not found_repo_layer:
+    mill_cfg_path = resolve_repo_config_path(hub_root, worktree_root)
+    if not template_path.exists() and mill_cfg_path is None:
         raise ReviewError(
             f"Missing config: searched plugin template at {template_path} "
             f"and mill-config.yaml in hub, main worktree, or task worktree"
         )
 
-    # 5. Deep-merge the local layer
+    # Delegate the core template/repo/local merge (including env overrides,
+    # env interpolation, and the dispatch back-compat shim) to the shared
+    # implementation.
+    cfg = _core_load_config(hub_root, worktree_root)
+
+    # Stale-review-key warning: the delegate reads config.local.yaml
+    # internally but does not expose it, so this is re-derived here as a
+    # read-only peek at the same file.
     local_path = mill_dir / "config.local.yaml"
     if local_path.exists():
         with local_path.open(encoding="utf-8") as fh:
@@ -1897,16 +1892,5 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
                 f"(orphaned: {orphaned}); remove them or update to 'roles:'",
                 file=sys.stderr,
             )
-        cfg = _deep_merge(cfg, local_cfg)
-
-    # 6. Validate unknown keys
-    check_cfg = {k: v for k, v in cfg.items() if k != "hub_relative_path"}
-    warn_unknown_keys(check_cfg, template_cfg, "merged config")
-
-    # 7. Apply environment overrides
-    cfg = apply_env_overrides(cfg)
-
-    # 8. Apply dispatch enum back-compat shim for legacy via_psmux
-    _apply_dispatch_shim(cfg)
 
     return cfg
