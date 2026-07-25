@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-severity-vocabulary-docs
+phase: approved-commit-none-validator
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-07-25T13:43:35Z'
 implementing  '2026-07-25T13:45:37Z'
 approved-severity-failloud-core  '2026-07-25T13:52:39Z'
 approved-severity-vocabulary-docs  '2026-07-25T13:55:22Z'
+approved-commit-none-validator  '2026-07-25T14:03:32Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: f866191588c52ad2336e09f00d06cecb00ef0017
     commit_sha: 27b467f6cea911c01b7a86d97bad01323307b813
   - name: commit-none-validator
-    state: running
+    state: approved
     implementer_session: 86c98460-cee1-4646-b845-80d751177577
     start_sha: aded126abc0f9e5c03de842d8d37f0dcbc289abb
+    commit_sha: b6f9d9224c9edd6ab3655548f70a8781c5dffe6d
   - name: commit-none-implementer-brief
     state: pending
   - name: severity-failloud-legacy-callsites
