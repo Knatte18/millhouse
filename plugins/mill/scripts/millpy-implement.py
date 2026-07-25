@@ -238,6 +238,23 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
+    # Fail fast when a full-stage (in-process, synchronous) run is misrouted
+    # under agent-mode dispatch. --stage defaults to "full", so a bare
+    # invocation and an explicit `--stage full` both hit this guard; agent-mode
+    # hubs must instead go through the prepare/finalize two-call split (see
+    # mill-go/SKILL.md "## Agent-mode dispatch"). Checked here -- immediately
+    # after cfg loads, before any git config check, slug resolution, or wiki
+    # daemon I/O -- so a misconfigured call fails in milliseconds rather than
+    # blocking for up to cfg["llm"]["implementer_timeout"] (default 1800s).
+    if args.stage == "full" and _agent_dispatch.resolve_dispatch_mode(cfg) == "agent":
+        print(
+            "millpy-implement.py: --stage full is incompatible with dispatch: agent"
+            " config. Use --stage prepare followed by --stage finalize instead"
+            " (see mill-go/SKILL.md \"## Agent-mode dispatch\").",
+            file=sys.stderr,
+        )
+        return 1
+
     name_result = _subprocess_util.run(
         ["git", "config", "--global", "--get", "user.name"], cwd=project_root
     )
