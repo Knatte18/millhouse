@@ -83,6 +83,28 @@ def test_model_to_tier_raises_on_unknown() -> None:
     print("PASS model_to_tier -- raises on unknown model")
 
 
+def test_resolve_subagent_type_returns_base_when_effort_none() -> None:
+    """resolve_subagent_type returns base unchanged when effort is None."""
+    assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_REVIEWER, None) == "mill:mill-reviewer"
+    assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_IMPLEMENTER, None) == "mill:mill-implementer"
+    print("PASS resolve_subagent_type -- returns base when effort is None")
+
+
+def test_resolve_subagent_type_appends_known_tier() -> None:
+    """resolve_subagent_type appends a recognized effort tier as a suffix."""
+    for tier in ("medium", "high", "max"):
+        assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_REVIEWER, tier) == f"mill:mill-reviewer-{tier}"
+        assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_IMPLEMENTER, tier) == f"mill:mill-implementer-{tier}"
+    print("PASS resolve_subagent_type -- appends known tier")
+
+
+def test_resolve_subagent_type_falls_back_on_unrecognized_tier() -> None:
+    """resolve_subagent_type falls back to base for an unrecognized effort tier."""
+    for tier in ("low", "xhigh", "bogus"):
+        assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_REVIEWER, tier) == "mill:mill-reviewer"
+    print("PASS resolve_subagent_type -- falls back to base on unrecognized tier")
+
+
 def test_write_brief_creates_file() -> None:
     """write_brief creates a file with correct content and path."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -261,6 +283,9 @@ def main() -> int:
         test_model_to_tier_opus,
         test_model_to_tier_haiku,
         test_model_to_tier_raises_on_unknown,
+        test_resolve_subagent_type_returns_base_when_effort_none,
+        test_resolve_subagent_type_appends_known_tier,
+        test_resolve_subagent_type_falls_back_on_unrecognized_tier,
         test_write_brief_creates_file,
         test_write_brief_creates_parent_dirs,
         test_write_brief_overwrites_existing_file,
