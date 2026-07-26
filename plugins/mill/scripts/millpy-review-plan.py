@@ -182,7 +182,9 @@ def main(argv: list[str] | None = None) -> int:
                 "stage": "prepare",
                 "brief_path": str(brief_path),
                 "output_path": str(_agent_dispatch.output_path_for(brief_path)),
-                "subagent_type": _agent_dispatch.SUBAGENT_REVIEWER,
+                "subagent_type": _agent_dispatch.resolve_subagent_type(
+                    _agent_dispatch.SUBAGENT_REVIEWER, prepare_result.get("effort")
+                ),
                 "model": _agent_dispatch.model_to_tier(prepare_result["model"]),
                 "session_id": None,
                 "role": "review-plan",
