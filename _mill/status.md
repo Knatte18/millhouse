@@ -39,5 +39,7 @@ batches:
     start_sha: be729a05144369970f7843191e9776040efe4062
     commit_sha: fc3fa78575611ce222130b0bed46b12ca5bf1d01
   - name: subagent-type-effort-wiring
-    state: pending
+    state: running
+    implementer_session: 47380e1f-16fd-4c4e-ad65-37f5bfd7cb53
+    start_sha: de10b17cb457eb117bd0c6cae0dbfdf8332baab3
 ```
