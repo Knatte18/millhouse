@@ -12,6 +12,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -238,6 +239,36 @@ def test_implementer_agent_definition() -> None:
     print("PASS test_implementer_agent_definition")
 
 
+def test_plugin_json_registers_all_agent_files() -> None:
+    """plugin.json's explicit `agents` array must list every agent-definition file on disk.
+
+    Per Claude Code's plugin manifest reference, an explicit `agents` array *replaces*
+    directory-based auto-discovery -- a file present under `agents/` but missing from
+    this array is never registered as a dispatchable subagent_type. This test guards
+    against the exact class of gap Card 4 fixes: a future agent file added to the
+    directory without a matching plugin.json entry, or a stale entry left behind
+    after a file is removed.
+    """
+    manifest_path = HUB / "plugins" / "mill" / ".claude-plugin" / "plugin.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    # Normalize the manifest's agents array to a set of bare "<name>.md" basenames.
+    manifest_agents = {
+        Path(entry).name for entry in manifest.get("agents", [])
+    }
+
+    # Every agent-definition file actually present on disk.
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    disk_agents = {path.name for path in agents_dir.glob("*.md")}
+
+    assert manifest_agents == disk_agents, (
+        f"plugin.json agents array must exactly match agents/*.md on disk; "
+        f"manifest={manifest_agents}, disk={disk_agents}"
+    )
+
+    print("PASS test_plugin_json_registers_all_agent_files")
+
+
 def main() -> int:
     tests = [
         test_reviewer_agent_definition,
@@ -248,6 +279,7 @@ def main() -> int:
         test_implementer_medium_agent_definition,
         test_implementer_high_agent_definition,
         test_implementer_max_agent_definition,
+        test_plugin_json_registers_all_agent_files,
     ]
     failures: list[str] = []
     for fn in tests:
