@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-agent-effort-gap
 branch: hanf/mill-agent-effort-gap
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-merge-in-effort-forward  '2026-07-26T08:27:40Z'
 approved-subagent-type-effort-wiring  '2026-07-26T08:32:26Z'
 holistic-reviewing  '2026-07-26T08:32:50Z'
 holistic-approved  '2026-07-26T08:34:29Z'
+done  '2026-07-26T08:34:54Z'
 ```
 
 ## Batches
