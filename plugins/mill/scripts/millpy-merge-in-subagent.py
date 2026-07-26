@@ -353,7 +353,7 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(impl_model)
         session_id = str(uuid.uuid4())
-        return emit_prepare(briefs_dir, "merge", "conflicts", 1, prompt_text, model_tier, session_id)
+        return emit_prepare(briefs_dir, "merge", "conflicts", 1, prompt_text, model_tier, session_id, effort=impl_effort)
 
     # Stage: full (default)
     try:
@@ -434,7 +434,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(impl_model)
         session_id = str(uuid.uuid4())
-        return emit_prepare(briefs_dir, "merge", "verify-fix", 1, prompt_text, model_tier, session_id)
+        return emit_prepare(briefs_dir, "merge", "verify-fix", 1, prompt_text, model_tier, session_id, effort=impl_effort)
 
     # Stage: full (default)
     try:

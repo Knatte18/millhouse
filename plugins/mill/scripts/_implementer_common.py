@@ -1172,7 +1172,9 @@ def emit_prepare(
     envelope = {
         "stage": "prepare",
         "brief_path": str(brief_path.resolve()),
-        "subagent_type": _agent_dispatch.SUBAGENT_IMPLEMENTER,
+        "subagent_type": _agent_dispatch.resolve_subagent_type(
+            _agent_dispatch.SUBAGENT_IMPLEMENTER, effort
+        ),
         "model": model_tier,
         "session_id": session_id,
         "role": role,

@@ -252,8 +252,14 @@ def _assert_effort_envelope(review_type: str, effort: str | None) -> bool:
         return False
 
     if effort is None:
-        return "effort" not in envelope
-    return envelope.get("effort") == effort
+        return (
+            "effort" not in envelope
+            and envelope["subagent_type"] == _agent_dispatch.SUBAGENT_REVIEWER
+        )
+    return (
+        envelope.get("effort") == effort
+        and envelope["subagent_type"] == f"{_agent_dispatch.SUBAGENT_REVIEWER}-{effort}"
+    )
 
 
 def test_discussion_prepare_envelope_has_effort() -> bool:

@@ -13,6 +13,11 @@ model_to_tier(model: str) -> str
     claude-opus-* -> "opus", claude-haiku-* -> "haiku".
     Raises ValueError on unrecognized family.
 
+resolve_subagent_type(base: str, effort: str | None) -> str
+    Append an effort-tier suffix ("-medium"/"-high"/"-max") to a base
+    subagent_type string when effort names a recognized tier. Falls back to
+    base unchanged for None or any unrecognized value -- never raises.
+
 write_brief(briefs_dir: Path, role: str, scope: str, round_n: int, prompt_text: str, output_contract: bool = False) -> Path
     Write a brief file to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md,
     creating parent directories. The scope component is sanitized for Windows
@@ -45,6 +50,7 @@ import _review_common
 __all__ = [
     "resolve_dispatch_mode",
     "model_to_tier",
+    "resolve_subagent_type",
     "write_brief",
     "output_path_for",
     "language_skills_directive",
@@ -61,6 +67,7 @@ MODEL_FAMILIES = {
     "claude-opus": "opus",
     "claude-haiku": "haiku",
 }
+EFFORT_TIERED_SUBAGENT_TYPES = frozenset({"medium", "high", "max"})
 
 
 def resolve_dispatch_mode(cfg: dict) -> str:
@@ -101,6 +108,35 @@ def model_to_tier(model: str) -> str:
         if model.startswith(family):
             return tier
     raise ValueError(f"Unrecognized model family: {model!r}")
+
+
+def resolve_subagent_type(base: str, effort: str | None) -> str:
+    """Compute the tier-suffixed subagent_type for an Agent-tool dispatch.
+
+    This is the single place every envelope-construction call site computes
+    a tier-suffixed subagent_type string, rather than each re-implementing
+    the "{base}-{effort}" f-string pattern inline.
+
+    Args:
+        base: The base subagent_type, e.g. SUBAGENT_REVIEWER or
+            SUBAGENT_IMPLEMENTER.
+        effort: The resolved alias's effort tier, or None when the alias
+            carries no effort field.
+
+    Returns:
+        base unchanged when effort is None or not a member of
+        EFFORT_TIERED_SUBAGENT_TYPES -- this fallback is deliberate and
+        forward-compatible: an unrecognized future tier (e.g. someone adding
+        "effort: low" to mill-agents.yaml before a matching agent-definition
+        file exists) degrades to today's base behavior rather than raising
+        or constructing a subagent_type with no matching file on disk.
+        Otherwise returns f"{base}-{effort}", e.g.
+        resolve_subagent_type(SUBAGENT_REVIEWER, "high") ->
+        "mill:mill-reviewer-high".
+    """
+    if effort is None or effort not in EFFORT_TIERED_SUBAGENT_TYPES:
+        return base
+    return f"{base}-{effort}"
 
 
 def write_brief(
