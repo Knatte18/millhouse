@@ -33,7 +33,9 @@ batches:
     start_sha: 33920a514ccd380d79d885c8ed29b02b1a97f48a
     commit_sha: 3d871e767879b9b180181d3b855a3a72bfb5251a
   - name: merge-in-effort-forward
-    state: pending
+    state: running
+    implementer_session: c65fb94d-82cf-4852-8c02-3e2f7614d7be
+    start_sha: be729a05144369970f7843191e9776040efe4062
   - name: subagent-type-effort-wiring
     state: pending
 ```
