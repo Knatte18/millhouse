@@ -385,6 +385,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["role"], "merge")
         self.assertEqual(data["scope"], "conflicts")
+        self.assertEqual(data["effort"], "high")
 
     def test_project_root_rebind_uses_resolve_active_hub_not_raw_cwd(self):
         """project_root rebinds to resolve_active_hub's value, not the raw Path.cwd() this file used before.
@@ -477,6 +478,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["role"], "merge")
         self.assertEqual(data["scope"], "verify-fix")
+        self.assertEqual(data["effort"], "high")
 
     def test_15_stage_finalize_conflicts(self):
         """--stage finalize conflicts mode: reads agent output, calls finalize_from_output."""
