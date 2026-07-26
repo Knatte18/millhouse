@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-effort-forward
+phase: approved-subagent-type-effort-wiring
 slug: mill-agent-effort-gap
 branch: hanf/mill-agent-effort-gap
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-07-26T08:18:35Z'
 implementing  '2026-07-26T08:21:25Z'
 approved-tier-agent-definition-files  '2026-07-26T08:25:37Z'
 approved-merge-in-effort-forward  '2026-07-26T08:27:40Z'
+approved-subagent-type-effort-wiring  '2026-07-26T08:32:26Z'
 ```
 
 ## Batches
@@ -39,7 +40,8 @@ batches:
     start_sha: be729a05144369970f7843191e9776040efe4062
     commit_sha: fc3fa78575611ce222130b0bed46b12ca5bf1d01
   - name: subagent-type-effort-wiring
-    state: running
+    state: approved
     implementer_session: 47380e1f-16fd-4c4e-ad65-37f5bfd7cb53
     start_sha: de10b17cb457eb117bd0c6cae0dbfdf8332baab3
+    commit_sha: 95455cd24f8d73243ed55e7b358b8ba785cdd98f
 ```
