@@ -36,6 +36,121 @@ def _extract_frontmatter(text: str) -> dict | None:
     return None
 
 
+def _check_tier_agent_definition(
+    agent_file: Path, base_file: Path, expected_effort: str
+) -> None:
+    """Assert a per-tier agent-definition file is a faithful tier variant of its base.
+
+    Per the overview's "new agent-definition files are byte-identical to their base
+    except name and effort" Shared Decision, a tier file (e.g. mill-reviewer-high.md)
+    must carry the same description and tools as its base file (mill-reviewer.md),
+    differing only in its `name` (matching the tier filename stem) and an added
+    `effort` frontmatter key.
+
+    Args:
+        agent_file: path to the tier-suffixed agent-definition file under test.
+        base_file: path to the untiered base agent-definition file it was derived from.
+        expected_effort: the tier string the file's `effort` frontmatter key must equal
+            (e.g. "medium", "high", "max").
+    """
+    assert agent_file.exists(), f"Agent file not found: {agent_file}"
+
+    tier_text = agent_file.read_text(encoding="utf-8")
+    tier_fm = _extract_frontmatter(tier_text)
+    assert tier_fm is not None, f"No frontmatter in {agent_file}"
+
+    base_text = base_file.read_text(encoding="utf-8")
+    base_fm = _extract_frontmatter(base_text)
+    assert base_fm is not None, f"No frontmatter in {base_file}"
+
+    # Name must match the tier file's own filename stem, e.g. "mill-reviewer-high".
+    assert tier_fm.get("name") == agent_file.stem, (
+        f"Expected name {agent_file.stem!r}, got {tier_fm.get('name')!r}"
+    )
+
+    # Description is copied verbatim from the base file -- read it dynamically so
+    # this check tracks the base file's actual text rather than a hardcoded copy.
+    base_desc = base_fm.get("description")
+    assert tier_fm.get("description") == base_desc, (
+        f"{agent_file.name} description must equal base file's description exactly; "
+        f"got {tier_fm.get('description')!r}, expected {base_desc!r}"
+    )
+
+    # Tools set is copied verbatim from the base file (normalized the same way the
+    # base-file tests normalize theirs: split on comma/whitespace, strip, dedupe).
+    tier_tools_raw = tier_fm.get("tools", "")
+    base_tools_raw = base_fm.get("tools", "")
+    tier_tools = {t.strip() for t in tier_tools_raw.replace(",", " ").split() if t.strip()}
+    base_tools = {t.strip() for t in base_tools_raw.replace(",", " ").split() if t.strip()}
+    assert tier_tools == base_tools, (
+        f"{agent_file.name} tools must equal base file's tools exactly; "
+        f"got {tier_tools}, expected {base_tools}"
+    )
+
+    # The tier is what makes this file dispatchable as a distinct subagent_type.
+    assert tier_fm.get("effort") == expected_effort, (
+        f"Expected effort {expected_effort!r}, got {tier_fm.get('effort')!r}"
+    )
+
+    # No model field -- per-call override supplies the tier, same invariant the
+    # base-file tests enforce.
+    assert "model" not in tier_fm, (
+        f"{agent_file.name} must not set model field (per-call override supplies tier)"
+    )
+
+    print(f"PASS _check_tier_agent_definition ({agent_file.name})")
+
+
+def test_reviewer_medium_agent_definition() -> None:
+    """mill-reviewer-medium.md is a byte-faithful medium-tier variant of mill-reviewer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-reviewer-medium.md", agents_dir / "mill-reviewer.md", "medium"
+    )
+
+
+def test_reviewer_high_agent_definition() -> None:
+    """mill-reviewer-high.md is a byte-faithful high-tier variant of mill-reviewer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-reviewer-high.md", agents_dir / "mill-reviewer.md", "high"
+    )
+
+
+def test_reviewer_max_agent_definition() -> None:
+    """mill-reviewer-max.md is a byte-faithful max-tier variant of mill-reviewer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-reviewer-max.md", agents_dir / "mill-reviewer.md", "max"
+    )
+
+
+def test_implementer_medium_agent_definition() -> None:
+    """mill-implementer-medium.md is a byte-faithful medium-tier variant of mill-implementer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-implementer-medium.md",
+        agents_dir / "mill-implementer.md",
+        "medium",
+    )
+
+
+def test_implementer_high_agent_definition() -> None:
+    """mill-implementer-high.md is a byte-faithful high-tier variant of mill-implementer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-implementer-high.md", agents_dir / "mill-implementer.md", "high"
+    )
+
+
+def test_implementer_max_agent_definition() -> None:
+    """mill-implementer-max.md is a byte-faithful max-tier variant of mill-implementer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-implementer-max.md", agents_dir / "mill-implementer.md", "max"
+    )
+
+
 def test_reviewer_agent_definition() -> None:
     """mill-reviewer may write only its own report: tools = {Read, Grep, Glob, Write}.
 
@@ -80,7 +195,7 @@ def test_reviewer_agent_definition() -> None:
 
     # No model field
     assert "model" not in fm, (
-        f"mill-reviewer must not set model field (per-call override supplies tier)"
+        "mill-reviewer must not set model field (per-call override supplies tier)"
     )
 
     print("PASS test_reviewer_agent_definition")
@@ -117,7 +232,7 @@ def test_implementer_agent_definition() -> None:
 
     # No model field
     assert "model" not in fm, (
-        f"mill-implementer must not set model field (per-call override supplies tier)"
+        "mill-implementer must not set model field (per-call override supplies tier)"
     )
 
     print("PASS test_implementer_agent_definition")
@@ -127,6 +242,12 @@ def main() -> int:
     tests = [
         test_reviewer_agent_definition,
         test_implementer_agent_definition,
+        test_reviewer_medium_agent_definition,
+        test_reviewer_high_agent_definition,
+        test_reviewer_max_agent_definition,
+        test_implementer_medium_agent_definition,
+        test_implementer_high_agent_definition,
+        test_implementer_max_agent_definition,
     ]
     failures: list[str] = []
     for fn in tests:
