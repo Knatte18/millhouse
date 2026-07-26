@@ -49,7 +49,7 @@ batches:
 
 - **Decision:** `_implementer_common.emit_prepare_no_dispatch` keeps its hardcoded `subagent_type: _agent_dispatch.SUBAGENT_IMPLEMENTER` unchanged and gains no `effort` parameter.
 - **Rationale:** this path only fires when `dispatch_needed: false` (verify already passed during prepare) — no Agent-tool call is ever made from this envelope, so its `subagent_type` value is inert/informational. Wiring effort through a value nothing dispatches against would be scope creep.
-- **Applies to:** `subagent-type-effort-wiring` batch, Card 5.
+- **Applies to:** `subagent-type-effort-wiring` batch, Card 6.
 
 ### Decision: new agent-definition files are byte-identical to their base except name and effort
 
@@ -57,8 +57,15 @@ batches:
 - **Rationale:** matches `_mill/discussion.md`'s `tier-file-strategy` Decision — minimal diff, no behavior differs beyond the effort tier itself, and no operator-facing description text needs to explain the tier (the filename already does).
 - **Applies to:** `tier-agent-definition-files` batch.
 
+### Decision: plugin.json's `agents` array must list every new agent-definition file
+
+- **Decision:** `plugins/mill/.claude-plugin/plugin.json` carries an explicit `agents` array (currently listing only the two base files). Per Claude Code's plugin manifest behavior, an explicit `agents` field *replaces* directory-based auto-discovery of `agents/*.md` — it does not supplement it. Every one of the six new tier files must therefore be added to this array, or the Agent tool will fail to resolve their `subagent_type` and every tier-suffixed dispatch this task adds will be unreachable in practice.
+- **Rationale:** this was independently verified against Claude Code's plugin manifest documentation after `plan-review round 1` incorrectly reasoned (citing `_mill/discussion.md`'s `tier-file-strategy` Decision, which was itself written without checking this specific manifest behavior) that directory-based auto-discovery applied here and no plugin.json edit was needed. That reasoning is wrong for this plugin specifically: `mill`'s `plugin.json` already opts out of auto-discovery by declaring an explicit `agents` array. Confirmed via the Claude Code plugins reference: an `agents` field "replaces" the default `agents/` directory scan.
+- **Applies to:** `tier-agent-definition-files` batch, Card 4.
+
 ## All Files Touched
 
+- `plugins/mill/.claude-plugin/plugin.json`
 - `plugins/mill/agents/mill-implementer-high.md`
 - `plugins/mill/agents/mill-implementer-max.md`
 - `plugins/mill/agents/mill-implementer-medium.md`

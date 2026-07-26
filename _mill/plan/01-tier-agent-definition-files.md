@@ -4,7 +4,7 @@
 task: "Agent-tool dispatch discards the effort tier already encoded in mill-agents.yaml (opushigh/opusmedium/opusmax)"
 batch: "tier-agent-definition-files"
 number: 1
-cards: 3
+cards: 4
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-agents-defs.py
 depends-on: []
 ```
@@ -18,12 +18,15 @@ Not applicable — this batch has no `Moves:` entries.
 Ship the six static per-effort-tier agent-definition files (`mill-reviewer-medium.md`,
 `mill-reviewer-high.md`, `mill-reviewer-max.md`, `mill-implementer-medium.md`,
 `mill-implementer-high.md`, `mill-implementer-max.md`) that a later batch's
-`_agent_dispatch.resolve_subagent_type` will dispatch to by name, plus the test
-coverage that locks their frontmatter invariants in place. This batch produces no
-externally-consumed interface yet — the next batch (`subagent-type-effort-wiring`)
-is the one that starts computing subagent_type strings pointing at these files, which
-is why it depends on this batch landing first: a real Agent-tool dispatch must never
-resolve to a `subagent_type` with no matching file on disk.
+`_agent_dispatch.resolve_subagent_type` will dispatch to by name, register them in
+`plugin.json` so they are actually dispatchable (see Card 4 — `mill`'s plugin manifest
+opts out of directory-based auto-discovery by declaring an explicit `agents` array, so
+a file merely existing under `agents/` is not enough), and add the test coverage that
+locks their frontmatter invariants and manifest registration in place. The next batch
+(`subagent-type-effort-wiring`) is the one that starts computing subagent_type strings
+pointing at these files, which is why it depends on this batch landing first: a real
+Agent-tool dispatch must never resolve to a `subagent_type` with no matching,
+registered agent definition.
 
 Per the overview's Shared Decision "new agent-definition files are byte-identical to
 their base except name and effort": every new file is a verbatim copy of its base
@@ -104,10 +107,63 @@ line differ.
   The `description:` line, the `tools:` line, and the entire body below the closing `---` (the `# mill-implementer` heading, all prose, and the "Test Integrity Guardrail" section) are copied unchanged. This matches the overview's Shared Decision "new agent-definition files are byte-identical to their base except name and effort."
 - **Commit:** `feat(mill): add mill-implementer-medium/high/max agent definitions`
 
+### Card 4: Register the six new agent files in `plugin.json`
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/.claude-plugin/plugin.json`
+  - `plugins/mill/unit_tests/test-agents-defs.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+  `plugins/mill/.claude-plugin/plugin.json` currently declares:
+  ```json
+  "agents": [
+    "./agents/mill-implementer.md",
+    "./agents/mill-reviewer.md"
+  ]
+  ```
+  Per Claude Code's plugin manifest reference, an explicit `agents` field *replaces*
+  the default directory scan of `agents/` — files present in that directory but not
+  listed here are never registered as dispatchable `subagent_type`s. Add the six new
+  tier files, alphabetically sorted for readability:
+  ```json
+  "agents": [
+    "./agents/mill-implementer.md",
+    "./agents/mill-implementer-high.md",
+    "./agents/mill-implementer-max.md",
+    "./agents/mill-implementer-medium.md",
+    "./agents/mill-reviewer.md",
+    "./agents/mill-reviewer-high.md",
+    "./agents/mill-reviewer-max.md",
+    "./agents/mill-reviewer-medium.md"
+  ]
+  ```
+
+  In `plugins/mill/unit_tests/test-agents-defs.py`, add a new test function
+  `test_plugin_json_registers_all_agent_files`, placed after the six per-tier test
+  functions Card 1 adds and before `main()`. It must:
+  - Read and `json.load` `plugins/mill/.claude-plugin/plugin.json` (add `import json`
+    at the top of the file if not already present).
+  - Glob `plugins/mill/agents/*.md` for every agent-definition file actually on disk.
+  - Assert the manifest's `agents` array, normalized to a set of `<name>.md` basenames
+    (stripping the `./agents/` prefix), equals the set of `.md` filenames the glob
+    found — exactly, not a subset either direction.
+  - This guards against the exact class of gap this card fixes: a future agent file
+    added to the directory without a matching `plugin.json` entry, or a stale entry
+    left behind after a file is removed.
+
+  Register the new function last in `main()`'s `tests` list, after the six per-tier
+  functions added in Card 1.
+- **Commit:** `fix(mill): register per-tier agent definitions in plugin.json`
+
 ## Batch Tests
 
 `verify:` runs `plugins/mill/unit_tests/test-agents-defs.py` directly (single file, matches
-the SKILL.md's documented single-test-file `verify:` pattern). It exercises exactly the
-files this batch touches: the two existing base-file tests plus the six new per-tier
-tests added in Card 1, which in turn require Cards 2 and 3's created files to exist and
-carry correct frontmatter. All three cards must land before `verify:` can pass.
+the SKILL.md's documented single-test-file `verify:` pattern). It exercises every file
+this batch touches: the two existing base-file tests, the six new per-tier tests added
+in Card 1 (which in turn require Cards 2 and 3's created files to exist and carry
+correct frontmatter), and Card 4's manifest-registration test (which requires Cards 2
+and 3's files to exist on disk for its glob comparison, and Card 4's own `plugin.json`
+edit to match). All four cards must land before `verify:` can pass.

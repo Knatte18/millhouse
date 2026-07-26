@@ -22,14 +22,14 @@ that appends the resolved alias's effort tier as a `-<tier>` suffix. This is the
 fix for the bug `_mill/discussion.md` describes — note that the true fix site is NOT
 `mill-go/SKILL.md` prose (mill-go's orchestration text already just forwards whatever
 `subagent_type` the envelope says); the fix is in the five Python call sites that build
-that envelope. Card 7 corrects `mill-go/SKILL.md`'s now-stale documentation of this
+that envelope. Card 8 corrects `mill-go/SKILL.md`'s now-stale documentation of this
 gap to describe the closed state accurately. Depends on batch 1 because a live
 Agent-tool dispatch must never be pointed at a `subagent_type` with no matching
 agent-definition file on disk.
 
 ## Cards
 
-### Card 4: Add `resolve_subagent_type` to `_agent_dispatch.py`
+### Card 5: Add `resolve_subagent_type` to `_agent_dispatch.py`
 
 - **Context:** none
 - **Edits:**
@@ -56,7 +56,7 @@ agent-definition file on disk.
   Each function ends with a `print("PASS ...")` line matching this file's existing convention. Register all three new functions in `main()`'s `tests` list, immediately after the existing `test_model_to_tier_raises_on_unknown` entry.
 - **Commit:** `feat(mill): add resolve_subagent_type effort-tier helper`
 
-### Card 5: Wire `resolve_subagent_type` into `emit_prepare`
+### Card 6: Wire `resolve_subagent_type` into `emit_prepare`
 
 - **Context:**
   - `plugins/mill/scripts/_agent_dispatch.py`
@@ -92,7 +92,7 @@ agent-definition file on disk.
   Do not add a new numbered case — these are additional assertions inside the existing Case 65 block, since it already exercises the exact `emit_prepare` calls this card changes the behavior of.
 - **Commit:** `fix(mill): forward effort tier into implementer/fix/merge-in subagent_type`
 
-### Card 6: Wire `resolve_subagent_type` into the three review CLIs
+### Card 7: Wire `resolve_subagent_type` into the three review CLIs
 
 - **Context:**
   - `plugins/mill/scripts/_agent_dispatch.py`
@@ -142,7 +142,7 @@ agent-definition file on disk.
   This strengthens the six existing test functions that already call `_assert_effort_envelope` (`test_discussion_prepare_envelope_has_effort`, `test_discussion_prepare_envelope_omits_effort_when_absent`, and the `plan`/`code` equivalents) — no new test functions are needed, since they already parametrize over the exact `effort=None` / `effort="high"` axis this card's fix affects. Do not modify `_assert_success_envelope_shape` or its `subagent_type != _agent_dispatch.SUBAGENT_REVIEWER` check — that helper's fixture always uses `effort=None` (via `_success_prepare_result("holistic")`, no `effort=` kwarg), so `resolve_subagent_type` returns the base unchanged there and the existing assertion stays correct as-is.
 - **Commit:** `fix(mill): forward effort tier into reviewer subagent_type`
 
-### Card 7: Correct `mill-go/SKILL.md`'s stale effort-forwarding documentation
+### Card 8: Correct `mill-go/SKILL.md`'s stale effort-forwarding documentation
 
 - **Context:** none
 - **Edits:**
@@ -177,11 +177,11 @@ agent-definition file on disk.
 ## Batch Tests
 
 `verify:` runs the three unit-test files this batch's Python changes affect, scoped via
-`run-all.py --only` (three files, not the full suite): `test-agent-dispatch.py` (Card 4's
-new `resolve_subagent_type` tests), `test-implementer-common.py` (Card 5's Case 65
+`run-all.py --only` (three files, not the full suite): `test-agent-dispatch.py` (Card 5's
+new `resolve_subagent_type` tests), `test-implementer-common.py` (Card 6's Case 65
 extension, plus the full pre-existing suite in that file to guard against regressions in
 `emit_prepare`/`emit_prepare_no_dispatch`), and `test-review-prepare-envelope.py` (Card
-6's strengthened `_assert_effort_envelope` checks across all three review CLIs). Card 7
+7's strengthened `_assert_effort_envelope` checks across all three review CLIs). Card 8
 (`mill-go/SKILL.md`) is a documentation-only change with no runnable surface — verified
 by code read-through during code review of the diff, per `_mill/discussion.md`'s Testing
 section.

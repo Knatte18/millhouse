@@ -29,7 +29,7 @@ file overlap with) `subagent-type-effort-wiring` — its own test only asserts t
 
 ## Cards
 
-### Card 8: Forward `impl_effort` into merge-in's Agent-mode prepare envelope
+### Card 9: Forward `impl_effort` into merge-in's Agent-mode prepare envelope
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
