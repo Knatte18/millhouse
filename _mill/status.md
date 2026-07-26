@@ -27,7 +27,9 @@ implementing  '2026-07-26T08:21:25Z'
 ```yaml
 batches:
   - name: tier-agent-definition-files
-    state: pending
+    state: running
+    implementer_session: b941dbd6-240d-400c-9966-ddc31fb9d5a3
+    start_sha: 33920a514ccd380d79d885c8ed29b02b1a97f48a
   - name: merge-in-effort-forward
     state: pending
   - name: subagent-type-effort-wiring
