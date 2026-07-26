@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-subagent-type-effort-wiring
+phase: holistic-reviewing
 slug: mill-agent-effort-gap
 branch: hanf/mill-agent-effort-gap
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-07-26T08:21:25Z'
 approved-tier-agent-definition-files  '2026-07-26T08:25:37Z'
 approved-merge-in-effort-forward  '2026-07-26T08:27:40Z'
 approved-subagent-type-effort-wiring  '2026-07-26T08:32:26Z'
+holistic-reviewing  '2026-07-26T08:32:50Z'
 ```
 
 ## Batches
