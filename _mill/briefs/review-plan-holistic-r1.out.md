@@ -1,0 +1,54 @@
+MILL_REVIEW_BEGIN
+# Review: Agent-tool dispatch discards the effort tier already encoded in mill-agents.yaml (opushigh/opusmedium/opusmax) — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnetmax
+reviewed_file: plan/
+date: 2026-07-25
+```
+
+Cross-checked every card's quoted before/after code blocks, insertion points, and
+Context/Edits claims against the actual source: `_agent_dispatch.py` (MODEL_FAMILIES
+placement, model_to_tier/write_brief ordering, __all__, docstring Exports section),
+`_implementer_common.py` (`emit_prepare`'s existing `effort` param and hardcoded
+`subagent_type` line, `emit_prepare_no_dispatch`), `test-implementer-common.py`
+(Case 65's exact two assertions), `test-agent-dispatch.py` (function ordering around
+`test_model_to_tier_raises_on_unknown`/`test_write_brief_creates_file`), all three
+review CLIs' `--stage prepare` envelope blocks, `test-review-prepare-envelope.py`
+(`_assert_effort_envelope`, `_assert_success_envelope_shape`, `_success_prepare_result`),
+`millpy-merge-in-subagent.py`'s two `emit_prepare` call sites in `_run_conflicts`/
+`_run_verify_fix` plus their `impl_effort` parameters, `test-millpy-merge-in-subagent.py`
+(`test_12_stage_prepare_conflicts`, `test_14_stage_prepare_verify_fix_fails`, the
+`effort: "high"` fixture), `mill-go/SKILL.md`'s step-2 bullet list and the exact
+step-3 sentence targeted for replacement, and `millpy-implement.py`/`millpy-fix.py`
+(confirming they already pass `effort=` into `emit_prepare`, so Card 5's fix covers
+implement/fix "for free" alongside merge-in). Every quoted snippet, insertion point,
+and dependency claim matched the file on disk exactly.
+
+Also verified: Batch Index DAG (2 depends-on [1], 3 depends-on [] — no cycle, both
+`file:` entries present, batch 3 genuinely has zero file overlap with batch 2 as
+claimed), global card numbering (1-8, sequential, no gaps), all `Moves: none` /
+`## Rename mechanic: Not applicable` pairings are internally consistent, verify:
+commands all correctly carry the `PYTHONPATH= ` prefix, and `EFFORT_TIERED_SUBAGENT_TYPES`
+= {medium, high, max} matches every `effort:` value actually used in
+`mill-agents.yaml` (including the bare `opus`/`sonnet` aliases already defaulting to
+`medium` — the plan's medium-tier files correctly cover that default-alias case, not
+just the high/max edge cases the task title calls out).
+
+Considered whether the six new agent-definition files also need registration in
+`plugins/mill/.claude-plugin/plugin.json`'s `agents:` array (only the two base files
+are currently listed there). `_mill/discussion.md`'s `tier-file-strategy` Decision
+states the Agent tool resolves `subagent_type` "by name from the harness's static
+registry of `.md` files under `agents/`" — directory-based auto-discovery, not a
+plugin.json allowlist — so no card is needed for that file. No other cross-cutting
+registry (mill-agents.yaml schema, marketplace.json) references agent-definition
+filenames either.
+
+No BLOCKING or NIT findings.
+
+## Verdict
+
+APPROVE
+Every card's code claims verified byte-for-byte against source; DAG, sequencing, and decision coverage are all sound.
+MILL_REVIEW_END

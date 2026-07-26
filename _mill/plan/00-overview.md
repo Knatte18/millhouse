@@ -3,7 +3,7 @@
 ```yaml
 task: "Agent-tool dispatch discards the effort tier already encoded in mill-agents.yaml (opushigh/opusmedium/opusmax)"
 slug: "mill-agent-effort-gap"
-approved: false
+approved: true
 started: "20260725-174301"
 parent: "hanf/linux-port-more"
 root: ""

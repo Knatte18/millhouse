@@ -127,7 +127,10 @@ line differ.
   Per Claude Code's plugin manifest reference, an explicit `agents` field *replaces*
   the default directory scan of `agents/` — files present in that directory but not
   listed here are never registered as dispatchable `subagent_type`s. Add the six new
-  tier files, alphabetically sorted for readability:
+  tier files, grouped base-file-first per role then tier variants sorted
+  alphabetically within each group (not a single ASCII sort across the whole array —
+  Card 4's own test compares the array as a set, so exact ordering carries no
+  functional meaning; this is a readability grouping only):
   ```json
   "agents": [
     "./agents/mill-implementer.md",
