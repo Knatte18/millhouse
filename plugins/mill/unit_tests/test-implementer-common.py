@@ -3437,6 +3437,9 @@ def main() -> int:
             assert data["effort"] == "high", (
                 f"expected effort='high' in envelope, got {data}"
             )
+            assert data["subagent_type"] == "mill:mill-implementer-high", (
+                f"expected tier-suffixed subagent_type, got {data}"
+            )
 
             rc, captured = _capture_stdout(
                 lambda: emit_prepare(
@@ -3453,6 +3456,9 @@ def main() -> int:
             data = json.loads(captured.strip())
             assert "effort" not in data, (
                 f"expected effort key absent when omitted, got {data}"
+            )
+            assert data["subagent_type"] == "mill:mill-implementer", (
+                f"expected base subagent_type, got {data}"
             )
             print("PASS: case 65 - emit_prepare threads effort through envelope")
         except Exception as exc:
