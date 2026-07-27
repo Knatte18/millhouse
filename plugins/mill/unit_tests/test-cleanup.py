@@ -23,6 +23,7 @@ CleanupPlan = mod.CleanupPlan
 SlugRecord = mod.SlugRecord
 apply_plan = mod.apply_plan
 _resolve_inplace_mode = mod._resolve_inplace_mode
+_is_live_phase = mod._is_live_phase
 
 import _status  # noqa: E402
 import _worktree  # noqa: E402
@@ -151,6 +152,34 @@ def test_scan_orphan_portals() -> None:
             f"Case 5: expected [{portal_path}] once, got {result!r}"
         )
         print("PASS _scan_orphan_portals — both conditions true -> returned once")
+
+
+def test_is_live_phase() -> None:
+    # Base pipeline phases (bare, no round/batch suffix) -> live.
+    for phase in (
+        "discussing", "discussed", "planning", "planned", "implementing",
+        "blocked", "holistic-reviewing", "holistic-fixing", "holistic-approved",
+    ):
+        assert _is_live_phase(phase) is True, f"expected {phase!r} -> True"
+    print("PASS _is_live_phase — base pipeline phases -> True")
+
+    # Round-suffixed and batch-embedded phases -> live.
+    for phase in (
+        "discussion-fix-r1", "plan-review-r3", "plan-fix-r2",
+        "reviewing-batch-a-r1", "fixing-batch-a-r2", "approved-batch-a",
+        "nits-fixed-holistic", "nits-fixed-batch-a",
+    ):
+        assert _is_live_phase(phase) is True, f"expected {phase!r} -> True"
+    print("PASS _is_live_phase — round-suffixed and batch-embedded phases -> True")
+
+    # Dropped bare values, unrecognized value, and terminal phases -> not live.
+    for phase in ("reviewing", "fixing", "frobnicating", "done", "abandoned", "pr-pending"):
+        assert _is_live_phase(phase) is False, f"expected {phase!r} -> False"
+    print("PASS _is_live_phase — dropped bare values, unrecognized, and terminal phases -> False")
+
+    # Non-str phase (e.g. hand-edited status.md with unquoted `phase: 42`) -> False, not TypeError.
+    assert _is_live_phase(42) is False, "expected int phase 42 -> False, not TypeError"
+    print("PASS _is_live_phase — non-str phase (42) -> False, no TypeError")
 
 
 def main() -> int:
@@ -283,6 +312,27 @@ def main() -> int:
 
             assert plan.to_remove_done == [] and plan.to_remove_abandoned == [] and plan.to_reset_home == []
             print("PASS build_plan — live phase (implementing) -> no action")
+
+        # --- live slug (round-suffixed phase, e.g. plan-review-r2) -> no action, not unknown ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            wts_dir = tmp / "wts"
+            hub = wts_dir / "my-repo"
+            hub.mkdir(parents=True)
+            wt = wts_dir / "live-slug-round"
+            wt.mkdir(parents=True)
+            (wt / "_mill").mkdir()
+            (wt / "_mill" / "status.md").write_text(_make_status_md("plan-review-r2"), encoding="utf-8")
+
+            home_tasks = [_make_task("live-slug-round", "active")]
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir()
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_mock_branch_run("impl/live-slug-round")):
+                plan = build_plan([wt], home_tasks, wiki_path, hub_root=hub, branch_prefix="impl/")
+
+            assert plan.to_remove_done == [] and plan.to_remove_abandoned == [] and plan.to_reset_home == []
+            assert plan.to_report == []
+            print("PASS build_plan — live phase (plan-review-r2, round-suffixed) -> no action")
 
         # --- unreadable status.md (missing file) ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -1373,6 +1423,7 @@ def main() -> int:
         print("PASS test_apply_inplace_indicator_missing_ok — no error when indicator file absent")
 
         test_scan_orphan_portals()
+        test_is_live_phase()
 
         # Note: registry-based orphan detection (git worktree list --porcelain)
         # is implemented in build_plan and thoroughly tested via mocked list_worktrees.
