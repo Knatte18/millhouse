@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-finalize-output-missing-file-error
+phase: holistic-reviewing
 slug: mill-agent-dispatch-guidance-gaps
 branch: hanf/mill-agent-dispatch-guidance-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-07-27T17:34:43Z'
 implementing  '2026-07-27T17:45:23Z'
 approved-dispatch-guidance-docs  '2026-07-27T17:47:39Z'
 approved-finalize-output-missing-file-error  '2026-07-27T17:50:29Z'
+holistic-reviewing  '2026-07-27T17:50:50Z'
 ```
 
 ## Batches
