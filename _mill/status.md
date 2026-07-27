@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-go-build-tag-directory-deletion-guard
+phase: approved-cleanup-live-phase-classification
 slug: mill-go-verify-gate-misclassification
 branch: hanf/mill-go-verify-gate-misclassification
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-07-27T17:48:11Z'
 planned  '2026-07-27T17:48:29Z'
 implementing  '2026-07-27T18:01:33Z'
 approved-go-build-tag-directory-deletion-guard  '2026-07-27T18:05:17Z'
+approved-cleanup-live-phase-classification  '2026-07-27T18:09:19Z'
 ```
 
 ## Batches
@@ -34,7 +35,8 @@ batches:
     start_sha: b3857e8a77891f3c581252463248a73d0456ebb4
     commit_sha: 7e81fc8d48e2930a172f3ca4612826727ead695d
   - name: cleanup-live-phase-classification
-    state: running
+    state: approved
     implementer_session: 23eaf3d5-2b73-4b5c-bf86-07c33db60206
     start_sha: b7a384f8d89e571ed8d8f3a763ed6009704b3bb4
+    commit_sha: 2ba4fb6f847e96ba7975be69384021f5d6af54de
 ```
