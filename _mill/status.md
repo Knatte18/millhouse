@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-agent-dispatch-guidance-gaps
 branch: hanf/mill-agent-dispatch-guidance-gaps
 plan: _mill/plan
@@ -20,4 +20,15 @@ discussed  '2026-07-27T17:23:07Z'
 planning  '2026-07-27T17:26:14Z'
 plan-fix-r1  '2026-07-27T17:34:28Z'
 planned  '2026-07-27T17:34:43Z'
+implementing  '2026-07-27T17:45:23Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: dispatch-guidance-docs
+    state: pending
+  - name: finalize-output-missing-file-error
+    state: pending
 ```
