@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go-verify-gate-misclassification
 branch: hanf/mill-go-verify-gate-misclassification
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-07-27T18:01:33Z'
 approved-go-build-tag-directory-deletion-guard  '2026-07-27T18:05:17Z'
 approved-cleanup-live-phase-classification  '2026-07-27T18:09:19Z'
 holistic-reviewing  '2026-07-27T18:09:35Z'
+holistic-approved  '2026-07-27T18:11:35Z'
 ```
 
 ## Batches
