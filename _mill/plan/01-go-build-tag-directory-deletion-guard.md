@@ -87,7 +87,7 @@ this batch depends on or is consumed by batch 2.
     matching the existing `[go-build-tag-retiering] skip: ...` convention
     used by the `tag_mismatch` and non-qualifying-tag skip branches in the
     same function.
-  - **Commit:** `fix(implementer): skip go-build-tag compile check for deleted directories`
+- **Commit:** `fix(implementer): skip go-build-tag compile check for deleted directories`
 
 ## Batch Tests
 

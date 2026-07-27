@@ -100,7 +100,7 @@ function in one file; independent of batch 1.
     `plan.to_report == []` (a new assertion not present on the existing
     block — confirms the round-suffixed phase is silently treated as
     live, not reported as unknown, end-to-end through `build_plan`).
-  - **Commit:** `fix(cleanup): recognize round-suffixed and batch-embedded phases as live`
+- **Commit:** `fix(cleanup): recognize round-suffixed and batch-embedded phases as live`
 
 ## Batch Tests
 
