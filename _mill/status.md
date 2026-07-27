@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-verify-gate-misclassification
 branch: hanf/mill-go-verify-gate-misclassification
 plan: _mill/plan
@@ -20,4 +20,15 @@ discussed  '2026-07-27T17:31:11Z'
 planning  '2026-07-27T17:35:01Z'
 plan-fix-r1  '2026-07-27T17:48:11Z'
 planned  '2026-07-27T17:48:29Z'
+implementing  '2026-07-27T18:01:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: go-build-tag-directory-deletion-guard
+    state: pending
+  - name: cleanup-live-phase-classification
+    state: pending
 ```
