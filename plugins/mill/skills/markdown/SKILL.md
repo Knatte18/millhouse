@@ -7,8 +7,6 @@ description: Markdown formatting rules for generated files. Use when writing .md
 
 Rules for metadata formatting in generated markdown files. Language-agnostic.
 
-Full format reference: `plugins/mill/doc/formats/markdown.md`
-
 ---
 
 ## Fenced YAML for metadata
@@ -22,3 +20,7 @@ YAML frontmatter (`---`) is reserved for system-parsed metadata in skill definit
 - Use markdown headings (`#`, `##`) to structure the document.
 - Place metadata in fenced YAML code blocks immediately after their heading.
 - Group related fields in a single block. Use separate blocks for separate concerns (e.g., task metadata vs. timeline).
+
+## No fixed-column hard-wrapping
+
+Write prose paragraphs as a single unbroken line each — do not insert a line break at a fixed column (e.g. ~80-88 characters). That mechanical wrapping habit lands mid-word or mid-phrase (`file-` / `based`) instead of at a sentence or clause boundary, because the break is chosen by character count, not by meaning. Renderers soft-wrap long lines for display; hard-wrapping in the source only fights that and produces ragged diffs. Only break a line where CommonMark requires it (e.g. blank lines around fenced code blocks), never at a fixed column count.
