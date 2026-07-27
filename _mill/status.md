@@ -28,7 +28,9 @@ implementing  '2026-07-27T18:01:33Z'
 ```yaml
 batches:
   - name: go-build-tag-directory-deletion-guard
-    state: pending
+    state: running
+    implementer_session: 9ce41ccb-c226-49df-bc3a-64c2fb7fe30b
+    start_sha: b3857e8a77891f3c581252463248a73d0456ebb4
   - name: cleanup-live-phase-classification
     state: pending
 ```
