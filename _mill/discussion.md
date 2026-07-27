@@ -25,6 +25,17 @@ spawned worktree window is meant to host an **independent top-level session**.
 Root cause: default OS subprocess env inheritance — the launcher never scrubs the
 marker before spawning `code`. Source: GitHub issue #719.
 
+**Known residual limitation (found during discussion review round 4 — see
+`Decisions > instance-reuse-limitation`):** this fix only guarantees a clean
+environment when `code <path>` actually spawns a brand-new top-level VS Code process.
+VS Code's CLI defaults to single-instance behavior: if an instance is already running,
+`code <path>` forwards the request over IPC to that existing instance, which opens the
+new window using whatever environment *that* instance originally started with — not
+the freshly-scrubbed environment this task's `subprocess.run` call now passes, since no
+new OS process is created in that path. mill's own multi-worktree-window workflow
+(`--filter-open` / `_vscode_processes.find_open_vscode_paths`) means this is a real,
+not corner-case, path. See Scope/Out and Constraints.
+
 ## Scope
 
 **In:**
@@ -77,6 +88,11 @@ marker before spawning `code`. Source: GitHub issue #719.
   vars such as `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX` (found during
   discussion review, round 2 — see `Decisions > scrub-scope`), and unrelated vars like
   `ANTHROPIC_*`/`CLAUDE_PLUGIN_ROOT` — not implicated by the issue, not stripped.
+- Making the fix effective when VS Code's CLI reuses an already-running instance
+  instead of spawning a fresh process (found during discussion review round 4 — see
+  Problem and `Decisions > instance-reuse-limitation`). No `--new-window`/`-n` flag or
+  running-instance detection is added by this task; the fix is accepted as scoped to
+  the fresh-process spawn path only.
 
 ## Decisions
 
@@ -181,6 +197,41 @@ marker before spawning `code`. Source: GitHub issue #719.
   of building the filtered dict directly; no material advantage, so the simpler
   comprehension form stands.
 
+### instance-reuse-limitation
+
+- Decision: Do not add `--new-window`/`-n` (or any other flag) to `_build_code_argv`'s
+  or `millpy-terminal.py`'s launch argv, and do not add running-instance detection
+  before launching. Accept and document (Problem, Scope/Out) that this fix only
+  guarantees a clean environment when `code <path>`/`claude --name <slug>` actually
+  spawns a fresh top-level OS process.
+- Rationale: `--new-window` does not solve the underlying env-propagation gap — it
+  changes window-management behavior (force a new window vs. reuse/focus an existing
+  one for the same workspace) but does not force VS Code to spawn a genuinely separate
+  top-level process with its own environment; by default, `code --new-window` still
+  communicates with an already-running instance's Electron main process over the same
+  IPC channel used for a plain `code <path>`. Adding it would give a false impression
+  the gap is closed while leaving the actual defect (env comes from whenever the
+  existing instance was first started) untouched. True process isolation would require
+  something like a distinct `--user-data-dir` per window, which changes VS Code's
+  user-data isolation semantics far beyond what this bug fix should touch, and
+  contradicts mill's own anticipated usage — `_vscode_processes.find_open_vscode_paths`
+  and `--filter-open` exist specifically because multiple worktree windows sharing one
+  running VS Code instance is the expected pattern, not an edge case to design around.
+- Rejected: Add `--new-window` to the launch argv — doesn't fix the env-propagation gap
+  (see Rationale), only changes window-focus behavior.
+- Rejected: Detect an already-running VS Code instance (reusing
+  `_vscode_processes.find_open_vscode_paths`, already used for `--filter-open`) and
+  warn or block when the reuse path would apply — over-engineering for this task; the
+  original issue's own documented workaround (fully close the window and reopen from a
+  clean parent, or launch via `env -u CLAUDE_CODE_CHILD_SESSION -u ... code <path>`)
+  already covers this residual case without new detection machinery.
+- Accepted limitation: a spawned VS Code window opened while another VS Code instance
+  is already running may still inherit that other instance's original environment
+  (clean only if that instance itself was started clean). This fix eliminates the leak
+  for the reported/common case — spawning the first/only window, or any window when no
+  VS Code instance is currently running — but not the instance-reuse case. Not closed
+  by this task.
+
 ## Technical context
 
 - `plugins/mill/scripts/millpy-vscode.py` — the two launch sites needing the fix:
@@ -220,26 +271,40 @@ marker before spawning `code`. Source: GitHub issue #719.
   exclusion.
 - `plugins/mill/unit_tests/test-millpy-vscode.py` and
   `plugins/mill/unit_tests/test-millpy-terminal.py` — existing tests in both files
-  already mock `subprocess.run` at every call site relevant to this fix. In
-  `test-millpy-terminal.py` specifically (corrected during discussion review round 2 —
-  the round-1 draft undercounted this): 5 of the file's `subprocess.run` mock lambdas
-  capture only `cwd` and discard the rest of `kwargs` (the `mock_subprocess_run` helper
-  function used at line 76, plus the inline lambdas at lines 122, 201, 245, 297) and
-  need updating to capture full `kwargs` for this fix's `env` assertions; the other 3
-  (lines 159, 339, 386) already do `subprocess_calls.append(kw)` and need no signature
-  change, only new assertions added on the already-captured `kw["env"]`.
-  `test-millpy-vscode.py`'s mocks (audited during discussion review round 3 — unlike
-  terminal.py, there is no partial split here) discard `kwargs` entirely at **every**
-  one of its 18 `subprocess.run` mock sites (lines 74, 120, 158, 200, 246, 298, 342,
-  389, 424, 522, 569, 615, 662, 720, 772, 812, 863, 903 — all of the form
-  `lambda a, **kw: subprocess_calls.append(a)` / `lambda a, **kw: subprocess_calls.append({"argv": a})`,
-  or the equivalent `mock_subprocess_run(argv, **kwargs)` function at line 65 used by
-  line 74): 100% of `test-millpy-vscode.py`'s mock sites need the signature change to
-  capture `kwargs` too, not a per-site audit.
+  mock `subprocess.run`, but **only one exemplar test per real production call site
+  needs a mock-signature change and a new `env` assertion** — see `Testing` for the
+  named exemplars (narrowed in discussion review round 4; the round-3 text implied a
+  file-wide mechanical change across every mock site, which overstated the actual
+  work). The remaining mock sites in both files are unaffected by this fix and need no
+  change:
+  - `test-millpy-vscode.py` has 18 total `subprocess.run` mock sites (lines 74, 120,
+    158, 200, 246, 298, 342, 389, 424, 522, 569, 615, 662, 720, 772, 812, 863, 903), all
+    discarding `kwargs` today (audited in round 3) — of these, only the two exemplars
+    named in `Testing` (covering the interactive-picker call site at
+    `millpy-vscode.py:275` and the spawn-and-open call site at `millpy-vscode.py:132`)
+    get a signature change; the other 16 keep testing `argv`/`cwd` only, unchanged.
+  - `test-millpy-terminal.py` has 8 total `subprocess.run` mock sites: 5 capture only
+    `cwd` (the `mock_subprocess_run` helper at line 76, plus inline lambdas at 122,
+    201, 245, 297) and 3 already capture full `kwargs` (159, 339, 386) (audited in
+    round 2) — of these, only the exemplar named in `Testing` (covering the POSIX
+    `subprocess.run(["claude", ...], cwd=launch_path)` call site at
+    `millpy-terminal.py:121`) gets a signature change; the rest are unaffected. Neither
+    test file mocks `os.name`, so the Windows branches (`millpy-terminal.py:118`,
+    `millpy-vscode.py`'s `_build_code_argv` `nt` branch) are untested today regardless
+    of this fix — a pre-existing test-infrastructure gap, out of scope for this task
+    (see `Testing`'s closing note). The env scrub itself is applied identically
+    regardless of which OS branch builds `argv`, so exercising the POSIX branch
+    exercises the same env-scrub code path.
 
 ## Constraints
 
 No `CONSTRAINTS.md` present at the hub root.
+
+Accepted constraint (found during discussion review round 4 — see
+`Decisions > instance-reuse-limitation`): this fix cannot guarantee a clean spawned-
+window environment when VS Code's CLI reuses an already-running instance instead of
+spawning a fresh process. Scoped as a known, documented limitation rather than
+addressed in this task.
 
 ## Testing
 
@@ -254,28 +319,46 @@ No `CONSTRAINTS.md` present at the hub root.
   and all other keys, including `CLAUDE_CODE_USE_BEDROCK`, are preserved unchanged.
   Also cover the case where none of the 3 allowlisted keys are present (no-op, no
   error), and the default (`env=None`) case reading from real `os.environ`.
-- **Integration into existing tests:** extend the `mock_subprocess_run` /
-  `side_effect=lambda a, **kw: subprocess_calls.append(...)` call sites in both
-  `test-millpy-vscode.py` (interactive picker `--slug`/numeric-selection paths, and
-  `--new`/spawn-and-open) and `test-millpy-terminal.py` (auto-select single-worktree
-  path, and numeric-picker multi-worktree path) to also capture `kwargs` and assert:
-  - `kwargs["env"]` is present (not `None`, i.e. the call sites now always pass an
-    explicit scrubbed env rather than falling through to full inheritance).
-  - None of `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`,
-    `CLAUDE_CODE_ENTRYPOINT` (and generally no `CLAUDE_CODE_*` key) appears in
-    `kwargs["env"]`, when the test harness injects one of these into `os.environ` via
-    `monkeypatch`/`patch.dict` before invoking `main()`.
-  - A control var unrelated to the prefix (e.g. `PATH`) is still present in
-    `kwargs["env"]`, proving the scrub is a filter, not a full env drop.
-- Cover all four launch sites: `millpy-vscode.py`'s interactive picker
-  (`subprocess.run(code_argv)` at line 275) and spawn-and-open flow
-  (`subprocess.run(_build_code_argv(launch_path))` at line 132); `millpy-terminal.py`'s
-  Windows branch (`subprocess.run(["cmd", "/c", "claude", ...])` at line 118) and POSIX
-  branch (`subprocess.run(["claude", ...])` at line 121).
+- **Integration into existing tests — exactly these exemplars, not a file-wide sweep**
+  (narrowed in discussion review round 4 — see `Technical context` for the reconciled
+  scope): extend the mock `side_effect` at exactly these existing test sections to also
+  capture full `kwargs` and add the `env` assertions below; no other mock site in
+  either file changes.
+  - `test-millpy-vscode.py`: the "two worktrees, user picks first" test (mock at line
+    74) — covers the interactive-picker call site (`millpy-vscode.py:275`). The "no
+    active worktrees, no flags -> spawn called, new worktree opened" test (mock at
+    line 342) — covers the spawn-and-open call site (`millpy-vscode.py:132`).
+  - `test-millpy-terminal.py`: the "single worktree -> auto-selected, subprocess
+    called without prompt" test (mock at line 122) — covers the POSIX call site
+    (`millpy-terminal.py:121`), the only branch any existing test exercises (see
+    `Technical context`'s closing note on the untested Windows branch).
+  - Assertions to add at each of the three exemplars above:
+    - `kwargs["env"]` is present (not `None`, i.e. the call sites now always pass an
+      explicit scrubbed env rather than falling through to full inheritance).
+    - None of `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`,
+      `CLAUDE_CODE_ENTRYPOINT` appears in `kwargs["env"]`, when the test harness
+      injects one of these into `os.environ` via `monkeypatch`/`patch.dict` before
+      invoking `main()`.
+    - A control var unrelated to the allowlist (e.g. `PATH`) is still present in
+      `kwargs["env"]`, proving the scrub is a filter, not a full env drop.
+- **Real-world coverage scope covered by the 3 exemplars above:** the interactive
+  picker call site (`millpy-vscode.py:275`), the spawn-and-open call site
+  (`millpy-vscode.py:132`), and the POSIX branch of `millpy-terminal.py`'s single call
+  site cluster (`millpy-terminal.py:121`). `millpy-terminal.py`'s Windows branch
+  (`millpy-terminal.py:118`) and `millpy-vscode.py`'s Windows `argv`-building branch in
+  `_build_code_argv` are not separately unit-tested by this task — see `Technical
+  context`'s closing note: neither test file mocks `os.name` today (pre-existing gap),
+  and `scrub_env()` is applied identically before either OS branch builds its `argv`,
+  so the POSIX-branch exemplars exercise the same env-scrub code the Windows branches
+  would run.
 - `_llm_claude.py`'s `STRIP_VARS`-based spawns are out of scope (see Scope/Out) — no
   test changes there.
 - No end-to-end test that actually launches `code`, VS Code, or `claude` — out of
-  scope, consistent with existing test suite's full mocking of `subprocess.run`.
+  scope, consistent with existing test suite's full mocking of `subprocess.run`. This
+  also means the round-4 `code`-instance-reuse limitation (see `Constraints`) is
+  undetectable by this test suite by construction — mocking `subprocess.run` cannot
+  observe VS Code's own IPC-based window-reuse behavior, since that behavior happens
+  entirely inside the real `code` binary this task's tests never invoke.
 
 ## Q&A log
 
@@ -359,4 +442,30 @@ No `CONSTRAINTS.md` present at the hub root.
   sites discard `kwargs` entirely, so 100% need the signature change, not a per-site
   decision. **Why:** leaving it deferred risked a plan writer assuming a
   terminal.py-like partial split applies to vscode.py too, undercounting the actual
-  test-update work.
+  test-update work. **[Superseded in round 4 — see the "Testing scope narrower than
+  Technical context" gap entry below; the "100% need updating" framing was itself
+  narrowed to exemplar-only coverage.]**
+- **Q:** [discussion review round 4, GAP] `Technical context` implied every mock site
+  in both test files needs a signature change (26 sites total), but `Testing` only
+  named ~4 exemplar scenarios for actual new `env` assertions — which scope is
+  correct? **A:** [auto-pick] `Testing`'s narrower exemplar scope is correct;
+  `Technical context` was rewritten to match — exactly one exemplar per real
+  production call site (2 in `test-millpy-vscode.py`, 1 in `test-millpy-terminal.py`,
+  since terminal.py's two originally-listed exemplars both hit the same POSIX call
+  site) gets a mock-signature change and new `env` assertions; every other mock site is
+  unaffected. **Why:** one assertion per real call site is sufficient to prove
+  `scrub_env()` is wired in correctly; a file-wide mechanical sweep across every test
+  would be needless churn with no additional coverage value, since the other tests
+  already cover argv/cwd/control-flow concerns unrelated to this fix.
+- **Q:** [discussion review round 4, GAP] Neither launch site passes `--new-window`;
+  VS Code's default CLI behavior reuses an already-running instance rather than
+  spawning a fresh process, so the newly-scrubbed `env=` on this task's `subprocess.run`
+  call wouldn't apply in that path — should this be fixed or scoped as a known
+  limitation? **A:** [auto-pick] Scope as a known, documented limitation (see
+  `Decisions > instance-reuse-limitation`); do not add `--new-window` or running-
+  instance detection. **Why:** `--new-window` only changes window-focus behavior, not
+  process isolation — it does not actually close the gap, and would misleadingly
+  suggest it does. True process isolation (e.g. per-window `--user-data-dir`) is out of
+  proportion to this bug fix and conflicts with mill's own anticipated multi-window/
+  single-instance usage pattern (`--filter-open`). The issue's own documented
+  workaround already covers this residual case.
