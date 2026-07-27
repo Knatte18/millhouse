@@ -14,7 +14,7 @@ model_to_tier(model: str) -> str
     Raises ValueError on unrecognized family.
 
 resolve_subagent_type(base: str, effort: str | None) -> str
-    Append an effort-tier suffix ("-medium"/"-high"/"-max") to a base
+    Append an effort-tier suffix ("-low"/"-medium"/"-high"/"-xhigh"/"-max") to a base
     subagent_type string when effort names a recognized tier. Falls back to
     base unchanged for None or any unrecognized value -- never raises.
 
@@ -67,7 +67,7 @@ MODEL_FAMILIES = {
     "claude-opus": "opus",
     "claude-haiku": "haiku",
 }
-EFFORT_TIERED_SUBAGENT_TYPES = frozenset({"medium", "high", "max"})
+EFFORT_TIERED_SUBAGENT_TYPES = frozenset({"low", "medium", "high", "xhigh", "max"})
 
 
 def resolve_dispatch_mode(cfg: dict) -> str:
@@ -127,7 +127,7 @@ def resolve_subagent_type(base: str, effort: str | None) -> str:
         base unchanged when effort is None or not a member of
         EFFORT_TIERED_SUBAGENT_TYPES -- this fallback is deliberate and
         forward-compatible: an unrecognized future tier (e.g. someone adding
-        "effort: low" to mill-agents.yaml before a matching agent-definition
+        "effort: ultra" to mill-agents.yaml before a matching agent-definition
         file exists) degrades to today's base behavior rather than raising
         or constructing a subagent_type with no matching file on disk.
         Otherwise returns f"{base}-{effort}", e.g.

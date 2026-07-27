@@ -102,6 +102,14 @@ def _check_tier_agent_definition(
     print(f"PASS _check_tier_agent_definition ({agent_file.name})")
 
 
+def test_reviewer_low_agent_definition() -> None:
+    """mill-reviewer-low.md is a byte-faithful low-tier variant of mill-reviewer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-reviewer-low.md", agents_dir / "mill-reviewer.md", "low"
+    )
+
+
 def test_reviewer_medium_agent_definition() -> None:
     """mill-reviewer-medium.md is a byte-faithful medium-tier variant of mill-reviewer.md."""
     agents_dir = HUB / "plugins" / "mill" / "agents"
@@ -123,6 +131,24 @@ def test_reviewer_max_agent_definition() -> None:
     agents_dir = HUB / "plugins" / "mill" / "agents"
     _check_tier_agent_definition(
         agents_dir / "mill-reviewer-max.md", agents_dir / "mill-reviewer.md", "max"
+    )
+
+
+def test_reviewer_xhigh_agent_definition() -> None:
+    """mill-reviewer-xhigh.md is a byte-faithful xhigh-tier variant of mill-reviewer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-reviewer-xhigh.md", agents_dir / "mill-reviewer.md", "xhigh"
+    )
+
+
+def test_implementer_low_agent_definition() -> None:
+    """mill-implementer-low.md is a byte-faithful low-tier variant of mill-implementer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-implementer-low.md",
+        agents_dir / "mill-implementer.md",
+        "low",
     )
 
 
@@ -149,6 +175,16 @@ def test_implementer_max_agent_definition() -> None:
     agents_dir = HUB / "plugins" / "mill" / "agents"
     _check_tier_agent_definition(
         agents_dir / "mill-implementer-max.md", agents_dir / "mill-implementer.md", "max"
+    )
+
+
+def test_implementer_xhigh_agent_definition() -> None:
+    """mill-implementer-xhigh.md is a byte-faithful xhigh-tier variant of mill-implementer.md."""
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    _check_tier_agent_definition(
+        agents_dir / "mill-implementer-xhigh.md",
+        agents_dir / "mill-implementer.md",
+        "xhigh",
     )
 
 
@@ -273,12 +309,16 @@ def main() -> int:
     tests = [
         test_reviewer_agent_definition,
         test_implementer_agent_definition,
+        test_reviewer_low_agent_definition,
         test_reviewer_medium_agent_definition,
         test_reviewer_high_agent_definition,
         test_reviewer_max_agent_definition,
+        test_reviewer_xhigh_agent_definition,
+        test_implementer_low_agent_definition,
         test_implementer_medium_agent_definition,
         test_implementer_high_agent_definition,
         test_implementer_max_agent_definition,
+        test_implementer_xhigh_agent_definition,
         test_plugin_json_registers_all_agent_files,
     ]
     failures: list[str] = []

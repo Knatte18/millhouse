@@ -9,11 +9,15 @@
   "agents": [
     "./agents/mill-implementer.md",
     "./agents/mill-implementer-high.md",
+    "./agents/mill-implementer-low.md",
     "./agents/mill-implementer-max.md",
     "./agents/mill-implementer-medium.md",
+    "./agents/mill-implementer-xhigh.md",
     "./agents/mill-reviewer.md",
     "./agents/mill-reviewer-high.md",
+    "./agents/mill-reviewer-low.md",
     "./agents/mill-reviewer-max.md",
-    "./agents/mill-reviewer-medium.md"
+    "./agents/mill-reviewer-medium.md",
+    "./agents/mill-reviewer-xhigh.md"
   ]
 }

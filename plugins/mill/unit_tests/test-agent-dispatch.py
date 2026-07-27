@@ -92,7 +92,7 @@ def test_resolve_subagent_type_returns_base_when_effort_none() -> None:
 
 def test_resolve_subagent_type_appends_known_tier() -> None:
     """resolve_subagent_type appends a recognized effort tier as a suffix."""
-    for tier in ("medium", "high", "max"):
+    for tier in ("low", "medium", "high", "xhigh", "max"):
         assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_REVIEWER, tier) == f"mill:mill-reviewer-{tier}"
         assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_IMPLEMENTER, tier) == f"mill:mill-implementer-{tier}"
     print("PASS resolve_subagent_type -- appends known tier")
@@ -100,7 +100,7 @@ def test_resolve_subagent_type_appends_known_tier() -> None:
 
 def test_resolve_subagent_type_falls_back_on_unrecognized_tier() -> None:
     """resolve_subagent_type falls back to base for an unrecognized effort tier."""
-    for tier in ("low", "xhigh", "bogus"):
+    for tier in ("ultra", "bogus"):
         assert _agent_dispatch.resolve_subagent_type(_agent_dispatch.SUBAGENT_REVIEWER, tier) == "mill:mill-reviewer"
     print("PASS resolve_subagent_type -- falls back to base on unrecognized tier")
 
