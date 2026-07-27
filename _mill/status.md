@@ -28,7 +28,9 @@ implementing  '2026-07-27T17:45:23Z'
 ```yaml
 batches:
   - name: dispatch-guidance-docs
-    state: pending
+    state: running
+    implementer_session: 642177a9-2187-449b-a7b3-c951e938ba2d
+    start_sha: 56b0b7df372f6dc179806dce1e4751ca1be16d3e
   - name: finalize-output-missing-file-error
     state: pending
 ```
