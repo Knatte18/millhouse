@@ -109,6 +109,15 @@ marker before spawning `code`. Source: GitHub issue #719.
   match with a config-var carve-out list) was considered and rejected as more complex
   without a stronger guarantee, since a future config var also isn't guaranteed to be
   known in advance.
+- `CLAUDE_CODE_ENTRYPOINT` confirmed session-scoped (discussion review round 3): unlike
+  `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX` — boolean backend-routing toggles
+  a user deliberately sets and expects to persist across every session they start —
+  `CLAUDE_CODE_ENTRYPOINT` records *how the current process was invoked* (e.g. CLI vs.
+  SDK vs. another entrypoint), a fact the Claude Code binary determines and sets itself
+  at process start. A user exporting it manually in a shell profile would only
+  misrepresent how the session was actually launched; it has no persistent-config use
+  case analogous to Bedrock/Vertex routing, so keeping it on the allowlist alongside
+  the two confirmed session markers is correct.
 
 ### helper-location
 
@@ -211,18 +220,22 @@ marker before spawning `code`. Source: GitHub issue #719.
   exclusion.
 - `plugins/mill/unit_tests/test-millpy-vscode.py` and
   `plugins/mill/unit_tests/test-millpy-terminal.py` — existing tests in both files
-  already mock `subprocess.run` at every call site relevant to this fix (e.g. via
-  `patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a}))`
-  and the equivalent `mill_terminal.subprocess.run` patches). In `test-millpy-terminal.py`
-  specifically (corrected during discussion review round 2 — the round-1 draft
-  undercounted this): 5 of the file's `subprocess.run` mock lambdas capture only `cwd`
-  and discard the rest of `kwargs` (the `mock_subprocess_run` helper function used at
-  line 76, plus the inline lambdas at lines 122, 201, 245, 297) and need updating to
-  capture full `kwargs` for this fix's `env` assertions; the other 3 (lines 159, 339,
-  386) already do `subprocess_calls.append(kw)` and need no signature change, only new
-  assertions added on the already-captured `kw["env"]`. `test-millpy-vscode.py`'s mocks
-  similarly need auditing per-site for which already capture full `kwargs` vs. `argv`
-  only, before deciding which need a signature change.
+  already mock `subprocess.run` at every call site relevant to this fix. In
+  `test-millpy-terminal.py` specifically (corrected during discussion review round 2 —
+  the round-1 draft undercounted this): 5 of the file's `subprocess.run` mock lambdas
+  capture only `cwd` and discard the rest of `kwargs` (the `mock_subprocess_run` helper
+  function used at line 76, plus the inline lambdas at lines 122, 201, 245, 297) and
+  need updating to capture full `kwargs` for this fix's `env` assertions; the other 3
+  (lines 159, 339, 386) already do `subprocess_calls.append(kw)` and need no signature
+  change, only new assertions added on the already-captured `kw["env"]`.
+  `test-millpy-vscode.py`'s mocks (audited during discussion review round 3 — unlike
+  terminal.py, there is no partial split here) discard `kwargs` entirely at **every**
+  one of its 18 `subprocess.run` mock sites (lines 74, 120, 158, 200, 246, 298, 342,
+  389, 424, 522, 569, 615, 662, 720, 772, 812, 863, 903 — all of the form
+  `lambda a, **kw: subprocess_calls.append(a)` / `lambda a, **kw: subprocess_calls.append({"argv": a})`,
+  or the equivalent `mock_subprocess_run(argv, **kwargs)` function at line 65 used by
+  line 74): 100% of `test-millpy-vscode.py`'s mock sites need the signature change to
+  capture `kwargs` too, not a per-site audit.
 
 ## Constraints
 
@@ -337,3 +350,13 @@ No `CONSTRAINTS.md` present at the hub root.
   while keeping the production call sites' zero-argument convenience via the default.
   See `Decisions > helper-location`'s rejected alternative (monkeypatching
   `os.environ` instead) for why the parameter was preferred over that option.
+- **Q:** [discussion review round 3, GAP] `Technical context`'s note on
+  `test-millpy-vscode.py`'s mock-kwargs audit was deferred ("needs auditing per-site...
+  before deciding") even though `test-millpy-terminal.py`'s parallel note gives an
+  exact per-line breakdown — should `test-millpy-vscode.py` get the same precision?
+  **A:** [auto-pick] Yes — audited and stated plainly: unlike `test-millpy-terminal.py`
+  (which has a 5-vs-3 split), all 18 of `test-millpy-vscode.py`'s `subprocess.run` mock
+  sites discard `kwargs` entirely, so 100% need the signature change, not a per-site
+  decision. **Why:** leaving it deferred risked a plan writer assuming a
+  terminal.py-like partial split applies to vscode.py too, undercounting the actual
+  test-update work.
