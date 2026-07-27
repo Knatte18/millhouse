@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-go-verify-gate-misclassification
 branch: hanf/mill-go-verify-gate-misclassification
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r2  '2026-07-27T17:31:11Z'
 discussed  '2026-07-27T17:31:11Z'
 planning  '2026-07-27T17:35:01Z'
 plan-fix-r1  '2026-07-27T17:48:11Z'
+planned  '2026-07-27T17:48:29Z'
 ```
