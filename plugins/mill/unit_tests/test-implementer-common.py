@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -4160,6 +4161,115 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 66g ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 66h -- removed_dirs: the whole package directory was deleted via `git
+    # rm -r` (not just detagged in place). The diff still classifies this as a
+    # removed-tag transition, but the directory no longer exists on disk -- the
+    # compile check must be skipped, not run against a missing path.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "bar.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Bar() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/bar.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add tagged bar.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Delete the whole directory via git -- the diff classifies bar.go's
+        # //go:build removal as a removed-tag transition, but "pkg" is now gone.
+        subprocess.run(
+            ["git", "-C", str(project_root), "rm", "-r", "-q", "pkg"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "delete pkg directory"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        stderr_buf = io.StringIO()
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                with contextlib.redirect_stderr(stderr_buf):
+                    result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-h")
+            assert result is None, (
+                f"case 66h: expected None (directory deleted, no compile check), got {result}"
+            )
+            assert calls == [], f"case 66h: expected no go build call, got {calls}"
+            assert "skip" in stderr_buf.getvalue().lower(), (
+                f"case 66h: expected a skip log line, got {stderr_buf.getvalue()!r}"
+            )
+            print(
+                "PASS: case 66h - removed_dirs: whole-directory git deletion is"
+                " skipped, not compile-checked against a missing path"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66h ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66i -- added_dirs: the package directory gained a //go:build tag per
+    # git history (still present at HEAD in the diff), but was then removed from
+    # the filesystem without committing that removal. The gate must consult the
+    # filesystem, not just the diff, before compile-checking.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "foo.go").write_text("package pkg\n\nfunc Foo() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "pkg/foo.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged foo.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: add a //go:build constraint -- file now exits the default build.
+        (pkg_dir / "foo.go").write_text(
+            "//go:build integration\n\npackage pkg\n\nfunc Foo() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag foo.go integration"],
+            check=True, capture_output=True,
+        )
+        # Remove the directory from disk only -- git history at HEAD still has it,
+        # so the diff-based classification still sees an added-tag transition.
+        shutil.rmtree(pkg_dir)
+        side_effect, calls = _go_gate_mock(build_returncode=0)
+        stderr_buf = io.StringIO()
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                with contextlib.redirect_stderr(stderr_buf):
+                    result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-i")
+            assert result is None, (
+                f"case 66i: expected None (directory deleted, no compile check), got {result}"
+            )
+            assert calls == [], f"case 66i: expected no go build call, got {calls}"
+            assert "skip" in stderr_buf.getvalue().lower(), (
+                f"case 66i: expected a skip log line, got {stderr_buf.getvalue()!r}"
+            )
+            print(
+                "PASS: case 66i - added_dirs: filesystem-only directory deletion is"
+                " skipped, not compile-checked against a missing path"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66i ({exc})", file=sys.stderr)
             errors += 1
 
     if errors:
