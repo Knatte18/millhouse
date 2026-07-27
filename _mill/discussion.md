@@ -55,8 +55,14 @@ not corner-case, path. See Scope/Out and Constraints.
 - A shared `scrub_env()` helper (see `Decisions > helper-location`), used by all
   four launch sites above.
 - Unit test coverage asserting the scrubbed vars are absent from the env passed to
-  `subprocess.run` at each of the four sites, while unrelated vars (e.g. `PATH`) are
-  preserved.
+  `subprocess.run`, while unrelated vars (e.g. `PATH`) are preserved — at 3 exemplars,
+  not all four production sites (reworded in discussion review round 5 to match
+  `Testing`'s round-4-narrowed scope): the interactive-picker call site
+  (`millpy-vscode.py:275`), the spawn-and-open call site (`millpy-vscode.py:132`), and
+  the POSIX branch of `millpy-terminal.py`'s call site (`millpy-terminal.py:121`).
+  `millpy-terminal.py`'s Windows branch (`millpy-terminal.py:118`) is not
+  unit-test-covered by this task — see `Testing`'s closing note and `Technical
+  context`'s note on the pre-existing lack of `os.name` mocking in either test file.
 
 **Out:**
 - `millpy-spawn.py` — confirmed (via grep across the script and both `mill-spawn`/
@@ -283,10 +289,14 @@ not corner-case, path. See Scope/Out and Constraints.
     named in `Testing` (covering the interactive-picker call site at
     `millpy-vscode.py:275` and the spawn-and-open call site at `millpy-vscode.py:132`)
     get a signature change; the other 16 keep testing `argv`/`cwd` only, unchanged.
-  - `test-millpy-terminal.py` has 8 total `subprocess.run` mock sites: 5 capture only
-    `cwd` (the `mock_subprocess_run` helper at line 76, plus inline lambdas at 122,
-    201, 245, 297) and 3 already capture full `kwargs` (159, 339, 386) (audited in
-    round 2) — of these, only the exemplar named in `Testing` (covering the POSIX
+  - `test-millpy-terminal.py` has 8 total `subprocess.run` mock sites: 5 don't capture
+    full `kwargs` — 4 inline lambdas (122, 201, 245, 297) store only the bare `cwd`
+    value, and the `mock_subprocess_run` helper at line 76 stores `{"argv": argv,
+    "cwd": cwd}` (both fields, but still not full `kwargs`, so `env` is dropped there
+    too — corrected in discussion review round 5, which had been miscounted as
+    identical to the other 4 in round 2) — and 3 already capture full `kwargs` (159,
+    339, 386) (audited in round 2) — of these, only the exemplar named in `Testing`
+    (covering the POSIX
     `subprocess.run(["claude", ...], cwd=launch_path)` call site at
     `millpy-terminal.py:121`) gets a signature change; the rest are unaffected. Neither
     test file mocks `os.name`, so the Windows branches (`millpy-terminal.py:118`,
@@ -469,3 +479,11 @@ addressed in this task.
   proportion to this bug fix and conflicts with mill's own anticipated multi-window/
   single-instance usage pattern (`--filter-open`). The issue's own documented
   workaround already covers this residual case.
+- **Q:** [discussion review round 5, GAP] `Scope > In`'s test-coverage bullet still
+  said assertions land "at each of the four sites," but `Testing` (narrowed in round
+  4) covers only 3 exemplars and explicitly leaves `millpy-terminal.py:118` (Windows
+  branch) unit-test-uncovered — round 4's narrowing reached `Technical context` but
+  missed this bullet. **A:** [auto-pick] Reworded `Scope > In`'s bullet to state the
+  3-exemplar scope explicitly, matching `Testing` and `Technical context`. **Why:** a
+  stale "four sites" claim left in `Scope > In` would contradict the already-narrowed
+  `Testing`/`Technical context` sections and risk a plan writer trusting the wrong one.
