@@ -28,8 +28,9 @@ marker before spawning `code`. Source: GitHub issue #719.
 ## Scope
 
 **In:**
-- Strip all `CLAUDE_CODE_*`-prefixed environment variables from the child environment
-  passed to every interactive top-level-session launch subprocess identified below.
+- Strip the named `CLAUDE_CODE_*` session-marker vars (see `Decisions > scrub-scope`)
+  from the child environment passed to every interactive top-level-session launch
+  subprocess identified below.
 - Both launch call sites in `millpy-vscode.py`: the interactive picker
   (`main()`, `subprocess.run(code_argv)`) and the spawn-and-open flow
   (`_spawn_and_open()`, `subprocess.run(_build_code_argv(launch_path))`).
@@ -40,7 +41,7 @@ marker before spawning `code`. Source: GitHub issue #719.
   <slug>` is meant to start an independent top-level Claude Code session in the
   selected worktree, one hop more direct than the VS Code case since it launches
   Claude Code itself, not an editor that may or may not later host a Claude session.
-- A shared `_scrubbed_env()` helper (see `Decisions > helper-location`), used by all
+- A shared `scrub_env()` helper (see `Decisions > helper-location`), used by all
   four launch sites above.
 - Unit test coverage asserting the scrubbed vars are absent from the env passed to
   `subprocess.run` at each of the four sites, while unrelated vars (e.g. `PATH`) are
@@ -72,30 +73,54 @@ marker before spawning `code`. Source: GitHub issue #719.
   `_subprocess_util.run`"), and the `_spawn_and_open` call follows the same pattern for
   consistency. No change to `run()` or its defaults — see `Decisions > helper-location`
   for where the new shared scrub helper actually lives instead.
-- Any env vars outside the `CLAUDE_CODE_*` prefix (e.g. `ANTHROPIC_*`, `CLAUDE_PLUGIN_ROOT`)
-  — not implicated by the issue, not stripped.
+- Any env var not in the `scrub-scope` allowlist — including other `CLAUDE_CODE_*`
+  vars such as `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX` (found during
+  discussion review, round 2 — see `Decisions > scrub-scope`), and unrelated vars like
+  `ANTHROPIC_*`/`CLAUDE_PLUGIN_ROOT` — not implicated by the issue, not stripped.
 
 ## Decisions
 
 ### scrub-scope
 
-- Decision: Strip by prefix match — every environment variable whose name starts with
-  `CLAUDE_CODE_` — rather than an explicit allowlist of the 3 named vars
-  (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`).
-- Rationale: The issue itself hedges on the third var ("and likely
-  `CLAUDE_CODE_ENTRYPOINT`"), signaling the reporter isn't certain of the complete
-  marker set. A spawned VS Code window is meant to be a fully independent top-level
-  session — there is no known legitimate case where a `CLAUDE_CODE_*` var from the
-  launching session should leak into it. Prefix-based stripping is defensive against
-  markers added later without requiring this fix to be revisited.
-- Rejected: Explicit 3-var allowlist — matches the issue text most literally, but goes
-  stale silently if a new marker is introduced elsewhere in the codebase.
+- Decision: Strip an explicit allowlist of exactly 3 named session-marker vars —
+  `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT` —
+  rather than a blanket `CLAUDE_CODE_*` prefix match.
+- Rationale: **Superseded by discussion review round 2.** The original decision chose
+  prefix-match on the theory that "there is no known legitimate case where a
+  `CLAUDE_CODE_*` var from the launching session should leak into" a freshly spawned
+  window. Round 2 review disproved that premise: `CLAUDE_CODE_USE_BEDROCK` and
+  `CLAUDE_CODE_USE_VERTEX` are documented persistent-configuration vars (not session
+  markers) that a user may export at shell level, expecting every Claude Code session
+  they open — including ones spawned inside a fresh VS Code window — to inherit them.
+  A blanket prefix strip would silently break Bedrock/Vertex routing for any spawned
+  session, which is worse than the bug this task fixes: today's bug degrades a spawned
+  session (transcript-off, manual mode); a blanket strip would instead break the
+  session's backend configuration outright, with no visible error pointing back to
+  `mill-vscode`/`mill-terminal`. An explicit allowlist of the 3 named markers fixes
+  exactly the reported leak with a bounded, auditable blast radius and no risk to
+  config vars under the same prefix.
+- Rejected: Blanket `CLAUDE_CODE_*` prefix match — the original decision; superseded
+  above because it collides with real persistent-config vars under the same prefix,
+  not merely a hypothetical future marker.
+- Accepted trade-off: if a new `CLAUDE_CODE_*` *session-marker* var (as opposed to a
+  config var) is introduced elsewhere in the codebase later, this allowlist will not
+  catch it automatically — it must be added to the allowlist explicitly. This is
+  accepted as the safer default given the round-2 finding; the alternative (prefix
+  match with a config-var carve-out list) was considered and rejected as more complex
+  without a stronger guarantee, since a future config var also isn't guaranteed to be
+  known in advance.
 
 ### helper-location
 
-- Decision: Add a `scrub_env(prefix: str = "CLAUDE_CODE_") -> dict[str, str]` helper to
-  `_subprocess_util.py`, imported by both `millpy-vscode.py` and `millpy-terminal.py`
-  at all four launch call sites (see Scope/In).
+- Decision: Add a `scrub_env(env: dict[str, str] | None = None) -> dict[str, str]`
+  helper to `_subprocess_util.py`, imported by both `millpy-vscode.py` and
+  `millpy-terminal.py` at all four launch call sites (see Scope/In). When `env` is
+  `None` (the production call sites' default), the helper reads `os.environ`
+  internally; tests pass a fake dict directly through the `env` parameter instead of
+  monkeypatching `os.environ`. The function filters out exactly the 3 allowlisted keys
+  from `Decisions > scrub-scope` (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`,
+  `CLAUDE_CODE_ENTRYPOINT`) — no `prefix` parameter, since scrub-scope moved from
+  prefix-match to an explicit allowlist.
 - Rationale: Originally scoped to a single file (`millpy-vscode.py`) with no second
   consumer, which argued for a local private helper. Discussion review round 1
   surfaced `millpy-terminal.py` as a second file needing the identical scrub (see
@@ -107,28 +132,45 @@ marker before spawning `code`. Source: GitHub issue #719.
   module docstring already centralises "subprocess invocation" concerns), and adding
   a plain filtering function there does not require routing through its `run()`
   wrapper — the interactive launchers still bypass `run()` for the console-ownership
-  reason documented at each call site.
+  reason documented at each call site. The `env` parameter was added in round 2 after
+  review flagged that the originally-decided no-argument signature (reading
+  `os.environ` directly) gave `Testing`'s planned "fake env dict" unit test no seam to
+  inject through; an optional parameter defaulting to `None`/`os.environ` satisfies
+  both the production call sites (which want zero-argument convenience) and the test
+  (which wants an isolated fake dict, per `Testing`'s "do not mutate real `os.environ`
+  in the test").
 - Rejected: Local helper duplicated in both `millpy-vscode.py` and `millpy-terminal.py`
   — avoids adding an import but duplicates identical filtering logic in two files,
   the exact duplication YAGNI was originally invoked to avoid at a smaller scope.
 - Rejected: Extend `_llm_claude.py`'s existing `STRIP_VARS` frozenset (see Scope/Out)
-  to also cover `CLAUDE_CODE_*` and reuse it here — `STRIP_VARS` is exact-match, not
-  prefix-match (see `scrub-scope` decision above for why prefix-match was chosen), and
+  to also cover the 3 allowlisted `CLAUDE_CODE_*` markers and reuse it here —
   `_llm_claude.py`'s spawn sites are a semantically different case (intentional child
   sessions, not top-level independent sessions — see Scope/Out) that this task
-  deliberately does not touch. Precedent noted, not reused, per discussion review
-  round 1 finding.
+  deliberately does not touch, so sharing one set/function across both would blur that
+  intentional distinction. Precedent noted, not reused, per discussion review round 1
+  finding.
+- Rejected: Monkeypatch/`patch.dict` on real `os.environ` in the unit test instead of
+  adding an `env` parameter (the round-2 review's alternative fix for the
+  signature/testing gap) — works, but mutating process-global `os.environ` in a unit
+  test (even temporarily, even patched) is more fragile under parallel test execution
+  than passing an isolated dict; the parameter costs one optional argument.
 
 ### env-copy-semantics
 
-- Decision: Build the scrubbed env as a fresh dict comprehension over
-  `os.environ.items()`, filtering out keys with the `CLAUDE_CODE_` prefix, rather than
-  mutating a copy with `del`/`pop`. Absence of the vars (e.g. when `mill-vscode` is run
-  outside a Claude Code session) is not an error condition — the filter is a no-op in
-  that case.
+- Decision: Build the scrubbed env as a fresh dict comprehension over the source env's
+  `.items()` (the `env` parameter when given, else `os.environ` — see
+  `Decisions > helper-location`), filtering out keys that match the 3-var allowlist
+  from `Decisions > scrub-scope`, rather than mutating a copy with `del`/`pop`. Absence
+  of the vars (e.g. when `mill-vscode` is run outside a Claude Code session) is not an
+  error condition — the filter is a no-op in that case.
 - Rationale: Simplest correct form; no special-casing needed for "var not present".
-- Rejected: `os.environ.copy()` + explicit `pop(key, None)` per named var — reintroduces
-  the allowlist approach already rejected above.
+  A dict comprehension over an allowlist-membership check (`k not in _SCRUBBED_KEYS`)
+  is equally simple whether the filter is a prefix test or a set-membership test, so
+  this decision is unaffected by `scrub-scope`'s round-2 move from prefix to allowlist.
+- Rejected: `os.environ.copy()` + explicit `pop(key, None)` per named var — functionally
+  equivalent to the comprehension for an allowlist, but mutates a copy in place instead
+  of building the filtered dict directly; no material advantage, so the simpler
+  comprehension form stands.
 
 ## Technical context
 
@@ -171,10 +213,16 @@ marker before spawning `code`. Source: GitHub issue #719.
   `plugins/mill/unit_tests/test-millpy-terminal.py` — existing tests in both files
   already mock `subprocess.run` at every call site relevant to this fix (e.g. via
   `patch("mill_vscode.subprocess.run", side_effect=lambda a, **kw: subprocess_calls.append({"argv": a}))`
-  and the equivalent `mill_terminal.subprocess.run` patches). These mocks currently
-  discard `kwargs` (only capturing `argv`, or in one `test-millpy-terminal.py` case
-  only `cwd`); the fix's tests need to capture the full `kwargs` too so they can assert
-  on the `env` passed.
+  and the equivalent `mill_terminal.subprocess.run` patches). In `test-millpy-terminal.py`
+  specifically (corrected during discussion review round 2 — the round-1 draft
+  undercounted this): 5 of the file's `subprocess.run` mock lambdas capture only `cwd`
+  and discard the rest of `kwargs` (the `mock_subprocess_run` helper function used at
+  line 76, plus the inline lambdas at lines 122, 201, 245, 297) and need updating to
+  capture full `kwargs` for this fix's `env` assertions; the other 3 (lines 159, 339,
+  386) already do `subprocess_calls.append(kw)` and need no signature change, only new
+  assertions added on the already-captured `kw["env"]`. `test-millpy-vscode.py`'s mocks
+  similarly need auditing per-site for which already capture full `kwargs` vs. `argv`
+  only, before deciding which need a signature change.
 
 ## Constraints
 
@@ -183,11 +231,16 @@ No `CONSTRAINTS.md` present at the hub root.
 ## Testing
 
 - **TDD candidate:** `scrub_env()` helper in `_subprocess_util.py` — pure function,
-  no I/O. Test with a fake env dict (do not mutate real `os.environ` in the test)
-  containing a mix of `CLAUDE_CODE_*` keys and ordinary keys (e.g. `PATH`, `HOME`);
-  assert the `CLAUDE_CODE_*` keys are absent from the result and the ordinary keys are
-  preserved unchanged. Also cover the case where no `CLAUDE_CODE_*` keys are present
-  (no-op, no error).
+  no I/O. Call it with an explicit fake `env` dict argument (per `Decisions >
+  helper-location`'s `env` parameter — do not mutate or monkeypatch real `os.environ`
+  in the test) containing a mix of the 3 allowlisted keys
+  (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`) and
+  ordinary keys (e.g. `PATH`, `HOME`, and — per the round-2 finding — a persistent
+  config var like `CLAUDE_CODE_USE_BEDROCK` to prove the allowlist does NOT strip
+  same-prefix config vars); assert the 3 allowlisted keys are absent from the result
+  and all other keys, including `CLAUDE_CODE_USE_BEDROCK`, are preserved unchanged.
+  Also cover the case where none of the 3 allowlisted keys are present (no-op, no
+  error), and the default (`env=None`) case reading from real `os.environ`.
 - **Integration into existing tests:** extend the `mock_subprocess_run` /
   `side_effect=lambda a, **kw: subprocess_calls.append(...)` call sites in both
   `test-millpy-vscode.py` (interactive picker `--slug`/numeric-selection paths, and
@@ -218,7 +271,9 @@ No `CONSTRAINTS.md` present at the hub root.
   Prefix match on `CLAUDE_CODE_*`. **Why:** the issue itself is uncertain about the
   third var ("likely `CLAUDE_CODE_ENTRYPOINT`"), and a spawned window has no known
   legitimate use for any `CLAUDE_CODE_*` marker from the launcher; prefix stripping
-  stays correct if new markers are added later.
+  stays correct if new markers are added later. **[Superseded in round 2 — see the
+  `scrub-scope` gap entry below; reverted to the 3-var allowlist after review found a
+  real collision with persistent config vars under the same prefix.]**
 - **Q:** Where should the env-scrub logic live — a helper local to `millpy-vscode.py`,
   or a shared helper in `_vscode.py`/`_subprocess_util.py`? **A:** [auto-pick] Local
   helper in `millpy-vscode.py`. **Why:** both real `code`-launch sites already live in
@@ -253,3 +308,32 @@ No `CONSTRAINTS.md` present at the hub root.
   different case from the top-level independent sessions this task targets. No
   reported symptom that they misbehave; stripping `CLAUDE_CODE_CHILD_SESSION` there
   risks changing behavior outside this bug's scope.
+- **Q:** [discussion review round 2, GAP] Does the blanket `CLAUDE_CODE_*` prefix
+  strip from `scrub-scope` risk dropping legitimate persistent config, since the
+  `claude` CLI documents vars like `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX`
+  under the same prefix? **A:** [auto-pick] Yes, confirmed a real conflict — revert
+  `scrub-scope` from prefix-match to an explicit 3-var allowlist
+  (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`).
+  **Why:** `CLAUDE_CODE_USE_BEDROCK`/`CLAUDE_CODE_USE_VERTEX` are persistent backend-
+  routing config a user may export at shell level, not session-state markers; a
+  blanket prefix strip would silently break Bedrock/Vertex routing for every spawned
+  session. An allowlist fixes exactly the reported leak without that risk — see
+  `Decisions > scrub-scope`'s "Superseded by discussion review round 2" note for the
+  full trade-off.
+- **Q:** [discussion review round 2, GAP] `Scope > In` names the helper
+  `_scrubbed_env()` while every other section says `scrub_env()` — which is correct?
+  **A:** [auto-pick] `scrub_env()` — corrected the stray name in `Scope > In`. **Why:**
+  every other section (`Decisions > helper-location`, `Technical context`, `Testing`,
+  earlier Q&A entries) already used `scrub_env()`; `Scope > In` had the only
+  inconsistent mention.
+- **Q:** [discussion review round 2, GAP] The decided `scrub_env()` signature
+  (originally `scrub_env(prefix: str = "CLAUDE_CODE_") -> dict[str, str]`, reading
+  `os.environ` directly per `env-copy-semantics`) has no parameter for `Testing`'s
+  planned "fake env dict" unit test to inject through — how should this be resolved?
+  **A:** [auto-pick] Add an `env: dict[str, str] | None = None` parameter (defaulting
+  to `os.environ` when omitted); drop the now-unused `prefix` parameter since
+  `scrub-scope` moved to an allowlist in this same round. **Why:** gives the unit test
+  an isolated seam to pass a fake dict through without mutating real `os.environ`,
+  while keeping the production call sites' zero-argument convenience via the default.
+  See `Decisions > helper-location`'s rejected alternative (monkeypatching
+  `os.environ` instead) for why the parameter was preferred over that option.
