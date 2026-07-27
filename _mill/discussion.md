@@ -73,8 +73,13 @@ not corner-case, path. See Scope/Out and Constraints.
   itself spawns `code` — already covered by the `_spawn_and_open` fix above. No change
   needed in `millpy-spawn.py`.
 - `_vscode.py` — settings/tasks rendering only, no subprocess spawning; out of scope.
-- `_llm_claude.py`'s three `claude -p` subprocess launches (lines 332, 358, 384),
-  which already filter `os.environ` through a `STRIP_VARS` frozenset before spawning
+- `_llm_claude.py`'s three `STRIP_VARS`-filtered subprocess launches (lines 332, 358,
+  384) — two direct `claude -p` calls (358, 384, via `_build_argv`) plus one
+  psmux-wrapper call (332, via `_build_psmux_argv`, argv
+  `[sys.executable, millpy-claude-sub.py, ...]`, not `claude -p` directly; corrected in
+  discussion review round 6 — the earlier "three `claude -p`" phrasing was imprecise
+  about line 332). All three already filter `os.environ` through a `STRIP_VARS`
+  frozenset before spawning
   (found during discussion review, round 1 — see `_llm_claude.py:82-90`, "Git env vars
   that must NOT be inherited by spawned Claude sessions", #367). These are the
   subprocess/psmux dispatch mode's own reviewer/implementer/merge-in child-worker
@@ -270,8 +275,10 @@ not corner-case, path. See Scope/Out and Constraints.
   Scope/Out), found during discussion review round 1: a `frozenset` of `GIT_*` var
   names (`_llm_claude.py:82-90`), applied via
   `{k: v for k, v in os.environ.items() if k not in STRIP_VARS}` before three
-  `claude -p` subprocess launches (lines 332, 358, 384) used by subprocess/psmux
-  dispatch mode's reviewer/implementer/merge-in pipeline. Confirmed out of scope for
+  subprocess launches (lines 332, 358, 384) used by subprocess/psmux dispatch mode's
+  reviewer/implementer/merge-in pipeline — two direct `claude -p` calls (358, 384) and
+  one psmux-wrapper call (332, `[sys.executable, millpy-claude-sub.py, ...]`; see
+  Scope/Out for the round-6 correction to this description). Confirmed out of scope for
   this task (see Scope/Out and `Decisions > helper-location`'s rejected alternatives)
   — noted here so mill-plan doesn't independently rediscover and second-guess the
   exclusion.
@@ -319,7 +326,10 @@ addressed in this task.
 ## Testing
 
 - **TDD candidate:** `scrub_env()` helper in `_subprocess_util.py` — pure function,
-  no I/O. Call it with an explicit fake `env` dict argument (per `Decisions >
+  no I/O. Tested in `plugins/mill/unit_tests/test-subprocess-util.py`, the existing
+  dedicated test file for `_subprocess_util.py` (found during discussion review round
+  6; currently `from _subprocess_util import _GRACE_SECONDS, popen_detached, run` —
+  add `scrub_env` to that import). Call it with an explicit fake `env` dict argument (per `Decisions >
   helper-location`'s `env` parameter — do not mutate or monkeypatch real `os.environ`
   in the test) containing a mix of the 3 allowlisted keys
   (`CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_ENTRYPOINT`) and
@@ -487,3 +497,11 @@ addressed in this task.
   3-exemplar scope explicitly, matching `Testing` and `Technical context`. **Why:** a
   stale "four sites" claim left in `Scope > In` would contradict the already-narrowed
   `Testing`/`Technical context` sections and risk a plan writer trusting the wrong one.
+- **Q:** [discussion review round 6, GAP] `Testing`'s `scrub_env()` TDD-candidate plan
+  never named a target test file, despite an existing dedicated file
+  (`test-subprocess-util.py`) for `_subprocess_util.py` — which file should the new
+  unit tests go in? **A:** [auto-pick] `plugins/mill/unit_tests/test-subprocess-util.py`
+  — add `scrub_env` to its existing `from _subprocess_util import ...` line. **Why:**
+  that file already exists specifically for `_subprocess_util.py` (imports
+  `_GRACE_SECONDS, popen_detached, run`); creating a separate file for one more
+  function in the same module would be an unnecessary split.
