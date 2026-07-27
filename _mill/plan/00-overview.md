@@ -3,7 +3,7 @@
 ```yaml
 task: 'Agent-dispatch boundary gaps: source-read guidance, fork directive-echo, and raw FileNotFoundError on missing agent-output'
 slug: mill-agent-dispatch-guidance-gaps
-approved: false
+approved: true
 started: 20260727-172506
 parent: main
 root: ""
