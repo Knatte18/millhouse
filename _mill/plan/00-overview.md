@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go verify/cleanup gates misclassify build-tag deletions and round-suffixed phases"
 slug: mill-go-verify-gate-misclassification
-approved: false
+approved: true
 started: "20260727-173358"
 parent: main
 root: ""

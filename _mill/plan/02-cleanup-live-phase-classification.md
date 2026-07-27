@@ -59,8 +59,14 @@ function in one file; independent of batch 1.
     ))
     ```
   - Add a new function `_is_live_phase(phase: str) -> bool` next to
-    `_read_phase` (~line 53) that returns `True` when `phase` is in
-    `_LIVE_PHASES` or matches any pattern in `_LIVE_PHASE_PATTERNS`
+    `_read_phase` (~line 53) that returns `False` immediately when
+    `not isinstance(phase, str)` (a hand-edited `status.md` can yield a
+    non-str `phase`, e.g. unquoted `phase: 42`; the replaced
+    `phase in _LIVE_PHASES` set check degraded safely to `False` for such
+    input, so the new regex path must not raise `TypeError` and abort
+    `build_plan` for the whole sweep over one malformed slug). Otherwise
+    return `True` when `phase` is in `_LIVE_PHASES` or matches any
+    pattern in `_LIVE_PHASE_PATTERNS`
     (`any(p.match(phase) for p in _LIVE_PHASE_PATTERNS)`), else `False`.
   - Change the `build_plan` branch at ~line 179 from
     `elif phase in _LIVE_PHASES: pass` to
@@ -85,7 +91,8 @@ function in one file; independent of batch 1.
     Assert `False` for: `reviewing`, `fixing` (the two dropped bare
     values), `frobnicating` (an unrecognized value), `done`, `abandoned`,
     `pr-pending` (terminal phases handled by earlier branches — must NOT
-    be classified live by this helper).
+    be classified live by this helper), and `42` (an int, exercising the
+    `isinstance` guard — must return `False`, not raise `TypeError`).
   - Call `test_is_live_phase()` explicitly from within `main()`, mirroring
     exactly how `test_scan_orphan_portals()` is already called at
     ~line 1375 (place the call adjacent to that existing call).
