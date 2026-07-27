@@ -34,5 +34,7 @@ batches:
     start_sha: b3857e8a77891f3c581252463248a73d0456ebb4
     commit_sha: 7e81fc8d48e2930a172f3ca4612826727ead695d
   - name: cleanup-live-phase-classification
-    state: pending
+    state: running
+    implementer_session: 23eaf3d5-2b73-4b5c-bf86-07c33db60206
+    start_sha: b7a384f8d89e571ed8d8f3a763ed6009704b3bb4
 ```
