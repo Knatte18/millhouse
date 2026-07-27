@@ -128,7 +128,14 @@ in the issue text.
     values (grep across `plugins/mill/skills/*/SKILL.md` and
     `plugins/mill/scripts/*.py` for `append_phase(` call sites confirms
     every reviewing/fixing phase is either batch-suffixed or
-    `holistic-`-prefixed).
+    `holistic-`-prefixed). Caveat: this grep only covers current source,
+    not whether any already-registered active worktree's `status.md` has
+    `phase:` frozen at a bare `reviewing`/`fixing` value from before
+    round-suffixing existed — such a task would flip from silently-live to
+    newly-reported by `millpy-cleanup`. This is a bounded, low-severity
+    residual risk (a diagnostic report line only, never a mutation) and
+    falls under the same "no retroactive audit of live repos" carve-out
+    already listed under Scope > Out.
   - `done`, `abandoned`, `pr-pending` are unaffected — they're handled by
     earlier `elif` branches in `build_plan` before the live-phase check is
     ever reached, and are NOT part of `_is_live_phase`.

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-verify-gate-misclassification
 branch: hanf/mill-go-verify-gate-misclassification
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-07-27T17:05:31Z'
+discussion-fix-r2  '2026-07-27T17:31:11Z'
+discussed  '2026-07-27T17:31:11Z'
 ```
