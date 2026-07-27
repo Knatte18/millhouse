@@ -187,10 +187,13 @@ in the issue text.
     Docstring confirms phase names come from an open-ended "closed v2 set"
     plus "per-round variants" — i.e. round-suffixing is an expected,
     ongoing pattern, not a one-off.
-  - Call sites across `plugins/mill/skills/mill-plan/SKILL.md`,
-    `plugins/mill/skills/mill-go/SKILL.md`, `plugins/mill/skills/mill-start/SKILL.md`
-    are the authoritative list of phase values in current use (see
-    Decisions for the full enumerated set derived from these).
+  - Call sites across `plugins/mill/skills/*/SKILL.md` (including
+    `mill-plan`, `mill-go`, `mill-start`, and also `mill-finalize`/
+    `mill-merge` for the `pr-pending` phase, which is handled by an
+    earlier `elif` branch in `build_plan` and is intentionally excluded
+    from `_is_live_phase`) are the authoritative list of phase values in
+    current use (see Decisions for the full enumerated set derived from
+    these).
 
 ## Constraints
 
@@ -215,14 +218,21 @@ git operations run for real):**
   recorded (`calls == []`), and a skip line appears on stderr (matching
   the `"skip"` substring check pattern used in case 66c) mentioning the
   directory no longer existing.
-- Also cover the added-tag-transition + whole-directory-deletion
-  combination for symmetry with the "apply to both loops" decision, even
-  though it isn't the literal issue repro (a batch that deletes a
-  directory whose remaining diff coincidentally looks like an added-tag
-  transition — construct via a two-file directory where one file gains a
-  tag and the whole directory is deleted in the same batch, or a lighter
-  synthetic case directly exercising the `added_dirs` skip path if a
-  natural git-diff fixture is awkward to construct).
+- Also cover the added-tag-transition case for symmetry with the "apply
+  to both loops" decision. Note: an added-tag transition (added=1,
+  removed=0) can only be classified for a file that still exists at HEAD
+  — `git diff` reports a deleted file's original lines purely as
+  removals, never additions — so a directory that is truly gone on disk
+  can never surface via `added_dirs` through git history alone; only
+  `removed_dirs` can arise from an actual directory deletion. To exercise
+  the `added_dirs` isdir-skip path anyway (both loops must be covered by
+  the fix, per Decisions), construct the test by physically removing the
+  directory from disk without committing: reuse case 66a's git setup (tag
+  added, directory present and committed in git), then `shutil.rmtree` the
+  directory before calling `_go_build_tag_retiering_stuck` — the diff
+  still classifies it as an added-tag transition from git's perspective,
+  but the isdir() check now correctly skips it since the directory is
+  physically absent, exactly as the gate itself observes the filesystem.
 - TDD candidate: yes — write the failing case first (currently the isdir
   check doesn't exist, so this new case should reproduce the
   `lstat`-style failure via a real `go build` if not mocked, or simply
@@ -243,12 +253,14 @@ follows the existing `_make_status_md(phase, parent)` + `build_plan(...)`
   `nits-fixed-holistic`, `nits-fixed-batch-a` → all `True`. And confirm
   bare `"reviewing"` / `"fixing"` (now dropped) plus a genuinely unknown
   value (e.g. `"frobnicating"`) → `False`.
-- Integration-level: at least one `build_plan(...)` test (mirroring the
-  existing `"implementing"` phase test at ~line 276) using a round-suffixed
-  or batch-embedded phase value (e.g. `plan-review-r2` or
-  `reviewing-batch-a-r1`) via `_make_status_md`, asserting
-  `plan.to_report == []` (i.e. it is silently treated as live, not
-  reported as unknown).
+- Integration-level: at least one `build_plan(...)` test using a
+  round-suffixed or batch-embedded phase value (e.g. `plan-review-r2` or
+  `reviewing-batch-a-r1`) via `_make_status_md`, structured like the
+  existing `"implementing"` phase test at ~line 276 (same fixture/call
+  pattern), but with a new `plan.to_report == []` assertion — that
+  existing test itself only asserts `to_remove_done`/`to_remove_abandoned`/
+  `to_reset_home` are empty (lines 267-285), not `to_report`, so the
+  `to_report == []` check here is new, not literally carried over.
 - TDD candidate: yes for `_is_live_phase` itself (pure function, easy to
   drive test-first); the `build_plan` integration case can follow once the
   helper exists.
@@ -261,3 +273,4 @@ follows the existing `_make_status_md(phase, parent)` + `build_plan(...)`
 - **Q:** Should the millpy-cleanup fix cover only the 3 phases literally named in issue #716, or the full round-suffixed/batch-embedded phase vocabulary mill-go actually writes? **A:** [auto-pick] Comprehensive — a regex/prefix-based `_is_live_phase()` helper covering every phase value `_status.append_phase` is called with anywhere in the current codebase (batch-name-embedded phases included). **Why:** the narrow fix leaves the bug effectively unfixed for the common case (any task mid-batch-review or mid-holistic-review still misreports as unknown); the issue text itself allows "a regex over the phase vocabulary" as an acceptable alternative to the literal 3-phase list.
 - **Q:** Should the dead bare `"reviewing"`/`"fixing"` entries in the base `_LIVE_PHASES` set be removed? **A:** [auto-pick] Yes, remove them. **Why:** `_status.append_phase` never writes those literal bare values (confirmed by grepping every `append_phase(` call site) — they are unreachable and misleading; the regex forms correctly cover the real values that replace them.
 - **Q:** Where should the new phase-classification helper live — `millpy-cleanup.py` or `_status.py`? **A:** [auto-pick] `millpy-cleanup.py`, next to `_read_phase`. **Why:** this classification is specific to cleanup's report-vs-skip decision; `_status.py` is the phase writer, not a registry of every caller's round/batch-naming scheme, and no other script currently needs this helper.
+- **Q:** (discussion-review r1 GAP) The Testing section proposed exercising the `added_dirs` isdir-skip path via "a two-file directory where one file gains a tag and the whole directory is deleted in the same batch" — is this construction buildable? **A:** [auto-pick] No — fixed. `git diff` only reports a deleted file's original lines as removals, so an added-tag classification (added=1, removed=0) requires the file to still exist at HEAD, meaning its directory necessarily still exists too; a real directory deletion can only ever surface via `removed_dirs`. The `added_dirs` case must instead be tested by physically `shutil.rmtree`-ing a directory that's still present in git history (reusing case 66a's setup) before calling the gate, so the isdir() check fires against the live filesystem rather than git history. **Why:** confirmed against `_go_build_tag_retiering_stuck`/`_parse_go_build_tag_diff`'s actual diff-parsing logic during discussion review round 1 (2026-07-27).
