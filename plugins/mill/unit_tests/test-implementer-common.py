@@ -4162,6 +4162,37 @@ def main() -> int:
             print(f"FAIL: case 66g ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 67 -- finalize_from_output reports a clean error (not a raw
+    # FileNotFoundError traceback) when --agent-output names a file that does
+    # not exist on disk (issue #704).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        agent_output_path = project_root / "_mill" / "missing-agent-output.txt"
+        stderr_buf = io.StringIO()
+        try:
+            with contextlib.redirect_stderr(stderr_buf):
+                rc = finalize_from_output(
+                    agent_output_path,
+                    project_root,
+                    session_id="test-session-67",
+                )
+            captured_stderr = stderr_buf.getvalue()
+            assert rc == 1, f"case 67: expected rc=1, got {rc}"
+            assert str(agent_output_path) in captured_stderr, (
+                f"case 67: expected missing path named in stderr, got {captured_stderr!r}"
+            )
+            assert "agent-output" in captured_stderr.lower(), (
+                f"case 67: expected actionable 'agent-output' message, got {captured_stderr!r}"
+            )
+            print(
+                "PASS: case 67 - finalize_from_output reports a clean error for a"
+                " missing --agent-output file"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 67 ({exc})", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
