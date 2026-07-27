@@ -1315,6 +1315,21 @@ def finalize_from_output(
             parse_verify_field. Takes precedence over git_root/project_root;
             forwarded unchanged to _forward_output.
     """
+    # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
+    # but the parameter is documented (not enforced) as Path.
+    agent_output_path = Path(agent_output_path)
+    if not agent_output_path.is_file():
+        # Guard against a raw, unhandled FileNotFoundError (or IsADirectoryError, if a
+        # directory occupies the path -- is_file() catches that case too) crashing the
+        # implementer/fixer/merge-in CLI with a traceback instead of an actionable message.
+        print(
+            f"ERROR: --agent-output file not found: {agent_output_path} -- for"
+            " implementer/fixer/merge-in dispatches the orchestrator must write the"
+            " notification message to this path before calling --stage finalize",
+            file=sys.stderr,
+        )
+        return 1
+
     # The harness HTML-escapes the <task-notification> payload uniformly before
     # delivery, so the text captured to agent_output_path may contain entities
     # like "&amp;" and "&lt;". Unescape here (at the read site) so downstream
