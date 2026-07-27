@@ -34,5 +34,7 @@ batches:
     start_sha: 56b0b7df372f6dc179806dce1e4751ca1be16d3e
     commit_sha: 28d973b97ec2602341613f6a3febe72e493be6ef
   - name: finalize-output-missing-file-error
-    state: pending
+    state: running
+    implementer_session: 9398e750-76f0-4f7c-a137-1d10c23918be
+    start_sha: 9d691a512a05dd5456465cec1f6899185d414043
 ```
