@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-vscode-spawn-session-leak
 branch: hanf/mill-vscode-spawn-session-leak
 plan: _mill/plan
@@ -19,4 +19,13 @@ discussed  '2026-07-28T16:57:05Z'
 planning  '2026-07-28T17:00:02Z'
 plan-fix-r1  '2026-07-28T17:09:09Z'
 planned  '2026-07-28T17:09:27Z'
+implementing  '2026-07-28T17:50:23Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: scrub-session-env
+    state: pending
 ```
