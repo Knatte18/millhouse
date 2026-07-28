@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import _spawn_core
+import _subprocess_util
 from wiki import _client as wiki
 from _config import load_config as _load_config
 from _paths import resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
@@ -115,10 +116,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Session name: {selected_slug}", file=sys.stderr)
     if os.name == "nt":
         # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
-        subprocess.run(["cmd", "/c", "claude", "--name", selected_slug], cwd=launch_path)
+        subprocess.run(
+            ["cmd", "/c", "claude", "--name", selected_slug], cwd=launch_path, env=_subprocess_util.scrub_env()
+        )
     else:
         # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
-        subprocess.run(["claude", "--name", selected_slug], cwd=launch_path)
+        subprocess.run(["claude", "--name", selected_slug], cwd=launch_path, env=_subprocess_util.scrub_env())
     return 0
 
 
