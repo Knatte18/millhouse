@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-vscode-spawn-session-leak
 branch: hanf/mill-vscode-spawn-session-leak
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-07-28T17:50:23Z'
 approved-scrub-session-env  '2026-07-28T17:55:52Z'
 holistic-reviewing  '2026-07-28T17:56:10Z'
 holistic-approved  '2026-07-28T17:58:33Z'
+done  '2026-07-28T17:58:58Z'
 ```
 
 ## Batches
