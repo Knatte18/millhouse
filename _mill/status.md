@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-review-verdict-and-counting-gaps
 branch: hanf/mill-review-verdict-and-counting-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: 'Plan review verdict correctness: unverified platform claims and missing nit_count in subprocess dispatch'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-27T18:02:19Z'
 discussed  '2026-07-28T18:33:00Z'
+planning  '2026-07-28T18:51:14Z'
 ```
