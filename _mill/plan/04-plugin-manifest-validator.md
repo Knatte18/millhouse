@@ -5,7 +5,7 @@ task: 'Plan review verdict correctness: unverified platform claims and missing n
 batch: plugin-manifest-validator
 number: 4
 cards: 4
-verify: null
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-plan-validate.py
 depends-on: []
 ```
 

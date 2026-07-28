@@ -5,13 +5,13 @@ task: 'Plan review verdict correctness: unverified platform claims and missing n
 batch: review-plan-counting-tests
 number: 2
 cards: 7
-verify: null
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py test-review-common.py
 depends-on: [1]
 ```
 
 ## Batch Scope
 
-Add test coverage proving Batch 1's `finalize_scope()` refactor actually works: every one of the 4 refactored write sites in `_review_plan.py`, the skip-approved carryforward site, and the `[MEDIUM]`-fold-in regression (#720) get a real, non-vacuous assertion backed by a fixture containing at least one genuine `[NIT]`/`[BLOCKING]`/off-vocabulary finding heading — never a reused zero-finding fixture with a trivially-passing `== 0` assertion appended (a fixture like that would pass identically on unfixed and fixed code and prove nothing). This batch does not add coverage for Batch 1's 6 schema-parity-only (`"nit_count": 0`) error-path additions (Cards 3/5) — those sites have no successful raw response to compute real counts from, so there is no non-vacuous finding-based assertion to write for them; the existing error-path tests already covering `blocking_count == 0` on those sites are left untouched. This batch depends on Batch 1 (`review-plan-counting-fix`) because every new assertion here exercises that batch's refactored code paths.
+Add test coverage proving Batch 1's `finalize_scope()` refactor actually works: every one of the 4 refactored write sites in `_review_plan.py`, the skip-approved carryforward site, and the `[MEDIUM]`-fold-in regression (#720) get a real, non-vacuous assertion backed by a fixture containing at least one genuine `[NIT]`/`[BLOCKING]`/off-vocabulary finding heading — never a reused zero-finding fixture with a trivially-passing `== 0` assertion appended (a fixture like that would pass identically on unfixed and fixed code and prove nothing). This batch does not add coverage for Batch 1's 6 schema-parity-only (`"nit_count": 0`) error-path additions (Cards 3/5) — those sites have no successful raw response to compute real counts from, so there is no non-vacuous finding-based assertion to write for them, and the final `ReviewResult` aggregation (`sum(r.get("nit_count", 0) for r in reviews)`) tolerates a missing or wrong `nit_count` key via `.get(..., 0)`, so a dedicated per-site key assertion has low marginal value; the existing error-path tests (4, 16, 20, 21) covering `verdict == "ERROR"` and error-message content on those sites are left untouched. This batch depends on Batch 1 (`review-plan-counting-fix`) because every new assertion here exercises that batch's refactored code paths.
 
 ## Cards
 
@@ -45,6 +45,7 @@ _One `### Card N` per card, numbered globally across all batches._
 
 - **Context:**
   - `plugins/mill/scripts/_review_plan.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
@@ -57,6 +58,7 @@ _One `### Card N` per card, numbered globally across all batches._
 
 - **Context:**
   - `plugins/mill/scripts/_review_plan.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
@@ -69,6 +71,7 @@ _One `### Card N` per card, numbered globally across all batches._
 
 - **Context:**
   - `plugins/mill/scripts/_review_plan.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - **Creates:** none
@@ -91,7 +94,8 @@ _One `### Card N` per card, numbered globally across all batches._
 
 ### Card 13: `test-review-common.py` — extend isolated `finalize_scope()` `[MEDIUM]`-only case
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-common.py`
 - **Creates:** none

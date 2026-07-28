@@ -5,7 +5,7 @@ task: 'Plan review verdict correctness: unverified platform claims and missing n
 batch: review-plan-counting-fix
 number: 1
 cards: 6
-verify: null
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py
 depends-on: []
 ```
 
