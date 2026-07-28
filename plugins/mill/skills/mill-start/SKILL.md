@@ -131,6 +131,8 @@ After writing the digest, explore the relevant parts of the codebase.
 
 This is the one site in mill with no brief, no resume requirement, no per-role model tier, and no tool restriction to lose, which is exactly why none of the three fork disqualifiers (see "Why not fork?" in `mill-go/SKILL.md`'s "## Agent-mode dispatch") apply here.
 
+**Fork echo caution.** A fork dispatched via `Agent(subagent_type: "fork")` shortly after the parent has just produced a similarly-shaped text block (e.g. the Step 2 scope digest) may, on its first turn, echo/restate that block instead of executing the assigned investigation directive. Check the fork's first response for grounded findings (specific file:line citations, quoted code) before trusting it as complete. If the response is a restatement rather than grounded findings, `SendMessage` the same fork an explicit corrective directive (e.g. telling it to stop restating context and perform the investigation) rather than accepting the echoed response.
+
 ### Phase: Discuss
 
 Interview the user relentlessly about every aspect of the task. Ask questions in **focused batches**. Questions that don't depend on each other's answers can be asked together. For each question, provide your **recommended answer**. Prefer multiple-choice (A/B/C with trade-offs) when there are distinct options. Cap each batch at ≤5 questions; ask the rest in subsequent batches after the user answers.

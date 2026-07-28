@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,6 +63,53 @@ def _read_phase(status_path: Path) -> str | None:
         return None
 
 
+# Base pipeline phases that _status.append_phase writes verbatim (no
+# round-number or batch-name suffix). Round-suffixed / batch-embedded forms
+# are matched separately via _LIVE_PHASE_PATTERNS below.
+_LIVE_PHASES = {
+    "discussing", "discussed", "planning", "planned",
+    "implementing", "blocked", "holistic-reviewing", "holistic-fixing",
+    "holistic-approved",
+}
+
+# Round-suffixed and batch-name-embedded phase forms that _status.append_phase
+# writes throughout mill-start/mill-plan/mill-go (e.g. "discussion-fix-r2",
+# "reviewing-cleanup-live-phase-classification-r1"). These never appear as
+# bare set entries because the batch/round segments are dynamic.
+_LIVE_PHASE_PATTERNS = tuple(re.compile(p) for p in (
+    r"^discussion-fix-r\d+$",
+    r"^plan-review-r\d+$",
+    r"^plan-fix-r\d+$",
+    r"^reviewing-.+-r\d+$",
+    r"^fixing-.+-r\d+$",
+    r"^approved-.+$",
+    r"^nits-fixed-.+$",
+))
+
+
+def _is_live_phase(phase: str) -> bool:
+    """
+    Classify whether a status.md ``phase`` value is a live, mid-pipeline
+    phase that build_plan should silently skip (as opposed to a terminal
+    phase like "done"/"abandoned"/"pr-pending", which are handled by their
+    own earlier branches, or a genuinely unrecognized value that should be
+    reported).
+
+    A hand-edited status.md can yield a non-str phase (e.g. unquoted
+    ``phase: 42`` parses as an int via yaml.safe_load), so this guards on
+    isinstance first rather than letting re.match raise TypeError and abort
+    the whole build_plan sweep over one malformed slug.
+
+    Returns:
+        True when phase is a str and either exactly matches one of the
+        base pipeline phases in _LIVE_PHASES or matches one of the
+        round-suffixed / batch-embedded patterns in _LIVE_PHASE_PATTERNS.
+    """
+    if not isinstance(phase, str):
+        return False
+    return phase in _LIVE_PHASES or any(p.match(phase) for p in _LIVE_PHASE_PATTERNS)
+
+
 def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path]:
     if not portals_dir.is_dir():
         return []
@@ -111,11 +159,6 @@ def build_plan(
     to_report: list[str] = []
     to_reap_pr: list[SlugRecord] = []
     to_reset_unclaimed: list[str] = []
-
-    _LIVE_PHASES = {
-        "discussing", "discussed", "planning", "planned",
-        "implementing", "reviewing", "fixing", "blocked",
-    }
 
     for wt_path in active_worktrees:
         branch_proc = _subprocess_util.run(
@@ -176,7 +219,7 @@ def build_plan(
                 )
         elif phase == "pr-pending":
             to_reap_pr.append(record)
-        elif phase in _LIVE_PHASES:
+        elif _is_live_phase(phase):
             pass
         else:
             to_report.append(f"{slug} -- unknown phase {phase!r}, skipping")

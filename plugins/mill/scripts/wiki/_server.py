@@ -418,14 +418,19 @@ class WikiServer(DaemonBase):
         skip_git = os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1"
         skip_push = os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1"
 
-        # Pull before render
+        # Pull before render. TinyDB's JSONStorage holds tasks.json open for the
+        # life of the Store, which blocks "git pull"'s working-tree checkout on
+        # Windows (unable to unlink old 'tasks.json'). Release the handle before
+        # the subprocess runs and reopen immediately after, win or lose.
         if not skip_git and not skip_push:
+            self._store.close()
             try:
                 pull(self._wiki_path)
-                self._store.reload()
                 self._last_pull = time.monotonic()
             except WikiPushError:
                 pass
+            finally:
+                self._store.reload()
 
         # Render all tasks
         rendered = render(self._store.all_tasks())
@@ -449,12 +454,17 @@ class WikiServer(DaemonBase):
         commit_paths = list(dict.fromkeys(commit_paths))
         message = f"wiki: {slug_for_msg}"
 
+        # commit_push may internally retry via "git pull --rebase" on a rejected
+        # push, which rewrites tasks.json's working-tree copy -- same handle-held
+        # deadlock as the pull above. Release before the call, reopen after
+        # (success or failure) to pick up any cross-host changes from rebase.
+        self._store.close()
         try:
             commit_push(self._wiki_path, commit_paths, message)
-            # Reload after successful push to pick up any cross-host changes from rebase
-            self._store.reload()
         except WikiPushError:
             raise
+        finally:
+            self._store.reload()
 
     def _ensure_gitignore(self) -> None:
         """Ensure .gitignore contains daemon artifact entries."""

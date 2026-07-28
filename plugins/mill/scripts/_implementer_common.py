@@ -1042,9 +1042,13 @@ def _go_build_tag_retiering_stuck(
          GOOS/GOARCH value (see _is_qualifying_custom_tag); qualifying directories
          run `go build -tags <tag> ./<dir>/...`. Non-qualifying (compound/negated/
          GOOS/GOARCH) constraints are logged (ASCII-only, stderr) and skipped.
-      9. Any compile check exiting non-zero -- return a stuck_type="verify" dict
-         naming the directory, transition direction, and captured output tail.
-      10. All compile checks pass (or none were needed) -- return None.
+      9. Before either compile check runs, if the affected directory no longer
+         exists on disk, the transition was actually a whole-directory deletion
+         (not a same-directory detagging edit) -- log a skip line (ASCII-only,
+         stderr) and skip the compile check for that directory.
+      10. Any compile check exiting non-zero -- return a stuck_type="verify" dict
+          naming the directory, transition direction, and captured output tail.
+      11. All compile checks pass (or none were needed) -- return None.
 
     Never raises to its caller: any subprocess/parsing failure is caught and
     degrades to None (nothing to report), per this plan's "never raise from a new
@@ -1095,6 +1099,16 @@ def _go_build_tag_retiering_stuck(
             # membership transition, skip.
 
         for dir_str in sorted(added_dirs):
+            if not (project_root / dir_str).is_dir():
+                # The directory that gained the //go:build tag no longer exists --
+                # this was a whole-directory deletion, not a same-directory
+                # detagging edit. There is nothing left to compile-check.
+                print(
+                    f"[go-build-tag-retiering] skip: {dir_str} no longer exists"
+                    f" on disk (directory deleted)",
+                    file=sys.stderr,
+                )
+                continue
             build_result = _subprocess_util.run(
                 ["go", "build", _go_build_pattern(dir_str)],
                 cwd=project_root,
@@ -1118,6 +1132,16 @@ def _go_build_tag_retiering_stuck(
                     f"[go-build-tag-retiering] skip: {', '.join(entry['files'])}"
                     f" removed a //go:build constraint not safe to translate"
                     f" to -tags (compound, negated, or GOOS/GOARCH): {tag}",
+                    file=sys.stderr,
+                )
+                continue
+            if not (project_root / dir_str).is_dir():
+                # The directory that lost the //go:build tag no longer exists --
+                # this was a whole-directory deletion, not a same-directory
+                # detagging edit. There is nothing left to compile-check.
+                print(
+                    f"[go-build-tag-retiering] skip: {dir_str} no longer exists"
+                    f" on disk (directory deleted)",
                     file=sys.stderr,
                 )
                 continue
@@ -1291,6 +1315,21 @@ def finalize_from_output(
             parse_verify_field. Takes precedence over git_root/project_root;
             forwarded unchanged to _forward_output.
     """
+    # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
+    # but the parameter is documented (not enforced) as Path.
+    agent_output_path = Path(agent_output_path)
+    if not agent_output_path.is_file():
+        # Guard against a raw, unhandled FileNotFoundError (or IsADirectoryError, if a
+        # directory occupies the path -- is_file() catches that case too) crashing the
+        # implementer/fixer/merge-in CLI with a traceback instead of an actionable message.
+        print(
+            f"ERROR: --agent-output file not found: {agent_output_path} -- for"
+            " implementer/fixer/merge-in dispatches the orchestrator must write the"
+            " notification message to this path before calling --stage finalize",
+            file=sys.stderr,
+        )
+        return 1
+
     # The harness HTML-escapes the <task-notification> payload uniformly before
     # delivery, so the text captured to agent_output_path may contain entities
     # like "&amp;" and "&lt;". Unescape here (at the read site) so downstream
