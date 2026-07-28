@@ -1,0 +1,37 @@
+MILL_REVIEW_BEGIN
+# Review: Plan review verdict correctness: unverified platform claims and missing nit_count in subprocess dispatch — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnetmax
+reviewed_file: plan/
+date: 2026-07-28
+```
+
+## Findings
+
+### [BLOCKING] Card 6 cites _review_common.py without listing it in Context
+**Location:** Batch 1 (review-plan-counting-fix) / Card 6
+**Issue:** Requirements justifies the new `nit_count=aggregate_nit` kwarg by saying "`ReviewResult`'s `nit_count` field already defaults to `0`... see its `@dataclass` definition in `_review_common.py`", but Card 6's `Context:` is `none` and `Edits:` is only `_review_plan.py` — `_review_common.py` is absent from both.
+**Fix:** Add `plugins/mill/scripts/_review_common.py` to Card 6's `Context:`, matching Cards 2 and 4, which already list it for the identical `_review_common` symbol-citation reason.
+
+### [NIT] Card 4 preserves a reassignment that becomes dead code
+**Location:** Batch 1 / Card 4, site (a) — holistic NEED_CONTEXT retry-success branch
+**Issue:** Requirements instructs to keep the branch's `verdict = parse_verdict(raw)` line, stating it is "still needed for the retry-success control flow." Once this card's own refactor switches the print/`reviews.append` calls to `review_entry['verdict']`, that local reassignment is never read again — it becomes a redundant, unused duplicate of the `parse_verdict` call `finalize_scope` already performs internally.
+**Fix:** Correct the rationale, or drop the "keep it, it's needed" instruction — the line is harmless but not load-bearing after the refactor.
+
+### [NIT] Batch 2 scope claims schema-parity test coverage no card delivers
+**Location:** Batch 2 (review-plan-counting-tests) / Batch Scope
+**Issue:** The opening sentence promises coverage proving "Batch 1's `finalize_scope()` refactor and schema-parity fixes actually work," but Cards 7-13 only add assertions for the 4 refactored success sites, the carryforward site, and the #720 regression — none touches the 6 schema-parity-only `"nit_count": 0` error-path additions from Batch 1 Cards 3/5 (existing error-path tests 4, 16, 20, 21 stay untouched).
+**Fix:** Trim the scope sentence to not claim schema-parity coverage, or add a `"nit_count" in entry` / `== 0` assertion to one existing error-path test per refactored site.
+
+### [NIT] Card 9's fixture literal breaks its own markdown code span
+**Location:** Batch 2 / Card 9
+**Issue:** The single-backtick-wrapped Requirements sentence defining `NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT` embeds a second single-backtick pair around `` `nonexistent/missing.py` `` inside the outer span. CommonMark closes an inline code span at the first backtick run of matching length, so the outer span terminates early at that embedded backtick instead of the intended closing backtick at the end of the literal.
+**Fix:** Wrap the fixture-literal span in double backticks, or drop the single-backtick wrapping around the path inside the literal text.
+
+## Verdict
+
+REQUEST_CHANGES
+One Context-completeness BLOCKING (Card 6) plus three low-risk NIT findings across Batches 1-2.
+MILL_REVIEW_END
