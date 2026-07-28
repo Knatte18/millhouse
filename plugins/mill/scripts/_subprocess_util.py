@@ -21,6 +21,9 @@ Public API:
         Thin wrapper around ``subprocess.Popen`` with the guarantees above.
     popen_detached(argv, *, stdin=None, stdout=None, stderr=None, cwd=None, env=None)
         Fire-and-forget detached subprocess. Returns the Popen handle.
+    scrub_env(env=None)
+        Strips the 3 named CLAUDE_CODE_* session markers from an environment
+        dict. Used by interactive launchers that bypass run().
 """
 from __future__ import annotations
 
@@ -35,6 +38,42 @@ from pathlib import Path
 _GRACE_SECONDS = 5
 # CREATE_BREAKAWAY_FROM_JOB is not exported by the subprocess module.
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+# Session-scoped markers a parent Claude Code process injects into its own
+# environment. A child `claude` process spawned with these still present
+# believes it is a sub-session of the parent and disables transcript saving.
+# Persistent user config like CLAUDE_CODE_USE_BEDROCK/_VERTEX is deliberately
+# excluded — this is an exact-match allowlist, not a CLAUDE_CODE_ prefix strip.
+_SCRUBBED_ENV_KEYS = frozenset(
+    {"CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT"}
+)
+
+
+def scrub_env(env: dict[str, str] | None = None) -> dict[str, str]:
+    """
+    Return a copy of an environment dict with the child-session markers removed.
+
+    Interactive launchers (VS Code / claude-cli spawns) bypass ``run()`` and
+    call ``subprocess.run()`` directly so they keep their own console. Those
+    call sites still need the parent's Claude Code session markers stripped
+    from the child environment — otherwise a Claude session opened in the
+    spawned window inherits ``CLAUDE_CODE_CHILD_SESSION`` and silently
+    disables transcript saving. This helper gives them that seam without
+    routing through ``run()``.
+
+    Args:
+        env: Source environment dict to filter. When ``None`` (the default),
+            reads from the live ``os.environ`` of this process. Callers only
+            pass an explicit dict in tests, to filter a fake environment
+            instead of the real one.
+
+    Returns:
+        A new dict — the input (or ``os.environ``) is never mutated — with
+        every key in ``_SCRUBBED_ENV_KEYS`` removed and all other keys
+        (including persistent config like ``CLAUDE_CODE_USE_BEDROCK``)
+        preserved unchanged.
+    """
+    source = env if env is not None else os.environ
+    return {k: v for k, v in source.items() if k not in _SCRUBBED_ENV_KEYS}
 
 
 def run(

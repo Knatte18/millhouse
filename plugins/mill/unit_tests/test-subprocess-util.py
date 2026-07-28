@@ -18,7 +18,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _subprocess_util import _GRACE_SECONDS, popen_detached, run  # noqa: E402
+from _subprocess_util import _GRACE_SECONDS, popen_detached, run, scrub_env  # noqa: E402
 
 # Tests (d) and (e) use a small_delta for timeout wall-time budget
 _SMALL_DELTA = 5
@@ -330,6 +330,69 @@ def main() -> int:
         print("PASS (o): non-zero exit emits both spawn and exit breadcrumbs")
     except AssertionError as exc:
         failures.append(f"FAIL (o) failure-emit: {exc}")
+
+    # (p) scrub_env strips only the 3 allowlisted keys, leaves same-prefix
+    # persistent config (CLAUDE_CODE_USE_BEDROCK) and ordinary keys untouched,
+    # and does not mutate the input dict
+    try:
+        fake_env = {
+            "CLAUDE_CODE_CHILD_SESSION": "abc123",
+            "CLAUDE_CODE_SESSION_ID": "def456",
+            "CLAUDE_CODE_ENTRYPOINT": "cli",
+            "PATH": "/usr/bin:/bin",
+            "HOME": "/home/tester",
+            "CLAUDE_CODE_USE_BEDROCK": "1",
+        }
+        fake_env_copy = dict(fake_env)
+        result = scrub_env(env=fake_env)
+        assert "CLAUDE_CODE_CHILD_SESSION" not in result, (
+            f"expected CLAUDE_CODE_CHILD_SESSION stripped, got {result!r}"
+        )
+        assert "CLAUDE_CODE_SESSION_ID" not in result, (
+            f"expected CLAUDE_CODE_SESSION_ID stripped, got {result!r}"
+        )
+        assert "CLAUDE_CODE_ENTRYPOINT" not in result, (
+            f"expected CLAUDE_CODE_ENTRYPOINT stripped, got {result!r}"
+        )
+        assert result["PATH"] == "/usr/bin:/bin", f"PATH altered: {result!r}"
+        assert result["HOME"] == "/home/tester", f"HOME altered: {result!r}"
+        assert result["CLAUDE_CODE_USE_BEDROCK"] == "1", (
+            f"expected CLAUDE_CODE_USE_BEDROCK preserved (allowlist, not prefix match), "
+            f"got {result!r}"
+        )
+        assert fake_env == fake_env_copy, (
+            f"scrub_env must not mutate its input dict, got {fake_env!r}"
+        )
+        print("PASS (p): scrub_env strips exactly the 3 allowlisted keys, preserves the rest")
+    except AssertionError as exc:
+        failures.append(f"FAIL (p) scrub_env-allowlist: {exc}")
+
+    # (q) scrub_env is a no-op when none of the allowlisted keys are present
+    try:
+        fake_env = {"PATH": "/usr/bin", "HOME": "/home/x"}
+        result = scrub_env(env=fake_env)
+        assert result == fake_env, f"expected unchanged dict, got {result!r}"
+        print("PASS (q): scrub_env is a no-op when no allowlisted keys are present")
+    except AssertionError as exc:
+        failures.append(f"FAIL (q) scrub_env-noop: {exc}")
+
+    # (r) scrub_env() with no argument reads live os.environ
+    try:
+        with unittest.mock.patch.dict(os.environ, {"CLAUDE_CODE_CHILD_SESSION": "1"}):
+            result = scrub_env()
+        assert "CLAUDE_CODE_CHILD_SESSION" not in result, (
+            f"expected CLAUDE_CODE_CHILD_SESSION stripped from default os.environ read, "
+            f"got {result!r}"
+        )
+        assert "PATH" in result, (
+            f"expected PATH from live os.environ preserved in result, got {result!r}"
+        )
+        assert result["PATH"] == os.environ["PATH"], (
+            f"expected PATH value to match live os.environ, got {result['PATH']!r}"
+        )
+        print("PASS (r): scrub_env() with no argument reads live os.environ")
+    except AssertionError as exc:
+        failures.append(f"FAIL (r) scrub_env-default-os-environ: {exc}")
 
     if failures:
         for msg in failures:
