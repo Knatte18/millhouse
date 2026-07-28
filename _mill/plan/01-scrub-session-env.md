@@ -76,10 +76,10 @@ already states.
       allowlisted keys exist.
     - `(r)`: call `scrub_env()` with no argument (default `env=None`), using
       `unittest.mock.patch.dict(os.environ, {"CLAUDE_CODE_CHILD_SESSION": "1"})` (a
-      new `import os` and `unittest.mock.patch.dict` import/usage — `os` is not
-      currently imported in this file; add `import os` alongside the other stdlib
-      imports at the top) to inject one allowlisted key into the real environment for
-      the duration of the test. Assert `"CLAUDE_CODE_CHILD_SESSION"` is absent from
+      new use of the already-imported `os` module — `import os` is already present at
+      line 10 of this file — plus `unittest.mock.patch.dict`, already imported via
+      `import unittest.mock` at line 15) to inject one allowlisted key into the real
+      environment for the duration of the test. Assert `"CLAUDE_CODE_CHILD_SESSION"` is absent from
       the result, and that some other real key already present in `os.environ`
       before the patch (e.g. `PATH`, which is present in every POSIX process) is
       present in the result with its real value — proving the default path reads live

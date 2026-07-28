@@ -1,0 +1,22 @@
+MILL_REVIEW_BEGIN
+# Review: mill-vscode/mill-spawn leak CLAUDE_CODE_CHILD_SESSION into spawned VS Code windows — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnetmax
+reviewed_file: plan/
+date: 2026-07-28
+```
+
+## Findings
+
+### [NIT] Card 1 wrongly claims `os` isn't imported in test-subprocess-util.py
+**Location:** Batch 1 (scrub-session-env) / Card 1, test case (r)
+**Issue:** Requirements say "`os` is not currently imported in this file; add `import os`" for `plugins/mill/unit_tests/test-subprocess-util.py`, but the file already has `import os` at line 10 — following the instruction literally adds a harmless but redundant duplicate import.
+**Fix:** Drop the false premise; note `os` is already imported so only the `unittest.mock.patch.dict` usage is new. (The parallel "add `import os`, if not already present" instructions in Cards 2/3 are correctly hedged and factually accurate for their respective files — no change needed there.)
+
+## Verdict
+
+APPROVE
+Plan is precise and source-grounded (line numbers, imports, and existing call sites verified against actual files); all four Shared Decisions are faithfully implemented across cards; only one harmless doc/premise inaccuracy found.
+MILL_REVIEW_END

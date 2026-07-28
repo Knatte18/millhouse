@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-vscode/mill-spawn leak CLAUDE_CODE_CHILD_SESSION into spawned VS Code windows"
 slug: mill-vscode-spawn-session-leak
-approved: false
+approved: true
 started: "20260728-165804"
 parent: main
 root: ""
