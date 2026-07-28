@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r4
+phase: plan-fix-r5
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: _mill/plan
@@ -26,4 +26,5 @@ plan-review-r3  '2026-07-28T19:19:20Z'
 plan-fix-r3  '2026-07-28T19:19:20Z'
 plan-review-r4  '2026-07-28T19:35:34Z'
 plan-fix-r4  '2026-07-28T19:35:34Z'
+plan-fix-r5  '2026-07-28T19:51:49Z'
 ```

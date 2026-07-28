@@ -3,7 +3,7 @@
 ```yaml
 task: "Merge-in conflict handling: silent marker-verification gaps, mill-config.yaml chicken-and-egg crash, and undocumented dirty-worktree squash failure"
 slug: "mill-merge-conflict-robustness-gaps"
-approved: false
+approved: true
 started: "20260728-182257"
 parent: "main"
 root: ""
