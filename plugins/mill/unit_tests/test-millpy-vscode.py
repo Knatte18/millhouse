@@ -6,6 +6,7 @@ the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -63,7 +64,7 @@ def main() -> int:
         subprocess_calls: list[dict] = []
 
         def mock_subprocess_run(argv, **kwargs):
-            subprocess_calls.append({"argv": argv})
+            subprocess_calls.append({"argv": argv, "env": kwargs.get("env")})
 
         with (
             patch("mill_vscode.resolve_git_root", return_value=root),
@@ -74,6 +75,7 @@ def main() -> int:
             patch("mill_vscode.subprocess.run", side_effect=mock_subprocess_run),
             patch("mill_vscode.input", return_value="1", create=True),
             patch("mill_vscode._vscode_processes.find_open_vscode_paths", return_value=set()),
+            patch.dict(os.environ, {"CLAUDE_CODE_CHILD_SESSION": "1", "PATH": os.environ.get("PATH", "")}),
         ):
             rc = mill_vscode.main([])
 
@@ -94,6 +96,25 @@ def main() -> int:
                 errors += 1
             else:
                 print("PASS: two worktrees -- user picks 1 -> code invoked with first worktree path")
+                env = subprocess_calls[0]["env"]
+                if env is None:
+                    print("FAIL: two-worktree pick: env kwarg not passed to subprocess.run", file=sys.stderr)
+                    errors += 1
+                elif any(
+                    key in env
+                    for key in ("CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT")
+                ):
+                    print(f"FAIL: two-worktree pick: session markers leaked into env: {env}", file=sys.stderr)
+                    errors += 1
+                elif env.get("PATH") != os.environ.get("PATH"):
+                    print(
+                        f"FAIL: two-worktree pick: expected PATH={os.environ.get('PATH')!r} in scrubbed env, "
+                        f"got {env.get('PATH')!r}",
+                        file=sys.stderr,
+                    )
+                    errors += 1
+                else:
+                    print("PASS: two-worktree pick -- scrub_env() strips session markers, preserves PATH")
 
     # ------------------------------------------------------------------
     # Test: --slug selects without prompting.
@@ -339,8 +360,9 @@ def main() -> int:
             patch("mill_vscode._load_spawn_main", return_value=spawn_callable),
             patch(
                 "mill_vscode.subprocess.run",
-                side_effect=lambda a, **kw: subprocess_calls.append({"argv": a}),
+                side_effect=lambda a, **kw: subprocess_calls.append({"argv": a, "env": kw.get("env")}),
             ),
+            patch.dict(os.environ, {"CLAUDE_CODE_CHILD_SESSION": "1", "PATH": os.environ.get("PATH", "")}),
         ):
             rc = mill_vscode.main([])
 
@@ -364,6 +386,25 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: no active worktrees + no flags -> spawn called, new worktree opened")
+            env = subprocess_calls[0]["env"]
+            if env is None:
+                print("FAIL: no-active-worktrees spawn: env kwarg not passed to subprocess.run", file=sys.stderr)
+                errors += 1
+            elif any(
+                key in env
+                for key in ("CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT")
+            ):
+                print(f"FAIL: no-active-worktrees spawn: session markers leaked into env: {env}", file=sys.stderr)
+                errors += 1
+            elif env.get("PATH") != os.environ.get("PATH"):
+                print(
+                    f"FAIL: no-active-worktrees spawn: expected PATH={os.environ.get('PATH')!r} in scrubbed env, "
+                    f"got {env.get('PATH')!r}",
+                    file=sys.stderr,
+                )
+                errors += 1
+            else:
+                print("PASS: no-active-worktrees spawn -- scrub_env() strips session markers, preserves PATH")
 
     # ------------------------------------------------------------------
     # Test: no active worktrees, spawn returns non-zero -> exit 1, no VS Code.
