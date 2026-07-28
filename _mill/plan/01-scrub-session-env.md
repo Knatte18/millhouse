@@ -84,8 +84,7 @@ already states.
       before the patch (e.g. `PATH`, which is present in every POSIX process) is
       present in the result with its real value — proving the default path reads live
       `os.environ`, not an empty dict.
-  - **Commit:** `fix(subprocess-util): add scrub_env() to strip CLAUDE_CODE_* session
-    markers`
+- **Commit:** `fix(subprocess-util): add scrub_env() to strip CLAUDE_CODE_* session markers`
 
 ### Card 2: Wire `scrub_env()` into `millpy-vscode.py`'s two launch sites
 
@@ -137,8 +136,7 @@ already states.
       three env assertions (not-`None`, no allowlisted keys, `PATH` present with its
       injected value) after the existing `argv` assertion, following the existing
       `errors += 1` control-flow convention in this test block.
-  - **Commit:** `fix(mill-vscode): pass scrub_env() to both code-launch subprocess
-    calls`
+- **Commit:** `fix(mill-vscode): pass scrub_env() to both code-launch subprocess calls`
 
 ### Card 3: Wire `scrub_env()` into `millpy-terminal.py`'s two launch sites
 
@@ -185,8 +183,7 @@ already states.
       existing test in this file are unaffected — see `discussion.md`'s `Testing`
       section for why the Windows branch stays untested (no existing `os.name` mock in
       this file, pre-existing gap, out of scope).
-  - **Commit:** `fix(mill-terminal): pass scrub_env() to both claude-launch
-    subprocess calls`
+- **Commit:** `fix(mill-terminal): pass scrub_env() to both claude-launch subprocess calls`
 
 ## Batch Tests
 
