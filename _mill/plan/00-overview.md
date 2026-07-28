@@ -3,7 +3,7 @@
 ```yaml
 task: 'Plan review verdict correctness: unverified platform claims and missing nit_count in subprocess dispatch'
 slug: mill-review-verdict-and-counting-gaps
-approved: false
+approved: true
 started: 20260728-184433
 parent: main
 root: ""
