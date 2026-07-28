@@ -1,8 +1,7 @@
 # Status
 
 ```yaml
-phase: blocked
-blocked_reason: 'auto: discussion review gaps unresolved after 9 rounds'
+phase: discussed
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: null
@@ -17,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-27T18:09:31Z'
 blocked  '2026-07-28T18:15:47Z'
+discussed  '2026-07-28T18:18:15Z'
 ```
