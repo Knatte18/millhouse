@@ -37,7 +37,7 @@ batches:
     name: dirty-parent-worktree-preflight
     file: 04-dirty-parent-worktree-preflight.md
     depends-on: []
-    verify: null
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-merge.py
 ```
 
 ## Shared Decisions
@@ -54,9 +54,9 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 ### Decision: Documentation-only batches skip `verify:`
 
-- **Decision:** Batches 3 and 4 set the batch-level `verify: null` — their content is SKILL.md/template prose, not unit-testable, or (batch 4) an integration test extension already covered by that batch's own card-level verification via the shared `test-merge.py` invocation documented in that batch's Batch Tests section.
-- **Rationale:** `_mill/discussion.md`'s Testing section states the `merge-in-conflict-brief.md` instruction "is not unit-testable (it's an LLM prompt, not code); document two distinct worked examples directly in the template itself." Batch 4's `mill-merge/SKILL.md` edit is likewise prose; its paired `test-merge.py` extension is exercised manually per that batch's Batch Tests section since `test-merge.py` is an integration test invoked directly (`uv run --project plugins/mill python plugins/mill/integration_tests/test-merge.py`), not via the `run-all.py` unit-test harness this project's `verify:` convention targets.
-- **Applies to:** merge-in-semantic-duplication, dirty-parent-worktree-preflight
+- **Decision:** Batch 3 sets the batch-level `verify: null` — its content is SKILL.md/template prose with no runnable surface. Batch 4 is NOT documentation-only: although Card 15 is prose (`mill-merge/SKILL.md`), Card 16 adds real, directly-invocable integration-test assertions to `test-merge.py`, so batch 4's `verify:` is wired to that file directly (same non-`run-all.py` direct-invocation shape batches 1-2 already use) rather than left `null` — a `null` verify would leave Card 16's new assertions unrun by anything but a human remembering a manual step.
+- **Rationale:** `_mill/discussion.md`'s Testing section states the `merge-in-conflict-brief.md` instruction "is not unit-testable (it's an LLM prompt, not code); document two distinct worked examples directly in the template itself" — this applies to batch 3 only. Batch 4's `mill-merge/SKILL.md` edit (Card 15) is likewise prose, but its paired `test-merge.py` extension (Card 16) is real Python, so it gets the same `verify:` treatment as batches 1-2's unit-test files.
+- **Applies to:** merge-in-semantic-duplication
 
 ## All Files Touched
 
