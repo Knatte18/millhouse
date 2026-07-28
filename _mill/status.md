@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-review-verdict-and-counting-gaps
 branch: hanf/mill-review-verdict-and-counting-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-27T18:02:19Z'
+discussed  '2026-07-28T18:33:00Z'
 ```
