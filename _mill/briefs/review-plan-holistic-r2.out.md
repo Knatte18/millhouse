@@ -1,0 +1,37 @@
+MILL_REVIEW_BEGIN
+# Review: Merge-in conflict handling: silent marker-verification gaps, mill-config.yaml chicken-and-egg crash, and undocumented dirty-worktree squash failure — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnetmax
+reviewed_file: plan/
+date: 2026-07-28
+```
+
+## Findings
+
+### [BLOCKING] Dirty-parent halt collides with existing generic Rollback section
+**Location:** Batch 4 / Card 15 (`mill-merge/SKILL.md` Step 5)
+**Issue:** The new pre-squash halt sits inside Step 5, which the pre-existing `## Rollback (Steps 1-5 only)` section already covers with "any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back via ... `git -C <parent-path> reset --hard mill-checkpoint-<name>`," so a mechanical reading would apply that reset to this new halt too, destroying exactly the independent uncommitted parent-worktree work scenario (a)'s own message tells the operator to commit/stash.
+**Fix:** State explicitly that this new pre-squash halt is exempt from `## Rollback (Steps 1-5 only)` (nothing was mutated yet), mirroring the doc's existing Step-4-specific rollback carve-out (`git reset --hard HEAD`, no checkpoint ref) that exists for the same reason.
+
+### [NIT] Card 4's "mirror exactly" framing contradicts its own fixture needs
+**Location:** Batch 1 / Card 4
+**Issue:** The opening clause says to mirror `test_worktree_template_augments_template_cfg` "exactly in structure" (where `hub_root == worktree_root` are the same directory), but the card's later detail requires a valid `hub_root` template distinct from the broken `worktree_root` template — if an implementer keeps them equal, breaking the one shared file breaks both loop candidates, `template_cfg` never gets the probe key, and assertion (c) fails even against correctly-fixed code.
+**Fix:** State explicitly, up front, that `hub_root` and `worktree_root` must be distinct directories in this new test, unlike the mirrored test.
+
+### [NIT] Card 5 misstates `_review_common.load_config`'s raise condition
+**Location:** Batch 1 / Card 5
+**Issue:** Card 5 claims `resolve_repo_config_path(...) is None` alone "is the only condition that raises" `ReviewError`, but `_review_common.py:2003` raises only on the conjunction `not template_path.exists() and mill_cfg_path is None`; the prescribed test still passes (the fixture makes `mill_cfg_path` non-None either way) but the stated rationale is factually wrong.
+**Fix:** Correct the citation to the actual conjunction at `_review_common.py:2003`.
+
+### [NIT] Card 10's stuck-skips-gate test doesn't name which call site it covers
+**Location:** Batch 2 / Card 10
+**Issue:** `test_2x_stuck_status_skips_gate` is specified once with no statement of whether it must cover both the `--stage full` and `--stage finalize` call sites Cards 7-8 add, so an implementer could satisfy it by exercising only one and leave the other's stuck-skips-gate path unverified.
+**Fix:** Specify that this test (or two variants) must assert the gate is skipped at both call sites.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 15's new halt must be reconciled with the existing Rollback section to avoid destroying the uncommitted work it tells operators to preserve.
+MILL_REVIEW_END
