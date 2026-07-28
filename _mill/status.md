@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-vscode-spawn-session-leak
 branch: hanf/mill-vscode-spawn-session-leak
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-07-27T17:05:38Z'
 discussed  '2026-07-28T16:57:05Z'
 planning  '2026-07-28T17:00:02Z'
 plan-fix-r1  '2026-07-28T17:09:09Z'
+planned  '2026-07-28T17:09:27Z'
 ```
