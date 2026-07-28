@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import io
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +14,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _safe_rmtree  # noqa: E402
 from _implementer_common import (  # noqa: E402
     _forward_output,
     _batch_completeness_stuck,
@@ -4250,7 +4250,7 @@ def main() -> int:
         )
         # Remove the directory from disk only -- git history at HEAD still has it,
         # so the diff-based classification still sees an added-tag transition.
-        shutil.rmtree(pkg_dir)
+        _safe_rmtree.safe_rmtree(pkg_dir, allowed_root=project_root)
         side_effect, calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
         try:
