@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-vscode-spawn-session-leak
 branch: hanf/mill-vscode-spawn-session-leak
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-27T17:05:38Z'
+discussed  '2026-07-28T16:57:05Z'
 ```
