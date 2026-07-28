@@ -27,5 +27,7 @@ implementing  '2026-07-28T17:50:23Z'
 ```yaml
 batches:
   - name: scrub-session-env
-    state: pending
+    state: running
+    implementer_session: d09b5784-7ec3-4d6e-ab09-280951ea8d21
+    start_sha: f84e9522b66f9e1b2379ad409992789a59e7a182
 ```
