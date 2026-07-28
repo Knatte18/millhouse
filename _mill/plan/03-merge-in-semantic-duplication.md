@@ -42,7 +42,8 @@ Fixes #718: the conflict-resolution sub-agent can resolve a conflict by keeping 
 
 ### Card 14: Generalize `mill-merge-in/SKILL.md` Step 3's operator-facing `discarded` wording
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/templates/merge-in-conflict-brief.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Creates:** none
