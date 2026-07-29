@@ -1490,6 +1490,10 @@ def _check_context_completeness(
        sentinel strings) are never flagged -- only genuine file references
        that this validator can independently confirm exist.
 
+    Note: markdown's double-backtick-escape convention (`` `path` ``) is not
+    detected by this regex; future citations needing that format should be
+    aware they won't be checked by context-completeness.
+
     Error dict shape: ``{check, batch, card, path, message}``.
 
     Args:
