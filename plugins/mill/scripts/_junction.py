@@ -322,17 +322,38 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
                 file=sys.stderr,
             )
             return
+        except FileNotFoundError:
+            # dir_path was listed by an outer scandir() but vanished before
+            # this call opened it -- a TOCTOU race (sibling deletion,
+            # generated-file cleanup, concurrent teardown). Skip rather than
+            # propagate, and log distinctly from the permission-denied case
+            # above so the two failure modes are never conflated.
+            print(
+                f"[junction] WARNING: vanished entry scanning {dir_path}; skipping",
+                file=sys.stderr,
+            )
+            return
 
         for entry in entries:
             ep = Path(entry.path)
-            # If entry is a junction or symlink, remove it and do NOT descend.
-            if entry.is_symlink() or _is_junction_or_symlink(ep):
-                remove(ep)
-                removed.append(ep)
-            # If entry is a real directory, recurse into it.
-            elif entry.is_dir():
-                _walk(ep)
-            # Files are skipped.
+            try:
+                # If entry is a junction or symlink, remove it and do NOT descend.
+                if entry.is_symlink() or _is_junction_or_symlink(ep):
+                    remove(ep)
+                    removed.append(ep)
+                # If entry is a real directory, recurse into it.
+                elif entry.is_dir():
+                    _walk(ep)
+                # Files are skipped.
+            except FileNotFoundError:
+                # ep vanished between being listed and being processed.
+                # Never append to removed -- it was already gone, not
+                # actually removed by this call's remove(ep).
+                print(
+                    f"[junction] WARNING: vanished entry: {ep}; skipping",
+                    file=sys.stderr,
+                )
+                continue
 
     _walk(worktree_path)
     return removed

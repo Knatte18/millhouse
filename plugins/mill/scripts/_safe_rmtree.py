@@ -59,14 +59,28 @@ def _is_reparse_point(p: Path) -> bool:
 
 
 def _walk_strip_reparse_points(root: Path) -> None:
-    with os.scandir(str(root)) as it:
-        for entry in it:
-            ep = Path(entry.path)
-            if entry.is_symlink() or _is_reparse_point(ep):
-                _junction.remove(ep)
-                continue
-            if entry.is_dir(follow_symlinks=False):
-                _walk_strip_reparse_points(ep)
+    # The directory listed by an outer os.scandir() (or this call's own
+    # os.scandir(root)) can vanish between listing and processing -- a
+    # sibling deletion, a generated-file cleanup, or a concurrent teardown
+    # racing this walk. Guard the whole scandir open plus the per-entry
+    # processing separately so one vanished entry never aborts sibling
+    # processing, and a vanished root never propagates past this call.
+    try:
+        with os.scandir(str(root)) as it:
+            for entry in it:
+                ep = Path(entry.path)
+                try:
+                    if entry.is_symlink() or _is_reparse_point(ep):
+                        _junction.remove(ep)
+                        continue
+                    if entry.is_dir(follow_symlinks=False):
+                        _walk_strip_reparse_points(ep)
+                except FileNotFoundError:
+                    print(f"[safe-rmtree] skip vanished entry: {ep}", file=sys.stderr)
+                    continue
+    except FileNotFoundError:
+        print(f"[safe-rmtree] skip vanished entry: {root}", file=sys.stderr)
+        return
 
 
 def _blacklist_for(allowed_root: Path) -> list[Path]:
