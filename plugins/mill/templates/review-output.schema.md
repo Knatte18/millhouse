@@ -12,6 +12,7 @@ This file documents the canonical format for all review output files produced by
 ```yaml
 verdict: APPROVE | REQUEST_CHANGES | GAPS_FOUND | NEED_CONTEXT
 reviewer_model: <reviewer name from config, e.g. sonnetmax>
+reviewer_self_id: <optional, reviewer-reported self-identification>
 reviewed_file: <path to the artefact that was reviewed>
 date: <UTC YYYY-MM-DD>
 ```
@@ -45,8 +46,11 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 |---|---|---|---|
 | `verdict` | string | yes | `APPROVE`, `REQUEST_CHANGES`, `GAPS_FOUND`, or `NEED_CONTEXT` |
 | `reviewer_model` | string | yes | reviewer name from config (e.g. `sonnetmax`, `sonnethigh`) |
+| `reviewer_self_id` | string | no | optional, reviewer-self-reported model identification; unverified |
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
+
+`reviewer_self_id` is unverified and reviewer-reported: it is the reviewer's own best-effort claim about what model/version it is, present only in the discussion and plan review templates, and it is never validated by `parse_verdict()`. This is distinct from `reviewer_model`, which is orchestrator-supplied — dictated to the reviewer up front — and which `apply_actual_model_override()` (invoked via the CLIs' `--actual-model` flag) can rewrite after the fact.
 
 `parse_verdict()` scans for the first fenced ` ```yaml ` block in the document and returns the `verdict` value. If no fenced block is found, it falls back to scanning for an unfenced `verdict:` line (case-sensitive, with leading whitespace allowed). It raises `ReviewError` if:
 - No ` ```yaml ` opening fence is found AND no unfenced `verdict:` line is found.

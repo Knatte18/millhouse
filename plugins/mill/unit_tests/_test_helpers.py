@@ -10,6 +10,8 @@ Public API:
     init_wiki_repo(wiki_path) -> None
         Initialize a git repo with bare origin at a wiki_path.
     safe_temp_dir() -> ContextManager[Path]
+    write_local_overlay(mill_dir, **entries) -> None
+        Write reviewer registry entries to the hub's local overlay file.
 """
 from __future__ import annotations
 
@@ -38,8 +40,9 @@ os.environ.setdefault("WIKI_DAEMON_IDLE_TIMEOUT", "1")
 os.environ.setdefault("WIKI_DAEMON_SKIP_GIT", "1")
 os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
 
-import pygit2  # noqa: E402
 import _safe_rmtree  # noqa: E402
+import pygit2  # noqa: E402
+import yaml  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from wiki._parse import parse_home_md  # noqa: E402
 
@@ -297,3 +300,20 @@ def safe_temp_dir():
         except OSError:
             pass
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+
+
+def write_local_overlay(mill_dir: Path, **entries) -> None:
+    """Write reviewer registry entries to the hub's local overlay file.
+
+    `_reviewers.load()` merges the plugin template (always present and
+    non-empty in this source tree) with `.millhouse/agents.local.yaml` --
+    the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to`
+    is only consulted when both the template and the local overlay are
+    empty, which never happens here. Tests that need a specific named
+    reviewer spec to actually resolve via `reviewer_override` must seed it
+    here, mirroring the local-overlay convention already established in
+    test-reviewers.py.
+    """
+    (mill_dir / "agents.local.yaml").write_text(
+        yaml.safe_dump(entries, default_flow_style=False), encoding="utf-8"
+    )

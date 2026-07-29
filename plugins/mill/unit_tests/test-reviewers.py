@@ -964,6 +964,104 @@ def test_resolve_unknown_name_lists_available() -> None:
     print("PASS: resolve unknown name lists available names in error")
 
 
+def test_resolve_reviewer_override_single_claude_happy_path() -> None:
+    """resolve_reviewer_override returns the resolved spec for a single/claude entry."""
+    registry = {
+        "sonnetmax": {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+            "effort": "max",
+        }
+    }
+    spec = _reviewers.resolve_reviewer_override(registry, "sonnetmax", reject_non_claude=True)
+    assert spec["type"] == "single"
+    assert spec["provider"] == "claude"
+    assert spec["model"] == "claude-sonnet-4-6"
+    print("PASS: resolve_reviewer_override single claude happy path")
+
+
+def test_resolve_reviewer_override_cluster_raises() -> None:
+    """resolve_reviewer_override rejects cluster names regardless of reject_non_claude."""
+    registry = {
+        "myworker": {
+            "type": "single",
+            "provider": "claude",
+            "model": "claude-sonnet-4-6",
+            "effort": "max",
+        },
+        "mycluster": {
+            "type": "cluster",
+            "workers": {"use": "myworker", "count": 3},
+            "handler": {"use": "myworker"},
+        },
+    }
+    for reject_non_claude in (True, False):
+        try:
+            _reviewers.resolve_reviewer_override(registry, "mycluster", reject_non_claude=reject_non_claude)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError as exc:
+            assert "cluster" in str(exc).lower()
+    print("PASS: resolve_reviewer_override cluster raises regardless of reject_non_claude")
+
+
+def test_resolve_reviewer_override_test_stub_raises() -> None:
+    """resolve_reviewer_override rejects the model-less test_stub spec regardless of reject_non_claude."""
+    for reject_non_claude in (True, False):
+        try:
+            _reviewers.resolve_reviewer_override({}, "test_stub", reject_non_claude=reject_non_claude)
+            raise AssertionError("Expected ReviewerError")
+        except ReviewerError:
+            pass
+    print("PASS: resolve_reviewer_override test_stub raises regardless of reject_non_claude")
+
+
+def test_resolve_reviewer_override_non_claude_rejected_when_reject_true() -> None:
+    """resolve_reviewer_override rejects a non-Claude provider when reject_non_claude=True."""
+    registry = {
+        "geminireviewer": {
+            "type": "single",
+            "provider": "gemini",
+            "model": "gemini-2.5-flash",
+            "effort": "high",
+        }
+    }
+    try:
+        _reviewers.resolve_reviewer_override(registry, "geminireviewer", reject_non_claude=True)
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError:
+        pass
+    print("PASS: resolve_reviewer_override non-claude rejected when reject_non_claude=True")
+
+
+def test_resolve_reviewer_override_non_claude_accepted_when_reject_false() -> None:
+    """resolve_reviewer_override accepts a non-Claude provider unchanged when reject_non_claude=False."""
+    registry = {
+        "geminireviewer": {
+            "type": "single",
+            "provider": "gemini",
+            "model": "gemini-2.5-flash",
+            "effort": "high",
+        }
+    }
+    spec = _reviewers.resolve_reviewer_override(registry, "geminireviewer", reject_non_claude=False)
+    assert spec["provider"] == "gemini"
+    assert spec["model"] == "gemini-2.5-flash"
+    print("PASS: resolve_reviewer_override non-claude accepted when reject_non_claude=False")
+
+
+def test_resolve_reviewer_override_unknown_name_raises() -> None:
+    """resolve_reviewer_override propagates resolve()'s 'Unknown reviewer' error unchanged."""
+    try:
+        _reviewers.resolve_reviewer_override(
+            make_minimal_registry(), "does-not-exist", reject_non_claude=True
+        )
+        raise AssertionError("Expected ReviewerError")
+    except ReviewerError as exc:
+        assert "Unknown reviewer" in str(exc)
+    print("PASS: resolve_reviewer_override unknown name raises")
+
+
 def test_tier_rank_single_claude_returns_family_and_effort_rank() -> None:
     """tier_rank returns (family_rank, effort_rank) for a resolved single/claude spec."""
     spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
@@ -1088,6 +1186,12 @@ def main() -> int:
         test_bare_aliases_resolve_with_correct_spec,
         test_validate_role_refs_accepts_bare_aliases,
         test_resolve_unknown_name_lists_available,
+        test_resolve_reviewer_override_single_claude_happy_path,
+        test_resolve_reviewer_override_cluster_raises,
+        test_resolve_reviewer_override_test_stub_raises,
+        test_resolve_reviewer_override_non_claude_rejected_when_reject_true,
+        test_resolve_reviewer_override_non_claude_accepted_when_reject_false,
+        test_resolve_reviewer_override_unknown_name_raises,
         test_tier_rank_single_claude_returns_family_and_effort_rank,
         test_tier_rank_missing_effort_defaults_to_zero,
         test_tier_rank_non_claude_provider_returns_none,

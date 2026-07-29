@@ -41,6 +41,8 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **All Files Touched scope** — the overview's `## All Files Touched` section lists the union of `Edits:`/`Creates:`/Move-target paths across all batches; `Deletes:` tokens and Move-source paths are excluded by convention. A Deletes-only or Move-source-only path missing from that list is correct, not a finding.
 - **Platform-behavior-claim verification** — BLOCKING if a plan or discussion claim describes Claude Code's own platform/harness behavior (e.g. agent auto-discovery, plugin manifest semantics) and a manifest or doc file that could confirm or refute the claim is present in your context, bulked or Read-able, but the claim was accepted without checking that file. Tool-use-mode reviewers may Read `plugin.json`/platform docs directly even when not bulked.
 
+Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
+
 ## Output format — STRICT
 
 Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** Per finding: 3–5 lines, short and factual. The consumer has full context of the plan; do NOT explain background. Cite the batch/card, state what's wrong, propose the fix.
@@ -54,6 +56,7 @@ MILL_REVIEW_BEGIN
 ```yaml
 verdict: APPROVE | REQUEST_CHANGES | NEED_CONTEXT
 reviewer_model: <REVIEWER_MODEL>
+reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: plan/
 date: <UTC YYYY-MM-DD>
 ```

@@ -9,6 +9,8 @@ Flags:
     --max-rounds <N>   Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
                        (overrides both scopes) for this invocation. Default: use config values.
     --no-holistic      Skip the holistic plan review; run per-batch reviews only.
+    --reviewer <alias> Override roles.plan-review.holistic.reviewer for this invocation only.
+                       Holistic scope only -- batch-scope reviewer is unaffected. Default: use config value.
     --skip-check <CHECK>  Skip a named validator check (repeatable). Silently ignores unknown names.
     --skip-validate    Bypass the auto pre-review validator. Use only when you
                        know the validator is false-positive on a finding.
@@ -87,6 +89,11 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
+    )
+    parser.add_argument(
+        "--reviewer",
+        default=None,
+        help="Override roles.plan-review.holistic.reviewer for this invocation only (e.g. sonnetmax). Holistic scope only -- batch-scope reviewer is unaffected. Nothing is written back to config.",
     )
     parser.add_argument(
         "--actual-model",
@@ -171,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
             prepare_result = prepare(
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
+                reviewer_override=args.reviewer,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -280,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_rounds=args.max_rounds,
                 holistic_only=args.holistic_only,
                 no_holistic=args.no_holistic,
+                reviewer_override=args.reviewer,
             )
             print(json.dumps(result.to_dict()))
             return 0

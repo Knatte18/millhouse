@@ -50,6 +50,7 @@ def prepare(
     *,
     max_rounds: int | None = None,
     agent_mode: bool = False,
+    reviewer_override: str | None = None,
 ) -> dict:
     """Prepare a holistic discussion review by rendering the prompt.
 
@@ -58,6 +59,15 @@ def prepare(
             (adds the single Write carve-out for the .out.md report).
             Defaults to False so run()'s `--stage full` fallback keeps
             receiving today's non-agent rule unchanged.
+        reviewer_override: When not None, overrides the config-resolved
+            discussion-review holistic reviewer for this call only --
+            nothing is written back to config. Bypasses the `reviewer:
+            null` disablement (but not the separate `rounds: 0` check
+            above), and skips the large-prompt auto-switch entirely.
+            Resolved with `reject_non_claude=agent_mode`: rejects a
+            non-Claude model when called from the Agent-mode `--stage
+            prepare` entrypoint (agent_mode=True), but accepts one when
+            called from run()'s internal, non-agent-mode invocation.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -78,13 +88,30 @@ def prepare(
             f"Round {round_n} exceeds max {effective_max} for discussion review"
         )
 
-    # 3. Resolve reviewer spec via registry
-    reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
-    if reviewer_name is None:
-        raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+    # 3. Resolve reviewer spec via registry. An explicit reviewer_override
+    # bypasses the `reviewer: null` disablement below; the config-resolved
+    # path is otherwise unchanged. reject_non_claude follows agent_mode:
+    # the Agent-mode `--stage prepare` CLI entrypoint (agent_mode=True) only
+    # ever dispatches Claude subagents, so an override naming another
+    # provider is rejected here; run()'s internal call (agent_mode=False)
+    # is the legacy direct-dispatch path, which must keep accepting any
+    # configured provider -- its own downstream resolve already uses
+    # reject_non_claude=False, so this call must not reject first.
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
-    spec = _reviewers.resolve(registry, reviewer_name)
+    if reviewer_override is not None:
+        try:
+            spec = _reviewers.resolve_reviewer_override(
+                registry, reviewer_override, reject_non_claude=agent_mode
+            )
+        except _reviewers.ReviewerError as exc:
+            raise ReviewError(str(exc)) from exc
+        reviewer_name = reviewer_override
+    else:
+        reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+        if reviewer_name is None:
+            raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+        spec = _reviewers.resolve(registry, reviewer_name)
     mode = "tool-use" if spec.get("tooluse") else "bulk"
     tool_rule = build_tool_rule(mode, agent_mode)
 
@@ -113,9 +140,10 @@ def prepare(
         reviewer_model=reviewer_name,
     )
 
-    spec, reviewer_name = maybe_switch_spec_for_large_prompt(
-        prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
-    )
+    if reviewer_override is None:
+        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
+        )
 
     return {
         "prompt_text": prompt_text,
@@ -204,6 +232,7 @@ def run(
     wiki_root: Path,
     *,
     max_rounds: int | None = None,
+    reviewer_override: str | None = None,
 ) -> ReviewResult:
     """Run a holistic discussion review.
 
@@ -211,6 +240,11 @@ def run(
     1. prepare() to render prompt.
     2. Call reviewer via _reviewer_single.run().
     3. finalize() to parse verdict and return ReviewResult.
+
+    Args:
+        reviewer_override: When not None, overrides the config-resolved
+            discussion-review holistic reviewer for this call only --
+            nothing is written back to config.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled
@@ -230,18 +264,33 @@ def run(
             )
 
         # Prepare
-        prepare_result = prepare(cfg, slug, mill_dir, project_root, wiki_root, max_rounds=max_rounds)
+        prepare_result = prepare(
+            cfg, slug, mill_dir, project_root, wiki_root,
+            max_rounds=max_rounds, reviewer_override=reviewer_override,
+        )
         prompt_text = prepare_result["prompt_text"]
         round_n = prepare_result["round"]
         reviews_dir = prepare_result["reviews_dir"]
 
-        # Determine spec for reviewer call (need to resolve it again in prepare to get full spec)
-        reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+        # Determine spec for reviewer call (need to resolve it again in prepare to get full spec).
+        # An explicit reviewer_override bypasses the reviewer: null disablement and skips the
+        # large-prompt auto-switch; reject_non_claude=False since this direct-dispatch path
+        # never calls model_to_tier and must keep accepting non-Claude aliases.
         registry = _reviewers.load(project_root)
-        spec = _reviewers.resolve(registry, reviewer_name)
-        spec, _ = maybe_switch_spec_for_large_prompt(
-            prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
-        )
+        if reviewer_override is not None:
+            try:
+                spec = _reviewers.resolve_reviewer_override(
+                    registry, reviewer_override, reject_non_claude=False
+                )
+            except _reviewers.ReviewerError as exc:
+                raise ReviewError(str(exc)) from exc
+            reviewer_name = reviewer_override
+        else:
+            reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+            spec = _reviewers.resolve(registry, reviewer_name)
+            spec, _ = maybe_switch_spec_for_large_prompt(
+                prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
+            )
 
         # Invoke reviewer
         try:

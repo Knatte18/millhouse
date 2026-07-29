@@ -328,6 +328,7 @@ def prepare(
     wiki_root: Path,
     git_root: Path,
     agent_mode: bool = False,
+    reviewer_override: str | None = None,
 ) -> dict:
     """Prepare a plan review by rendering the prompt for a single scope.
 
@@ -340,6 +341,11 @@ def prepare(
             ``_review_one_batch``'s or ``run()``'s own build_tool_rule
             calls -- those belong to the `--stage full` path, which is a
             separate, non-prepare code path for plan review.
+        reviewer_override: When not None, overrides the config-resolved
+            plan-review holistic reviewer for this call only -- nothing is
+            written back to config. Bypasses the `reviewer: null`
+            disablement and skips the large-prompt auto-switch entirely.
+            No-op when `scope is not None` (batch scope is unaffected).
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -463,10 +469,19 @@ def prepare(
         # Holistic scope
         round_n = discover_round(reviews_dir, "plan", "holistic")
 
-        holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
-        if holistic_name is None:
-            raise ReviewError("plan-review holistic reviewer is null")
-        holistic_spec = _reviewers.resolve(registry, holistic_name)
+        if reviewer_override is not None:
+            try:
+                holistic_spec = _reviewers.resolve_reviewer_override(
+                    registry, reviewer_override, reject_non_claude=True
+                )
+            except _reviewers.ReviewerError as exc:
+                raise ReviewError(str(exc)) from exc
+            holistic_name = reviewer_override
+        else:
+            holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
+            if holistic_name is None:
+                raise ReviewError("plan-review holistic reviewer is null")
+            holistic_spec = _reviewers.resolve(registry, holistic_name)
 
         # Union all Context:/Edits:/Creates: across all batch files
         all_raw_refs: dict[str, None] = {}
@@ -539,9 +554,10 @@ def prepare(
             reviewer_model=holistic_name,
         )
 
-        holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
-            prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
-        )
+        if reviewer_override is None:
+            holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
+                prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
+            )
 
         return {
             "prompt_text": prompt_text,
@@ -625,6 +641,7 @@ def run(
     max_rounds: int | None = None,
     holistic_only: bool = False,
     no_holistic: bool = False,
+    reviewer_override: str | None = None,
 ) -> ReviewResult:
     """Run plan review: parallel per-batch + optional holistic.
 
@@ -636,6 +653,17 @@ def run(
        Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
     5. Holistic review (skipped if cfg["roles"]["plan-review"]["holistic"]["reviewer"] is None or no_holistic).
     6. Aggregate and return ReviewResult (all-ERROR → ERROR; no raise).
+
+    Args:
+        reviewer_override: When not None, overrides the config-resolved
+            plan-review holistic reviewer for this call only -- nothing is
+            written back to config. Bypasses the `holistic_name is None`
+            disablement in step 3, but not the separate
+            `cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0` gate,
+            which is checked independently and still applies. Skips the
+            large-prompt auto-switch entirely. The per-batch reviewer
+            resolution (the immediately-preceding half of step 3) is
+            completely untouched by this parameter.
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
@@ -687,7 +715,19 @@ def run(
             batch_spec = _reviewers.resolve(registry, batch_reviewer_name)
 
         holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
-        if holistic_name is None or cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0:
+        if reviewer_override is not None and cfg["roles"]["plan-review"]["holistic"]["rounds"] != 0:
+            # An explicit --reviewer bypasses the `holistic_name is None`
+            # disablement below, but not the independent `rounds == 0` gate
+            # -- a round-0 config still returns no holistic spec even with
+            # an override, per the overview's null-bypass Decision.
+            try:
+                holistic_spec = _reviewers.resolve_reviewer_override(
+                    registry, reviewer_override, reject_non_claude=False
+                )
+            except _reviewers.ReviewerError as exc:
+                raise ReviewError(str(exc)) from exc
+            holistic_name = reviewer_override
+        elif holistic_name is None or cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0:
             holistic_spec = None
         else:
             holistic_spec = _reviewers.resolve(registry, holistic_name)
@@ -894,9 +934,10 @@ def run(
                 reviewer_model=holistic_name,
             )
 
-            holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
-                prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
-            )
+            if reviewer_override is None:
+                holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(
+                    prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry
+                )
 
             resolved_timeout = resolve_large_prompt_timeout(
                 prompt_text, cfg, "plan-review", "holistic", holistic_timeout

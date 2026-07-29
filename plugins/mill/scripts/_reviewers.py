@@ -13,6 +13,10 @@ Public API:
     resolve(registry: dict, name: str) -> dict
         Resolve a reviewer name to a fully-flattened spec dict.
         Special case: "test_stub" returns a synthetic spec without consulting the registry.
+    resolve_reviewer_override(registry: dict, name: str, *, reject_non_claude: bool) -> dict
+        Resolve a `--reviewer` per-round override name, rejecting cluster types,
+        specs with no model (e.g. test_stub), and (when reject_non_claude) any
+        model whose family is not recognized by _agent_dispatch.model_to_tier.
     resolve_role(cfg: dict, registry: dict, role: str, scope: str) -> dict | None
         Read cfg.roles.<role>.<scope>.reviewer and resolve via registry.
         Returns None if reviewer is null or rounds is 0.
@@ -404,6 +408,71 @@ def resolve(registry: dict, name: str) -> dict:
         workers["use"] = resolve(registry, workers["use"])
     if isinstance(handler, dict) and "use" in handler:
         handler["use"] = resolve(registry, handler["use"])
+    return spec
+
+
+def resolve_reviewer_override(registry: dict, name: str, *, reject_non_claude: bool) -> dict:
+    """Resolve a `--reviewer` per-round override name to a dispatchable spec.
+
+    A `--reviewer` override is a deliberate, one-off operator choice made on
+    the command line to break a stalled review loop, so it is held to a
+    narrower contract than the general-purpose `resolve()`: only single,
+    model-bearing reviewers may be named, and (for the Agent-mode dispatch
+    path, which is Claude-only by construction) only Claude models.
+
+    Args:
+        registry: The loaded reviewer registry, as returned by `load()`.
+        name: The reviewer name passed via `--reviewer`.
+        reject_non_claude: When True, also require the resolved model to
+            belong to a recognized Claude model family (checked via
+            `_agent_dispatch.model_to_tier`). Agent-mode dispatch call sites
+            pass True; direct-dispatch call sites pass False, since that
+            path already dispatches non-Claude reviewers via ordinary
+            config today and must keep doing so.
+
+    Returns:
+        The fully-flattened spec dict for `name`, unchanged from `resolve()`.
+
+    Raises:
+        ReviewerError: If `name` is unknown (propagated from `resolve()`),
+            names a cluster reviewer, names a reviewer with no `model` key
+            (e.g. the `test_stub` synthetic spec), or (when
+            `reject_non_claude` is True) names a reviewer whose model family
+            `_agent_dispatch.model_to_tier` does not recognize.
+    """
+    spec = resolve(registry, name)
+
+    # Cluster reviewers dispatch through a fan-out/fan-in handler with no
+    # single model to attribute a round to; only single reviewers can stand
+    # in as a per-round override.
+    if spec.get("type") == "cluster":
+        raise ReviewerError(
+            f"--reviewer {name!r} is cluster type; only single reviewers are supported for a per-round override"
+        )
+
+    # The test_stub synthetic spec (and any malformed single spec) carries no
+    # "model" key at all. Check this before touching model_to_tier below --
+    # calling it on a missing model would raise AttributeError, not the
+    # ReviewerError this function promises.
+    if spec.get("model") is None:
+        raise ReviewerError(
+            f"--reviewer {name!r} has no model (e.g. test_stub); not supported for a per-round override"
+        )
+
+    if reject_non_claude:
+        # Agent-mode dispatch only ever runs Claude subagents, so an
+        # override naming a non-Claude (or unrecognized-family) model can
+        # never actually be dispatched through that path. Local import
+        # mirrors tier_rank()'s existing precedent for this same cross-module
+        # call, avoiding a module-level import-cycle risk against
+        # _agent_dispatch's own module-level import of _review_common.
+        import _agent_dispatch
+
+        try:
+            _agent_dispatch.model_to_tier(spec["model"])
+        except ValueError as exc:
+            raise ReviewerError(f"--reviewer {name!r}: {exc}") from exc
+
     return spec
 
 

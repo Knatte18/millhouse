@@ -44,6 +44,8 @@ Reviewer model: **<REVIEWER_MODEL>**. Batch: **<BATCH_NAME>**. Round **<ROUND>**
 
 **Reviewer note:** plan-reviewer sees only `Context: ∪ Edits:` (existing files). `Creates:` targets are absent — do not flag missing `Creates:` files as NEED_CONTEXT.
 
+Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
+
 ## Output format — STRICT
 
 Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** Per finding: 3–5 lines, short and factual. The consumer has full context of the plan; do NOT explain background. Cite the step/card, state what's wrong, propose the fix.
@@ -57,6 +59,7 @@ MILL_REVIEW_BEGIN
 ```yaml
 verdict: APPROVE | REQUEST_CHANGES | NEED_CONTEXT
 reviewer_model: <REVIEWER_MODEL>
+reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: <BATCH_NAME>
 date: <UTC YYYY-MM-DD>
 ```
