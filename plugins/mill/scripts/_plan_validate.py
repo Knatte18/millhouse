@@ -33,6 +33,10 @@ Checks performed (check keys):
     verify-malformed-cwd     — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd or missing command)
     verify-mixed-cwd         — batches in the plan resolve the {cwd, command} mapping form to more than one distinct cwd
     verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and byte-identical to the parent branch
+    verify-excludes-edited-tagged-test — Go-specific (gated on go.mod presence);
+                               flags a batch whose Edits:-only _test.go files include a
+                               //go:build ...integration...-tagged file when the batch's
+                               verify: command lacks a matching -tags ...integration... flag
     wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
                                but plugin.json is not in that batch's Context: or Edits:
@@ -1511,6 +1515,180 @@ def _check_verify_not_isolated(
 
 
 # ---------------------------------------------------------------------------
+# verify-excludes-edited-tagged-test check
+# ---------------------------------------------------------------------------
+
+# Matches a Go build-constraint comment line: "//go:build <expr>". The
+# captured expression is checked for the word "integration".
+_RE_GO_BUILD_CONSTRAINT = re.compile(r"^//go:build\s+(?P<expr>.*)$")
+
+# Matches a -tags flag (space or = separated) and its value, which may be a
+# quoted (comma/space-separated) list or a single bare (comma-separated) token.
+_RE_VERIFY_TAGS_FLAG = re.compile(r"-tags[= ]+(\"[^\"]*\"|'[^']*'|\S+)")
+
+# Safety net bounding the //go:build header-comment scan well above
+# real-world license-header lengths (Apache-2.0 ~15 lines, BSD-3-Clause
+# ~25-27 lines), so a long copyright header never causes an unbounded scan.
+_GO_BUILD_TAG_SCAN_LINES = 40
+
+
+def _go_file_is_integration_tagged(path: Path) -> bool:
+    """
+    Return True if a Go source file's leading //go:build constraint mentions "integration".
+
+    Scans from the top of the file, skipping blank lines and `//`-comment
+    lines (a license/copyright header may precede the build-constraint
+    line); the first line that is neither blank nor a `//`-comment ends the
+    scan (e.g. `package foo` or a `/*` block comment opener). Bounded to the
+    first `_GO_BUILD_TAG_SCAN_LINES` lines.
+
+    Args:
+        path: Path to an existing Go source file on disk.
+
+    Returns:
+        True if a scanned `//go:build` line's constraint expression contains
+        the word "integration".
+    """
+    text = path.read_text(encoding="utf-8")
+    for line in text.splitlines()[:_GO_BUILD_TAG_SCAN_LINES]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not stripped.startswith("//"):
+            break
+        m = _RE_GO_BUILD_CONSTRAINT.match(stripped)
+        if m and re.search(r"\bintegration\b", m.group("expr")):
+            return True
+    return False
+
+
+def _verify_command_has_integration_tag(command: str) -> bool:
+    """
+    Return True if a verify: command's -tags flag value includes "integration".
+
+    Matches `-tags integration`, `-tags=integration`, and a quoted or bare
+    comma-separated value like `-tags "integration,other"` or
+    `-tags integration,other`. A value like `integrationtest` does not count
+    -- the match requires "integration" as an exact comma/whitespace-split
+    token, not a substring.
+
+    Args:
+        command: The verify: command string (already normalized via
+            `_plan_dag.parse_verify_field`).
+
+    Returns:
+        True if any `-tags` flag in the command carries "integration" as one
+        of its comma/whitespace-split values.
+    """
+    for m in _RE_VERIFY_TAGS_FLAG.finditer(command):
+        value = m.group(1).strip("\"'")
+        tokens = re.split(r"[,\s]+", value)
+        if "integration" in tokens:
+            return True
+    return False
+
+
+def _check_verify_excludes_edited_tagged_test(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag a batch whose verify: command silently skips an edited integration-tagged Go test.
+
+    Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open
+    for every non-Go project -- mirrors `_check_verify_not_isolated`'s
+    `is_python_project` gate.
+
+    For each batch, collects `Edits:`-only tokens ending in `_test.go` (via
+    `_parse_edits_only`, filtered to that suffix). `Creates:` tokens are
+    deliberately excluded from this collection: a `Creates:` target does not
+    exist on disk at plan-validation time (this codebase's established
+    convention), so `resolve_existing_paths` would never confirm it as
+    integration-tagged anyway -- an accepted, documented limitation, not a
+    bug (see the Card 6 `(h)` regression scenario).
+
+    Each resolved edited test file is scanned via
+    `_go_file_is_integration_tagged`. When a batch has at least one edited
+    integration-tagged test, its `verify:` command (normalized via
+    `_plan_dag.parse_verify_field`; a malformed `{cwd, command}` mapping
+    raises `ValueError` -- caught and skipped here since
+    `_check_verify_malformed_cwd` is the sole reporter for that) must carry
+    a `-tags` flag whose value includes "integration"
+    (`_verify_command_has_integration_tag`); otherwise this check reports
+    the batch with one finding naming the first (sorted) tagged token found.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root); also the
+            `go.mod` presence-check root.
+        root: Optional root subfolder for source refs, threaded to
+            `resolve_existing_paths` exactly like sibling checks
+            (`_check_non_existent_path`, `_check_move_source_missing`,
+            `_check_batch_oversized`) so a nested-layout Go project still
+            resolves `_test.go` tokens correctly.
+        wiki_root: Optional wiki root path, threaded to `resolve_existing_paths`.
+        git_root: Optional repo root, threaded to `resolve_existing_paths`.
+
+    Returns:
+        List of error dicts, one per batch with an edited integration-tagged
+        test file whose verify: command lacks a matching -tags flag.
+    """
+    if not (project_root / "go.mod").exists():
+        return []
+
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        edited_test_tokens = sorted(
+            t for t in _parse_edits_only(batch_path) if t.endswith("_test.go")
+        )
+        if not edited_test_tokens:
+            continue
+
+        tagged_token: str | None = None
+        for token in edited_test_tokens:
+            resolved = resolve_existing_paths(
+                [token], project_root, root, wiki_root=wiki_root, git_root=git_root,
+            )
+            if not resolved:
+                continue
+            if _go_file_is_integration_tagged(resolved[0]):
+                tagged_token = token
+                break
+        if tagged_token is None:
+            continue
+
+        try:
+            frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+            command, _cwd = _plan_dag.parse_verify_field(
+                frontmatter, project_root, project_root,
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+
+        if command is None or not _verify_command_has_integration_tag(command):
+            errors.append({
+                "check": "verify-excludes-edited-tagged-test",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": tagged_token,
+                "message": (
+                    f"batch '{batch_path.stem}' edits integration-tagged test "
+                    f"'{tagged_token}' but its verify: command lacks a matching "
+                    "-tags ...integration... flag"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # verify-full-suite check
 # ---------------------------------------------------------------------------
 
@@ -2087,6 +2265,11 @@ def run(
     errors.extend(_check_verify_mixed_cwd(batch_files, overview_text, project_root, effective_git_root))
     errors.extend(_check_verify_unrelated_test_files(
         batch_files, project_root, effective_git_root, parent_branch,
+    ))
+    errors.extend(_check_verify_excludes_edited_tagged_test(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
     ))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_plugin_manifest_context_missing(batch_files))
