@@ -63,5 +63,7 @@ batches:
     start_sha: 6855265e58332d30d4f7301c3798bf555fa95ce5
     commit_sha: 418839ae6a865492ad033e6fa2417d5a64963da7
   - name: unit-tests-plan
-    state: pending
+    state: running
+    implementer_session: b76365fc-b64b-4296-a8c3-f64420d2b89c
+    start_sha: 4804460eba317bf61f360d0c53243e3fb595ab4a
 ```
