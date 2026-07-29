@@ -2,8 +2,8 @@
 Detect whether a task is running in-place (no separate worktree directory).
 
 An *in-place* task is one that was claimed via ``mill-claim`` from the hub
-itself — the task branch IS the hub's current branch; no child worktree
-directory exists under ``<container>/worktrees/<slug>/``.
+itself — the task branch IS the hub's current branch, so ``git_root`` for
+the running session IS the main worktree root.
 
 ``mill-merge`` and ``mill-cleanup`` call ``is_inplace`` to decide whether
 to run ``git worktree remove`` (worktree mode) or only ``git branch -d``
@@ -11,10 +11,11 @@ to run ``git worktree remove`` (worktree mode) or only ``git branch -d``
 
 Public API:
     is_inplace(slug, git_root, cfg) -> bool
-        Returns True when no worktree directory exists at the resolved
-        worktrees-container / slug path. The slug is already derived from
-        the current branch by the caller (via ``_marker.slug_from_branch``),
-        so no branch re-fetch is needed here.
+        Returns True when ``git_root`` IS the main worktree root (a
+        git-topology comparison, not a directory-existence check). The
+        slug is already derived from the current branch by the caller
+        (via ``_marker.slug_from_branch``), so no branch re-fetch is
+        needed here.
 
     prompt_stale_worktree(slug, worktree_path) -> str
         Interactive numbered prompt for the stale-worktree edge case (branch
@@ -26,27 +27,36 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from _paths import resolve_worktrees_dir
+from _paths import resolve_main_worktree_root
 
 
 def is_inplace(slug: str, git_root: Path, cfg: dict) -> bool:
     """Return True when this task is running in-place (no separate worktree dir).
 
-    Detection criterion: no directory exists at ``<worktrees-dir>/<slug>/``.
+    Detection criterion: ``git_root`` IS the main worktree root — a
+    git-topology comparison rather than a check for directory existence at
+    some canonical path. This is immune to the task's worktree having been
+    parked at a non-canonical location (see issue #735).
 
     The slug is already validated against the current branch by the caller
     via ``_marker.slug_from_branch``, so no branch re-fetch is required.
+    ``slug`` and ``cfg`` are retained in the signature only for API
+    compatibility with existing call sites — neither participates in the
+    check below.
 
     Args:
-        slug: Task slug derived from the current branch name.
+        slug: Task slug derived from the current branch name. Unused.
         git_root: Absolute path to the hub git checkout.
-        cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
+        cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml). Unused.
 
     Returns:
         True if the task is in-place; False otherwise.
     """
-    worktrees_dir = resolve_worktrees_dir(cfg, git_root)
-    return not (worktrees_dir / slug).is_dir()
+    main_root = resolve_main_worktree_root(git_root)
+    try:
+        return git_root.samefile(main_root)
+    except OSError:
+        return git_root.resolve() == main_root.resolve()
 
 
 def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
