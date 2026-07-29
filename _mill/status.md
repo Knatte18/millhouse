@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-start-tracked-files-vanish-mid-review
 branch: hanf/mill-start-tracked-files-vanish-mid-review
 plan: _mill/plan
@@ -35,6 +35,7 @@ approved-mill-plan-wiring  '2026-07-29T09:23:11Z'
 approved-mill-go-wiring  '2026-07-29T09:26:35Z'
 holistic-reviewing  '2026-07-29T09:26:57Z'
 holistic-fixing  '2026-07-29T09:30:26Z'
+holistic-reviewing  '2026-07-29T09:32:45Z'
 ```
 
 ## Batches
