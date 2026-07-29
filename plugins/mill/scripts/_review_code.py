@@ -268,10 +268,17 @@ def prepare(
                 file=sys.stderr,
             )
 
-    all_raw_refs: dict[str, None] = {}
+    # Context: refs are split from Edits:/Creates:/Deletes: refs so only the
+    # former can soft-fail on a confirmed git-ignore hit (#733) -- a missing
+    # Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since
+    # those name files the batch is expected to produce or touch.
+    context_only_refs: dict[str, None] = {}
+    other_refs: dict[str, None] = {}
     for bp in batch_files:
-        for ref in parse_batch_refs(bp):
-            all_raw_refs[ref] = None
+        for ref in parse_batch_refs(bp, fields=("Context",)):
+            context_only_refs[ref] = None
+        for ref in parse_batch_refs(bp, fields=("Edits", "Creates", "Deletes")):
+            other_refs[ref] = None
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
     # Move targets exist post-implementation; the code reviewer should see the
@@ -280,11 +287,17 @@ def prepare(
     # deletes_union so a stale Context: ref pointing at a path a later batch
     # relocates is silently suppressed rather than hard-failing (#686).
     moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
-    referenced = resolve_ref_paths(
-        list(all_raw_refs.keys()), project_root, root,
+    other_resolved = resolve_ref_paths(
+        list(other_refs.keys()), project_root, root,
         creates_union=creates_union, deletes_union=deletes_union | moves_sources_union,
         wiki_root=wiki_root, git_root=git_root,
     )
+    context_resolved = resolve_ref_paths(
+        list(context_only_refs.keys()), project_root, root,
+        creates_union=creates_union, deletes_union=deletes_union | moves_sources_union,
+        wiki_root=wiki_root, git_root=git_root, soft_fail_gitignored=True,
+    )
+    referenced = [*other_resolved, *context_resolved]
 
     # Deduplicate while preserving order across the three lists.
     seen: dict[Path, None] = {}
@@ -298,7 +311,7 @@ def prepare(
     # resolve_existing_paths so a missing target (incomplete implementation)
     # is silently skipped rather than hard-failing code review.
     moves_targets_on_disk = resolve_existing_paths(
-        [t for t in moves_targets_union if t not in all_raw_refs],
+        [t for t in moves_targets_union if t not in other_refs and t not in context_only_refs],
         project_root,
         root,
         wiki_root=wiki_root,
@@ -317,7 +330,7 @@ def prepare(
         )
 
     ancestors_on_disk = resolve_existing_paths(
-        [raw for raw in creates_union if raw not in all_raw_refs],
+        [raw for raw in creates_union if raw not in other_refs and raw not in context_only_refs],
         project_root,
         root,
         wiki_root=wiki_root,
