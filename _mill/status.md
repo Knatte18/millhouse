@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-wiki-health-check-and-messaging
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r5  '2026-07-29T14:53:49Z'
 plan-review-r6  '2026-07-29T14:59:00Z'
 planned  '2026-07-29T14:59:16Z'
 implementing  '2026-07-29T15:00:06Z'
+approved-wiki-health-check-and-messaging  '2026-07-29T15:09:31Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-07-29T15:00:06Z'
 ```yaml
 batches:
   - name: wiki-health-check-and-messaging
-    state: running
+    state: approved
     implementer_session: 5564b5cd-7ee3-4efd-9c70-54a1d5ebd2de
     start_sha: 280af59c782f4002cf122bb3a8a002f67d7b17f4
+    commit_sha: 414efea66a0290cb7a9d07408238fdefa2bbae82
   - name: mill-resume-repair
     state: pending
   - name: config-resolution-fixes-implement-and-small
