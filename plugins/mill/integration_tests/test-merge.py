@@ -826,6 +826,108 @@ def main() -> int:
 
         print("PASS -- mill-merge end-to-end (flat-hub scenario)")
 
+        # === Step 5 guard: parent tracks nothing at task_dir (#736) ===
+        # Fresh, self-contained fixture -- deliberately does NOT reuse
+        # hub/worktree/container from _setup_trio, whose hub already has a
+        # seeded _mill/status.md on main by this point (the true
+        # worktree-mode #648 scenario above dodges this exact bug on
+        # purpose). This scenario needs the opposite starting state: main
+        # tracks no _mill/ anywhere in its tree.
+        container_step5_guard = SCRATCH / f"merge-test-step5-guard-{uuid.uuid4().hex[:8]}"
+        _run(["git", "init", str(container_step5_guard), "-b", "main"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_step5_guard), "config", "user.email", "test@example.com"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_step5_guard), "config", "user.name", "Test"], cwd=SCRATCH)
+        (container_step5_guard / "README.md").write_text("step5 guard test\n", encoding="utf-8")
+        _run(["git", "-C", str(container_step5_guard), "add", "README.md"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_step5_guard), "commit", "-m", "init"], cwd=SCRATCH)
+
+        # Task branch carries both the intended production file and a
+        # _mill/status.md, committed together -- so main ends up with no
+        # _mill/ anywhere in its tree once we check back out to it: the
+        # exact #736 case ("parent tracks nothing at task_dir").
+        _run(["git", "-C", str(container_step5_guard), "checkout", "-b", "task/guard-test"], cwd=SCRATCH)
+        task_mill_dir = container_step5_guard / "_mill"
+        task_mill_dir.mkdir()
+        (task_mill_dir / "status.md").write_text("phase: done\ntask: Step 5 guard test\n", encoding="utf-8")
+        (container_step5_guard / "feature.txt").write_text("feature\n", encoding="utf-8")
+        _run(["git", "-C", str(container_step5_guard), "add", "_mill/status.md", "feature.txt"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_step5_guard), "commit", "-m", "task: add feature + _mill"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_step5_guard), "checkout", "main"], cwd=SCRATCH)
+
+        # --- squash the task branch onto main ---
+        _run(["git", "-C", str(container_step5_guard), "merge", "--squash", "task/guard-test"], cwd=SCRATCH)
+
+        # --- Repro #736 first: a bare, unguarded restore-checkout fails ---
+        # Mirrors the real Step 5 command ordering (reset, then checkout) and
+        # the existing #648 repro sub-step's own two-command structure.
+        # Both _mill/status.md and feature.txt are staged as new files right
+        # after the squash (from the index, where _mill IS present) -- the
+        # reset below is what makes the index match HEAD's absence at
+        # _mill/, reproducing the #736 pathspec-match failure on checkout.
+        repro_reset = _run(
+            ["git", "-C", str(container_step5_guard), "reset", "-q", "HEAD", "--", "_mill"],
+            cwd=SCRATCH, check=False,
+        )
+        _assert(repro_reset.returncode == 0,
+                f"expected reset to succeed (unstages _mill/status.md), got rc={repro_reset.returncode}")
+        repro_checkout = _run(
+            ["git", "-C", str(container_step5_guard), "checkout", "--", "_mill"],
+            cwd=SCRATCH, check=False,
+        )
+        repro_combined = repro_checkout.stdout + repro_checkout.stderr
+        _assert(repro_checkout.returncode != 0,
+                f"expected bare unguarded checkout to fail when main tracks nothing at "
+                f"task_dir, got rc={repro_checkout.returncode}")
+        _assert(
+            "did not match any file" in repro_combined,
+            f"expected pathspec-match error, got:\n{repro_combined}",
+        )
+        print(
+            "PASS: repro -- bare unguarded checkout fails when parent tracks nothing "
+            "at task_dir (#736)"
+        )
+
+        # --- Prove the fix: the 2>/dev/null || true guard swallows it ---
+        fix_reset = _run(
+            ["git", "-C", str(container_step5_guard), "reset", "-q", "HEAD", "--", "_mill"],
+            cwd=SCRATCH,
+        )
+        _assert(fix_reset.returncode == 0,
+                f"expected reset to be a true no-op (already unstaged by the repro step "
+                f"above), got rc={fix_reset.returncode}")
+        # The `||` guard is shell syntax, so this one call needs shell=True --
+        # unlike every other _run() call in this file, which passes an argv list.
+        fix_checkout = subprocess.run(
+            "git checkout -- _mill 2>/dev/null || true",
+            shell=True, cwd=str(container_step5_guard), capture_output=True, text=True,
+        )
+        _assert(fix_checkout.returncode == 0,
+                f"expected the guarded checkout to exit 0 even though _mill is absent "
+                f"from HEAD, got rc={fix_checkout.returncode}")
+        print(
+            "PASS: fix -- guarded checkout swallows the pathspec-match failure "
+            "(#736)"
+        )
+
+        # --- guard still keeps _mill out of the squash commit (Step 5's actual purpose) ---
+        commit_result = _run(
+            ["git", "-C", str(container_step5_guard), "commit", "-m", "Demo guarded merge"],
+            cwd=SCRATCH,
+        )
+        _assert(commit_result.returncode == 0,
+                f"expected the squash commit to succeed, got rc={commit_result.returncode}")
+        show_stat = _run(
+            ["git", "-C", str(container_step5_guard), "show", "--stat", "HEAD"], cwd=SCRATCH,
+        ).stdout
+        _assert(
+            "_mill" not in show_stat,
+            f"expected the squash commit to not mention _mill/, got:\n{show_stat}",
+        )
+        print(
+            "PASS: Step 5 guarded checkout no longer halts when parent tracks nothing "
+            "at task_dir (#736)"
+        )
+
         # === Phase-gate slug-mismatch fallback sub-scenario (#656/#659/#662) ===
         # Simulates the post-Step-3-corruption state mill-finalize's restore
         # path produces (this task's Batch 2 fix): a status.md belonging to a
@@ -1053,6 +1155,8 @@ def main() -> int:
                 print(f"Scratch preserved: {container_retry}", file=sys.stderr)
             if "container_untracked" in locals():
                 print(f"Scratch preserved: {container_untracked}", file=sys.stderr)
+            if "container_step5_guard" in locals():
+                print(f"Scratch preserved: {container_step5_guard}", file=sys.stderr)
         else:
             _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
             if "container_nested" in locals():
@@ -1083,6 +1187,12 @@ def main() -> int:
                 _safe_rmtree.safe_rmtree(
                     container_untracked,
                     allowed_root=container_untracked,
+                    ignore_errors=True,
+                )
+            if "container_step5_guard" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_step5_guard,
+                    allowed_root=container_step5_guard,
                     ignore_errors=True,
                 )
 

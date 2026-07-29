@@ -18,59 +18,49 @@ import _inplace  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def _test_is_inplace_true_when_no_worktree_dir():
-    """Returns True when no worktree directory exists for the slug."""
+def _test_is_inplace_true_when_topology_matches():
+    """Returns True when git_root IS the main worktree root."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         git_root = tmp / "hub"
         git_root.mkdir()
         cfg = {}
-        # No worktrees dir created — is_inplace should return True.
-        with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
+        # git_root is reported as the main worktree root -- in-place.
+        with patch("_inplace.resolve_main_worktree_root", return_value=git_root):
             result = _inplace.is_inplace("my-task", git_root, cfg)
 
         if not result:
             raise AssertionError("Expected is_inplace to return True")
-        print("PASS is_inplace — no worktrees dir -> True")
+        print("PASS is_inplace — topology matches -> True")
 
 
-def _test_is_inplace_false_when_worktree_dir_exists_default():
-    """Returns False when worktree dir exists at default location."""
+def _test_is_inplace_false_when_topology_differs_735_regression():
+    """Returns False when git_root is NOT the main worktree root.
+
+    Regression test for issue #735: a real separate worktree parked at a
+    non-canonical location (no directory at the canonical <wts>/<slug>/
+    path) must still be detected as a worktree, not misdetected as
+    in-place. The old path-existence implementation would have wrongly
+    returned True here.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         git_root = tmp / "hub"
         git_root.mkdir()
-        worktree_dir = tmp / "worktrees" / "my-task"
-        worktree_dir.mkdir(parents=True)
+        # Simulate the main worktree living elsewhere -- no directory is
+        # created at the canonical <wts>/my-task/ path at all.
+        main_root = tmp / "elsewhere" / "main"
+        main_root.mkdir(parents=True)
         cfg = {}
 
-        with patch("_inplace.resolve_worktrees_dir", return_value=tmp / "worktrees"):
-            result = _inplace.is_inplace("my-task", git_root, cfg)
-
-        if result:
-            raise AssertionError("Expected is_inplace to return False when worktree dir exists")
-        print("PASS is_inplace — worktree dir exists (default location) -> False")
-
-
-def _test_is_inplace_false_when_worktree_dir_exists_override():
-    """Returns False when worktree dir exists at overridden location."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        git_root = tmp / "hub"
-        git_root.mkdir()
-        custom_worktrees = tmp / "custom-worktrees"
-        worktree_dir = custom_worktrees / "my-task"
-        worktree_dir.mkdir(parents=True)
-        cfg = {"spawn": {"worktrees_dir": str(custom_worktrees)}}
-
-        with patch("_inplace.resolve_worktrees_dir", return_value=custom_worktrees):
+        with patch("_inplace.resolve_main_worktree_root", return_value=main_root):
             result = _inplace.is_inplace("my-task", git_root, cfg)
 
         if result:
             raise AssertionError(
-                "Expected is_inplace to return False when worktree dir exists at override"
+                "Expected is_inplace to return False when topology differs"
             )
-        print("PASS is_inplace — worktree dir exists (overridden location) -> False")
+        print("PASS is_inplace — topology differs (#735 regression) -> False")
 
 
 # ---------------------------------------------------------------------------
@@ -144,9 +134,8 @@ def main() -> int:
         _test_prompt_stale_worktree_importable_and_callable,
         _test_is_inplace_returns_bool,
         _test_prompt_stale_worktree_returns_str,
-        _test_is_inplace_true_when_no_worktree_dir,
-        _test_is_inplace_false_when_worktree_dir_exists_default,
-        _test_is_inplace_false_when_worktree_dir_exists_override,
+        _test_is_inplace_true_when_topology_matches,
+        _test_is_inplace_false_when_topology_differs_735_regression,
         _test_prompt_stale_worktree_returns_abort_on_choice_1,
         _test_prompt_stale_worktree_returns_inplace_on_choice_2,
         _test_prompt_stale_worktree_returns_worktree_on_choice_3,

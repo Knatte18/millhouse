@@ -182,6 +182,64 @@ def test_is_live_phase() -> None:
     print("PASS _is_live_phase — non-str phase (42) -> False, no TypeError")
 
 
+def test_resolve_inplace_mode_topology_outcomes() -> None:
+    """Exercise both post-topology-fix outcomes of `_resolve_inplace_mode` directly.
+
+    Calls `_resolve_inplace_mode` itself (not through `apply_plan`), patching
+    only `mill_cleanup._inplace.resolve_main_worktree_root` to force each
+    outcome. This covers the "worktree" fallback branch at
+    `millpy-cleanup.py:437`, which was unreachable before the topology
+    rewrite -- the old `is_inplace` recomputed the same path-existence check
+    the caller had already confirmed `False`, so it always returned `True`
+    at this call site.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        hub_root = tmp / "hub"
+        hub_root.mkdir()
+        wiki_path = tmp / "wiki"
+
+        record = SlugRecord(
+            slug="my-task",
+            worktree_path=hub_root,
+            branch="impl/my-task",
+            home_marker="active",
+        )
+
+        def _fake_run2(argv, **kwargs):
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = "impl/my-task\n"
+            result.stderr = ""
+            return result
+
+        # Case A (in-place): git_root IS the main worktree root.
+        with (
+            patch("mill_cleanup._marker.slug_from_branch", return_value="my-task"),
+            patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run2),
+            patch("mill_cleanup._paths.resolve_main_worktree_root", return_value=hub_root),
+            patch("mill_cleanup._inplace.resolve_main_worktree_root", return_value=hub_root),
+        ):
+            result = _resolve_inplace_mode(record, hub_root, wiki_path, cfg={})
+        assert result == ("inplace", "impl/my-task"), f"Case A: expected inplace, got {result!r}"
+        print("PASS _resolve_inplace_mode — topology matches -> ('inplace', task_branch)")
+
+        # Case B (worktree): git_root is NOT the main worktree root.
+        elsewhere_root = tmp / "elsewhere"
+        with (
+            patch("mill_cleanup._marker.slug_from_branch", return_value="my-task"),
+            patch("mill_cleanup._subprocess_util.run", side_effect=_fake_run2),
+            patch("mill_cleanup._paths.resolve_main_worktree_root", return_value=hub_root),
+            patch("mill_cleanup._inplace.resolve_main_worktree_root", return_value=elsewhere_root),
+        ):
+            result = _resolve_inplace_mode(record, hub_root, wiki_path, cfg={})
+        # Exercises millpy-cleanup.py:437's fallback, unreachable before the
+        # topology rewrite (the old is_inplace re-derived the same
+        # path-existence result the caller had already confirmed False).
+        assert result == ("worktree", ""), f"Case B: expected worktree fallback, got {result!r}"
+        print("PASS _resolve_inplace_mode — topology differs -> ('worktree', '') fallback")
+
+
 def main() -> int:
     try:
         # --- read_parent_branch: missing file -> None ---
@@ -1424,6 +1482,7 @@ def main() -> int:
 
         test_scan_orphan_portals()
         test_is_live_phase()
+        test_resolve_inplace_mode_topology_outcomes()
 
         # Note: registry-based orphan detection (git worktree list --porcelain)
         # is implemented in build_plan and thoroughly tested via mocked list_worktrees.
