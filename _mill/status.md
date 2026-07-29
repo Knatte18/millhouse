@@ -47,5 +47,7 @@ batches:
     start_sha: 70c4dd3a4aed3f4c3541ba511aa1b77c63c2ea0d
     commit_sha: 6b765dd9a0f0c4521a3d4c24b916bad327decd2a
   - name: review-plan-counting-tests
-    state: pending
+    state: running
+    implementer_session: a4e567a7-703c-4e94-9130-d1ee553b0590
+    start_sha: ea72613d1059f8035427eb7bfdd1da1d3612b20b
 ```
