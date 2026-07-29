@@ -59,5 +59,7 @@ batches:
     start_sha: 1b9a781195ffb3479596a8c07bb50697ccc6b0a2
     commit_sha: 2469b6f04d7127c17f9479cf1ec033a3c2b379f4
   - name: mill-go-wiring
-    state: pending
+    state: running
+    implementer_session: 0d34087e-7703-4345-94dd-c1bb84227cec
+    start_sha: 9a0cdef124eea049d4bb7427a8c8cf7183990eee
 ```
