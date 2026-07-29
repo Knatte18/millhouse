@@ -28,7 +28,7 @@ from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_plan import prepare as plan_prepare  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
-from _test_helpers import seed_wiki_config  # noqa: E402
+from _test_helpers import seed_wiki_config, write_local_overlay  # noqa: E402
 
 SLUG = "test-slug"
 
@@ -168,23 +168,6 @@ def _make_plan_fixture(
 def _seed_approve(n: int) -> None:
     """Seed n approve responses on the stub."""
     stub.seed([(APPROVE_TEXT, f"sid-{i + 1}") for i in range(n)])
-
-
-def _write_local_overlay(mill_dir: Path, **entries) -> None:
-    """Write reviewer registry entries to the hub's local overlay file.
-
-    `_reviewers.load()` merges the plugin template (always present and
-    non-empty in this source tree) with `.millhouse/agents.local.yaml` --
-    the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to`
-    is only consulted when both the template and the local overlay are
-    empty, which never happens here. Tests that need a specific named
-    reviewer spec to actually resolve via `reviewer_override` must seed it
-    here, mirroring the local-overlay convention already established in
-    test-review-discussion-flow.py and test-reviewers.py.
-    """
-    (mill_dir / "agents.local.yaml").write_text(
-        yaml.safe_dump(entries, default_flow_style=False), encoding="utf-8"
-    )
 
 
 def _make_nested_plan_fixture(
@@ -1894,7 +1877,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "override-reviewer": {
@@ -1963,7 +1946,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 worker_single={
                     "type": "single",
@@ -2009,7 +1992,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "override-reviewer": {
@@ -2056,7 +2039,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "override-reviewer": {
@@ -2097,7 +2080,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "override-reviewer": {
@@ -2164,7 +2147,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "gemini-reviewer": {
@@ -2212,7 +2195,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            _write_local_overlay(
+            write_local_overlay(
                 mill_dir,
                 **{
                     "override-reviewer": {
