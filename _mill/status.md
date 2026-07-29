@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-review-verdict-and-counting-gaps
 branch: hanf/mill-review-verdict-and-counting-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-plugin-manifest-validator  '2026-07-29T04:53:35Z'
 approved-review-plan-counting-tests  '2026-07-29T05:00:19Z'
 holistic-reviewing  '2026-07-29T05:00:39Z'
 holistic-approved  '2026-07-29T05:03:23Z'
+done  '2026-07-29T05:03:46Z'
 ```
 
 ## Batches
