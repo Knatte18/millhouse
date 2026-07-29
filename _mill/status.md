@@ -50,5 +50,7 @@ batches:
     start_sha: 6859aed4bd4f368ee27a60c09fbc3dcaa028881a
     commit_sha: c4a60fe4b870c941997a8f69b019b3a59ac4d708
   - name: config-resolution-fixes-fix-and-merge
-    state: pending
+    state: running
+    implementer_session: 7a965f41-bce2-48ef-8356-5ec6d78efd3b
+    start_sha: c025b45f45e86630a18e990092baa7408f6a8707
 ```
