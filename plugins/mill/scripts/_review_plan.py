@@ -285,26 +285,21 @@ def _review_one_batch(
                         "error": f"resume retry failed: {exc}",
                         "session_id": None,
                     }
-                verdict = parse_verdict(raw)
                 # Second NEED_CONTEXT propagates to caller untouched.
 
-        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-        blocking_count += count_unrecognized_severity_findings(
-            raw, blocking_severity="BLOCKING", nit_severity="NIT"
-        )
-        path = write_review_file(
-            reviews_dir, "plan", round_n, raw, scope=batch_path.stem
-        )
+        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope=batch_path.stem)
         print(
-            f"[_review_plan] batch {batch_path.stem}: verdict={verdict} file={path.name}",
+            f"[_review_plan] batch {batch_path.stem}: verdict={review_entry['verdict']} "
+            f"file={Path(review_entry['file']).name}",
             file=sys.stderr,
         )
         return {
             "scope": batch_path.stem,
             "round": round_n,
-            "verdict": verdict,
-            "blocking_count": blocking_count,
-            "file": str(path),
+            "verdict": review_entry["verdict"],
+            "blocking_count": review_entry["blocking_count"],
+            "nit_count": review_entry["nit_count"],
+            "file": review_entry["file"],
             "session_id": session_id,
         }
     except ReviewError as exc:
