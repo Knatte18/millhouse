@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-registry-local-overlay-redirect
+phase: approved-implementer-commit-sha-validation
 slug: mill-pipeline-silent-failure-and-report-bugs
 branch: hanf/mill-pipeline-silent-failure-and-report-bugs
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-07-29T17:51:12Z'
 approved-archive-tag-push-failure  '2026-07-29T17:55:30Z'
 approved-plan-review-holistic-rounds-gate  '2026-07-29T18:00:30Z'
 approved-test-registry-local-overlay-redirect  '2026-07-29T18:05:49Z'
+approved-implementer-commit-sha-validation  '2026-07-29T18:09:36Z'
 ```
 
 ## Batches
@@ -45,7 +46,8 @@ batches:
     start_sha: a3af7ec91201a50a3a2c3b094a32ebcb51fa9943
     commit_sha: 7959bf0ca364954c97cfe354b35bf1e52e5832f5
   - name: implementer-commit-sha-validation
-    state: running
+    state: approved
     implementer_session: 6b453038-ccdc-44aa-ba50-3b2270fcfbbe
     start_sha: ee48a10c1159e23d8d0be03dcf6c0acf4a9e92cf
+    commit_sha: 2a47fd145f37193f6cdad1b7e30f587f72a66b38
 ```
