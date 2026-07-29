@@ -54,5 +54,7 @@ batches:
     start_sha: 4f720e00ff2191e39ff25d32f52ee18bf942bca3
     commit_sha: 77c42fb07e10285851d8e30e030c798f19155428
   - name: dirty-parent-worktree-preflight
-    state: pending
+    state: running
+    implementer_session: 686bec2e-ffb3-4c08-a7d3-e7d304ea7af1
+    start_sha: 98ace36eeba3344f524adfcf8c68393bbc03f9f8
 ```
