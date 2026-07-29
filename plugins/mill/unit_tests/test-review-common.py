@@ -749,6 +749,31 @@ def main() -> int:
     assert apply_actual_model_override(raw, None) == raw
     print("PASS: apply_actual_model_override identity when actual_model is None")
 
+    # apply_actual_model_override: leaves a reviewer_self_id: line untouched
+    # when rewriting reviewer_model: -- only the reviewer_model: line changes.
+    raw = (
+        "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n"
+        "reviewer_self_id: claude-sonnet-4-6 (self-reported)\n```\n"
+    )
+    out = apply_actual_model_override(raw, "sonnet")
+    assert out == (
+        "```yaml\nverdict: APPROVE\nreviewer_model: sonnet\n"
+        "reviewer_self_id: claude-sonnet-4-6 (self-reported)\n```\n"
+    )
+    print("PASS: apply_actual_model_override leaves reviewer_self_id line untouched")
+
+    # write_review_file: preserves a reviewer_self_id: line verbatim
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir / "reviews"
+        raw = (
+            "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n"
+            "reviewer_self_id: claude-opus-4-1\n```\n"
+        )
+        path = write_review_file(reviews, "discussion", 2, raw)
+        written = path.read_text(encoding="utf-8")
+        assert "reviewer_self_id: claude-opus-4-1" in written
+        print("PASS: write_review_file preserves reviewer_self_id line verbatim")
+
     # finalize_scope: actual_model override is reflected in the written file
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir / "reviews"
