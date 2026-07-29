@@ -827,6 +827,7 @@ def resolve_ref_paths(
     wiki_root: Path | None = None,
     git_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
+    soft_fail_gitignored: bool = False,
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
 
@@ -841,7 +842,11 @@ def resolve_ref_paths(
     3. Candidate path under project_root (unchanged).
     4. Candidate path under git_root/raw (when git_root provided, no root).
     5. creates_union/deletes_union suppression (unchanged).
-    6. Hard-fail ReviewError (unchanged).
+    6. When ``soft_fail_gitignored`` is True and no candidate is on disk,
+       confirm via ``git check-ignore`` whether any candidate is
+       git-ignored under its own source root; if so, skip the ref with a
+       stderr warning instead of hard-failing (#733).
+    7. Hard-fail ReviewError (unchanged).
 
     Keyword args:
         creates_union: Set of raw token strings extracted from ``Creates:``
@@ -859,6 +864,11 @@ def resolve_ref_paths(
             tried under git_root as a fallback before suppression/hard-fail.
         caller_label: Prefix used in ``ReviewError`` messages. Defaults to
             the function name.
+        soft_fail_gitignored: When True, a missing non-wiki candidate that
+            is confirmed git-ignored (via ``git check-ignore``) under its
+            own source root is silently skipped with a stderr warning
+            instead of raising ``ReviewError``. Opt-in; the ``wiki/``
+            branch is never affected. Default False (#733).
 
     Raises ``ReviewError`` when a candidate path is not on disk AND not in
     either ``creates_union`` or ``deletes_union`` — hard-fail replaces the
@@ -891,30 +901,57 @@ def resolve_ref_paths(
                 f"not in plan creates_union, not on disk; resolved candidate: {candidate}"
             )
         # Non-wiki path resolution: try git_root/root/raw (if git_root available),
-        # then project_root/root/raw, then git_root/raw (if no root).
-        candidates = []
+        # then project_root/root/raw, then git_root/raw (if no root). Each
+        # candidate is paired with the source_root it was built from, so a
+        # later soft-fail check can run `git check-ignore` against the
+        # right repo.
+        candidates: list[tuple[Path, Path]] = []
         if root and git_root is not None:
             # When the worktree cwd is itself the `root` sub-path, project_root
             # already ends with `root`, so project_root / root / raw doubles it.
             # Try git_root / root / raw first so `root` is joined onto the repo
             # root exactly once — matching how the plan was validated.
-            candidates.append(git_root / root / raw)
+            candidates.append((git_root / root / raw, git_root))
         if root:
-            candidates.append(project_root / root / raw)
+            candidates.append((project_root / root / raw, project_root))
         else:
-            candidates.append(project_root / raw)
+            candidates.append((project_root / raw, project_root))
         if git_root is not None:
-            candidates.append(git_root / raw)
+            candidates.append((git_root / raw, git_root))
         # Primary candidate is the first one for error reporting.
-        candidate = candidates[0]
+        candidate = candidates[0][0]
         # Try all candidates; first match wins.
-        hit = next((c for c in candidates if c.exists()), None)
+        hit = next((pair for pair in candidates if pair[0].exists()), None)
         if hit is not None:
-            resolved.append(hit)
+            resolved.append(hit[0])
             continue
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue
+        # Opt-in soft-fail: a missing ref that is confirmed git-ignored
+        # under its own source root is skipped with a warning instead of
+        # hard-failing (#733). Only attempted when the caller opted in.
+        if soft_fail_gitignored:
+            skipped = False
+            for cand, source_root in candidates:
+                try:
+                    result = _subprocess_util.run(
+                        ["git", "-C", str(source_root), "check-ignore", "-q", str(cand)]
+                    )
+                except Exception:
+                    # Any failure (including a non-git source_root) means
+                    # "not confirmed ignored" — never propagates.
+                    continue
+                if result.returncode == 0:
+                    print(
+                        f"[resolve_ref_paths] warning: skipping git-ignored Context: ref "
+                        f"{raw!r} (confirmed ignored under {source_root})",
+                        file=sys.stderr,
+                    )
+                    skipped = True
+                    break
+            if skipped:
+                continue
         # Hard-fail.
         raise ReviewError(
             f"[{caller_label}] referenced path not found: {raw!r}; "

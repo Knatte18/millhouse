@@ -2037,6 +2037,201 @@ def main() -> int:
             print(f"FAIL: Test C ({exc})", file=sys.stderr)
             errors += 1
 
+    # Test D: short combined output (<= 2000 chars) -- reason is the exact stripped
+    # output with no omitted-content marker (regression guard for the unchanged
+    # short-output path) (#731)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            short_stdout = "some stdout line\n"
+            short_stderr = "some stderr line\n"
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 1
+                mock_result.stdout = short_stdout
+                mock_result.stderr = short_stderr
+                mock_run.return_value = mock_result
+
+                result = _run_verify_gate(project_root, "echo fail")
+            assert result is not None, "Test D: expected stuck dict on failure"
+            expected_reason = (short_stdout + short_stderr).strip()
+            assert result["reason"] == expected_reason, (
+                f"Test D: expected exact stripped output, got {result['reason']!r}"
+            )
+            assert "[..." not in result["reason"], (
+                "Test D: expected no omitted-content marker for short output"
+            )
+            print(
+                "PASS: Test D - short combined output has no omitted-content marker (#731)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test D ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test E: truncated output with an earlier Go package-level failure line
+    # ("FAIL\t<package>") recovered from the omitted portion, plus the literal
+    # tail content (#731)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            fail_line = "FAIL\tinternal/reedengine\t0.02s"
+            early_block = ("z" * 2500) + "\n" + fail_line + "\n" + ("y" * 2500) + "\n"
+            tail_signature = "--- FAIL: TestTailSignature (0.01s)"
+            tail_block = tail_signature + "\n" + ("w" * 500)
+            combined = early_block + tail_block
+            assert len(combined) > 2000, "Test E fixture must exceed 2000 chars"
+
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 1
+                mock_result.stdout = combined
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                result = _run_verify_gate(project_root, "echo fail")
+            assert result is not None, "Test E: expected stuck dict on failure"
+            reason = result["reason"]
+            output_stripped = combined.strip()
+            expected_tail = output_stripped[-2000:]
+            omitted_len = len(output_stripped) - 2000
+            assert f"[... {omitted_len} earlier chars omitted; earlier failures:" in reason, (
+                f"Test E: expected omitted-content marker with earlier-failures clause, got {reason[:200]!r}"
+            )
+            assert fail_line in reason, (
+                "Test E: expected extracted FAIL\\tpackage line in reason"
+            )
+            assert reason.endswith(expected_tail), (
+                "Test E: expected literal tail content at end of reason"
+            )
+            print(
+                "PASS: Test E - truncated reason recovers earlier FAIL\\tpackage line and tail (#731)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test E ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test F: truncated output with no recognized failure-marker line anywhere in the
+    # omitted portion -- marker is byte-count-only, no "; earlier failures:" clause (#731)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            early_block = "no match here\n" * 200
+            tail_block = "some innocuous tail content\n" * 50
+            combined = early_block + tail_block
+            assert len(combined) > 2000, "Test F fixture must exceed 2000 chars"
+
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 1
+                mock_result.stdout = combined
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                result = _run_verify_gate(project_root, "echo fail")
+            assert result is not None, "Test F: expected stuck dict on failure"
+            reason = result["reason"]
+            output_stripped = combined.strip()
+            expected_tail = output_stripped[-2000:]
+            omitted_len = len(output_stripped) - 2000
+            assert f"[... {omitted_len} earlier chars omitted ...]" in reason, (
+                f"Test F: expected byte-count-only marker, got {reason[:200]!r}"
+            )
+            assert "; earlier failures:" not in reason, (
+                "Test F: expected no earlier-failures clause when nothing matched"
+            )
+            assert reason.endswith(expected_tail), (
+                "Test F: expected literal tail content at end of reason"
+            )
+            print(
+                "PASS: Test F - truncated reason with no matching lines has byte-count-only marker (#731)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test F ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test G: truncated output with more than 20 matching failure lines in the omitted
+    # portion -- extracted list is capped at exactly 20 (#731)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            fail_lines_list = [f"FAIL\tpkg{i}\t0.0{i}s" for i in range(25)]
+            early_block = "\n".join(fail_lines_list) + "\n" + ("z" * 3000) + "\n"
+            tail_block = "y" * 2500
+            combined = early_block + tail_block
+            assert len(combined) > 2000, "Test G fixture must exceed 2000 chars"
+
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 1
+                mock_result.stdout = combined
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                result = _run_verify_gate(project_root, "echo fail")
+            assert result is not None, "Test G: expected stuck dict on failure"
+            reason = result["reason"]
+            for line in fail_lines_list[:20]:
+                assert line in reason, (
+                    f"Test G: expected capped-in line {line!r} present in reason"
+                )
+            for line in fail_lines_list[20:]:
+                assert line not in reason, (
+                    f"Test G: expected capped-out line {line!r} absent from reason"
+                )
+            print(
+                "PASS: Test G - extracted failure-line list is capped at exactly 20 (#731)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test G ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Test H: truncated output shaped like a run-all.py failure -- both the per-test
+    # "--- FAIL <name> (<elapsed>s) ---" line and the "FAIL -- <n> of <m> in
+    # <elapsed>s: [...]" summary line are recovered from the omitted portion (#731)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            run_all_fail_line = "--- FAIL some_test (1.2s) ---"
+            run_all_summary_line = "FAIL -- 3 of 10 in 45.6s: [...]"
+            early_block = (
+                ("p" * 1500)
+                + "\n"
+                + run_all_fail_line
+                + "\n"
+                + ("q" * 1500)
+                + "\n"
+                + run_all_summary_line
+                + "\n"
+                + ("r" * 1500)
+                + "\n"
+            )
+            tail_block = "s" * 2500
+            combined = early_block + tail_block
+            assert len(combined) > 2000, "Test H fixture must exceed 2000 chars"
+
+            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
+                mock_result = unittest.mock.MagicMock()
+                mock_result.returncode = 1
+                mock_result.stdout = combined
+                mock_result.stderr = ""
+                mock_run.return_value = mock_result
+
+                result = _run_verify_gate(project_root, "echo fail")
+            assert result is not None, "Test H: expected stuck dict on failure"
+            reason = result["reason"]
+            assert run_all_fail_line in reason, (
+                "Test H: expected run-all.py per-test FAIL line in reason"
+            )
+            assert run_all_summary_line in reason, (
+                "Test H: expected run-all.py summary FAIL line in reason"
+            )
+            print(
+                "PASS: Test H - truncated reason recovers run-all.py per-test and summary FAIL lines (#731)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test H ({exc})", file=sys.stderr)
+            errors += 1
+
     # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
     # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit,
     # the parsed-success path emits stuck/logic rather than success.
