@@ -53,6 +53,92 @@ g3flash_preview_bulk:
   tooluse: false
   type: single
 
+# Bare fable alias -- resolves to the medium effort tier. Use fablehigh or fablemax for higher effort.
+fable:
+  effort: medium
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+# Bare fable_bulk alias -- resolves to the medium effort tier. Use fablehigh_bulk or fablemax_bulk for higher effort.
+fable_bulk:
+  effort: medium
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
+fablehigh:
+  effort: high
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+fablehigh_bulk:
+  effort: high
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
+fablelow:
+  effort: low
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+fablelow_bulk:
+  effort: low
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
+fablemax:
+  effort: max
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+fablemax_bulk:
+  effort: max
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
+fablemedium:
+  effort: medium
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+fablemedium_bulk:
+  effort: medium
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
+fablexhigh:
+  effort: xhigh
+  model: claude-fable-5
+  provider: claude
+  tooluse: true
+  type: single
+
+fablexhigh_bulk:
+  effort: xhigh
+  model: claude-fable-5
+  provider: claude
+  tooluse: false
+  type: single
+
 haiku:
   model: claude-haiku-4-5-20251001
   provider: claude

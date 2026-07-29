@@ -66,6 +66,7 @@ MODEL_FAMILIES = {
     "claude-sonnet": "sonnet",
     "claude-opus": "opus",
     "claude-haiku": "haiku",
+    "claude-fable": "fable",
 }
 EFFORT_TIERED_SUBAGENT_TYPES = frozenset({"low", "medium", "high", "xhigh", "max"})
 
@@ -99,7 +100,7 @@ def model_to_tier(model: str) -> str:
         model: Concrete model id, e.g., "claude-sonnet-4-6".
 
     Returns:
-        Tier string: "sonnet", "opus", or "haiku".
+        Tier string: "sonnet", "opus", "haiku", or "fable".
 
     Raises:
         ValueError: If model family is unrecognized.
