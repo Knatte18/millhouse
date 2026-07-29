@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -24,4 +24,17 @@ plan-review-r2  '2026-07-29T13:56:31Z'
 plan-fix-r2  '2026-07-29T13:57:41Z'
 plan-fix-r3  '2026-07-29T14:04:56Z'
 planned  '2026-07-29T14:05:23Z'
+implementing  '2026-07-29T14:08:39Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-validate-pipeline
+    state: pending
+  - name: review-code-soft-fail
+    state: pending
+  - name: verify-gate-enrichment
+    state: pending
 ```
