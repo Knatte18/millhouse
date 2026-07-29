@@ -16,6 +16,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _status import (  # noqa: E402
     read,
     append_phase,
+    append_recovery_log,
     clear_module_verify_baseline,
     get_module_verify_baseline,
     init_batches,
@@ -844,6 +845,114 @@ def main() -> int:
             after = sp.read_text(encoding="utf-8")
             assert after == before, "clear_module_verify_baseline should be a no-op when field is absent"
             print("PASS: clear_module_verify_baseline is a no-op when the field was never set")
+
+        # --- append_recovery_log tests ---
+        ts_rl = "2026-07-29T08:00:00Z"
+
+        # Test 1: lazy section creation on first call.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_rl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert "## Tracked-file recovery log" not in initial, (
+                "render_initial output should not pre-seed the recovery-log section"
+            )
+            append_recovery_log(sp, ts_rl, ["_mill/status.md"])
+            contents = sp.read_text(encoding="utf-8")
+            assert "## Tracked-file recovery log" in contents, (
+                "recovery-log heading not created on first call"
+            )
+            rl_lines = contents.splitlines()
+            heading_idx = rl_lines.index("## Tracked-file recovery log")
+            fence_open_idx = rl_lines.index("```text", heading_idx)
+            fence_close_idx = rl_lines.index("```", fence_open_idx + 1)
+            body = rl_lines[fence_open_idx + 1 : fence_close_idx]
+            expected_row = f"{quote_scalar(ts_rl)}  _mill/status.md"
+            assert body == [expected_row], f"unexpected recovery-log body: {body!r}"
+            print("PASS: append_recovery_log creates the section lazily on first call")
+
+            # Test 2: append-only on second call — first row survives, second appended.
+            append_recovery_log(sp, "2026-07-29T08:05:00Z", ["_mill/reviews/y.md"])
+            contents2 = sp.read_text(encoding="utf-8")
+            rl_lines2 = contents2.splitlines()
+            heading_idx2 = rl_lines2.index("## Tracked-file recovery log")
+            fence_open_idx2 = rl_lines2.index("```text", heading_idx2)
+            fence_close_idx2 = rl_lines2.index("```", fence_open_idx2 + 1)
+            body2 = rl_lines2[fence_open_idx2 + 1 : fence_close_idx2]
+            expected_row2 = f"{quote_scalar('2026-07-29T08:05:00Z')}  _mill/reviews/y.md"
+            assert body2 == [expected_row, expected_row2], (
+                f"expected two rows with the first unchanged, got {body2!r}"
+            )
+            print("PASS: append_recovery_log appends a second row without disturbing the first")
+
+        # Test 3: multiple restored paths in one call are comma-joined into one row.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_rl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_recovery_log(
+                sp, ts_rl, ["_mill/status.md", "_mill/briefs/x.md"]
+            )
+            contents = sp.read_text(encoding="utf-8")
+            assert "_mill/status.md, _mill/briefs/x.md" in contents, (
+                f"expected comma-joined paths in row, got: {contents!r}"
+            )
+            print("PASS: append_recovery_log comma-joins multiple restored paths in one row")
+
+        # Test 4: does not disturb ## Timeline or the yaml block.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_rl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            before_full = read_full(sp)
+            append_recovery_log(sp, ts_rl, ["_mill/status.md"])
+            after_full = read_full(sp)
+            assert after_full["yaml"]["phase"] == before_full["yaml"]["phase"], (
+                "phase: changed after append_recovery_log"
+            )
+            assert after_full["timeline"] == before_full["timeline"], (
+                "## Timeline rows changed after append_recovery_log"
+            )
+            print("PASS: append_recovery_log does not disturb ## Timeline or the yaml block")
+
+        # Test 5: malformed section raises ValueError.
+        # 5a: heading present, no fenced block at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_rl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Tracked-file recovery log\n")
+            try:
+                append_recovery_log(sp, ts_rl, ["_mill/status.md"])
+                assert False, "expected ValueError for missing fence"
+            except ValueError:
+                pass
+        print("PASS: append_recovery_log raises ValueError when the fenced block is missing")
+
+        # 5b: heading present, opening fence present, no closing fence before EOF.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_rl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Tracked-file recovery log\n\n```text\n")
+            try:
+                append_recovery_log(sp, ts_rl, ["_mill/status.md"])
+                assert False, "expected ValueError for unterminated fence"
+            except ValueError:
+                pass
+        print("PASS: append_recovery_log raises ValueError when the fenced block is unterminated")
 
         print("All _status unit tests passed.")
         return 0
