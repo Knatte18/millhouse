@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-plan-autonomy-and-validation-gaps
 branch: hanf/mill-plan-autonomy-and-validation-gaps
 plan: _mill/plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-07-29T16:10:23Z'
 discussed  '2026-07-29T16:54:33Z'
 planning  '2026-07-29T17:23:33Z'
+plan-review-r1  '2026-07-29T17:32:22Z'
+plan-fix-r1  '2026-07-29T17:32:22Z'
 ```
