@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: _mill/plan
@@ -28,4 +28,19 @@ plan-review-r4  '2026-07-28T19:35:34Z'
 plan-fix-r4  '2026-07-28T19:35:34Z'
 plan-fix-r5  '2026-07-28T19:51:49Z'
 planned  '2026-07-28T19:52:23Z'
+implementing  '2026-07-29T04:42:11Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-yaml-crash-fallback
+    state: pending
+  - name: merge-in-marker-verification
+    state: pending
+  - name: merge-in-semantic-duplication
+    state: pending
+  - name: dirty-parent-worktree-preflight
+    state: pending
 ```
