@@ -597,6 +597,61 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 7b — holistic NEED_CONTEXT no-resolve branch
+    # Sibling to Test 7 (this file's tests are not renumbered when a new one
+    # is inserted between existing numbers -- see Test 9's own "bug C fix
+    # #184" comment for precedent). Single batch (alpha) succeeds; holistic
+    # returns NEED_CONTEXT referencing a path that resolve_existing_paths
+    # cannot resolve on disk, so the no-retry / no-resolve branch fires and
+    # the holistic entry is finalized directly from the first response.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # `nonexistent/missing.py` is never created on disk and is not a
+            # Creates:/Deletes: token in any batch file, so
+            # resolve_existing_paths returns an empty list and no retry fires.
+            NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT = (
+                "# Review: test\n\n### [NIT] pending cleanup\n\n- b\n\n"
+                "```yaml\nverdict: NEED_CONTEXT\n```\n\n"
+                "## Missing context\n\n"
+                "- `nonexistent/missing.py` — need this file\n"
+            )
+            stub.seed([
+                (APPROVE_TEXT, "sid-1"),  # alpha
+                (NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT, "sid-2"),  # holistic first call, unresolvable
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, (
+                f"expected 2 prompts (alpha + holistic first call, no retry), got {len(prompts)}"
+            )
+            rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
+            assert rv_hol["verdict"] == "NEED_CONTEXT", (
+                f"expected holistic verdict NEED_CONTEXT, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["blocking_count"] == 0, (
+                f"expected holistic blocking_count=0, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
+            )
+            print("PASS test7b: holistic NEED_CONTEXT no-resolve branch — no retry, counters finalized from first response")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test7b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test7b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     REQUEST_CHANGES_TEXT = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
 
     # ------------------------------------------------------------------
