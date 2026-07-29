@@ -3,7 +3,7 @@
 ```yaml
 task: mill-plan/review validation false-positives, hard-fails, and truncated failure reasons
 slug: mill-plan-review-validation-gaps
-approved: false
+approved: true
 started: 20260729-132742
 parent: main
 root: ""
