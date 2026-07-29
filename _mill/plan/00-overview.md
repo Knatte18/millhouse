@@ -29,13 +29,18 @@ batches:
     depends-on: []
     verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-worktree.py test-paths.py test-resume-repair.py"
   - number: 3
-    name: config-resolution-fixes
-    file: 03-config-resolution-fixes.md
+    name: config-resolution-fixes-implement-and-small
+    file: 03-config-resolution-fixes-implement-and-small.md
     depends-on: []
-    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-implement.py test-millpy-fix.py test-abandon.py test-merge-in-subagent.py test-millpy-validate-plan.py"
+    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-implement.py test-abandon.py test-millpy-validate-plan.py"
+  - number: 4
+    name: config-resolution-fixes-fix-and-merge
+    file: 04-config-resolution-fixes-fix-and-merge.md
+    depends-on: []
+    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-fix.py test-merge-in-subagent.py"
 ```
 
-All three batches are independent (no shared edit targets, no data/control dependency between them) and can run in any order or in parallel.
+All four batches are independent (no shared edit targets, no data/control dependency between them) and can run in any order or in parallel. Batches 3 and 4 were split from a single "config-resolution-fixes" batch during Step 1.5's validator gate (`batch-oversized`: the original batch's `millpy-implement.py`/`millpy-fix.py` unit test files alone are ~1900/~1990 lines each, pushing the combined context estimate to ~139603 tokens against the 120000 cap) -- see each file's Batch Scope for the split rationale.
 
 ## Shared Decisions
 
