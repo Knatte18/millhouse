@@ -48,7 +48,13 @@ def run(
 
     if provider == "test_stub":
         import _reviewer_test_stub as stub
-        return stub.run(prompt_text, session_id=session_id, resume=resume, timeout=timeout)
+        return stub.run(
+            prompt_text,
+            session_id=session_id,
+            resume=resume,
+            timeout=timeout,
+            effort=spec.get("effort"),
+        )
 
     try:
         llm = importlib.import_module(f"_llm_{provider}")
