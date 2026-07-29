@@ -133,15 +133,17 @@ authoritative for both edited files in this batch.
   level that doesn't require reimplementing the protocol, e.g. patching the
   `DirEntry`-shaped objects' methods rather than `os.scandir` itself where
   that is simpler). Do not modify or remove any existing case in this file
-  — the existing 11 cases (blacklist/containment refusals, junction/symlink
-  strip-before-rmtree, missing-path no-op, `ignore_errors` semantics,
-  non-container `allowed_root` handling) must still pass unchanged.
+  — the existing 15 cases (blacklist/containment refusals x6, path-is-
+  symlink/path-is-junction refusals x2, junction/symlink strip-before-
+  rmtree x3, missing-path no-op, `ignore_errors` semantics x2, non-
+  container `allowed_root` handling) must still pass unchanged.
 - **Commit:** `test(safe-rmtree): cover vanished-entry TOCTOU race in _walk_strip_reparse_points`
 
 ### Card 4: Add vanished-entry regression coverage to `test-junction.py`
 
 - **Context:**
   - `plugins/mill/scripts/_junction.py`
+  - `plugins/mill/scripts/_safe_rmtree.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-junction.py`
 - **Creates:** none
