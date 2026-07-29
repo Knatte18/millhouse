@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r5
+phase: planned
 slug: mill-start-tracked-files-vanish-mid-review
 branch: hanf/mill-start-tracked-files-vanish-mid-review
 plan: _mill/plan
@@ -26,4 +26,5 @@ plan-fix-r3  '2026-07-29T07:54:41Z'
 plan-review-r4  '2026-07-29T08:01:42Z'
 plan-fix-r4  '2026-07-29T08:01:42Z'
 plan-review-r5  '2026-07-29T08:06:57Z'
+planned  '2026-07-29T08:07:10Z'
 ```
