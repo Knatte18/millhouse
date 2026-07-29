@@ -29,6 +29,22 @@ millpy_merge_in_subagent = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(millpy_merge_in_subagent)
 
 
+def _clean_gate_side_effect(argv, **kwargs):
+    """Realistic ``_subprocess_util.run`` side_effect covering every call this module makes.
+
+    ``git rev-parse HEAD`` returns a fake sha (the pre-existing constant every test relied
+    on). Both marker-gate checks the Card 6 helper issues -- ``git diff --name-only
+    --diff-filter=U ...`` and ``git diff --cached --check ...`` -- get their own realistic
+    clean response (empty stdout, returncode 0) instead of reusing the rev-parse sha by
+    coincidence, so a conflicts-mode success test genuinely exercises a passing gate rather
+    than happening to pass because the sha string contains neither "conflict marker" nor
+    any of the test's input filenames.
+    """
+    if "rev-parse" in argv:
+        return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+    return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+
 class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def setUp(self):
@@ -124,9 +140,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         ), \
         unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
-            ),
+            side_effect=_clean_gate_side_effect,
         ):
             rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py", "b.py"])
 
@@ -490,7 +504,11 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._implementer_claude, "run"
-        ) as mock_run:
+        ) as mock_run, \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
             rc, out = self._run_main([
                 "--mode", "conflicts",
                 "--files", "f.py",
@@ -525,9 +543,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         ), \
         unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
-            ),
+            side_effect=_clean_gate_side_effect,
         ):
             rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
 
@@ -560,9 +576,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         ), \
         unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
-            return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
-            ),
+            side_effect=_clean_gate_side_effect,
         ):
             rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
 
@@ -642,7 +656,15 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             # triggering real git operations on a non-repo temp directory.
             millpy_merge_in_subagent, "finalize_from_output",
             return_value=0,
-        ) as mock_finalize:
+        ) as mock_finalize, \
+        unittest.mock.patch.object(
+            # The gate now runs BEFORE finalize_from_output; give it a clean
+            # response so control still reaches the mocked finalize_from_output
+            # call above instead of the real, unmocked git checks failing
+            # ("fatal: not a git repository") against the non-repo temp dir.
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
             rc, out = self._run_main([
                 "--mode", "conflicts",
                 "--files", "f.py",
@@ -663,6 +685,124 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         # conflicts-mode finalize always passes session_id=None to finalize_from_output
         _, call_kwargs = mock_finalize.call_args
         self.assertIsNone(call_kwargs.get("session_id"))
+
+    def test_2x_stage_full_conflicts_reaches_gate(self):
+        """--stage full: a positive marker-gate finding overrides the sub-agent's own success (#713).
+
+        Proves Card 7 actually wires the gate in, not just that the helper (Card 9) works
+        standalone -- the sub-agent self-reports success, but the mocked diff-filter=U check
+        finds a.py still unmerged.
+        """
+        def _unmerged_side_effect(argv, **kwargs):
+            if "--diff-filter=U" in argv:
+                return subprocess.CompletedProcess(args=argv, returncode=0, stdout="a.py\n", stderr="")
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"success","commit_sha":"abc"}\n', "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_unmerged_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "logic")
+        self.assertIn("never staged", data["reason"])
+        self.assertIn("a.py", data["reason"])
+
+    def test_2x_stage_finalize_conflicts_reaches_gate(self):
+        """--stage finalize: a positive marker-gate finding overrides the sub-agent's own success (#713).
+
+        Proves Card 8 actually wires the gate in ahead of finalize_from_output -- the
+        agent-output file self-reports success, but the mocked --cached --check finds a
+        residual marker in f.py.
+        """
+        def _marker_side_effect(argv, **kwargs):
+            if "--check" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=2, stdout="f.py:3: leftover conflict marker\n", stderr=""
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz"}\n',
+            encoding="utf-8",
+        )
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_run, \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_marker_side_effect,
+        ):
+            rc, out = self._run_main([
+                "--mode", "conflicts",
+                "--files", "f.py",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "logic")
+        self.assertIn("residual conflict markers", data["reason"])
+        self.assertIn("f.py", data["reason"])
+
+    def test_2x_stuck_status_skips_gate_stage_full(self):
+        """--stage full: a sub-agent stuck self-report never triggers the marker gate (#713)."""
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"stuck","stuck_type":"logic","reason":"ambiguous"}\n', "fake"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_verify_conflict_markers",
+        ) as mock_gate:
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        mock_gate.assert_not_called()
+
+    def test_2x_stuck_status_skips_gate_stage_finalize(self):
+        """--stage finalize: an agent-output stuck self-report never triggers the marker gate (#713)."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"stuck","stuck_type":"logic","reason":"ambiguous"}\n',
+            encoding="utf-8",
+        )
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_run, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_verify_conflict_markers",
+        ) as mock_gate:
+            rc, out = self._run_main([
+                "--mode", "conflicts",
+                "--files", "f.py",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        mock_gate.assert_not_called()
 
 
 def _git(args, cwd, check=True):
