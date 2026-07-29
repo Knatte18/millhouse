@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-discussion-review-cli
+phase: approved-plan-review-cli
 slug: mill-review-dispatch-attribution-gaps
 branch: hanf/mill-review-dispatch-attribution-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ implementing  '2026-07-29T09:08:59Z'
 approved-reviewer-override-helper  '2026-07-29T09:11:37Z'
 approved-reviewer-self-id-templates  '2026-07-29T09:14:26Z'
 approved-discussion-review-cli  '2026-07-29T09:17:59Z'
+approved-plan-review-cli  '2026-07-29T09:22:11Z'
 ```
 
 ## Batches
@@ -51,9 +52,10 @@ batches:
     start_sha: 715220c3cc0fae02bcfea61ca1dc603291230c7f
     commit_sha: 165930aec8eea2a6735b37039c792ef6033686b8
   - name: plan-review-cli
-    state: running
+    state: approved
     implementer_session: e7e1d8c8-ce83-4802-ac37-e64f437f6acf
     start_sha: ca8cccaa9d8bddb87b76805ac2df638d9e48e189
+    commit_sha: 98721cc4c0c7fff9537c251271c154c1606bd127
   - name: unit-tests-discussion
     state: pending
   - name: unit-tests-plan
