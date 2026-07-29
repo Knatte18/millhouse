@@ -610,6 +610,104 @@ def main() -> int:
             cwd=container,
         )
 
+        # --- dirty-parent-worktree preflight (#705) ---
+        # Proves the underlying `git status --porcelain --untracked-files=no`
+        # check mill-merge/SKILL.md's Step 5 now documents actually flags
+        # both halt scenarios from the operator-facing message (independent
+        # uncommitted edit, and a mid-Step-5-retry partially-applied squash)
+        # and ignores untracked-only noise. None of the three cases needs a
+        # wiki, worktree, or junctions -- a plain two-branch git repo is
+        # enough -- so each gets its own lightweight fixture directly at a
+        # fresh container path, instead of a `_setup_trio()` spin-up.
+
+        # Scenario (a): independent uncommitted edit in the parent worktree.
+        container_dirty = SCRATCH / f"merge-test-dirty-{uuid.uuid4().hex[:8]}"
+        _run(["git", "init", str(container_dirty), "-b", "main"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_dirty), "config", "user.email", "test@example.com"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_dirty), "config", "user.name", "Test"], cwd=SCRATCH)
+        (container_dirty / "README.md").write_text("dirty test\n", encoding="utf-8")
+        _run(["git", "-C", str(container_dirty), "add", "README.md"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_dirty), "commit", "-m", "init"], cwd=SCRATCH)
+
+        uncommitted_content = "dirty test\nuncommitted edit\n"
+        (container_dirty / "README.md").write_text(uncommitted_content, encoding="utf-8")
+        dirty_status = _run(
+            ["git", "-C", str(container_dirty), "status", "--porcelain", "--untracked-files=no"],
+            cwd=SCRATCH,
+        )
+        _assert(
+            dirty_status.stdout.strip() != "",
+            f"expected non-empty status for independent uncommitted edit, got {dirty_status.stdout!r}",
+        )
+        _assert(
+            (container_dirty / "README.md").read_text(encoding="utf-8") == uncommitted_content,
+            "expected the uncommitted edit to remain untouched -- proving the documented halt "
+            "means the squash step is never attempted",
+        )
+        dirty_log = _run(
+            ["git", "-C", str(container_dirty), "log", "--oneline", "-n", "1"],
+            cwd=SCRATCH,
+        )
+        _assert(
+            "squash" not in dirty_log.stdout.lower(),
+            f"expected no squash-merge commit on top of the uncommitted edit, got {dirty_log.stdout!r}",
+        )
+        print("PASS: dirty-parent-worktree preflight flags an independent uncommitted edit (#705)")
+
+        # Scenario (b): mid-Step-5-retry -- merge --squash staged but never committed.
+        container_retry = SCRATCH / f"merge-test-retry-{uuid.uuid4().hex[:8]}"
+        _run(["git", "init", str(container_retry), "-b", "main"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_retry), "config", "user.email", "test@example.com"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_retry), "config", "user.name", "Test"], cwd=SCRATCH)
+        (container_retry / "README.md").write_text("retry test\n", encoding="utf-8")
+        _run(["git", "-C", str(container_retry), "add", "README.md"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_retry), "commit", "-m", "init"], cwd=SCRATCH)
+
+        _run(["git", "-C", str(container_retry), "checkout", "-b", "feature-branch"], cwd=SCRATCH)
+        (container_retry / "feature.txt").write_text("feature\n", encoding="utf-8")
+        _run(["git", "-C", str(container_retry), "add", "feature.txt"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_retry), "commit", "-m", "feature"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_retry), "checkout", "main"], cwd=SCRATCH)
+        # Simulates a Step 5 that failed between `merge --squash` and `commit`:
+        # the squash content is staged, but the commit that would land it never ran.
+        _run(["git", "-C", str(container_retry), "merge", "--squash", "feature-branch"], cwd=SCRATCH)
+
+        retry_status = _run(
+            ["git", "-C", str(container_retry), "status", "--porcelain", "--untracked-files=no"],
+            cwd=SCRATCH,
+        )
+        _assert(
+            retry_status.stdout.strip() != "",
+            f"expected non-empty status for a partially-applied squash (staged, not committed), "
+            f"got {retry_status.stdout!r}",
+        )
+        print(
+            "PASS: dirty-parent-worktree preflight flags a mid-Step-5-retry partially-applied "
+            "squash identically to an independent edit (#705) -- this is exactly why the halt "
+            "message documents two scenarios rather than auto-distinguishing them in the check"
+        )
+
+        # Scenario (c) negative check: untracked-only noise must NOT trip the check.
+        container_untracked = SCRATCH / f"merge-test-untracked-{uuid.uuid4().hex[:8]}"
+        _run(["git", "init", str(container_untracked), "-b", "main"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_untracked), "config", "user.email", "test@example.com"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_untracked), "config", "user.name", "Test"], cwd=SCRATCH)
+        (container_untracked / "README.md").write_text("untracked test\n", encoding="utf-8")
+        _run(["git", "-C", str(container_untracked), "add", "README.md"], cwd=SCRATCH)
+        _run(["git", "-C", str(container_untracked), "commit", "-m", "init"], cwd=SCRATCH)
+
+        (container_untracked / "scratch-note.txt").write_text("untracked\n", encoding="utf-8")
+        untracked_status = _run(
+            ["git", "-C", str(container_untracked), "status", "--porcelain", "--untracked-files=no"],
+            cwd=SCRATCH,
+        )
+        _assert(
+            untracked_status.stdout.strip() == "",
+            f"expected empty status for untracked-only noise (--untracked-files=no scoping), "
+            f"got {untracked_status.stdout!r}",
+        )
+        print("PASS: dirty-parent-worktree preflight ignores untracked-only noise (#705)")
+
         # --- direct squash-merge child -> parent ---
         _run(["git", "-C", str(hub), "merge", "--squash", child_branch], cwd=container)
 
@@ -949,6 +1047,12 @@ def main() -> int:
                 print(f"Scratch preserved: {container_nested}", file=sys.stderr)
             if "container_verify" in locals():
                 print(f"Scratch preserved: {container_verify}", file=sys.stderr)
+            if "container_dirty" in locals():
+                print(f"Scratch preserved: {container_dirty}", file=sys.stderr)
+            if "container_retry" in locals():
+                print(f"Scratch preserved: {container_retry}", file=sys.stderr)
+            if "container_untracked" in locals():
+                print(f"Scratch preserved: {container_untracked}", file=sys.stderr)
         else:
             _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
             if "container_nested" in locals():
@@ -961,6 +1065,24 @@ def main() -> int:
                 _safe_rmtree.safe_rmtree(
                     container_verify,
                     allowed_root=container_verify,
+                    ignore_errors=True,
+                )
+            if "container_dirty" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_dirty,
+                    allowed_root=container_dirty,
+                    ignore_errors=True,
+                )
+            if "container_retry" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_retry,
+                    allowed_root=container_retry,
+                    ignore_errors=True,
+                )
+            if "container_untracked" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_untracked,
+                    allowed_root=container_untracked,
                     ignore_errors=True,
                 )
 

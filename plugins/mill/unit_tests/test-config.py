@@ -746,6 +746,70 @@ def test_load_config_sub_project_hub_overlay() -> None:
     print("PASS load_config -- sub-project hub overlay: hub value wins over template")
 
 
+def test_load_config_repo_layer_yaml_crash_falls_back() -> None:
+    """load_config falls back to template defaults instead of raising when the
+    repo-layer mill-config.yaml contains literal merge-conflict markers."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        _git_init(hub_root)
+        # Simulate a repo-layer config left mid-merge with literal conflict markers --
+        # this is guaranteed-invalid YAML.
+        broken_config_path = hub_root / "mill-config.yaml"
+        _write_yaml(
+            broken_config_path,
+            "spawn:\n<<<<<<< HEAD\n  branch_prefix: a\n=======\n  branch_prefix: b\n>>>>>>> other\n",
+        )
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(hub_root, hub_root)
+            stderr_output = mock_stderr.getvalue()
+
+        # load_config must not raise; the broken source is treated as absent, so the
+        # template default surfaces instead of the (unparseable) repo override.
+        assert cfg.get("spawn", {}).get("branch_prefix") == "", (
+            f"Expected template default on parse failure; got {cfg.get('spawn')!r}"
+        )
+        assert str(broken_config_path) in stderr_output, (
+            f"Expected stderr warning naming {broken_config_path}; got {stderr_output!r}"
+        )
+    print("PASS load_config -- repo-layer YAML crash falls back to template default, does not raise")
+
+
+def test_load_config_repo_layer_clean_yaml_unaffected() -> None:
+    """A clean, valid repo-layer mill-config.yaml still merges normally -- Card 1's
+    try/except does not change the non-crash path's behavior."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        _git_init(hub_root)
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: clean_value\n")
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(hub_root, hub_root)
+            stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("spawn", {}).get("branch_prefix") == "clean_value", (
+            f"Expected clean repo-layer override to merge; got {cfg.get('spawn')!r}"
+        )
+        assert "failed to parse" not in stderr_output, (
+            f"Unexpected parse-failure warning for a clean config; stderr: {stderr_output!r}"
+        )
+    print("PASS load_config -- clean repo-layer YAML unaffected by parse-failure guard")
+
+
 def test_worktree_template_augments_template_cfg() -> None:
     """load_config augments template_cfg with worktree-local template to avoid unknown-key warnings."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -831,6 +895,128 @@ def test_worktree_template_augments_template_cfg() -> None:
                 f"Expected pipeline.max_cards_per_batch in result; got {cfg.get('pipeline')!r}"
             )
     print("PASS load_config -- worktree template augments template_cfg, no unknown-key warning")
+
+
+def test_worktree_template_crash_falls_through_to_hub_template() -> None:
+    """load_config falls through to the hub-root cache-lag template candidate when the
+    worktree-root candidate exists but fails to parse (literal merge-conflict markers).
+
+    Deliberately uses DISTINCT directories for hub_root and worktree_root -- unlike
+    test_worktree_template_augments_template_cfg, which reuses one directory for both.
+    Reusing one directory here would make "the worktree_root candidate" and "the
+    hub_root candidate" the same file on disk, so breaking one breaks both loop
+    candidates and assertion (c) below would pass even against a still-broken
+    (non-fall-through) implementation.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+
+        # Cache template (what resolve_plugin_template_path resolves to) without the
+        # probe key -- mirrors test_worktree_template_augments_template_cfg's setup.
+        cache_template_dir = tmp_path / "cache_templates"
+        cache_template_dir.mkdir(parents=True, exist_ok=True)
+        cache_template_path = cache_template_dir / "mill-config.yaml"
+        cache_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # worktree_root: its own cache-lag template candidate is broken (conflict
+        # markers) -- would have introduced pipeline.test_probe_key had it parsed.
+        worktree_root = tmp_path / "wt"
+        worktree_root.mkdir()
+        worktree_template_dir = worktree_root / "plugins" / "mill" / "templates"
+        worktree_template_dir.mkdir(parents=True, exist_ok=True)
+        worktree_template_path = worktree_template_dir / "mill-config.yaml"
+        worktree_template_path.write_text(
+            "pipeline:\n<<<<<<< HEAD\n  test_probe_key: 42\n=======\n  test_probe_key: 99\n>>>>>>> other\n",
+            encoding="utf-8",
+        )
+
+        # hub_root: DISTINCT directory. Its cache-lag template candidate is valid and
+        # does introduce pipeline.test_probe_key -- this must still get a chance to
+        # augment template_cfg once the broken worktree_root candidate is skipped.
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir()
+        hub_template_dir = hub_root / "plugins" / "mill" / "templates"
+        hub_template_dir.mkdir(parents=True, exist_ok=True)
+        hub_template_path = hub_template_dir / "mill-config.yaml"
+        hub_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "pipeline:\n  test_probe_key: 42\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # Also write the SAME probe key into the repo-layer mill-config.yaml (candidate1
+        # for resolve_repo_config_path is hub_root / "mill-config.yaml"). Per
+        # _mill/discussion.md's round-5 Q&A: warn_unknown_keys only walks keys present in
+        # check_cfg, which is derived from the returned cfg -- template_cfg (what the
+        # augmentation loop builds) never feeds cfg directly. Only a key that ALSO reaches
+        # cfg via the repo-layer merge makes assertion (c) below falsifiable.
+        hub_config_path = hub_root / "mill-config.yaml"
+        hub_config_path.write_text(
+            "pipeline:\n  test_probe_key: 42\n",
+            encoding="utf-8",
+        )
+        _git_init(hub_root)
+        _git_init(worktree_root)
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=cache_template_path
+                ):
+                    cfg = _config.load_config(hub_root, worktree_root)
+            stderr_output = mock_stderr.getvalue()
+
+        # (a) does not raise -- guaranteed by reaching this point.
+        # (b) stderr names the broken worktree_root candidate.
+        assert str(worktree_template_path) in stderr_output, (
+            f"Expected stderr warning naming {worktree_template_path}; got {stderr_output!r}"
+        )
+        # (c) no unknown-key warning for the probe key -- falsifiable because the key
+        # reaches check_cfg via the repo-layer config regardless of the loop's outcome,
+        # so this only passes if the hub_root candidate actually augmented template_cfg.
+        assert "unknown key: pipeline.test_probe_key" not in stderr_output, (
+            f"Unexpected unknown-key warning; stderr: {stderr_output!r}"
+        )
+        assert cfg.get("pipeline", {}).get("test_probe_key") == 42, (
+            f"Expected pipeline.test_probe_key in result; got {cfg.get('pipeline')!r}"
+        )
+    print("PASS load_config -- cache-lag fall-through: broken worktree_root candidate skipped, hub_root candidate augments template_cfg")
 
 
 def test_same_template_path_skips_augmentation() -> None:
@@ -954,6 +1140,63 @@ def test_review_common_load_config_container_layout() -> None:
             f"Should resolve primary clone config; got {cfg.get('roles')!r}"
         )
     print("PASS _review_common.load_config -- container/wts layout: primary clone config resolved")
+
+
+def test_review_common_load_config_unparseable_repo_layer_does_not_raise() -> None:
+    """_review_common.load_config does not raise ReviewError when the repo-layer
+    mill-config.yaml exists but is unparseable (literal merge-conflict markers).
+
+    The missing-source strictness raise at _review_common.py:2003-2007 fires only on
+    the conjunction ``not template_path.exists() and mill_cfg_path is None``.
+    resolve_repo_config_path (which feeds mill_cfg_path) returns a non-None path
+    whenever a candidate file EXISTS on disk, regardless of whether it parses -- so a
+    present-but-broken repo-layer file makes the conjunction False and no raise
+    occurs. This documents existing behavior (verified against
+    _review_common.py:2001-2007); no production edit is needed or made by this test.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+
+        # Create container/wts layout
+        container = tmp_path / "container"
+        container.mkdir()
+        wts_dir = container / "wts"
+        wts_dir.mkdir()
+        primary_clone = wts_dir / "primary"
+        primary_clone.mkdir()
+        _git_init(primary_clone)
+
+        # Write an unparseable mill-config.yaml (literal conflict markers) to the
+        # primary clone -- same broken-fixture shape as Card 3's repo-layer test.
+        _write_yaml(
+            primary_clone / "mill-config.yaml",
+            "spawn:\n<<<<<<< HEAD\n  branch_prefix: a\n=======\n  branch_prefix: b\n>>>>>>> other\n",
+        )
+
+        # Create a linked worktree
+        task_worktree = wts_dir / "task-slug"
+        subprocess.run(
+            ["git", "-C", str(primary_clone), "worktree", "add", str(task_worktree)],
+            check=True,
+            capture_output=True,
+        )
+
+        mill_dir = task_worktree / ".millhouse"
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _review_common, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                try:
+                    _review_common.load_config(hub_root=container, mill_dir=mill_dir)
+                except _review_common.ReviewError as exc:
+                    raise AssertionError(
+                        f"load_config raised ReviewError for a present-but-unparseable "
+                        f"repo-layer config; it should be treated as found: {exc}"
+                    ) from exc
+    print("PASS _review_common.load_config -- unparseable repo-layer config still counts as found, no raise")
 
 
 def test_no_repo_layer_config_anywhere_emits_note() -> None:
@@ -1328,6 +1571,8 @@ def main() -> int:
         test_load_config_hub_relative_path_no_warning,
         test_load_config_no_hub_overlay_returns_template,
         test_load_config_sub_project_hub_overlay,
+        test_load_config_repo_layer_yaml_crash_falls_back,
+        test_load_config_repo_layer_clean_yaml_unaffected,
         test_no_op_when_both_args_none,
         test_creates_file_when_missing,
         test_updates_existing_value,
@@ -1335,6 +1580,7 @@ def main() -> int:
         test_partial_update_branch_only_preserves_repo_url,
         test_preserves_other_top_level_keys,
         test_worktree_template_augments_template_cfg,
+        test_worktree_template_crash_falls_through_to_hub_template,
         test_same_template_path_skips_augmentation,
         test_dispatch_shim_via_psmux_true_resolves_to_psmux,
         test_dispatch_shim_via_psmux_false_resolves_to_subprocess,
@@ -1345,6 +1591,7 @@ def main() -> int:
         test_git_unknown_subkey_still_warns,
         test_container_layout_config_resolution,
         test_review_common_load_config_container_layout,
+        test_review_common_load_config_unparseable_repo_layer_does_not_raise,
         test_no_repo_layer_config_anywhere_emits_note,
         test_implementer_model_default_is_sonnethigh,
         test_load_config_rename_detect_pct_key_present,
