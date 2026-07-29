@@ -1393,6 +1393,147 @@ def test_wiki_config_mutation_modifies_and_creates() -> int:
             return 1
 
 
+def test_plugin_manifest_context_missing_creates_dirty() -> int:
+    """Creates: touches plugins/mill/agents/ with no manifest ref -> exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", creates=["plugins/mill/agents/new-agent.md"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "plugin-manifest-context-missing"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 plugin-manifest-context-missing error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"card should be None, got: {e['card']!r}"
+            assert e["path"] == "plugins/mill/.claude-plugin/plugin.json", f"wrong path: {e['path']!r}"
+            print("PASS test_plugin_manifest_context_missing_creates_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_plugin_manifest_context_missing_creates_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_plugin_manifest_context_missing_creates_with_context_clean() -> int:
+    """Creates: touches agents/ with manifest in Context: -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            creates=["plugins/mill/agents/new-agent.md"],
+            context=["plugins/mill/.claude-plugin/plugin.json"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "plugin-manifest-context-missing"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 plugin-manifest-context-missing errors, got: {check_errors}"
+            )
+            print("PASS test_plugin_manifest_context_missing_creates_with_context_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_plugin_manifest_context_missing_creates_with_context_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_plugin_manifest_context_missing_creates_with_edits_clean() -> int:
+    """Creates: touches agents/ with manifest in Edits: (the primary case) -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            creates=["plugins/mill/agents/new-agent.md"],
+            edits=["plugins/mill/.claude-plugin/plugin.json"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "plugin-manifest-context-missing"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 plugin-manifest-context-missing errors, got: {check_errors}"
+            )
+            print("PASS test_plugin_manifest_context_missing_creates_with_edits_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_plugin_manifest_context_missing_creates_with_edits_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_plugin_manifest_context_missing_deletes_dirty() -> int:
+    """Deletes: touches agents/ (symmetric removal case) with no manifest ref -> exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", deletes=["plugins/mill/agents/old-agent.md"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "plugin-manifest-context-missing"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 plugin-manifest-context-missing error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"card should be None, got: {e['card']!r}"
+            assert e["path"] == "plugins/mill/.claude-plugin/plugin.json", f"wrong path: {e['path']!r}"
+            print("PASS test_plugin_manifest_context_missing_deletes_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_plugin_manifest_context_missing_deletes_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_plugin_manifest_context_missing_unrelated_batch_clean() -> int:
+    """Batch never touches plugins/mill/agents/ -> zero errors regardless of manifest presence."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["plugins/mill/scripts/_review_plan.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "plugin-manifest-context-missing"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 plugin-manifest-context-missing errors, got: {check_errors}"
+            )
+            print("PASS test_plugin_manifest_context_missing_unrelated_batch_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_plugin_manifest_context_missing_unrelated_batch_clean: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_skip_checks_filters_wiki_config_mutation() -> int:
     """skip_checks={"wiki-config-mutation"} suppresses that check entirely."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -3901,6 +4042,12 @@ def main() -> int:
         test_wiki_config_mutation_creates,
         test_wiki_config_mutation_multi_batch,
         test_wiki_config_mutation_modifies_and_creates,
+        # plugin-manifest-context-missing check
+        test_plugin_manifest_context_missing_creates_dirty,
+        test_plugin_manifest_context_missing_creates_with_context_clean,
+        test_plugin_manifest_context_missing_creates_with_edits_clean,
+        test_plugin_manifest_context_missing_deletes_dirty,
+        test_plugin_manifest_context_missing_unrelated_batch_clean,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,

@@ -34,6 +34,8 @@ Checks performed (check keys):
     verify-mixed-cwd         — batches in the plan resolve the {cwd, command} mapping form to more than one distinct cwd
     verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and byte-identical to the parent branch
     wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
+    plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
+                               but plugin.json is not in that batch's Context: or Edits:
     move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
     move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
@@ -233,6 +235,45 @@ def _parse_deletes_only(batch_path: Path) -> set[str]:
     while i < len(lines):
         m = _RE_REFS_HEADER.match(lines[i])
         if m and m.group(1) == "Deletes":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                batch_tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                batch_tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        batch_tokens.extend(bt)
+                    j += 1
+            for t in batch_tokens:
+                if t.lower() != "none":
+                    tokens.add(t)
+        i += 1
+    return tokens
+
+
+def _parse_context_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Context: lines only.
+
+    Same single-line / multi-line logic as parse_batch_refs in _review_common,
+    but restricted to ``- **Context:**`` headers. Filters ``none``
+    (case-insensitive) per the existing convention.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    tokens: set[str] = set()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Context":
             inline = m.group("inline").strip()
             if inline:
                 backtick_tokens = re.findall(r"`([^`]+)`", inline)
@@ -1250,6 +1291,69 @@ def _check_wiki_config_mutation(batch_files: list[Path]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# plugin-manifest-context-missing check
+# ---------------------------------------------------------------------------
+
+# Directory prefix identifying an agent-definition file. Any batch whose
+# Creates:/Edits:/Deletes: touches a path under this prefix must also bulk
+# the plugin manifest so a bulk-mode reviewer can verify platform claims
+# about agent registration (issue #714).
+_AGENTS_DIR_PREFIX = "plugins/mill/agents/"
+
+# The plugin manifest declaring the agents array. A batch that registers or
+# removes an agent typically edits this file directly; it must be reachable
+# in the reviewer's bulked context either way.
+_PLUGIN_MANIFEST_PATH = "plugins/mill/.claude-plugin/plugin.json"
+
+
+def _check_plugin_manifest_context_missing(batch_files: list[Path]) -> list[dict]:
+    """
+    Require the plugin manifest in Context:/Edits: for batches touching agents/.
+
+    A bulk-mode plan reviewer cannot fetch files on its own -- it only sees
+    what the backend bulks into its prompt from each batch's Context: and
+    Edits: fields. When a batch's Creates:/Edits:/Deletes: touches a file
+    under ``plugins/mill/agents/`` (registering, editing, or removing an
+    agent definition), the reviewer needs ``plugin.json`` in context to
+    verify the corresponding platform claim (e.g. that the agent is
+    correctly wired into the manifest's ``agents`` array). This check flags
+    a batch that touches ``plugins/mill/agents/`` but omits the manifest
+    from both ``Context:`` and ``Edits:``.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+
+    Returns:
+        List of error dicts, one per offending batch.
+    """
+    errors: list[dict] = []
+    for batch_path in batch_files:
+        touched = (
+            _parse_creates_only(batch_path)
+            | _parse_edits_only(batch_path)
+            | _parse_deletes_only(batch_path)
+        )
+        if not any(t.startswith(_AGENTS_DIR_PREFIX) for t in touched):
+            continue
+        context = _parse_context_only(batch_path)
+        edits = _parse_edits_only(batch_path)
+        if _PLUGIN_MANIFEST_PATH not in context and _PLUGIN_MANIFEST_PATH not in edits:
+            errors.append({
+                "check": "plugin-manifest-context-missing",
+                "batch": batch_path.stem,
+                "card": None,
+                "path": _PLUGIN_MANIFEST_PATH,
+                "message": (
+                    f"batch touches a file under '{_AGENTS_DIR_PREFIX}' but "
+                    f"'{_PLUGIN_MANIFEST_PATH}' is not in Context: or Edits:"
+                ),
+            })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 8 — all-files-touched-mismatch
 # ---------------------------------------------------------------------------
 
@@ -1912,11 +2016,11 @@ def run(
     {check, batch, card, path, message}.
 
     Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
-    verify-not-isolated, verify-full-suite, verify-malformed-cwd,
-    verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target,
-    batch-oversized, commit-none-with-content, and five Move-specific
-    checks (move-format, move-redundant, move-source-missing,
-    move-target-collision, move-mechanic-missing).
+    plugin-manifest-context-missing, verify-not-isolated, verify-full-suite,
+    verify-malformed-cwd, verify-mixed-cwd, verify-unrelated-test-file,
+    out-of-worktree-target, batch-oversized, commit-none-with-content, and
+    five Move-specific checks (move-format, move-redundant,
+    move-source-missing, move-target-collision, move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -1985,6 +2089,7 @@ def run(
         batch_files, project_root, effective_git_root, parent_branch,
     ))
     errors.extend(_check_wiki_config_mutation(batch_files))
+    errors.extend(_check_plugin_manifest_context_missing(batch_files))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
     errors.extend(_check_out_of_worktree_target(batch_files, project_root))
     errors.extend(_check_batch_oversized(

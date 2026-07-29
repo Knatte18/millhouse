@@ -118,6 +118,22 @@ def test_kept_prose_stays_kept() -> None:
     print("PASS test_kept_prose_stays_kept")
 
 
+def test_plan_criteria_bullets_present() -> None:
+    """The two new plan-review criteria bullets (All Files Touched scope,
+    platform-behavior-claim verification) are present verbatim in both
+    plan-review templates' raw source."""
+    for name in ["review-plan-holistic", "review-plan-batch"]:
+        source = _read_template_source(name)
+        assert (
+            "the overview's `## All Files Touched` section lists the union of"
+            in source
+        ), f"{name} missing the All-Files-Touched-scope criteria bullet"
+        assert "Platform-behavior-claim verification" in source, (
+            f"{name} missing the platform-behavior-claim-verification criteria bullet"
+        )
+    print("PASS test_plan_criteria_bullets_present")
+
+
 def test_no_output_file_token() -> None:
     """No template names the report destination via an <OUTPUT_FILE> token."""
     for name in TEMPLATE_NAMES:
@@ -131,6 +147,7 @@ def main() -> int:
         test_all_templates_render,
         test_deleted_prose_stays_deleted,
         test_kept_prose_stays_kept,
+        test_plan_criteria_bullets_present,
         test_no_output_file_token,
     ]
     failures: list[str] = []

@@ -107,11 +107,17 @@ def _scan_approved_batches(reviews_dir: Path) -> dict[str, dict]:
             )
             continue
         if verdict == "APPROVE":
+            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+            blocking_count += count_unrecognized_severity_findings(
+                raw, blocking_severity="BLOCKING", nit_severity="NIT"
+            )
+            nit_count = parse_blocking_count(raw, severity="NIT")
             result[batch_stem] = {
                 "scope": batch_stem,
                 "round": n,
                 "verdict": "APPROVE",
-                "blocking_count": 0,
+                "blocking_count": blocking_count,
+                "nit_count": nit_count,
                 "file": str(path),
                 "session_id": None,
             }
@@ -240,6 +246,7 @@ def _review_one_batch(
                 "round": round_n,
                 "verdict": "ERROR",
                 "blocking_count": 0,
+                "nit_count": 0,
                 "file": None,
                 "error": str(exc),
                 "session_id": None,
@@ -275,30 +282,26 @@ def _review_one_batch(
                         "round": round_n,
                         "verdict": "ERROR",
                         "blocking_count": 0,
+                        "nit_count": 0,
                         "file": None,
                         "error": f"resume retry failed: {exc}",
                         "session_id": None,
                     }
-                verdict = parse_verdict(raw)
                 # Second NEED_CONTEXT propagates to caller untouched.
 
-        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-        blocking_count += count_unrecognized_severity_findings(
-            raw, blocking_severity="BLOCKING", nit_severity="NIT"
-        )
-        path = write_review_file(
-            reviews_dir, "plan", round_n, raw, scope=batch_path.stem
-        )
+        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope=batch_path.stem)
         print(
-            f"[_review_plan] batch {batch_path.stem}: verdict={verdict} file={path.name}",
+            f"[_review_plan] batch {batch_path.stem}: verdict={review_entry['verdict']} "
+            f"file={Path(review_entry['file']).name}",
             file=sys.stderr,
         )
         return {
             "scope": batch_path.stem,
             "round": round_n,
-            "verdict": verdict,
-            "blocking_count": blocking_count,
-            "file": str(path),
+            "verdict": review_entry["verdict"],
+            "blocking_count": review_entry["blocking_count"],
+            "nit_count": review_entry["nit_count"],
+            "file": review_entry["file"],
             "session_id": session_id,
         }
     except ReviewError as exc:
@@ -308,6 +311,7 @@ def _review_one_batch(
             "round": round_n,
             "verdict": "ERROR",
             "blocking_count": 0,
+            "nit_count": 0,
             "file": None,
             "error": str(exc),
             "session_id": None,
@@ -907,6 +911,7 @@ def run(
                     "round": round_n,
                     "verdict": "ERROR",
                     "blocking_count": 0,
+                    "nit_count": 0,
                     "file": None,
                     "error": str(exc),
                     "session_id": None,
@@ -943,72 +948,60 @@ def run(
                                     "round": round_n,
                                     "verdict": "ERROR",
                                     "blocking_count": 0,
+                                    "nit_count": 0,
                                     "file": None,
                                     "error": f"resume retry failed: {exc}",
                                     "session_id": None,
                                 })
                                 # error entry appended above; else branch writes the review file on success
                             else:
-                                verdict = parse_verdict(raw)
                                 # Second NEED_CONTEXT propagates to caller untouched.
-                                blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                                blocking_count += count_unrecognized_severity_findings(
-                                    raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                                )
-                                path = write_review_file(
-                                    reviews_dir, "plan", round_n, raw, scope="holistic"
-                                )
+                                review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                                 print(
-                                    f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                                    f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                                    f"file={Path(review_entry['file']).name}",
                                     file=sys.stderr,
                                 )
                                 reviews.append({
                                     "scope": "holistic",
                                     "round": round_n,
-                                    "verdict": verdict,
-                                    "blocking_count": blocking_count,
-                                    "file": str(path),
+                                    "verdict": review_entry["verdict"],
+                                    "blocking_count": review_entry["blocking_count"],
+                                    "nit_count": review_entry["nit_count"],
+                                    "file": review_entry["file"],
                                     "session_id": session_id,
                                 })
                         else:
                             # No resolvable paths to re-attach — propagate NEED_CONTEXT.
-                            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                            blocking_count += count_unrecognized_severity_findings(
-                                raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                            )
-                            path = write_review_file(
-                                reviews_dir, "plan", round_n, raw, scope="holistic"
-                            )
+                            review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                             print(
-                                f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                                f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                                f"file={Path(review_entry['file']).name}",
                                 file=sys.stderr,
                             )
                             reviews.append({
                                 "scope": "holistic",
                                 "round": round_n,
-                                "verdict": verdict,
-                                "blocking_count": blocking_count,
-                                "file": str(path),
+                                "verdict": review_entry["verdict"],
+                                "blocking_count": review_entry["blocking_count"],
+                                "nit_count": review_entry["nit_count"],
+                                "file": review_entry["file"],
                                 "session_id": session_id,
                             })
                     else:
-                        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                        blocking_count += count_unrecognized_severity_findings(
-                            raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                        )
-                        path = write_review_file(
-                            reviews_dir, "plan", round_n, raw, scope="holistic"
-                        )
+                        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                         print(
-                            f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                            f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                            f"file={Path(review_entry['file']).name}",
                             file=sys.stderr,
                         )
                         reviews.append({
                             "scope": "holistic",
                             "round": round_n,
-                            "verdict": verdict,
-                            "blocking_count": blocking_count,
-                            "file": str(path),
+                            "verdict": review_entry["verdict"],
+                            "blocking_count": review_entry["blocking_count"],
+                            "nit_count": review_entry["nit_count"],
+                            "file": review_entry["file"],
                             "session_id": session_id,
                         })
                 except ReviewError as exc:
@@ -1018,6 +1011,7 @@ def run(
                         "round": round_n,
                         "verdict": "ERROR",
                         "blocking_count": 0,
+                        "nit_count": 0,
                         "file": str(path),
                         "error": f"parse_verdict failed: {exc}",
                         "session_id": session_id,
@@ -1028,10 +1022,12 @@ def run(
             aggregate = "ERROR"
         agg_round = max(r["round"] for r in reviews) if reviews else 0
         aggregate_blocking = sum(r.get("blocking_count", 0) for r in reviews)
+        aggregate_nit = sum(r.get("nit_count", 0) for r in reviews)
         return ReviewResult(
             type="plan",
             round=agg_round,
             verdict=aggregate,
             blocking_count=aggregate_blocking,
+            nit_count=aggregate_nit,
             reviews=reviews,
         )
