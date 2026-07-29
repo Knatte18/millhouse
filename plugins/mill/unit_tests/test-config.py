@@ -897,6 +897,128 @@ def test_worktree_template_augments_template_cfg() -> None:
     print("PASS load_config -- worktree template augments template_cfg, no unknown-key warning")
 
 
+def test_worktree_template_crash_falls_through_to_hub_template() -> None:
+    """load_config falls through to the hub-root cache-lag template candidate when the
+    worktree-root candidate exists but fails to parse (literal merge-conflict markers).
+
+    Deliberately uses DISTINCT directories for hub_root and worktree_root -- unlike
+    test_worktree_template_augments_template_cfg, which reuses one directory for both.
+    Reusing one directory here would make "the worktree_root candidate" and "the
+    hub_root candidate" the same file on disk, so breaking one breaks both loop
+    candidates and assertion (c) below would pass even against a still-broken
+    (non-fall-through) implementation.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+
+        # Cache template (what resolve_plugin_template_path resolves to) without the
+        # probe key -- mirrors test_worktree_template_augments_template_cfg's setup.
+        cache_template_dir = tmp_path / "cache_templates"
+        cache_template_dir.mkdir(parents=True, exist_ok=True)
+        cache_template_path = cache_template_dir / "mill-config.yaml"
+        cache_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # worktree_root: its own cache-lag template candidate is broken (conflict
+        # markers) -- would have introduced pipeline.test_probe_key had it parsed.
+        worktree_root = tmp_path / "wt"
+        worktree_root.mkdir()
+        worktree_template_dir = worktree_root / "plugins" / "mill" / "templates"
+        worktree_template_dir.mkdir(parents=True, exist_ok=True)
+        worktree_template_path = worktree_template_dir / "mill-config.yaml"
+        worktree_template_path.write_text(
+            "pipeline:\n<<<<<<< HEAD\n  test_probe_key: 42\n=======\n  test_probe_key: 99\n>>>>>>> other\n",
+            encoding="utf-8",
+        )
+
+        # hub_root: DISTINCT directory. Its cache-lag template candidate is valid and
+        # does introduce pipeline.test_probe_key -- this must still get a chance to
+        # augment template_cfg once the broken worktree_root candidate is skipped.
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir()
+        hub_template_dir = hub_root / "plugins" / "mill" / "templates"
+        hub_template_dir.mkdir(parents=True, exist_ok=True)
+        hub_template_path = hub_template_dir / "mill-config.yaml"
+        hub_template_path.write_text(
+            "spawn:\n  branch_prefix: ''\n"
+            "pipeline:\n  test_probe_key: 42\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n",
+            encoding="utf-8",
+        )
+
+        # Also write the SAME probe key into the repo-layer mill-config.yaml (candidate1
+        # for resolve_repo_config_path is hub_root / "mill-config.yaml"). Per
+        # _mill/discussion.md's round-5 Q&A: warn_unknown_keys only walks keys present in
+        # check_cfg, which is derived from the returned cfg -- template_cfg (what the
+        # augmentation loop builds) never feeds cfg directly. Only a key that ALSO reaches
+        # cfg via the repo-layer merge makes assertion (c) below falsifiable.
+        hub_config_path = hub_root / "mill-config.yaml"
+        hub_config_path.write_text(
+            "pipeline:\n  test_probe_key: 42\n",
+            encoding="utf-8",
+        )
+        _git_init(hub_root)
+        _git_init(worktree_root)
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=cache_template_path
+                ):
+                    cfg = _config.load_config(hub_root, worktree_root)
+            stderr_output = mock_stderr.getvalue()
+
+        # (a) does not raise -- guaranteed by reaching this point.
+        # (b) stderr names the broken worktree_root candidate.
+        assert str(worktree_template_path) in stderr_output, (
+            f"Expected stderr warning naming {worktree_template_path}; got {stderr_output!r}"
+        )
+        # (c) no unknown-key warning for the probe key -- falsifiable because the key
+        # reaches check_cfg via the repo-layer config regardless of the loop's outcome,
+        # so this only passes if the hub_root candidate actually augmented template_cfg.
+        assert "unknown key: pipeline.test_probe_key" not in stderr_output, (
+            f"Unexpected unknown-key warning; stderr: {stderr_output!r}"
+        )
+        assert cfg.get("pipeline", {}).get("test_probe_key") == 42, (
+            f"Expected pipeline.test_probe_key in result; got {cfg.get('pipeline')!r}"
+        )
+    print("PASS load_config -- cache-lag fall-through: broken worktree_root candidate skipped, hub_root candidate augments template_cfg")
+
+
 def test_same_template_path_skips_augmentation() -> None:
     """load_config skips augmentation when worktree template path resolves to same path."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1401,6 +1523,7 @@ def main() -> int:
         test_partial_update_branch_only_preserves_repo_url,
         test_preserves_other_top_level_keys,
         test_worktree_template_augments_template_cfg,
+        test_worktree_template_crash_falls_through_to_hub_template,
         test_same_template_path_skips_augmentation,
         test_dispatch_shim_via_psmux_true_resolves_to_psmux,
         test_dispatch_shim_via_psmux_false_resolves_to_subprocess,
