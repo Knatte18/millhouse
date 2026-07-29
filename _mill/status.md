@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-start-tracked-files-vanish-mid-review
 branch: hanf/mill-start-tracked-files-vanish-mid-review
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T05:57:04Z'
+discussed  '2026-07-29T07:18:29Z'
 ```
