@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 import _spawn_core
+import _subprocess_util
 import _vscode_processes
 from wiki import _client as wiki
 from _config import load_config as _load_config
@@ -129,7 +130,7 @@ def _spawn_and_open(
                 pass
     launch_path = resolve_hub_relative_path(new_path, hub_subpath)
     print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
-    subprocess.run(_build_code_argv(launch_path))
+    subprocess.run(_build_code_argv(launch_path), env=_subprocess_util.scrub_env())
     return 0
 
 
@@ -272,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Opening VS Code in: {launch_path}", file=sys.stderr)
     code_argv = _build_code_argv(launch_path)
     # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
-    subprocess.run(code_argv)
+    subprocess.run(code_argv, env=_subprocess_util.scrub_env())
     return 0
 
 

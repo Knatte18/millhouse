@@ -6,6 +6,7 @@ the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
 from __future__ import annotations
 
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -119,8 +120,12 @@ def main() -> int:
             patch("mill_terminal.resolve_worktrees_dir", return_value=worktrees_dir),
             patch("mill_terminal._spawn_core.discover_active_worktrees",
                   return_value=[(wt1, "solo-task", "Solo Task")]),
-            patch("mill_terminal.subprocess.run", side_effect=lambda *a, **kw: subprocess_calls.append(kw.get("cwd"))),
+            patch(
+                "mill_terminal.subprocess.run",
+                side_effect=lambda *a, **kw: subprocess_calls.append({"cwd": kw.get("cwd"), "env": kw.get("env")}),
+            ),
             patch("mill_terminal.input", side_effect=mock_input, create=True),
+            patch.dict(os.environ, {"CLAUDE_CODE_CHILD_SESSION": "1", "PATH": os.environ.get("PATH", "")}),
         ):
             rc = mill_terminal.main([])
 
@@ -130,7 +135,7 @@ def main() -> int:
         elif input_calls:
             print("FAIL: input() was called for single worktree (should auto-select)", file=sys.stderr)
             errors += 1
-        elif not subprocess_calls or subprocess_calls[0] != wt1:
+        elif not subprocess_calls or subprocess_calls[0]["cwd"] != wt1:
             print(
                 f"FAIL: expected subprocess cwd={wt1}, got {subprocess_calls}",
                 file=sys.stderr,
@@ -138,6 +143,25 @@ def main() -> int:
             errors += 1
         else:
             print("PASS: single worktree auto-selected, no prompt, subprocess called")
+            env = subprocess_calls[0]["env"]
+            if env is None:
+                print("FAIL: single-worktree auto-select: env kwarg not passed to subprocess.run", file=sys.stderr)
+                errors += 1
+            elif any(
+                key in env
+                for key in ("CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT")
+            ):
+                print(f"FAIL: single-worktree auto-select: session markers leaked into env: {env}", file=sys.stderr)
+                errors += 1
+            elif env.get("PATH") != os.environ.get("PATH"):
+                print(
+                    f"FAIL: single-worktree auto-select: expected PATH={os.environ.get('PATH')!r} in scrubbed env, "
+                    f"got {env.get('PATH')!r}",
+                    file=sys.stderr,
+                )
+                errors += 1
+            else:
+                print("PASS: single-worktree auto-select -- scrub_env() strips session markers, preserves PATH")
 
     # ------------------------------------------------------------------
     # Test: no active worktrees, spawn returns 0, backlog empty -> exit 0.

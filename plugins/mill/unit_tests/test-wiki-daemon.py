@@ -810,6 +810,70 @@ def main() -> int:
     except Exception as exc:
         fail("_spawn_server stdio redirection, both platform branches", exc)
 
+    # --- (z1) tasks.json handle is released before "git pull" runs ---
+    # Regression for: TinyDB's JSONStorage keeps tasks.json open for the life of
+    # the Store; if that handle is still open when "git pull --rebase" rewrites
+    # the working tree, Windows fails with "unable to unlink old 'tasks.json'".
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+
+            observed = {}
+
+            def fake_pull(_wiki_path):
+                observed["handle_closed"] = wiki_server._store._db.storage._handle.closed
+                return False
+
+            with patch("wiki._server.pull", side_effect=fake_pull) as mock_pull, \
+                 patch("wiki._server.commit_push"), \
+                 patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_GIT": ""}):
+                wiki_server._render_and_commit_all(slug_for_msg="x")
+
+            assert mock_pull.call_count == 1, f"pull called {mock_pull.call_count} times, expected 1"
+            assert observed.get("handle_closed") is True, \
+                "tasks.json handle must be closed while 'git pull' runs"
+            assert not wiki_server._store._db.storage._handle.closed, \
+                "store must be reopened after pull returns"
+            ok("tasks.json handle is released before git pull runs")
+    except Exception as exc:
+        fail("tasks.json handle is released before git pull runs", exc)
+
+    # --- (z2) tasks.json handle is released before commit_push runs (rebase path) ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+
+            observed = {}
+
+            def fake_commit_push(_wiki_path, _paths, _message):
+                observed["handle_closed"] = wiki_server._store._db.storage._handle.closed
+
+            with patch("wiki._server.pull", return_value=False), \
+                 patch("wiki._server.commit_push", side_effect=fake_commit_push) as mock_commit, \
+                 patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_GIT": ""}):
+                wiki_server._render_and_commit_all(slug_for_msg="x")
+
+            assert mock_commit.call_count == 1, f"commit_push called {mock_commit.call_count} times, expected 1"
+            assert observed.get("handle_closed") is True, \
+                "tasks.json handle must be closed while commit_push (and its internal rebase retry) runs"
+            assert not wiki_server._store._db.storage._handle.closed, \
+                "store must be reopened after commit_push returns"
+            ok("tasks.json handle is released before commit_push runs")
+    except Exception as exc:
+        fail("tasks.json handle is released before commit_push runs", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)
