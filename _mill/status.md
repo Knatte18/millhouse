@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-autonomy-and-validation-gaps
 branch: hanf/mill-plan-autonomy-and-validation-gaps
 plan: _mill/plan
@@ -21,4 +21,15 @@ plan-review-r1  '2026-07-29T17:32:22Z'
 plan-fix-r1  '2026-07-29T17:32:22Z'
 plan-fix-r2  '2026-07-29T17:42:37Z'
 planned  '2026-07-29T17:42:59Z'
+implementing  '2026-07-29T17:51:08Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: context-completeness-check
+    state: pending
+  - name: plan-guardrails-and-anti-pause
+    state: pending
 ```
