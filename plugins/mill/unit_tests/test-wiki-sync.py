@@ -22,6 +22,7 @@ from wiki._sync import (  # noqa: E402
     atomic_write,
     commit_push,
     path_guard,
+    verify_git_repo,
     _run,
     _git_env,
 )
@@ -368,6 +369,34 @@ def main() -> int:
             ok("commit_push against non-git-repo raises WikiPushError")
         except Exception as exc:
             fail("commit_push against non-git-repo raises WikiPushError", exc)
+
+        # --- (r) verify_git_repo() raises WikiPushError when wiki_path has no .git ---
+        try:
+            no_git = tmp / "no_git"
+            no_git.mkdir(parents=True)
+
+            raised = False
+            error_msg = ""
+            try:
+                verify_git_repo(no_git)
+            except WikiPushError as e:
+                raised = True
+                error_msg = str(e)
+
+            assert raised, "verify_git_repo() on a plain dir should raise WikiPushError"
+            assert "not a git repository" in error_msg, \
+                f"Error should mention 'not a git repository', got: {error_msg}"
+            ok("verify_git_repo() raises WikiPushError when wiki_path has no .git")
+        except Exception as exc:
+            fail("verify_git_repo() raises WikiPushError when wiki_path has no .git", exc)
+
+        # --- (s) verify_git_repo() returns None without raising for a valid clone ---
+        try:
+            result = verify_git_repo(clone)
+            assert result is None
+            ok("verify_git_repo() returns None without raising for a valid git clone")
+        except Exception as exc:
+            fail("verify_git_repo() returns None without raising for a valid git clone", exc)
 
         # --- (o) clone_or_init plain-clone paths set upstream tracking ---
         try:
