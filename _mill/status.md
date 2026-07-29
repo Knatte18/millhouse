@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-baseline-snapshot-windows-path-gap
 branch: hanf/mill-baseline-snapshot-windows-path-gap
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-07-29T13:45:04Z'
 plan-review-r1  '2026-07-29T13:49:16Z'
 plan-fix-r1  '2026-07-29T13:49:16Z'
 plan-fix-r2  '2026-07-29T13:52:50Z'
+planned  '2026-07-29T13:52:59Z'
 ```
