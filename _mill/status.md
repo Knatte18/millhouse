@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-yaml-crash-fallback
+phase: approved-merge-in-marker-verification
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ plan-fix-r5  '2026-07-28T19:51:49Z'
 planned  '2026-07-28T19:52:23Z'
 implementing  '2026-07-29T04:42:11Z'
 approved-config-yaml-crash-fallback  '2026-07-29T04:48:14Z'
+approved-merge-in-marker-verification  '2026-07-29T04:57:22Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: cc264c59d1ff50ac164a4eecce8574c13b0b4abf
     commit_sha: f6ee5329c1012eb384530ae43409397a7a729fcd
   - name: merge-in-marker-verification
-    state: running
+    state: approved
     implementer_session: 3db4006d-ad1d-4123-9ef3-548e186d185e
     start_sha: 044fb39a9d01e6b5f27c0b5d4280b77c2a7079bb
+    commit_sha: 78e8f596a9d824d5f6dae094ab82cfe3425a5589
   - name: merge-in-semantic-duplication
     state: pending
   - name: dirty-parent-worktree-preflight
