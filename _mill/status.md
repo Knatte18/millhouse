@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-plan-skill-doc-gaps
 branch: hanf/mill-plan-skill-doc-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T18:17:42Z'
+discussed  '2026-07-29T18:44:05Z'
 ```
