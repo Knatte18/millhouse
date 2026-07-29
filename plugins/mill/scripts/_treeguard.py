@@ -121,9 +121,12 @@ def check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: 
 
     still_missing = set(deleted_paths) - set(restored_paths)
     if still_missing:
+        # Sanitize stderr and path list to ASCII only (Windows cp1252 crash risk).
+        stderr_ascii = result.stderr.encode("ascii", errors="replace").decode("ascii")
+        paths_ascii = str(sorted(still_missing)).encode("ascii", errors="replace").decode("ascii")
         print(
-            f"[treeguard] failed to restore: {sorted(still_missing)}; "
-            f"git checkout stderr: {result.stderr}",
+            f"[treeguard] failed to restore: {paths_ascii}; "
+            f"git checkout stderr: {stderr_ascii}",
             file=sys.stderr,
         )
 

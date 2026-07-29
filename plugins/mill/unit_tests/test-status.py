@@ -13,8 +13,7 @@ import yaml
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _status import (  # noqa: E402
-    read,
+from _status import (
     append_phase,
     append_recovery_log,
     clear_module_verify_baseline,
@@ -34,7 +33,7 @@ from _status import (  # noqa: E402
     set_module_verify_baseline,
     update_field,
 )
-from _yaml_writer import quote_scalar  # noqa: E402
+from _yaml_writer import quote_scalar
 
 
 def main() -> int:
