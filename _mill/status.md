@@ -44,7 +44,9 @@ batches:
     start_sha: 85c5dc4842a4991e454c093b57f8848f9fa8ca8e
     commit_sha: 74ab9139672894a95fbb519273e8aeed79997bb7
   - name: config-resolution-fixes-implement-and-small
-    state: pending
+    state: running
+    implementer_session: 52382f2e-78c6-4559-97a1-75985e4dd614
+    start_sha: 6859aed4bd4f368ee27a60c09fbc3dcaa028881a
   - name: config-resolution-fixes-fix-and-merge
     state: pending
 ```
