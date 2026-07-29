@@ -3,7 +3,7 @@
 ```yaml
 task: mill-merge misjudges worktree topology and mishandles Step 5 squash-restore checkout
 slug: mill-merge-topology-and-squash-restore-gaps
-approved: false
+approved: true
 started: 20260729-065338
 parent: main
 root: ""
