@@ -40,6 +40,9 @@ Checks performed (check keys):
     wiki-config-mutation     — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
                                but plugin.json is not in that batch's Context: or Edits:
+    context-completeness     — a card's Requirements: references a resolvable
+                               file-path-shaped backtick token absent from that
+                               card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
     move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
     move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
@@ -1358,6 +1361,223 @@ def _check_plugin_manifest_context_missing(batch_files: list[Path]) -> list[dict
 
 
 # ---------------------------------------------------------------------------
+# context-completeness check (#742)
+# ---------------------------------------------------------------------------
+
+# Prohibition-marker substrings: a Requirements: sentence containing one of
+# these (lowercased) names a file the card must NOT act on, not an unlisted
+# read dependency, so a backtick token on that line is exempt from flagging.
+_PROHIBITION_MARKERS = (
+    "forbid",
+    "never touch",
+    "must not touch",
+    "do not touch",
+    "not touch",
+)
+
+# A backtick-quoted token counts as path-candidate-shaped when it contains a
+# path separator or ends with one of these extensions; anything else (a JSON
+# key, a function name, a sentinel string) is silently ignored.
+_PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json")
+
+
+def _extract_requirements_text(card_text: str) -> str | None:
+    """Return the body text of a card's ``Requirements:`` field, or ``None``.
+
+    Locates the ``- **Requirements:**`` header line and collects that line's
+    trailing text plus every subsequent line up to (but not including) the
+    next ``- **<Field>:**`` header or the end of ``card_text``. Returns
+    ``None`` when no ``Requirements:`` header line is found at all -- a
+    missing field is ``card-missing-field``'s concern, not this check's.
+    """
+    lines = card_text.splitlines()
+    header_re = re.compile(r"^-\s*\*\*Requirements:\*\*")
+    any_field_header_re = re.compile(r"^-\s*\*\*[A-Za-z]+:\*\*")
+
+    for i, line in enumerate(lines):
+        if header_re.match(line):
+            collected = [line]
+            j = i + 1
+            while j < len(lines) and not any_field_header_re.match(lines[j]):
+                collected.append(lines[j])
+                j += 1
+            return "\n".join(collected)
+    return None
+
+
+def _card_own_reference_set(card_text: str) -> set[str]:
+    """Return the union of backtick tokens this card declares as its own.
+
+    Combines every backtick-wrapped token found under this card's
+    Context:/Edits:/Creates:/Deletes: headers (single-line or multi-line
+    sub-bullet form) with the source-only half of its Moves: pairs (the
+    destination half is deliberately excluded -- a Requirements: reference
+    to a not-yet-existing Move target is not "already declared").
+    """
+    tokens: set[str] = set()
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_REFS_HEADER.match(line)
+        if m:
+            inline = m.group("inline").strip()
+            if inline:
+                tokens.update(re.findall(r"`([^`]+)`", inline))
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                tokens.update(re.findall(r"`([^`]+)`", sm.group(1)))
+                j += 1
+            i = j
+            continue
+        i += 1
+
+    for idx, line in enumerate(lines):
+        m_moves = _RE_MOVES_HEADER.match(line)
+        if not m_moves:
+            continue
+        inline = m_moves.group("inline").strip()
+        if inline:
+            # Inline "none" (or any other inline value) has no sub-bullets
+            # to walk.
+            continue
+        k = idx + 1
+        while k < len(lines):
+            sm = _RE_REFS_SUB.match(lines[k])
+            if not sm:
+                break
+            pair_m = _RE_MOVE_PAIR.match(sm.group(1).strip())
+            if pair_m:
+                tokens.add(pair_m.group(1))
+            k += 1
+
+    return tokens
+
+
+def _check_context_completeness(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    creates_union: set[str],
+    deletes_union: set[str],
+    moves_targets: set[str],
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag a card's Requirements: prose citing a file absent from its own refs.
+
+    A ``Requirements:`` field frequently prose-references a file the
+    implementer must read or reason about; when that file is a genuine
+    dependency it belongs in the card's own ``Context:``/``Edits:`` (or
+    ``Creates:``/``Deletes:``/``Moves:``) so a bulk-mode reviewer actually
+    sees it. This check heuristically detects the gap: for each card, every
+    backtick-quoted, path-shaped token in ``Requirements:`` that
+    independently resolves to a real file (on disk, or a plan-wide
+    ``Creates:``/``Deletes:``/Moves-target reference) must also appear in
+    that same card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
+    set. Two exemptions prevent false positives:
+
+    1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a
+       file the card must NOT act on, not an unlisted dependency.
+    2. Non-path-shaped or unresolvable tokens (JSON keys, function names,
+       sentinel strings) are never flagged -- only genuine file references
+       that this validator can independently confirm exist.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (typically the worktree root).
+        root: Optional root subfolder for source refs.
+        creates_union: Plan-wide union of Creates: targets.
+        deletes_union: Plan-wide union of Deletes: targets.
+        moves_targets: Plan-wide union of Moves: destination paths.
+        wiki_root: Optional wiki root path for wiki/-prefixed refs.
+        git_root: Optional repo root for git_root-relative resolution.
+
+    Returns:
+        List of error dicts, one per unresolvable-elsewhere Requirements: reference.
+    """
+    errors: list[dict] = []
+    backtick_re = re.compile(r"`([^`]+)`")
+
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        for card_num, card_lines in cards:
+            card_text = "\n".join(card_lines)
+            requirements_text = _extract_requirements_text(card_text)
+            if requirements_text is None:
+                continue
+
+            requirements_lines = requirements_text.splitlines()
+            own_refs: set[str] | None = None  # lazily computed per card
+
+            for line in requirements_lines:
+                for token in backtick_re.findall(line):
+                    # Path-candidate shape only: contains a separator or ends
+                    # with a recognized source-file extension.
+                    if "/" not in token and not token.endswith(_PATH_CANDIDATE_EXTENSIONS):
+                        continue
+
+                    # Prohibition-marker exemption: the line naming this
+                    # token forbids acting on it, so it is not an unlisted
+                    # read dependency.
+                    lowered_line = line.lower()
+                    if any(marker in lowered_line for marker in _PROHIBITION_MARKERS):
+                        continue
+
+                    # Strip a trailing line-range suffix before testing
+                    # resolvability and matching; the ORIGINAL token is kept
+                    # for the emitted error's "path" field.
+                    stripped_token = _RE_LINE_RANGE.sub("", token)
+
+                    existing = resolve_existing_paths(
+                        [stripped_token], project_root, root,
+                        wiki_root=wiki_root, git_root=git_root,
+                    )
+                    resolvable = (
+                        bool(existing)
+                        or stripped_token in creates_union
+                        or stripped_token in deletes_union
+                        or stripped_token in moves_targets
+                    )
+                    if not resolvable:
+                        continue
+
+                    if own_refs is None:
+                        own_refs = _card_own_reference_set(card_text)
+
+                    if stripped_token in own_refs:
+                        continue
+                    if "/" not in stripped_token and any(
+                        Path(stripped_token).name == Path(entry).name for entry in own_refs
+                    ):
+                        continue
+
+                    errors.append({
+                        "check": "context-completeness",
+                        "batch": batch_path.stem,
+                        "card": card_num,
+                        "path": token,
+                        "message": (
+                            f"card {card_num}'s Requirements: references '{token}' "
+                            f"which is not in this card's "
+                            f"Context:/Edits:/Creates:/Deletes:/Moves:"
+                        ),
+                    })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 8 — all-files-touched-mismatch
 # ---------------------------------------------------------------------------
 
@@ -2273,6 +2493,11 @@ def run(
     ))
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_plugin_manifest_context_missing(batch_files))
+    errors.extend(_check_context_completeness(
+        batch_files, project_root, effective_root, creates_union, deletes_union, moves_targets,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
     errors.extend(_check_all_files_touched_mismatch(overview_path, batch_files))
     errors.extend(_check_out_of_worktree_target(batch_files, project_root))
     errors.extend(_check_batch_oversized(
