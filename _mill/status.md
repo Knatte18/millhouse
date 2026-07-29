@@ -35,7 +35,9 @@ implementing  '2026-07-29T09:08:46Z'
 ```yaml
 batches:
   - name: treeguard-helper
-    state: pending
+    state: running
+    implementer_session: 1442cab8-f2d2-47c4-a1d0-741ea0afb9fd
+    start_sha: b058a4b2b6088140f965fb49c890a29cf0e1299f
   - name: status-recovery-log
     state: pending
   - name: mill-start-wiring
