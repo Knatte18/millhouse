@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-start: tracked _mill/ files disappear from the working tree mid-review-loop; existing safeguard covers only status.md"
 slug: mill-start-tracked-files-vanish-mid-review
-approved: false
+approved: true
 started: "20260729-072604"
 parent: main
 root: ""
