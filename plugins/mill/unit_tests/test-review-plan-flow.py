@@ -859,6 +859,7 @@ def main() -> int:
                 "# Review\n\n"
                 "### [BLOCKING] issue one\n\n- b\n\n"
                 "### [BLOCKING] issue two\n\n- b\n\n"
+                "### [NIT] issue four\n\n- b\n\n"
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             one_blocking = (
@@ -873,7 +874,8 @@ def main() -> int:
             ])
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 3, f"expected aggregate blocking_count=3, got {r.blocking_count}"
-            print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0)")
+            assert r.nit_count == 1, f"expected aggregate nit_count=1, got {r.nit_count}"
+            print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0), nit_count == 1")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test14: {exc}", file=sys.stderr)
@@ -1681,6 +1683,7 @@ def main() -> int:
             major_only = (
                 "# Review\n\n"
                 "### [MAJOR] compile break\n\n- b\n\n"
+                "### [NIT] minor note\n\n- b\n\n"
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([
@@ -1689,7 +1692,8 @@ def main() -> int:
             ])
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 1, f"expected blocking_count=1, got {r.blocking_count}"
-            print("PASS test29: unrecognized [MAJOR] severity fail-loud in synchronous per-batch dispatch")
+            assert r.nit_count == 1, f"expected nit_count=1, got {r.nit_count}"
+            print("PASS test29: unrecognized [MAJOR] severity fail-loud in synchronous per-batch dispatch, nit_count == 1")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test29: {exc}", file=sys.stderr)
