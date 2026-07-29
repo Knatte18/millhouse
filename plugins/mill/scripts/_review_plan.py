@@ -107,11 +107,17 @@ def _scan_approved_batches(reviews_dir: Path) -> dict[str, dict]:
             )
             continue
         if verdict == "APPROVE":
+            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
+            blocking_count += count_unrecognized_severity_findings(
+                raw, blocking_severity="BLOCKING", nit_severity="NIT"
+            )
+            nit_count = parse_blocking_count(raw, severity="NIT")
             result[batch_stem] = {
                 "scope": batch_stem,
                 "round": n,
                 "verdict": "APPROVE",
-                "blocking_count": 0,
+                "blocking_count": blocking_count,
+                "nit_count": nit_count,
                 "file": str(path),
                 "session_id": None,
             }
