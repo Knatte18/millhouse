@@ -4103,6 +4103,291 @@ def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
 
 
 # ---------------------------------------------------------------------------
+# verify-excludes-edited-tagged-test check (#724)
+# ---------------------------------------------------------------------------
+
+_GO_MOD_TEXT = "module example.com/alpha\n\ngo 1.21\n"
+
+_INTEGRATION_TAGGED_TEST_GO = "//go:build integration\n\npackage foo\n"
+
+_UNTAGGED_TEST_GO = "package foo\n\nfunc TestFoo(t *testing.T) {}\n"
+
+_HEADER_COMMENT_INTEGRATION_TAGGED_TEST_GO = (
+    "// Copyright 2024 Foo Corp.\n"
+    "// Licensed under the Apache License, Version 2.0 (the \"License\");\n"
+    "// you may not use this file except in compliance with the License.\n"
+    "// You may obtain a copy of the License at\n"
+    "//\n"
+    "//     http://www.apache.org/licenses/LICENSE-2.0\n"
+    "//\n"
+    "//go:build integration\n\n"
+    "package foo\n"
+)
+
+
+def test_verify_excludes_edited_tagged_test_no_tags_flag_dirty() -> int:
+    """(a) Go project, edited integration-tagged test, verify: has no -tags -> one finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["path"] == "pkg/foo_test.go", f"wrong path: {e['path']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_no_tags_flag_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_no_tags_flag_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_tags_integration_clean() -> int:
+    """(b) Same fixture, verify: includes -tags integration -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags integration", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_tags_integration_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_tags_integration_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_tags_integration_comma_other_clean() -> int:
+    """(c) Same fixture, verify: includes -tags integration,other -> zero findings (comma-split)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags integration,other", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_tags_integration_comma_other_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_tags_integration_comma_other_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_no_build_tag_clean() -> int:
+    """(d) Go project, edited _test.go has no //go:build line at all -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_UNTAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_no_build_tag_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_no_build_tag_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_not_go_project_clean() -> int:
+    """(e) NOT a Go project (no go.mod) -- otherwise identical to (a)'s dirty fixture -> zero findings (fail-open language gate)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings for a non-Go project, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_not_go_project_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_not_go_project_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_malformed_verify_no_crash() -> int:
+    """(f) Go project, malformed verify: {cwd, command} mapping -> zero findings, no crash."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\ndepends-on: []\n"
+            "verify:\n  cwd: hub\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `pkg/foo_test.go`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        # run() must not raise -- the ValueError parse_verify_field raises for a
+        # malformed mapping (missing command:) is caught and skipped by this check.
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings for a malformed verify: mapping, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_malformed_verify_no_crash")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_malformed_verify_no_crash: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_header_comment_scan_dirty() -> int:
+    """(g) Leading //-comment header before //go:build integration -> finding still raised."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_HEADER_COMMENT_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, (
+                f"expected 1 finding despite the leading header comment, got {len(check)}: {check}"
+            )
+            print("PASS test_verify_excludes_edited_tagged_test_header_comment_scan_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_header_comment_scan_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_creates_only_clean() -> int:
+    """(h) Tagged file referenced only via Creates: (not Edits:) -> zero findings (documented limitation)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        # The file is intentionally never written to disk -- Creates: targets
+        # do not exist at plan-validation time, per this codebase's convention.
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: PYTHONPATH= go test ./...\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** `pkg/foo_test.go`\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings for a Creates:-only reference, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_creates_only_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_creates_only_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
@@ -4230,6 +4515,15 @@ def main() -> int:
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
+        # verify-excludes-edited-tagged-test check (#724)
+        test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
+        test_verify_excludes_edited_tagged_test_tags_integration_clean,
+        test_verify_excludes_edited_tagged_test_tags_integration_comma_other_clean,
+        test_verify_excludes_edited_tagged_test_no_build_tag_clean,
+        test_verify_excludes_edited_tagged_test_not_go_project_clean,
+        test_verify_excludes_edited_tagged_test_malformed_verify_no_crash,
+        test_verify_excludes_edited_tagged_test_header_comment_scan_dirty,
+        test_verify_excludes_edited_tagged_test_creates_only_clean,
     ]
 
     errors = 0
