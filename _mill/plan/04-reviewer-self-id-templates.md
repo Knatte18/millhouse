@@ -36,7 +36,7 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In the yaml metadata example block (currently lines 57-62), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 59) and before `reviewed_file: <BATCH_NAME>` (line 60). Same lowercase, non-token placeholder rule as Card 8. Add the same one-sentence instruction as Card 8, placed directly above the `## Output format — STRICT` heading (line 47).
+- **Requirements:** In the yaml metadata example block (currently lines 57-62), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 59) and before `reviewed_file: <BATCH_NAME>` (line 60). Same lowercase, non-token placeholder rule as Card 9. Add the same one-sentence instruction as Card 9, placed directly above the `## Output format — STRICT` heading (line 47).
 - **Commit:** `mill: add reviewer_self_id field to review-plan-batch.md template`
 
 ### Card 11: `reviewer_self_id` field in `review-plan-holistic.md`
@@ -48,18 +48,19 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In the yaml metadata example block (currently lines 54-59), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 56) and before `reviewed_file: plan/` (line 57). Same lowercase, non-token placeholder rule as Card 8. Add the same one-sentence instruction as Card 8, placed directly above the `## Output format — STRICT` heading (line 44).
+- **Requirements:** In the yaml metadata example block (currently lines 54-59), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 56) and before `reviewed_file: plan/` (line 57). Same lowercase, non-token placeholder rule as Card 9. Add the same one-sentence instruction as Card 9, placed directly above the `## Output format — STRICT` heading (line 44).
 - **Commit:** `mill: add reviewer_self_id field to review-plan-holistic.md template`
 
 ### Card 12: document `reviewer_self_id` in `review-output.schema.md`
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/templates/review-output.schema.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add `reviewer_self_id: <optional, reviewer-reported self-identification>` to the fenced "File format" worked example block (currently lines 9-17), immediately after `reviewer_model: <reviewer name from config, e.g. sonnetmax>` (line 14) and before `reviewed_file: <path to the artefact that was reviewed>` (line 15) — the field-ordering convention Cards 8-10 also follow. Add a new row to the "Metadata block fields" table (currently lines 44-49), immediately after the `reviewer_model` row: `| `reviewer_self_id` | string | no | optional, reviewer-self-reported model identification; unverified |`. Add a one-line note directly below the table distinguishing `reviewer_self_id` (unverified, reviewer-reported, best-effort, present only in the discussion and plan review templates, never validated by `parse_verdict()`) from `reviewer_model` (orchestrator-supplied, dictated to the reviewer up front, and the field `--actual-model`/`apply_actual_model_override()` can rewrite after the fact).
+- **Requirements:** Add `reviewer_self_id: <optional, reviewer-reported self-identification>` to the fenced "File format" worked example block (currently lines 9-17), immediately after `reviewer_model: <reviewer name from config, e.g. sonnetmax>` (line 14) and before `reviewed_file: <path to the artefact that was reviewed>` (line 15) — the field-ordering convention Cards 9-11 also follow. Add a new row to the "Metadata block fields" table (currently lines 44-49), immediately after the `reviewer_model` row: `| `reviewer_self_id` | string | no | optional, reviewer-self-reported model identification; unverified |`. Add a one-line note directly below the table distinguishing `reviewer_self_id` (unverified, reviewer-reported, best-effort, present only in the discussion and plan review templates, never validated by `parse_verdict()`, the parser defined in `_review_common.py`) from `reviewer_model` (orchestrator-supplied, dictated to the reviewer up front, and the field `_review_common.apply_actual_model_override()` — invoked via the CLIs' `--actual-model` flag — can rewrite after the fact).
 - **Commit:** `mill: document reviewer_self_id field in review-output.schema.md`
 
 ## Batch Tests
