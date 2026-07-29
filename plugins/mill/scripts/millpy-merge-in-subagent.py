@@ -114,6 +114,92 @@ def _collect_task_intent(project_root: Path) -> str:
     return "\n\n".join(output)
 
 
+def _verify_conflict_markers(files: list[str], project_root: Path) -> dict | None:
+    """
+    Verify that none of ``files`` still carries an unresolved merge conflict
+    after a conflicts-mode sub-agent self-reports success (#713).
+
+    A sub-agent's own ``{"status": "success"}`` claim is not proof: it may
+    have edited a file without ever running ``git add`` on it, or it may
+    have left ``<<<<<<<``/``=======``/``>>>>>>>`` markers in place while
+    still staging the file. This function runs two independent git checks,
+    both scoped to ``files`` and both always executed (neither short-circuits
+    the other), to catch either failure mode before the caller's success
+    envelope reaches the Builder:
+
+    1. ``git diff --name-only --diff-filter=U`` — lists paths still marked
+       unmerged in the index. Any of ``files`` appearing here was never
+       staged at all (same idiom as ``mill-merge-in/SKILL.md`` step 3 and
+       ``millpy-wikipush.py``'s dirty-wiki check).
+    2. ``git diff --cached --check`` — greps the staged diff for git's own
+       ``"conflict marker"`` warning, which fires when a staged hunk still
+       contains literal marker lines.
+
+    A file resolved via ``git rm`` (a modify/delete resolution) needs no
+    special-casing: it is absent from both check outputs by construction --
+    already resolved out of check 1's unmerged list, and nothing left to
+    diff for check 2.
+
+    Args:
+        files: Paths (relative to ``project_root``) the sub-agent claimed
+            to have resolved.
+        project_root: Absolute path to the git worktree these checks run
+            against.
+
+    Returns:
+        ``None`` when both checks are clean. Otherwise a
+        ``{"status": "stuck", "stuck_type": "logic", "reason": ...}`` dict
+        the caller substitutes for the sub-agent's own success envelope --
+        either because a check found a real marker/staging problem, or
+        because a check's own git invocation failed (e.g. lock contention),
+        signaled by a ``"fatal:"`` prefix in its output, which makes that
+        check's finding untrustworthy and short-circuits immediately ahead
+        of the two ordinary findings.
+    """
+    unmerged_result = _subprocess_util.run(
+        ["git", "diff", "--name-only", "--diff-filter=U", "--", *files],
+        cwd=project_root,
+    )
+    unmerged_combined = unmerged_result.stdout + unmerged_result.stderr
+    if "fatal:" in unmerged_combined:
+        return {
+            "status": "stuck",
+            "stuck_type": "logic",
+            "reason": f"conflict-marker verification itself failed to run: {unmerged_combined}",
+        }
+
+    marker_result = _subprocess_util.run(
+        ["git", "diff", "--cached", "--check", "--", *files],
+        cwd=project_root,
+    )
+    marker_combined = marker_result.stdout + marker_result.stderr
+    if "fatal:" in marker_combined:
+        return {
+            "status": "stuck",
+            "stuck_type": "logic",
+            "reason": f"conflict-marker verification itself failed to run: {marker_combined}",
+        }
+
+    # Check 1: any of our files still listed as unmerged means it was never staged.
+    unmerged_files = [f for f in files if f in unmerged_result.stdout.splitlines()]
+
+    # Check 2: any "conflict marker" line in the staged diff means markers survived staging.
+    marker_lines = [
+        line for line in marker_combined.splitlines() if "conflict marker" in line
+    ]
+
+    clauses = []
+    if unmerged_files:
+        clauses.append(f"file(s) never staged / still unmerged: {', '.join(unmerged_files)}")
+    if marker_lines:
+        clauses.append(f"residual conflict markers found in staged files: {', '.join(marker_lines)}")
+
+    if clauses:
+        return {"status": "stuck", "stuck_type": "logic", "reason": "; ".join(clauses)}
+
+    return None
+
+
 def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> int:
     """
     Reset and eagerly recompute the cached ``module_verify_baseline`` after a
