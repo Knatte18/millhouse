@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: mill-plan-autonomy-and-validation-gaps
 branch: hanf/mill-plan-autonomy-and-validation-gaps
 plan: _mill/plan
@@ -26,6 +26,8 @@ approved-context-completeness-check  '2026-07-29T17:57:19Z'
 approved-plan-guardrails-and-anti-pause  '2026-07-29T18:00:05Z'
 holistic-reviewing  '2026-07-29T18:00:23Z'
 holistic-fixing  '2026-07-29T18:05:56Z'
+nits-fixed-holistic  '2026-07-29T18:08:18Z'
+holistic-approved  '2026-07-29T18:08:23Z'
 ```
 
 ## Batches
