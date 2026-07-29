@@ -164,6 +164,14 @@ PR dispatch lives in mill-finalize. This step is direct path only.
   TASK_DIR_REL = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md']).parent.relative_to(worktree_root).as_posix()
   ```
 
+  **Pre-squash dirty-parent-worktree check (`mode == 'worktree'` only):** before running the bash block below, run `git -C <parent-path> status --porcelain --untracked-files=no` and inspect its output. This check applies only when `mode == 'worktree'` (the `mode` variable bound at Entry Step 1) — skip it entirely when `mode == 'inplace'`, matching the existing in-place bypass documented at line 33 (Step 5 already omits `-C <parent-path>` in that mode, so there is no separate parent worktree to check).
+
+  If the output is non-empty, halt Step 5 — do NOT run `merge --squash` — and report to the operator:
+
+  > "The parent worktree is not clean — either (a) this is independent uncommitted work in the parent worktree: commit or stash it, then re-run `/mill-merge`; or (b) this is a partially-applied squash left over from a Step 5 that failed after `merge --squash`/`reset`/`checkout` already staged changes but before `commit` landed: run `git -C <parent-path> commit` to complete it, or `git -C <parent-path> reset --hard` to discard it, then re-run."
+
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt (Step 5)" carve-out. Nothing has been mutated yet at this halt point, so there is nothing to roll back.
+
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
   git -C <parent-path> reset -q HEAD -- "$TASK_DIR_REL"
@@ -332,6 +340,8 @@ Release the merge lock. Preserve the checkpoint branch. Report the failure with 
 ```bash
 git reset --hard HEAD
 ```
+
+**Dirty-parent-worktree halt (Step 5):** the pre-squash dirty-parent-worktree check (`mode == 'worktree'` only) that halts Step 5 before `merge --squash` runs is exempt from this rollback — no checkpoint reset applies, and there is no `git reset --hard` at all. Nothing has been mutated yet at that halt point: running `git -C <parent-path> reset --hard mill-checkpoint-<name>` there would destroy exactly the independent uncommitted parent-worktree work the halt message's scenario (a) tells the operator to commit or stash.
 
 Post-Step-5 failures (archive tag, Home.md, sidebar) are **not** rolled back — the merge on parent is production state and un-doing it would waste the squash that the PR or direct merge already committed to origin.
 
