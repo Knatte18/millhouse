@@ -1022,10 +1022,12 @@ def run(
             aggregate = "ERROR"
         agg_round = max(r["round"] for r in reviews) if reviews else 0
         aggregate_blocking = sum(r.get("blocking_count", 0) for r in reviews)
+        aggregate_nit = sum(r.get("nit_count", 0) for r in reviews)
         return ReviewResult(
             type="plan",
             round=agg_round,
             verdict=aggregate,
             blocking_count=aggregate_blocking,
+            nit_count=aggregate_nit,
             reviews=reviews,
         )
