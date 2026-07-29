@@ -3,7 +3,7 @@
 ```yaml
 task: "Cross-machine resume, wiki-daemon health-check, and hub-in-subdirectory config resolution gaps"
 slug: "mill-cross-machine-resume-and-config-gaps"
-approved: false
+approved: true
 started: "2026-07-29T14:10:00Z"
 parent: "main"
 root: ""
