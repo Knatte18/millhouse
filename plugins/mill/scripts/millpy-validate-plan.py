@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,13 +34,21 @@ def main(argv: list[str] | None = None) -> int:
     from _review_common import ReviewError, find_active_slug, load_config, resolve_path
     import _plan_validate
 
-    project_root = Path.cwd()
+    # Hub-rooted, not cwd -- resolve_hub_path() is the bootstrap hub root
+    # (see cfg-reload-after-active-hub / #728: a plain Path.cwd() misses the
+    # hub's own mill-config.yaml whenever the hub lives in a subdirectory of
+    # the git repo). This same corrected project_root also threads through to
+    # find_active_slug (whose first parameter is named hub_root) and
+    # _plan_validate.run (whose docstring documents project_root as doubling
+    # for hub_root) -- both consume this variable directly, closing all three
+    # consumers in one fix.
+    project_root = resolve_hub_path()
     mill_dir = project_root / ".millhouse"
     repo_root = resolve_git_root()
     wiki_root = resolve_wiki_path(repo_root)
 
     try:
-        cfg = load_config(resolve_hub_path(), mill_dir)
+        cfg = load_config(project_root, mill_dir)
         slug = find_active_slug(project_root, wiki_root, cfg)
         plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
         errors = _plan_validate.run(plan_dir, project_root, wiki_root=wiki_root, skip_checks=frozenset(args.skip_checks))
