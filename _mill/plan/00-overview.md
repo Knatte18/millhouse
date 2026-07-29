@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan autonomy guidance and validation gaps: fork scope violations, missing anti-pause guidance, no mechanical Context/Edits completeness check'
 slug: mill-plan-autonomy-and-validation-gaps
-approved: false
+approved: true
 started: 20260729-172007
 parent: main
 root: ""
