@@ -29,6 +29,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import subprocess
@@ -49,7 +50,7 @@ import _review_common
 import _reviewers
 import _status
 import _verify_baseline
-from _implementer_common import _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
+from _implementer_common import _extract_status_json, _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
 
 
 # DU-conflict resolution needs branch intent; the resolver had no signal before #314.
@@ -393,6 +394,30 @@ def main(argv=None) -> int:
             verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
             print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
             return 0
+        elif args.mode == "conflicts":
+            # Replicate finalize_from_output's own is_file() guard inline -- that
+            # guard is unreachable on the gate-fail branch below, so a missing
+            # --agent-output file must not crash with a raw FileNotFoundError here.
+            if not Path(args.agent_output).is_file():
+                print(
+                    f"ERROR: --agent-output file not found: {args.agent_output} -- for"
+                    " implementer/fixer/merge-in dispatches the orchestrator must write the"
+                    " notification message to this path before calling --stage finalize",
+                    file=sys.stderr,
+                )
+                return 1
+            if not args.files:
+                print("--files is required for conflicts mode", file=sys.stderr)
+                return 1
+            # Mirror finalize_from_output's own read: unescape the HTML entities the
+            # harness injects into the <task-notification> payload before parsing.
+            output = html.unescape(Path(args.agent_output).read_text(encoding="utf-8"))
+            self_reported = _extract_status_json(output)
+            if self_reported is not None and self_reported.get("status") == "success":
+                gate_result = _verify_conflict_markers(args.files, project_root)
+                if gate_result is not None:
+                    print(json.dumps(gate_result))
+                    return 0
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -456,6 +481,16 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
         print(json.dumps({"status": "stuck", "stuck_type": "transient", "reason": str(e)}))
         print(str(e), file=sys.stderr)
         return 1
+
+    # Gate: a sub-agent's own success self-report is not proof that every
+    # conflicting file was actually resolved and staged clean -- verify
+    # before letting the success envelope reach the Builder (#713).
+    self_reported = _extract_status_json(output)
+    if self_reported is not None and self_reported.get("status") == "success":
+        gate_result = _verify_conflict_markers(args.files, project_root)
+        if gate_result is not None:
+            print(json.dumps(gate_result))
+            return 0
 
     return _forward_output(output, project_root)
 
