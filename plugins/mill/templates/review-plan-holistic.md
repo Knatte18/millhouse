@@ -38,6 +38,8 @@ Reviewer model: **<REVIEWER_MODEL>**. Round **<ROUND>**.
 - **Context field** — non-empty per card; Edits: files are implicitly read.
 - **Context completeness** — BLOCKING if `Requirements:` mentions a function, class, or constant from a file not listed in `Context:` or `Edits:`. The implementer may only read files in `Context:`; a missing entry means cold-start exploration.
 - **Global step numbering** — unique, sequential, no gaps across batches.
+- **All Files Touched scope** — the overview's `## All Files Touched` section lists the union of `Edits:`/`Creates:`/Move-target paths across all batches; `Deletes:` tokens and Move-source paths are excluded by convention. A Deletes-only or Move-source-only path missing from that list is correct, not a finding.
+- **Platform-behavior-claim verification** — BLOCKING if a plan or discussion claim describes Claude Code's own platform/harness behavior (e.g. agent auto-discovery, plugin manifest semantics) and a manifest or doc file that could confirm or refute the claim is present in your context, bulked or Read-able, but the claim was accepted without checking that file. Tool-use-mode reviewers may Read `plugin.json`/platform docs directly even when not bulked.
 
 ## Output format — STRICT
 
