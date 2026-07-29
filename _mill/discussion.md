@@ -179,10 +179,27 @@ one instance, not a one-off.
   **`entry.is_dir(follow_symlinks=False)`** (line 68 — the check that
   decides whether to recurse), and the recursive
   `_walk_strip_reparse_points(ep)` call for directories — in one
-  `try/except FileNotFoundError: continue` per entry inside the loop. Separately, guard the function's own `os.scandir(root)` call at
-  the top (the case where `root` itself vanished between being listed by
-  its *parent's* scandir and being recursed into) so a vanished
-  subdirectory doesn't raise before the loop even starts. Apply the
+  `try/except FileNotFoundError: continue` per entry inside the loop.
+  Separately — and this is the guard's actual justification, not the
+  per-entry recursive-call case, which the per-entry `try/except` above
+  already covers — wrap `_walk_strip_reparse_points`'s own
+  `with os.scandir(str(root)) as it:` call (the very first line of the
+  function body) in a `try/except FileNotFoundError`, log
+  `[safe-rmtree] skip vanished entry: {root}` (same wording/prefix as
+  the per-entry skip message), and return early. This is what actually
+  protects `safe_rmtree`'s own direct, unwrapped call
+  `_walk_strip_reparse_points(original)` (line 151, immediately after
+  the step-6 `exists()` check at lines 147-148) — a TOCTOU window
+  between that `exists()` check and the walk's own `os.scandir` open
+  that has no enclosing `try/except` anywhere in the call chain, since
+  it is the outermost call, not one made from inside a per-entry loop.
+  Placing the guard inside the function itself (rather than only in
+  `safe_rmtree`) means the same guard transparently also covers the
+  recursive-call case, making the per-entry guard's coverage of that one
+  specific sub-scenario (a vanished directory's own `os.scandir` open on
+  re-entry) redundant defense-in-depth rather than the guard's sole
+  justification — the per-entry guard remains necessary for its other
+  wrapped calls (`is_symlink()`, `is_dir()`, `remove()`) regardless. Apply the
   identical shape to `_junction.strip_all_in_worktree`'s `_walk`: add a
   **separate** `except FileNotFoundError:` clause alongside (not merged
   into) its existing `except PermissionError:` around
@@ -343,7 +360,16 @@ fixtures, no real git/LLM calls).
   `safe_rmtree` / `strip_all_in_worktree` completes without raising and
   the rest of the tree (siblings of the vanished subdirectory) is still
   processed.
-- **Scenario 3 — `strip_all_in_worktree` specifically:** since its walk
+- **Scenario 3 — top-level `safe_rmtree` entry-point window (the guard's
+  actual justification):** mock `os.scandir` to raise `FileNotFoundError`
+  on the very first (outermost) call to `_walk_strip_reparse_points` —
+  i.e. the call `safe_rmtree` itself makes directly at line 151, not a
+  recursive call from inside the loop. Call `safe_rmtree` (not
+  `_walk_strip_reparse_points` directly) so the assertion exercises the
+  actual previously-unguarded window between `safe_rmtree`'s step-6
+  `exists()` check and the walk's own `os.scandir` open. Assert
+  `safe_rmtree` completes without raising.
+- **Scenario 4 — `strip_all_in_worktree` specifically:** since its walk
   runs unconditionally as `remove_safe`'s step 1 (before any git call),
   add a `test-junction.py` case asserting `strip_all_in_worktree` itself
   (not just its inner `_walk` in isolation) completes when the
@@ -401,3 +427,4 @@ fixtures, no real git/LLM calls).
 - **Q:** [discussion-review r4 GAP] Should the widened `_junction.py` `FileNotFoundError` guard reuse the existing "permission denied" log message, or get its own wording? **A:** [auto-resolved] Its own distinct message (e.g. `[junction] WARNING: vanished entry scanning {dir_path}; skipping`), added as a separate `except FileNotFoundError:` clause, not merged into the `PermissionError` branch's text. **Why:** reusing "permission denied" wording for a vanished-path case would misreport what actually happened, directly undermining the earlier Logging decision's own stated goal of an accurate skip-and-log signal.
 - **Q:** [discussion-review r4 NOTE] Does the Testing section's `os.scandir` mocking guidance account for the two walks calling `os.scandir` differently (context-manager vs plain iterable)? **A:** [auto-resolved] No — added an explicit note: `_safe_rmtree`'s walk needs a context-manager-shaped mock, `_junction.py`'s walk needs a plain-iterable mock. **Why:** verified directly against both functions' source — `_safe_rmtree.py` uses `with os.scandir(...) as it:`, `_junction.py` uses `list(os.scandir(...))`; a test author following the original undifferentiated guidance could write a mock that fails one walk's protocol.
 - **Q:** [discussion-review r5 GAP] Does the `_safe_rmtree` walk's guard-placement enumeration list every call the Rationale paragraph says needs the fix, including `entry.is_dir(follow_symlinks=False)`? **A:** [auto-resolved] No — added `entry.is_dir(follow_symlinks=False)` to the Decision's enumerated list for the `_safe_rmtree` walk, matching the `_junction.py` walk's parallel enumeration (which already included its `entry.is_dir()` equivalent). **Why:** the Rationale paragraph already named `entry.is_dir(follow_symlinks=False)` as needing the fix, but the Decision's own enumerated list for that walk omitted it — the same class of enumeration ambiguity round 2 already fixed for the removal call, recurring for the dir-check call.
+- **Q:** [discussion-review r6 GAP] Is the top-of-function `os.scandir(root)` guard's stated rationale ("root vanished between parent's scandir and being recursed into") actually the scenario needing a *separate* guard, given the per-entry guard already wraps the recursive call? **A:** [auto-resolved] No — re-anchored the guard's rationale on the real gap: `safe_rmtree`'s own direct, unwrapped call `_walk_strip_reparse_points(original)` (line 151, right after the step-6 `exists()` check), which has no enclosing try/except anywhere since it's the outermost call, not one made from inside a per-entry loop. Specified the guard's exact behavior (log `[safe-rmtree] skip vanished entry: {root}`, return early) and added Testing Scenario 3 exercising it via `safe_rmtree` itself, not `_walk_strip_reparse_points` directly. **Why:** the original rationale described a scenario the per-entry guard already covers, leaving the actually-uncovered `safe_rmtree` step-6-to-7 window unaddressed and the guard's own log/return behavior unspecified.
