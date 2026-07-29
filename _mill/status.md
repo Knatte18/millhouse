@@ -27,7 +27,9 @@ implementing  '2026-07-29T17:51:12Z'
 ```yaml
 batches:
   - name: archive-tag-push-failure
-    state: pending
+    state: running
+    implementer_session: 263850d3-93c7-4b11-a449-aa4e0de3447a
+    start_sha: f1c49625994ebb214fd2dbf1df28346b1082a4ab
   - name: plan-review-holistic-rounds-gate
     state: pending
   - name: test-registry-local-overlay-redirect
