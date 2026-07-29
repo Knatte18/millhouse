@@ -18,7 +18,7 @@ import _reviewer_single  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
 from _reviewers import ReviewerError  # noqa: E402
 from _test_cfg import make_minimal_cfg  # noqa: E402
-from _test_registry import make_minimal_registry  # noqa: E402
+from _test_registry import make_minimal_registry, write_to  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
 
@@ -103,6 +103,28 @@ def test_load_happy_path() -> None:
         assert "sonnetmax_bulk" in registry
         assert registry["sonnetmax_bulk"]["tooluse"] is False
     print("PASS: load happy path round-trips")
+
+
+def test_write_to_round_trips_through_reviewers_load() -> None:
+    """_test_registry.write_to()'s redirected output resolves via _reviewers.load()."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_dir = tmp_path / "hub"
+        hub_dir.mkdir()
+        write_to(hub_dir / ".millhouse")
+        with patch.object(
+            _reviewers,
+            "resolve_plugin_template_path",
+            return_value=tmp_path / "nonexistent" / "mill-agents.yaml",
+        ):
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                registry = _reviewers.load(hub_dir)
+
+        assert "sonnetmax" in registry
+        assert registry["sonnetmax"]["type"] == "single"
+        assert registry["sonnetmax"]["provider"] == "claude"
+        assert "sonnetmax_bulk" in registry
+    print("PASS: write_to round-trips through reviewers.load")
 
 
 def test_load_raises_on_missing_file() -> None:
@@ -1160,6 +1182,7 @@ def main() -> int:
         test_load_raises_duplicate_name,
         test_load_raises_cluster_use_nonexistent,
         test_load_raises_cluster_use_referencing_cluster,
+        test_write_to_round_trips_through_reviewers_load,
         test_resolve_single_happy_path,
         test_resolve_cluster_happy_path,
         test_resolve_raises_missing_name,
