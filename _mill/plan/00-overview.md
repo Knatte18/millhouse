@@ -3,7 +3,7 @@
 ```yaml
 task: 'Self-discovered mill pipeline bugs: silent archive-tag push failure, ignored --max-rounds override, dead test-registry helper, truncated commit_sha in implementer reports'
 slug: mill-pipeline-silent-failure-and-report-bugs
-approved: false
+approved: true
 started: 20260729-172419
 parent: main
 root: ""
