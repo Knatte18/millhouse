@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-resume-repair
+phase: approved-config-resolution-fixes-implement-and-small
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-07-29T14:59:16Z'
 implementing  '2026-07-29T15:00:06Z'
 approved-wiki-health-check-and-messaging  '2026-07-29T15:09:31Z'
 approved-mill-resume-repair  '2026-07-29T15:21:20Z'
+approved-config-resolution-fixes-implement-and-small  '2026-07-29T15:29:51Z'
 ```
 
 ## Batches
@@ -44,9 +45,10 @@ batches:
     start_sha: 85c5dc4842a4991e454c093b57f8848f9fa8ca8e
     commit_sha: 74ab9139672894a95fbb519273e8aeed79997bb7
   - name: config-resolution-fixes-implement-and-small
-    state: running
+    state: approved
     implementer_session: 52382f2e-78c6-4559-97a1-75985e4dd614
     start_sha: 6859aed4bd4f368ee27a60c09fbc3dcaa028881a
+    commit_sha: c4a60fe4b870c941997a8f69b019b3a59ac4d708
   - name: config-resolution-fixes-fix-and-merge
     state: pending
 ```
