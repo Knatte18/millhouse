@@ -1,0 +1,131 @@
+# Discussion: Cross-machine resume, wiki-daemon health-check, and hub-in-subdirectory config resolution gaps
+
+```yaml
+task: Cross-machine resume, wiki-daemon health-check, and hub-in-subdirectory config resolution gaps
+slug: mill-cross-machine-resume-and-config-gaps
+status: discussing
+parent: main
+```
+
+## Problem
+
+Four related-but-distinct bugs, bundled from closed GitHub issues #730, #737, #729, and #728, all in mill's wiki/worktree/config-resolution layer:
+
+1. **#730** — no mill skill or the wiki daemon's `health_check` fetches/fast-forwards the local `.wiki` clone against `origin` before reading it. A task pushed to the wiki from another machine is silently invisible on a second machine until a manual `git fetch` + `git merge --ff-only` inside the wiki clone.
+2. **#737** — `health_check()` only confirms the daemon process is reachable; it never verifies the wiki directory is actually a valid git repo. A session ran an entire `mill-go` pipeline against a `.git`-less wiki, with every daemon-restart's `.gitignore` chore-commit silently logged as a warning, only surfacing when `set_phase` at Handoff raised `WikiPushError`.
+3. **#729** — `mill-resume` Phase 1 only checks for `.millhouse/config.local.yaml` and a `.wiki` junction at cwd; if either is missing it unconditionally tells the user to run `mill-setup`, which is the wrong remedy for a task worktree that already exists on disk (e.g. hand-created via `git worktree add` at a non-canonical path) with `_mill/` state already committed on the branch.
+4. **#728** — `millpy-implement.py`, `millpy-fix.py`, `millpy-abandon.py`, and `millpy-merge-in-subagent.py` each call `_review_common.load_config(git_root, mill_dir)` with the outer git-repo root instead of the resolved hub root, silently missing the hub's own `mill-config.yaml` whenever the hub lives in a subdirectory of the git repo (blocked mill-go's implement/fix dispatch entirely for a hub-in-subdirectory repo).
+
+**Why now:** all four surfaced from real cross-machine / non-standard-layout usage (a loomyard resume on a fresh machine, a NORCE-DrillingAndWells hub-in-subdirectory repo) and were independently reported and closed as issues; this task bundles them because they all live in the same "mill assumes a clean, canonical, single-machine setup" blind spot.
+
+## Scope
+
+**In:**
+- `wiki/_server.py`'s `_handle_health` (OP_HEALTH): verify the wiki directory is a valid git repo, and perform a debounced `fetch` + `pull --ff-only` against `origin` using the existing `wiki/_sync.py:pull()` helper.
+- `wiki/_client.py`'s `health_check()`: return semantics updated so a missing/invalid git repo is a hard failure; a fetch/network failure is a soft warning (health_check still reports OK).
+- `plugins/mill/skills/mill-resume/SKILL.md`: new phase (inserted after Phase 1, not renumbering existing phases) that detects an already-existing, off-canonical, under-scaffolded task worktree (when mill-resume — or, per its own doc, "any mill skill" — is invoked from inside such a worktree) and repairs it: safety check for uncommitted changes, user confirmation, `git worktree move` to the canonical `<container>/wts/<slug>` path, then Phase 7/8's copy-`.millhouse`/create-`.wiki`-junction steps.
+- `millpy-implement.py`, `millpy-fix.py`, `millpy-abandon.py`, `millpy-merge-in-subagent.py`: fix the `load_config(...)` call to pass the already-resolved hub-rooted variable, matching `millpy-review-code.py`'s existing correct pattern. For `millpy-merge-in-subagent.py`, this also requires fixing `project_root = Path.cwd()` to resolve via `_paths.resolve_hub_path()` (cwd is not hub-rooted there today).
+- `millpy-validate-plan.py`: fix the same bug class found during investigation (its `mill_dir` argument is cwd-based instead of hub-rooted) — not one of the 4 originally-named files, but the same root cause, already diagnosed.
+- Regression tests: extend the existing per-script unit test files (`test-millpy-implement.py`, `test-millpy-fix.py`, `test-abandon.py`, `test-merge-in-subagent.py`, `test-millpy-validate-plan.py`) with a hub-in-subdirectory config-resolution fixture; new/extended daemon unit test for health_check's git-validity + staleness-fetch behavior; new integration test for mill-resume's relocate+scaffold flow.
+
+**Out:**
+- Proactive discovery of orphaned off-canonical worktrees from the hub (e.g. cross-referencing `git worktree list` against all active tasks). Only the reactive path — detected when a mill skill is run from inside the broken worktree itself, matching issue #729's literal reproduction — is in scope.
+- Renumbering `mill-resume/SKILL.md`'s pre-existing phase-numbering gap (the file jumps from "Phase 2" to "Phase 4" with no "Phase 3" anywhere). Discovered during investigation, unrelated to this task, left as-is.
+- Centralizing/refactoring `load_config` call-site convention repo-wide (e.g. forcing a single resolver signature). This task fixes the 5 known-wrong call sites mechanically; it does not restructure `_review_common.load_config` itself.
+- Auditing every other wiki-mutation code path for silent failure swallowing. Verified during investigation that all client-side mutation wrappers (`upsert_task`, `set_phase`, `remove_task`, `merge_tasks`, `set_deps`, `rerender`) already correctly raise `WikiPushError` on failure — issue #737's framing that "every wiki write silently failed" does not hold against current code. The one genuine swallow site is `_ensure_gitignore`'s startup chore-commit, and it stays non-fatal (see Decisions).
+- Changes to `mill-setup` itself. mill-resume gets its own repair path instead of ever routing this case to `mill-setup`.
+
+## Decisions
+
+### wiki-health-check-scope
+
+- Decision: implement both the git-repo-validity check and the fetch+ff-merge staleness fix server-side, inside the daemon's `_handle_health` (`wiki/_server.py`), reusing `wiki/_sync.py:pull()` (already implements `git pull --ff-only`). No client-side git access, no new op.
+- Rationale: `health_check()` is already the one chokepoint called before every batch/review dispatch in mill-go and from mill-resume; fixing it there requires zero call-site changes anywhere else. The daemon already owns the wiki lock and all git mutation goes through `_sync.py` — doing this client-side would bypass that lock discipline.
+- Rejected: client-side git access in `_client.health_check()` (lock-safety risk); a new dedicated op (adds call-site fanout for no benefit — every existing caller already calls `health_check()` for exactly this purpose).
+
+### health-check-failure-semantics
+
+- Decision: a missing/invalid `.git` directory is a hard failure (`health_check()` returns `False` / surfaces a clear error) per issue #737's explicit ask. A fetch/pull failure due to network unreachability is a soft warning only — `health_check()` still reports healthy, since most mill work doesn't require wiki connectivity and offline use shouldn't be blocked by a transient network blip.
+- Rationale: distinguishes "this is fundamentally broken and needs user action" (missing repo) from "this is transient and shouldn't block work" (no network).
+- Rejected: hard-fail on both conditions (too strict, blocks all mill work when offline); soft-warn on both (reproduces exactly the "false assurance" problem #737 complains about for the missing-repo case).
+
+### health-check-fetch-cadence
+
+- Decision: debounce the fetch+ff-merge with an in-daemon-memory TTL (e.g. 60s) rather than fetching on every single `health_check()` call.
+- Rationale: `health_check()` is called before every batch/review dispatch in a mill-go session — fetching on every call adds a network round-trip to every dispatch even when calls are seconds apart. A TTL still catches staleness within a session and always fetches fresh on daemon (re)spawn.
+- Rejected: fetch unconditionally on every call (simplest, but unnecessarily chatty over the network for long mill-go sessions).
+
+### gitignore-swallow-left-nonfatal
+
+- Decision: `_ensure_gitignore`'s startup chore-commit (`wiki/_server.py`, called once per daemon `on_start`) stays best-effort/non-fatal, logged via `self._log.warning` as today. The git-repo-validity signal now lives in `health_check`/`OP_HEALTH` (see wiki-health-check-scope), which is where callers actually check for it.
+- Rationale: failing daemon startup entirely over a cosmetic `.gitignore` commit is disproportionate; the actual problem (missing `.git`) is now caught at the point callers gate on it. Verified all real data-mutation wrappers already raise `WikiPushError` correctly — this was the one narrow genuine gap, not a systemic swallowing problem.
+- Rejected: making `_ensure_gitignore` raise/propagate, which would fail daemon startup for a non-critical file write.
+
+### mill-resume-detection-point
+
+- Decision: add a new phase immediately after Phase 1 ("Verify setup") that triggers when mill-resume (or, per the SKILL's own doc, another mill skill sharing this check) is invoked from inside a directory that has `_mill/status.md` present (a genuine task worktree) but `.millhouse/config.local.yaml` and/or `.wiki` missing — i.e. Phase 1's current halt condition, but now branching into repair instead of directing to `mill-setup`.
+- Rationale: matches issue #729's literal reproduction (user `cd`s into the hand-created, non-canonical worktree and runs a mill skill there). Proactively scanning `git worktree list` from the hub for orphans would also help but expands scope to a case not actually reported.
+- Rejected: hub-side proactive enumeration via `git worktree list` (real capability, but not what was reported — flagged as future work, not blocking this task).
+
+### mill-resume-relocate-then-scaffold
+
+- Decision: on detection, relocate the worktree to the canonical `<container>/wts/<slug>` path via `git worktree move <old-path> <canonical-path>` (native git, atomic, updates the worktree's administrative files), then run the equivalent of Phase 7 (copy `.millhouse/`, excluding `scratch/`/`children/`, from the parent/hub) and Phase 8 (create the `.wiki` junction).
+- Rationale: issue #729 explicitly calls out that downstream lookups (`resolve_container_path`, used by mill-cleanup, mill-merge, wiki-by-slug resolution) assume the canonical path — leaving the worktree in place would just move the fragility elsewhere. `git worktree move` is the correct git primitive; no existing mill helper does this today (confirmed: no `worktree move`/`worktree_move` helper anywhere in `plugins/mill/scripts/`).
+- Rejected: scaffold in place without relocating (simpler, but reproduces the exact fragility the issue is trying to eliminate).
+
+### mill-resume-confirmation-gate
+
+- Decision: require explicit user confirmation before the relocate+scaffold repair runs, after a safety pre-check that the worktree has no uncommitted changes (`git status --porcelain`); halt with a clear message if dirty.
+- Rationale: this is a novel, off-happy-path repair operating on a worktree the user created by hand outside any mill skill — more can be wrong than mill expects (uncommitted changes, mid-rebase, detached state). `git worktree move` mutating a worktree with uncommitted work is exactly the kind of hard-to-reverse action that warrants a confirm step.
+- Rejected: fully automatic with no confirmation (matches the rest of mill-resume's largely-unattended phases, but this phase handles state mill didn't create and can't fully vouch for).
+
+### mill-resume-phase-placement
+
+- Decision: insert the new repair logic as its own phase directly after Phase 1 (documented as "Phase 1b" or similar clearly-scoped label), without renumbering the file's existing phases or filling the pre-existing Phase-2→Phase-4 numbering gap.
+- Rationale: the numbering gap is a pre-existing, unrelated cosmetic issue (confirmed: `mill-resume/SKILL.md` has no "Phase 3" anywhere, phases run 1, 2, 4, 5...); renumbering the whole file is unrelated churn for this task.
+- Rejected: renumbering every phase from 3 onward while inserting the new phase (correct hygiene, but out of scope — YAGNI for this task).
+
+### load-config-fix-mechanics
+
+- Decision: for `millpy-implement.py` (line ~236), `millpy-fix.py` (line ~297), and `millpy-abandon.py` (line ~42), swap the `load_config(git_root, mill_dir)` call to use the already-locally-computed hub-rooted variable (`project_root` in the first two, `hub_dir` in the third) — a mechanical one-line fix per site, matching `millpy-review-code.py`'s existing correct pattern (`project_root = _paths.resolve_hub_path(); ...; load_config(project_root, mill_dir)`). For `millpy-merge-in-subagent.py` (line ~345), fix the root cause: `project_root = Path.cwd()` (line ~338) is not hub-rooted at all — change it to `_paths.resolve_hub_path()` (or thread in the correct hub-root variable if one is already computed nearby), then the `load_config` call itself needs no further change once `project_root` is correct.
+- Rationale: 3 of the 4 sites need only a call-site argument swap since the correct variable already exists in scope; the 4th needs its root-computation fixed first — conflating them into one blanket "swap the argument" instruction would silently under-fix `millpy-merge-in-subagent.py`.
+- Rejected: a structural refactor centralizing root-resolution in `_review_common.py` (bigger diff, not needed to close these 4 bugs, and risks touching call sites that are already correct).
+
+### load-config-validate-plan-included
+
+- Decision: also fix `millpy-validate-plan.py` (line ~44), where `load_config(resolve_hub_path(), mill_dir)` passes the correct hub root as arg 1 but `mill_dir = Path.cwd() / ".millhouse"` (line ~39) is cwd-based rather than hub-rooted — the inverse mismatch of the other 4 sites, same underlying bug class.
+- Rationale: discovered while investigating #728, already fully diagnosed, mechanically trivial to fix (`mill_dir` should be `resolve_hub_path() / ".millhouse"`). Leaving a known, already-understood sibling instance of the exact bug unfixed after finding it would be an oversight, not scope discipline.
+- Rejected: filing it as a separate follow-up issue instead of fixing now — unnecessary process overhead for a one-line fix already fully understood.
+
+## Technical context
+
+- **Wiki daemon health check:** `wiki/_client.py:585 health_check()` → dispatches `OP_HEALTH` → `wiki/_server.py:295 _handle_health()`, which today unconditionally returns `{FIELD_OK: True}` (no git-validity or staleness logic at all — this is the entire fix surface for #730/#737-part-1).
+- **Existing fetch/pull helper:** `wiki/_sync.py:156 pull(wiki_path)` already implements `git pull --ff-only` and raises `WikiPushError` on failure — reuse this rather than writing new git-invocation logic. `wiki/_sync.py:180 commit_push()` is the general commit+push helper (already raises `WikiPushError` correctly at every failure stage, confirmed for the swallowing question above).
+- **Startup chore-write:** `wiki/_server.py:87 on_start()` calls `_ensure_gitignore()` (`wiki/_server.py:469`) once per daemon (re)spawn; its `commit_push` failure is caught and logged via `self._log.warning` (`wiki/_server.py:506`) — this is the "repeated on every daemon restart" WARNING from issue #737's daemon log excerpt, not a per-write-op issue.
+- **Client-side mutation wrappers already correct:** `upsert_task`, `set_phase`, `remove_task`, `merge_tasks`, `set_deps`, `rerender` in `wiki/_client.py` all check `resp.get(FIELD_OK)` and raise `WikiPushError`/`WikiValidationError`/etc. on failure — confirmed no silent-swallow pattern beyond the gitignore chore-write.
+- **mill-resume phases:** `plugins/mill/skills/mill-resume/SKILL.md` — Phase 1 (line 29, current halt-to-mill-setup logic), Phase 6 (line 109, `git worktree add <container>/wts/<slug> <branch_name>` — always canonical, assumes worktree doesn't yet exist), Phase 7 (line 122, copy `.millhouse/` from parent excluding `scratch/`/`children/`, same as `mill-spawn`'s copy step — see `plugins/mill/scripts/millpy/entrypoints/spawn_task.py` for the canonical implementation), Phase 8 (line 130, `_junction.create(wiki_clone_path, new_worktree / ".wiki")`).
+- **Container/hub path resolution:** `_paths.py` — `resolve_container_path` (line 289), `resolve_hub_path` (line 159), `resolve_main_worktree_root` (line 228). No existing `worktree move`/relocate helper anywhere in `plugins/mill/scripts/` — this task introduces the first one (likely a thin wrapper around `git worktree move`, following the existing pattern of wrapping git subprocess calls, e.g. `wiki/_sync.py:_run()`).
+- **load_config call sites:** `_review_common.py:1960 load_config(hub_root, mill_dir)` — `hub_root` is documented as "Absolute path to the hub directory." Reference-correct call: `millpy-review-code.py:112-116` (`project_root = _paths.resolve_hub_path(); mill_dir = project_root / ".millhouse"; cfg = load_config(project_root, mill_dir)`). Wrong-root call sites: `millpy-abandon.py:42` (passes `git_root`, correct var is `hub_dir`), `millpy-fix.py:297` (passes `git_root`, correct var is `project_root` computed at line ~291), `millpy-implement.py:236` (same pattern, `project_root` at line ~230), `millpy-merge-in-subagent.py:345` (`project_root = Path.cwd()` at line ~338 is itself wrong — not just the call-site argument). Inverted-mismatch site: `millpy-validate-plan.py:44` (`mill_dir = Path.cwd() / ".millhouse"` at line ~39 is cwd-based, arg 1 is already correctly hub-rooted).
+- **Config fallback that masks the bug in the common case:** `_config.py:152 resolve_repo_config_path()` falls back to a "primary clone" candidate via `_paths.resolve_main_worktree_root()` (line ~177) when the direct `hub_root`-rooted candidate is missing — this is why the 4+1 wrong-root sites don't fail outright in the common (hub == git root) case; only hub-in-subdirectory layouts expose the bug, per issue #728's own repro (`spawn.branch_prefix` resolving to `""`).
+
+## Testing
+
+- **Wiki health_check (git-validity + staleness):** unit test in `plugins/mill/unit_tests/`, using the existing in-memory/tempfile daemon harness (`WIKI_DAEMON_INPROCESS=1` / `use_inprocess`, per repo convention — no real network). TDD candidates: (a) wiki dir with no `.git` at all → `health_check()` reports failure; (b) two local tempdir git repos, one configured as `origin` remote of the other, with the "local clone" behind by a commit → after `health_check()`, the local clone has fast-forwarded; (c) debounce — two `health_check()` calls within the TTL window trigger only one fetch (assert via a call-count spy/mock on the fetch invocation).
+- **mill-resume relocate+scaffold:** integration test under `plugins/mill/integration_tests/` (real git worktree operations — per repo convention, this class of git-topology test belongs in integration, not unit). Scenarios: (a) worktree at a non-canonical path with `_mill/status.md` present but `.millhouse/`/`.wiki` missing and clean git status → relocates and scaffolds successfully; (b) same but with uncommitted changes present → halts with a clear message, worktree untouched; (c) user declines the confirmation prompt → no mutation occurs.
+- **load_config hub-in-subdirectory fixture:** extend the existing per-script unit test files (`test-millpy-implement.py`, `test-millpy-fix.py`, `test-abandon.py`, `test-merge-in-subagent.py`, `test-millpy-validate-plan.py`) with a fixture where `mill-config.yaml` lives in a subdirectory of the git root (mirroring issue #728's NORCE.Models repro) and assert each script's resolved config actually contains the hub's own values (e.g. a distinctive `spawn.branch_prefix`) rather than silently falling back to the plugin template/primary-clone default.
+
+## Q&A log
+
+- **Q:** Where should the wiki fetch+ff-merge and git-repo-validity check live? 1) Server-side inside the daemon's `_handle_health`, reusing `wiki/_sync.py:pull()` 2) Client-side in `_client.health_check()` 3) A new dedicated op **A:** [auto-pick] Server-side inside `_handle_health`, reusing `pull()`. **Why:** `health_check()` is already the one chokepoint called before every batch/review dispatch; fixing it there needs zero other call-site changes, and the daemon already owns the wiki lock/git-mutation discipline that client-side git access would bypass.
+- **Q:** What should health_check do on (a) missing/invalid `.git`, vs (b) a network-down fetch failure? 1) Hard-fail on (a), soft-warn on (b) 2) Hard-fail on both 3) Soft-warn on both **A:** [auto-pick] Hard-fail on (a), soft-warn on (b). **Why:** matches issue #737's explicit ask for the missing-repo case while not blocking offline mill work over a transient network blip.
+- **Q:** Fetch cadence for the staleness check — every `health_check()` call, or debounced? 1) Debounced with an in-memory TTL (~60s) 2) Fetch on every call **A:** [auto-pick] Debounced TTL. **Why:** `health_check()` is called before every batch/review dispatch in a mill-go session; unconditional fetching adds an unnecessary network round-trip on every dispatch.
+- **Q:** Should `_ensure_gitignore`'s startup chore-commit also be made to raise/propagate, or stay non-fatal? 1) Stay non-fatal; rely on the new `health_check` git-validity check as the real surfacing point 2) Make it raise, failing daemon startup **A:** [auto-pick] Stay non-fatal. **Why:** failing daemon startup over a cosmetic `.gitignore` commit is disproportionate; verified all real data-mutation wrappers (`set_phase`, `upsert_task`, etc.) already raise `WikiPushError` correctly, so this was the one narrow gap, not a systemic swallowing problem.
+- **Q:** How does mill-resume detect an existing off-canonical, under-scaffolded worktree? 1) Reactive — detect when invoked from inside such a worktree (matches issue #729's literal repro) 2) Proactive — enumerate via `git worktree list` from the hub 3) Both **A:** [auto-pick] Reactive detection only. **Why:** matches what was actually reported; proactive hub-side enumeration is a real but separate capability not covered by the issue, flagged as future work rather than pulled into this task's scope.
+- **Q:** Once detected, does mill-resume relocate the worktree to the canonical path, or scaffold it in place? 1) Relocate via `git worktree move` then scaffold 2) Scaffold in place, leave non-canonical **A:** [auto-pick] Relocate then scaffold. **Why:** issue #729 explicitly notes downstream lookups (`resolve_container_path`, used by mill-cleanup/mill-merge/wiki-by-slug resolution) assume the canonical path; leaving it non-canonical just relocates the fragility.
+- **Q:** Should the relocate+scaffold repair require user confirmation? 1) Yes, with an uncommitted-changes safety pre-check 2) Fully automatic **A:** [auto-pick] Require confirmation with a dirty-worktree pre-check. **Why:** this operates on state the user created by hand outside any mill skill — more can be wrong than mill expects, and `git worktree move` on a dirty worktree is a hard-to-reverse action.
+- **Q:** Should the new mill-resume phase also fix the file's pre-existing Phase-2→Phase-4 numbering gap? 1) No — insert the new phase without renumbering, leave the gap 2) Yes — renumber the whole file **A:** [auto-pick] No renumbering. **Why:** the gap is a pre-existing, unrelated cosmetic issue found during investigation; renumbering the whole file is unrelated churn for this task (YAGNI).
+- **Q:** For the 4 named `load_config` call sites, is a mechanical argument swap sufficient for all of them? 1) No — 3 sites need only the swap, but `millpy-merge-in-subagent.py` needs its `project_root = Path.cwd()` root computation fixed first 2) Yes, treat all 4 identically **A:** [auto-pick] Differentiated fix — 3 mechanical swaps, 1 root-computation fix. **Why:** `millpy-merge-in-subagent.py`'s `project_root` isn't hub-rooted at all today; a blanket "swap the argument" instruction would silently under-fix it.
+- **Q:** Should `millpy-validate-plan.py`'s inverted mismatch (found during investigation, not one of the 4 named files) also be fixed in this task? 1) Yes — same bug class, already diagnosed, trivial fix 2) No — file a separate follow-up issue **A:** [auto-pick] Yes, fix it now. **Why:** leaving a known, fully-understood sibling instance of the exact same bug unfixed after finding it is an oversight, not scope discipline; the fix is one line.
+- **Q:** Testing approach for the health_check git-validity + staleness fix? 1) Unit test via the existing in-memory/tempfile daemon harness 2) Integration test only **A:** [auto-pick] Unit test via existing harness. **Why:** matches repo convention (`unit_tests/` = in-memory/tempfile, no real git/network); a local two-tempdir-repo fixture (one as `origin`) covers the fetch/ff-merge behavior without needing real network access.
+- **Q:** Testing approach for mill-resume's relocate+scaffold flow? 1) Integration test with real git worktree operations 2) Unit test with a mocked git layer **A:** [auto-pick] Integration test. **Why:** this touches real `git worktree move`/`add` topology semantics that are risky to fake convincingly with mocks; matches the existing `integration_tests/` convention for real-git scenarios.
+- **Q:** Testing approach for the `load_config` hub-in-subdirectory fix (#728 + validate-plan)? 1) Extend the existing per-script unit test files with a hub-in-subdirectory fixture 2) No new test, manual verification only **A:** [auto-pick] Extend existing test files. **Why:** this exact bug class already caused a production blocker (#728: "blocks mill-go's implement/fix dispatch entirely for any hub-in-subdirectory repo") and silently masks itself in the common case via `resolve_repo_config_path`'s fallback — a regression test is warranted.
