@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-baseline-snapshot-windows-path-gap
 branch: hanf/mill-baseline-snapshot-windows-path-gap
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T10:51:49Z'
+discussed  '2026-07-29T13:35:48Z'
 ```
