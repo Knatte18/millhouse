@@ -39,7 +39,9 @@ batches:
     start_sha: c0b1951c56b7fb69087cceb9a69825ac3dad059c
     commit_sha: 54c3f1b87d4dd92603af82872f6ad84950e1bab6
   - name: reviewer-self-id-templates
-    state: pending
+    state: running
+    implementer_session: 433c3420-1661-4a4a-be26-cc5a1026425e
+    start_sha: 7047d51c1646c5e10e0682378ed1205c0373c620
   - name: discussion-review-cli
     state: pending
   - name: plan-review-cli
