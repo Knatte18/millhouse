@@ -15,7 +15,7 @@ This batch wires the `--reviewer` override through the discussion-review backend
 
 ## Cards
 
-### Card 2: `_review_discussion.py::prepare()` accepts `reviewer_override`
+### Card 3: `_review_discussion.py::prepare()` accepts `reviewer_override`
 
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
@@ -31,7 +31,7 @@ This batch wires the `--reviewer` override through the discussion-review backend
   Wrap the existing `maybe_switch_spec_for_large_prompt(prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry)` call (currently unconditional, immediately after the `render_prompt(...)` call) in `if reviewer_override is None:` per the overview's large-prompt Decision — when an override is set, `spec`/`reviewer_name` from the block above pass through to the return dict untouched. No change is needed to the `render_prompt(...)` call itself — its `reviewer_model=reviewer_name` keyword argument already reads whichever `reviewer_name` value the block above set.
 - **Commit:** `mill: add --reviewer override support to _review_discussion.py prepare()`
 
-### Card 3: `_review_discussion.py::run()` accepts `reviewer_override`
+### Card 4: `_review_discussion.py::run()` accepts `reviewer_override`
 
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
@@ -46,7 +46,7 @@ This batch wires the `--reviewer` override through the discussion-review backend
   - Else: unchanged existing behavior — `reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]`; `spec = _reviewers.resolve(registry, reviewer_name)`; `spec, _ = maybe_switch_spec_for_large_prompt(prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry)`.
 - **Commit:** `mill: add --reviewer override support to _review_discussion.py run()`
 
-### Card 4: `--reviewer` CLI flag on `millpy-review-discussion.py`
+### Card 5: `--reviewer` CLI flag on `millpy-review-discussion.py`
 
 - **Context:** none
 - **Edits:**

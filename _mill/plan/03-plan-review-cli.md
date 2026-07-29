@@ -15,7 +15,7 @@ This batch wires the `--reviewer` override through the plan-review backend's hol
 
 ## Cards
 
-### Card 5: `_review_plan.py::prepare()` holistic branch accepts `reviewer_override`
+### Card 6: `_review_plan.py::prepare()` holistic branch accepts `reviewer_override`
 
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
@@ -31,7 +31,7 @@ This batch wires the `--reviewer` override through the plan-review backend's hol
   The per-batch branch (`if scope is not None:`, which resolves `batch_reviewer_name`/`batch_spec`) is completely untouched by this card — `reviewer_override` is accepted by the function signature regardless of `scope` but has no effect when `scope is not None`, per the overview's holistic-only Decision. There is no live caller today that passes both a batch `scope` and `reviewer_override` together, so this is a documented no-op, not a new error path.
 - **Commit:** `mill: add --reviewer override support to _review_plan.py prepare() holistic scope`
 
-### Card 6: `_review_plan.py::run()` holistic branch accepts `reviewer_override`
+### Card 7: `_review_plan.py::run()` holistic branch accepts `reviewer_override`
 
 - **Context:**
   - `plugins/mill/scripts/_reviewers.py`
@@ -47,7 +47,7 @@ This batch wires the `--reviewer` override through the plan-review backend's hol
   In the holistic-review section (step 5, after the `prompt_text = render_prompt("review-plan-holistic", ...)` call for the holistic scope), wrap the existing `holistic_spec, holistic_name = maybe_switch_spec_for_large_prompt(prompt_text, holistic_spec, holistic_name, cfg, "plan-review", "holistic", registry)` call in `if reviewer_override is None:`.
 - **Commit:** `mill: add --reviewer override support to _review_plan.py run() holistic scope`
 
-### Card 7: `--reviewer` CLI flag on `millpy-review-plan.py`
+### Card 8: `--reviewer` CLI flag on `millpy-review-plan.py`
 
 - **Context:**
   - `plugins/mill/scripts/_review_plan.py`

@@ -15,7 +15,7 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 
 ## Cards
 
-### Card 8: `reviewer_self_id` field in `review-discussion.md`
+### Card 9: `reviewer_self_id` field in `review-discussion.md`
 
 - **Context:**
   - `plugins/mill/scripts/_render.py`
@@ -27,7 +27,7 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 - **Requirements:** In the yaml metadata example block (currently lines 43-48, inside the fenced ` ``` ` output-format block), add a new line `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 45) and before `reviewed_file: <artefact reference>` (line 46). Use exactly this lowercase, non-token placeholder text. Add one short sentence instructing the reviewer to independently state, in the `reviewer_self_id:` field, what model/version it believes itself to be — as its own best-effort assessment, distinct from the `reviewer_model:` value already dictated to it on line 3 (`Reviewer model: **<REVIEWER_MODEL>**`). Place this sentence directly above the `## Output format — STRICT` heading (line 31), as a short new paragraph, not inline with any existing sentence.
 - **Commit:** `mill: add reviewer_self_id field to review-discussion.md template`
 
-### Card 9: `reviewer_self_id` field in `review-plan-batch.md`
+### Card 10: `reviewer_self_id` field in `review-plan-batch.md`
 
 - **Context:**
   - `plugins/mill/scripts/_render.py`
@@ -39,7 +39,7 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 - **Requirements:** In the yaml metadata example block (currently lines 57-62), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 59) and before `reviewed_file: <BATCH_NAME>` (line 60). Same lowercase, non-token placeholder rule as Card 8. Add the same one-sentence instruction as Card 8, placed directly above the `## Output format — STRICT` heading (line 47).
 - **Commit:** `mill: add reviewer_self_id field to review-plan-batch.md template`
 
-### Card 10: `reviewer_self_id` field in `review-plan-holistic.md`
+### Card 11: `reviewer_self_id` field in `review-plan-holistic.md`
 
 - **Context:**
   - `plugins/mill/scripts/_render.py`
@@ -51,7 +51,7 @@ This batch adds a new, optional `reviewer_self_id:` field to the three discussio
 - **Requirements:** In the yaml metadata example block (currently lines 54-59), add `reviewer_self_id: <your own model self-identification, if known>` immediately after `reviewer_model: <REVIEWER_MODEL>` (line 56) and before `reviewed_file: plan/` (line 57). Same lowercase, non-token placeholder rule as Card 8. Add the same one-sentence instruction as Card 8, placed directly above the `## Output format — STRICT` heading (line 44).
 - **Commit:** `mill: add reviewer_self_id field to review-plan-holistic.md template`
 
-### Card 11: document `reviewer_self_id` in `review-output.schema.md`
+### Card 12: document `reviewer_self_id` in `review-output.schema.md`
 
 - **Context:** none
 - **Edits:**

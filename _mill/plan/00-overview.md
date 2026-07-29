@@ -64,7 +64,7 @@ subsection per decision. Batch-local decisions live in each batch file._
 
 ### Decision: `--reviewer` bypasses a `reviewer: null` disablement, not a `rounds: 0` disablement
 
-- **Decision:** In all four resolution sites, resolving `reviewer_override` happens unconditionally BEFORE the existing `reviewer_name is None: raise ReviewError(...)` check (in `prepare()`) or equivalent — i.e. when `reviewer_override` is set, that null-check is never reached at all, so an explicit `--reviewer` forces a round to run even when config has `reviewer: null` for that role/scope. This mirrors the existing `--max-rounds`-vs-`rounds: 0` precedent already in the same functions. It does NOT also bypass a `rounds: 0` disablement — `rounds: 0` is checked independently (in `prepare()`'s `effective_max == 0` branch and in `run()`'s early-return stub), before any reviewer-name resolution runs, and `reviewer_override` never touches that check. Forcing a round on a `rounds: 0` scope still requires `--max-rounds` in addition to `--reviewer`.
+- **Decision:** In all four resolution sites, resolving `reviewer_override` happens unconditionally BEFORE the existing `reviewer_name is None: raise ReviewError(...)` check (in `prepare()`) or equivalent — i.e. when `reviewer_override` is set, that null-check is never reached at all, so an explicit `--reviewer` forces a round to run even when config has `reviewer: null` for that role/scope. This mirrors the existing `--max-rounds`-vs-`rounds: 0` precedent already in the same functions. It does NOT also bypass a `rounds: 0` disablement. `rounds: 0` is checked independently, but the check's location differs by backend: `_review_discussion.py::prepare()` has its own `effective_max == 0` early-raise, and both backends' `run()` functions have their own early-return APPROVE stub when rounds is 0 — `_review_plan.py::prepare()`'s holistic branch has no `rounds == 0` check at all (round-0 handling for plan review's holistic scope happens only in `run()`). `reviewer_override` never touches any of these checks. Forcing a round on a `rounds: 0` scope still requires `--max-rounds` in addition to `--reviewer`.
 - **Rationale:** An operator naming a reviewer on the command line is unambiguously asking for a round to run, the same way `--max-rounds 1` already overrides `rounds: 0`. The two disablements (`reviewer: null` and `rounds: 0`) are independent checks and this task's scope only touches the reviewer-name resolution, not the round-count gate.
 - **Applies to:** discussion-review-cli, plan-review-cli
 
@@ -89,6 +89,7 @@ subsection per decision. Batch-local decisions live in each batch file._
 ## All Files Touched
 
 - `plugins/mill/scripts/_reviewers.py`
+- `plugins/mill/scripts/_reviewer_single.py`
 - `plugins/mill/scripts/_review_discussion.py`
 - `plugins/mill/scripts/millpy-review-discussion.py`
 - `plugins/mill/scripts/_review_plan.py`
