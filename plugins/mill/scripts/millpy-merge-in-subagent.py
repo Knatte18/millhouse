@@ -334,7 +334,7 @@ def main(argv=None) -> int:
         return 1
 
     # Common setup
-    project_root = Path.cwd()
+    project_root = _paths.resolve_hub_path()
     mill_dir = project_root / ".millhouse"
     plugin_root = Path(__file__).resolve().parent.parent
 
@@ -342,7 +342,7 @@ def main(argv=None) -> int:
     wiki_path = _paths.resolve_wiki_path(git_root)
 
     try:
-        cfg = _review_common.load_config(git_root, mill_dir)
+        cfg = _review_common.load_config(project_root, mill_dir)
     except _review_common.ReviewError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -358,6 +358,12 @@ def main(argv=None) -> int:
         container_path, slug, cfg=cfg, git_root=git_root, skip_slug_validation=True
     )
     mill_dir = project_root / ".millhouse"
+    # Reload against the resolve_active_hub()-corrected root -- the bootstrap
+    # cfg above may have come from a different (e.g. primary-clone template)
+    # config than the task hub's own mill-config.yaml. Downstream consumers
+    # (verify-cwd resolution, conflict handling, finalize dispatch) must
+    # observe this corrected value, per cfg-reload-after-active-hub.
+    cfg = _review_common.load_config(project_root, mill_dir)
 
     if args.recompute_baseline:
         return _run_recompute_baseline(project_root, git_root, cfg)
