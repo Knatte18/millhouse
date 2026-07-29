@@ -44,7 +44,7 @@ import _paths
 from _config import deep_merge, resolve_plugin_template_path
 
 _NAME_REGEX = re.compile(r"^[a-z0-9_-]+$")
-_TIER_RANK = {"haiku": 0, "sonnet": 1, "opus": 2}
+_TIER_RANK = {"haiku": 0, "sonnet": 1, "fable": 1, "opus": 2}
 _EFFORT_RANK = {"low": 0, "medium": 1, "high": 2, "max": 3}
 
 
@@ -558,7 +558,7 @@ def tier_rank(spec: dict) -> tuple[int, int] | None:
     Only type="single" + provider="claude" specs are comparable: cluster
     types and non-Claude providers (e.g. the gemini-provider entries in
     mill-agents.yaml) have no defined ordering. Family rank comes from
-    _agent_dispatch.model_to_tier (haiku < sonnet < opus); effort rank comes
+    _agent_dispatch.model_to_tier (haiku < sonnet == fable < opus); effort rank comes
     from spec["effort"], defaulting to 0 ("low") when the key is absent --
     the shipped haiku/haiku_bulk entries carry no effort: field at all.
 
