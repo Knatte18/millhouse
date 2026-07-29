@@ -15,7 +15,13 @@ Two small, mechanical documentation gaps in `mill-plan/SKILL.md` and `mill-go/SK
 
 Verified during discussion (this is not speculative — both files were read in full):
 - `mill-plan/SKILL.md` line 246-254 (the "Max-rounds escape" in Phase: Plan Review) presents a lettered options prompt (`A) ... B) ... C) ...` with a `Recommended:` line) — the same shape `mill:conversation` documents, but the file never loads that skill anywhere.
-- `mill-go/SKILL.md` has several such prompts, none preceded by a load: the `infrastructure` stuck-type prompt (`1) Re-fire fresh (Recommended)` / `2) Block`, around line 490), the `incomplete` stuck-type prompt (`1) Skip to cleanliness gate (Recommended)` / `2) Retry from scratch`, lines 495-496), the `verify`/`logic` stuck-type prompts (lines 500, 502, 504), and the holistic-review-rounds-exhausted prompt (`1) Rethink` / `2) Skip holistic` / `3) Block`, lines 769-774).
+- `mill-go/SKILL.md` has several such prompts under `### Stuck escalation`, none preceded by a load — re-verified line-by-line against the enclosing stuck_type heading after an earlier draft of this discussion mis-attributed three of them (caught by discussion-review round 2):
+  - `infrastructure` (line 490): `1) Re-fire fresh (Recommended)` / `2) Block`.
+  - `transient`, already-retried, `commits_made > 0` branch (lines 494-496): `1) Skip to cleanliness gate (Recommended)` / `2) Retry from scratch`.
+  - `transient`, already-retried, "Otherwise" branch (line 500): three options — retry fresh, edit plan and retry, block.
+  - `incomplete`, interactive mode's second-escalation branch (line 502): three options — resume once more, edit plan and resume, block.
+  - `verify` / `logic` (line 504): three options — edit plan to clarify then retry fresh, skip this batch (block the task), block the task.
+  - Holistic-review-rounds-exhausted (a separate mechanism, not a per-batch `stuck_type`; lines 769-774): `1) Rethink` / `2) Skip holistic` / `3) Block`.
 - `mill-go/SKILL.md`'s Entry section (`## Entry`, line 12) currently opens with "**Step 0: Verify `CLAUDE_PLUGIN_ROOT`.**" (lines 14-18) — a natural insertion point for a new unconditional skill-load step, structurally mirroring mill-start's Step 0.
 - `mill-plan/SKILL.md`'s Entry section (`## Entry`, line 12) currently opens directly with step 1 ("Resolve and bind the path variables...", line 14) — no existing Step 0 to extend; a new Step 0 must be inserted before it.
 
