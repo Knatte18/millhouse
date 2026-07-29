@@ -175,10 +175,11 @@ one instance, not a one-off.
   check, the `_is_reparse_point(ep)` check, **the `_junction.remove(ep)`
   call** (the actual `os.unlink`/`os.rmdir` at removal time — a real
   `FileNotFoundError` source in its own right if the entry vanishes
-  between being detected as a symlink/junction and being removed), and
-  the recursive `_walk_strip_reparse_points(ep)` call for directories —
-  in one `try/except FileNotFoundError: continue` per entry inside the
-  loop. Separately, guard the function's own `os.scandir(root)` call at
+  between being detected as a symlink/junction and being removed),
+  **`entry.is_dir(follow_symlinks=False)`** (line 68 — the check that
+  decides whether to recurse), and the recursive
+  `_walk_strip_reparse_points(ep)` call for directories — in one
+  `try/except FileNotFoundError: continue` per entry inside the loop. Separately, guard the function's own `os.scandir(root)` call at
   the top (the case where `root` itself vanished between being listed by
   its *parent's* scandir and being recursed into) so a vanished
   subdirectory doesn't raise before the loop even starts. Apply the
@@ -399,3 +400,4 @@ fixtures, no real git/LLM calls).
 - **Q:** [discussion-review r3 NOTE] Does "Both `_junction.remove` implementations" wording imply two separate implementations exist? **A:** [auto-resolved] Reworded to "both walks' calls into the single `_junction.remove`" — there is exactly one implementation. **Why:** the original phrasing was imprecise and could mislead a plan writer into looking for a second `remove` function that doesn't exist.
 - **Q:** [discussion-review r4 GAP] Should the widened `_junction.py` `FileNotFoundError` guard reuse the existing "permission denied" log message, or get its own wording? **A:** [auto-resolved] Its own distinct message (e.g. `[junction] WARNING: vanished entry scanning {dir_path}; skipping`), added as a separate `except FileNotFoundError:` clause, not merged into the `PermissionError` branch's text. **Why:** reusing "permission denied" wording for a vanished-path case would misreport what actually happened, directly undermining the earlier Logging decision's own stated goal of an accurate skip-and-log signal.
 - **Q:** [discussion-review r4 NOTE] Does the Testing section's `os.scandir` mocking guidance account for the two walks calling `os.scandir` differently (context-manager vs plain iterable)? **A:** [auto-resolved] No — added an explicit note: `_safe_rmtree`'s walk needs a context-manager-shaped mock, `_junction.py`'s walk needs a plain-iterable mock. **Why:** verified directly against both functions' source — `_safe_rmtree.py` uses `with os.scandir(...) as it:`, `_junction.py` uses `list(os.scandir(...))`; a test author following the original undifferentiated guidance could write a mock that fails one walk's protocol.
+- **Q:** [discussion-review r5 GAP] Does the `_safe_rmtree` walk's guard-placement enumeration list every call the Rationale paragraph says needs the fix, including `entry.is_dir(follow_symlinks=False)`? **A:** [auto-resolved] No — added `entry.is_dir(follow_symlinks=False)` to the Decision's enumerated list for the `_safe_rmtree` walk, matching the `_junction.py` walk's parallel enumeration (which already included its `entry.is_dir()` equivalent). **Why:** the Rationale paragraph already named `entry.is_dir(follow_symlinks=False)` as needing the fix, but the Decision's own enumerated list for that walk omitted it — the same class of enumeration ambiguity round 2 already fixed for the removal call, recurring for the dir-check call.
