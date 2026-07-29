@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-plan-autonomy-and-validation-gaps
 branch: hanf/mill-plan-autonomy-and-validation-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T16:10:23Z'
+discussed  '2026-07-29T16:54:33Z'
 ```
