@@ -32,7 +32,9 @@ implementing  '2026-07-29T15:00:06Z'
 ```yaml
 batches:
   - name: wiki-health-check-and-messaging
-    state: pending
+    state: running
+    implementer_session: 5564b5cd-7ee3-4efd-9c70-54a1d5ebd2de
+    start_sha: 280af59c782f4002cf122bb3a8a002f67d7b17f4
   - name: mill-resume-repair
     state: pending
   - name: config-resolution-fixes-implement-and-small
