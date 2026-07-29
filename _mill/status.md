@@ -33,7 +33,9 @@ batches:
     start_sha: f1c49625994ebb214fd2dbf1df28346b1082a4ab
     commit_sha: bb11db45e7fe13348f1de890445e9d2f89dec414
   - name: plan-review-holistic-rounds-gate
-    state: pending
+    state: running
+    implementer_session: cf8ec1fe-cd7d-42b9-9332-8e0b61790bee
+    start_sha: 1716ea25880231bb691ee83581e49e2ebfc4e521
   - name: test-registry-local-overlay-redirect
     state: pending
   - name: implementer-commit-sha-validation
