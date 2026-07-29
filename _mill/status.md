@@ -29,7 +29,9 @@ implementing  '2026-07-29T17:51:08Z'
 ```yaml
 batches:
   - name: context-completeness-check
-    state: pending
+    state: running
+    implementer_session: 4e23ba95-c05e-47b5-a388-13094bedd8b6
+    start_sha: 9981122ccb4554814295084216aae814a27f8aa6
   - name: plan-guardrails-and-anti-pause
     state: pending
 ```
