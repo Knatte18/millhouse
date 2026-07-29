@@ -3,7 +3,7 @@
 ```yaml
 task: "millpy-implement.py --stage baseline: WinError 3 snapshotting a transient/generated file on Windows"
 slug: "mill-baseline-snapshot-windows-path-gap"
-approved: false
+approved: true
 started: "2026-07-29T13:43:56Z"
 parent: "main"
 root: ""
@@ -31,7 +31,7 @@ batches:
 
 ### Decision: skip-and-log, never silent
 
-- **Decision:** Every new `except FileNotFoundError:` branch introduced by this task prints an ASCII-only, module-prefixed message to `sys.stderr` before continuing/returning — `[safe-rmtree] skip vanished entry: {path}` in `_safe_rmtree.py`; `[junction] WARNING: vanished entry scanning {dir_path}; skipping` in `_junction.py`. No new branch is silent.
+- **Decision:** Every new `except FileNotFoundError:` branch introduced by this task prints an ASCII-only, module-prefixed message to `sys.stderr` before continuing/returning — `[safe-rmtree] skip vanished entry: {path}` in `_safe_rmtree.py`; in `_junction.py`, `[junction] WARNING: vanished entry scanning {dir_path}; skipping` for the directory-level guard and `[junction] WARNING: vanished entry: {ep}; skipping` for the per-entry guard (distinct wording since an entry is not a directory being scanned). No new branch is silent.
 - **Rationale:** The GitHub issue (#738) this task fixes explicitly asks for skip-and-log rather than hard-fail. A silent skip would make the race invisible again — just non-fatal instead of fatal, which is a net loss of debugging signal versus today's loud crash. `[junction]`'s new message must NOT reuse the existing `permission denied` wording from the sibling `except PermissionError:` branch — that would misreport a vanished-path race as a permission failure.
 - **Applies to:** all batches.
 

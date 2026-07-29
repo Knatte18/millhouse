@@ -81,8 +81,11 @@ authoritative for both edited files in this batch.
   check, the `remove(ep)` call, and the `entry.is_dir()` check plus the
   recursive `_walk(ep)` call it guards — in a `try/except
   FileNotFoundError: continue` per entry. On catch inside this inner
-  per-entry guard, print `f"[junction] WARNING: vanished entry scanning
-  {ep}; skipping"` to `sys.stderr` before continuing. `removed.append(ep)`
+  per-entry guard, print `f"[junction] WARNING: vanished entry: {ep};
+  skipping"` to `sys.stderr` before continuing — deliberately not reusing
+  the directory-level branch's "scanning" wording, since `ep` here is a
+  single entry being processed, not a directory being scanned.
+  `removed.append(ep)`
   must stay inside the per-entry try (an entry whose `remove(ep)` call
   raises `FileNotFoundError` must not be appended to `removed`, since it was
   never actually removed by this call — it was already gone). Do not change
@@ -155,10 +158,13 @@ authoritative for both edited files in this batch.
   `_safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path,
   ignore_errors=True)` teardown, matching cases (a)-(e)). This file
   currently does no mocking (`import unittest.mock` is not present) — add
-  `from unittest.mock import patch` for these new cases; that is a
-  deliberate, discussed departure from the file's prior real-filesystem-only
-  convention, needed because the vanished-entry race cannot be reproduced
-  with real filesystem timing.
+  `from unittest.mock import MagicMock, patch` for these new cases
+  (`MagicMock`, or an equivalent stand-in class, is needed to construct the
+  fake `DirEntry`-shaped objects cases 1-2 raise `FileNotFoundError` from —
+  matching `test-safe-rmtree.py`'s existing `MagicMock, patch` import
+  pair); that is a deliberate, discussed departure from the file's prior
+  real-filesystem-only convention, needed because the vanished-entry race
+  cannot be reproduced with real filesystem timing.
   1. **Vanished file entry mid-walk:** build a fixture worktree with at
      least two sibling entries under it, patch `_junction.os.scandir` (which
      `strip_all_in_worktree`'s `_walk` calls as a plain iterable —
