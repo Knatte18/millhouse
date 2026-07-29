@@ -42,12 +42,14 @@ Redirects `_test_registry.write_to` from the dead legacy `wiki_root/agents.yaml`
 - **Edits:**
   - `plugins/mill/unit_tests/_test_helpers.py`
 - **Creates:** none
-- **Deletes:** none
+- **Deletes:**
+  - `plugins/mill/scripts/_test_registry.py`
 - **Moves:** none
 - **Requirements:**
   - Add `import _test_registry` to `_test_helpers.py`'s existing flat-import block (same convention as its other bare `import _safe_rmtree` / `import pygit2` lines — no package prefix).
   - Rewrite `write_local_overlay(mill_dir: Path, **entries) -> None`'s body to `_test_registry._write_registry_file(mill_dir, entries)`, discarding the returned path (the function's own return type stays `-> None`). Preserve its existing external behavior exactly: it must still write the raw `entries` dict verbatim (no baseline merge) to `mill_dir / "agents.local.yaml"`.
   - Update the docstring: the sentence "the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to` is only consulted when both the template and the local overlay are empty" is now stale — `_test_registry.write_to` no longer targets the wiki `agents.yaml`; it writes the same `.millhouse/agents.local.yaml` file this function does (via the shared `_write_registry_file` helper). Rewrite that sentence to say so while keeping the surrounding explanation of `_reviewers.load()`'s merge order (plugin template + local overlay, wiki fallback only when both are empty) intact.
+  - Delete `plugins/mill/scripts/_test_registry.py` — an unreferenced duplicate of `plugins/mill/unit_tests/_test_registry.py` (identical `make_minimal_registry`/`write_to` pair, pre-dating this batch, no in-scripts importer) discovered mid-implementation: `test-review-plan-flow.py` and `test-review-discussion-flow.py` insert `plugins/mill/scripts` onto `sys.path` ahead of their own directory, so `import _test_registry` there resolved to this stale scripts-dir copy instead of the redirected `unit_tests` module, silently shadowing Card 6's redirect and breaking `write_local_overlay`'s delegation. Before the redirect both copies wrote identical content, so the shadowing was harmless; the redirect exposed it. Deleting the dead copy lets `import _test_registry` fall through to the real module on `sys.path`.
 - **Commit:** `refactor(test-helpers): delegate write_local_overlay to the shared registry writer`
 
 ### Card 8: Add a round-trip test proving the redirected write_to resolves through _reviewers.load
