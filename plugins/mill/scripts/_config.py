@@ -226,7 +226,18 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         hub_root / "plugins" / "mill" / "templates" / "mill-config.yaml",
     ):
         if _candidate.exists() and _candidate.resolve() != template_path.resolve():
-            _cand_cfg = yaml.safe_load(_candidate.read_text(encoding="utf-8")) or {}
+            try:
+                _cand_cfg = yaml.safe_load(_candidate.read_text(encoding="utf-8")) or {}
+            except yaml.YAMLError as e:
+                # A candidate that exists but fails to parse (e.g. a task worktree mid-merge-
+                # conflict, with literal conflict markers in its own template copy) must fall
+                # through exactly like .exists() being False -- try the next tuple entry rather
+                # than crashing or stopping the search.
+                print(
+                    f"[_config] warning: failed to parse {_candidate}: {e} -- skipping candidate",
+                    file=sys.stderr,
+                )
+                continue
             template_cfg = deep_merge(template_cfg, _cand_cfg)
             break
 
@@ -236,8 +247,20 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
     # 3. Apply repo-layer merge logic
     source_label = ""
     if mill_cfg_path is not None:
-        repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
-        cfg = deep_merge(cfg, repo_cfg)
+        try:
+            repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as e:
+            # A repo-layer mill-config.yaml with literal merge-conflict markers (e.g. mid-
+            # rebase or mid-merge-in) is present but unparseable. Treat that source as absent
+            # for this load rather than crashing -- the file is still "found" (source_label
+            # is still set below), it just contributes nothing to the merged config.
+            print(
+                f"[_config] warning: failed to parse {mill_cfg_path}: {e} -- skipping repo-layer config",
+                file=sys.stderr,
+            )
+            repo_cfg = {}
+        else:
+            cfg = deep_merge(cfg, repo_cfg)
         source_label = "mill-config.yaml"
     else:
         print(
