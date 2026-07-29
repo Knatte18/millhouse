@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-plan-skill-doc-gaps
 branch: hanf/mill-plan-skill-doc-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-plan/SKILL.md doc gaps: missing mill:conversation load, Phase: Plan commit step omits push'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-29T18:17:42Z'
 discussed  '2026-07-29T18:44:05Z'
+planning  '2026-07-29T18:55:20Z'
 ```
