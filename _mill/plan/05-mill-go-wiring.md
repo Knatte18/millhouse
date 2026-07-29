@@ -93,9 +93,7 @@ Add the tree-guard safeguard (mill-go had none) to both of mill-go's review loop
 
     `Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
 
-    Insert immediately after that same sentence and before the `"If \`dispatch == subprocess\` or \`psmux\`:"` line that follows it:
-
-    `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
+    Step 3.6 has no subprocess/psmux branch of its own to bracket — "Re-run sub-step 3" is a cross-reference, not a repeated dispatch-mode branch, so the two checkpoints above (before/after sub-item 3) are the complete pair for this call site. Do not insert a third checkpoint here; there is no `"If \`dispatch == subprocess\` or \`psmux\`:"` line inside step 3.6 to anchor one against.
 - **Commit:** `docs(mill): add tree-guard safeguard to mill-go's Holistic Review loop`
 
 ## Batch Tests
