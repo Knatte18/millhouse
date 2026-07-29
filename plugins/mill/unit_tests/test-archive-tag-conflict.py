@@ -6,6 +6,9 @@ Covers:
   - create_or_resolve: ancestor SHA -- force updates tag to new SHA
   - create_or_resolve: divergent SHA -- moves old tag aside with -01 suffix
   - create_or_resolve: multiple divergences -- increments suffix to -02, -03, etc.
+  - create_or_resolve: push outcomes (push_failed/push_error) for each of the
+    four actions, using a bare-remote fixture with a pre-receive hook that
+    deterministically accepts or rejects specific ref pushes.
 """
 from __future__ import annotations
 
@@ -92,6 +95,52 @@ class TestArchiveTagConflict(unittest.TestCase):
             text=True,
         )
         return result.stdout.strip()
+
+    def _init_bare_remote(
+        self, worktree: Path, tmp: Path, reject_ref_names: set[str] | None = None
+    ) -> Path:
+        """
+        Create a bare "origin" remote for worktree, optionally rejecting specific refs.
+
+        When reject_ref_names is given, installs a pre-receive hook that reads each
+        "<old> <new> <refname>" line git feeds it on stdin and exits non-zero (after
+        printing "rejected: <refname>" to stderr) if any line's refname is in
+        reject_ref_names, else exits 0. This gives deterministic, per-push
+        accept/reject control without depending on --force-with-lease's
+        remote-tracking-ref semantics (this fixture never runs `git fetch`, so real
+        lease-conflict detection would be git-version-dependent).
+
+        Returns the bare repo path.
+        """
+        remote_path = tmp / "remote.git"
+        subprocess.run(
+            ["git", "init", "--bare", str(remote_path)],
+            check=True,
+            capture_output=True,
+        )
+        if reject_ref_names:
+            hook_path = remote_path / "hooks" / "pre-receive"
+            reject_list = " ".join(sorted(reject_ref_names))
+            hook_script = (
+                "#!/bin/sh\n"
+                "while read old new refname; do\n"
+                "  for rejected in {}; do\n"
+                '    if [ "$refname" = "$rejected" ]; then\n'
+                '      echo "rejected: $refname" >&2\n'
+                "      exit 1\n"
+                "    fi\n"
+                "  done\n"
+                "done\n"
+                "exit 0\n"
+            ).format(reject_list)
+            hook_path.write_text(hook_script)
+            hook_path.chmod(0o755)
+        subprocess.run(
+            ["git", "-C", str(worktree), "remote", "add", "origin", str(remote_path)],
+            check=True,
+            capture_output=True,
+        )
+        return remote_path
 
     def test_no_existing_tag_creates(self) -> None:
         """When no tag exists, create_or_resolve creates the tag."""
@@ -319,6 +368,176 @@ class TestArchiveTagConflict(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(main_tag_sha.stdout.strip(), sha_after_second)
+
+    def test_created_push_success_reports_no_failure(self) -> None:
+        """When the remote accepts the push, created action reports push_failed=False."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+            self._init_bare_remote(worktree, tmp_path)
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "created")
+            self.assertIs(result["push_failed"], False)
+            self.assertIsNone(result["push_error"])
+
+    def test_noop_reports_no_push_attempted(self) -> None:
+        """The noop action never attempts a push, so it always reports push_failed=False."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+
+            # Create the tag pointing at HEAD -- no remote needed since noop never pushes.
+            subprocess.run(
+                ["git", "-C", str(worktree), "tag", "archive/test-slug", "HEAD"],
+                check=True,
+                capture_output=True,
+            )
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "noop")
+            self.assertIs(result["push_failed"], False)
+            self.assertIsNone(result["push_error"])
+
+    def test_created_push_rejected_reports_push_failed_true(self) -> None:
+        """When the remote's pre-receive hook rejects the new tag, push_failed is True."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+            self._init_bare_remote(
+                worktree, tmp_path, reject_ref_names={"refs/tags/archive/test-slug"}
+            )
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "created")
+            self.assertIs(result["push_failed"], True)
+            self.assertTrue(result["push_error"])
+
+    def test_force_update_push_rejected_reports_push_failed_true(self) -> None:
+        """When the remote rejects the force-with-lease push, push_failed is True."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+
+            # Create tag pointing at ancestor, then advance HEAD -- mirrors
+            # test_ancestor_sha_force_updates's setup.
+            subprocess.run(
+                ["git", "-C", str(worktree), "tag", "archive/test-slug", "HEAD"],
+                check=True,
+                capture_output=True,
+            )
+            self._make_commit(worktree, "commit2")
+            self._make_commit(worktree, "commit3")
+
+            self._init_bare_remote(
+                worktree, tmp_path, reject_ref_names={"refs/tags/archive/test-slug"}
+            )
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "force_update")
+            self.assertIs(result["push_failed"], True)
+            self.assertTrue(result["push_error"])
+
+    def test_moved_aside_partial_push_failure_names_which_tag(self) -> None:
+        """When only the primary-tag push is rejected, push_error names "primary" only."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+
+            # Create tag, then diverge via an orphan branch -- mirrors
+            # test_divergent_sha_moves_aside_to_01's setup.
+            subprocess.run(
+                ["git", "-C", str(worktree), "tag", "archive/test-slug", "HEAD"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "checkout", "--orphan", "orphan-branch"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "rm", "-rf", "."],
+                check=False,
+                capture_output=True,
+            )
+            (worktree / "orphan-file.txt").write_text("orphan commit")
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", "orphan-file.txt"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "commit", "-m", "orphan commit"],
+                check=True,
+                capture_output=True,
+            )
+
+            # Reject only the primary tag; the moved-aside tag push is allowed.
+            self._init_bare_remote(
+                worktree, tmp_path, reject_ref_names={"refs/tags/archive/test-slug"}
+            )
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "moved_aside")
+            self.assertEqual(result["moved_aside_to"], "archive/test-slug-01")
+            self.assertIs(result["push_failed"], True)
+            self.assertIn("primary", result["push_error"])
+            self.assertNotIn("moved-aside", result["push_error"])
+
+    def test_moved_aside_both_pushes_rejected_combines_errors(self) -> None:
+        """When both moved-aside and primary pushes are rejected, both are named in push_error."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            worktree, _ = self._init_repo(tmp_path / "work")
+
+            subprocess.run(
+                ["git", "-C", str(worktree), "tag", "archive/test-slug", "HEAD"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "checkout", "--orphan", "orphan-branch"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "rm", "-rf", "."],
+                check=False,
+                capture_output=True,
+            )
+            (worktree / "orphan-file.txt").write_text("orphan commit")
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", "orphan-file.txt"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(worktree), "commit", "-m", "orphan commit"],
+                check=True,
+                capture_output=True,
+            )
+
+            self._init_bare_remote(
+                worktree,
+                tmp_path,
+                reject_ref_names={
+                    "refs/tags/archive/test-slug",
+                    "refs/tags/archive/test-slug-01",
+                },
+            )
+
+            result = _archive_tag.create_or_resolve(worktree, "test-slug", "HEAD")
+
+            self.assertEqual(result["action"], "moved_aside")
+            self.assertIs(result["push_failed"], True)
+            self.assertIn("primary", result["push_error"])
+            self.assertIn("moved-aside", result["push_error"])
 
 
 if __name__ == "__main__":

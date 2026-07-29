@@ -41,8 +41,8 @@ os.environ.setdefault("WIKI_DAEMON_SKIP_GIT", "1")
 os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
 
 import _safe_rmtree  # noqa: E402
+import _test_registry  # noqa: E402
 import pygit2  # noqa: E402
-import yaml  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from wiki._parse import parse_home_md  # noqa: E402
 
@@ -307,13 +307,12 @@ def write_local_overlay(mill_dir: Path, **entries) -> None:
 
     `_reviewers.load()` merges the plugin template (always present and
     non-empty in this source tree) with `.millhouse/agents.local.yaml` --
-    the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to`
-    is only consulted when both the template and the local overlay are
-    empty, which never happens here. Tests that need a specific named
-    reviewer spec to actually resolve via `reviewer_override` must seed it
-    here, mirroring the local-overlay convention already established in
-    test-reviewers.py.
+    the wiki `agents.yaml` fallback is only consulted when both the
+    template and the local overlay are empty, which never happens here.
+    `_test_registry.write_to` now targets this same `.millhouse/agents.local.yaml`
+    file (via the shared `_write_registry_file` helper) rather than the wiki.
+    Tests that need a specific named reviewer spec to actually resolve via
+    `reviewer_override` must seed it here, mirroring the local-overlay
+    convention already established in test-reviewers.py.
     """
-    (mill_dir / "agents.local.yaml").write_text(
-        yaml.safe_dump(entries, default_flow_style=False), encoding="utf-8"
-    )
+    _test_registry._write_registry_file(mill_dir, entries)

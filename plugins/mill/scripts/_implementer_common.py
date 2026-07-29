@@ -382,6 +382,14 @@ def _batch_completeness_stuck(
     }
 
 
+_COMMIT_SHA_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+
+
+def _is_valid_commit_sha(value: str) -> bool:
+    """Return True when value is a well-formed full-length git commit SHA (40 or 64 lowercase hex characters)."""
+    return bool(_COMMIT_SHA_RE.match(value))
+
+
 def _attach_commit_sha(stuck_dict: dict, project_root: Path) -> dict:
     """
     Attach the current HEAD SHA to stuck_dict as 'commit_sha' on success.
@@ -1649,14 +1657,23 @@ def _forward_output(
             ["git", "rev-parse", "HEAD"],
             cwd=project_root,
         )
-        if result.returncode == 0:
+        if result.returncode == 0 and _is_valid_commit_sha(result.stdout.strip()):
             parsed["commit_sha"] = result.stdout.strip()
             violations = _cleanliness.compute_scope_violations(project_root, git_root)
             if violations:
                 parsed["scope_violations"] = violations
             print(json.dumps(parsed))
         else:
-            print(json.dumps(parsed))
+            # The corrective git rev-parse HEAD call failed or returned a
+            # malformed SHA -- never pass an agent's unvalidated self-reported
+            # commit_sha through on the success path (see #744 postmortem).
+            _correction_failure = {
+                "status": "stuck",
+                "stuck_type": "logic",
+                "reason": "commit_sha correction failed: git rev-parse HEAD did not return a well-formed SHA",
+                "session_id": session_id or parsed.get("session_id") or "unknown",
+            }
+            print(json.dumps(_correction_failure))
         return 0
     try:
         if (

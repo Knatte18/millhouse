@@ -727,7 +727,7 @@ def run(
             except _reviewers.ReviewerError as exc:
                 raise ReviewError(str(exc)) from exc
             holistic_name = reviewer_override
-        elif holistic_name is None or cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0:
+        elif holistic_name is None or holistic_max_rounds == 0:
             holistic_spec = None
         else:
             holistic_spec = _reviewers.resolve(registry, holistic_name)

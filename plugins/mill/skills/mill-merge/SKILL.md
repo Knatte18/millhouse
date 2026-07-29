@@ -285,6 +285,8 @@ result = _archive_tag.create_or_resolve(worktree, '<slug>', '$CHILD_BRANCH')
 print(f'[mill-merge] archive-tag action: {result[\"action\"]} -- tag: {result[\"tag\"]}')
 if result['moved_aside_to']:
     print(f'[mill-merge] prior tag preserved as {result[\"moved_aside_to\"]}')
+if result.get('push_failed'):
+    print(f'[mill-merge] WARNING: archive tag push failed -- reconcile {result[\"tag\"]} with remote manually: {result.get(\"push_error\")}')
 "
 ```
 
