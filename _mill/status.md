@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plugin-manifest-validator
+phase: approved-review-plan-counting-tests
 slug: mill-review-verdict-and-counting-gaps
 branch: hanf/mill-review-verdict-and-counting-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-07-29T04:42:20Z'
 approved-review-plan-counting-fix  '2026-07-29T04:47:07Z'
 approved-plan-review-templates  '2026-07-29T04:49:35Z'
 approved-plugin-manifest-validator  '2026-07-29T04:53:35Z'
+approved-review-plan-counting-tests  '2026-07-29T05:00:19Z'
 ```
 
 ## Batches
@@ -47,7 +48,8 @@ batches:
     start_sha: 70c4dd3a4aed3f4c3541ba511aa1b77c63c2ea0d
     commit_sha: 6b765dd9a0f0c4521a3d4c24b916bad327decd2a
   - name: review-plan-counting-tests
-    state: running
+    state: approved
     implementer_session: a4e567a7-703c-4e94-9130-d1ee553b0590
     start_sha: ea72613d1059f8035427eb7bfdd1da1d3612b20b
+    commit_sha: b6b90907db6c3877b8219e2ce7a05c4df85d4de4
 ```
