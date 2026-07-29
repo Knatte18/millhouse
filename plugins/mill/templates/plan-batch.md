@@ -19,6 +19,23 @@ verify: scope MUST match what the batch touches — usually a single test file o
 
 verify: also accepts the `{cwd: hub|git_root, command: <string>}` mapping form as an alternative to the plain string above (normalized by `_plan_dag.parse_verify_field`). The plain string implies `cwd: git_root`. In a nested layout (`_paths.resolve_hub_path() != _paths.resolve_git_root()`), if this batch's verify command is naturally hub-relative, write it as the mapping form with `cwd: hub` instead of the plain-string form. If it is naturally git-root-relative, keep the plain-string form (or an explicit `cwd: git_root` mapping) — the field describes how the command is actually written, not a forced choice.
 
+_One `### Card N` per card. Cards are logical sub-sections, not files.
+Number cards globally across all batches (no restart-from-1 inside
+each batch) so the reviewer and implementer can cite card numbers
+unambiguously. Fields per card:_
+
+- **Context:** every file the implementer reads but does not change. Non-empty. One backtick-wrapped path per indented bullet. Context: is an allowlist — the implementer reads ONLY the files listed here. A file needed but not listed is a plan defect. Files listed in Edits: are implicitly read — do not repeat them in Context:.
+- **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.
+- **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
+- **Deletes:** files the implementer deletes. One backtick-wrapped path per indented bullet. Multi-line bullet form supported. When a field has nothing, write the literal "none" on the same line as the field label.
+- **Moves:** old-to-new rename pairs this card performs. List immediately after `Deletes:` and before `Requirements:`. Each entry is a sub-bullet of the form `` `old/path` -> `new/path` `` (ASCII ` -> `, backtick-wrapped paths). Write the literal "none" on the same line when the card has no renames. A path expressed in `Moves:` must NOT also appear in `Creates:` or `Deletes:`. A rename-plus-extraction is one `Moves:` pair (the relocated file) plus a separate `Creates:` entry (the newly extracted file).
+- **Requirements:** what the card must achieve. Use stable identifiers — name the specific function, class, or constant being added, changed, or deleted (e.g., "replace `_load_config` in `mill-claim.py` with `from _config import load_config`"). Never write vague prose ("refactor X") without the specific identifier. Exact assertion shapes live in tests, not here.
+- **Commit:** one-line commit message the implementer will use. Accepts the literal "none" for a verification-only card whose sole job is confirming earlier work (e.g. a grep-and-confirm gate) -- valid ONLY when Edits:/Creates:/Deletes:/Moves: on the same card are ALL also "none" (enforced by the commit-none-with-content validator check); a card with any real edit must always carry a real commit message.
+
+Context/Edits/Creates/Deletes/Moves fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label. Moves: sub-bullets use the two-path form `` `old` -> `new` `` rather than a single path. Commit: also participates in the "none" convention, but unlike the other fields its "none" is conditional, not free-standing: it is valid only when Edits:/Creates:/Deletes:/Moves: on the same card are all also "none" (enforced by the commit-none-with-content validator check).
+
+Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only; `Creates:` targets do not exist yet). The code-reviewer bulks `Context: ∪ Edits: ∪ Creates:` (all files exist post-implementation).
+
 Strip this HTML comment before writing.
 -->
 # Batch: <BATCH_NAME>
@@ -53,23 +70,6 @@ consume. List the batch-local decisions that differ from `## Shared
 Decisions` in the overview._
 
 ## Cards
-
-_One `### Card N` per card. Cards are logical sub-sections, not files.
-Number cards globally across all batches (no restart-from-1 inside
-each batch) so the reviewer and implementer can cite card numbers
-unambiguously. Fields per card:_
-
-- **Context:** every file the implementer reads but does not change. Non-empty. One backtick-wrapped path per indented bullet. Context: is an allowlist — the implementer reads ONLY the files listed here. A file needed but not listed is a plan defect. Files listed in Edits: are implicitly read — do not repeat them in Context:.
-- **Edits:** files the implementer changes (implicitly also read — do not repeat in Context:). One backtick-wrapped path per indented bullet.
-- **Creates:** files the implementer creates. One backtick-wrapped path per indented bullet. When a field has nothing, write the literal "none" on the same line as the field label.
-- **Deletes:** files the implementer deletes. One backtick-wrapped path per indented bullet. Multi-line bullet form supported. When a field has nothing, write the literal "none" on the same line as the field label.
-- **Moves:** old-to-new rename pairs this card performs. List immediately after `Deletes:` and before `Requirements:`. Each entry is a sub-bullet of the form `` `old/path` -> `new/path` `` (ASCII ` -> `, backtick-wrapped paths). Write the literal "none" on the same line when the card has no renames. A path expressed in `Moves:` must NOT also appear in `Creates:` or `Deletes:`. A rename-plus-extraction is one `Moves:` pair (the relocated file) plus a separate `Creates:` entry (the newly extracted file).
-- **Requirements:** what the card must achieve. Use stable identifiers — name the specific function, class, or constant being added, changed, or deleted (e.g., "replace `_load_config` in `mill-claim.py` with `from _config import load_config`"). Never write vague prose ("refactor X") without the specific identifier. Exact assertion shapes live in tests, not here.
-- **Commit:** one-line commit message the implementer will use. Accepts the literal "none" for a verification-only card whose sole job is confirming earlier work (e.g. a grep-and-confirm gate) -- valid ONLY when Edits:/Creates:/Deletes:/Moves: on the same card are ALL also "none" (enforced by the commit-none-with-content validator check); a card with any real edit must always carry a real commit message.
-
-Context/Edits/Creates/Deletes/Moves fields contain ONLY backtick-wrapped paths in bullet form. No inline parenthetical commentary, no line-range suffixes (e.g. ":55-65"). Inline notes belong in Requirements:. When a field has nothing, write the literal "none" on the same line as the field label. Moves: sub-bullets use the two-path form `` `old` -> `new` `` rather than a single path. Commit: also participates in the "none" convention, but unlike the other fields its "none" is conditional, not free-standing: it is valid only when Edits:/Creates:/Deletes:/Moves: on the same card are all also "none" (enforced by the commit-none-with-content validator check).
-
-Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only; `Creates:` targets do not exist yet). The code-reviewer bulks `Context: ∪ Edits: ∪ Creates:` (all files exist post-implementation).
 
 ### Card N: <short title>
 

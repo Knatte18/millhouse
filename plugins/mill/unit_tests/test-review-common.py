@@ -1544,6 +1544,94 @@ def main() -> int:
         assert result == [wiki_file], f"Got {result}"
         print("PASS: resolve_ref_paths wiki/ prefix ignores git_root fallback")
 
+    # resolve_ref_paths: soft_fail_gitignored=True skips a missing ref confirmed git-ignored
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        (repo_root / ".gitignore").write_text(".scratch/probe.md\n", encoding="utf-8")
+        result = resolve_ref_paths(
+            [".scratch/probe.md"],
+            repo_root,
+            None,
+            git_root=repo_root,
+            soft_fail_gitignored=True,
+        )
+        assert result == [], f"Got {result}"
+        print(
+            "PASS: resolve_ref_paths soft_fail_gitignored skips confirmed-ignored missing ref"
+        )
+
+    # resolve_ref_paths: soft_fail_gitignored=True still hard-fails on a missing ref NOT git-ignored
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        (repo_root / ".gitignore").write_text(".scratch/probe.md\n", encoding="utf-8")
+        try:
+            resolve_ref_paths(
+                ["not_ignored_missing.py"],
+                repo_root,
+                None,
+                git_root=repo_root,
+                soft_fail_gitignored=True,
+            )
+            print(
+                "FAIL: resolve_ref_paths soft_fail_gitignored: expected ReviewError for non-ignored missing ref",
+                file=sys.stderr,
+            )
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print(
+                "PASS: resolve_ref_paths soft_fail_gitignored still hard-fails non-ignored missing ref"
+            )
+
+    # resolve_ref_paths: soft_fail_gitignored omitted (default False) -> still hard-fails on git-ignored missing ref
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        (repo_root / ".gitignore").write_text(".scratch/probe.md\n", encoding="utf-8")
+        try:
+            resolve_ref_paths(
+                [".scratch/probe.md"],
+                repo_root,
+                None,
+                git_root=repo_root,
+            )
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError with soft_fail_gitignored omitted",
+                file=sys.stderr,
+            )
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print(
+                "PASS: resolve_ref_paths hard-fails git-ignored missing ref when soft_fail_gitignored omitted"
+            )
+
+    # resolve_ref_paths: soft_fail_gitignored=False explicit -> still hard-fails on git-ignored missing ref
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        (repo_root / ".gitignore").write_text(".scratch/probe.md\n", encoding="utf-8")
+        try:
+            resolve_ref_paths(
+                [".scratch/probe.md"],
+                repo_root,
+                None,
+                git_root=repo_root,
+                soft_fail_gitignored=False,
+            )
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError with soft_fail_gitignored=False",
+                file=sys.stderr,
+            )
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print(
+                "PASS: resolve_ref_paths hard-fails git-ignored missing ref when soft_fail_gitignored=False explicit"
+            )
+
     # compute_creates_union: empty plan dir returns empty set
     with _test_helpers.safe_temp_dir() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")

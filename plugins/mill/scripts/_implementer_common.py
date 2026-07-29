@@ -692,8 +692,12 @@ def _run_verify_gate(
     When verify_cmd is not None, runs the command via bash on Windows (so the
     POSIX env-prefix syntax is honoured) and via subprocess.run with shell=True
     elsewhere, capturing output as text. On non-zero return code, returns a stuck
-    dict with stuck_type="verify" and reason set to the last 2000 characters of
-    stdout+stderr. On success (rc 0) or when verify_cmd is None, returns None.
+    dict with stuck_type="verify". When the combined stdout+stderr is over 2000
+    characters, reason is an omitted-content marker (byte count of the omitted
+    prefix, plus up to 20 extracted earlier-failure summary lines when any are
+    found) followed by the last 2000 characters; under 2000 characters, reason
+    is the stripped output unchanged. On success (rc 0) or when verify_cmd is
+    None, returns None.
 
     On Windows (sys.platform == "win32"), applies an additional gate: if the output
     contains a benign cleanup-race signature and no test failures (per
@@ -768,13 +772,28 @@ def _run_verify_gate(
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
-            # Use last 2000 characters of the output
+            # Truncation enriches the reason with an omitted-content marker plus up
+            # to 20 extracted earlier-failure summary lines recovered from the
+            # omitted portion (#731) -- without this, an earlier failing
+            # package/test's identity can be silently dropped when a later, less-
+            # informative failure lands in the kept tail.
             output_stripped = output.strip()
-            reason = (
-                output_stripped[-2000:]
-                if len(output_stripped) > 2000
-                else output_stripped
-            )
+            if len(output_stripped) > 2000:
+                tail = output_stripped[-2000:]
+                omitted = output_stripped[:-2000]
+                fail_lines = [
+                    line for line in omitted.splitlines()
+                    if line.startswith((
+                        "--- FAIL:", "FAIL\t", "FAILED ", "--- FAIL ", "FAIL -- ",
+                    ))
+                ][:20]
+                marker = f"[... {len(omitted)} earlier chars omitted"
+                if fail_lines:
+                    marker += "; earlier failures:\n" + "\n".join(fail_lines)
+                marker += " ...]\n"
+                reason = marker + tail
+            else:
+                reason = output_stripped
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
