@@ -50,6 +50,7 @@ def prepare(
     *,
     max_rounds: int | None = None,
     agent_mode: bool = False,
+    reviewer_override: str | None = None,
 ) -> dict:
     """Prepare a holistic discussion review by rendering the prompt.
 
@@ -58,6 +59,11 @@ def prepare(
             (adds the single Write carve-out for the .out.md report).
             Defaults to False so run()'s `--stage full` fallback keeps
             receiving today's non-agent rule unchanged.
+        reviewer_override: When not None, overrides the config-resolved
+            discussion-review holistic reviewer for this call only --
+            nothing is written back to config. Bypasses the `reviewer:
+            null` disablement (but not the separate `rounds: 0` check
+            above), and skips the large-prompt auto-switch entirely.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -78,13 +84,24 @@ def prepare(
             f"Round {round_n} exceeds max {effective_max} for discussion review"
         )
 
-    # 3. Resolve reviewer spec via registry
-    reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
-    if reviewer_name is None:
-        raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+    # 3. Resolve reviewer spec via registry. An explicit reviewer_override
+    # bypasses the `reviewer: null` disablement below; the config-resolved
+    # path is otherwise unchanged.
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
-    spec = _reviewers.resolve(registry, reviewer_name)
+    if reviewer_override is not None:
+        try:
+            spec = _reviewers.resolve_reviewer_override(
+                registry, reviewer_override, reject_non_claude=True
+            )
+        except _reviewers.ReviewerError as exc:
+            raise ReviewError(str(exc)) from exc
+        reviewer_name = reviewer_override
+    else:
+        reviewer_name = cfg["roles"]["discussion-review"]["holistic"]["reviewer"]
+        if reviewer_name is None:
+            raise ReviewError("discussion-review holistic reviewer is null; nothing to do")
+        spec = _reviewers.resolve(registry, reviewer_name)
     mode = "tool-use" if spec.get("tooluse") else "bulk"
     tool_rule = build_tool_rule(mode, agent_mode)
 
@@ -113,9 +130,10 @@ def prepare(
         reviewer_model=reviewer_name,
     )
 
-    spec, reviewer_name = maybe_switch_spec_for_large_prompt(
-        prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
-    )
+    if reviewer_override is None:
+        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+            prompt_text, spec, reviewer_name, cfg, "discussion-review", "holistic", registry
+        )
 
     return {
         "prompt_text": prompt_text,
