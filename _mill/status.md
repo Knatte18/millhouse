@@ -42,7 +42,9 @@ batches:
     start_sha: cc264c59d1ff50ac164a4eecce8574c13b0b4abf
     commit_sha: f6ee5329c1012eb384530ae43409397a7a729fcd
   - name: merge-in-marker-verification
-    state: pending
+    state: running
+    implementer_session: 3db4006d-ad1d-4123-9ef3-548e186d185e
+    start_sha: 044fb39a9d01e6b5f27c0b5d4280b77c2a7079bb
   - name: merge-in-semantic-duplication
     state: pending
   - name: dirty-parent-worktree-preflight
