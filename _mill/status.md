@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-recovery-log
+phase: approved-mill-start-wiring
 slug: mill-start-tracked-files-vanish-mid-review
 branch: hanf/mill-start-tracked-files-vanish-mid-review
 plan: _mill/plan
@@ -30,6 +30,7 @@ planned  '2026-07-29T08:07:10Z'
 implementing  '2026-07-29T09:08:46Z'
 approved-treeguard-helper  '2026-07-29T09:14:24Z'
 approved-status-recovery-log  '2026-07-29T09:17:54Z'
+approved-mill-start-wiring  '2026-07-29T09:20:49Z'
 ```
 
 ## Batches
@@ -47,9 +48,10 @@ batches:
     start_sha: 58daf44a2c35ee2e00e4a314473d91398f254930
     commit_sha: 0c3281f453312ce941f28157c2fb37129bf8d31f
   - name: mill-start-wiring
-    state: running
+    state: approved
     implementer_session: 8695e1bd-293c-4f75-acc4-e14897845cab
     start_sha: c142539e70df3579d2a3e49aa2cd0d83ee9e2c71
+    commit_sha: 35c48a2feedcee1343bab3f91a12650d7c93fe18
   - name: mill-plan-wiring
     state: pending
   - name: mill-go-wiring
