@@ -188,11 +188,13 @@ one instance, not a one-off.
   (`entry.is_symlink()`, `_is_junction_or_symlink(ep)`, **the
   `remove(ep)` call**, `entry.is_dir()`, and the recursive `_walk(ep)`
   call) in the same per-entry `try/except FileNotFoundError: continue`.
-  Both `_junction.remove` implementations already re-check
-  `os.path.lexists`/idempotency at their own entry, but that check
-  happens before this fix's guard is entered — it narrows, but does not
-  close, the removal-time TOCTOU window this decision now explicitly
-  covers.
+  Both walks' calls into the single `_junction.remove` (there is exactly
+  one implementation, in `_junction.py`, called from both
+  `_safe_rmtree._walk_strip_reparse_points` and `_junction.py`'s own
+  `_walk`) already re-check `os.path.lexists`/idempotency at that
+  function's own entry, but that check happens before this fix's guard
+  is entered — it narrows, but does not close, the removal-time TOCTOU
+  window this decision now explicitly covers.
 - Rationale: `_is_reparse_point`/`_is_junction_or_symlink` already
   swallow `OSError`/`AttributeError` internally, but `entry.is_symlink()`,
   `entry.is_dir(follow_symlinks=False)`, and the `_junction.remove(ep)`
@@ -322,9 +324,13 @@ fixtures, no real git/LLM calls).
   processed.
 - **Scenario 3 — `strip_all_in_worktree` specifically:** since its walk
   runs unconditionally as `remove_safe`'s step 1 (before any git call),
-  add a `test-worktree.py` or `test-junction.py` case asserting
-  `remove_safe` itself completes when the underlying worktree tree has a
-  vanished entry, not just the lower-level walk function in isolation.
+  add a `test-junction.py` case asserting `strip_all_in_worktree` itself
+  (not just its inner `_walk` in isolation) completes when the
+  underlying worktree tree has a vanished entry. Coverage stays confined
+  to the two Scope-named files (`test-safe-rmtree.py`,
+  `test-junction.py`) — `test-worktree.py` is not touched by this task
+  (see Technical context: it is a `remove_safe`-level beneficiary of
+  this fix with no changes of its own required).
 - **Regression guard (existing coverage, must still pass):** every
   existing case in `test-safe-rmtree.py` (blacklist refusal, containment
   refusal, junction/symlink stripping before rmtree — the wiki-wipe
@@ -369,3 +375,5 @@ fixtures, no real git/LLM calls).
 - **Q:** [discussion-review r1 NOTE] Is `mill-merge` actually a `safe_rmtree`/`remove_safe` beneficiary as originally claimed? **A:** [auto-resolved] No — corrected. **Why:** grep of `millpy-merge-in-subagent.py` and `mill-merge/SKILL.md` shows no reference to worktree teardown; `mill-merge/SKILL.md` states teardown is handled by `/mill-cleanup`. The attribution was factually wrong and has been removed/corrected.
 - **Q:** [discussion-review r2 GAP] Does the Testing section accurately describe `test-junction.py`'s existing coverage? **A:** [auto-resolved] No — corrected to name the actual 5 cases (`strips-undeclared-junction`, `multiple-junctions`, `non-junction-untouched`, `missing-worktree`, `nested-junction`); the claimed permission-denied and create/remove/points_to coverage does not exist in that file. **Why:** verified by reading the file's docstring and case list directly — the original claim was inaccurate.
 - **Q:** [discussion-review r2 GAP] Is the `_junction.remove(ep)` / `remove(ep)` call itself inside the per-entry `try/except FileNotFoundError` guard, or ambiguous? **A:** [auto-resolved] Explicitly inside — the Decisions section now names the removal call directly as a covered TOCTOU source (the `os.unlink`/`os.rmdir` it performs can itself raise `FileNotFoundError` if the entry vanishes between detection and removal). **Why:** the removal call is the same TOCTOU class as the detection calls already covered by "wrap the whole per-entry body"; leaving it unnamed left real ambiguity about whether the fix's stated scope actually included it.
+- **Q:** [discussion-review r3 GAP] Testing Scenario 3 offered `test-worktree.py` as an alternative to `test-junction.py`, contradicting Technical Context's claim that `test-worktree.py` needs no changes — which wins? **A:** [auto-resolved] `test-junction.py` only; dropped the `test-worktree.py` option from Scenario 3. **Why:** Scope's "In" bullet and Technical Context both already commit to `test-worktree.py` being an unmodified beneficiary of the fix, not a file this task adds coverage to; the Scenario 3 wording was the stale/contradicting side, not the other two sections.
+- **Q:** [discussion-review r3 NOTE] Does "Both `_junction.remove` implementations" wording imply two separate implementations exist? **A:** [auto-resolved] Reworded to "both walks' calls into the single `_junction.remove`" — there is exactly one implementation. **Why:** the original phrasing was imprecise and could mislead a plan writer into looking for a second `remove` function that doesn't exist.
