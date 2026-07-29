@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: mill-merge-topology-and-squash-restore-gaps
 branch: hanf/mill-merge-topology-and-squash-restore-gaps
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-07-29T06:57:03Z'
 plan-review-r1  '2026-07-29T07:05:51Z'
 plan-fix-r1  '2026-07-29T07:05:51Z'
 plan-review-r2  '2026-07-29T07:11:23Z'
+planned  '2026-07-29T07:11:41Z'
 ```
