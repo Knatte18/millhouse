@@ -953,66 +953,53 @@ def run(
                                 })
                                 # error entry appended above; else branch writes the review file on success
                             else:
-                                verdict = parse_verdict(raw)
                                 # Second NEED_CONTEXT propagates to caller untouched.
-                                blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                                blocking_count += count_unrecognized_severity_findings(
-                                    raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                                )
-                                path = write_review_file(
-                                    reviews_dir, "plan", round_n, raw, scope="holistic"
-                                )
+                                review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                                 print(
-                                    f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                                    f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                                    f"file={Path(review_entry['file']).name}",
                                     file=sys.stderr,
                                 )
                                 reviews.append({
                                     "scope": "holistic",
                                     "round": round_n,
-                                    "verdict": verdict,
-                                    "blocking_count": blocking_count,
-                                    "file": str(path),
+                                    "verdict": review_entry["verdict"],
+                                    "blocking_count": review_entry["blocking_count"],
+                                    "nit_count": review_entry["nit_count"],
+                                    "file": review_entry["file"],
                                     "session_id": session_id,
                                 })
                         else:
                             # No resolvable paths to re-attach — propagate NEED_CONTEXT.
-                            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                            blocking_count += count_unrecognized_severity_findings(
-                                raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                            )
-                            path = write_review_file(
-                                reviews_dir, "plan", round_n, raw, scope="holistic"
-                            )
+                            review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                             print(
-                                f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                                f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                                f"file={Path(review_entry['file']).name}",
                                 file=sys.stderr,
                             )
                             reviews.append({
                                 "scope": "holistic",
                                 "round": round_n,
-                                "verdict": verdict,
-                                "blocking_count": blocking_count,
-                                "file": str(path),
+                                "verdict": review_entry["verdict"],
+                                "blocking_count": review_entry["blocking_count"],
+                                "nit_count": review_entry["nit_count"],
+                                "file": review_entry["file"],
                                 "session_id": session_id,
                             })
                     else:
-                        blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-                        blocking_count += count_unrecognized_severity_findings(
-                            raw, blocking_severity="BLOCKING", nit_severity="NIT"
-                        )
-                        path = write_review_file(
-                            reviews_dir, "plan", round_n, raw, scope="holistic"
-                        )
+                        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
                         print(
-                            f"[_review_plan] holistic: verdict={verdict} file={path.name}",
+                            f"[_review_plan] holistic: verdict={review_entry['verdict']} "
+                            f"file={Path(review_entry['file']).name}",
                             file=sys.stderr,
                         )
                         reviews.append({
                             "scope": "holistic",
                             "round": round_n,
-                            "verdict": verdict,
-                            "blocking_count": blocking_count,
-                            "file": str(path),
+                            "verdict": review_entry["verdict"],
+                            "blocking_count": review_entry["blocking_count"],
+                            "nit_count": review_entry["nit_count"],
+                            "file": review_entry["file"],
                             "session_id": session_id,
                         })
                 except ReviewError as exc:
