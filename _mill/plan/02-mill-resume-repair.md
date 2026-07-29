@@ -56,8 +56,8 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
 - **Moves:** none
 - **Requirements:** New module, following the `_spawn_core.py` pattern of a small per-skill orchestration helper (module docstring with a "Public API" list, same style as `_worktree.py`/`_spawn_core.py`). Public API:
   - `check_uncommitted_changes(worktree: Path) -> list[str]` — returns `_pygit2_util.status_porcelain(worktree, include_untracked=True)` verbatim. An empty list means the worktree is clean.
-  - `relocate_and_scaffold(old_worktree: Path, canonical_path: Path, hub_root: Path, wiki_path: Path) -> None` — calls, in order: `_worktree.move(old_worktree, canonical_path, cwd=hub_root)` (pass `hub_root` as `cwd`, not `old_worktree`, since `old_worktree` is the directory being relocated by the very command); `_worktree.copy_millhouse(hub_root / ".millhouse", canonical_path / ".millhouse", exclude={"wiki", "active"})` (same exclude set `mill-spawn` uses via this same helper); `_junction.create(wiki_path, canonical_path / ".wiki")`. Document in the docstring that `hub_root` MUST be the directory that actually contains `.millhouse/` for the hub -- resolved by the caller via `_paths.resolve_hub_path(cwd=_paths.resolve_main_worktree_root(git_root))` (Card 10 Step 4 does this) so the resolution is both immune to `old_worktree`'s own cwd (never consults `old_worktree`'s own `.millhouse/`, since `old_worktree` is, by construction, the under-scaffolded worktree this function is relocating) and `hub_relative_path`-aware (correct for a main worktree whose own hub `.millhouse` lives in a git subdirectory). Passing `_paths.resolve_main_worktree_root`'s result directly, with no `resolve_hub_path` step, is NOT sufficient -- it is not `hub_relative_path`-aware and `_worktree.copy_millhouse` silently no-ops (does not raise) when its `src` argument does not exist, turning a wrong `hub_root` into a silent empty-`.millhouse` scaffold rather than a visible error.
-  This function does **not** re-verify cleanliness or re-check the canonical-path collision itself — those are the caller's responsibility, run as separate pre-check steps by `mill-resume/SKILL.md`'s Phase 1b (Card 10) before this function is ever invoked. Let `_worktree.WorktreeError` (from `move`), `ValueError` (from `_junction.create` when `link_path` already exists), and `OSError` (from `copy_millhouse`) propagate uncaught — Phase 1b's embedded Python snippet catches and reports them to the operator.
+  - `relocate_and_scaffold(old_worktree: Path, canonical_path: Path, hub_root: Path, wiki_path: Path) -> None` — **idempotent, retry-safe**: (1) if `canonical_path` is not already registered as a worktree (check via `_worktree.list_worktrees(cwd=hub_root)` -- compare against `canonical_path` resolved), call `_worktree.move(old_worktree, canonical_path, cwd=hub_root)` (pass `hub_root` as `cwd`, not `old_worktree`, since `old_worktree` is the directory being relocated by the very command); if `canonical_path` is already registered there (a retry after a prior call's `move()` succeeded but a later step failed), skip the move entirely -- do not re-attempt it. (2) call `_worktree.copy_millhouse(hub_root / ".millhouse", canonical_path / ".millhouse", exclude={"wiki", "active"})` unconditionally (same exclude set `mill-spawn` uses via this same helper) -- already safe to re-run: its own docstring states existing files in `dst` are overwritten. (3) create the `.wiki` junction only if not already present: `if not (canonical_path / ".wiki").exists(): _junction.create(wiki_path, canonical_path / ".wiki")` -- `_junction.create` itself raises `ValueError` on an existing `link_path`, so this guard is what makes step 3 retry-safe. This three-step idempotency means calling `relocate_and_scaffold` again with the same arguments after a partial failure (move succeeded, scaffold steps didn't) completes the remaining work instead of re-raising or re-attempting an already-done step. Document in the docstring that `hub_root` MUST be the directory that actually contains `.millhouse/` for the hub -- resolved by the caller via `_paths.resolve_hub_path(cwd=_paths.resolve_main_worktree_root(git_root))` (Card 10 Step 4 does this) so the resolution is both immune to `old_worktree`'s own cwd (never consults `old_worktree`'s own `.millhouse/`, since `old_worktree` is, by construction, the under-scaffolded worktree this function is relocating) and `hub_relative_path`-aware (correct for a main worktree whose own hub `.millhouse` lives in a git subdirectory). Passing `_paths.resolve_main_worktree_root`'s result directly, with no `resolve_hub_path` step, is NOT sufficient -- it is not `hub_relative_path`-aware and `_worktree.copy_millhouse` silently no-ops (does not raise) when its `src` argument does not exist, turning a wrong `hub_root` into a silent empty-`.millhouse` scaffold rather than a visible error.
+  This function does **not** re-verify cleanliness itself, and does not by itself distinguish "canonical_path is a resumable interrupted repair for this same task" from "canonical_path is a genuine collision with an unrelated worktree" -- that distinction is the caller's responsibility (`mill-resume/SKILL.md` Phase 1b Step 2, Card 10). Let `_worktree.WorktreeError` (from `move`), `ValueError` (from `_junction.create` when `link_path` already exists despite the guard, e.g. a non-junction file at that path), and `OSError` (from `copy_millhouse`) propagate uncaught — Phase 1b's embedded Python snippet catches and reports them to the operator.
 - **Commit:** `feat: add _resume_repair module for mill-resume's off-canonical worktree repair`
 
 ### Card 9: New unit test `test-resume-repair.py`
@@ -83,6 +83,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   - `plugins/mill/scripts/_worktree.py`
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_junction.py`
+  - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/wiki/_client.py`
 - **Edits:**
   - `plugins/mill/skills/mill-resume/SKILL.md`
@@ -163,18 +164,35 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
 
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-  import _paths
+  import _paths, _status
   git_root = _paths.resolve_git_root()
   container_path = _paths.resolve_container_path(git_root)
   canonical = _paths.resolve_canonical_worktree_path(container_path, '<slug>')
   print(canonical)
-  print('EXISTS' if canonical.exists() else 'FREE')
+  if not canonical.exists():
+      print('FREE')
+  else:
+      candidate_status = canonical / '_mill' / 'status.md'
+      if candidate_status.exists() and _status.read(candidate_status).get('slug') == '<slug>':
+          print('RESUMABLE')
+      else:
+          print('COLLISION')
   "
   ```
 
-  If `EXISTS`: halt -- tell the user the canonical path already exists
-  (stale entry or another worktree) and to resolve manually before
-  re-running `mill-resume`. Do not proceed; no mutation attempted.
+  If `COLLISION`: halt -- tell the user the canonical path already exists
+  (a different task, or an unrelated directory) and to resolve manually
+  before re-running `mill-resume`. Do not proceed; no mutation attempted.
+
+  If `RESUMABLE`: the canonical path already exists and its own
+  `_mill/status.md` carries the *same* slug being repaired -- this is a
+  worktree from a prior Phase 1b run whose `move()` step succeeded but
+  whose scaffold steps (`.millhouse` copy / `.wiki` junction) did not
+  complete. Skip Step 3's confirmation prompt (the operator already
+  approved this relocation in the prior run) and go directly to Step 4 --
+  `relocate_and_scaffold` (Card 8) is idempotent and will skip the
+  already-done `move()`, re-run the safe-to-repeat `.millhouse` copy, and
+  create the `.wiki` junction only if it is not already present.
 
   **Step 3 -- confirm with the user.**
 
@@ -210,9 +228,16 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   "
   ```
 
-  If this fails (`git worktree move` itself failed -- locked worktree,
-  cross-filesystem move, permission error -- or the scaffold steps failed),
-  report the printed stderr and stop. No further mutation is attempted.
+  If this fails, report the printed stderr and stop. Tell the user:
+  re-running `mill-resume` will retry safely -- `relocate_and_scaffold`
+  (Card 8) is idempotent, so if the failure was in `git worktree move`
+  itself (locked worktree, cross-filesystem move, permission error),
+  nothing was mutated and the retry starts the move over from `<cwd>`;
+  if the move already succeeded and a later scaffold step (`.millhouse`
+  copy or `.wiki` junction) is what failed, the worktree now lives at
+  `<canonical>` and Step 2's `RESUMABLE` branch on the next run will
+  route straight back into Step 4 to finish scaffolding without
+  re-attempting the move.
 
   `hub_root` resolution is two steps, each closing a different bug: first
   `main_root = _paths.resolve_main_worktree_root(git_root)` -- resolved
@@ -249,7 +274,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   already exists, and scaffolding is already done by Step 4 above).
   ```
 
-  Finally, update the `## Error Conditions` table (`plugins/mill/skills/mill-resume/SKILL.md:161-171`): change the `.millhouse/config.local.yaml missing` and `.wiki junction missing` rows' Action column to `Stop, tell user to run mill-setup (only when _mill/status.md is also absent at cwd -- otherwise branch to Phase 1b)`, and add four new rows: `wiki daemon health check fails (Phase 1)` -> `Halt; tell user to inspect the printed reason`; `Phase 1b: worktree has uncommitted changes` -> `Halt with a clear message; worktree untouched`; `Phase 1b: canonical path already occupied` -> `Halt identifying the collision; no mutation attempted`; `Phase 1b: git worktree move fails` -> `Report the error with stderr; no further mutation attempted`.
+  Finally, update the `## Error Conditions` table (`plugins/mill/skills/mill-resume/SKILL.md:161-171`): change the `.millhouse/config.local.yaml missing` and `.wiki junction missing` rows' Action column to `Stop, tell user to run mill-setup (only when _mill/status.md is also absent at cwd -- otherwise branch to Phase 1b)`, and add five new rows: `wiki daemon health check fails (Phase 1)` -> `Halt; tell user to inspect the printed reason`; `Phase 1b: worktree has uncommitted changes` -> `Halt with a clear message; worktree untouched`; `Phase 1b: canonical path occupied by an unrelated worktree/task` -> `Halt identifying the collision; no mutation attempted`; `Phase 1b: canonical path occupied by this same task's own interrupted repair` -> `Skip confirmation, resume scaffolding via idempotent relocate_and_scaffold`; `Phase 1b: relocate_and_scaffold fails (move or scaffold step)` -> `Report the error with stderr and stop; safe to re-run mill-resume -- retry is idempotent`.
 - **Commit:** `feat(mill-resume): repair off-canonical under-scaffolded worktrees in a new Phase 1b`
 
 ### Card 11: New integration test `test-resume-relocate.py`
@@ -267,7 +292,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   - `plugins/mill/integration_tests/test-resume-relocate.py`
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** New standalone integration test (real `git worktree`/`git init` operations under `tempfile`, per the established `plugins/mill/integration_tests/` convention for real-git-topology tests — no LLM, no claude subprocess), following `test-worktree-sibling-resolution.py`'s and `test-hub-relative-path.py`'s structure (module docstring with a "Run from hub root: `PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-resume-relocate.py`" line; exits 0 on PASS, 1 on any assertion failure). Build a fixture: a bare "origin" repo, a main worktree clone of it (acting as the hub, with a `.millhouse/` dir and a fake wiki clone dir), and a second worktree created via `_worktree.create()` at a **non-canonical** path (not `<container>/wts/<slug>`) with a committed `_mill/status.md` on its branch but no `.millhouse`/`.wiki` of its own. Cover the five scenarios from `discussion.md`'s Testing section: (a) clean off-canonical worktree with `_mill/status.md` present, `.millhouse`/`.wiki` missing -> `_resume_repair.relocate_and_scaffold` (called directly, simulating Phase 1b's Step 4) succeeds: worktree now registered at the canonical path, `.millhouse`/`.wiki` present there. (b) same fixture but with an uncommitted modified file -> `_resume_repair.check_uncommitted_changes` (simulating Step 1) returns non-empty, and the test asserts the worktree is left untouched when the caller halts on that result (no `relocate_and_scaffold` call made). (c) simulate the "user declines" path by simply asserting no filesystem/git mutation occurs when the test does not call `relocate_and_scaffold` at all (Step 3 has no python component to test directly -- documented as a no-op assertion with a comment explaining why). (d) canonical path already occupied (create a stub directory there first) -> assert the caller's collision check (`canonical.exists()`, simulating Step 2) is `True` and, separately, that calling `relocate_and_scaffold` anyway raises (git refuses to move onto an existing path) -- both worktrees left untouched afterward. (e) after a successful `relocate_and_scaffold` call, assert the returned/computed canonical path is what a subsequent `_paths.resolve_hub_path()`/`_paths.require_status_path()`-style read against the new location would use -- i.e. assert `(canonical / "_mill" / "status.md").exists()` and the pre-move path no longer does, covering `mill-resume-cwd-after-move`'s "operate on the new path" requirement. (f) hub-in-subdirectory main worktree (mirroring issue #728's NORCE.Models repro, e.g. the hub's own `.millhouse/` lives at `<main-worktree>/src/csharp/NORCE.Models/.millhouse` with a `hub_relative_path` stub at the main worktree root, rather than at `<main-worktree>/.millhouse` directly) -- run Card 10 Step 4's exact two-step resolution (`main_root = _paths.resolve_main_worktree_root(git_root)` then `hub_root = _paths.resolve_hub_path(cwd=main_root)`) against this fixture and assert `hub_root` resolves to the subdirectory, not the main worktree root; then call `relocate_and_scaffold` with that `hub_root` and assert the canonical path's `.millhouse/` contains the subdirectory hub's marker file (not empty) -- regression-guards the silent-no-op failure mode where `_worktree.copy_millhouse` does not raise when its `src` argument does not exist.
+- **Requirements:** New standalone integration test (real `git worktree`/`git init` operations under `tempfile`, per the established `plugins/mill/integration_tests/` convention for real-git-topology tests — no LLM, no claude subprocess), following `test-worktree-sibling-resolution.py`'s and `test-hub-relative-path.py`'s structure (module docstring with a "Run from hub root: `PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-resume-relocate.py`" line; exits 0 on PASS, 1 on any assertion failure). Build a fixture: a bare "origin" repo, a main worktree clone of it (acting as the hub, with a `.millhouse/` dir and a fake wiki clone dir), and a second worktree created via `_worktree.create()` at a **non-canonical** path (not `<container>/wts/<slug>`) with a committed `_mill/status.md` on its branch but no `.millhouse`/`.wiki` of its own. Cover the five scenarios from `discussion.md`'s Testing section: (a) clean off-canonical worktree with `_mill/status.md` present, `.millhouse`/`.wiki` missing -> `_resume_repair.relocate_and_scaffold` (called directly, simulating Phase 1b's Step 4) succeeds: worktree now registered at the canonical path, `.millhouse`/`.wiki` present there. (b) same fixture but with an uncommitted modified file -> `_resume_repair.check_uncommitted_changes` (simulating Step 1) returns non-empty, and the test asserts the worktree is left untouched when the caller halts on that result (no `relocate_and_scaffold` call made). (c) simulate the "user declines" path by simply asserting no filesystem/git mutation occurs when the test does not call `relocate_and_scaffold` at all (Step 3 has no python component to test directly -- documented as a no-op assertion with a comment explaining why). (d) canonical path already occupied by an unrelated worktree (create a stub `_mill/status.md` there first carrying a *different* slug) -> assert the caller's collision check (simulating Step 2: `canonical.exists()` is `True` and the status.md slug does not match) classifies this as a genuine collision, not `RESUMABLE`, and that calling `relocate_and_scaffold` anyway raises (git refuses to move onto an existing path) -- both worktrees left untouched afterward. (e) after a successful `relocate_and_scaffold` call, assert the returned/computed canonical path is what a subsequent `_paths.resolve_hub_path()`/`_paths.require_status_path()`-style read against the new location would use -- i.e. assert `(canonical / "_mill" / "status.md").exists()` and the pre-move path no longer does, covering `mill-resume-cwd-after-move`'s "operate on the new path" requirement. (f) hub-in-subdirectory main worktree (mirroring issue #728's NORCE.Models repro, e.g. the hub's own `.millhouse/` lives at `<main-worktree>/src/csharp/NORCE.Models/.millhouse` with a `hub_relative_path` stub at the main worktree root, rather than at `<main-worktree>/.millhouse` directly) -- run Card 10 Step 4's exact two-step resolution (`main_root = _paths.resolve_main_worktree_root(git_root)` then `hub_root = _paths.resolve_hub_path(cwd=main_root)`) against this fixture and assert `hub_root` resolves to the subdirectory, not the main worktree root; then call `relocate_and_scaffold` with that `hub_root` and assert the canonical path's `.millhouse/` contains the subdirectory hub's marker file (not empty) -- regression-guards the silent-no-op failure mode where `_worktree.copy_millhouse` does not raise when its `src` argument does not exist. (g) partial-failure retry -- from a fresh copy of the (a) fixture, call `_worktree.move(old, canonical, cwd=hub)` directly (simulating `relocate_and_scaffold`'s first step succeeding on a prior run) without running the scaffold steps; assert `canonical` now exists with no `.millhouse`/`.wiki`; assert the caller's collision check (simulating Step 2 against this state) classifies it as `RESUMABLE` (status.md at `canonical` carries the matching slug); then call `relocate_and_scaffold(old, canonical, hub, wiki)` again (simulating Step 4's retry) and assert it completes without attempting to re-move (no `WorktreeError` from a second `move()` call against an already-relocated path) and that `.millhouse`/`.wiki` are now present at `canonical` -- regression-guards the idempotent-retry fix for a `move()`-succeeded-but-scaffold-failed interruption.
 - **Commit:** `test(integration): add mill-resume off-canonical relocate+scaffold coverage`
 
 ## Batch Tests
