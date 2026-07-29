@@ -671,17 +671,30 @@ def main() -> int:
         try:
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True, exist_ok=True)
-            # 01-a approved in r1
+            # 01-a approved in r1, with a real [NIT] finding to prove the
+            # carryforward path computes a genuine nit_count, not just 0.
+            APPROVE_WITH_NIT_TEXT = (
+                "# Review: test\n\n### [NIT] cosmetic\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
             (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
-                APPROVE_TEXT, encoding="utf-8"
+                APPROVE_WITH_NIT_TEXT, encoding="utf-8"
             )
             # 02-b NOT approved (REQUEST_CHANGES)
             (reviews_dir / "20260429-000002-plan-review-02-b-r1.md").write_text(
                 REQUEST_CHANGES_TEXT, encoding="utf-8"
             )
-            # 03-c approved in r1
+            # 03-c approved in r1, with an off-vocabulary [MAJOR] heading
+            # alongside verdict: APPROVE -- _scan_approved_batches carries this
+            # forward because parse_verdict still reads APPROVE, exercising
+            # the round-3 finding that verdict is never cross-validated
+            # against the review's actual finding counts.
+            APPROVE_WITH_UNRECOGNIZED_SEVERITY_TEXT = (
+                "# Review: test\n\n### [MAJOR] mislabeled issue\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
             (reviews_dir / "20260429-000003-plan-review-03-c-r1.md").write_text(
-                APPROVE_TEXT, encoding="utf-8"
+                APPROVE_WITH_UNRECOGNIZED_SEVERITY_TEXT, encoding="utf-8"
             )
             # holistic-r1: marks round 1 as complete so detect_resume_round returns None
             (reviews_dir / "20260429-000004-plan-review-r1.md").write_text(
@@ -720,7 +733,20 @@ def main() -> int:
             assert rv_b["session_id"] == "sid-fresh-b", f"02-b should be fresh, got {rv_b['session_id']!r}"
             assert rv_hol["session_id"] == "sid-fresh-hol", f"holistic should be fresh, got {rv_hol['session_id']!r}"
 
-            print("PASS test8: skip-approved happy path — 01-a/03-c carryforward, 02-b/holistic fresh")
+            # Carryforward counts: 01-a's real [NIT] heading and 03-c's
+            # off-vocabulary [MAJOR] heading (folds into blocking_count).
+            assert rv_a["blocking_count"] == 0, f"expected 01-a blocking_count=0, got {rv_a['blocking_count']}"
+            assert rv_a["nit_count"] == 1, f"expected 01-a nit_count=1, got {rv_a['nit_count']}"
+            assert rv_c["blocking_count"] == 1, f"expected 03-c blocking_count=1, got {rv_c['blocking_count']}"
+            assert rv_c["nit_count"] == 0, f"expected 03-c nit_count=0, got {rv_c['nit_count']}"
+
+            # Aggregate: the fresh 02-b/holistic dispatches return zero-finding
+            # APPROVE_TEXT/REQUEST_CHANGES_TEXT, so only the two carryforward
+            # entries above contribute to the run-level aggregate.
+            assert r.blocking_count == 1, f"expected aggregate blocking_count=1, got {r.blocking_count}"
+            assert r.nit_count == 1, f"expected aggregate nit_count=1, got {r.nit_count}"
+
+            print("PASS test8: skip-approved happy path — 01-a/03-c carryforward, 02-b/holistic fresh, blocking/nit counts correct")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test8: {exc}", file=sys.stderr)
