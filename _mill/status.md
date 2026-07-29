@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-dirty-parent-worktree-preflight
+phase: holistic-reviewing
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: _mill/plan
@@ -33,6 +33,7 @@ approved-config-yaml-crash-fallback  '2026-07-29T04:48:14Z'
 approved-merge-in-marker-verification  '2026-07-29T04:57:22Z'
 approved-merge-in-semantic-duplication  '2026-07-29T04:59:58Z'
 approved-dirty-parent-worktree-preflight  '2026-07-29T05:04:36Z'
+holistic-reviewing  '2026-07-29T05:04:53Z'
 ```
 
 ## Batches
