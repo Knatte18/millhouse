@@ -56,7 +56,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
 - **Moves:** none
 - **Requirements:** New module, following the `_spawn_core.py` pattern of a small per-skill orchestration helper (module docstring with a "Public API" list, same style as `_worktree.py`/`_spawn_core.py`). Public API:
   - `check_uncommitted_changes(worktree: Path) -> list[str]` — returns `_pygit2_util.status_porcelain(worktree, include_untracked=True)` verbatim. An empty list means the worktree is clean.
-  - `relocate_and_scaffold(old_worktree: Path, canonical_path: Path, hub_root: Path, wiki_path: Path) -> None` — calls, in order: `_worktree.move(old_worktree, canonical_path, cwd=hub_root)` (pass `hub_root` as `cwd`, not `old_worktree`, since `old_worktree` is the directory being relocated by the very command); `_worktree.copy_millhouse(hub_root / ".millhouse", canonical_path / ".millhouse", exclude={"wiki", "active"})` (same exclude set `mill-spawn` uses via this same helper); `_junction.create(wiki_path, canonical_path / ".wiki")`.
+  - `relocate_and_scaffold(old_worktree: Path, canonical_path: Path, hub_root: Path, wiki_path: Path) -> None` — calls, in order: `_worktree.move(old_worktree, canonical_path, cwd=hub_root)` (pass `hub_root` as `cwd`, not `old_worktree`, since `old_worktree` is the directory being relocated by the very command); `_worktree.copy_millhouse(hub_root / ".millhouse", canonical_path / ".millhouse", exclude={"wiki", "active"})` (same exclude set `mill-spawn` uses via this same helper); `_junction.create(wiki_path, canonical_path / ".wiki")`. Document in the docstring that `hub_root` MUST be the true main-worktree root (e.g. from `_paths.resolve_main_worktree_root`), never a value derived by consulting `old_worktree`'s own `.millhouse/` -- `old_worktree` is, by construction, the under-scaffolded worktree this function is relocating, so any cwd-walk-based hub resolution rooted there can silently resolve back to `old_worktree` itself.
   This function does **not** re-verify cleanliness or re-check the canonical-path collision itself — those are the caller's responsibility, run as separate pre-check steps by `mill-resume/SKILL.md`'s Phase 1b (Card 10) before this function is ever invoked. Let `_worktree.WorktreeError` (from `move`), `ValueError` (from `_junction.create` when `link_path` already exists), and `OSError` (from `copy_millhouse`) propagate uncaught — Phase 1b's embedded Python snippet catches and reports them to the operator.
 - **Commit:** `feat: add _resume_repair module for mill-resume's off-canonical worktree repair`
 
@@ -66,6 +66,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   - `plugins/mill/scripts/_resume_repair.py`
   - `plugins/mill/scripts/_worktree.py`
   - `plugins/mill/scripts/_junction.py`
+  - `plugins/mill/scripts/_pygit2_util.py`
   - `plugins/mill/unit_tests/test-worktree.py`
 - **Edits:** none
 - **Creates:**
@@ -147,7 +148,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
   import sys
-  import _resume_repair
+  import _paths, _resume_repair
   lines = _resume_repair.check_uncommitted_changes(_paths.resolve_git_root())
   if lines:
       print('\n'.join(lines), file=sys.stderr)
@@ -197,7 +198,7 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   git_root = _paths.resolve_git_root()
   container_path = _paths.resolve_container_path(git_root)
   canonical = _paths.resolve_canonical_worktree_path(container_path, '<slug>')
-  hub_root = _paths.resolve_hub_path()
+  hub_root = _paths.resolve_main_worktree_root(git_root)
   wiki_path = _paths.resolve_wiki_path(git_root)
   try:
       _resume_repair.relocate_and_scaffold(git_root, canonical, hub_root, wiki_path)
@@ -211,6 +212,19 @@ External interface this batch produces: `_worktree.move()` (mirrors `_worktree.c
   If this fails (`git worktree move` itself failed -- locked worktree,
   cross-filesystem move, permission error -- or the scaffold steps failed),
   report the printed stderr and stop. No further mutation is attempted.
+
+  `hub_root` is resolved via `_paths.resolve_main_worktree_root(git_root)`,
+  not `_paths.resolve_hub_path()` -- Phase 1 branches into Phase 1b when
+  *either* `.millhouse/config.local.yaml` *or* `.wiki` is missing, so
+  `.millhouse/config.local.yaml` can still exist at cwd (the `.wiki`-only-
+  missing case). `resolve_hub_path()`'s cwd-walk would then find that
+  local `.millhouse/config.local.yaml` immediately and return the broken
+  worktree itself as `hub_root` -- exactly the `cwd == old_worktree`
+  situation `move()`'s own docstring (Card 7) warns against.
+  `resolve_main_worktree_root()` resolves purely from git's own
+  common-directory metadata and never consults cwd's `.millhouse/`, so it
+  is correct regardless of which of the two Phase 1 conditions triggered
+  the branch into Phase 1b.
 
   **Step 5 -- report and continue.**
 
