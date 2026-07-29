@@ -32,7 +32,9 @@ implementing  '2026-07-29T14:08:39Z'
 ```yaml
 batches:
   - name: plan-validate-pipeline
-    state: pending
+    state: running
+    implementer_session: 8739fa1e-10c7-4e80-a01e-6e4c5cbaf2b8
+    start_sha: 7e10e6d74c50bbc15afa62a27b8911cabdea005d
   - name: review-code-soft-fail
     state: pending
   - name: verify-gate-enrichment
