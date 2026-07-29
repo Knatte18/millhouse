@@ -36,5 +36,7 @@ batches:
     start_sha: 887f781028c868ded33b234b22dbbac51bab9003
     commit_sha: d08374a82f5ff6d1c5e50d73774908ddda14ec9d
   - name: step5-checkout-guard
-    state: pending
+    state: running
+    implementer_session: 0867af3f-2d21-472e-a694-d4d2047ee34e
+    start_sha: 2008d3ad2f4afebc8832160d0f8ee060f8ab9977
 ```
