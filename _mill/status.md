@@ -51,7 +51,9 @@ batches:
     start_sha: 715220c3cc0fae02bcfea61ca1dc603291230c7f
     commit_sha: 165930aec8eea2a6735b37039c792ef6033686b8
   - name: plan-review-cli
-    state: pending
+    state: running
+    implementer_session: e7e1d8c8-ce83-4802-ac37-e64f437f6acf
+    start_sha: ca8cccaa9d8bddb87b76805ac2df638d9e48e189
   - name: unit-tests-discussion
     state: pending
   - name: unit-tests-plan
