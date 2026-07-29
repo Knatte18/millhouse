@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-pipeline-silent-failure-and-report-bugs
 branch: hanf/mill-pipeline-silent-failure-and-report-bugs
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-07-29T16:10:13Z'
 discussed  '2026-07-29T16:44:55Z'
 planning  '2026-07-29T17:27:34Z'
 plan-fix-r1  '2026-07-29T17:33:25Z'
+planned  '2026-07-29T17:33:49Z'
 ```
