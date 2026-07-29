@@ -35,6 +35,7 @@ Public API:
     get_module_verify_baseline(status_path) -> str | None
     set_module_verify_baseline(status_path, value) -> None
     clear_module_verify_baseline(status_path) -> None
+    append_recovery_log(status_path, timestamp, restored_paths) -> None
 """
 from __future__ import annotations
 
@@ -528,6 +529,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 # ---------------------------------------------------------------------------
 
 _BATCHES_HEADING = "## Batches"
+_RECOVERY_LOG_HEADING = "## Tracked-file recovery log"
 _BATCH_ALLOWED_KEYS = {
     "state",
     "implementer_session",
@@ -1022,3 +1024,118 @@ def set_batch_fields(
             _write_batches(status_path, batches)
             return
     raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
+
+
+# ---------------------------------------------------------------------------
+# Tracked-file recovery log — audit trail for _treeguard.check_and_restore
+# ---------------------------------------------------------------------------
+
+
+def _find_recovery_log_block(lines: list[str]) -> tuple[int, int, int, int] | None:
+    r"""Locate the recovery-log section's heading and fenced-text body.
+
+    Structurally mirrors ``_find_batches_block``, but scans for
+    ``_RECOVERY_LOG_HEADING`` and the ``\`\`\`text`` fence (``_TIMELINE_FENCE``)
+    instead of ``_BATCHES_HEADING`` and a yaml fence — the recovery log is a
+    plain append-only text block, not a yaml list.
+
+    Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)``
+    where:
+    - ``heading_idx`` points at the ``## Tracked-file recovery log`` line,
+    - ``fence_open_idx`` points at the opening ``\`\`\`text``,
+    - ``fence_close_idx`` points at the closing ``\`\`\``,
+    - ``section_end_idx`` is the last-line-inclusive end of the section
+      (the next ``## `` heading or EOF).
+
+    Returns ``None`` if the heading is absent.
+    """
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == _RECOVERY_LOG_HEADING:
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+
+    # Fence discovery is scoped to the section (until next ## heading).
+    section_end_idx = len(lines) - 1
+    for j in range(heading_idx + 1, len(lines)):
+        if lines[j].startswith("## "):
+            section_end_idx = j - 1
+            break
+
+    fence_open_idx = None
+    for j in range(heading_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == _TIMELINE_FENCE:
+            fence_open_idx = j
+            break
+    if fence_open_idx is None:
+        raise ValueError(
+            f"{_RECOVERY_LOG_HEADING} section missing its {_TIMELINE_FENCE} block"
+        )
+    fence_close_idx = None
+    for j in range(fence_open_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```":
+            fence_close_idx = j
+            break
+    if fence_close_idx is None:
+        raise ValueError(
+            f"{_RECOVERY_LOG_HEADING} {_TIMELINE_FENCE} block is unterminated"
+        )
+    return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
+
+
+def append_recovery_log(
+    status_path: Path, timestamp: str, restored_paths: list[str]
+) -> None:
+    """
+    Append one audit row recording a tracked-file restore to ``status.md``.
+
+    The ``## Tracked-file recovery log`` section is created lazily on first
+    call, mirroring ``_write_batches``'s lazy-insert-if-absent pattern for
+    ``## Batches`` — but unlike ``## Batches``, which replaces its whole
+    section on every write, this section is append-only on every subsequent
+    call, matching ``## Timeline``'s append-only convention instead: each
+    call adds one new row inside the existing fenced block, never rewriting
+    or dropping a prior row.
+
+    This function is the caller's explicit, separate audit-append step.
+    ``_treeguard.check_and_restore`` itself never calls this function or
+    touches ``status.md`` — callers that want the deletion-and-restore event
+    logged must call this helper themselves after inspecting
+    ``check_and_restore``'s return value.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        timestamp: ISO-8601 UTC timestamp for the restore event; written
+            through ``_yaml_writer.quote_scalar`` to match ``append_phase``'s
+            quoted timeline-row convention.
+        restored_paths: The hub-relative paths that were restored, in the
+            order ``_treeguard.check_and_restore`` reported them. Joined
+            with ``", "`` into a single row.
+
+    Raises:
+        ValueError: the recovery-log heading is present but its fenced
+            block is missing or unterminated.
+    """
+    _require_path(status_path, "append_recovery_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    new_row = f"{quote_scalar(timestamp)}  {', '.join(restored_paths)}"
+
+    located = _find_recovery_log_block(lines)
+    if located is None:
+        # Append a new section at the end with leading blank separator,
+        # mirroring _write_batches's absent-section branch.
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend([_RECOVERY_LOG_HEADING, "", _TIMELINE_FENCE, new_row, "```"])
+    else:
+        # Insert into the existing fenced block — an append, never a
+        # whole-section replace (the one behavioral difference from
+        # _write_batches, called out in the docstring above).
+        _heading_idx, _fence_open, fence_close_idx, _section_end = located
+        lines.insert(fence_close_idx, new_row)
+
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
