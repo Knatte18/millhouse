@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-tracked-files-vanish-mid-review
 branch: hanf/mill-start-tracked-files-vanish-mid-review
 plan: _mill/plan
@@ -27,4 +27,21 @@ plan-review-r4  '2026-07-29T08:01:42Z'
 plan-fix-r4  '2026-07-29T08:01:42Z'
 plan-review-r5  '2026-07-29T08:06:57Z'
 planned  '2026-07-29T08:07:10Z'
+implementing  '2026-07-29T09:08:46Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: treeguard-helper
+    state: pending
+  - name: status-recovery-log
+    state: pending
+  - name: mill-start-wiring
+    state: pending
+  - name: mill-plan-wiring
+    state: pending
+  - name: mill-go-wiring
+    state: pending
 ```
