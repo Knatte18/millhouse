@@ -28,7 +28,7 @@ This batch resolves two small, mechanical documentation gaps in mill-v2's orches
 - **Moves:** none
 - **Requirements:**
 
-  Make the following seven surgical text replacements in `plugins/mill/skills/mill-plan/SKILL.md`. Each is given as an exact old block to find and the exact new block to replace it with — the fenced-block content below is copied byte-for-byte from the current source file (no extra indentation added for this plan's own list nesting); use it verbatim as the search/replace text. Do not touch any other text in the file.
+  Make the following seven surgical text replacements in `plugins/mill/skills/mill-plan/SKILL.md`. Each is given as an exact old block to find and the exact new block to replace it with. Every "Find:" block below is copied byte-for-byte from the current source file (no extra indentation added for this plan's own list nesting) — use it verbatim to locate the target text. Every "Replace with:" block is new authored text (not present in source today) to paste in as-given. Do not touch any other text in the file.
 
   **1. Insert Step 0 at the top of `## Entry`** (before the existing step 1). Find:
 ```
@@ -128,7 +128,7 @@ set overview frontmatter `approved: true` via direct Edit, commit on the task br
 - **Moves:** none
 - **Requirements:**
 
-  Insert a new **Step 0b** in `## Entry`, immediately after the existing `**Step 0: Verify \`CLAUDE_PLUGIN_ROOT\`.**` block (including its bash snippet and the "Path variable rule" paragraph) and before the existing numbered step 1. The fenced-block content below is copied byte-for-byte from the current source file (0 leading spaces — both quoted lines sit at column 0 in the source); use it verbatim as the search/replace text. Find:
+  Insert a new **Step 0b** in `## Entry`, immediately after the existing `**Step 0: Verify \`CLAUDE_PLUGIN_ROOT\`.**` block (including its bash snippet and the "Path variable rule" paragraph) and before the existing numbered step 1. The "Find:" block below is copied byte-for-byte from the current source file (0 leading spaces — both quoted lines sit at column 0 in the source) — use it verbatim to locate the target text. The "Replace with:" block is new authored text (not present in source today) to paste in as-given. Find:
 ```
 **Path variable rule:** All Bash tool calls in this skill use `${CLAUDE_PLUGIN_ROOT}` directly — it is an environment variable already present in the shell. Do NOT read or memorize its value. Write the variable reference; the shell expands it at runtime. The full absolute path must never appear in a command string.
 

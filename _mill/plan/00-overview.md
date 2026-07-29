@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-plan/SKILL.md doc gaps: missing mill:conversation load, Phase: Plan commit step omits push"
 slug: "mill-plan-skill-doc-gaps"
-approved: false
+approved: true
 started: "20260729-185355"
 parent: "main"
 root: ""
