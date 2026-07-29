@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: Cross-machine resume, wiki-daemon health-check, and hub-in-subdirectory config resolution gaps
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-29T10:51:42Z'
 discussed  '2026-07-29T13:49:16Z'
+planning  '2026-07-29T14:06:17Z'
 ```
