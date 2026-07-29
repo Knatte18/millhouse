@@ -763,6 +763,279 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # run() reviewer_override -- dispatches the named override, not config
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "tooluse": False,
+                    }
+                },
+            )
+            stub.seed([(APPROVE_TEXT, "sid-run-override")])
+            r = discussion_run(
+                cfg, SLUG, mill_dir, project_root, wiki_root,
+                reviewer_override="override-reviewer",
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            assert Path(r.reviews[0]["file"]).exists(), (
+                f"expected review file to exist, got {r.reviews[0]['file']!r}"
+            )
+            print(
+                "PASS run() reviewer_override: named override dispatches, "
+                "not config's reviewer"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL run() reviewer_override: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL run() reviewer_override (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # run() reviewer_override -- unknown name raises ReviewError before dispatch
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                discussion_run(
+                    cfg, SLUG, mill_dir, project_root, wiki_root,
+                    reviewer_override="does-not-exist",
+                )
+                errors += 1
+                print(
+                    "FAIL run() reviewer_override unknown name: expected ReviewError",
+                    file=sys.stderr,
+                )
+            except ReviewError as exc:
+                assert "Unknown reviewer" in str(exc), (
+                    f"expected 'Unknown reviewer' in error, got {exc!r}"
+                )
+                print(
+                    "PASS run() reviewer_override unknown name: raises "
+                    "ReviewError mentioning 'Unknown reviewer' (fails before dispatch)"
+                )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL run() reviewer_override unknown name: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL run() reviewer_override unknown name (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # run() reviewer_override -- accepts a non-Claude alias (reject_non_claude=False)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "gemini-reviewer": {
+                        "type": "single",
+                        "provider": "gemini",
+                        "model": "gemini-2.5-flash",
+                        "tooluse": False,
+                    }
+                },
+            )
+            import _llm_gemini as llm_gemini
+
+            original = llm_gemini.run_bulk
+            llm_gemini.run_bulk = lambda prompt_text, **kw: (APPROVE_TEXT, "sid-gemini")
+            try:
+                r = discussion_run(
+                    cfg, SLUG, mill_dir, project_root, wiki_root,
+                    reviewer_override="gemini-reviewer",
+                )
+            finally:
+                llm_gemini.run_bulk = original
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            print(
+                "PASS run() reviewer_override: accepts non-Claude alias "
+                "(reject_non_claude=False), unlike prepare()"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL run() reviewer_override gemini alias: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL run() reviewer_override gemini alias (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # run() reviewer_override -- skips the large-prompt auto-switch entirely
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                        "large_prompt": {
+                            "threshold_ktok": 0,
+                            "reviewer": "large-prompt-reviewer",
+                        },
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "tooluse": False,
+                        "effort": "max",
+                    },
+                    "large-prompt-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "tooluse": False,
+                        "effort": "low",
+                    },
+                },
+            )
+            stub.seed([(APPROVE_TEXT, "sid-run-large-prompt")])
+            r = discussion_run(
+                cfg, SLUG, mill_dir, project_root, wiki_root,
+                reviewer_override="override-reviewer",
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            dispatched_effort = stub.captured_prompts()[-1][1]["effort"]
+            assert dispatched_effort == "max", (
+                f"expected dispatched effort 'max' (override-reviewer's, not "
+                f"large-prompt-reviewer's 'low'), got {dispatched_effort!r}"
+            )
+            print(
+                "PASS run() reviewer_override large-prompt skip: dispatched "
+                "spec is the override's, not the large-prompt fallback's"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(
+                f"FAIL run() reviewer_override large-prompt skip: {exc}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL run() reviewer_override large-prompt skip (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
     # brief-path nested-layout: prepare stage writes brief under hub_dir (#553)
     # ------------------------------------------------------------------
     errors += test_brief_path_nested_layout()

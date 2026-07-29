@@ -64,6 +64,10 @@ def prepare(
             nothing is written back to config. Bypasses the `reviewer:
             null` disablement (but not the separate `rounds: 0` check
             above), and skips the large-prompt auto-switch entirely.
+            Resolved with `reject_non_claude=agent_mode`: rejects a
+            non-Claude model when called from the Agent-mode `--stage
+            prepare` entrypoint (agent_mode=True), but accepts one when
+            called from run()'s internal, non-agent-mode invocation.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -86,13 +90,19 @@ def prepare(
 
     # 3. Resolve reviewer spec via registry. An explicit reviewer_override
     # bypasses the `reviewer: null` disablement below; the config-resolved
-    # path is otherwise unchanged.
+    # path is otherwise unchanged. reject_non_claude follows agent_mode:
+    # the Agent-mode `--stage prepare` CLI entrypoint (agent_mode=True) only
+    # ever dispatches Claude subagents, so an override naming another
+    # provider is rejected here; run()'s internal call (agent_mode=False)
+    # is the legacy direct-dispatch path, which must keep accepting any
+    # configured provider -- its own downstream resolve already uses
+    # reject_non_claude=False, so this call must not reject first.
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
     if reviewer_override is not None:
         try:
             spec = _reviewers.resolve_reviewer_override(
-                registry, reviewer_override, reject_non_claude=True
+                registry, reviewer_override, reject_non_claude=agent_mode
             )
         except _reviewers.ReviewerError as exc:
             raise ReviewError(str(exc)) from exc
