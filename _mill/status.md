@@ -29,7 +29,9 @@ implementing  '2026-07-29T04:42:20Z'
 ```yaml
 batches:
   - name: review-plan-counting-fix
-    state: pending
+    state: running
+    implementer_session: 2230e10d-4d03-455b-8959-e11c686d6a68
+    start_sha: 9c12fb09c1c0fb562b9b763b54283d7fae431ddc
   - name: plan-review-templates
     state: pending
   - name: plugin-manifest-validator
