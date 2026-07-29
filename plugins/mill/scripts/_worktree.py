@@ -21,6 +21,7 @@ Public API:
     WorktreeError                          — raised on any git failure.
     WorktreeLockedError                    — raised when a worktree is in use (NTFS CWD lock or PermissionError).
     create(branch, target, cwd)            — git worktree add -b.
+    move(old, new, cwd) -> None            — git worktree move.
     copy_millhouse(src, dst, exclude)      — copy .millhouse/ minus exclude.
     list_worktrees(cwd) -> list[dict]      — enumerate all worktrees for the repo at cwd.
     remove(path, cwd, force=True) -> None  — remove a registered worktree.
@@ -78,6 +79,54 @@ def create(branch: str, target: Path, cwd: Path) -> None:
             f"{result.stderr.strip()!r}"
         )
     print(f"[worktree] create: branch={branch!r} target={target}", file=sys.stderr)
+
+
+def move(old: Path, new: Path, cwd: Path) -> None:
+    """
+    Relocate a registered worktree from ``old`` to ``new``.
+
+    Runs ``git worktree move <old> <new>``, mirroring ``create``'s
+    ``-C``-flag style but additionally passing ``cwd`` explicitly to
+    ``_subprocess_util.run`` rather than relying on ``-C`` alone. This
+    matters because a caller of this function may invoke it from inside
+    ``old`` itself (the very directory being relocated) — a bare ``-C``
+    flag tells git which repo to operate on but does not change the
+    spawned subprocess's own OS-level working directory, and Windows NTFS
+    holds a directory open while a process's cwd points into it, a
+    well-known cause of lock failures during a rename. ``cwd`` should
+    therefore be a stable worktree in the same repo (e.g. the hub), never
+    ``old`` itself, since the caller's own OS-level cwd cannot be trusted
+    to already be outside ``old``.
+
+    Args:
+        old: Absolute path to the worktree's current location.
+        new: Absolute path where the worktree should live afterward. Must
+            not already exist (git refuses otherwise).
+        cwd: Directory from which to invoke ``git`` — must be inside the
+            target repository, and must NOT be ``old``.
+
+    Raises:
+        WorktreeLockedError: stderr matches the same lock-pattern set
+            ``remove_safe`` checks (worktree in use).
+        WorktreeError: ``git worktree move`` returned non-zero for any
+            other reason. The exception message includes the captured
+            stderr for the user to inspect.
+    """
+    result = _subprocess_util.run(
+        ["git", "-C", str(cwd), "worktree", "move", str(old), str(new)],
+        cwd=cwd,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
+        if any(p in stderr for p in _lock_patterns):
+            raise WorktreeLockedError(
+                f"git worktree move failed (old={old}, new={new}): {stderr!r}"
+            )
+        raise WorktreeError(
+            f"git worktree move failed (old={old}, new={new}): {stderr!r}"
+        )
+    print(f"[worktree] move: old={old} new={new}", file=sys.stderr)
 
 
 def copy_millhouse(src: Path, dst: Path, exclude: set[str]) -> None:
