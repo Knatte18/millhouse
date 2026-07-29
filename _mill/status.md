@@ -44,5 +44,7 @@ batches:
     start_sha: 2746f2f59bd24af727dee63cbcfb4fd1618fb1c1
     commit_sha: 0d6fe3fa16f01a69e3daad0ac4a6007350edb0a6
   - name: verify-gate-enrichment
-    state: pending
+    state: running
+    implementer_session: 74a83c48-081c-45b9-baa9-f0f0067ee123
+    start_sha: 18650cde7ab78b6551678e9929620a8c12fc5050
 ```
