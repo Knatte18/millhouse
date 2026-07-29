@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-baseline-snapshot-windows-path-gap
 branch: hanf/mill-baseline-snapshot-windows-path-gap
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-07-29T13:56:09Z'
 approved-toctou-guard-hardening  '2026-07-29T14:00:32Z'
 holistic-reviewing  '2026-07-29T14:00:48Z'
 holistic-approved  '2026-07-29T14:03:13Z'
+done  '2026-07-29T14:03:36Z'
 ```
 
 ## Batches
