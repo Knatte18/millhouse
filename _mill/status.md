@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-context-completeness-check
 slug: mill-plan-autonomy-and-validation-gaps
 branch: hanf/mill-plan-autonomy-and-validation-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-07-29T17:32:22Z'
 plan-fix-r2  '2026-07-29T17:42:37Z'
 planned  '2026-07-29T17:42:59Z'
 implementing  '2026-07-29T17:51:08Z'
+approved-context-completeness-check  '2026-07-29T17:57:19Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-07-29T17:51:08Z'
 ```yaml
 batches:
   - name: context-completeness-check
-    state: running
+    state: approved
     implementer_session: 4e23ba95-c05e-47b5-a388-13094bedd8b6
     start_sha: 9981122ccb4554814295084216aae814a27f8aa6
+    commit_sha: 2aeca8449e190c79024e12ab5071bafb63a4efff
   - name: plan-guardrails-and-anti-pause
     state: pending
 ```
