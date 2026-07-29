@@ -553,11 +553,15 @@ def main() -> int:
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # alpha: APPROVE; holistic: NEED_CONTEXT -> retry APPROVE
+        # alpha: APPROVE; holistic: NEED_CONTEXT -> retry APPROVE-with-a-real-[NIT]
+        RETRY_APPROVE_WITH_NIT_TEXT = (
+            "# Review: test\n\n### [NIT] cleanup note\n\n- b\n\n"
+            "```yaml\nverdict: APPROVE\n```\n"
+        )
         stub.seed([
             (APPROVE_TEXT,      "sid-1"),  # alpha
             (NEED_CONTEXT_TEXT, "sid-2"),  # holistic first call
-            (APPROVE_TEXT,      "sid-3"),  # holistic retry
+            (RETRY_APPROVE_WITH_NIT_TEXT, "sid-3"),  # holistic retry
         ])
         try:
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
@@ -565,6 +569,12 @@ def main() -> int:
             rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
             assert rv_hol["verdict"] == "APPROVE", (
                 f"holistic verdict should be APPROVE after retry, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["blocking_count"] == 0, (
+                f"expected holistic blocking_count=0, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
             )
             prompts = stub.captured_prompts()
             # alpha + holistic first + holistic retry = 3
