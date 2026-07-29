@@ -47,6 +47,8 @@ External interface: none of these three files are imported by any other file in 
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
+  - `plugins/mill/scripts/_review_common.py`
+  - `plugins/mill/scripts/_plan_validate.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-validate-plan.py`
   - `plugins/mill/unit_tests/test-millpy-validate-plan.py`

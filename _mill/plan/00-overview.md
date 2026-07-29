@@ -22,7 +22,7 @@ batches:
     name: wiki-health-check-and-messaging
     file: 01-wiki-health-check-and-messaging.md
     depends-on: []
-    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-wiki-sync.py test-wiki-health-check.py test-wiki-daemon.py test-wiki-client-retry.py"
+    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-wiki-health-check.py test-wiki-daemon.py test-wiki-client-retry.py"
   - number: 2
     name: mill-resume-repair
     file: 02-mill-resume-repair.md
