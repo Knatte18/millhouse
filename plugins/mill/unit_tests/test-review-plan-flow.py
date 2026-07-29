@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
@@ -24,6 +26,7 @@ import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
+from _review_plan import prepare as plan_prepare  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
 
@@ -165,6 +168,23 @@ def _make_plan_fixture(
 def _seed_approve(n: int) -> None:
     """Seed n approve responses on the stub."""
     stub.seed([(APPROVE_TEXT, f"sid-{i + 1}") for i in range(n)])
+
+
+def _write_local_overlay(mill_dir: Path, **entries) -> None:
+    """Write reviewer registry entries to the hub's local overlay file.
+
+    `_reviewers.load()` merges the plugin template (always present and
+    non-empty in this source tree) with `.millhouse/agents.local.yaml` --
+    the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to`
+    is only consulted when both the template and the local overlay are
+    empty, which never happens here. Tests that need a specific named
+    reviewer spec to actually resolve via `reviewer_override` must seed it
+    here, mirroring the local-overlay convention already established in
+    test-review-discussion-flow.py and test-reviewers.py.
+    """
+    (mill_dir / "agents.local.yaml").write_text(
+        yaml.safe_dump(entries, default_flow_style=False), encoding="utf-8"
+    )
 
 
 def _make_nested_plan_fixture(
@@ -1860,6 +1880,374 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test30 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31a — prepare() holistic reviewer_override drives resolution,
+    # not config's holistic reviewer (Card 16, check 1)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "config-reviewer-should-not-be-used"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-opus-4-1",
+                        "effort": "max",
+                        "tooluse": False,
+                    }
+                },
+            )
+            result = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root, reviewer_override="override-reviewer",
+            )
+            assert result["model"] == "claude-opus-4-1", (
+                f"expected override model claude-opus-4-1, got {result['model']!r}"
+            )
+            assert result["effort"] == "max", f"expected override effort max, got {result['effort']!r}"
+            print("PASS test31a: prepare() holistic reviewer_override drives resolution, not config's reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31a: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31a (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31b — prepare() holistic reviewer_override: unknown name raises
+    # ReviewError mentioning "Unknown reviewer" (Card 16, check 2)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                plan_prepare(
+                    cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                    wiki_root=wiki_root, git_root=project_root, reviewer_override="does-not-exist",
+                )
+                errors += 1
+                print("FAIL test31b: expected ReviewError for unknown reviewer_override", file=sys.stderr)
+            except ReviewError as exc:
+                assert "Unknown reviewer" in str(exc), f"expected 'Unknown reviewer' in error, got {exc!r}"
+                print("PASS test31b: prepare() holistic reviewer_override unknown name raises ReviewError")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31c — prepare() holistic reviewer_override: cluster override
+    # raises ReviewError mentioning "cluster" (Card 16, check 3)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                worker_single={
+                    "type": "single",
+                    "provider": "claude",
+                    "model": "claude-sonnet-4-6",
+                },
+                my_cluster={
+                    "type": "cluster",
+                    "workers": {"use": "worker_single", "count": 3},
+                    "handler": {"use": "worker_single"},
+                },
+            )
+            try:
+                plan_prepare(
+                    cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                    wiki_root=wiki_root, git_root=project_root, reviewer_override="my_cluster",
+                )
+                errors += 1
+                print("FAIL test31c: expected ReviewError for cluster reviewer_override", file=sys.stderr)
+            except ReviewError as exc:
+                assert "cluster" in str(exc), f"expected 'cluster' in error, got {exc!r}"
+                print("PASS test31c: prepare() holistic reviewer_override cluster raises ReviewError")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31c: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31c (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31d — prepare() holistic reviewer_override skips the
+    # large-prompt auto-switch entirely (Card 16, check 4)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["large_prompt"] = {
+            "threshold_ktok": 0,
+            "reviewer": "large-prompt-reviewer",
+        }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-opus-4-1",
+                        "effort": "max",
+                        "tooluse": False,
+                    },
+                    "large-prompt-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-haiku-4-5-20251001",
+                        "tooluse": False,
+                    },
+                },
+            )
+            result = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root, reviewer_override="override-reviewer",
+            )
+            assert result["model"] == "claude-opus-4-1", (
+                f"expected override model claude-opus-4-1 (large-prompt-reviewer never "
+                f"consulted), got {result['model']!r}"
+            )
+            print("PASS test31d: prepare() holistic reviewer_override survives large_prompt auto-switch untouched")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31d: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31d (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31e — prepare() reviewer_override is a documented no-op when
+    # scope is not None (batch scope), per the holistic-only Decision
+    # (Card 16, check 5)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-opus-4-1",
+                        "effort": "max",
+                        "tooluse": False,
+                    }
+                },
+            )
+            result = plan_prepare(
+                cfg, SLUG, scope="01-setup", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root, reviewer_override="override-reviewer",
+            )
+            assert result["model"] is None, (
+                f"expected batch-scope model=None (test_stub has no model key), got {result['model']!r}"
+            )
+            assert result["scope"] == "01-setup", f"expected scope='01-setup', got {result['scope']!r}"
+            print("PASS test31e: prepare() reviewer_override is a no-op outside holistic scope")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31e: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31e (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 32a — run() holistic_only=True reviewer_override dispatches the
+    # named override, not config's holistic reviewer (Card 17, check 1)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "config-reviewer-should-not-be-used"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "tooluse": False,
+                    }
+                },
+            )
+            stub.seed([(APPROVE_TEXT, "sid-run-plan-override")])
+            r = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                holistic_only=True, reviewer_override="override-reviewer",
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            print("PASS test32a: run() holistic_only reviewer_override dispatches named override")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test32a: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test32a (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 32b — run() holistic_only=True reviewer_override: unknown name
+    # raises ReviewError mentioning "Unknown reviewer" (Card 17, check 2)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                plan_run(
+                    cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                    holistic_only=True, reviewer_override="does-not-exist",
+                )
+                errors += 1
+                print("FAIL test32b: expected ReviewError for unknown reviewer_override", file=sys.stderr)
+            except ReviewError as exc:
+                assert "Unknown reviewer" in str(exc), f"expected 'Unknown reviewer' in error, got {exc!r}"
+                print("PASS test32b: run() holistic_only reviewer_override unknown name raises ReviewError")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test32b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test32b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 32c — run() holistic_only=True reviewer_override dispatches a
+    # non-Claude (Gemini) reviewer, since direct-dispatch call sites pass
+    # reject_non_claude=False (Card 17, check 3)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "gemini-reviewer": {
+                        "type": "single",
+                        "provider": "gemini",
+                        "model": "gemini-2.5-flash",
+                        "tooluse": False,
+                    }
+                },
+            )
+            import _llm_gemini as llm_gemini
+            original = llm_gemini.run_bulk
+            llm_gemini.run_bulk = lambda prompt_text, **kw: (APPROVE_TEXT, "sid-gemini")
+            try:
+                r = plan_run(
+                    cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                    holistic_only=True, reviewer_override="gemini-reviewer",
+                )
+            finally:
+                llm_gemini.run_bulk = original
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            print("PASS test32c: run() holistic_only reviewer_override dispatches non-Claude (Gemini) reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test32c: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test32c (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 32d — run() holistic_only=True reviewer_override skips the
+    # large-prompt auto-switch entirely; effort is forwarded to the
+    # test_stub provider branch (Card 17, check 4; depends on batch
+    # reviewer-override-helper's Card 2 fix)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["large_prompt"] = {
+            "threshold_ktok": 0,
+            "reviewer": "large-prompt-reviewer",
+        }
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "effort": "max",
+                        "tooluse": False,
+                    },
+                    "large-prompt-reviewer": {
+                        "type": "single",
+                        "provider": "test_stub",
+                        "model": "unused-test-stub-model",
+                        "effort": "low",
+                        "tooluse": False,
+                    },
+                },
+            )
+            stub.seed([(APPROVE_TEXT, "sid-run-plan-large-prompt")])
+            r = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                holistic_only=True, reviewer_override="override-reviewer",
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            assert stub.captured_prompts()[-1][1]["effort"] == "max", (
+                f"expected effort='max' forwarded from override-reviewer spec, "
+                f"got {stub.captured_prompts()[-1][1]['effort']!r}"
+            )
+            print("PASS test32d: run() holistic_only reviewer_override skips large-prompt auto-switch, effort forwarded")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test32d: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test32d (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
