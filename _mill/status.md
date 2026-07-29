@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config-resolution-fixes-fix-and-merge
+phase: holistic-reviewing
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-wiki-health-check-and-messaging  '2026-07-29T15:09:31Z'
 approved-mill-resume-repair  '2026-07-29T15:21:20Z'
 approved-config-resolution-fixes-implement-and-small  '2026-07-29T15:29:51Z'
 approved-config-resolution-fixes-fix-and-merge  '2026-07-29T15:38:15Z'
+holistic-reviewing  '2026-07-29T15:38:36Z'
 ```
 
 ## Batches
