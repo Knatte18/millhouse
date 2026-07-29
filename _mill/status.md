@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-plan-skill-doc-gaps
 branch: hanf/mill-plan-skill-doc-gaps
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-07-29T18:55:20Z'
 plan-review-r1  '2026-07-29T19:04:13Z'
 plan-fix-r1  '2026-07-29T19:04:29Z'
 plan-fix-r2  '2026-07-29T19:08:21Z'
+planned  '2026-07-29T19:08:38Z'
 ```
