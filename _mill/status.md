@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r6
+phase: planned
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
 plan: _mill/plan
@@ -23,4 +23,5 @@ plan-fix-r3  '2026-07-29T14:35:55Z'
 plan-fix-r4  '2026-07-29T14:44:51Z'
 plan-fix-r5  '2026-07-29T14:53:49Z'
 plan-review-r6  '2026-07-29T14:59:00Z'
+planned  '2026-07-29T14:59:16Z'
 ```
