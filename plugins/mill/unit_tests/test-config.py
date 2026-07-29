@@ -1142,6 +1142,63 @@ def test_review_common_load_config_container_layout() -> None:
     print("PASS _review_common.load_config -- container/wts layout: primary clone config resolved")
 
 
+def test_review_common_load_config_unparseable_repo_layer_does_not_raise() -> None:
+    """_review_common.load_config does not raise ReviewError when the repo-layer
+    mill-config.yaml exists but is unparseable (literal merge-conflict markers).
+
+    The missing-source strictness raise at _review_common.py:2003-2007 fires only on
+    the conjunction ``not template_path.exists() and mill_cfg_path is None``.
+    resolve_repo_config_path (which feeds mill_cfg_path) returns a non-None path
+    whenever a candidate file EXISTS on disk, regardless of whether it parses -- so a
+    present-but-broken repo-layer file makes the conjunction False and no raise
+    occurs. This documents existing behavior (verified against
+    _review_common.py:2001-2007); no production edit is needed or made by this test.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+
+        # Create container/wts layout
+        container = tmp_path / "container"
+        container.mkdir()
+        wts_dir = container / "wts"
+        wts_dir.mkdir()
+        primary_clone = wts_dir / "primary"
+        primary_clone.mkdir()
+        _git_init(primary_clone)
+
+        # Write an unparseable mill-config.yaml (literal conflict markers) to the
+        # primary clone -- same broken-fixture shape as Card 3's repo-layer test.
+        _write_yaml(
+            primary_clone / "mill-config.yaml",
+            "spawn:\n<<<<<<< HEAD\n  branch_prefix: a\n=======\n  branch_prefix: b\n>>>>>>> other\n",
+        )
+
+        # Create a linked worktree
+        task_worktree = wts_dir / "task-slug"
+        subprocess.run(
+            ["git", "-C", str(primary_clone), "worktree", "add", str(task_worktree)],
+            check=True,
+            capture_output=True,
+        )
+
+        mill_dir = task_worktree / ".millhouse"
+        mill_dir.mkdir(parents=True, exist_ok=True)
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _review_common, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                try:
+                    _review_common.load_config(hub_root=container, mill_dir=mill_dir)
+                except _review_common.ReviewError as exc:
+                    raise AssertionError(
+                        f"load_config raised ReviewError for a present-but-unparseable "
+                        f"repo-layer config; it should be treated as found: {exc}"
+                    ) from exc
+    print("PASS _review_common.load_config -- unparseable repo-layer config still counts as found, no raise")
+
+
 def test_no_repo_layer_config_anywhere_emits_note() -> None:
     """load_config emits note to stderr when no repo-layer config found anywhere."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1534,6 +1591,7 @@ def main() -> int:
         test_git_unknown_subkey_still_warns,
         test_container_layout_config_resolution,
         test_review_common_load_config_container_layout,
+        test_review_common_load_config_unparseable_repo_layer_does_not_raise,
         test_no_repo_layer_config_anywhere_emits_note,
         test_implementer_model_default_is_sonnethigh,
         test_load_config_rename_detect_pct_key_present,
