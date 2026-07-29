@@ -1832,6 +1832,37 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 30 — #720 holistic-path [MEDIUM]-only regression
+    # A holistic response with ONLY a "### [MEDIUM]" heading (no recognized
+    # [BLOCKING]/[NIT] heading at all) must fold into blocking_count on the
+    # holistic dispatch path, not just the per-batch path Test 29 covers.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            medium_only_holistic = (
+                "# Review\n\n"
+                "### [MEDIUM] borderline concern\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(APPROVE_TEXT, "sid-a"), (medium_only_holistic, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.blocking_count == 1, f"expected blocking_count=1, got {r.blocking_count}"
+            assert r.nit_count == 0, f"expected nit_count=0, got {r.nit_count}"
+            print("PASS test30: #720 MEDIUM-fold-in on the holistic dispatch path")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test30: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test30 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
