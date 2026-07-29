@@ -665,5 +665,175 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIsNone(call_kwargs.get("session_id"))
 
 
+def _git(args, cwd, check=True):
+    """Run a git subprocess against a real fixture repo, raising on unexpected failure."""
+    result = subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed: {result.stdout}{result.stderr}")
+    return result
+
+
+class TestVerifyConflictMarkersGate(unittest.TestCase):
+    """Exercises _verify_conflict_markers directly against real git repositories (#713).
+
+    Unlike TestMillpyMergeInSubagent, most of these tests do NOT mock
+    _subprocess_util.run -- the helper's own two git invocations are exactly
+    what needs proving against a real conflicted/resolved repo. Only the
+    "fatal:" scenario mocks _subprocess_util.run, since forcing a real git
+    lock-contention failure is impractical to fixture reliably.
+    """
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp())
+        self.addCleanup(_safe_rmtree.safe_rmtree, self.repo, allowed_root=self.repo, ignore_errors=True)
+        _git(["init"], self.repo)
+        _git(["checkout", "-b", "main"], self.repo)
+
+    def _commit(self, message):
+        _git(
+            ["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", message],
+            self.repo,
+        )
+
+    def _write(self, name, content):
+        (self.repo / name).write_text(content, encoding="utf-8")
+
+    def _make_content_conflict(self, *filenames):
+        """Seed a real content conflict across all ``filenames`` in one merge, left unresolved.
+
+        All files conflict simultaneously via a single merge commit -- required for the
+        multi-file scenario, where two different files must remain unresolved/staged
+        independently in the same working tree at the same time.
+        """
+        branch = "side-" + "-".join(filenames).replace(".", "_")
+        for filename in filenames:
+            self._write(filename, "base\n")
+            _git(["add", filename], self.repo)
+        self._commit("base (" + ", ".join(filenames) + ")")
+
+        _git(["checkout", "-b", branch], self.repo)
+        for filename in filenames:
+            self._write(filename, "base\nside change\n")
+            _git(["add", filename], self.repo)
+        self._commit("side change (" + ", ".join(filenames) + ")")
+
+        _git(["checkout", "main"], self.repo)
+        for filename in filenames:
+            self._write(filename, "base\nmain change\n")
+            _git(["add", filename], self.repo)
+        self._commit("main change (" + ", ".join(filenames) + ")")
+
+        # Expected to fail with a real content conflict -- markers land in the working tree.
+        _git(["merge", branch], self.repo, check=False)
+
+    def test_2x_marker_gate_residual_markers_staged(self):
+        """(a) file staged via git add still carries residual markers -> stuck, names the file."""
+        self._make_content_conflict("conflict.txt")
+        # Stage the file exactly as merge left it -- markers still present -- simulating a
+        # sub-agent that ran `git add` without actually resolving the conflict.
+        _git(["add", "conflict.txt"], self.repo)
+
+        result = millpy_merge_in_subagent._verify_conflict_markers(["conflict.txt"], self.repo)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "stuck")
+        self.assertEqual(result["stuck_type"], "logic")
+        self.assertIn("residual conflict markers", result["reason"])
+        self.assertIn("conflict.txt", result["reason"])
+
+    def test_2x_marker_gate_never_staged(self):
+        """(b) file left unmerged and never staged -> stuck, names the file."""
+        self._make_content_conflict("conflict.txt")
+        # Do NOT git add -- the file remains unmerged in the index.
+
+        result = millpy_merge_in_subagent._verify_conflict_markers(["conflict.txt"], self.repo)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "stuck")
+        self.assertEqual(result["stuck_type"], "logic")
+        self.assertIn("never staged", result["reason"])
+        self.assertIn("still unmerged", result["reason"])
+        self.assertIn("conflict.txt", result["reason"])
+
+    def test_2x_marker_gate_clean_resolved_and_staged(self):
+        """(c) a clean, properly resolved-and-staged file -> None."""
+        self._make_content_conflict("conflict.txt")
+        # Resolve for real: overwrite with reconciled content, then stage it.
+        self._write("conflict.txt", "base\nmain change\nside change\n")
+        _git(["add", "conflict.txt"], self.repo)
+
+        result = millpy_merge_in_subagent._verify_conflict_markers(["conflict.txt"], self.repo)
+        self.assertIsNone(result)
+
+    def test_2x_marker_gate_modify_delete_resolved_via_rm(self):
+        """(d) modify/delete conflict resolved via `git rm` -> None, not an error."""
+        self._write("d.py", "original\n")
+        _git(["add", "d.py"], self.repo)
+        self._commit("base (d.py)")
+
+        _git(["checkout", "-b", "side-d"], self.repo)
+        self._write("d.py", "changed\n")
+        _git(["add", "d.py"], self.repo)
+        self._commit("side modifies d.py")
+
+        _git(["checkout", "main"], self.repo)
+        _git(["rm", "d.py"], self.repo)
+        self._commit("main deletes d.py")
+
+        # Expected to conflict: deleted on main, modified on side.
+        _git(["merge", "side-d"], self.repo, check=False)
+        # Resolve by keeping the deletion.
+        _git(["rm", "d.py"], self.repo)
+
+        result = millpy_merge_in_subagent._verify_conflict_markers(["d.py"], self.repo)
+        self.assertIsNone(result)
+
+    def test_2x_marker_gate_multi_file_both_failure_shapes_in_one_call(self):
+        """(e) one file trips check 1, a different file trips check 2, in a single call."""
+        # Both files conflict in the same merge so they can be independently
+        # staged/left-unmerged afterward.
+        self._make_content_conflict("never-staged.txt", "has-markers.txt")
+        # Leave never-staged.txt unmerged; stage has-markers.txt as-is (markers still present).
+        _git(["add", "has-markers.txt"], self.repo)
+
+        result = millpy_merge_in_subagent._verify_conflict_markers(
+            ["never-staged.txt", "has-markers.txt"], self.repo
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "stuck")
+        self.assertEqual(result["stuck_type"], "logic")
+        self.assertIn("never-staged.txt", result["reason"])
+        self.assertIn("has-markers.txt", result["reason"])
+        self.assertIn("never staged", result["reason"])
+        self.assertIn("residual conflict markers", result["reason"])
+
+    def test_2x_marker_gate_fatal_output_short_circuits(self):
+        """(f) a "fatal:"-prefixed check output is distinct from an ordinary finding."""
+        def _fake_run(argv, **kwargs):
+            if "--diff-filter=U" in argv:
+                return subprocess.CompletedProcess(
+                    args=argv, returncode=128, stdout="", stderr="fatal: unable to read tree\n"
+                )
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run", side_effect=_fake_run
+        ):
+            result = millpy_merge_in_subagent._verify_conflict_markers(["a.py"], self.repo)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "stuck")
+        self.assertEqual(result["stuck_type"], "logic")
+        self.assertIn("verification itself failed to run", result["reason"])
+        # Distinct from an ordinary marker/unmerged finding.
+        self.assertNotIn("never staged", result["reason"])
+        self.assertNotIn("residual conflict markers", result["reason"])
+
+
 if __name__ == "__main__":
     unittest.main()
