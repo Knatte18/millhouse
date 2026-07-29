@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-pipeline-silent-failure-and-report-bugs
 branch: hanf/mill-pipeline-silent-failure-and-report-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T16:10:13Z'
+discussed  '2026-07-29T16:44:55Z'
 ```
