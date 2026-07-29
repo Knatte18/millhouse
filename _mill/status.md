@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-yaml-crash-fallback
 slug: mill-merge-conflict-robustness-gaps
 branch: hanf/mill-merge-conflict-robustness-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r4  '2026-07-28T19:35:34Z'
 plan-fix-r5  '2026-07-28T19:51:49Z'
 planned  '2026-07-28T19:52:23Z'
 implementing  '2026-07-29T04:42:11Z'
+approved-config-yaml-crash-fallback  '2026-07-29T04:48:14Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ implementing  '2026-07-29T04:42:11Z'
 ```yaml
 batches:
   - name: config-yaml-crash-fallback
-    state: running
+    state: approved
     implementer_session: ea07e3fe-fba3-4e3d-be34-24c7d0822486
     start_sha: cc264c59d1ff50ac164a4eecce8574c13b0b4abf
+    commit_sha: f6ee5329c1012eb384530ae43409397a7a729fcd
   - name: merge-in-marker-verification
     state: pending
   - name: merge-in-semantic-duplication
