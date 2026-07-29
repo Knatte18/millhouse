@@ -36,7 +36,9 @@ implementing  '2026-07-29T04:42:11Z'
 ```yaml
 batches:
   - name: config-yaml-crash-fallback
-    state: pending
+    state: running
+    implementer_session: ea07e3fe-fba3-4e3d-be34-24c7d0822486
+    start_sha: cc264c59d1ff50ac164a4eecce8574c13b0b4abf
   - name: merge-in-marker-verification
     state: pending
   - name: merge-in-semantic-duplication
