@@ -34,6 +34,8 @@ The verify command `<VERIFY_CMD>` failed after a merge. Your job is to diagnose 
 
 Your last output line MUST be a bare JSON object (no code fence, no backticks):
 
+**`commit_sha` MUST be the full SHA from `git rev-parse HEAD` -- never the abbreviated form (`git rev-parse --short HEAD`) or a `git log --oneline` hash.**
+
 On success:
 
 {"status":"success","commit_sha":"<last-HEAD-sha>"}

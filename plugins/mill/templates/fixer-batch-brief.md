@@ -78,6 +78,8 @@ Your last line of output (after all work and commits) MUST be a single JSON obje
 
 **`commit_sha` MUST be a real new content commit distinct from the fix-round housekeeping commit**<NITS_ONLY_CARVEOUT> A fixer that made edits but did not commit must report `status: stuck` (`stuck_type: logic`) instead.
 
+**`commit_sha` MUST be the full SHA from `git rev-parse HEAD` -- never the abbreviated form (`git rev-parse --short HEAD`) or a `git log --oneline` hash.**
+
 or, when stuck:
 
 ```json
