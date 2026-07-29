@@ -33,7 +33,9 @@ implementing  '2026-07-29T09:08:59Z'
 ```yaml
 batches:
   - name: reviewer-override-helper
-    state: pending
+    state: running
+    implementer_session: 1b6bdf22-9d82-4417-bdde-de9fea479cd1
+    start_sha: c0b1951c56b7fb69087cceb9a69825ac3dad059c
   - name: reviewer-self-id-templates
     state: pending
   - name: discussion-review-cli
