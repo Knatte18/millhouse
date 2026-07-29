@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-dispatch-attribution-gaps
 branch: hanf/mill-review-dispatch-attribution-gaps
 plan: _mill/plan
@@ -25,4 +25,23 @@ plan-fix-r2  '2026-07-29T07:53:04Z'
 plan-review-r3  '2026-07-29T08:00:06Z'
 plan-fix-r3  '2026-07-29T08:00:06Z'
 planned  '2026-07-29T08:00:41Z'
+implementing  '2026-07-29T09:08:59Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: reviewer-override-helper
+    state: pending
+  - name: reviewer-self-id-templates
+    state: pending
+  - name: discussion-review-cli
+    state: pending
+  - name: plan-review-cli
+    state: pending
+  - name: unit-tests-discussion
+    state: pending
+  - name: unit-tests-plan
+    state: pending
 ```
