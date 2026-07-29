@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
@@ -22,6 +24,8 @@ import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
+from _review_common import ReviewError  # noqa: E402
+from _review_discussion import prepare as discussion_prepare  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
 
@@ -81,6 +85,23 @@ def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     )
     _test_registry.write_to(wiki_root)
     return mill_dir, worktree, wiki_root
+
+
+def _write_local_overlay(mill_dir: Path, **entries) -> None:
+    """Write reviewer registry entries to the hub's local overlay file.
+
+    `_reviewers.load()` merges the plugin template (always present and
+    non-empty in this source tree) with `.millhouse/agents.local.yaml` --
+    the legacy wiki `agents.yaml` fallback used by `_test_registry.write_to`
+    is only consulted when both the template and the local overlay are
+    empty, which never happens here. Tests that need a specific named
+    reviewer spec to actually resolve via `reviewer_override` must seed it
+    here, mirroring the local-overlay convention already established in
+    test-reviewers.py.
+    """
+    (mill_dir / "agents.local.yaml").write_text(
+        yaml.safe_dump(entries, default_flow_style=False), encoding="utf-8"
+    )
 
 
 def main() -> int:
@@ -459,6 +480,283 @@ def main() -> int:
             errors += 1
             print(
                 f"FAIL rounds=0 (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # prepare() reviewer_override -- resolves the named override, not config
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-opus-4-1",
+                        "effort": "max",
+                        "tooluse": False,
+                    }
+                },
+            )
+            result = discussion_prepare(
+                cfg, SLUG, mill_dir, project_root, wiki_root,
+                reviewer_override="override-reviewer",
+            )
+            assert result["model"] == "claude-opus-4-1", (
+                f"expected override model claude-opus-4-1, got {result['model']!r}"
+            )
+            assert result["effort"] == "max", (
+                f"expected override effort max, got {result['effort']!r}"
+            )
+            print(
+                "PASS prepare() reviewer_override: named override drives "
+                "resolution, not config's reviewer"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL prepare() reviewer_override: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL prepare() reviewer_override (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # prepare() reviewer_override -- unknown name raises ReviewError
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                discussion_prepare(
+                    cfg, SLUG, mill_dir, project_root, wiki_root,
+                    reviewer_override="does-not-exist",
+                )
+                errors += 1
+                print(
+                    "FAIL prepare() reviewer_override unknown name: expected ReviewError",
+                    file=sys.stderr,
+                )
+            except ReviewError as exc:
+                assert "Unknown reviewer" in str(exc), (
+                    f"expected 'Unknown reviewer' in error, got {exc!r}"
+                )
+                print(
+                    "PASS prepare() reviewer_override unknown name: raises "
+                    "ReviewError mentioning 'Unknown reviewer'"
+                )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL prepare() reviewer_override unknown name: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL prepare() reviewer_override unknown name (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # prepare() reviewer_override -- cluster override raises ReviewError
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "worker_single": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-sonnet-4-6",
+                    },
+                    "override-cluster": {
+                        "type": "cluster",
+                        "workers": {"use": "worker_single", "count": 3},
+                        "handler": {"use": "worker_single"},
+                    },
+                },
+            )
+            try:
+                discussion_prepare(
+                    cfg, SLUG, mill_dir, project_root, wiki_root,
+                    reviewer_override="override-cluster",
+                )
+                errors += 1
+                print(
+                    "FAIL prepare() reviewer_override cluster: expected ReviewError",
+                    file=sys.stderr,
+                )
+            except ReviewError as exc:
+                assert "cluster" in str(exc), (
+                    f"expected 'cluster' in error, got {exc!r}"
+                )
+                print(
+                    "PASS prepare() reviewer_override cluster: raises "
+                    "ReviewError mentioning 'cluster'"
+                )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL prepare() reviewer_override cluster: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL prepare() reviewer_override cluster (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # prepare() reviewer_override -- skips the large-prompt auto-switch entirely
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {
+                        "rounds": 1,
+                        "reviewer": "config-reviewer-should-not-be-used",
+                        "large_prompt": {
+                            "threshold_ktok": 0,
+                            "reviewer": "large-prompt-reviewer",
+                        },
+                    },
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _write_local_overlay(
+                mill_dir,
+                **{
+                    "override-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-opus-4-1",
+                        "effort": "max",
+                        "tooluse": False,
+                    },
+                    "large-prompt-reviewer": {
+                        "type": "single",
+                        "provider": "claude",
+                        "model": "claude-haiku-4-5-20251001",
+                        "tooluse": False,
+                    },
+                },
+            )
+            result = discussion_prepare(
+                cfg, SLUG, mill_dir, project_root, wiki_root,
+                reviewer_override="override-reviewer",
+            )
+            assert result["model"] == "claude-opus-4-1", (
+                f"expected override model claude-opus-4-1 (large-prompt-reviewer "
+                f"never consulted), got {result['model']!r}"
+            )
+            print(
+                "PASS prepare() reviewer_override large-prompt skip: override "
+                "survives large_prompt auto-switch untouched"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(
+                f"FAIL prepare() reviewer_override large-prompt skip: {exc}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL prepare() reviewer_override large-prompt skip (unexpected "
+                f"{type(exc).__name__}): {exc}",
                 file=sys.stderr,
             )
         finally:
