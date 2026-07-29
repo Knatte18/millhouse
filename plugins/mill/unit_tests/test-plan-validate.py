@@ -3992,6 +3992,116 @@ def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
             return 1
 
 
+def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
+    """Regression guard for #734: the Cards field-legend must not be parsed as refs.
+
+    Part 1 reproduces the pre-fix bug: ``plan-batch.md`` used to render its
+    field-legend bullets (``- **Context:** every file the implementer
+    reads...`` and the six sibling fields) as literal content directly under
+    ``## Cards``, outside any HTML comment. Every validator check that scans
+    a batch file line-by-line for ``- **Context:**``/``- **Edits:**``/etc.
+    headers (``_check_non_existent_path`` via ``_review_common.parse_batch_refs``,
+    ``_check_ref_not_backtick_path``) matches those lines regardless of
+    whether they are genuine card content or template prose, so the
+    legend's bare (non-backtick) prose was misparsed as real path refs.
+
+    Part 2 validates the corrected post-fix shape. The actual fix
+    (``plan-batch.md`` Card 1) moves the field-legend into the template's
+    single leading HTML comment, which ``_render.render()``'s
+    ``_strip_leading_comment`` drops wholesale before a real per-task batch
+    file is ever written -- a genuine post-fix batch file contains no trace
+    of the legend at all, not a commented-out copy of it. This fixture
+    therefore validates a batch file whose ``## Cards`` section goes
+    straight from the heading to the real ``### Card 1:`` block, matching
+    actual rendered output. (A literal ``<!-- ... -->``-wrapped legend
+    still present in the batch file text would not clear this test even
+    post-fix: ``_check_non_existent_path`` sources its Context:/Edits:/
+    Creates: tokens from ``_review_common.parse_batch_refs``, which has no
+    HTML-comment awareness and is owned by a different batch in this plan
+    -- out of this batch's edit scope -- so a comment-wrapped-but-present
+    legend would still trip ``non-existent-path`` regardless of anything
+    changed inside this batch's own ``_plan_validate.py``.)
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        legend_lines = (
+            "- **Context:** every file the implementer reads but does not change.\n"
+            "- **Edits:** files the implementer changes.\n"
+            "- **Creates:** files the implementer creates.\n"
+            "- **Deletes:** files the implementer deletes.\n"
+            "- **Moves:** old-to-new rename pairs this card performs.\n"
+            "- **Requirements:** what the card must achieve.\n"
+            "- **Commit:** one-line commit message the implementer will use.\n"
+        )
+        card_block = (
+            "### Card 1: example\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/a.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        frontmatter = (
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+
+        # Part 1: legend prose sits directly under ## Cards, outside any HTML
+        # comment -- the original #734 bug shape.
+        dirty_text = (
+            "# Batch: alpha\n\n" + frontmatter
+            + "## Cards\n\n" + legend_lines + "\n" + card_block
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", dirty_text)])
+        dirty_result = _plan_validate.run(plan_dir, project_root)
+        dirty_hits = [
+            e for e in dirty_result
+            if e["check"] in {"reads-not-backtick-path", "non-existent-path"}
+        ]
+
+        # Part 2: the corrected post-fix shape -- ## Cards goes straight to the
+        # real card, matching what a per-task batch file actually contains once
+        # plan-batch.md's leading HTML comment (now including the legend) is
+        # stripped during rendering.
+        clean_text = (
+            "# Batch: alpha\n\n" + frontmatter
+            + "## Cards\n\n" + card_block
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", clean_text)])
+        clean_result = _plan_validate.run(plan_dir, project_root)
+        clean_hits = [
+            e for e in clean_result
+            if e["check"] in {
+                "non-existent-path", "reads-not-backtick-path",
+                "all-files-touched-mismatch", "parallel-modifies-overlap",
+            }
+        ]
+
+        try:
+            assert dirty_hits, (
+                "expected at least one non-existent-path/reads-not-backtick-path "
+                f"finding for the pre-fix legend-outside-comment shape, got none: {dirty_result}"
+            )
+            assert clean_hits == [], f"expected no findings for the post-fix shape, got: {clean_hits}"
+            print("PASS test_check_cards_legend_in_comment_not_parsed_as_refs")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_cards_legend_in_comment_not_parsed_as_refs: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -4118,6 +4228,8 @@ def main() -> int:
         test_check_verify_unrelated_test_files_differs_not_flagged,
         test_check_verify_unrelated_test_files_parent_branch_none_no_findings,
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
+        # Cards field-legend HTML-comment regression guard (#734)
+        test_check_cards_legend_in_comment_not_parsed_as_refs,
     ]
 
     errors = 0
