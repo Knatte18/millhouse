@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-review-dispatch-attribution-gaps
 branch: hanf/mill-review-dispatch-attribution-gaps
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-07-29T05:56:57Z'
+discussion-fix-r5  '2026-07-29T06:58:40Z'
+discussed  '2026-07-29T06:58:40Z'
 ```
