@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-skill-doc-gaps
 branch: hanf/mill-plan-skill-doc-gaps
 plan: _mill/plan
@@ -21,4 +21,13 @@ plan-review-r1  '2026-07-29T19:04:13Z'
 plan-fix-r1  '2026-07-29T19:04:29Z'
 plan-fix-r2  '2026-07-29T19:08:21Z'
 planned  '2026-07-29T19:08:38Z'
+implementing  '2026-07-29T19:20:57Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: skill-doc-gaps
+    state: pending
 ```
