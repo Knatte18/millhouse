@@ -45,5 +45,7 @@ batches:
     start_sha: a3af7ec91201a50a3a2c3b094a32ebcb51fa9943
     commit_sha: 7959bf0ca364954c97cfe354b35bf1e52e5832f5
   - name: implementer-commit-sha-validation
-    state: pending
+    state: running
+    implementer_session: 6b453038-ccdc-44aa-ba50-3b2270fcfbbe
+    start_sha: ee48a10c1159e23d8d0be03dcf6c0acf4a9e92cf
 ```
