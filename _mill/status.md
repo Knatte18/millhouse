@@ -29,5 +29,7 @@ implementing  '2026-07-29T13:56:09Z'
 ```yaml
 batches:
   - name: toctou-guard-hardening
-    state: pending
+    state: running
+    implementer_session: 99f0f40c-c169-4137-a3bb-38e7bc545bc8
+    start_sha: 99c1e2b7c32d67b2404d16ea768594e79955b380
 ```
