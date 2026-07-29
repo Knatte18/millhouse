@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-merge-topology-and-squash-restore-gaps
 branch: hanf/mill-merge-topology-and-squash-restore-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-07-29T07:15:01Z'
 approved-is-inplace-topology-fix  '2026-07-29T07:21:44Z'
 approved-step5-checkout-guard  '2026-07-29T07:26:20Z'
 holistic-reviewing  '2026-07-29T07:26:41Z'
+holistic-approved  '2026-07-29T07:28:22Z'
 ```
 
 ## Batches
