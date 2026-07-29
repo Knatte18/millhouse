@@ -1,0 +1,37 @@
+MILL_REVIEW_BEGIN
+# Review: mill-start: tracked _mill/ files disappear from the working tree mid-review-loop; existing safeguard covers only status.md — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-07-29
+```
+
+## Findings
+
+### [BLOCKING] `check_and_restore` doesn't rebase paths for nested-hub layouts
+**Location:** 00-overview.md Shared Decision "git-status detection reuses `_pygit2_util.status_porcelain`..."; batch 01 Card 1.
+**Issue:** `_pygit2_util.status_porcelain(worktree, ...)` always returns paths relative to the *git repository toplevel*, per `compute_scope_violations`'s own docstring in `_cleanliness.py` — not relative to `worktree`. `check_and_restore(worktree, tracked_root="_mill")` matches `raw_path` against bare `"_mill"`/`"_mill/"` with no git_root-to-hub rebasing. `_paths.resolve_hub_path`/`resolve_active_hub` (called by mill-go/mill-start/mill-plan to produce the `worktree_root` passed in) explicitly support hub roots nested under the git root ("M2+sub repos … .millhouse/ lives in a git subdirectory"). In that config, porcelain lines read `"<hub-rel>/_mill/…"`, never bare `"_mill/…"`, so `check_and_restore` silently never detects any deletion — defeating this entire task's purpose. `_cleanliness.revert_out_of_scope_drift`/`compute_scope_violations` — the plan's own cited analog — handle exactly this via an optional `git_root` param and `_rebase_onto_hub`; `_treeguard.py` omits both.
+**Fix:** Add a `git_root: Path | None = None` parameter to `check_and_restore`, rebase git-root-relative porcelain paths onto `worktree` the same way `_cleanliness._rebase_onto_hub` does, and add a nested-hub-layout regression test (mirroring `_cleanliness.py`'s CV-7/ROOD-5/ROOD-6) to batch 01 Card 2.
+
+### [BLOCKING] Holistic loop's rate-limit-fallback redispatch has no tree-guard bracket
+**Location:** batch 05 (mill-go-wiring) Card 8, step 3.6 "Rate-limit fallback."
+**Issue:** Card 8 explicitly re-brackets step 3.5's ERROR-retry redispatch (its own pre/post tree-guard checkpoints), but step 3.6 also re-invokes "sub-step 3" (a fresh Agent-mode dispatch, when both 3.5 passes are `ERROR` and a `fallback_reviewer` is configured) with no dedicated tree-guard checkpoint of its own. The generic post-dispatch checkpoint the card inserts "before step 4" only covers whichever dispatch happens to be physically last before that line, not specifically 3.6's redispatch, and there is no pre-dispatch check immediately before 3.6 fires. This leaves exactly the kind of out-of-process reviewer window the task exists to close, unguarded on this narrow but real path.
+**Fix:** Add the same pre/post tree-guard checkpoint pair around step 3.6's "re-run sub-step 3" redispatch that Card 8 already adds for step 3.5.
+
+### [NIT] Card 2's runner-shape claim misdescribes `test-cleanliness.py`
+**Location:** batch 01 (treeguard-helper) Card 2.
+**Issue:** The card says the new test file's single top-level `try/except AssertionError` (first failure aborts, prints `FAIL:`, returns 1) matches "`test-status.py`'s and `test-cleanliness.py`'s existing runner shape exactly." It matches `test-status.py`; `test-cleanliness.py` actually wraps each scenario in its own try/except, accumulates a `failures` list, and reports all failures at the end without early exit — a materially different shape.
+**Fix:** Drop the `test-cleanliness.py` half of the "matches exactly" claim, or explicitly say the new file follows `test-status.py`'s shape.
+
+### [NIT] mill-start Card 5 mischaracterizes where step 2 "closes"
+**Location:** batch 03 (mill-start-wiring) Card 5, post-dispatch checkpoint insertion.
+**Issue:** The card says to insert "before step 3 … i.e. after the **Agent-mode properties:** paragraph that closes out step 2," but in `mill-start/SKILL.md` the entire **Subprocess/psmux branch** prose (still part of step 2) follows the Agent-mode properties paragraph before step 3 begins. The literal anchor ("before step 3") is unambiguous and correct; the parenthetical framing is not.
+**Fix:** Drop or correct the "i.e. after Agent-mode properties … closes out step 2" framing.
+
+## Verdict
+
+REQUEST_CHANGES
+Two BLOCKING correctness gaps (nested-hub path matching; holistic rate-limit-fallback bracketing) must be resolved before implementation.
+MILL_REVIEW_END
