@@ -48,7 +48,9 @@ batches:
     start_sha: 044fb39a9d01e6b5f27c0b5d4280b77c2a7079bb
     commit_sha: 78e8f596a9d824d5f6dae094ab82cfe3425a5589
   - name: merge-in-semantic-duplication
-    state: pending
+    state: running
+    implementer_session: b6ae8e15-1a98-40c7-a4fb-45978b32a392
+    start_sha: 4f720e00ff2191e39ff25d32f52ee18bf942bca3
   - name: dirty-parent-worktree-preflight
     state: pending
 ```
