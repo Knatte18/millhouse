@@ -56,10 +56,12 @@ one instance, not a one-off.
   every call, not just on the long-path git-failure fallback that
   `_safe_rmtree`'s walk guards — making this the more likely actual
   crash site for issue #738's reported race, not just a parallel one.
-  Same treatment: skip the vanished entry, log it
-  (`[junction]`-prefixed, ASCII-only, matching this file's existing
-  `[junction] WARNING: permission denied...` convention), continue the
-  walk.
+  Same treatment: skip the vanished entry, log it with a distinct
+  `[junction]`-prefixed, ASCII-only message (e.g. `[junction] WARNING:
+  vanished entry scanning {dir_path}; skipping` — matching this file's
+  existing `[junction]` prefix convention, but NOT reusing the existing
+  `permission denied` wording, since that would misreport a vanished-path
+  case as a permission failure), continue the walk.
 - Apply both guards unconditionally (both Windows and POSIX) — the same
   list-then-open race can occur on POSIX (ENOENT), and
   `_safe_rmtree.py`'s existing docstring already commits to symmetric
@@ -180,14 +182,17 @@ one instance, not a one-off.
   the top (the case where `root` itself vanished between being listed by
   its *parent's* scandir and being recursed into) so a vanished
   subdirectory doesn't raise before the loop even starts. Apply the
-  identical shape to `_junction.strip_all_in_worktree`'s `_walk`: widen
-  its existing `try/except PermissionError` around
-  `os.scandir(str(dir_path))` (line 318) to also catch
-  `FileNotFoundError` (skip-and-log, return early — same as the existing
-  `PermissionError` branch's shape), and wrap the per-entry body
-  (`entry.is_symlink()`, `_is_junction_or_symlink(ep)`, **the
-  `remove(ep)` call**, `entry.is_dir()`, and the recursive `_walk(ep)`
-  call) in the same per-entry `try/except FileNotFoundError: continue`.
+  identical shape to `_junction.strip_all_in_worktree`'s `_walk`: add a
+  **separate** `except FileNotFoundError:` clause alongside (not merged
+  into) its existing `except PermissionError:` around
+  `os.scandir(str(dir_path))` (line 318) — same skip-and-log,
+  return-early control flow, but its own distinct message text (see
+  Scope's "In" bullet for the exact wording) rather than reusing the
+  `permission denied` string, since that would misreport what actually
+  happened. Wrap the per-entry body (`entry.is_symlink()`,
+  `_is_junction_or_symlink(ep)`, **the `remove(ep)` call**,
+  `entry.is_dir()`, and the recursive `_walk(ep)` call) in the same
+  per-entry `try/except FileNotFoundError: continue`.
   Both walks' calls into the single `_junction.remove` (there is exactly
   one implementation, in `_junction.py`, called from both
   `_safe_rmtree._walk_strip_reparse_points` and `_junction.py`'s own
@@ -244,8 +249,15 @@ one instance, not a one-off.
   sibling unguarded recursive walk surfaced by discussion-review round 1.
   Its `try/except` around `os.scandir(str(dir_path))` (line 318)
   currently catches only `PermissionError`, logging a `[junction]
-  WARNING: permission denied...` and returning early — the pattern to
-  extend for `FileNotFoundError` too.
+  WARNING: permission denied...` and returning early. The fix adds a
+  separate `except FileNotFoundError:` clause with its own distinct
+  message (see Scope's "In" bullet) — not a shared/reused message with
+  the `PermissionError` branch, since the two are different failure
+  modes and conflating their wording would misreport a vanished path as
+  a permission error. `os.scandir(str(dir_path))` here is called as a
+  plain iterable (`list(os.scandir(str(dir_path)))`, line 317) rather
+  than via the context-manager protocol — see the Testing section note
+  on why this matters for how the two walks' unit tests mock it.
 - `plugins/mill/scripts/_worktree.py` — `remove_safe` (lines 180-276) is
   the caller relevant to this bug's reproduction path. Step 1
   (lines 219-224) calls `_junction.strip_all_in_worktree` unconditionally
@@ -306,6 +318,14 @@ fixtures, no real git/LLM calls).
   the new "vanished entry mid-walk does not raise" case first, confirm it
   fails against the current unguarded implementation, then implement the
   fix.
+- **`os.scandir` call-shape difference between the two walks:** the two
+  walks call `os.scandir` differently, so a mock satisfying one will not
+  automatically satisfy the other. `_safe_rmtree._walk_strip_reparse_points`
+  uses the context-manager form (`with os.scandir(str(root)) as it:`),
+  so its mock stand-in needs `__enter__`/`__exit__`. `_junction.py`'s
+  `_walk` uses the plain-iterable form (`list(os.scandir(str(dir_path)))`),
+  so its mock just needs to be iterable. Match the mock shape to whichever
+  walk a given test case targets.
 - **Scenario 1 — vanished file entry (both walks):** a fixture tree with
   two sibling files under a directory; mock the walk so one file's
   presence-check (`entry.is_symlink()` or equivalent) raises
@@ -377,3 +397,5 @@ fixtures, no real git/LLM calls).
 - **Q:** [discussion-review r2 GAP] Is the `_junction.remove(ep)` / `remove(ep)` call itself inside the per-entry `try/except FileNotFoundError` guard, or ambiguous? **A:** [auto-resolved] Explicitly inside — the Decisions section now names the removal call directly as a covered TOCTOU source (the `os.unlink`/`os.rmdir` it performs can itself raise `FileNotFoundError` if the entry vanishes between detection and removal). **Why:** the removal call is the same TOCTOU class as the detection calls already covered by "wrap the whole per-entry body"; leaving it unnamed left real ambiguity about whether the fix's stated scope actually included it.
 - **Q:** [discussion-review r3 GAP] Testing Scenario 3 offered `test-worktree.py` as an alternative to `test-junction.py`, contradicting Technical Context's claim that `test-worktree.py` needs no changes — which wins? **A:** [auto-resolved] `test-junction.py` only; dropped the `test-worktree.py` option from Scenario 3. **Why:** Scope's "In" bullet and Technical Context both already commit to `test-worktree.py` being an unmodified beneficiary of the fix, not a file this task adds coverage to; the Scenario 3 wording was the stale/contradicting side, not the other two sections.
 - **Q:** [discussion-review r3 NOTE] Does "Both `_junction.remove` implementations" wording imply two separate implementations exist? **A:** [auto-resolved] Reworded to "both walks' calls into the single `_junction.remove`" — there is exactly one implementation. **Why:** the original phrasing was imprecise and could mislead a plan writer into looking for a second `remove` function that doesn't exist.
+- **Q:** [discussion-review r4 GAP] Should the widened `_junction.py` `FileNotFoundError` guard reuse the existing "permission denied" log message, or get its own wording? **A:** [auto-resolved] Its own distinct message (e.g. `[junction] WARNING: vanished entry scanning {dir_path}; skipping`), added as a separate `except FileNotFoundError:` clause, not merged into the `PermissionError` branch's text. **Why:** reusing "permission denied" wording for a vanished-path case would misreport what actually happened, directly undermining the earlier Logging decision's own stated goal of an accurate skip-and-log signal.
+- **Q:** [discussion-review r4 NOTE] Does the Testing section's `os.scandir` mocking guidance account for the two walks calling `os.scandir` differently (context-manager vs plain iterable)? **A:** [auto-resolved] No — added an explicit note: `_safe_rmtree`'s walk needs a context-manager-shaped mock, `_junction.py`'s walk needs a plain-iterable mock. **Why:** verified directly against both functions' source — `_safe_rmtree.py` uses `with os.scandir(...) as it:`, `_junction.py` uses `list(os.scandir(...))`; a test author following the original undifferentiated guidance could write a mock that fails one walk's protocol.
