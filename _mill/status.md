@@ -38,7 +38,9 @@ batches:
     start_sha: 7e10e6d74c50bbc15afa62a27b8911cabdea005d
     commit_sha: afb53d6ff92970c22c9d681fe48f3ba5c6a68121
   - name: review-code-soft-fail
-    state: pending
+    state: running
+    implementer_session: d20acdeb-d0b5-4807-b123-c27500d1fab0
+    start_sha: 2746f2f59bd24af727dee63cbcfb4fd1618fb1c1
   - name: verify-gate-enrichment
     state: pending
 ```
