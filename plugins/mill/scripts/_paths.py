@@ -46,6 +46,10 @@ Public API:
         (``main_root.parent.name == "wts"``) returns ``main_root.parent.parent``.
         In prefix-form returns ``main_root.parent``.
 
+    resolve_canonical_worktree_path(container_path, slug)
+        Return the canonical worktree path for ``slug`` under
+        ``container_path``, with no existence check.
+
     resolve_hub_relative_path(worktree_root, hub_subpath)
         Translate the ``hub_relative_path`` value from
         ``.millhouse/config.local.yaml`` into an absolute path.
@@ -116,6 +120,7 @@ __all__ = [
     "resolve_active_worktree",
     "resolve_active_hub",
     "resolve_container_path",
+    "resolve_canonical_worktree_path",
     "ActiveWorktreeNotFound",
     "ActiveWorktreeSlugMismatch",
     "resolve_task_path",
@@ -307,6 +312,11 @@ def resolve_container_path(git_root: Path) -> Path:
     if main_root.parent.name == "wts":
         return main_root.parent.parent
     return main_root.parent
+
+
+def resolve_canonical_worktree_path(container_path: Path, slug: str) -> Path:
+    """Return the canonical worktree path for ``slug`` under ``container_path``, with no existence check."""
+    return container_path / "wts" / slug
 
 
 def resolve_short_name(cfg: dict, repo_name: str) -> str:
