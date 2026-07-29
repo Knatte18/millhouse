@@ -27,7 +27,7 @@ import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
-from _review_code import run as code_run, finalize as code_finalize  # noqa: E402
+from _review_code import run as code_run, finalize as code_finalize, prepare  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
 
@@ -1621,6 +1621,13 @@ def main() -> int:
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
+    # ------------------------------------------------------------------
+    # Context: soft-fail gitignore path -- a missing but confirmed
+    # git-ignored Context: ref degrades to a warning instead of a hard
+    # ReviewError (#733).
+    # ------------------------------------------------------------------
+    errors += test_context_only_gitignored_ref_soft_fails_prepare()
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
@@ -1793,6 +1800,129 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
             " not resolve_hub_path's decoy"
         )
         return 0
+
+
+def test_context_only_gitignored_ref_soft_fails_prepare() -> int:
+    """Context:-only refs confirmed git-ignored soft-fail prepare() instead of hard-failing (#733).
+
+    Scenario (a): alpha's Context: field gains a missing ref
+    (.scratch/probe.md) covered by an appended .gitignore rule. prepare()
+    must not raise ReviewError, and the soft-skipped ref must not surface
+    as its own bulked "--- FILE: ... ---" section in the rendered
+    prompt_text (mirrors the moved-away-source assertion in test23 above --
+    a missing file is never bulked in regardless of soft-fail vs hard-fail,
+    so the real assertion of interest is that prepare() completes at all).
+
+    Scenario (b) is a regression guard, run in the same fixture shape:
+    a DIFFERENT missing ref NOT covered by the .gitignore must still
+    hard-fail prepare() with ReviewError -- soft-fail only fires on a
+    confirmed git-ignore hit, exactly as resolve_ref_paths's own unit
+    coverage in test-review-common.py.
+
+    Returns 0 on success, 1 on failure (errors-accumulator convention used
+    throughout this file).
+    """
+    errors = 0
+
+    # Scenario (a): git-ignored missing Context: ref soft-fails prepare().
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_path = Path(tmpdir)
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmp_path)
+        plan_dir = project_root / "plan"
+        gitignore_path = project_root / ".gitignore"
+        gitignore_path.write_text(
+            gitignore_path.read_text(encoding="utf-8") + ".scratch/probe.md\n",
+            encoding="utf-8",
+        )
+        alpha_path = plan_dir / "01-alpha.md"
+        alpha_path.write_text(
+            alpha_path.read_text(encoding="utf-8").replace(
+                "- **Context:** `src/a.py`\n",
+                "- **Context:** `src/a.py`, `.scratch/probe.md`\n",
+            ),
+            encoding="utf-8",
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            result = prepare(
+                cfg, SLUG, scope="alpha", mill_dir=mill_dir,
+                project_root=project_root, wiki_root=wiki_root, git_root=project_root,
+            )
+            missing_ref = project_root / ".scratch" / "probe.md"
+            assert f"--- FILE: {missing_ref} ---" not in result["prompt_text"], (
+                "soft-skipped git-ignored Context: ref must not surface as its own"
+                " bulked FILE section"
+            )
+            print(
+                "PASS: test_context_only_gitignored_ref_soft_fails_prepare (a): "
+                "git-ignored missing Context: ref soft-skipped, prepare() did not raise"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(
+                f"FAIL test_context_only_gitignored_ref_soft_fails_prepare (a): {exc}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL test_context_only_gitignored_ref_soft_fails_prepare (a): prepare()"
+                f" raised {type(exc).__name__} instead of soft-skipping: {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # Scenario (b): a DIFFERENT missing ref NOT covered by .gitignore still hard-fails.
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        tmp_path = Path(tmpdir)
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmp_path)
+        plan_dir = project_root / "plan"
+        gitignore_path = project_root / ".gitignore"
+        gitignore_path.write_text(
+            gitignore_path.read_text(encoding="utf-8") + ".scratch/probe.md\n",
+            encoding="utf-8",
+        )
+        alpha_path = plan_dir / "01-alpha.md"
+        alpha_path.write_text(
+            alpha_path.read_text(encoding="utf-8").replace(
+                "- **Context:** `src/a.py`\n",
+                "- **Context:** `src/a.py`, `not_ignored_missing.py`\n",
+            ),
+            encoding="utf-8",
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            prepare(
+                cfg, SLUG, scope="alpha", mill_dir=mill_dir,
+                project_root=project_root, wiki_root=wiki_root, git_root=project_root,
+            )
+            errors += 1
+            print(
+                "FAIL test_context_only_gitignored_ref_soft_fails_prepare (b): expected"
+                " ReviewError for a missing, non-ignored Context: ref",
+                file=sys.stderr,
+            )
+        except ReviewError:
+            print(
+                "PASS: test_context_only_gitignored_ref_soft_fails_prepare (b): missing,"
+                " non-ignored Context: ref still hard-fails prepare()"
+            )
+        except AssertionError:
+            raise
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL test_context_only_gitignored_ref_soft_fails_prepare (b): unexpected"
+                f" {type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":
