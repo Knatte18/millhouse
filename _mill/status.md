@@ -41,7 +41,9 @@ batches:
     start_sha: b058a4b2b6088140f965fb49c890a29cf0e1299f
     commit_sha: 15c38e7011b9243dd5c8a9a18356019e65921605
   - name: status-recovery-log
-    state: pending
+    state: running
+    implementer_session: ac6b337a-2497-4bb1-a4cd-eee2d777326c
+    start_sha: 58daf44a2c35ee2e00e4a314473d91398f254930
   - name: mill-start-wiring
     state: pending
   - name: mill-plan-wiring
