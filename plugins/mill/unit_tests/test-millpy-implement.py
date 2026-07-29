@@ -485,6 +485,103 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
         self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
+    def test_load_config_uses_hub_root_when_hub_in_subdirectory(self):
+        """#728 repro: hub lives in a subdirectory of the outer git repo.
+
+        load_config must be invoked with the resolved hub root (project_root /
+        resolve_active_hub's corrected root), never the outer git-repo root --
+        otherwise the hub's own mill-config.yaml is silently missed in favor of
+        a template/primary-clone fallback found by walking from git_root.
+        """
+        hub_dir = self.tmp_path / "sub" / "hub"
+        hub_dir.mkdir(parents=True, exist_ok=True)
+        _make_fixture(hub_dir)
+        self.mock_resolve_hub_path.return_value = hub_dir
+        self.mock_resolve_active_hub.return_value = hub_dir
+        # self.mock_resolve_git_root keeps returning self.tmp_path (the outer root),
+        # which must never be passed as load_config's hub_root argument.
+
+        observed_cfgs = []
+
+        def _fake_load_config(hub_root, mill_dir):
+            if hub_root == hub_dir:
+                cfg = {
+                    "paths": {"status_md": "_mill/status.md"},
+                    "spawn": {"branch_prefix": "hub-own-prefix"},
+                    "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
+                    "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
+                }
+            else:
+                # Stand-in for the template/primary-clone fallback the pre-fix code
+                # would silently pick up when passed the outer git-repo root.
+                cfg = {
+                    "spawn": {"branch_prefix": "template-fallback-prefix"},
+                    "llm": {"claude": {"dispatch": "subprocess"}},
+                }
+            observed_cfgs.append((hub_root, cfg))
+            return cfg
+
+        self.mock_load_config.side_effect = _fake_load_config
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        self.assertTrue(observed_cfgs)
+        for hub_root_arg, cfg in observed_cfgs:
+            self.assertEqual(hub_root_arg, hub_dir)
+            self.assertEqual(cfg["spawn"]["branch_prefix"], "hub-own-prefix")
+
+    def test_cfg_reload_after_resolve_active_hub_used_for_downstream_values(self):
+        """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely
+        differ. Downstream values that read cfg -- self_fix_rounds baked into the
+        rendered brief, and the model name passed to _reviewers.resolve -- must
+        come from the reloaded config, not the stale bootstrap one.
+        """
+        corrected_root = self.tmp_path / "corrected-worktree"
+        corrected_root.mkdir(parents=True, exist_ok=True)
+        _make_fixture(corrected_root)
+        self.mock_resolve_active_hub.return_value = corrected_root
+
+        bootstrap_cfg = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 2, "model": "bootstrap-model"}},
+            "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
+        }
+        reloaded_cfg = {
+            "paths": {"status_md": "_mill/status.md"},
+            "roles": {"implementer": {"self_fix_rounds": 9, "model": "reloaded-model"}},
+            "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
+        }
+
+        def _fake_load_config(hub_root, mill_dir):
+            return reloaded_cfg if hub_root == corrected_root else bootstrap_cfg
+
+        self.mock_load_config.side_effect = _fake_load_config
+
+        rendered_tokens = {}
+
+        def _capture_render(template_path, tokens):
+            rendered_tokens.update(tokens)
+            return "Brief text"
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", side_effect=_capture_render):
+            with unittest.mock.patch.object(millpy_implement._implementer_claude, "run") as mock_run:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        # self_fix_rounds baked into the brief must come from the reloaded config
+        # (9), never the bootstrap config's value (2).
+        self.assertEqual(rendered_tokens.get("SELF_FIX_ROUNDS"), "9")
+        # model_name passed to _reviewers.resolve must come from the reloaded
+        # config too.
+        self.mock_reviewers_resolve.assert_called_with(
+            self.mock_reviewers_load.return_value, "reloaded-model"
+        )
+
     def test_14_stage_finalize_reads_agent_output(self):
         """--stage finalize: reads agent output file, calls finalize_from_output."""
         agent_output_path = self.tmp_path / "agent-output.txt"
