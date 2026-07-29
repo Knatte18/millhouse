@@ -565,7 +565,7 @@ def main() -> int:
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),
             patch("_paths.resolve_main_worktree_root", return_value=git_root),
-            patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("_inplace.resolve_main_worktree_root", return_value=git_root),
         ):
             p = resolve_path("task/discussion.md", slug)
 
@@ -612,7 +612,7 @@ def main() -> int:
             patch("_paths.resolve_wiki_path", return_value=wiki_root),
             patch("_paths.resolve_hub_path", return_value=hub),
             patch("_paths.resolve_main_worktree_root", return_value=git_root),
-            patch("_inplace.resolve_worktrees_dir", return_value=worktrees_dir),
+            patch("_inplace.resolve_main_worktree_root", return_value=git_root),
         ):
             p = resolve_path("task/discussion.md", slug)
 

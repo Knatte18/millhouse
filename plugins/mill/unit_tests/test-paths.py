@@ -751,7 +751,7 @@ def main() -> int:
             git_root.mkdir()
             with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
                  patch("_marker.slug_from_branch", return_value="my-task"), \
-                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                 patch("_inplace.resolve_main_worktree_root", return_value=git_root):
                 got = _paths.resolve_active_worktree(
                     tmp_path, "my-task",
                     cfg={"hub_relative_path": "."},
@@ -766,7 +766,7 @@ def main() -> int:
             git_root.mkdir()
             with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
                  patch("_marker.slug_from_branch", return_value="my-task"), \
-                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                 patch("_inplace.resolve_main_worktree_root", return_value=git_root):
                 got = _paths.resolve_active_worktree(
                     tmp_path, "my-task",
                     cfg={"hub_relative_path": "src/Models"},
@@ -824,11 +824,10 @@ def main() -> int:
             # cfg has no spawn.branch_prefix key, so the cheap prefix-strip check
             # compares the raw branch name directly against slug with an empty prefix.
             _test_helpers.checkout_new_branch(repo, "my-task")
-            with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"), \
-                 patch(
-                     "_marker.slug_from_branch",
-                     side_effect=AssertionError("daemon should not be called"),
-                 ):
+            with patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ):
                 got = _paths.resolve_active_worktree(
                     tmp_path, "my-task",
                     cfg={},
@@ -931,7 +930,7 @@ def main() -> int:
             git_root.mkdir()
             with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
                  patch("_marker.slug_from_branch", return_value="my-task"), \
-                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                 patch("_inplace.resolve_main_worktree_root", return_value=git_root):
                 got = _paths.resolve_active_hub(
                     tmp_path, "my-task",
                     cfg={"hub_relative_path": "."},
@@ -946,7 +945,7 @@ def main() -> int:
             git_root.mkdir()
             with patch("_paths.resolve_wiki_path", return_value=tmp_path / "wiki"), \
                  patch("_marker.slug_from_branch", return_value="my-task"), \
-                 patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"):
+                 patch("_inplace.resolve_main_worktree_root", return_value=git_root):
                 got = _paths.resolve_active_hub(
                     tmp_path, "my-task",
                     cfg={"hub_relative_path": "src/Models"},
@@ -975,11 +974,10 @@ def main() -> int:
             git_root = tmp_path / "hub"
             repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
             _test_helpers.checkout_new_branch(repo, "my-task")
-            with patch("_inplace.resolve_worktrees_dir", return_value=tmp_path / "wts-none"), \
-                 patch(
-                     "_marker.slug_from_branch",
-                     side_effect=AssertionError("daemon should not be called"),
-                 ):
+            with patch(
+                "_marker.slug_from_branch",
+                side_effect=AssertionError("daemon should not be called"),
+            ):
                 got = _paths.resolve_active_hub(
                     tmp_path, "my-task",
                     cfg={"hub_relative_path": "."},
