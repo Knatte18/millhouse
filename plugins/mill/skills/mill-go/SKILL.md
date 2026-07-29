@@ -354,7 +354,8 @@ If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state �
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
-- `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`.
+- Tree-guard checkpoint: call `_treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` — on trigger, call `_status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+- `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`. Commit immediately: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: reviewing batch {batch_name} round {N}"` — mirrors the Holistic Review loop's own existing pattern at the same file (`_status.append_phase(status_path, "holistic-reviewing", ...)` immediately followed by an equivalent commit). This closes the window where an uncommitted phase-append could itself be the file a tree-guard restore later discards — see `_mill/discussion.md`'s "Closing the same-file modify-then-delete window in mill-go's per-batch loop" Decision.
 
 1. **Crash-recovery check.** Before firing the CLI, scan `reviews_dir` for a file matching `*-code-review-{batch_name}-r{N}.md`. If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, f"reviewing-{batch_name}-r{N}", occurrence=1)`; treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`. If freshness validation passes, parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below. This covers the case where mill-go crashed after writing the review but before committing state. If the file is stale (mtime before `ref_ts`) or `ref_ts` is None, ignore the file and fall through to firing the CLI.
 
@@ -375,7 +376,9 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
 1.5. **Prior-notes digest (round N > 1 only).** If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker). Extract the title text and the next non-empty line (which should contain Location and Issue fields). Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below. The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer. Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-2. If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
+2. Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below. This does not apply to the subprocess/psmux branch immediately following in this same step, which keeps its existing worktree_snapshot_guard coverage unchanged.
+
+   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
 
    If `dispatch == subprocess` or `psmux`: background via `millpy-bg`:
 
@@ -404,6 +407,8 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
    done
    ```
    Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation. The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
+
+Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way. This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision). Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
 3. **Builder reads only the JSON envelope verdict, never the findings.** Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below). Builder does not load the skill.
 
@@ -450,7 +455,11 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
    When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
+   Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch. Does not apply to the subprocess/psmux branch immediately below.
+
    If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+
+   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
    If `dispatch == subprocess` or `psmux`:
 
