@@ -175,14 +175,14 @@ PR dispatch lives in mill-finalize. This step is direct path only.
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
   git -C <parent-path> reset -q HEAD -- "$TASK_DIR_REL"
-  git -C <parent-path> checkout -- "$TASK_DIR_REL"
+  git -C <parent-path> checkout -- "$TASK_DIR_REL" 2>/dev/null || true
   git -C <parent-path> commit -m "<cached_task>"
   git -C <parent-path> push
   ```
 
   Note: these two commands specifically require the relative form, because they run with `-C <parent-path>` and a relative pathspec resolves against that `-C` target -- the absolute, child-anchored `<task_dir>` value is never inside the parent's repo root when parent and child are separate worktree directories, and would resolve outside the parent's repo root and fail with "outside repository" (the exact #648 symptom). `$TASK_DIR_REL` is derived once and reused for both commands for this reason. Every other reference to `<task_dir>` in this skill (e.g. Step 4's `git -C <worktree> rm -r <task_dir>`, run against the child worktree) is unaffected and keeps its existing absolute form -- that one already resolves correctly within the child's own repo root.
 
-  **Why:** The child cleanup commit deletes `task_dir`, so a parent that independently tracks `task_dir/_mill/status.md` at the same relative path would otherwise have its file deleted by the squash diff (the #497 bug-2 corruption). The restore step unstages and restores the parent's own `task_dir` from its pre-squash HEAD, using the `$TASK_DIR_REL` relative pathspec so the restore resolves inside the parent's own repo root rather than the child's, ensuring the squash only stages the intended production files. This is a clean no-op when the parent tracks nothing at `task_dir`.
+  **Why:** The child cleanup commit deletes `task_dir`, so a parent that independently tracks `task_dir/_mill/status.md` at the same relative path would otherwise have its file deleted by the squash diff (the #497 bug-2 corruption). The restore step unstages and restores the parent's own `task_dir` from its pre-squash HEAD, using the `$TASK_DIR_REL` relative pathspec so the restore resolves inside the parent's own repo root rather than the child's, ensuring the squash only stages the intended production files. When the parent tracks nothing at `task_dir`, a bare `git checkout -- <pathspec>` against a pathspec absent from `HEAD`'s tree is not a no-op — it exits 1 with `error: pathspec '...' did not match any file(s) known to git`. The `2>/dev/null || true` guard swallows exactly that narrow, expected failure mode, matching the swallow-idiom already used in `mill-merge-in/SKILL.md:37`.
 
   After the restore, re-inspect the staged changes via `git -C <parent-path> diff --cached --stat` and proceed to commit only the intended production files.
 
