@@ -804,6 +804,47 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["status"], "stuck")
         mock_gate.assert_not_called()
 
+    def test_2x_finalize_conflicts_missing_agent_output_file(self):
+        """--stage finalize conflicts mode: missing --agent-output file -> exit 1, actionable message.
+
+        Regression coverage for Card 8's own is_file() guard -- proves it fires before
+        _extract_status_json / _verify_conflict_markers ever run on a missing file, rather
+        than crashing with a raw traceback.
+        """
+        missing_path = self.tmp_path / "does-not-exist.txt"
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc = millpy_merge_in_subagent.main([
+                "--mode", "conflicts",
+                "--files", "a.py",
+                "--stage", "finalize",
+                "--agent-output", str(missing_path),
+            ])
+        self.assertEqual(rc, 1)
+        self.assertIn("ERROR: --agent-output file not found", stderr_buf.getvalue())
+        self.assertIn(str(missing_path), stderr_buf.getvalue())
+
+    def test_2x_finalize_conflicts_missing_files_flag(self):
+        """--stage finalize conflicts mode: --files omitted -> exit 1, actionable message.
+
+        Regression coverage for Card 8's own falsy-`--files` guard -- proves the finalize
+        early-exit branch never reaches _run_conflicts's own --files check at line 337.
+        """
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz"}\n',
+            encoding="utf-8",
+        )
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc = millpy_merge_in_subagent.main([
+                "--mode", "conflicts",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+        self.assertEqual(rc, 1)
+        self.assertIn("--files is required for conflicts mode", stderr_buf.getvalue())
+
 
 def _git(args, cwd, check=True):
     """Run a git subprocess against a real fixture repo, raising on unexpected failure."""
