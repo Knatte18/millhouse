@@ -1371,7 +1371,13 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 22 — rounds=0 holistic via kwarg (early return APPROVE stub)
+    # Test 22 — rounds=0 holistic via kwarg, batch reviewer null -> both
+    # scopes are now correctly disabled, so ReviewError fires (post-Card-4:
+    # the disablement gate reads holistic_max_rounds, so a max_rounds=0
+    # override makes holistic_spec None the same as an explicit
+    # reviewer=None would -- it no longer coincidentally slips through
+    # the round-cap stub-return at holistic dispatch time, so with the
+    # batch reviewer also null there is genuinely nothing to review)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
@@ -1382,10 +1388,15 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=0)
-            assert r.verdict == "APPROVE", f"expected APPROVE for max_rounds=0, got {r.verdict}"
-            assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
-            print("PASS test22: max_rounds=0 kwarg -> holistic APPROVE stub")
+            try:
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=0)
+                errors += 1
+                print("FAIL test22: expected ReviewError", file=sys.stderr)
+            except ReviewError as exc:
+                assert "at least one must be set" in str(exc), (
+                    f"ReviewError message missing 'at least one must be set': {exc}"
+                )
+                print("PASS test22: max_rounds=0 kwarg disables holistic + batch=null -> ReviewError")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test22: {exc}", file=sys.stderr)
@@ -2231,6 +2242,43 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test32d (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 33 — --max-rounds override forces holistic dispatch despite
+    # holistic.rounds:0 (issue #740 regression: the elif gate used to read
+    # the raw config value instead of the max_rounds-aware override)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["rounds"] = 0
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-max-rounds-override")])
+            r = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                max_rounds=1, holistic_only=True,
+            )
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, (
+                f"--max-rounds=1 should force holistic dispatch despite holistic.rounds:0 "
+                f"(issue #740 regression: before the fix, the buggy gate read the raw "
+                f"config rounds value and skipped holistic entirely, giving 0 prompts "
+                f"since holistic_only=True already skips per-batch review), got {len(prompts)}"
+            )
+            assert len(r.reviews) == 1, f"expected 1 review entry, got {len(r.reviews)}"
+            assert r.reviews[0]["scope"] == "holistic"
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            print("PASS test33: --max-rounds override forces holistic dispatch despite rounds:0")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test33: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test33 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
