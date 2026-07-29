@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verify-gate-enrichment
+phase: holistic-reviewing
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-07-29T14:08:39Z'
 approved-plan-validate-pipeline  '2026-07-29T14:23:05Z'
 approved-review-code-soft-fail  '2026-07-29T14:31:12Z'
 approved-verify-gate-enrichment  '2026-07-29T14:35:37Z'
+holistic-reviewing  '2026-07-29T14:35:59Z'
 ```
 
 ## Batches
