@@ -169,34 +169,49 @@ one instance, not a one-off.
 ### Guard placement: per-entry try/except plus a top-of-function guard, applied symmetrically to both walks
 
 - Decision: in `_safe_rmtree._walk_strip_reparse_points`, wrap each
-  entry's full per-iteration body (the `entry.is_symlink()` check,
-  `_is_reparse_point(ep)` check, and the recursive
-  `_walk_strip_reparse_points(ep)` call for directories) in one
-  `try/except FileNotFoundError: continue` per entry inside the loop.
-  Separately, guard the function's own `os.scandir(root)` call at the top
-  (the case where `root` itself vanished between being listed by its
-  *parent's* scandir and being recursed into) so a vanished subdirectory
-  doesn't raise before the loop even starts. Apply the identical shape to
-  `_junction.strip_all_in_worktree`'s `_walk`: widen its existing
-  `try/except PermissionError` around `os.scandir(str(dir_path))` (line
-  318) to also catch `FileNotFoundError` (skip-and-log, return early —
-  same as the existing `PermissionError` branch's shape), and wrap the
-  per-entry body (`entry.is_symlink()`, `_is_junction_or_symlink(ep)`,
-  `entry.is_dir()`, and the recursive `_walk(ep)` call) in the same
-  per-entry `try/except FileNotFoundError: continue`.
+  entry's full per-iteration body — explicitly: the `entry.is_symlink()`
+  check, the `_is_reparse_point(ep)` check, **the `_junction.remove(ep)`
+  call** (the actual `os.unlink`/`os.rmdir` at removal time — a real
+  `FileNotFoundError` source in its own right if the entry vanishes
+  between being detected as a symlink/junction and being removed), and
+  the recursive `_walk_strip_reparse_points(ep)` call for directories —
+  in one `try/except FileNotFoundError: continue` per entry inside the
+  loop. Separately, guard the function's own `os.scandir(root)` call at
+  the top (the case where `root` itself vanished between being listed by
+  its *parent's* scandir and being recursed into) so a vanished
+  subdirectory doesn't raise before the loop even starts. Apply the
+  identical shape to `_junction.strip_all_in_worktree`'s `_walk`: widen
+  its existing `try/except PermissionError` around
+  `os.scandir(str(dir_path))` (line 318) to also catch
+  `FileNotFoundError` (skip-and-log, return early — same as the existing
+  `PermissionError` branch's shape), and wrap the per-entry body
+  (`entry.is_symlink()`, `_is_junction_or_symlink(ep)`, **the
+  `remove(ep)` call**, `entry.is_dir()`, and the recursive `_walk(ep)`
+  call) in the same per-entry `try/except FileNotFoundError: continue`.
+  Both `_junction.remove` implementations already re-check
+  `os.path.lexists`/idempotency at their own entry, but that check
+  happens before this fix's guard is entered — it narrows, but does not
+  close, the removal-time TOCTOU window this decision now explicitly
+  covers.
 - Rationale: `_is_reparse_point`/`_is_junction_or_symlink` already
-  swallow `OSError`/`AttributeError` internally, but `entry.is_symlink()`
-  and `entry.is_dir(follow_symlinks=False)` are not guarded anywhere in
-  either call chain. Wrapping the whole per-entry body in both walks is
-  the minimal change that covers every place a vanished entry could
-  raise, without threading a check through each individual call site
+  swallow `OSError`/`AttributeError` internally, but `entry.is_symlink()`,
+  `entry.is_dir(follow_symlinks=False)`, and the `_junction.remove(ep)`
+  call itself are not guarded anywhere in either call chain. Wrapping the
+  whole per-entry body — removal call included — in both walks is the
+  minimal change that covers every place a vanished entry could raise,
+  without threading a check through each individual call site
   separately, and keeps the two walks' resilience shape consistent with
   each other now that both are in scope.
 - Rejected: guarding only the top-level `os.scandir` call in either walk
   (leaves entry-level races — a file that vanishes between being listed
-  and `entry.is_symlink()` being called on it — unguarded); giving the
+  and `entry.is_symlink()` being called on it, or between being detected
+  and `_junction.remove(ep)` being called on it — unguarded); giving the
   two walks different guard shapes (adds needless divergence between two
-  now-parallel implementations of the same resilience requirement).
+  now-parallel implementations of the same resilience requirement);
+  leaving the removal call's coverage ambiguous/implicit rather than
+  stating it explicitly (this is exactly the gap discussion-review round
+  2 flagged — the removal call is the same TOCTOU class as the
+  detection calls and belongs unambiguously inside the guarded region).
 
 ### Logging: explicit skip-and-log, not silent
 
@@ -314,14 +329,25 @@ fixtures, no real git/LLM calls).
   existing case in `test-safe-rmtree.py` (blacklist refusal, containment
   refusal, junction/symlink stripping before rmtree — the wiki-wipe
   regression guard, path-is-junction/symlink refusal, missing-path
-  no-op, `ignore_errors` semantics) and `test-junction.py` (junction
-  create/remove/points_to, `strip_all_in_worktree`'s existing
-  permission-denied and multi-depth cases). The fix must not change any
-  of these behaviors; a `FileNotFoundError` on a genuinely-absent
-  top-level `path`/`worktree_path` is already handled earlier in both
-  functions (the existing "missing path is no-op" / `not
-  worktree_path.exists()` early-return cases) and is out of scope for
-  the new guard, which only covers entries discovered mid-walk.
+  no-op, `ignore_errors` semantics) and `test-junction.py`'s actual 5
+  existing cases — `strips-undeclared-junction`, `multiple-junctions`,
+  `non-junction-untouched`, `missing-worktree`, `nested-junction` (all
+  scoped to `strip_all_in_worktree`'s FS-scan behavior per that file's
+  own docstring; it has no `PermissionError`/junction
+  create-remove-points_to case of its own — those are exercised
+  incidentally by other test files, e.g. `test-worktree.py`'s
+  `remove_safe`-level `PermissionError` coverage, not by
+  `test-junction.py` directly). The fix must not change any of these
+  behaviors. Note: widening `_walk`'s `except PermissionError` (line 318)
+  to also catch `FileNotFoundError` currently has zero direct unit
+  coverage protecting the existing permission-denied skip-and-return-early
+  branch — the new test should not regress that branch, but adding
+  coverage for it is not required by this task's scope. A
+  `FileNotFoundError` on a genuinely-absent top-level `path`/
+  `worktree_path` is already handled earlier in both functions (the
+  existing "missing path is no-op" / `not worktree_path.exists()`
+  early-return cases) and is out of scope for the new guard, which only
+  covers entries discovered mid-walk.
 - **Not covered by new automated tests (acceptable per Decisions):** the
   real end-to-end Windows repro from issue #738 (a live `dotnet build`
   deleting a JsonCodeGen output file at exactly the right moment during
@@ -341,3 +367,5 @@ fixtures, no real git/LLM calls).
 - **Q:** Does `millpy-implement.py`'s `_run_baseline_stage` catch-all need any change? **A:** [auto-pick] No. **Why:** it already treats any `compute_baseline` exception as non-fatal (leaves baseline unset, logs, returns 0) — once the root-cause race is fixed upstream, this remains a correct last-resort backstop; adding narrower handling here too would be redundant per YAGNI.
 - **Q:** [discussion-review r1 GAP] `_junction.strip_all_in_worktree`'s sibling `_walk` has the identical unguarded `os.scandir` race and runs unconditionally as `remove_safe`'s step 1, before git is even attempted — is it in scope? **A:** [auto-resolved] Yes, extend scope to `_junction.py`'s `_walk` with the same `FileNotFoundError`-skip-and-log treatment. **Why:** it is structurally identical to the `_safe_rmtree` walk and, since it runs first and unconditionally on every `remove_safe` call, is arguably the more likely actual crash site for issue #738 than the git-failure-gated `_safe_rmtree` fallback; leaving it unfixed would reproduce this exact bug through an unaddressed path.
 - **Q:** [discussion-review r1 NOTE] Is `mill-merge` actually a `safe_rmtree`/`remove_safe` beneficiary as originally claimed? **A:** [auto-resolved] No — corrected. **Why:** grep of `millpy-merge-in-subagent.py` and `mill-merge/SKILL.md` shows no reference to worktree teardown; `mill-merge/SKILL.md` states teardown is handled by `/mill-cleanup`. The attribution was factually wrong and has been removed/corrected.
+- **Q:** [discussion-review r2 GAP] Does the Testing section accurately describe `test-junction.py`'s existing coverage? **A:** [auto-resolved] No — corrected to name the actual 5 cases (`strips-undeclared-junction`, `multiple-junctions`, `non-junction-untouched`, `missing-worktree`, `nested-junction`); the claimed permission-denied and create/remove/points_to coverage does not exist in that file. **Why:** verified by reading the file's docstring and case list directly — the original claim was inaccurate.
+- **Q:** [discussion-review r2 GAP] Is the `_junction.remove(ep)` / `remove(ep)` call itself inside the per-entry `try/except FileNotFoundError` guard, or ambiguous? **A:** [auto-resolved] Explicitly inside — the Decisions section now names the removal call directly as a covered TOCTOU source (the `os.unlink`/`os.rmdir` it performs can itself raise `FileNotFoundError` if the entry vanishes between detection and removal). **Why:** the removal call is the same TOCTOU class as the detection calls already covered by "wrap the whole per-entry body"; leaving it unnamed left real ambiguity about whether the fix's stated scope actually included it.
