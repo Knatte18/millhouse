@@ -57,7 +57,9 @@ batches:
     start_sha: ca8cccaa9d8bddb87b76805ac2df638d9e48e189
     commit_sha: 98721cc4c0c7fff9537c251271c154c1606bd127
   - name: unit-tests-discussion
-    state: pending
+    state: running
+    implementer_session: 0a39005a-9c34-4bc5-916b-d087e1541bef
+    start_sha: 6855265e58332d30d4f7301c3798bf555fa95ce5
   - name: unit-tests-plan
     state: pending
 ```
