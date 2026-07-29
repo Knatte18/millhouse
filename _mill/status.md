@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-baseline-snapshot-windows-path-gap
 branch: hanf/mill-baseline-snapshot-windows-path-gap
-plan: null
+plan: _mill/plan
 parent: main
 task: 'millpy-implement.py --stage baseline: WinError 3 snapshotting a transient/generated file on Windows'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-07-29T10:51:49Z'
 discussed  '2026-07-29T13:35:48Z'
+planning  '2026-07-29T13:45:04Z'
 ```
