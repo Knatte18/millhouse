@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-cross-machine-resume-and-config-gaps
 branch: hanf/mill-cross-machine-resume-and-config-gaps
 plan: _mill/plan
@@ -24,4 +24,19 @@ plan-fix-r4  '2026-07-29T14:44:51Z'
 plan-fix-r5  '2026-07-29T14:53:49Z'
 plan-review-r6  '2026-07-29T14:59:00Z'
 planned  '2026-07-29T14:59:16Z'
+implementing  '2026-07-29T15:00:06Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-health-check-and-messaging
+    state: pending
+  - name: mill-resume-repair
+    state: pending
+  - name: config-resolution-fixes-implement-and-small
+    state: pending
+  - name: config-resolution-fixes-fix-and-merge
+    state: pending
 ```
