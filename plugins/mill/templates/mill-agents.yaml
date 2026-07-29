@@ -224,3 +224,17 @@ sonnetmedium_bulk:
   provider: claude
   tooluse: false
   type: single
+
+sonnetxhigh:
+  effort: xhigh
+  model: claude-sonnet-5
+  provider: claude
+  tooluse: true
+  type: single
+
+sonnetxhigh_bulk:
+  effort: xhigh
+  model: claude-sonnet-5
+  provider: claude
+  tooluse: false
+  type: single

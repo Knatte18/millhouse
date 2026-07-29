@@ -3,8 +3,9 @@ Unit tests for plugins/mill/scripts/_safe_rmtree.py.
 
 Covers: blacklist refusal, containment refusal, junction/symlink-strip before
 rmtree (regression guard for the wiki-wipe incident), path-is-junction/symlink
-refusal, missing-path no-op, ignore_errors semantics, and non-container
-allowed_root handling.
+refusal, missing-path no-op, ignore_errors semantics, non-container
+allowed_root handling, and vanished-entry TOCTOU races in
+_walk_strip_reparse_points (GitHub issue #738).
 """
 from __future__ import annotations
 
@@ -284,6 +285,83 @@ def main() -> int:
         assert "onexc" in call_kwargs2, \
             f"expected onexc handler on ignore_errors=False path, got {call_kwargs2}"
         print("PASS: ignore_errors passes through to shutil.rmtree")
+
+    # --- vanished file entry mid-walk: sibling still processed ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        processed: list[str] = []
+        entry_a = MagicMock()
+        entry_a.path = str(tree_dir / "a.txt")
+        entry_a.is_symlink.side_effect = FileNotFoundError
+        entry_b = MagicMock()
+        entry_b.path = str(tree_dir / "b.txt")
+        entry_b.is_symlink.return_value = False
+        entry_b.is_dir.side_effect = lambda *a, **k: processed.append("b") or False
+
+        scandir_cm = MagicMock()
+        scandir_cm.__enter__ = MagicMock(return_value=iter([entry_a, entry_b]))
+        scandir_cm.__exit__ = MagicMock(return_value=False)
+
+        with patch("_safe_rmtree.os.scandir", return_value=scandir_cm), \
+                patch("_safe_rmtree.shutil.rmtree") as mock_rmtree:
+            safe_rmtree(tree_dir, allowed_root=tree_dir)
+
+        assert processed == ["b"], f"surviving sibling must still be processed, got {processed}"
+        mock_rmtree.assert_called_once()
+        print("PASS: vanished file entry mid-walk skips and continues")
+
+    # --- vanished subdirectory entry mid-walk: sibling still processed ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+        sub_path = tree_dir / "sub"
+
+        processed = []
+        entry_sub = MagicMock()
+        entry_sub.path = str(sub_path)
+        entry_sub.is_symlink.return_value = False
+        entry_sub.is_dir.return_value = True
+        entry_sibling = MagicMock()
+        entry_sibling.path = str(tree_dir / "sibling.txt")
+        entry_sibling.is_symlink.return_value = False
+        entry_sibling.is_dir.side_effect = lambda *a, **k: processed.append("sibling") or False
+
+        tree_cm = MagicMock()
+        tree_cm.__enter__ = MagicMock(return_value=iter([entry_sub, entry_sibling]))
+        tree_cm.__exit__ = MagicMock(return_value=False)
+
+        def fake_scandir(path: str):
+            if str(path) == str(sub_path):
+                raise FileNotFoundError(f"vanished: {path}")
+            if str(path) == str(tree_dir):
+                return tree_cm
+            raise AssertionError(f"unexpected scandir call: {path}")
+
+        with patch("_safe_rmtree.os.scandir", side_effect=fake_scandir), \
+                patch("_safe_rmtree.shutil.rmtree") as mock_rmtree:
+            safe_rmtree(tree_dir, allowed_root=tree_dir)
+
+        assert processed == ["sibling"], \
+            f"sibling of vanished subdirectory must still be processed, got {processed}"
+        mock_rmtree.assert_called_once()
+        print("PASS: vanished subdirectory entry mid-walk skips and continues")
+
+    # --- top-level safe_rmtree entry-point window: outermost scandir vanishes ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        with patch("_safe_rmtree.os.scandir", side_effect=FileNotFoundError), \
+                patch("_safe_rmtree.shutil.rmtree") as mock_rmtree:
+            safe_rmtree(tree_dir, allowed_root=tree_dir)
+
+        mock_rmtree.assert_called_once()
+        print("PASS: top-level safe_rmtree entry-point window skips without raising")
 
     # --- non-container allowed_root does not crash ---
     with tempfile.TemporaryDirectory() as tmp:

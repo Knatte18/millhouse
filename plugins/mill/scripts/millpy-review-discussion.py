@@ -7,6 +7,8 @@ Flags:
     --slug <slug>      Override active-slug detection (run from hub/main).
     --max-rounds <N>   Override roles.discussion-review.holistic.rounds for this invocation.
                        Default: use config value.
+    --reviewer <alias> Override roles.discussion-review.holistic.reviewer for this invocation only.
+                       Default: use config value.
     --stage {prepare,finalize,full}
                        Default: full. prepare=render prompt only, finalize=parse output only.
     --agent-output <path>
@@ -56,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help="Review round number from prepare envelope; auto-discovered when absent in finalize stage.",
+    )
+    parser.add_argument(
+        "--reviewer",
+        default=None,
+        help="Override roles.discussion-review.holistic.reviewer for this invocation only (e.g. sonnetmax). Nothing is written back to config.",
     )
     parser.add_argument(
         "--actual-model",
@@ -120,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
             prepare_result = prepare(
                 cfg, slug, mill_dir, project_root, wiki_root,
                 max_rounds=args.max_rounds, agent_mode=True,
+                reviewer_override=args.reviewer,
             )
             briefs_dir = _paths.resolve_task_path(hub_dir, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -195,7 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     else:  # full
         try:
             result = run(
-                cfg, slug, mill_dir, project_root, wiki_root, max_rounds=args.max_rounds
+                cfg, slug, mill_dir, project_root, wiki_root,
+                max_rounds=args.max_rounds, reviewer_override=args.reviewer,
             )
             print(json.dumps(result.to_dict()))
             return 0

@@ -28,6 +28,8 @@ Never fabricate file contents or code behaviour you have not actually read. Do n
 - **Feasibility** — technical obstacles not addressed, based on source files read.
 - **Decisions** — each `### Decision:` has rationale + rejected alternatives; implicit decisions surfaced.
 
+Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
+
 ## Output format — STRICT
 
 Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line. Everything outside these markers is ignored by the backend. **No preamble inside the markers.** No "I reviewed..." sentences. No narrative intro.
@@ -43,6 +45,7 @@ MILL_REVIEW_BEGIN
 ```yaml
 verdict: APPROVE | GAPS_FOUND
 reviewer_model: <REVIEWER_MODEL>
+reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: <artefact reference>
 date: <UTC YYYY-MM-DD>
 ```
