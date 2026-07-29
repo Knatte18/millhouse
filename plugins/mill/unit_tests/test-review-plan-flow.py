@@ -951,6 +951,44 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # Test 14b — holistic-normal site's own blocking_count/nit_count
+    # Sibling to Test 14 (inserted without renumbering later tests, same
+    # precedent as Test 7b). Test 14's holistic leg stays APPROVE_TEXT, so
+    # this is the only test that exercises the "holistic normal" finalize_scope
+    # call site's own counts directly rather than only the run-level aggregate.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            holistic_blocking_and_nit = (
+                "# Review\n\n"
+                "### [BLOCKING] missing edge case\n\n- b\n\n"
+                "### [NIT] naming nit\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(APPROVE_TEXT, "sid-a"), (holistic_blocking_and_nit, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
+            assert rv_hol["blocking_count"] == 1, (
+                f"expected holistic blocking_count=1, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
+            )
+            print("PASS test14b: holistic-normal site's own blocking_count/nit_count == 1/1")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
     # Test 15 — max_rounds kwarg override for plan review
     # Pre-populate 3 per-batch review files and 3 holistic files.
     # Without kwarg (cfg max=3): raises ReviewError (round 4 would exceed max).
