@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -20,4 +20,6 @@ discussed  '2026-07-29T11:25:12Z'
 planning  '2026-07-29T13:31:24Z'
 plan-review-r1  '2026-07-29T13:39:42Z'
 plan-fix-r1  '2026-07-29T13:43:33Z'
+plan-review-r2  '2026-07-29T13:56:31Z'
+plan-fix-r2  '2026-07-29T13:57:41Z'
 ```
