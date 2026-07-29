@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-commit-sha-validation
+phase: holistic-reviewing
 slug: mill-pipeline-silent-failure-and-report-bugs
 branch: hanf/mill-pipeline-silent-failure-and-report-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ approved-archive-tag-push-failure  '2026-07-29T17:55:30Z'
 approved-plan-review-holistic-rounds-gate  '2026-07-29T18:00:30Z'
 approved-test-registry-local-overlay-redirect  '2026-07-29T18:05:49Z'
 approved-implementer-commit-sha-validation  '2026-07-29T18:09:36Z'
+holistic-reviewing  '2026-07-29T18:09:58Z'
 ```
 
 ## Batches
