@@ -258,6 +258,45 @@ def _parse_deletes_only(batch_path: Path) -> set[str]:
     return tokens
 
 
+def _parse_context_only(batch_path: Path) -> set[str]:
+    """Extract raw path tokens from a batch file's Context: lines only.
+
+    Same single-line / multi-line logic as parse_batch_refs in _review_common,
+    but restricted to ``- **Context:**`` headers. Filters ``none``
+    (case-insensitive) per the existing convention.
+    """
+    text = batch_path.read_text(encoding="utf-8")
+    tokens: set[str] = set()
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        m = _RE_REFS_HEADER.match(lines[i])
+        if m and m.group(1) == "Context":
+            inline = m.group("inline").strip()
+            if inline:
+                backtick_tokens = re.findall(r"`([^`]+)`", inline)
+                batch_tokens = backtick_tokens if backtick_tokens else [
+                    t.strip() for t in inline.split(",") if t.strip()
+                ]
+            else:
+                batch_tokens = []
+                j = i + 1
+                while j < len(lines):
+                    sm = _RE_REFS_SUB.match(lines[j])
+                    if not sm:
+                        break
+                    rest = sm.group(1).strip()
+                    bt = re.findall(r"`([^`]+)`", rest)
+                    if bt:
+                        batch_tokens.extend(bt)
+                    j += 1
+            for t in batch_tokens:
+                if t.lower() != "none":
+                    tokens.add(t)
+        i += 1
+    return tokens
+
+
 # ---------------------------------------------------------------------------
 # move-format check
 # ---------------------------------------------------------------------------
