@@ -29,6 +29,7 @@ from _implementer_common import (  # noqa: E402
     _run_verify_gates,
     _is_benign_windows_cleanup,
     _go_build_tag_retiering_stuck,
+    _is_valid_commit_sha,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
@@ -4497,6 +4498,115 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: case 67 ({exc})", file=sys.stderr)
             errors += 1
+
+    # Case 68 -- commit_sha correction still applies to an abbreviated self-report:
+    # the implementer's own JSON claims commit_sha "abc", but the corrective
+    # git rev-parse HEAD must overwrite it with the real new-HEAD SHA.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=None,
+                verify_cmd=None,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data["commit_sha"] == new_head, (
+                f"expected corrected commit_sha={new_head}, got {data.get('commit_sha')}"
+            )
+            print(
+                "PASS: case 68 - commit_sha correction overwrites an abbreviated"
+                " self-report with the real new-HEAD SHA"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 68 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 69 -- corrective git rev-parse HEAD failure is not silently passed
+    # through: when the guard's own rev-parse call fails, the agent's raw
+    # self-reported commit_sha ("abc") must never leak into the emitted JSON.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        real_run = _subprocess_util.run
+
+        def _rev_parse_failure_side_effect(argv, **kwargs):
+            if argv == ["git", "rev-parse", "HEAD"] and kwargs.get("cwd") == project_root:
+                return subprocess.CompletedProcess(
+                    argv, 1, "", "fatal: not a git repository"
+                )
+            return real_run(argv, **kwargs)
+
+        with unittest.mock.patch.object(
+            _subprocess_util, "run", side_effect=_rev_parse_failure_side_effect
+        ):
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=None,
+                    verify_cmd=None,
+                )
+            )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"expected stuck_type=logic, got {data}"
+            )
+            assert "abc" not in captured, (
+                f"expected the raw self-reported commit_sha 'abc' to never leak"
+                f" into the output, got {captured!r}"
+            )
+            print(
+                "PASS: case 69 - a failed corrective git rev-parse HEAD is never"
+                " silently passed through as commit_sha"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 69 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 70 -- _is_valid_commit_sha direct coverage.
+    try:
+        assert _is_valid_commit_sha("a" * 40) is True, "40-char lowercase hex must pass"
+        assert _is_valid_commit_sha("a" * 64) is True, "64-char lowercase hex must pass"
+        assert _is_valid_commit_sha("abc1234") is False, "abbreviated SHA must fail"
+        assert _is_valid_commit_sha("A" * 40) is False, "uppercase hex must fail"
+        assert _is_valid_commit_sha("g" + "a" * 39) is False, (
+            "non-hex character must fail"
+        )
+        assert _is_valid_commit_sha("") is False, "empty string must fail"
+        print("PASS: case 70 - _is_valid_commit_sha accepts only well-formed full SHAs")
+    except Exception as exc:
+        print(f"FAIL: case 70 ({exc})", file=sys.stderr)
+        errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
