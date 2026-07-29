@@ -11,6 +11,8 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
 
 ## Entry
 
+**Step 0: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. Phase: Plan Review's max-rounds-escape prompt (step 6) is an operator-facing prompt that depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before that prompt can be built.
+
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
    - `wiki_path = _paths.resolve_wiki_path(git_root)`
@@ -113,7 +115,7 @@ A batch that legitimately touches a cross-cutting helper that every test imports
 - `_status.update_field(status_path, "plan", cfg['paths']['plan_dir'].rstrip('/'))` — pointer to the plan dir (worktree-relative).
 - `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())`.
 
-**Commit on the task branch.** `git -C <worktree> add <plan_dir> <status_path> && git commit -m "mill-plan: write plan for {slug}"`.
+**Commit on the task branch.** `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: write plan for {slug}"`. Push.
 
 ### Phase: Plan Review
 
@@ -123,7 +125,7 @@ A batch that legitimately touches a cross-cutting helper that every test imports
 
 Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable. Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, not embedded in the `<task-notification>` payload (which now carries only a one-line ack); the orchestrator must read that review file to present BLOCKING findings or NITs to the user, so the skill must already be active in context before that file is ever read. Loading it this early is still correct, it is just no longer motivated by the payload containing the findings.
 
-The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip plan review". If `roles.plan-review.holistic.rounds == 0` OR `roles.plan-review.holistic.reviewer` is `None`: set overview frontmatter `approved: true` via direct Edit, commit on the task branch (`git -C <worktree> add <plan_dir> && git commit -m "mill-plan: skip plan review (reviewer null or rounds 0) for {slug}"`), push, and proceed straight to Handoff. The skip is recorded in commit history; no `status.md` phase flip beyond the existing Handoff `planned` row.
+The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip plan review". If `roles.plan-review.holistic.rounds == 0` OR `roles.plan-review.holistic.reviewer` is `None`: set overview frontmatter `approved: true` via direct Edit, commit on the task branch (`git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: skip plan review (reviewer null or rounds 0) for {slug}"`), push, and proceed straight to Handoff. The skip is recorded in commit history; no `status.md` phase flip beyond the existing Handoff `planned` row.
 
 Loop up to `max_review_rounds` rounds. Each round:
 
@@ -164,7 +166,7 @@ Loop up to `max_review_rounds` rounds. Each round:
 
    Rows where the fix is "halt" are deliberate: those errors signal a structural planning bug that auto-fixing would mask. The two-pass cap fires for these too (the second pass will produce the same error and trigger halt).
 
-   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"` and re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
+   After applying mechanical fixes for every error in the JSON, mill-plan commits the fix(es) on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"`. Push. Then re-runs the CLI. The commit message uses `validator-fix` to distinguish it from `plan-fix-r{N}` commits (which are LLM-fix-pass commits).
 
    Before re-running via millpy-bg for the `plan-validator-fix` slug, verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -173,7 +175,7 @@ Loop up to `max_review_rounds` rounds. Each round:
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once. On a second consecutive error, the read-only reviewer dispatch (which writes no review file) falls back to the subprocess `--stage full` path via `millpy-bg` before surfacing to the operator. This recovery applies even though mill-plan is autonomous and normally has no user interaction or stuck machinery; the one-retry plus subprocess fallback is the defined recovery, after which the skill surfaces to the operator.
 
    **Agent-mode prepare-envelope handling:** When the prepare stage returns a JSON envelope, inspect the response for the **presence of an `errors` key**:
-   - **If `errors` key is present** (validator failure): The envelope contains `{"errors": [...], "summary": "..."}`. Parse the JSON and apply one mechanical fix per error dict, using the fix table in Step 1.5 below as the source of truth for all fix semantics. After fixes, commit on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"`. Then re-invoke the prepare stage via the same three-step Agent-mode dispatch (re-render brief, call Agent, finalize; the same cycle repeats). Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
+   - **If `errors` key is present** (validator failure): The envelope contains `{"errors": [...], "summary": "..."}`. Parse the JSON and apply one mechanical fix per error dict, using the fix table in Step 1.5 below as the source of truth for all fix semantics. After fixes, commit on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"`. Push. Then re-invoke the prepare stage via the same three-step Agent-mode dispatch (re-render brief, call Agent, finalize; the same cycle repeats). Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
    - **If `errors` key is absent** (validator success): The envelope contains `{"stage": "prepare", "brief_path": ..., ...}`. Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `plugins/mill/skills/mill-go/SKILL.md` "## Agent-mode dispatch").
 
    The discriminator is the **presence of the `errors` key in the JSON**, not the exit code or any other field. Validator errors emit exit code 1 with `errors` in the JSON; validator success emits exit code 0 with `stage: prepare` and `brief_path`.
@@ -239,19 +241,18 @@ Loop up to `max_review_rounds` rounds. Each round:
    - Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
    - Re-validate the plan DAG (`_plan_dag.validate`).
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
-   - Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git commit -m "mill-plan: plan-fix round {N} for {slug}"`.
+   - Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: plan-fix round {N} for {slug}"`. Push.
 
 5. **Non-progress check** (after writing each fixer report from round 2 onward): **Skip this check when the latest round's `## Pushed Back` section is empty.** Empty Pushed Back means the planner addressed every finding cleanly — that is convergence, not non-progress. The check only fires when both rounds have a non-empty Pushed Back AND the title set is identical. If the deep-merged config has `pipeline.autonomous_mode: true`: skip the user prompt; `_status.set_blocked(status_path, f"non-progress round {N}", timestamp=ts)`; commit `git -C <worktree> add <status_path> <reviews_dir> && git -C <worktree> commit -m "mill-plan: blocked (autonomous-mode non-progress) for {slug}"` and push; halt with "Autonomous mode: plan blocked on non-progress at round {N}. Task left as [active] for manual review." If the set is identical, halt with `BLOCKED: Plan review non-progress round {N}` and tell the user to look at the fixer reports. Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement; user intervention is required.
 
 6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): If the deep-merged config has `pipeline.autonomous_mode: true`: skip the user prompt; `_status.set_blocked(status_path, f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain", timestamp=ts)`; commit and push; halt with "Autonomous mode: plan blocked after {N} rounds, {M} BLOCKINGs remain. Task left as [active]." present the user with the prompt below verbatim, computing `{N}` and `{M}` and a one-line recommendation. `{M}` is `result["blocking_count"]` from the most recent CLI invocation — do not re-count manually. If `blocking_count` was 0 in the latest round, this prompt should not have fired — verify step 4c logic before presenting.
 
-   > After {N} rounds, {M} BLOCKING findings remain unresolved (blocking_count from latest round's review JSON). Options:
-   > A) Deep problems — rethink approach. Go back to mill-start and revise discussion.
-   > B) Shallow — one more review round. Invoke: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py" --max-rounds {N+1}` (the `--max-rounds` flag overrides the configured cap; without it the script re-reads config and exits at the same cap again).
-   > C) Override — accept findings and proceed to mill-go anyway.
-   > Recommended: {A/B/C} based on {analysis of remaining findings}.
+   > After {N} rounds, {M} BLOCKING findings remain unresolved (blocking_count from latest round's review JSON). Present these three as a numbered list per `mill:conversation`'s convention: determine the recommended option from {analysis of remaining findings}, list it first as `1)` with `(Recommended)` appended to its label, then list the remaining two as `2)` and `3)` in their order below.
+   > - Deep problems — rethink approach. Go back to mill-start and revise discussion.
+   > - Shallow — one more review round. Invoke: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py" --max-rounds {N+1}` (the `--max-rounds` flag overrides the configured cap; without it the script re-reads config and exits at the same cap again).
+   > - Override — accept findings and proceed to mill-go anyway.
 
-   Wait for the user's choice. A → halt and tell user to check out fresh after they revise. B → invoke `millpy-review-plan.py --max-rounds {N+1}` where `{N}` is the round count just reported (one extra round beyond the configured max). C → set `approved: true` and proceed to Handoff.
+   Wait for the user's choice. Deep problems → halt and tell user to check out fresh after they revise. Shallow → invoke `millpy-review-plan.py --max-rounds {N+1}` where `{N}` is the round count just reported (one extra round beyond the configured max). Override → set `approved: true` and proceed to Handoff.
 
 ### Phase: Handoff
 
