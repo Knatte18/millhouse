@@ -30,7 +30,9 @@ implementing  '2026-07-29T07:15:01Z'
 ```yaml
 batches:
   - name: is-inplace-topology-fix
-    state: pending
+    state: running
+    implementer_session: 6a682cfc-f09f-4876-adcb-ed06fac3268f
+    start_sha: 887f781028c868ded33b234b22dbbac51bab9003
   - name: step5-checkout-guard
     state: pending
 ```
