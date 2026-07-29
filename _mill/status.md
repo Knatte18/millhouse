@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-review-dispatch-attribution-gaps
 branch: hanf/mill-review-dispatch-attribution-gaps
 plan: _mill/plan
@@ -36,6 +36,7 @@ holistic-reviewing  '2026-07-29T09:53:47Z'
 holistic-fixing  '2026-07-29T10:17:54Z'
 holistic-reviewing  '2026-07-29T10:21:46Z'
 holistic-approved  '2026-07-29T10:23:47Z'
+done  '2026-07-29T10:24:10Z'
 ```
 
 ## Batches
