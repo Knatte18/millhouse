@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-pipeline-silent-failure-and-report-bugs
 branch: hanf/mill-pipeline-silent-failure-and-report-bugs
 plan: _mill/plan
@@ -19,4 +19,19 @@ discussed  '2026-07-29T16:44:55Z'
 planning  '2026-07-29T17:27:34Z'
 plan-fix-r1  '2026-07-29T17:33:25Z'
 planned  '2026-07-29T17:33:49Z'
+implementing  '2026-07-29T17:51:12Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: archive-tag-push-failure
+    state: pending
+  - name: plan-review-holistic-rounds-gate
+    state: pending
+  - name: test-registry-local-overlay-redirect
+    state: pending
+  - name: implementer-commit-sha-validation
+    state: pending
 ```
