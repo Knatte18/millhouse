@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-is-inplace-topology-fix
 slug: mill-merge-topology-and-squash-restore-gaps
 branch: hanf/mill-merge-topology-and-squash-restore-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-07-29T07:05:51Z'
 plan-review-r2  '2026-07-29T07:11:23Z'
 planned  '2026-07-29T07:11:41Z'
 implementing  '2026-07-29T07:15:01Z'
+approved-is-inplace-topology-fix  '2026-07-29T07:21:44Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-07-29T07:15:01Z'
 ```yaml
 batches:
   - name: is-inplace-topology-fix
-    state: running
+    state: approved
     implementer_session: 6a682cfc-f09f-4876-adcb-ed06fac3268f
     start_sha: 887f781028c868ded33b234b22dbbac51bab9003
+    commit_sha: d08374a82f5ff6d1c5e50d73774908ddda14ec9d
   - name: step5-checkout-guard
     state: pending
 ```
