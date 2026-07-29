@@ -3,7 +3,7 @@
 ```yaml
 task: 'Review dispatch: no per-round reviewer override, and reviewer_model echoes the dispatch flag instead of the model that ran'
 slug: mill-review-dispatch-attribution-gaps
-approved: false
+approved: true
 started: 20260729-072603
 parent: main
 root: ""
