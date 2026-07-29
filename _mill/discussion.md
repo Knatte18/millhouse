@@ -1,0 +1,140 @@
+# Discussion: Review dispatch: no per-round reviewer override, and reviewer_model echoes the dispatch flag instead of the model that ran
+
+```yaml
+task: Review dispatch: no per-round reviewer override, and reviewer_model echoes the dispatch flag instead of the model that ran
+slug: mill-review-dispatch-attribution-gaps
+status: discussing
+parent: main
+```
+
+## Problem
+
+Two related gaps in the review-dispatch layer (`millpy-review-discussion.py` / `millpy-review-plan.py`), sourced from GitHub issues #725 and #722.
+
+**Gap 1 (#725):** Neither review CLI exposes a `--reviewer` flag. The reviewer for a round is read only from `cfg["roles"]["<role>"]["<scope>"]["reviewer"]`. When an operator wants to try a different reviewer for a single round — the concrete incident: five `opushigh` discussion-review rounds stalled with a flat find-rate (6, 6, 6, 7, 7 findings), and switching to `sonnetmax` for round 6 broke the deadlock (APPROVE, 0 blocking) — there is no supported way to say "use reviewer X for this round." The only working path is a three-part manual workaround: reuse the prepare-stage brief, dispatch the Agent tool manually with a `subagent_type`/`model` that deliberately *contradicts* the prepare envelope's own fields, then pass `--actual-model` to the finalize stage to patch up the `reviewer_model:` field the contradiction broke.
+
+**Gap 2 (#722):** The `reviewer_model:` field written into every review file was never a genuine self-report, independent of `--actual-model`. `_review_discussion.py`'s `prepare()` (and the equivalent in `_review_plan.py`) passes `reviewer_model=reviewer_name` — the config-resolved alias — directly into the rendered prompt, and the `review-discussion.md` template tells the reviewer up front: "Reviewer model: **<REVIEWER_MODEL>**", then asks it to echo that same value back in its own yaml output. That's dictation, not identification. `--actual-model` then overwrites it a second time with the orchestrator's own claim about what it dispatched. Neither layer is a signal about what model actually produced the review — cross-model reviewer comparison (e.g. "did switching to sonnetmax genuinely produce a different quality of review, or did the operator just say it did") is currently unfalsifiable from the artifacts alone.
+
+**Why now:** both issues were filed via `/mill-self-report --auto` from real `/mill-start` sessions on other host repos (`loomyard`, branches `pattern-wiring` and `native-clients-migration`) where the workaround was actually used under time pressure to break a stalled review loop. This is a live papercut in the dispatch layer, not a hypothetical.
+
+## Scope
+
+**In:**
+- New `--reviewer <alias>` CLI flag on both `millpy-review-discussion.py` and `millpy-review-plan.py`, valid for all three `--stage` values (`prepare`, `finalize` is unaffected/no-op for this flag, `full`).
+- The flag overrides the config-resolved reviewer for that single invocation only; nothing is written back to config.
+- For `millpy-review-plan.py`, the override applies to **holistic scope only** (the only scope Agent-mode ever prepares/finalizes; batch scope has no Agent-mode dispatch path at all today and is disabled by default).
+- Resolution via the existing `_reviewers.resolve(registry, alias)` — reuses existing alias validation, no new config surface.
+- Validation: reject cluster-type and non-Claude-provider (`model_to_tier`-unrecognized) aliases at prepare time with a clean `ReviewError` / `ERROR` JSON envelope, mirroring the existing rejection in `maybe_switch_spec_for_large_prompt`.
+- An explicit `--reviewer` suppresses the large-prompt auto-switch (`maybe_switch_spec_for_large_prompt`) for that round — the operator's explicit choice is not silently re-overridden by the token-count heuristic.
+- Because `--reviewer` makes the prepare envelope's `subagent_type`/`model` fields correct at the source, following the envelope as normal (no manual contradiction) no longer causes a `reviewer_model:` mismatch — `--actual-model` is no longer *needed* for the "switch reviewer for one round" workflow (it remains available, unchanged, for genuinely ad-hoc mismatches).
+- New `reviewer_self_id:` field added to the reviewer-facing output contract for discussion and plan reviews only (`review-discussion.md`, `review-plan-batch.md`, `review-plan-holistic.md`) — the reviewer states, in its own words, what model it believes itself to be, as a field distinct from (and never touched by) the dictated/overridden `reviewer_model:` line. Optional/best-effort: not validated, review is not rejected if absent or malformed.
+- `review-output.schema.md` updated to document `reviewer_self_id:` as an optional field, with a note explaining its unverified, reviewer-reported nature.
+- Unit tests covering: valid `--reviewer` resolves correctly through the prepare envelope; unknown alias produces the standard `ERROR` envelope; cluster/non-Claude alias is rejected with a clear message; large-prompt auto-switch is skipped when `--reviewer` is set; `reviewer_self_id:` round-trips through `write_review_file` / `apply_actual_model_override` untouched.
+
+**Out:**
+- Code-review templates (`review-code-batch.md`, `review-code-holistic.md`) — not named in either sourced issue; `reviewer_self_id` stays scoped to discussion + plan review. (A follow-up could extend it, but that's a separate, unfiled decision.)
+- Batch-scope plan review dispatch — no CLI flag exposes batch-scope prepare/finalize today; adding one, or extending `--reviewer` to batch scope, is out of scope. `--reviewer` on `millpy-review-plan.py` under `--stage full` still only affects the holistic reviewer, not the batch reviewer, for the same reason.
+- Any change to `mill-go/SKILL.md`, `mill-start/SKILL.md`, or `mill-plan/SKILL.md` (the Agent-mode orchestration docs). `--reviewer` is designed for direct/manual CLI invocation — exactly how the #725 operator used the existing workaround, by hand, mid-loop — not for wiring into the automated `--auto` dispatch loop those files describe. Neither sourced issue asks for orchestration-doc changes, and deciding how an unattended orchestrator would ever choose to pass `--reviewer` is its own design problem.
+- Making `reviewer_model:` itself trustworthy (e.g. stopping the prompt from telling the reviewer its own expected identity). Rejected — see Decisions.
+- The existing `fallback_reviewer` config key (seen in `roles.code-review.batch` in `mill-config.yaml`) — that's an automatic swap-on-repeated-error mechanism, unrelated to this operator-driven single-round override. Not touched.
+- Any change to `_agent_dispatch.py`'s `model_to_tier` / `resolve_subagent_type` themselves — the new validation wraps a call to `model_to_tier`, it doesn't change its behavior.
+
+## Decisions
+
+### reviewer-flag-mechanism
+
+- Decision: Add `--reviewer <alias>` as a new argparse flag on both `millpy-review-discussion.py` and `millpy-review-plan.py`. Resolve it via `_reviewers.resolve(registry, alias)` at the same point the config-resolved reviewer name is currently resolved (`_review_discussion.py` `prepare()` line ~82-87; `_review_plan.py` `prepare()`'s holistic branch line ~466-469). When `--reviewer` is given, its resolved spec/name replaces `reviewer_name`/`spec` for that call — used both for the rendered prompt's `reviewer_model=` token and for the prepare envelope's `model`/`effort`/`subagent_type` fields. Threaded through `--stage full`'s `run()` too, so behavior is stage-independent.
+- Rationale: this directly satisfies issue #725's "Expected" section, reuses existing, already-validated registry/alias machinery, and requires no new config file or key. Because the envelope is now built from the override, an operator following the standard Agent-mode dispatch pattern (dispatch exactly what the envelope says) gets accurate attribution for free — the three-part manual workaround collapses to one flag.
+- Rejected: a config-key-based override (e.g. a `.millhouse/config.local.yaml` field) — rejected because the use case is explicitly per-round/per-invocation ("switching reviewers for a single round"), not session- or hub-scoped; a config key would need to be set and then unset around every use, which is worse than a flag.
+
+### reviewer-flag-scope
+
+- Decision: `--reviewer` affects holistic scope only for plan review; discussion review has only one scope so this doesn't apply there. Batch-scope plan review is untouched.
+- Rationale: Agent-mode plan review dispatch (`--stage prepare`/`--stage finalize`) only ever operates on holistic scope — `millpy-review-plan.py`'s prepare-stage call always passes `scope=None` (see the CLI's `--stage prepare` branch), and there is no CLI flag today that lets an external caller invoke batch-scope prepare/finalize at all. Batch scope is also disabled by default (`roles.plan-review.batch.reviewer: null` in the shipped `mill-config.yaml` template).
+- Rejected: overriding both scopes from one flag in `--stage full` — rejected as speculative surface for a scope with no live incident and no existing Agent-mode dispatch path; would also require deciding what "one reviewer for two structurally different scopes" even means (batch reviews run once per plan batch, holistic runs once).
+
+### reviewer-flag-validation
+
+- Decision: Immediately after resolving `--reviewer`'s spec via `_reviewers.resolve`, reject (a) `type: cluster` specs and (b) any spec whose `model` field `_agent_dispatch.model_to_tier` doesn't recognize (non-Claude providers, e.g. `g25flash`/`g25pro`-style registry entries) — both via a `ReviewError` routed through the standard `print_error_envelope("discussion"|"plan", msg)` path, not an unhandled exception.
+- Rationale: Agent-mode dispatch is Claude-only by construction (the Agent tool only accepts Claude `subagent_type`/`model` values), so today `_agent_dispatch.model_to_tier` never sees a non-Claude model string in this code path — but `--reviewer` is the first way an operator can reach it, since the registry itself contains non-Claude and cluster entries with no gate at resolution time. Without this check, a bad `--reviewer` value would surface as a raw Python traceback deep in envelope construction instead of the JSON `ERROR` envelope every other failure mode in these CLIs produces.
+- Rejected: no extra validation, let it fail wherever it naturally fails — rejected because it breaks the CLIs' otherwise-consistent "every failure is a JSON ERROR envelope" contract that `print_error_envelope` exists to guarantee.
+
+### reviewer-flag-large-prompt-interaction
+
+- Decision: When `--reviewer` is supplied, skip the call to `maybe_switch_spec_for_large_prompt` entirely for that round (both discussion and plan-holistic `prepare()`).
+- Rationale: the large-prompt auto-switch exists to protect against a reviewer choking on an oversized prompt by silently swapping in a configured fallback — but the entire point of `--reviewer` is the operator making a deliberate, informed choice to break a stalled loop. Letting an unrelated token-count heuristic silently revert that choice mid-round would be confusing and defeat the purpose; the operator can always pick a different reviewer if size is genuinely a concern.
+- Rejected: applying the large-prompt switch on top of `--reviewer` as normal — rejected for the reason above.
+
+### reviewer-attribution-decouples-actual-model
+
+- Decision: `--reviewer` does not require `--actual-model` to also be passed for the same round. Once the prepare envelope reflects the override, an operator following the standard "dispatch exactly what the envelope says" Agent-mode contract produces a review file whose `reviewer_model:` is already correct (because the rendered prompt's `reviewer_model=` token already carries the overridden name) — no post-hoc patch needed.
+- Rationale: this is what actually closes #725. If `--reviewer` still required `--actual-model` alongside it, the fix would just be "two flags instead of a manual contradiction," not a real fix — the bug is that the *envelope itself* was wrong, and `--reviewer` corrects that at the source.
+- Rejected: requiring both flags together — rejected as not actually solving the underlying problem, just moving the same workaround one step to the left.
+
+### reviewer-self-id-field
+
+- Decision: Add a new `reviewer_self_id:` field to the yaml metadata block in `review-discussion.md`, `review-plan-batch.md`, and `review-plan-holistic.md` — instructing the reviewer to independently state what model/version it believes itself to be, as its own field distinct from the dictated `reviewer_model:` line. Optional and best-effort: `parse_verdict`/`finalize_scope` do not validate its presence or content; a missing or garbled value does not fail the review. `apply_actual_model_override`'s regex (`^reviewer_model:[ \t]*\S.*$`) is anchored to `reviewer_model:` only and will not match or touch a `reviewer_self_id:` line, so the two fields never collide.
+- Rationale: issue #722 explicitly suggests exactly this ("have the reviewer report its own self-identified model in the review body as a separate field... distinct from the orchestrator-supplied reviewer_model:, so the two can be cross-checked"). This is the lower-risk fix compared to trying to make `reviewer_model:` itself trustworthy, since nothing downstream depends on `reviewer_model:`'s current semantics beyond presence/regex-replace — repurposing it risks breaking the existing `--actual-model` override contract and the schema doc's documented meaning.
+- Rejected: making `reviewer_model:` itself the trustworthy signal (e.g. no longer telling the reviewer its expected identity up front, and trusting whatever it reports) — rejected because the prompt still necessarily tells the reviewer *some* framing (round number, task title, etc.) and the field is consumed by `--actual-model`'s override contract elsewhere; changing its meaning would ripple into every existing caller of `apply_actual_model_override` and the schema doc's field table. A cheaper, additive field is lower-risk and matches the issue's own suggested fix.
+- Rejected: requiring/validating `reviewer_self_id:` — rejected because self-identification is inherently unreliable (acknowledged directly in the issue text: "Self-identification is imperfect"), so gating review validity on it would make an already-noisy signal load-bearing for no benefit — it's meant as a diagnostic cross-check, not a correctness gate.
+
+### reviewer-self-id-scope
+
+- Decision: `reviewer_self_id:` is added only to the discussion and plan review templates (3 files). Code-review templates (`review-code-batch.md`, `review-code-holistic.md`) are not touched.
+- Rationale: neither issue #722 (titled "review-plan/review-discussion...") nor #725 mentions code review. Even though the backend (`finalize_scope`, `apply_actual_model_override`, `review-output.schema.md`) is shared infrastructure across all five review templates, extending the new field to code review is unrequested scope expansion per the project's YAGNI convention — it can be filed and designed separately if wanted.
+
+### no-orchestration-doc-changes
+
+- Decision: This task does not modify `mill-go/SKILL.md`, `mill-start/SKILL.md`, or `mill-plan/SKILL.md`.
+- Rationale: `--reviewer` is designed for the exact workflow the #725 operator actually used — a manual, mid-loop, human-driven override — not for the automated Agent-mode dispatch pattern those three SKILL.md files describe (that pattern has no operator-in-the-loop concept for `--auto` runs to begin with). Wiring `--reviewer` into the automated loop (e.g. as a new stuck-loop-escalation option) is a separate design question — how would an unattended orchestrator ever decide to invoke it? — that neither sourced issue raises and that would expand this task well beyond a CLI-level fix.
+- Rejected: updating the SKILL.md docs to mark the old manual-dispatch-then-`--actual-model` sequence as deprecated — rejected as out of scope per the above; the manual sequence remains valid for cases `--reviewer` doesn't cover (e.g. anything not expressible as a registry alias).
+
+## Technical context
+
+**Files to change:**
+- `plugins/mill/scripts/millpy-review-discussion.py` — add `--reviewer` argparse flag; thread through to `prepare()`/`run()` calls at all three `--stage` branches.
+- `plugins/mill/scripts/millpy-review-plan.py` — same, but the override only reaches the holistic-scope prepare/finalize calls (`prepare(cfg, slug, scope=None, ...)` and `finalize(..., scope=None, ...)`); `run()`'s batch-scope internals stay untouched.
+- `plugins/mill/scripts/_review_discussion.py` — `prepare()` (line ~44-127): accept a new `reviewer_override: str | None = None` kwarg; when set, resolve via `_reviewers.resolve(registry, reviewer_override)`, validate (cluster / non-Claude rejection), use in place of the config-resolved `reviewer_name`/`spec`, and skip the `maybe_switch_spec_for_large_prompt` call. `run()` (line ~199-271) needs the same kwarg threaded through since it duplicates `prepare`'s reviewer resolution for its own direct-dispatch path.
+- `plugins/mill/scripts/_review_plan.py` — `prepare()` (line ~321-553), holistic branch only (line ~462-553): same `reviewer_override` kwarg and treatment. `run()` (line ~617+) needs the override threaded to its holistic-scope resolution only, leaving batch-scope resolution (line ~682-683 region) untouched.
+- `plugins/mill/scripts/_reviewers.py` — no changes needed; `resolve()` (line 369-407) already does exactly what's needed. Consider whether the cluster/non-Claude rejection belongs here as a reusable helper (e.g. `resolve_single_claude(registry, name)`) versus inlined at each call site — mill-plan's discretion; `maybe_switch_spec_for_large_prompt`'s existing inline cluster check (in `_review_common.py` line ~1442-1446) is the closest precedent and inlines it, so inlining at the two new call sites is the more consistent choice, but note `_agent_dispatch.model_to_tier` lives in a different module (`_agent_dispatch.py`) than `_reviewers.py`/`_review_common.py`, so whichever module ends up owning the check will need an import of the other — check current import direction (`_reviewers.py` already imports `_agent_dispatch` locally inside `tier_rank()`, line ~500, so that direction is already established and safe to reuse) to avoid introducing a cycle.
+- `plugins/mill/templates/review-discussion.md`, `review-plan-batch.md`, `review-plan-holistic.md` — add a `reviewer_self_id:` line to the yaml metadata block example (after `reviewer_model:`, before `reviewed_file:` — matches the schema doc's field ordering) plus a short instruction telling the reviewer to state its own model belief independently. `review-plan-batch.md`/`review-plan-holistic.md` were not read in full during this discussion — mill-plan should read them before editing to confirm their yaml block matches `review-discussion.md`'s structure (same `verdict:`/`reviewer_model:`/`reviewed_file:`/`date:` shape per `review-output.schema.md`).
+- `plugins/mill/templates/review-output.schema.md` — add `reviewer_self_id` to the field table (line ~44-49) as optional, with a one-line note distinguishing it from `reviewer_model` (unverified, reviewer-reported vs. orchestrator-supplied).
+- `plugins/mill/scripts/_review_common.py` — no changes needed for `reviewer_self_id` itself (it's inert as far as parsing/writing goes — `apply_actual_model_override`'s regex only touches `reviewer_model:`). Confirm `write_review_file` and `finalize_scope` don't need changes (they operate on the whole `raw_text` blob, field-agnostic).
+
+**Shared helpers already in place, reuse rather than reinvent:**
+- `_reviewers.resolve(registry, name) -> dict` (`_reviewers.py:369`) — alias resolution, already used everywhere else.
+- `_reviewers.ReviewerError` / `_review_common.ReviewError` — existing error types; route `--reviewer` failures through whichever the call site already raises (`_review_discussion.py`/`_review_plan.py` catch `ReviewError` at the CLI level and call `print_error_envelope`).
+- `_agent_dispatch.model_to_tier(model: str) -> str` (`_agent_dispatch.py:95`) — raises `ValueError` for unrecognized families; this task must catch that and re-raise/convert to `ReviewError` before it escapes.
+- `_review_cli.print_error_envelope(review_type, msg)` (`_review_cli.py:23`) — the standard ERROR-envelope emission path; every new failure mode here should route through it, same as every existing failure mode in these two CLIs.
+
+**Existing precedent for cluster rejection** (mirror this pattern): `_review_common.py`'s `maybe_switch_spec_for_large_prompt` (line ~1420-1460) already does `if override_spec.get("type") == "cluster": raise ReviewError(...)` — same shape, same message style, reuse for `--reviewer`.
+
+## Constraints
+
+No `CONSTRAINTS.md` present at the hub root. No additional constraints beyond what's captured in Scope/Decisions above.
+
+## Testing
+
+- **`test-review-discussion.py`-equivalent (or existing file if one exists under this name)**: TDD candidate — `prepare(cfg, slug, ..., reviewer_override="sonnetmax")` returns an envelope whose `model`/`effort` match `sonnetmax`'s resolved spec, not the config-resolved default; the rendered `prompt_text` contains `reviewer_model=sonnetmax`'s value, not the config default's.
+- Same shape for `_review_plan.py`'s holistic-scope `prepare()`.
+- **Unknown alias**: `--reviewer does-not-exist` on either CLI produces the standard `verdict: ERROR` JSON envelope on stdout and a `ERROR: Unknown reviewer...` line on stderr — reuse `_reviewers.resolve`'s existing `ReviewerError` message format (already tested in `_reviewers.py`'s own suite; this test confirms it propagates through the CLI layer's `print_error_envelope` correctly).
+- **Cluster-type alias rejected**: construct a registry fixture with a `type: cluster` entry, pass its name via `--reviewer`, assert `ReviewError` / `ERROR` envelope with a message naming the alias and "cluster type not supported" (or equivalent wording matching the `maybe_switch_spec_for_large_prompt` precedent).
+- **Non-Claude alias rejected**: construct/use a registry entry with a non-Claude `model` (e.g. the shipped `g25flash` shape) as `--reviewer`, assert the same clean `ERROR` envelope path (not a raw `ValueError` traceback).
+- **Large-prompt auto-switch skipped**: with `--reviewer` set and a prompt long enough to normally trigger `maybe_switch_spec_for_large_prompt`, assert the final resolved spec is still the `--reviewer` override's spec, not the `large_prompt.reviewer` config override.
+- **`reviewer_self_id` round-trip**: feed `apply_actual_model_override(raw_text_with_reviewer_self_id, actual_model="sonnetmax")` and assert the `reviewer_self_id:` line in `raw_text` is byte-identical in the output (only `reviewer_model:` changes). Feed text with `reviewer_self_id:` present through `write_review_file` and assert it's preserved verbatim in the written file.
+- Follow `mill:testing` / `python:python-testing` conventions: in-memory/tempfile fixtures, no real git or LLM calls, matching the existing `unit_tests/` suite's style (`run-all.py` runner).
+
+## Q&A log
+
+- **Q:** Should `--reviewer <alias>` be added to both `millpy-review-discussion.py` and `millpy-review-plan.py`, resolved via the existing reviewer registry, overriding the configured reviewer for that single invocation only? **A:** [auto-pick] Yes, both CLIs, invocation-scoped only. **Why:** the brief names both CLIs explicitly and issue #725's "Expected" section describes exactly this; reuses existing registry validation instead of inventing new config surface.
+- **Q:** For `millpy-review-plan.py`, should `--reviewer` apply to holistic scope only, or also batch scope? **A:** [auto-pick] Holistic scope only. **Why:** Agent-mode plan review dispatch only ever operates on holistic scope (no CLI flag exposes batch-scope prepare/finalize at all today), and batch scope is disabled by default in the shipped config.
+- **Q:** Should supplying `--reviewer` make `--actual-model` unnecessary for that round? **A:** [auto-pick] Yes — the prepare envelope now reflects the override, so following it as normal produces correct attribution without a patch step. **Why:** this is the actual fix for #725; requiring both flags together would just relocate the same workaround, not close it.
+- **Q:** Should `--reviewer` reject cluster-type and non-Claude-provider aliases at prepare time with a clean error, rather than an unhandled exception? **A:** [auto-pick] Yes, validate immediately and route through the standard `print_error_envelope` path. **Why:** Agent-mode dispatch is Claude-only by construction; `--reviewer` is the first path that can reach a non-Claude/cluster spec, and it must fail the same way every other error in these CLIs does.
+- **Q:** Should an explicit `--reviewer` suppress the large-prompt auto-switch for that round? **A:** [auto-pick] Yes. **Why:** the operator's deliberate choice shouldn't be silently reverted by an unrelated token-count heuristic — that would defeat the purpose of the override.
+- **Q:** Should the fix add a new, independent `reviewer_self_id:` field rather than trying to make `reviewer_model:` trustworthy? **A:** [auto-pick] Yes, add `reviewer_self_id:` as a second, untouched field. **Why:** issue #722 explicitly suggests this; it's lower-risk than repurposing `reviewer_model:`, which other code (`--actual-model` override, schema doc) already depends on.
+- **Q:** Should `reviewer_self_id:` be scoped to discussion + plan review templates only, or extended to code review too? **A:** [auto-pick] Discussion + plan only (3 templates). **Why:** neither sourced issue mentions code review; extending scope there is unrequested per the project's YAGNI convention.
+- **Q:** Should `reviewer_self_id:` be required/validated, or optional/best-effort? **A:** [auto-pick] Optional/best-effort, no validation. **Why:** self-identification is inherently unreliable (acknowledged in the issue itself); it's a diagnostic cross-check, not a correctness gate.
+- **Q:** Should `review-output.schema.md` be updated to document the new field? **A:** [auto-pick] Yes, add a row to the field table plus a short explanatory note. **Why:** the schema doc is the canonical reference for review file output; leaving it stale contradicts the project's own convention.
+- **Q:** Should `--reviewer` also work under `--stage full` (subprocess/psmux `run()`), not just the Agent-mode `prepare`/`finalize` split? **A:** [auto-pick] Yes, both. **Why:** it's one argparse flag shared across all `--stage` values; having it silently no-op under one stage would be a confusing inconsistency.
+- **Q:** Is updating the orchestration SKILL.md files (`mill-go`, `mill-start`, `mill-plan`) in scope? **A:** [auto-pick] No — CLI/templates/schema only. **Why:** `--reviewer` targets manual/direct CLI invocation (how the #725 operator actually used the workaround), not the automated Agent-mode dispatch loop; wiring it into `--auto` orchestration is a separate, unfiled design question neither issue raises.
+- **Q:** Should unit tests be added covering the new behaviors? **A:** [auto-pick] Yes, covering override resolution, unknown-alias error, cluster/non-Claude rejection, large-prompt-switch suppression, and `reviewer_self_id` round-trip. **Why:** this is exactly the kind of narrow, deterministic, non-LLM logic the existing unit-test suite already covers well.
