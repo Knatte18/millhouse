@@ -57,16 +57,16 @@ Card 15 (the `run()`-level large-prompt-skip test) distinguishes which reviewer 
 ### Card 15: `_review_discussion.py::run()` `reviewer_override` unit tests
 
 - **Context:**
-  - `plugins/mill/scripts/_review_discussion.py`
   - `plugins/mill/scripts/_reviewers.py`
   - `plugins/mill/scripts/_reviewer_test_stub.py`
   - `plugins/mill/unit_tests/test-reviewers.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-review-discussion-flow.py`
+  - `plugins/mill/scripts/_review_discussion.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add four new checks to `main()` (same fixture/accumulator/PASS-FAIL conventions as Card 14, same deliberately-wrong `cfg["roles"]["discussion-review"]["holistic"]["reviewer"]` pattern), calling `discussion_run` (already imported in this file) with a `reviewer_override` keyword argument:
+- **Requirements:** Add four new checks to `main()` (same fixture/accumulator/PASS-FAIL conventions as Card 14, same deliberately-wrong `cfg["roles"]["discussion-review"]["holistic"]["reviewer"]` pattern), calling `discussion_run` (already imported in this file) with a `reviewer_override` keyword argument. Writing Card 15's check 3 exposed a real bug in batch `discussion-review-cli`'s already-committed `run()`: `run()` calls `prepare()` first (to render the prompt) and `prepare()` unconditionally resolves `reviewer_override` with `reject_non_claude=True`, regardless of caller -- so a non-Claude override raises inside `prepare()` before `run()`'s own downstream `reject_non_claude=False` resolve is ever reached, making that downstream resolve dead code and contradicting its own inline comment ("must keep accepting non-Claude aliases"). Fix: in `_review_discussion.py::prepare()`, change the `reviewer_override` resolve's `reject_non_claude=True` to `reject_non_claude=agent_mode` -- `agent_mode` already distinguishes the two callers (`True` for the Agent-mode `--stage prepare` CLI entrypoint, which is Claude-subagent-only by construction; `False` for `run()`'s internal call, the legacy direct-dispatch path that accepts any configured provider), so this reuses an existing, already-correct distinction rather than introducing a new parameter.
   1. Extend the registry with `override-reviewer` (`type: single, provider: test_stub, model: "unused-test-stub-model", tooluse: False`); `stub.seed([(APPROVE_TEXT, "sid-run-override")])`; call `discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root, reviewer_override="override-reviewer")`; assert `r.verdict == "APPROVE"` and `Path(r.reviews[0]["file"]).exists()`.
   2. Call `discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root, reviewer_override="does-not-exist")` with no `stub.seed(...)` call (resolution fails before any dispatch); assert it raises `ReviewError` (imported by Card 14) mentioning "Unknown reviewer".
   3. Extend the registry with `gemini-reviewer` (`type: single, provider: gemini, model: "gemini-2.5-flash", tooluse: False`); monkeypatch `_llm_gemini.run_bulk` for the duration of this check only, mirroring `plugins/mill/unit_tests/test-reviewers.py`'s `test_single_gemini_bulk_mode` save/restore pattern (`import _llm_gemini as llm_gemini; original = llm_gemini.run_bulk; llm_gemini.run_bulk = lambda prompt_text, **kw: (APPROVE_TEXT, "sid-gemini"); try: <call>; finally: llm_gemini.run_bulk = original`); call `discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root, reviewer_override="gemini-reviewer")`; assert `r.verdict == "APPROVE"` — proving `run()`'s narrower `reject_non_claude=False` validation accepts an alias `prepare()` would reject.
