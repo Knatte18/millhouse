@@ -41,7 +41,9 @@ batches:
     start_sha: bd5fb54d5b49ce3eb5da25b68f15e6174b9656ac
     commit_sha: 2ad5be01a85fe480f93612479ee6178011aade10
   - name: plugin-manifest-validator
-    state: pending
+    state: running
+    implementer_session: 3d0c8b15-02c0-4ef4-b7d1-f8e72e117441
+    start_sha: 70c4dd3a4aed3f4c3541ba511aa1b77c63c2ea0d
   - name: review-plan-counting-tests
     state: pending
 ```
