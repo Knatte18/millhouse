@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-topology-and-squash-restore-gaps
 branch: hanf/mill-merge-topology-and-squash-restore-gaps
 plan: _mill/plan
@@ -22,4 +22,15 @@ plan-review-r1  '2026-07-29T07:05:51Z'
 plan-fix-r1  '2026-07-29T07:05:51Z'
 plan-review-r2  '2026-07-29T07:11:23Z'
 planned  '2026-07-29T07:11:41Z'
+implementing  '2026-07-29T07:15:01Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: is-inplace-topology-fix
+    state: pending
+  - name: step5-checkout-guard
+    state: pending
 ```
