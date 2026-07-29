@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-baseline-snapshot-windows-path-gap
 branch: hanf/mill-baseline-snapshot-windows-path-gap
 plan: _mill/plan
@@ -21,4 +21,13 @@ plan-review-r1  '2026-07-29T13:49:16Z'
 plan-fix-r1  '2026-07-29T13:49:16Z'
 plan-fix-r2  '2026-07-29T13:52:50Z'
 planned  '2026-07-29T13:52:59Z'
+implementing  '2026-07-29T13:56:09Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: toctou-guard-hardening
+    state: pending
 ```
