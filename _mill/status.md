@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: mill-baseline-snapshot-windows-path-gap
+branch: hanf/mill-baseline-snapshot-windows-path-gap
+plan: null
+parent: main
+task: 'millpy-implement.py --stage baseline: WinError 3 snapshotting a transient/generated file on Windows'
+task_description: |
+  millpy-implement.py --stage baseline: WinError 3 snapshotting a transient/generated file on Windows
+```
+
+## Timeline
+
+```text
+discussing  '2026-07-29T10:51:49Z'
+```
