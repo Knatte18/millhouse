@@ -746,6 +746,70 @@ def test_load_config_sub_project_hub_overlay() -> None:
     print("PASS load_config -- sub-project hub overlay: hub value wins over template")
 
 
+def test_load_config_repo_layer_yaml_crash_falls_back() -> None:
+    """load_config falls back to template defaults instead of raising when the
+    repo-layer mill-config.yaml contains literal merge-conflict markers."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        _git_init(hub_root)
+        # Simulate a repo-layer config left mid-merge with literal conflict markers --
+        # this is guaranteed-invalid YAML.
+        broken_config_path = hub_root / "mill-config.yaml"
+        _write_yaml(
+            broken_config_path,
+            "spawn:\n<<<<<<< HEAD\n  branch_prefix: a\n=======\n  branch_prefix: b\n>>>>>>> other\n",
+        )
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(hub_root, hub_root)
+            stderr_output = mock_stderr.getvalue()
+
+        # load_config must not raise; the broken source is treated as absent, so the
+        # template default surfaces instead of the (unparseable) repo override.
+        assert cfg.get("spawn", {}).get("branch_prefix") == "", (
+            f"Expected template default on parse failure; got {cfg.get('spawn')!r}"
+        )
+        assert str(broken_config_path) in stderr_output, (
+            f"Expected stderr warning naming {broken_config_path}; got {stderr_output!r}"
+        )
+    print("PASS load_config -- repo-layer YAML crash falls back to template default, does not raise")
+
+
+def test_load_config_repo_layer_clean_yaml_unaffected() -> None:
+    """A clean, valid repo-layer mill-config.yaml still merges normally -- Card 1's
+    try/except does not change the non-crash path's behavior."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        _git_init(hub_root)
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: clean_value\n")
+
+        with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+                with patch.object(
+                    _config, "resolve_plugin_template_path",
+                    return_value=tmp_path / "templates" / "mill-config.yaml"
+                ):
+                    cfg = _config.load_config(hub_root, hub_root)
+            stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("spawn", {}).get("branch_prefix") == "clean_value", (
+            f"Expected clean repo-layer override to merge; got {cfg.get('spawn')!r}"
+        )
+        assert "failed to parse" not in stderr_output, (
+            f"Unexpected parse-failure warning for a clean config; stderr: {stderr_output!r}"
+        )
+    print("PASS load_config -- clean repo-layer YAML unaffected by parse-failure guard")
+
+
 def test_worktree_template_augments_template_cfg() -> None:
     """load_config augments template_cfg with worktree-local template to avoid unknown-key warnings."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1328,6 +1392,8 @@ def main() -> int:
         test_load_config_hub_relative_path_no_warning,
         test_load_config_no_hub_overlay_returns_template,
         test_load_config_sub_project_hub_overlay,
+        test_load_config_repo_layer_yaml_crash_falls_back,
+        test_load_config_repo_layer_clean_yaml_unaffected,
         test_no_op_when_both_args_none,
         test_creates_file_when_missing,
         test_updates_existing_value,
