@@ -40,6 +40,14 @@ Widen mill-start's existing status.md-only "Status safeguard" (Phase: Discussion
     `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way. This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision). Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.`
 
   - Do not touch the `**Subprocess/psmux branch**` prose or its `millpy-bg` invocation in this phase — the subprocess/psmux path's coverage (`worktree_snapshot_guard`) is explicitly unchanged (`_mill/discussion.md` Scope (Out)).
+  - **Step 3.5 also needs bracketing.** Step 3.5 ("ERROR-only-aggregate retry") re-invokes `millpy-review-discussion.py` via a second, distinct Agent-mode dispatch — the same out-of-process reviewer-execution window step 2's checkpoints exist to close, just reached via a different branch. Locate step 3.5's sentence beginning `"**Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in \`plugins/mill/skills/mill-go/SKILL.md\`) with \`<cli> = millpy-review-discussion.py\` with \`<args> = --max-rounds <max_review_rounds + 1>\` ONLY when this round is the Auto mode non-progress-extension round ..."`. Insert immediately before it:
+
+    `Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill") — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch. Does not apply to the Subprocess/psmux branch immediately below.`
+
+    Insert immediately after that same Agent-mode paragraph and before the `"**Subprocess/psmux branch:**"` heading that follows it:
+
+    `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
+
   - Do not add or modify anything in `### Phase: Handoff` — its own `_status.append_phase(status_path, "discussed", timestamp)` call is a separate phase, not covered by the "applies to all `_status.append_phase` calls in this phase" wording (which is phase-scoped to Discussion Review, both before and after this edit).
 - **Commit:** `docs(mill): widen mill-start's tracked-file safeguard to the whole _mill/ tree`
 

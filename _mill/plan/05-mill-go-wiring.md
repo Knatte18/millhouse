@@ -41,7 +41,16 @@ Add the tree-guard safeguard (mill-go had none) to both of mill-go's review loop
     `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way. This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision). Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.`
 
   - Do not touch the subprocess/psmux `millpy-bg` invocation or polling logic in step 2 — its coverage (`worktree_snapshot_guard`) is explicitly unchanged (`_mill/discussion.md` Scope (Out)).
-  - Do not modify the NIT-fix dispatch (step 4's `APPROVE` branch) or any other step in this section — this task's Scope (In) covers only the per-`append_phase` and per-dispatch checkpoints named above.
+  - **Step 4.5 also needs bracketing.** Step 4.5 ("ERROR-only-aggregate retry") re-invokes `millpy-review-code.py` via a second, distinct Agent-mode dispatch of the same review CLI — the same out-of-process reviewer-execution window step 2's checkpoints exist to close, just reached via a different branch. Locate step 4.5's sentence `"If \`dispatch == agent\`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with \`<cli> = millpy-review-code.py\` and \`<args> = --batch <batch_name> [--extra-file <p> ...]\`."` Insert immediately before it:
+
+    `Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill") — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch. Does not apply to the subprocess/psmux branch immediately below.`
+
+    Insert immediately after that same sentence and before the `"If \`dispatch == subprocess\` or \`psmux\`:"` line that follows it:
+
+    `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
+
+  - **Fixer dispatch (step 4's NIT-fix pass, `<cli> = millpy-fix.py`) is out of scope — do not bracket it.** `millpy-fix.py` is not one of the three review CLIs (`millpy-review-discussion.py` / `millpy-review-plan.py` / `millpy-review-code.py`) this task's Scope (In) names; it dispatches a `mill:mill-implementer`-class subagent to a distinct role (fixing, not reviewing). `_mill/discussion.md`'s Scope (Out) explicitly limits this task to "the three review loops (discussion/plan/code+holistic)" and excludes "any... non-review-loop phase." Extending tree-guard bracketing to the fixer dispatch (and, by the same logic, to the Implement/merge-in dispatches sharing the same `## Agent-mode dispatch` section) would be a scope expansion beyond what `_mill/discussion.md` decided, conflicting with that already-approved scope boundary — leave it untouched.
+  - Do not modify any other step in this section beyond the ones named above — this task's Scope (In) covers only the per-`append_phase` and per-review-dispatch checkpoints named above.
 - **Commit:** `docs(mill): add tree-guard safeguard and commit-ordering fix to mill-go's per-batch Code Review loop`
 
 ### Card 8: Tree-guard safeguard in the Holistic Review loop
@@ -68,6 +77,13 @@ Add the tree-guard safeguard (mill-go had none) to both of mill-go's review loop
     `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way. This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision). Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.`
 
   - Do not touch the subprocess/psmux `millpy-bg` invocation, the venv-check block, or the crash-recovery three-way branch in step 1 — none of these are in scope for this task.
+  - **Step 3.5 also needs bracketing.** Step 3.5 ("ERROR-only-aggregate retry") re-invokes `millpy-review-code.py` via a second, distinct Agent-mode dispatch of the same review CLI — the same out-of-process reviewer-execution window step 3's checkpoints exist to close, just reached via a different branch. Locate step 3.5's sentence `"If \`dispatch == agent\`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with \`<cli> = millpy-review-code.py\` and \`<args> = [--extra-file <p> ...]\`."` Insert immediately before it:
+
+    `Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill") — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch. Does not apply to the subprocess/psmux branch immediately below.`
+
+    Insert immediately after that same sentence and before the `"If \`dispatch == subprocess\` or \`psmux\`:"` line that follows it:
+
+    `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
 - **Commit:** `docs(mill): add tree-guard safeguard to mill-go's Holistic Review loop`
 
 ## Batch Tests

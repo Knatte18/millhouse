@@ -39,7 +39,15 @@ Add a brand-new tree-guard safeguard to mill-plan's Phase: Plan Review (mill-pla
     `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize, including any validator-fix re-invocation cycle), and on trigger call _status.append_recovery_log the same way. This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision). Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.`
 
   - Do not touch the `**Subprocess/psmux branch — Invoke the CLI as a subprocess:**` prose or its `millpy-bg` invocation — the subprocess/psmux path's coverage (`worktree_snapshot_guard`) is explicitly unchanged (`_mill/discussion.md` Scope (Out)).
-  - Do not modify steps 4a/4b/4c/4d/4.5/5/6's own logic — the new safeguard paragraph above already covers every `_status.append_phase` call site in this phase without needing a per-step edit, mirroring how mill-start's single phase-level paragraph covers its own multiple `append_phase` call sites.
+  - **Step 4.5 also needs bracketing.** Step 4.5 ("ERROR-only-aggregate retry") re-invokes `millpy-review-plan.py` via a second, distinct Agent-mode dispatch — the same out-of-process reviewer-execution window step 2's checkpoints exist to close, just reached via a different branch. Locate step 4.5's sentence `"**Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in \`plugins/mill/skills/mill-go/SKILL.md\`) with \`<cli> = millpy-review-plan.py\` and \`<args> = --holistic-only\`."` Insert immediately before it:
+
+    `Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill") — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch. Does not apply to the Subprocess/psmux branch immediately below.`
+
+    Insert immediately after that same sentence and before the `"**Subprocess/psmux branch:**"` heading that follows it:
+
+    `Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill") again immediately after it returns, and on trigger call _status.append_recovery_log the same way.`
+
+  - Do not modify steps 4a/4b/4c/4d/5/6's own logic — the new safeguard paragraph above already covers every `_status.append_phase` call site in this phase without needing a per-step edit, mirroring how mill-start's single phase-level paragraph covers its own multiple `append_phase` call sites.
   - Do not add anything to `### Phase: Handoff` — its `_status.append_phase(status_path, "planned", ...)` call is a separate phase, not covered by the "applies to all `_status.append_phase` calls in this phase" wording.
 - **Commit:** `docs(mill): add tree-guard safeguard to mill-plan's Plan Review loop`
 
