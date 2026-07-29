@@ -35,5 +35,7 @@ batches:
     start_sha: 9981122ccb4554814295084216aae814a27f8aa6
     commit_sha: 2aeca8449e190c79024e12ab5071bafb63a4efff
   - name: plan-guardrails-and-anti-pause
-    state: pending
+    state: running
+    implementer_session: c66b89be-970d-4f5b-b879-958eadb01b84
+    start_sha: bb21b0125661c6f8c4230029ba18025ab3cc9a4f
 ```
