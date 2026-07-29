@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-plan-counting-tests
+phase: holistic-reviewing
 slug: mill-review-verdict-and-counting-gaps
 branch: hanf/mill-review-verdict-and-counting-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-review-plan-counting-fix  '2026-07-29T04:47:07Z'
 approved-plan-review-templates  '2026-07-29T04:49:35Z'
 approved-plugin-manifest-validator  '2026-07-29T04:53:35Z'
 approved-review-plan-counting-tests  '2026-07-29T05:00:19Z'
+holistic-reviewing  '2026-07-29T05:00:39Z'
 ```
 
 ## Batches
