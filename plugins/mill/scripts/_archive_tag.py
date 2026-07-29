@@ -39,6 +39,8 @@ def create_or_resolve(
           - action: "created" | "noop" | "force_update" | "moved_aside"
           - tag: The final tag name (e.g. "archive/my-task" or "archive/my-task-01")
           - moved_aside_to: The moved-aside tag name if action=="moved_aside", else None
+          - push_failed: True if any attempted `git push` for this action failed, else False
+          - push_error: Combined stderr describing the failure(s), or None if push_failed is False
     """
     # Resolve target SHA
     target_result = _subprocess_util.run(
@@ -62,15 +64,19 @@ def create_or_resolve(
             check=True,
         )
         # Attempt push; don't fail if it fails (tmp repo has no remote)
-        _subprocess_util.run(
+        push_result = _subprocess_util.run(
             ["git", "-C", str(worktree), "push", "origin", tag_name],
             check=False,
         )
+        push_failed = push_result.returncode != 0
+        push_error = push_result.stderr.strip() if push_failed else None
         print("[archive-tag] created -- tag: archive/{}".format(slug), file=sys.stderr)
         return {
             "action": "created",
             "tag": tag_name,
             "moved_aside_to": None,
+            "push_failed": push_failed,
+            "push_error": push_error,
         }
 
     # Tag exists -- get its current SHA
@@ -87,6 +93,8 @@ def create_or_resolve(
             "action": "noop",
             "tag": tag_name,
             "moved_aside_to": None,
+            "push_failed": False,
+            "push_error": None,
         }
 
     # Check if existing is ancestor of target
@@ -102,15 +110,19 @@ def create_or_resolve(
             check=True,
         )
         # Attempt push; don't fail if it fails
-        _subprocess_util.run(
+        push_result = _subprocess_util.run(
             ["git", "-C", str(worktree), "push", "--force-with-lease", "origin", tag_name],
             check=False,
         )
+        push_failed = push_result.returncode != 0
+        push_error = push_result.stderr.strip() if push_failed else None
         print("[archive-tag] force-update -- ancestor", file=sys.stderr)
         return {
             "action": "force_update",
             "tag": tag_name,
             "moved_aside_to": None,
+            "push_failed": push_failed,
+            "push_error": push_error,
         }
 
     # Divergent -- move aside and create new
@@ -151,14 +163,31 @@ def create_or_resolve(
     )
 
     # Push both tags; don't fail if push fails
-    _subprocess_util.run(
+    moved_aside_push = _subprocess_util.run(
         ["git", "-C", str(worktree), "push", "origin", moved_aside_tag],
         check=False,
     )
-    _subprocess_util.run(
+    primary_push = _subprocess_util.run(
         ["git", "-C", str(worktree), "push", "--force-with-lease", "origin", tag_name],
         check=False,
     )
+
+    # Report failure of either push, naming which one(s) failed so an operator
+    # knows exactly which remote ref needs manual reconciliation.
+    moved_aside_push_failed = moved_aside_push.returncode != 0
+    primary_push_failed = primary_push.returncode != 0
+    push_failed = moved_aside_push_failed or primary_push_failed
+    push_error = None
+    if moved_aside_push_failed and primary_push_failed:
+        push_error = (
+            "moved-aside tag push failed: {} | primary tag push failed: {}".format(
+                moved_aside_push.stderr.strip(), primary_push.stderr.strip()
+            )
+        )
+    elif moved_aside_push_failed:
+        push_error = "moved-aside tag push failed: {}".format(moved_aside_push.stderr.strip())
+    elif primary_push_failed:
+        push_error = "primary tag push failed: {}".format(primary_push.stderr.strip())
 
     print(
         "[archive-tag] moved aside -- {}: new tag created".format(moved_aside_tag),
@@ -168,4 +197,6 @@ def create_or_resolve(
         "action": "moved_aside",
         "tag": tag_name,
         "moved_aside_to": moved_aside_tag,
+        "push_failed": push_failed,
+        "push_error": push_error,
     }
