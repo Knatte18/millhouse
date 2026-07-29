@@ -29,5 +29,7 @@ implementing  '2026-07-29T19:20:57Z'
 ```yaml
 batches:
   - name: skill-doc-gaps
-    state: pending
+    state: running
+    implementer_session: b544f94e-27ce-4a59-a89e-de20c85dbe7f
+    start_sha: 90bef1db45acdbd15892d7a7202bc8072d6427ca
 ```
