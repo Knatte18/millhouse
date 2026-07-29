@@ -39,7 +39,9 @@ batches:
     start_sha: 1716ea25880231bb691ee83581e49e2ebfc4e521
     commit_sha: 10eada086a97d48a7aa2a245c0f75ea8e161bb7f
   - name: test-registry-local-overlay-redirect
-    state: pending
+    state: running
+    implementer_session: 2a04d7e9-7cd4-4871-95c4-38c4e296615d
+    start_sha: a3af7ec91201a50a3a2c3b094a32ebcb51fa9943
   - name: implementer-commit-sha-validation
     state: pending
 ```
