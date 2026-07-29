@@ -900,28 +900,28 @@ def test_bare_aliases_resolve_with_correct_spec() -> None:
     spec = _reviewers.resolve(registry, "sonnet")
     assert spec["provider"] == "claude"
     assert spec["effort"] == "medium"
-    assert spec["model"] == "claude-sonnet-4-6"
+    assert spec["model"] == "claude-sonnet-5"
     assert spec["tooluse"] is True
 
     # sonnet_bulk: bare bulk alias at medium effort
     spec = _reviewers.resolve(registry, "sonnet_bulk")
     assert spec["provider"] == "claude"
     assert spec["effort"] == "medium"
-    assert spec["model"] == "claude-sonnet-4-6"
+    assert spec["model"] == "claude-sonnet-5"
     assert spec["tooluse"] is False
 
     # opus: bare tool-use alias at medium effort
     spec = _reviewers.resolve(registry, "opus")
     assert spec["provider"] == "claude"
     assert spec["effort"] == "medium"
-    assert spec["model"] == "claude-opus-4-7"
+    assert spec["model"] == "claude-opus-5"
     assert spec["tooluse"] is True
 
     # opus_bulk: bare bulk alias at medium effort
     spec = _reviewers.resolve(registry, "opus_bulk")
     assert spec["provider"] == "claude"
     assert spec["effort"] == "medium"
-    assert spec["model"] == "claude-opus-4-7"
+    assert spec["model"] == "claude-opus-5"
     assert spec["tooluse"] is False
 
     print("PASS: bare aliases resolve with correct spec")

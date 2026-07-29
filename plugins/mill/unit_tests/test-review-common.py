@@ -2344,6 +2344,30 @@ def main() -> int:
             "PASS: finalize_scope folds unrecognized-severity findings into blocking_count"
         )
 
+        # Isolated case: a [MEDIUM]-only response (no recognized [BLOCKING]/[NIT]
+        # heading at all) must still fold into blocking_count via
+        # count_unrecognized_severity_findings, with nit_count staying 0.
+        # Uses round 2 (distinct from round 1 above) so write_review_file does
+        # not collide on filename.
+        raw_medium_only = (
+            "```yaml\n"
+            "verdict: REQUEST_CHANGES\n"
+            "reviewed_file: 01-setup.md\n"
+            "date: 2026-01-01\n"
+            "```\n"
+            "### [MEDIUM] borderline concern\n"
+        )
+        result = finalize_scope(reviews, "plan", 2, raw_medium_only, scope="01-setup")
+        assert result["blocking_count"] == 1, (
+            f"expected blocking_count 1, got {result['blocking_count']}"
+        )
+        assert result["nit_count"] == 0, (
+            f"expected nit_count 0, got {result['nit_count']}"
+        )
+        print(
+            "PASS: finalize_scope folds an isolated [MEDIUM]-only finding into blocking_count with zero recognized findings present"
+        )
+
     # ---------------------------------------------------------------------------
     # parse_blocking_count divergence warning
     # ---------------------------------------------------------------------------

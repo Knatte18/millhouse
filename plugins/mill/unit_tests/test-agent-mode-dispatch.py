@@ -168,6 +168,17 @@ class TestImplementerModeParity(unittest.TestCase):
             millpy_implement._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
         )
+        # project_root's rebind now resolves via resolve_container_path +
+        # resolve_active_hub instead of using git_root directly; mock both so
+        # the fixture's non-git tmp_path doesn't hit pygit2.
+        self.mock_resolve_container_path = _p(
+            millpy_implement._paths, "resolve_container_path",
+            return_value=self.tmp_path,
+        )
+        self.mock_resolve_active_hub = _p(
+            millpy_implement._paths, "resolve_active_hub",
+            return_value=self.tmp_path,
+        )
         self.mock_load_config = _p(
             millpy_implement._review_common, "load_config",
             return_value={

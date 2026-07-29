@@ -553,11 +553,15 @@ def main() -> int:
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # alpha: APPROVE; holistic: NEED_CONTEXT -> retry APPROVE
+        # alpha: APPROVE; holistic: NEED_CONTEXT -> retry APPROVE-with-a-real-[NIT]
+        RETRY_APPROVE_WITH_NIT_TEXT = (
+            "# Review: test\n\n### [NIT] cleanup note\n\n- b\n\n"
+            "```yaml\nverdict: APPROVE\n```\n"
+        )
         stub.seed([
             (APPROVE_TEXT,      "sid-1"),  # alpha
             (NEED_CONTEXT_TEXT, "sid-2"),  # holistic first call
-            (APPROVE_TEXT,      "sid-3"),  # holistic retry
+            (RETRY_APPROVE_WITH_NIT_TEXT, "sid-3"),  # holistic retry
         ])
         try:
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
@@ -565,6 +569,12 @@ def main() -> int:
             rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
             assert rv_hol["verdict"] == "APPROVE", (
                 f"holistic verdict should be APPROVE after retry, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["blocking_count"] == 0, (
+                f"expected holistic blocking_count=0, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
             )
             prompts = stub.captured_prompts()
             # alpha + holistic first + holistic retry = 3
@@ -587,6 +597,61 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 7b — holistic NEED_CONTEXT no-resolve branch
+    # Sibling to Test 7 (this file's tests are not renumbered when a new one
+    # is inserted between existing numbers -- see Test 9's own "bug C fix
+    # #184" comment for precedent). Single batch (alpha) succeeds; holistic
+    # returns NEED_CONTEXT referencing a path that resolve_existing_paths
+    # cannot resolve on disk, so the no-retry / no-resolve branch fires and
+    # the holistic entry is finalized directly from the first response.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # `nonexistent/missing.py` is never created on disk and is not a
+            # Creates:/Deletes: token in any batch file, so
+            # resolve_existing_paths returns an empty list and no retry fires.
+            NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT = (
+                "# Review: test\n\n### [NIT] pending cleanup\n\n- b\n\n"
+                "```yaml\nverdict: NEED_CONTEXT\n```\n\n"
+                "## Missing context\n\n"
+                "- `nonexistent/missing.py` — need this file\n"
+            )
+            stub.seed([
+                (APPROVE_TEXT, "sid-1"),  # alpha
+                (NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT, "sid-2"),  # holistic first call, unresolvable
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, (
+                f"expected 2 prompts (alpha + holistic first call, no retry), got {len(prompts)}"
+            )
+            rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
+            assert rv_hol["verdict"] == "NEED_CONTEXT", (
+                f"expected holistic verdict NEED_CONTEXT, got {rv_hol['verdict']}"
+            )
+            assert rv_hol["blocking_count"] == 0, (
+                f"expected holistic blocking_count=0, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
+            )
+            print("PASS test7b: holistic NEED_CONTEXT no-resolve branch — no retry, counters finalized from first response")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test7b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test7b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     REQUEST_CHANGES_TEXT = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
 
     # ------------------------------------------------------------------
@@ -606,17 +671,30 @@ def main() -> int:
         try:
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True, exist_ok=True)
-            # 01-a approved in r1
+            # 01-a approved in r1, with a real [NIT] finding to prove the
+            # carryforward path computes a genuine nit_count, not just 0.
+            APPROVE_WITH_NIT_TEXT = (
+                "# Review: test\n\n### [NIT] cosmetic\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
             (reviews_dir / "20260429-000001-plan-review-01-a-r1.md").write_text(
-                APPROVE_TEXT, encoding="utf-8"
+                APPROVE_WITH_NIT_TEXT, encoding="utf-8"
             )
             # 02-b NOT approved (REQUEST_CHANGES)
             (reviews_dir / "20260429-000002-plan-review-02-b-r1.md").write_text(
                 REQUEST_CHANGES_TEXT, encoding="utf-8"
             )
-            # 03-c approved in r1
+            # 03-c approved in r1, with an off-vocabulary [MAJOR] heading
+            # alongside verdict: APPROVE -- _scan_approved_batches carries this
+            # forward because parse_verdict still reads APPROVE, exercising
+            # the round-3 finding that verdict is never cross-validated
+            # against the review's actual finding counts.
+            APPROVE_WITH_UNRECOGNIZED_SEVERITY_TEXT = (
+                "# Review: test\n\n### [MAJOR] mislabeled issue\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
             (reviews_dir / "20260429-000003-plan-review-03-c-r1.md").write_text(
-                APPROVE_TEXT, encoding="utf-8"
+                APPROVE_WITH_UNRECOGNIZED_SEVERITY_TEXT, encoding="utf-8"
             )
             # holistic-r1: marks round 1 as complete so detect_resume_round returns None
             (reviews_dir / "20260429-000004-plan-review-r1.md").write_text(
@@ -655,7 +733,20 @@ def main() -> int:
             assert rv_b["session_id"] == "sid-fresh-b", f"02-b should be fresh, got {rv_b['session_id']!r}"
             assert rv_hol["session_id"] == "sid-fresh-hol", f"holistic should be fresh, got {rv_hol['session_id']!r}"
 
-            print("PASS test8: skip-approved happy path — 01-a/03-c carryforward, 02-b/holistic fresh")
+            # Carryforward counts: 01-a's real [NIT] heading and 03-c's
+            # off-vocabulary [MAJOR] heading (folds into blocking_count).
+            assert rv_a["blocking_count"] == 0, f"expected 01-a blocking_count=0, got {rv_a['blocking_count']}"
+            assert rv_a["nit_count"] == 1, f"expected 01-a nit_count=1, got {rv_a['nit_count']}"
+            assert rv_c["blocking_count"] == 1, f"expected 03-c blocking_count=1, got {rv_c['blocking_count']}"
+            assert rv_c["nit_count"] == 0, f"expected 03-c nit_count=0, got {rv_c['nit_count']}"
+
+            # Aggregate: the fresh 02-b/holistic dispatches return zero-finding
+            # APPROVE_TEXT/REQUEST_CHANGES_TEXT, so only the two carryforward
+            # entries above contribute to the run-level aggregate.
+            assert r.blocking_count == 1, f"expected aggregate blocking_count=1, got {r.blocking_count}"
+            assert r.nit_count == 1, f"expected aggregate nit_count=1, got {r.nit_count}"
+
+            print("PASS test8: skip-approved happy path — 01-a/03-c carryforward, 02-b/holistic fresh, blocking/nit counts correct")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test8: {exc}", file=sys.stderr)
@@ -859,6 +950,7 @@ def main() -> int:
                 "# Review\n\n"
                 "### [BLOCKING] issue one\n\n- b\n\n"
                 "### [BLOCKING] issue two\n\n- b\n\n"
+                "### [NIT] issue four\n\n- b\n\n"
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             one_blocking = (
@@ -873,13 +965,52 @@ def main() -> int:
             ])
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 3, f"expected aggregate blocking_count=3, got {r.blocking_count}"
-            print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0)")
+            assert r.nit_count == 1, f"expected aggregate nit_count=1, got {r.nit_count}"
+            print("PASS test14: aggregate blocking_count == 3 (2 + 1 + 0), nit_count == 1")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test14: {exc}", file=sys.stderr)
         except Exception as exc:
             errors += 1
             print(f"FAIL test14 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 14b — holistic-normal site's own blocking_count/nit_count
+    # Sibling to Test 14 (inserted without renumbering later tests, same
+    # precedent as Test 7b). Test 14's holistic leg stays APPROVE_TEXT, so
+    # this is the only test that exercises the "holistic normal" finalize_scope
+    # call site's own counts directly rather than only the run-level aggregate.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            holistic_blocking_and_nit = (
+                "# Review\n\n"
+                "### [BLOCKING] missing edge case\n\n- b\n\n"
+                "### [NIT] naming nit\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(APPROVE_TEXT, "sid-a"), (holistic_blocking_and_nit, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
+            assert rv_hol["blocking_count"] == 1, (
+                f"expected holistic blocking_count=1, got {rv_hol['blocking_count']}"
+            )
+            assert rv_hol["nit_count"] == 1, (
+                f"expected holistic nit_count=1, got {rv_hol['nit_count']}"
+            )
+            print("PASS test14b: holistic-normal site's own blocking_count/nit_count == 1/1")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test14b: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test14b (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
@@ -1681,6 +1812,7 @@ def main() -> int:
             major_only = (
                 "# Review\n\n"
                 "### [MAJOR] compile break\n\n- b\n\n"
+                "### [NIT] minor note\n\n- b\n\n"
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([
@@ -1689,13 +1821,45 @@ def main() -> int:
             ])
             r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 1, f"expected blocking_count=1, got {r.blocking_count}"
-            print("PASS test29: unrecognized [MAJOR] severity fail-loud in synchronous per-batch dispatch")
+            assert r.nit_count == 1, f"expected nit_count=1, got {r.nit_count}"
+            print("PASS test29: unrecognized [MAJOR] severity fail-loud in synchronous per-batch dispatch, nit_count == 1")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test29: {exc}", file=sys.stderr)
         except Exception as exc:
             errors += 1
             print(f"FAIL test29 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 30 — #720 holistic-path [MEDIUM]-only regression
+    # A holistic response with ONLY a "### [MEDIUM]" heading (no recognized
+    # [BLOCKING]/[NIT] heading at all) must fold into blocking_count on the
+    # holistic dispatch path, not just the per-batch path Test 29 covers.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            medium_only_holistic = (
+                "# Review\n\n"
+                "### [MEDIUM] borderline concern\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(APPROVE_TEXT, "sid-a"), (medium_only_holistic, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.blocking_count == 1, f"expected blocking_count=1, got {r.blocking_count}"
+            assert r.nit_count == 0, f"expected nit_count=0, got {r.nit_count}"
+            print("PASS test30: #720 MEDIUM-fold-in on the holistic dispatch path")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test30: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test30 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
