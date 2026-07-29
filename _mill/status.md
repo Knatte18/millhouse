@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-reviewer-override-helper
 slug: mill-review-dispatch-attribution-gaps
 branch: hanf/mill-review-dispatch-attribution-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-review-r3  '2026-07-29T08:00:06Z'
 plan-fix-r3  '2026-07-29T08:00:06Z'
 planned  '2026-07-29T08:00:41Z'
 implementing  '2026-07-29T09:08:59Z'
+approved-reviewer-override-helper  '2026-07-29T09:11:37Z'
 ```
 
 ## Batches
@@ -33,9 +34,10 @@ implementing  '2026-07-29T09:08:59Z'
 ```yaml
 batches:
   - name: reviewer-override-helper
-    state: running
+    state: approved
     implementer_session: 1b6bdf22-9d82-4417-bdde-de9fea479cd1
     start_sha: c0b1951c56b7fb69087cceb9a69825ac3dad059c
+    commit_sha: 54c3f1b87d4dd92603af82872f6ad84950e1bab6
   - name: reviewer-self-id-templates
     state: pending
   - name: discussion-review-cli
