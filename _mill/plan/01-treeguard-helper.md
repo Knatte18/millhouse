@@ -1,0 +1,76 @@
+# Batch: treeguard-helper
+
+```yaml
+task: "mill-start: tracked _mill/ files disappear from the working tree mid-review-loop; existing safeguard covers only status.md"
+batch: treeguard-helper
+number: 1
+cards: 2
+verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-treeguard.py"
+depends-on: []
+```
+
+## Batch Scope
+
+Deliver the reusable `_treeguard.py` module and its unit test — the core, TDD-flagged unit named in `_mill/discussion.md`'s Testing section. This batch has no dependency on `_status.py` and does not touch `status.md` at all: `check_and_restore` takes no `status_path`/`cfg` parameter, is a pure detect-and-restore function operating only on git state under a caller-supplied `worktree: Path`, and never calls into `_status.py`. The external interface the next batches (03/04/05) consume is exactly:
+
+```python
+def check_and_restore(worktree: Path, tracked_root: str = "_mill") -> dict:
+    """Returns {"triggered": bool, "restored_paths": list[str], "timestamp": str | None}."""
+```
+
+## Cards
+
+### Card 1: Create `_treeguard.py` with `check_and_restore`
+
+- **Context:**
+  - `plugins/mill/scripts/_pygit2_util.py`
+  - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/scripts/_cleanliness.py`
+  - `plugins/mill/scripts/_timestamp.py`
+- **Edits:** none
+- **Creates:**
+  - `plugins/mill/scripts/_treeguard.py`
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+  - Create `_treeguard.py` with a module docstring one line long (mirroring `_cleanliness.py:1`'s style, e.g. `"""Detect and restore deleted tracked files under a subtree (e.g. _mill/)."""`).
+  - Import `_pygit2_util`, `_subprocess_util`, and `_timestamp` (for the trigger timestamp) at module level, plus `from pathlib import Path`.
+  - Implement `check_and_restore(worktree: Path, tracked_root: str = "_mill") -> dict`:
+    1. Call `lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)`.
+    2. For each line, split into `status_code = line[:2]` and `raw_path = line[3:]` (mirrors `_cleanliness.revert_out_of_scope_drift`'s existing line-parsing idiom at `_cleanliness.py:406-407`).
+    3. A line is in-scope for this helper only when `raw_path == tracked_root` or `raw_path.startswith(tracked_root + "/")`.
+    4. Among in-scope lines, collect `raw_path` into `deleted_paths` (preserving the git status order; do not re-sort) for every line whose `status_code` is exactly `" D"` or `"D "` (per the Shared Decision "status codes and path-matching mirror `_cleanliness.py`'s existing partition logic" in `00-overview.md`). Every other status code (`"??"`, `" M"`, `"M "`, `"MM"`, or anything else) under `tracked_root` is ignored — never added to `deleted_paths`, never touched.
+    5. If `deleted_paths` is empty: return `{"triggered": False, "restored_paths": [], "timestamp": None}` immediately. Make no `_subprocess_util.run` call in this branch (no-deletion case must not invoke git a second time).
+    6. Otherwise, restore in one shot: `_subprocess_util.run(["git", "checkout", "HEAD", "--", *deleted_paths], cwd=worktree)` (mirrors `_cleanliness.py:432-435`'s exact argv/cwd shape, extended to accept multiple paths in one call instead of one path per call). Do not branch on the subprocess's `returncode` — the restore of already-committed content via `git checkout HEAD --` is expected to always succeed; this helper does not need `_cleanliness.py`'s failed-revert fallback branch since there is no "in-scope vs out-of-scope" partition here to fall back into.
+    7. Return `{"triggered": True, "restored_paths": sorted(deleted_paths), "timestamp": _timestamp.now_utc_iso()}`.
+  - `check_and_restore` must not read `cwd()` for any config lookup — `worktree` is the only path input, taken as an explicit parameter (per `CLAUDE.md`'s "Helpers with path args must not consult cwd for config" invariant, and per `_mill/discussion.md`'s Constraints section).
+  - `check_and_restore` must not import or reference `_status`, `status_path`, or `cfg` anywhere — it is a pure detect-and-restore function (per `_mill/discussion.md`'s "Reusable helper over duplicated Bash" Decision, resolving round 4's GAP).
+  - Any diagnostic `print()`/log output this module emits must be ASCII-only (`—` → ` -- `) per project convention.
+- **Commit:** `feat(mill): add _treeguard.check_and_restore for tracked-file deletion recovery`
+
+### Card 2: Create `plugins/mill/unit_tests/test-treeguard.py`
+
+- **Context:**
+  - `plugins/mill/unit_tests/test-cleanliness.py`
+  - `plugins/mill/unit_tests/test-status.py`
+- **Edits:** none
+- **Creates:**
+  - `plugins/mill/unit_tests/test-treeguard.py`
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+  - Follow `test-cleanliness.py`'s existing structure: a single `main() -> int` function, `from __future__ import annotations`, imports of `subprocess`, `sys`, `tempfile`, `pathlib.Path`, and `from _treeguard import check_and_restore` (mirroring `test-cleanliness.py`'s `sys.path`-relative import block for `_cleanliness`), one `with tempfile.TemporaryDirectory() as tmp:` block per scenario, `print("PASS: ...")` after each successful assertion, and a top-level `try/except AssertionError` in `main()` that prints `FAIL: {exc}` to stderr and returns 1, returning 0 and printing an `All _treeguard unit tests passed.` line on success — matching `test-status.py`'s and `test-cleanliness.py`'s existing runner shape exactly (do not use `unittest`/`pytest` classes).
+  - Fixture helper: initialize a real tempfile-based git repo (`git init`, configure a throwaway `user.email`/`user.name` via `git config` so commits succeed non-interactively, matching how other tempfile-based git fixtures in this test suite avoid relying on global git config), create a `_mill/` tree with `status.md`, `discussion.md`, `briefs/x.md`, `reviews/y.md`, and commit it (`git add -A && git commit -m "seed"`).
+  - Implement every scenario from `_mill/discussion.md`'s Testing section, each as its own `with tempfile.TemporaryDirectory()` block:
+    1. **No deletion:** call `check_and_restore` on the clean seeded tree; assert `result["triggered"] is False`, `result["restored_paths"] == []`, `result["timestamp"] is None`, and that every seeded file is still present and byte-identical to its committed content afterward.
+    2. **Single file deleted:** delete `_mill/status.md` from disk with `Path(...).unlink()` (not via `git rm`), call `check_and_restore`, assert the file is restored (exists again, content matches the committed blob), `result["triggered"] is True`, and `result["restored_paths"] == ["_mill/status.md"]`.
+    3. **Multiple files deleted across subdirectories:** delete `_mill/status.md` and `_mill/briefs/x.md` simultaneously (both via `unlink()`, no commit), call `check_and_restore` once, assert both files are restored and both paths appear in `result["restored_paths"]` (sorted).
+    4. **Staged deletion:** run `git rm _mill/discussion.md` (stages the deletion without committing — status code `"D "`), call `check_and_restore`, assert the file is restored to disk and tracked again as unmodified, and `result["triggered"] is True`.
+    5. **Untracked file alongside a real deletion:** create an untracked file at `_mill/scratch-leftover.txt` (never `git add`ed) alongside deleting `_mill/status.md` (`unlink()`), call `check_and_restore`, assert `_mill/status.md` is restored, and assert the untracked file is completely untouched (still present, unchanged, and not mentioned in `result["restored_paths"]`) — proving `"??"` porcelain lines never enter the restore pathspec.
+    6. **Legitimate uncommitted modification alongside a real deletion (regression case for round 2's GAP):** append a line to `_mill/status.md` and leave it uncommitted (status code `" M"`), and separately delete `_mill/reviews/y.md` (`unlink()`, status code `" D"`). Call `check_and_restore` once and assert: `_mill/reviews/y.md` is restored (present again, matching HEAD content); `_mill/status.md`'s uncommitted appended line is still present verbatim (its content was NOT reverted to HEAD); `result["restored_paths"] == ["_mill/reviews/y.md"]` (never includes `status.md`).
+  - Record-shape assertion: in scenario 2 or 3, additionally assert `check_and_restore` performs no `_status`/`status.md`-related file I/O — the simplest proof available at this test's level is that the function signature takes no `status_path`/`cfg` argument at all (already enforced by the call sites in this test file itself, which never pass one) and that no file named `status.md` is modified beyond the one deliberately-deleted-and-restored case in each scenario.
+- **Commit:** `test(mill): add test-treeguard.py covering detection and restore scenarios`
+
+## Batch Tests
+
+`verify:` runs `plugins/mill/unit_tests/test-treeguard.py` directly — the single new test file this batch adds, scoped per the project's per-batch verify convention (no cross-cutting helper touched, so no `run-all.py --only` list is needed).
