@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-validate-pipeline
 slug: mill-plan-review-validation-gaps
 branch: hanf/mill-plan-review-validation-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-07-29T13:57:41Z'
 plan-fix-r3  '2026-07-29T14:04:56Z'
 planned  '2026-07-29T14:05:23Z'
 implementing  '2026-07-29T14:08:39Z'
+approved-plan-validate-pipeline  '2026-07-29T14:23:05Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-07-29T14:08:39Z'
 ```yaml
 batches:
   - name: plan-validate-pipeline
-    state: running
+    state: approved
     implementer_session: 8739fa1e-10c7-4e80-a01e-6e4c5cbaf2b8
     start_sha: 7e10e6d74c50bbc15afa62a27b8911cabdea005d
+    commit_sha: afb53d6ff92970c22c9d681fe48f3ba5c6a68121
   - name: review-code-soft-fail
     state: pending
   - name: verify-gate-enrichment
