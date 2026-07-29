@@ -16,7 +16,9 @@ from _worktree import (  # noqa: E402
     WorktreeError,
     WorktreeLockedError,
     copy_millhouse,
+    create,
     list_worktrees,
+    move,
     remove,
     remove_safe,
     processes_holding_path,
@@ -446,6 +448,50 @@ def main() -> int:
                 print("PASS: kill_stale_holders — single-dict JSON from default enumerator is normalized")
         else:
             print("SKIP: kill_stale_holders default enumerator test (Windows-only)")
+
+        # --- move: relocates a worktree registered via create() ---
+        with tempfile.TemporaryDirectory() as tmp:
+            hub = Path(tmp) / "hub"
+            hub.mkdir()
+            _git_init(hub)
+            old_path = Path(tmp) / "old"
+            new_path = Path(tmp) / "new"
+            create("move-branch", old_path, cwd=hub)
+            move(old_path, new_path, cwd=hub)
+
+            wt_result = list_worktrees(hub)
+            paths = [Path(e["path"]) for e in wt_result]
+            assert new_path in paths, f"expected {new_path} registered after move, got {paths}"
+            assert old_path not in paths, f"expected {old_path} no longer registered after move, got {paths}"
+
+            list_output = subprocess.run(
+                ["git", "-C", str(hub), "worktree", "list"],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            assert str(old_path) not in list_output, (
+                f"old path {old_path} still appears in git worktree list output: {list_output!r}"
+            )
+            print("PASS move — relocates a registered worktree and updates git worktree list")
+
+        # --- move: target path already occupied by a regular file raises WorktreeError ---
+        # (git worktree move behaves like `mv`: an existing *directory* target nests the
+        # worktree inside it rather than failing, so the genuine collision case is a
+        # pre-existing regular file at the target path.)
+        with tempfile.TemporaryDirectory() as tmp:
+            hub = Path(tmp) / "hub"
+            hub.mkdir()
+            _git_init(hub)
+            old_path = Path(tmp) / "old2"
+            new_path = Path(tmp) / "new2"
+            new_path.write_text("occupied", encoding="utf-8")
+            create("move-branch-2", old_path, cwd=hub)
+            raised = False
+            try:
+                move(old_path, new_path, cwd=hub)
+            except WorktreeError:
+                raised = True
+            assert raised, "expected WorktreeError when move target already exists as a file"
+            print("PASS move — target path already occupied by a regular file raises WorktreeError")
 
         print("All _worktree unit tests passed.")
         return 0

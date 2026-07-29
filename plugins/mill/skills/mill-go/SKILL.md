@@ -213,7 +213,7 @@ if not _client.health_check(wiki_path):
     raise SystemExit(1)
 " || {
     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
-    echo "[mill-go] HALT: no config source reachable -- re-run mill-setup if mill-config.yaml is missing" >&2
+    echo "[mill-go] HALT: wiki daemon unreachable or unhealthy -- see the reason printed above; re-run mill-setup only if mill-config.yaml is confirmed missing" >&2
     exit 1
 }
 ```
@@ -601,7 +601,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
        raise SystemExit(1)
    " || {
        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
-       echo "[mill-go] HALT: no config source reachable -- re-run mill-setup if mill-config.yaml is missing" >&2
+       echo "[mill-go] HALT: wiki daemon unreachable or unhealthy -- see the reason printed above; re-run mill-setup only if mill-config.yaml is confirmed missing" >&2
        exit 1
    }
    ```

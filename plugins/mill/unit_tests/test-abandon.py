@@ -387,6 +387,218 @@ def main() -> int:
     except Exception as exc:
         fail("missing status.md", exc)
 
+    # --- (h) hub-in-subdirectory: cfg reflects the hub's own branch_prefix ---
+    # Regression guard for #728: load_config's hub_root arg must be hub_dir
+    # (resolve_hub_path's return value), never the outer git-repo root -- so
+    # the branch derived for "git push origin --delete <branch>" reflects the
+    # hub's own mill-config.yaml, not a config found by walking from git_root.
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            slug = "test-task"
+            outer_root = tmp
+            hub_dir = tmp / "sub" / "hub"
+            mill_dir = hub_dir / ".millhouse"
+            mill_dir.mkdir(parents=True, exist_ok=True)
+            # status.md has no explicit branch: field, forcing derivation via
+            # cfg.spawn.branch_prefix -- making the derived branch an observable
+            # proxy for which cfg (hub's own vs. outer-root fallback) was used.
+            status_path = hub_dir / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                "```yaml\n"
+                "phase: implementing\n"
+                f"slug: {slug}\n"
+                "task: Test task\n"
+                "parent: main\n"
+                "```\n\n"
+                "## Timeline\n\n"
+                "```text\n"
+                "implementing  2026-04-24T11:00:00Z\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            wiki_posix = (tmp / "wiki").as_posix()
+            outer_posix = outer_root.as_posix()
+            hub_posix = hub_dir.as_posix()
+            cmds_posix = (tmp / "_git_cmds.json").as_posix()
+            abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
+            trampoline = tmp / "_trampoline_subdir.py"
+            trampoline.write_text(
+                "import sys, types, importlib.util, json\n"
+                "from pathlib import Path\n"
+                "\n"
+                "pm = types.ModuleType('_paths')\n"
+                f"pm.resolve_git_root = lambda: Path(r'{outer_posix}')\n"
+                f"pm.resolve_wiki_path = lambda g: Path(r'{wiki_posix}')\n"
+                f"pm.resolve_container_path = lambda p: Path(r'{outer_posix}')\n"
+                f"pm.resolve_hub_path = lambda: Path(r'{hub_posix}')\n"
+                f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{hub_posix}')\n"
+                "pm.status_path = lambda wt, cfg: wt / '_mill' / 'status.md'\n"
+                "sys.modules['_paths'] = pm\n"
+                "\n"
+                "mm = types.ModuleType('_marker')\n"
+                "mm.MarkerError = type('MarkerError', (RuntimeError,), {})\n"
+                f"mm.slug_from_branch = lambda *a, **kw: {slug!r}\n"
+                "sys.modules['_marker'] = mm\n"
+                "\n"
+                "rcm = types.ModuleType('_review_common')\n"
+                f"_HUB_DIR = Path(r'{hub_posix}')\n"
+                "def _fake_load_config(hub_root, mill_dir):\n"
+                "    if Path(hub_root) == _HUB_DIR:\n"
+                "        return {'spawn': {'branch_prefix': 'hub-own-'}}\n"
+                "    return {'spawn': {'branch_prefix': 'wrong-fallback-'}}\n"
+                "rcm.load_config = _fake_load_config\n"
+                "sys.modules['_review_common'] = rcm\n"
+                "\n"
+                "_recorded = []\n"
+                f"_cmds_file = Path(r'{cmds_posix}')\n"
+                "\n"
+                "class _FakeResult:\n"
+                "    def __init__(self):\n"
+                "        self.returncode = 0\n"
+                "        self.stdout = ''\n"
+                "        self.stderr = ''\n"
+                "\n"
+                "_sub = types.ModuleType('_subprocess_util')\n"
+                "def _mock_run(argv, **kw):\n"
+                "    _recorded.append(list(argv))\n"
+                "    _cmds_file.write_text(json.dumps(_recorded), encoding='utf-8')\n"
+                "    return _FakeResult()\n"
+                "_sub.run = _mock_run\n"
+                "sys.modules['_subprocess_util'] = _sub\n"
+                "\n"
+                f"spec = importlib.util.spec_from_file_location('mill_abandon', r'{abandon_src}')\n"
+                "mod = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(mod)\n"
+                "sys.exit(mod.main())\n",
+                encoding="utf-8",
+            )
+            result = _run(hub_dir, trampoline, ["--force"])
+            assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
+            cmds = _read_git_cmds(tmp)
+            delete_cmds = [c for c in cmds if "push" in c and "--delete" in c]
+            assert len(delete_cmds) == 1, f"expected one delete cmd, got: {cmds}"
+            branch_arg = delete_cmds[0][-1]
+            assert branch_arg == f"hub-own-{slug}", (
+                f"expected branch derived from the hub's own config, got {branch_arg!r}"
+            )
+            ok("hub-in-subdirectory: branch derived from hub's own cfg, not outer git_root's")
+    except Exception as exc:
+        fail("hub-in-subdirectory cfg", exc)
+
+    # --- (i) bootstrap-vs-corrected-root reload: cfg and mill_dir both reload ---
+    # after resolve_active_hub. Verifies both effects of the reload: (1) the
+    # branch derived for the delete push comes from the corrected cfg, not the
+    # bootstrap one; (2) the builder-lock read uses the corrected mill_dir, not
+    # the stale bootstrap one -- a non-stale lock planted only at the bootstrap
+    # root must not block the run.
+    try:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            tmp = Path(tmp_str)
+            slug = "test-task"
+            bootstrap_dir = tmp / "bootstrap-hub"
+            corrected_dir = tmp / "corrected-hub"
+            bootstrap_mill_dir = bootstrap_dir / ".millhouse"
+            corrected_mill_dir = corrected_dir / ".millhouse"
+            bootstrap_mill_dir.mkdir(parents=True, exist_ok=True)
+            corrected_mill_dir.mkdir(parents=True, exist_ok=True)
+            # A non-stale lock planted only at the bootstrap root: if the reload
+            # fix regresses and the bootstrap mill_dir is used for the lock read,
+            # this would incorrectly block the run (without --force).
+            now_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            (bootstrap_mill_dir / _builder_lock.LOCK_FILENAME).write_text(
+                f"```yaml\nslug: other-task\ntimestamp: {now_ts}\n```\n", encoding="utf-8"
+            )
+            status_path = corrected_dir / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                "```yaml\n"
+                "phase: implementing\n"
+                f"slug: {slug}\n"
+                "task: Test task\n"
+                "parent: main\n"
+                "```\n\n"
+                "## Timeline\n\n"
+                "```text\n"
+                "implementing  2026-04-24T11:00:00Z\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            wiki_posix = (tmp / "wiki").as_posix()
+            tmp_posix = tmp.as_posix()
+            bootstrap_posix = bootstrap_dir.as_posix()
+            corrected_posix = corrected_dir.as_posix()
+            cmds_posix = (tmp / "_git_cmds.json").as_posix()
+            abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
+            trampoline = tmp / "_trampoline_reload.py"
+            trampoline.write_text(
+                "import sys, types, importlib.util, json\n"
+                "from pathlib import Path\n"
+                "\n"
+                "pm = types.ModuleType('_paths')\n"
+                f"pm.resolve_git_root = lambda: Path(r'{tmp_posix}')\n"
+                f"pm.resolve_wiki_path = lambda g: Path(r'{wiki_posix}')\n"
+                f"pm.resolve_container_path = lambda p: Path(r'{tmp_posix}')\n"
+                f"pm.resolve_hub_path = lambda: Path(r'{bootstrap_posix}')\n"
+                f"pm.resolve_active_hub = lambda container, slug, *, cfg, git_root: Path(r'{corrected_posix}')\n"
+                "pm.status_path = lambda wt, cfg: wt / '_mill' / 'status.md'\n"
+                "sys.modules['_paths'] = pm\n"
+                "\n"
+                "mm = types.ModuleType('_marker')\n"
+                "mm.MarkerError = type('MarkerError', (RuntimeError,), {})\n"
+                f"mm.slug_from_branch = lambda *a, **kw: {slug!r}\n"
+                "sys.modules['_marker'] = mm\n"
+                "\n"
+                "rcm = types.ModuleType('_review_common')\n"
+                f"_CORRECTED_DIR = Path(r'{corrected_posix}')\n"
+                "def _fake_load_config(hub_root, mill_dir):\n"
+                "    if Path(hub_root) == _CORRECTED_DIR:\n"
+                "        return {'spawn': {'branch_prefix': 'corrected-'}}\n"
+                "    return {'spawn': {'branch_prefix': 'bootstrap-'}}\n"
+                "rcm.load_config = _fake_load_config\n"
+                "sys.modules['_review_common'] = rcm\n"
+                "\n"
+                "_recorded = []\n"
+                f"_cmds_file = Path(r'{cmds_posix}')\n"
+                "\n"
+                "class _FakeResult:\n"
+                "    def __init__(self):\n"
+                "        self.returncode = 0\n"
+                "        self.stdout = ''\n"
+                "        self.stderr = ''\n"
+                "\n"
+                "_sub = types.ModuleType('_subprocess_util')\n"
+                "def _mock_run(argv, **kw):\n"
+                "    _recorded.append(list(argv))\n"
+                "    _cmds_file.write_text(json.dumps(_recorded), encoding='utf-8')\n"
+                "    return _FakeResult()\n"
+                "_sub.run = _mock_run\n"
+                "sys.modules['_subprocess_util'] = _sub\n"
+                "\n"
+                f"spec = importlib.util.spec_from_file_location('mill_abandon', r'{abandon_src}')\n"
+                "mod = importlib.util.module_from_spec(spec)\n"
+                "spec.loader.exec_module(mod)\n"
+                "sys.exit(mod.main())\n",
+                encoding="utf-8",
+            )
+            # No --force: the run must proceed unblocked (past the builder-lock
+            # guard, then confirmed via "y" on stdin), proving the builder-lock
+            # read used the corrected mill_dir (no lock there), not the bootstrap
+            # one (which carries a fresh, non-stale lock).
+            result = _run(corrected_dir, trampoline, stdin_input="y\n")
+            assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
+            cmds = _read_git_cmds(tmp)
+            delete_cmds = [c for c in cmds if "push" in c and "--delete" in c]
+            assert len(delete_cmds) == 1, f"expected one delete cmd, got: {cmds}"
+            branch_arg = delete_cmds[0][-1]
+            assert branch_arg == f"corrected-{slug}", (
+                f"expected branch derived from the reloaded (corrected) cfg, got {branch_arg!r}"
+            )
+            ok("bootstrap-vs-corrected reload: branch and builder-lock read use corrected root")
+    except Exception as exc:
+        fail("bootstrap-vs-corrected reload", exc)
+
     print(f"\n{passed} passed, {failed} failed.")
     return 0 if failed == 0 else 1
 

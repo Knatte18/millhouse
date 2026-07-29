@@ -599,7 +599,13 @@ def health_check(wiki_path: Path) -> bool:
     """
     try:
         resp = _dispatch(wiki_path, OP_HEALTH, {})
-        return bool(resp.get(FIELD_OK))
+        if not bool(resp.get(FIELD_OK)):
+            print(
+                f"[wiki] health check failed: {resp.get(FIELD_ERROR, '(no reason given)')}",
+                file=sys.stderr,
+            )
+            return False
+        return True
     except Exception:
         return False
 
@@ -640,7 +646,7 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
                     time.sleep(0.1)
                 state_file.unlink(missing_ok=True)
             else:
-                req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {}}
+                req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {"liveness_only": True}}
                 try:
                     resp = _connect_send_recv(state["host"], state["port"], req, timeout=1.0)
                     if resp.get(FIELD_OK) is True:

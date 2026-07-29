@@ -39,7 +39,7 @@ def main() -> int:
     wiki_path = _paths.resolve_wiki_path(git_root)
     hub_dir = _paths.resolve_hub_path()
     mill_dir = hub_dir / ".millhouse"
-    cfg = _review_common.load_config(git_root, mill_dir)
+    cfg = _review_common.load_config(hub_dir, mill_dir)
     try:
         slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
     except _marker.MarkerError as exc:
@@ -53,6 +53,14 @@ def main() -> int:
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
+    # Reload cfg (and the mill_dir it's paired with) against the resolve_active_hub-
+    # corrected root: the bootstrap cfg above was loaded against hub_dir before this
+    # correction, so it can miss the hub's own mill-config.yaml whenever the hub
+    # lives in a subdirectory of the git repo (see cfg-reload-after-active-hub).
+    # This corrected mill_dir/cfg is what the builder-lock read and the branch-name
+    # resolution below observe.
+    mill_dir = active_hub / ".millhouse"
+    cfg = _review_common.load_config(active_hub, mill_dir)
 
     # Step 4: load status.md and check phase
     status_path = _paths.status_path(active_hub, cfg)

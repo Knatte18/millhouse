@@ -1012,6 +1012,12 @@ def main() -> int:
             assert got == tmp_path, f"prefix-form: got {got}"
         print("PASS: resolve_container_path prefix-form -> parent dir")
 
+        # resolve_canonical_worktree_path
+
+        got = _paths.resolve_canonical_worktree_path(Path("/c"), "my-slug")
+        assert got == Path("/c") / "wts" / "my-slug", f"resolve_canonical_worktree_path: got {got}"
+        print("PASS: resolve_canonical_worktree_path joins container/wts/slug with no existence check")
+
         # resolve_git_root wiki-cwd guards
 
         # Case 1: name check fires when resolved root name == "wiki"

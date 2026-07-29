@@ -12,6 +12,8 @@ Public API:
         Write content to a file atomically (via temp + rename).
     pull(wiki_path)
         Fetch + fast-forward the wiki clone. Returns True if updated.
+    verify_git_repo(wiki_path)
+        Raise WikiPushError if wiki_path is not a valid git repository.
     commit_push(wiki_path, rel_paths, message)
         Stage, commit, and push with one rebase retry on non-fast-forward.
 
@@ -177,6 +179,41 @@ def pull(wiki_path: Path) -> bool:
     return "Already up to date." not in result.stdout
 
 
+def verify_git_repo(wiki_path: Path) -> None:
+    """Verify wiki_path is a valid git repository.
+
+    Runs "git rev-parse --git-dir" against wiki_path and raises WikiPushError
+    if the command fails, times out, or otherwise errors -- covers a missing
+    ".git" directory, a corrupted repository, or a hung git process.
+
+    Args:
+        wiki_path: Path to wiki clone root.
+
+    Raises:
+        WikiPushError: wiki_path is not a git repository, or the check
+            timed out (5.0s) or failed for any other reason.
+    """
+    # Use a subprocess.run call directly to avoid any potential issues with _run.
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+        if result.returncode != 0:
+            raise WikiPushError(
+                f"not a git repository: {wiki_path} -- "
+                f"initialize the wiki with 'git clone' or 'git init'"
+            )
+    except subprocess.TimeoutExpired:
+        raise WikiPushError(f"git directory check timed out for {wiki_path}")
+    except Exception as e:
+        if isinstance(e, WikiPushError):
+            raise
+        raise WikiPushError(f"failed to verify git repository: {e}")
+
+
 def commit_push(
     wiki_path: Path,
     rel_paths: list[str],
@@ -203,26 +240,7 @@ def commit_push(
     Raises:
         WikiPushError: Any unrecoverable git failure.
     """
-    # Verify wiki_path is a git repository before attempting operations.
-    # Use a subprocess.run call directly to avoid any potential issues with _run.
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(wiki_path), "rev-parse", "--git-dir"],
-            capture_output=True,
-            text=True,
-            timeout=5.0,
-        )
-        if result.returncode != 0:
-            raise WikiPushError(
-                f"not a git repository: {wiki_path} -- "
-                f"initialize the wiki with 'git clone' or 'git init'"
-            )
-    except subprocess.TimeoutExpired:
-        raise WikiPushError(f"git directory check timed out for {wiki_path}")
-    except Exception as e:
-        if isinstance(e, WikiPushError):
-            raise
-        raise WikiPushError(f"failed to verify git repository: {e}")
+    verify_git_repo(wiki_path)
 
     add = _run(
         ["git", "-C", str(wiki_path), "add", "--"] + list(rel_paths),

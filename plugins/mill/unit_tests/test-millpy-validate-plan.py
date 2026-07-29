@@ -291,6 +291,79 @@ def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
             return 1
 
 
+def test_cli_uses_resolve_hub_path_not_cwd_for_project_root() -> int:
+    """#728 repro: hub-in-subdirectory. project_root must come from resolve_hub_path(),
+    not Path.cwd() -- and that same corrected project_root must thread through to
+    load_config, find_active_slug (hub_root param), and _plan_validate.run.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        fixture_root = Path(tmpdir)
+        # The hub lives in a subdirectory of the outer repo root -- cwd (below)
+        # is deliberately the outer fixture_root, not hub_dir, so a regression to
+        # Path.cwd() would resolve the wrong root and fail these assertions.
+        hub_dir = fixture_root / "sub" / "hub"
+        plan_dir = hub_dir / "plan"
+        wiki_dir = fixture_root / "wiki"
+        wiki_dir.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        slug = "test-slug"
+        load_config_calls = []
+
+        def _fake_load_config(hub_root, mill_dir):
+            load_config_calls.append(hub_root)
+            return {"paths": {"plan_dir": "plan"}, "spawn": {"branch_prefix": "hub-own-prefix"}}
+
+        find_active_slug_calls = []
+
+        def _fake_find_active_slug(hub_root, wiki_root, cfg):
+            find_active_slug_calls.append(hub_root)
+            return slug
+
+        plan_validate_calls = []
+
+        def _fake_plan_validate_run(plan_dir_arg, project_root_arg, *, wiki_root, skip_checks):
+            plan_validate_calls.append(project_root_arg)
+            return []
+
+        captured = io.StringIO()
+
+        orig = os.getcwd()
+        os.chdir(str(fixture_root))
+        try:
+            with unittest.mock.patch("_paths.resolve_git_root", return_value=fixture_root), \
+                 unittest.mock.patch("_paths.resolve_hub_path", return_value=hub_dir), \
+                 unittest.mock.patch("_paths.resolve_wiki_path", return_value=wiki_dir), \
+                 unittest.mock.patch("_review_common.load_config", side_effect=_fake_load_config), \
+                 unittest.mock.patch("_review_common.find_active_slug", side_effect=_fake_find_active_slug), \
+                 unittest.mock.patch("_review_common.resolve_path", return_value=plan_dir), \
+                 unittest.mock.patch("_plan_validate.run", side_effect=_fake_plan_validate_run), \
+                 contextlib.redirect_stdout(captured):
+                rc = _vp_mod.main()
+        finally:
+            os.chdir(orig)
+
+        try:
+            assert rc == 0, f"expected exit 0, got {rc}"
+            assert load_config_calls == [hub_dir], (
+                f"load_config's hub_root arg was {load_config_calls}, expected [{hub_dir}]"
+            )
+            assert find_active_slug_calls == [hub_dir], (
+                f"find_active_slug's hub_root arg was {find_active_slug_calls}, expected [{hub_dir}]"
+            )
+            assert plan_validate_calls == [hub_dir], (
+                f"_plan_validate.run's project_root arg was {plan_validate_calls}, expected [{hub_dir}]"
+            )
+            print("PASS test_cli_uses_resolve_hub_path_not_cwd_for_project_root")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_cli_uses_resolve_hub_path_not_cwd_for_project_root: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -301,6 +374,7 @@ def main() -> int:
         test_cli_dirty_exits_one_card_missing_field,
         test_cli_skip_check_suppresses_target_check,
         test_cli_multiple_skip_checks_suppress_multiple_checks,
+        test_cli_uses_resolve_hub_path_not_cwd_for_project_root,
     ]
 
     errors = 0
