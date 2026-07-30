@@ -1,0 +1,1 @@
+- CRLF test doesn't isolate the explicit normalization step: **Location:** `plugins/mill/scripts/_plan_validate.py:1783` and `plugins/mill/unit_tests/test-plan-validate.py:2311-2350`

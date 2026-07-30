@@ -1,0 +1,22 @@
+MILL_REVIEW_BEGIN
+# Review: mill-plan: Requirements find/replace fences lose byte-exactness under list-nested indentation — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-07-30
+```
+
+## Findings
+
+### [NIT] CRLF normalization in the new check is dead code; its dedicated test doesn't exercise it
+**Location:** `plugins/mill/scripts/_plan_validate.py:1783` and `:1791` (also the fixture at `plugins/mill/unit_tests/test-plan-validate.py:2311-2353`)
+**Issue:** `Path.read_text(encoding="utf-8")` uses Python's default text-mode `newline=None`, which already performs universal-newline translation ("\r\n"/"\r"/"\n" all become "\n") before the string reaches Python code. Both `content = existing[0].read_text(...).replace("\r\n", "\n")` and `normalized_fence = fence_body.replace("\r\n", "\n")` therefore never see a literal "\r\n" to replace — the strings are already normalized by the time `.replace()` runs, on every platform, not just this repo's Linux CI. `test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence` writes the target file with `newline=""` to preserve on-disk CRLF bytes, but once `read_text()` reads it back the CRLF is already gone, so the test would pass identically even if both `.replace()` calls were deleted — it does not actually prove the normalization step runs, contrary to its docstring/plan intent.
+**Fix:** Informational only — behavior is correct (Python's own read path already guarantees LF-normalized strings), just for a different reason than the code/test comments claim. No functional change needed; if desired, retarget the test to read raw bytes (`open(..., 'rb')` or `newline=""` on read) to genuinely exercise a manual normalization path, or drop the now-redundant `.replace()` calls and update the docstrings/discussion rationale accordingly.
+
+## Verdict
+
+APPROVE
+Implementation matches the approved plan exactly across all three cards; wiring, tests, and docs are faithful and internally consistent.
+MILL_REVIEW_END
