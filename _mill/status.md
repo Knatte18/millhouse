@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-plan-entry-wait
+phase: holistic-reviewing
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-07-30T19:52:10Z'
 approved-phase-wait-foundation  '2026-07-30T19:56:12Z'
 approved-mill-go-entry-wait  '2026-07-30T19:58:13Z'
 approved-mill-plan-entry-wait  '2026-07-30T20:00:20Z'
+holistic-reviewing  '2026-07-30T20:00:38Z'
 ```
 
 ## Batches
