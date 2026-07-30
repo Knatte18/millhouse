@@ -31,5 +31,7 @@ implementing  '2026-07-30T11:15:28Z'
 ```yaml
 batches:
   - name: requirements-quote-indent-drift-check
-    state: pending
+    state: running
+    implementer_session: 703a6437-3035-4645-98c6-3d43d5a4b3b5
+    start_sha: cd2c8a173a1dd06975d066b903b131b7dd96ba72
 ```
