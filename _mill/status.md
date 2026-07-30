@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: _mill/plan
@@ -30,6 +30,7 @@ holistic-reviewing  '2026-07-30T20:00:38Z'
 holistic-fixing  '2026-07-30T20:03:42Z'
 nits-fixed-holistic  '2026-07-30T20:04:57Z'
 holistic-approved  '2026-07-30T20:05:06Z'
+done  '2026-07-30T20:05:23Z'
 ```
 
 ## Batches
