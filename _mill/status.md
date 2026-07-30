@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-requirements-quote-indent-drift-check
 slug: mill-plan-requirements-byte-exactness-gap
 branch: hanf/mill-plan-requirements-byte-exactness-gap
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-07-30T11:09:45Z'
 plan-review-r3  '2026-07-30T11:13:50Z'
 planned  '2026-07-30T11:13:59Z'
 implementing  '2026-07-30T11:15:28Z'
+approved-requirements-quote-indent-drift-check  '2026-07-30T11:25:43Z'
 ```
 
 ## Batches
@@ -31,7 +32,8 @@ implementing  '2026-07-30T11:15:28Z'
 ```yaml
 batches:
   - name: requirements-quote-indent-drift-check
-    state: running
+    state: approved
     implementer_session: 703a6437-3035-4645-98c6-3d43d5a4b3b5
     start_sha: cd2c8a173a1dd06975d066b903b131b7dd96ba72
+    commit_sha: 2399cf5dbbce41ffe9c635798777a511771b12a3
 ```
