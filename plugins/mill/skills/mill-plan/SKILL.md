@@ -18,7 +18,7 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
    - `wiki_path = _paths.resolve_wiki_path(git_root)`
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
-2. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
+2. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`. Read `roles.plan-review.holistic.rounds` as `max_review_rounds`. Entry step 4's `phase: discussing` row additionally reads two `pipeline.*` keys at the point of use (see "Entry-gate wait for upstream mill-start" below): `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent) — and `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent).
    `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
 
@@ -36,7 +36,92 @@ You are an autonomous planner running on Opus. Your job is to turn `discussion.m
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
-   | any other phase (`discussing`, `planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
+   | `phase: discussing` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
+
+### Entry-gate wait for upstream mill-start
+
+Whenever the phase-table lookup above lands on the `phase: discussing` row,
+run this procedure instead of jumping straight to its listed action:
+
+- Compute the match:
+  ```python
+  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [])
+  ```
+  No regex widening on this side. This is deliberate, not an oversight:
+  mill-start's `discussion-fix-r{N}` phase value (written mid-loop during
+  its own Discussion Review, per `mill-start/SKILL.md`'s step 4b) is
+  always folded into the same commit as the immediately following
+  `discussed` write and is never itself pushed as a standalone,
+  externally observable phase; and mill-start's GAPS_FOUND loop makes no
+  `_status.append_phase` call at all. The entire span of mill-start's
+  active work — including every round of its own review loop, in both
+  branches — is therefore already fully covered by the single exact
+  value `discussing`, unlike mill-go's side, where mill-plan's own Plan
+  Review loop commits its approve-phase and its Handoff-phase as
+  separate, independently observable commits.
+- Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
+- **If `matched` is `True` and `entry_wait` is `True`:**
+  - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 120)` and compute `giveup_s = timeout_minutes * 60`.
+  - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "discussed", 10, giveup_s)`.
+  - State one sentence to the user: waiting for the upstream mill-start
+    run to reach `phase: discussed`.
+  - Call the `Monitor` tool with `command=cmd`, `persistent: true`,
+    `description` naming the slug and the target phase (e.g. "waiting for
+    phase: discussed (mill-start handoff) for `<slug>`"). Do not set a
+    `timeout_ms` value distinct from the default — `persistent: true`
+    makes it irrelevant. This is never a decision point: state what is
+    being waited for, then wait, with no `AskUserQuestion` or free-text
+    prompt in between (mill-plan is autonomous outside its own documented
+    escape hatches; this wait introduces no new one).
+  - **Record the `task_id` the `Monitor` tool call returns** in a local
+    orchestrator variable and retain it for the duration of this wait.
+  - Wait for the `<task-notification>`. A `Monitor` run of this poll script
+    delivers exactly one per-line event notification (the single `READY` /
+    `BLOCKED: ...` / `TIMEOUT after ...` line the script echoes before
+    exiting, carried in that notification's `<event>` tag), immediately
+    followed by a second, separate terminal notification
+    (`<status>completed</status>`, no `<event>` tag) once the script's
+    process actually exits — this two-notification shape (confirmed by a
+    live spike during this task's plan review, not assumed from the Agent
+    tool's differently-shaped single-result notification) is expected and
+    requires no special handling: act on the first notification's
+    `<event>` content; the second, event-less completion notification for
+    the same `task_id` carries no further information and needs no
+    separate branch. Branch on the `<event>` content:
+    - **`READY`** — re-run Entry step 4 from its top: re-read
+      `status_path` fresh and re-evaluate the whole entry-branch table
+      again from scratch (do not assume `discussed` is now the phase and
+      jump straight to Phase: Plan).
+    - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to
+      the operator. mill-plan's phase table has no pre-existing `blocked`
+      row to reuse the exact message shape from (unlike mill-go's side) —
+      halt with a message of the same shape mill-plan already uses
+      elsewhere for a `BLOCKED:`-prefixed halt (e.g. the Plan Review
+      non-progress/max-rounds `_status.set_blocked` halts): state the
+      phase is blocked and surface `<reason>` verbatim. Do not re-arm the
+      wait automatically.
+    - **`TIMEOUT after <N>s waiting for phase: discussed`** — halt with a
+      message distinct from the `BLOCKED` case: state that the configured
+      give-up period (`pipeline.entry_wait_timeout_minutes`) elapsed
+      without mill-start reaching `phase: discussed`, and that the
+      operator should check on the upstream mill-start session (it may be
+      abandoned, still legitimately working past the give-up window, or
+      never started) and re-run `/mill-plan` to re-arm the wait if it is
+      in fact still in progress.
+  - **If the wait itself is stopped/interrupted at the harness level** (a
+    `TaskStop` or equivalent operator-level cancellation of the recorded
+    `task_id`, rather than one of the three outcomes above): no automatic
+    retry. Halt with a short message telling the operator the wait was
+    cancelled and that re-running `/mill-plan` will re-evaluate the phase
+    (proceeding immediately if it has since become ready, or re-arming the
+    wait if not).
+- **If `matched` is `True` but `entry_wait` is `False`:** fall back to the
+  original catch-all action for this phase — tell the user what phase is
+  set (`discussing`) and which skill should run instead (mill-start), and
+  halt.
+- **If `matched` is `False`:** the phase is not `discussing`; fall through
+  to the narrowed catch-all row above.
 
 ## Phases
 
