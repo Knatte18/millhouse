@@ -30,13 +30,16 @@ review is LLM judgment, not a deterministic gate.
 **In:**
 - A new mechanical check in `plugins/mill/scripts/_plan_validate.py`, wired into
   `run()`, that detects a card's `Requirements:` fenced block whose content only
-  byte-matches its target `Edits:` file after a uniform per-line dedent (the exact
-  signature of the list-continuation-indentation bug).
+  byte-matches its target `Edits:` file after stripping a fixed number of leading
+  spaces per line (the exact signature of the list-continuation-indentation bug — see
+  `trigger-heuristic-near-miss` under Decisions for the precise search).
 - A corresponding row in `/mill-plan`'s Step 1.5 fix table (`plugins/mill/skills/mill-plan/SKILL.md`)
-  describing the mechanical fix: dedent the fence in place.
+  describing the mechanical fix: strip the matched leading-space amount from the fence
+  in place.
 - An extension to the existing `Requirements:` bullet under `mill-plan/SKILL.md`'s
   `## Principles` section, explicitly warning that source-verbatim fences in
-  `Requirements:` must be dedented to column 0 regardless of surrounding list nesting.
+  `Requirements:` must not pick up extra indentation from surrounding list nesting
+  beyond the source's own baseline indentation.
 - Unit tests in `plugins/mill/unit_tests/test-plan-validate.py` following the existing
   `test_check_<name>_clean` / `test_check_<name>_dirty` pairing convention.
 
@@ -88,42 +91,79 @@ review is LLM judgment, not a deterministic gate.
 
 ### trigger-heuristic-near-miss
 
-- Decision: The check fires ONLY when a fence's whitespace-dedented content (common
-  leading whitespace stripped per non-blank line, equivalent to Python's
-  `textwrap.dedent`) IS a literal substring of at least one of the card's `Edits:`
-  files, BUT the RAW (un-dedented) fence content is NOT a literal substring of that same
-  file. This is a near-miss / "would match if not for a uniform indent" test.
-- Rationale: This is the exact signature of the list-continuation-indentation bug: the
-  quoted text is correct except for a uniform baked-in indent. It has a very low
-  false-positive rate — a fence that shows genuinely new/illustrative code (not a
-  literal quote of existing source) will not match the source file even after dedent,
-  so it is silently skipped rather than flagged. A fence with zero leading whitespace to
-  strip in the first place can never trigger this check at all (dedent is a no-op, so
-  raw == dedented, and the "raw does not match" / "dedented does match" pair can never
-  both hold), which is exactly the class of fence the check should ignore since it has
-  no drift to catch.
-- Rejected: Fire on ANY fence that isn't a literal substring of `Edits:` files,
-  regardless of near-miss (noisy — flags every fence showing new/desired-state code,
-  which is a common and legitimate authoring pattern). Fire only when the fence is
-  immediately preceded by a line containing the word "Find" (too fragile — that
-  convention is not documented or enforced anywhere in this codebase, and issue #749's
-  own repro does not require that literal word, so this trigger would miss real
-  occurrences).
+- Decision: The check fires ONLY when SOME fixed per-line leading-space strip amount
+  `N` (searched over `N = 1..40`, ascending, first match wins) applied uniformly to
+  every line of the fence body produces content that IS a literal substring of at
+  least one of the card's `Edits:` files, BUT the RAW (`N = 0`) fence content is NOT a
+  literal substring of that same file. This is a near-miss / "would match if not for a
+  uniform extra indent" test. Per-line stripping at a given `N`: for each line, if the
+  line has at least `N` leading space characters, remove exactly `N`; otherwise strip
+  only however many leading spaces the line actually has (handles short/blank lines
+  gracefully without erroring). `N` is bounded at 40 as a generous ceiling for
+  Markdown list-continuation nesting depth in this codebase — cheap to search
+  exhaustively (≤40 substring checks per fence per candidate `Edits:` file).
+- Rationale: This is the exact signature of the list-continuation-indentation bug: a
+  fixed number of extra spaces gets added to every line of the fence body, regardless
+  of what baseline indentation (if any) the true quoted excerpt already had. An earlier
+  version of this decision used `textwrap.dedent`'s common-minimum-strip semantics,
+  which strips the *minimum* leading whitespace shared by all lines — but that silently
+  misses drift when the real excerpt itself has nonzero baseline indentation (e.g.
+  quoting an indented Python/Go method body, or a nested YAML block): if the true
+  content's lines are indented 4/8 spaces and a uniform `K`-space list-continuation bug
+  adds `K` to every line, the result is 4+K/8+K, and `textwrap.dedent` strips only the
+  new minimum (4+K), producing 0/4 — never recovering the real 4/8 baseline, so the
+  dedented text never matches the source and the drift is silently missed (round-2
+  discussion review GAP "Dedent heuristic false-negatives on indented real-source
+  excerpts",
+  `_mill/reviews/20260730-104045-discussion-review-r2.md`). Searching over a bounded
+  range of fixed strip amounts instead of computing one common-minimum strip recovers
+  detection for any baseline indentation, because the search only needs to land on
+  `N = K` (the actual injected bug width) to reproduce the true source's original
+  indentation exactly, independent of what that baseline indentation is. It keeps the
+  same low false-positive property as before: a fence showing genuinely new/illustrative
+  code will not match the source file at ANY `N` in range (arbitrary different text
+  does not become a substring of an unrelated file merely by stripping some number of
+  leading spaces), so it is silently skipped rather than flagged. A fence with zero
+  leading whitespace to strip in the first place can still never trigger this check
+  (every `N ≥ 1` strip is a no-op past whatever's already flush at column 0, so it
+  can only ever reduce to the same already-checked raw content, never introduce a new
+  match), which is exactly the class of fence the check should ignore since it has no
+  drift to catch.
+- Rejected: `textwrap.dedent`'s common-minimum-strip (silently misses drift in
+  nonzero-baseline-indentation excerpts, per the round-2 GAP above — superseded).
+  Fire on ANY fence that isn't a literal substring of `Edits:` files, regardless of
+  near-miss (noisy — flags every fence showing new/desired-state code, which is a
+  common and legitimate authoring pattern). Fire only when the fence is immediately
+  preceded by a line containing the word "Find" (too fragile — that convention is not
+  documented or enforced anywhere in this codebase, and issue #749's own repro does not
+  require that literal word, so this trigger would miss real occurrences).
 
 ### mechanical-fix-dedent-in-place
 
-- Decision: When the check fires, mill-plan's mechanical fix is: dedent the fence's
-  body to column 0 (strip the common per-line leading whitespace amount) directly in
-  the plan batch file, leaving the fence delimiters and surrounding list structure
-  otherwise untouched.
+- Decision: When the check fires, mill-plan's mechanical fix is: strip exactly `N`
+  leading space characters (per line, per the `trigger-heuristic-near-miss` stripping
+  rule) from the fence's body directly in the plan batch file, where `N` is the
+  matched strip amount that produced the literal-substring hit — NOT necessarily to
+  column 0, since the real source excerpt may have nonzero baseline indentation that
+  must be preserved (per the `trigger-heuristic-near-miss` Decision's ranged-`N`
+  update). Leave the fence delimiters and surrounding list structure otherwise
+  untouched.
 - Rationale: Purely mechanical, deterministic text transform — no planning judgment
   required, consistent with how other purely-formatting fix-table rows work (e.g.
-  `verify-not-isolated`'s literal-prefix prepend, `move-format`'s re-formatting).
-- Rejected: Halt (treat as structural) — unnecessary ceremony for a deterministic
-  transform. Re-fetch fresh bytes from the source file and replace the whole fence body
-  — riskier, since it could silently overwrite a deliberate partial-quote/elision the
-  planner intended to keep (e.g. an ellipsized excerpt), whereas dedent only removes
-  whitespace and never changes the planner's chosen text content.
+  `verify-not-isolated`'s literal-prefix prepend, `move-format`'s re-formatting). The
+  `N` value is already computed by the check itself (it is the amount that produced
+  the match), so the fix step does not need to re-derive it — the error's `message`
+  field (see Technical context) must carry `N` alongside the fence-identifying snippet
+  so the mechanical-fix step applies the exact same strip amount the check found,
+  rather than guessing or defaulting to column 0.
+- Rejected: Dedent unconditionally to column 0 (superseded — would strip the real
+  source excerpt's own baseline indentation too, corrupting a byte-exact quote of
+  genuinely-indented source; see `trigger-heuristic-near-miss`). Halt (treat as
+  structural) — unnecessary ceremony for a deterministic transform. Re-fetch fresh bytes
+  from the source file and replace the whole fence body — riskier, since it could
+  silently overwrite a deliberate partial-quote/elision the planner intended to keep
+  (e.g. an ellipsized excerpt), whereas a fixed per-line space strip only removes the
+  injected extra whitespace and never changes the planner's chosen text content.
 
 ### doc-placement-principles-bullet
 
@@ -178,16 +218,23 @@ review is LLM judgment, not a deterministic gate.
   fence-aware would touch every existing check that reuses them, which is out of scope
   and unnecessary risk for this task (no other check has hit this edge case, since none
   of them depend on multi-line fenced *content* the way this check does). Instead, the
-  new check owns its own fence-aware re-scan: after calling the existing
-  `_extract_requirements_text(card_text)` to locate the Requirements: header's starting
-  line index, re-walk from that index over the ORIGINAL (untruncated) `card_lines` with
-  the `in_fence` toggle described above, collecting lines until either (a) a true
-  field/card boundary is hit while `in_fence` is `False`, or (b) `card_lines` is
-  exhausted. This re-scan replaces reliance on the existing helper's return value for
-  fence-containing cards; the existing helper's output remains a correct fast-path for
-  the common case with no nested `### `/`- **X:**` lines (they agree on the boundary
-  when no such lines are fence-nested), but the new check must not assume they agree —
-  always use the fence-aware re-scan's boundary as authoritative for its own extraction.
+  new check owns its own fence-aware re-scan, and locates its starting point WITHOUT
+  depending on `_extract_requirements_text`'s return value for an index it does not
+  expose (round-2 discussion review GAP "`_extract_requirements_text` cannot yield a
+  'line index' as instructed" — the function takes `card_text` and returns a joined
+  string or `None`; it has no index to hand back). The actual mechanism: re-use
+  `_extract_requirements_text`'s own `header_re` pattern
+  (`re.compile(r"^-\s*\*\*Requirements:\*\*")`) directly against `card_lines` —
+  `next(i for i, line in enumerate(card_lines) if header_re.match(line))` — to find the
+  header's starting index without calling the function at all for this purpose. From
+  that index, re-walk over the ORIGINAL (untruncated) `card_lines` with the `in_fence`
+  toggle described above, collecting lines until either (a) a true field/card boundary
+  is hit while `in_fence` is `False`, or (b) `card_lines` is exhausted. `_extract_requirements_text`'s
+  existing return value remains useful as a fast-path existence check only — "does
+  this card have a Requirements: field at all" (its `None` return still means "skip
+  this card," per its own documented contract) — but the new check must never treat
+  its *text* return value as authoritative for fence-containing cards; always use the
+  fence-aware re-scan's own collected lines as the field body for this check's purposes.
 - Rejected: Generalizing `_parse_cards`/`_extract_requirements_text` to be fence-aware
   globally (unnecessary blast radius across every existing check for a problem only
   this new check's use case exhibits). Documenting the truncation as an accepted
@@ -218,12 +265,15 @@ review is LLM judgment, not a deterministic gate.
   `{check, batch, card, path, message}`, appended via `errors.extend(...)`.
 - `_extract_requirements_text(card_text)` (around line 1384) already isolates a card's
   `Requirements:` field body (the header line plus every subsequent line up to the next
-  `- **<Field>:**` header or end of card). Reuse this to LOCATE the Requirements:
-  header's line index — do not re-implement that lookup — but do NOT trust its return
-  value as the final field body when the card's Requirements: contains a fence: per the
-  `fence-aware-boundary-detection` Decision above, re-walk from that header index over
-  the untruncated `card_lines` with fence-tracking before treating the collected text as
-  complete.
+  `- **<Field>:**` header or end of card) and returns `None` when the card has no
+  Requirements: field at all. Reuse it ONLY as that existence check (`is None` →
+  skip the card) — it returns a joined string, not an index, so it cannot itself locate
+  a starting position in `card_lines`. Per the `fence-aware-boundary-detection`
+  Decision, find the header's line index by re-matching its own `header_re` pattern
+  (`r"^-\s*\*\*Requirements:\*\*"`) directly against `card_lines`, then run the
+  fence-aware collection loop from that index over the untruncated `card_lines` — do
+  NOT treat `_extract_requirements_text`'s returned text as the final field body for
+  this check.
 - `_parse_cards(batch_text)` (around line 120) yields `(card_num, card_lines)` pairs per
   batch file; this is the existing per-card iteration primitive used by every other
   per-card check (e.g. `_check_context_completeness` at line 1462 iterates
@@ -258,10 +308,16 @@ review is LLM judgment, not a deterministic gate.
   `requirements_text` string returned by `_extract_requirements_text`. A single
   Requirements: field may contain more than one fence — iterate over all matches, not
   just the first.
-- Dedent: use `textwrap.dedent` (stdlib, not yet imported in this file — add the
-  import) on the fence body captured by the regex above. This correctly ignores
-  whitespace-only lines when computing the common-prefix amount while still stripping
-  that amount from every line, which is the standard/expected dedent semantics.
+- Per-line space strip search: per the `trigger-heuristic-near-miss` Decision, do NOT
+  use `textwrap.dedent` (its common-minimum-strip semantics silently miss drift in
+  nonzero-baseline-indentation excerpts — see that Decision for the full rationale).
+  Instead write a small helper, e.g. `_strip_n_leading_spaces(text: str, n: int) -> str`,
+  that strips up to `n` leading space characters from each line (removing exactly `n`
+  when the line has at least that many, otherwise stripping whatever leading spaces the
+  line has) and loop `N` from 1 to 40 (inclusive), stopping at the first `N` whose
+  stripped output is a literal substring of a candidate `Edits:` file — this `N` is
+  the value that must be reported in the error's `message` field so the mechanical fix
+  applies the identical strip amount (per `mechanical-fix-dedent-in-place`).
 - Line-ending normalization: normalize both the fence body and the target file's
   content by replacing `"\r\n"` with `"\n"` before the substring comparisons, so a
   Windows checkout (CRLF) does not produce a false negative against a plan file
@@ -269,23 +325,33 @@ review is LLM judgment, not a deterministic gate.
 - Error dict shape must stay exactly `{check, batch, card, path, message}` (no new
   keys — this is the documented return contract of `run()`, and `millpy-bg`/the
   Agent-mode envelope pass these dicts through verbatim as the `errors` array). Put the
-  offending fence's first line (or first ~40 chars) into `message` so mill-plan's
-  mechanical-fix step can locate which fence to dedent when a card has more than one.
-  `path` should be the `Edits:` file path the dedented content matched against.
+  offending fence's first line (or first ~40 chars) AND the matched strip amount `N`
+  into `message` (e.g. `"card 3's Requirements: fence 1 matches 'path/to/file.py' after
+  stripping 2 leading spaces per line (found N=2)"`) so mill-plan's mechanical-fix step
+  can both locate which fence to fix when a card has more than one, and apply the exact
+  same strip amount the check found rather than guessing. `path` should be the `Edits:`
+  file path the stripped content matched against (per the `edits-tie-break` Decision
+  when more than one `Edits:` file matches).
 - `mill-plan/SKILL.md`'s Step 1.5 fix table (around line 141-165) is a markdown table;
   the new row's mechanical-fix column should read something like: "Locate the card's
   `Requirements:` fence identified by the error payload's `message` (its first line/
-  snippet). Dedent the fence body to column 0 (strip the common per-line leading
-  whitespace) so its content is a literal byte-exact substring of the target `Edits:`
-  file named in the payload's `path` field." — follow the exact prose style/verb
-  choices of neighboring rows (e.g. `verify-not-isolated`'s row).
+  snippet and the reported strip amount `N`). Strip exactly `N` leading space
+  characters from each line of the fence body (not necessarily to column 0 — preserve
+  whatever baseline indentation remains after the strip) so its content is a literal
+  byte-exact substring of the target `Edits:` file named in the payload's `path`
+  field." — follow the exact prose style/verb choices of neighboring rows (e.g.
+  `verify-not-isolated`'s row).
 - `mill-plan/SKILL.md`'s `## Principles` section, `Requirements:` bullet (around line
   278), currently ends "...forces the implementer to explore, defeating the cold-start
-  guarantee." Append a sentence there (or a new adjacent bullet) warning that any
-  fenced block quoting exact source text inside `Requirements:` must be dedented to
-  column 0 regardless of surrounding list-item nesting, since Markdown
-  list-continuation indentation gets baked into the fence's literal byte content and
-  breaks literal `old_string` Edit-tool matches.
+  guarantee." Append a sentence there (or a new adjacent bullet) warning that any fenced
+  block quoting exact source text inside `Requirements:` must reproduce the source's
+  own original indentation byte-for-byte and must NOT pick up extra leading whitespace
+  from the surrounding list-item's continuation indent — author such fences so their
+  content, read literally, is already a byte-exact substring of the file being quoted,
+  regardless of how deeply the enclosing list item is nested. (Do not phrase this as
+  "dedent to column 0" — the source excerpt may legitimately have its own nonzero
+  baseline indentation, e.g. quoting an indented method body; the rule is "no *extra*
+  indentation beyond the source's own," not "no indentation at all.")
 - `plugins/mill/unit_tests/test-plan-validate.py` already has the fixture conventions
   to follow: `_make_batch_file(...)` (line 96) and `_make_batch_file_cards(...)` (line
   169) build batch-file text with `tempfile.TemporaryDirectory()`; tests are paired
@@ -309,23 +375,36 @@ were surfaced during discussion beyond the scope/decisions above.
     already a byte-exact substring of the target `Edits:` file (no indent to strip) →
     no error.
   - `test_check_requirements_quote_indent_drift_clean_illustrative_snippet`: fence
-    shows new/desired-state code that does not match the target file even after
-    dedent → no error (proves the near-miss heuristic does not false-positive on
-    legitimate illustrative fences).
+    shows new/desired-state code that does not match the target file at any tried
+    strip amount `N` (1..40) → no error (proves the near-miss heuristic does not
+    false-positive on legitimate illustrative fences).
   - `test_check_requirements_quote_indent_drift_clean_no_edits_field`: card's `Edits:`
     is `none`/empty → check is a no-op for that card (nothing to compare against).
   - `test_check_requirements_quote_indent_drift_dirty_list_continuation_indent`: fence
     is authored with a uniform list-continuation indent baked into every line; raw
-    content is NOT a substring of the target file, dedented content IS → error fires,
-    with `path` pointing at the matched `Edits:` file and `message` identifying the
-    offending fence.
+    content is NOT a substring of the target file, but stripping the injected amount
+    (some `N` in 1..40) IS → error fires, with `path` pointing at the matched `Edits:`
+    file and `message` identifying the offending fence and the matched `N`.
+  - `test_check_requirements_quote_indent_drift_dirty_nonzero_baseline_indent`: the
+    real source excerpt itself has nonzero baseline indentation (e.g. quoting an
+    indented method body at 4 spaces), and a uniform list-continuation bug adds further
+    spaces on top; raw does not match, but stripping exactly the injected amount does
+    (leaving the 4-space baseline intact, matching the source) → error fires, proving
+    the ranged-`N` search recovers drift even when the true excerpt is not flush at
+    column 0 (this is the case `textwrap.dedent`'s common-minimum-strip would have
+    missed — see `trigger-heuristic-near-miss`).
   - `test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card`: a card
     with two `Requirements:` fences, only one of which has the drift bug → exactly one
     error, correctly identifying the drifted fence (not the clean one).
-  - A CRLF-normalization case: target file content uses `\r\n`, fence body uses `\n`
-    (or vice versa) with a list-continuation indent otherwise matching the
-    dirty case → error still fires (proves line-ending normalization works), OR
-    conversely a case proving normalization prevents a false negative.
+  - `test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence`: the target
+    `Edits:` file is written to disk with `\r\n` line endings while the plan batch
+    file's fence body uses `\n` (the plan file's own natural line ending), with an
+    otherwise-matching list-continuation indent bug (raw does not match, some `N`
+    strip would match after normalization) → error still fires, proving the
+    `\r\n`-to-`\n` normalization step is applied to the target file's content before
+    the substring comparison (without normalization this case would false-negative,
+    since `\r\n` bytes in the file would never equal `\n` bytes in the fence even after
+    the correct `N` is stripped).
   - `test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading`:
     the drifted fence's body itself contains a `### `-prefixed line and a
     `- **Field:**`-shaped line (simulating a Requirements: fence that quotes a chunk of
@@ -339,9 +418,10 @@ were surfaced during discussion beyond the scope/decisions above.
     fixture helpers, so the test isolates the new check's fence-awareness from that
     separate limitation.
   - `test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break`: a card
-    whose `Edits:` lists two files, both of which independently contain the dedented
-    fence content as a literal substring → exactly one error, whose `path` field names
-    the first-listed `Edits:` file (per the `edits-tie-break` Decision), not the second.
+    whose `Edits:` lists two files, both of which independently contain the
+    `N`-stripped fence content as a literal substring → exactly one error, whose `path`
+    field names the first-listed `Edits:` file (per the `edits-tie-break` Decision), not
+    the second.
 - TDD candidate: `_check_requirements_quote_indent_drift` itself is the natural
   TDD-first unit — write the clean/dirty test pairs before the implementation, mirroring
   how every other check in this file already has its own clean/dirty pair.
@@ -360,15 +440,22 @@ were surfaced during discussion beyond the scope/decisions above.
   `old_string` bait is only meaningful against files this card actually edits;
   `Context:`-only files are read-but-not-changed, a weaker/irrelevant signal.
 - **Q:** What heuristic decides a fence is "suspicious" without flagging every
-  legitimate illustrative code snippet? **A:** [auto-pick] Near-miss detection — fire
-  only when the whitespace-dedented fence content matches the target file but the raw
-  content does not. **Why:** this is the exact signature of the list-continuation-
-  indentation bug and inherently cannot false-positive on fences with zero leading
-  whitespace to strip (dedent becomes a no-op) or on genuinely new/illustrative code
-  (which won't match even after dedent).
-- **Q:** What is the mechanical fix when the check fires? **A:** [auto-pick] Dedent the
-  fence body to column 0 in place. **Why:** deterministic text transform, no planning
-  judgment required, consistent with other purely-formatting fix-table rows.
+  legitimate illustrative code snippet? **A:** [auto-pick, superseded by round-2
+  discussion review — see below] Near-miss detection — fire only when the
+  whitespace-dedented fence content matches the target file but the raw content does
+  not. **Why:** this is the exact signature of the list-continuation-indentation bug.
+  **Superseded:** round-2 review found `textwrap.dedent`'s common-minimum-strip misses
+  drift when the true excerpt has nonzero baseline indentation; the final design (see
+  `trigger-heuristic-near-miss` under Decisions) instead searches a bounded range of
+  fixed per-line strip amounts `N = 1..40` for the first that produces a match, which
+  subsumes the original near-miss property without the baseline-indentation blind spot.
+- **Q:** What is the mechanical fix when the check fires? **A:** [auto-pick, superseded
+  by round-2 discussion review — see below] Dedent the fence body to column 0 in place.
+  **Why:** deterministic text transform, no planning judgment required. **Superseded:**
+  dedenting to column 0 would strip the source excerpt's own baseline indentation too;
+  the final design (see `mechanical-fix-dedent-in-place` under Decisions) strips exactly
+  the matched `N` from `trigger-heuristic-near-miss`'s search, preserving whatever
+  baseline indentation the true source has.
 - **Q:** Where does the SKILL.md guidance go? **A:** [auto-pick] Extend the existing
   `Requirements:` bullet under `## Principles` in mill-plan/SKILL.md. **Why:** already
   the canonical home for Requirements:-authoring rules; avoids unwarranted ceremony of
