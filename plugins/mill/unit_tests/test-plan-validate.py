@@ -2397,8 +2397,8 @@ depends-on: []
 ```
 ### Nested Heading
 - **SomeField:** value
-  alpha
-  beta
+    alpha
+    beta
 ```
 - **Commit:** feat(alpha): card 1
 """
