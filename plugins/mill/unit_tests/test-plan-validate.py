@@ -2354,11 +2354,10 @@ def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> i
 
 
 def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
-    """Drifted fence body with flush-left fence delimiters and look-alike lines inside a fence
-    should trigger in_fence guard. The fence contains a flush-left '- **Field:**'-shaped line
-    that should NOT terminate the field body extraction when inside a fence. The fence body
-    carries list-continuation-indent drift that is detected when the extracted full body is
-    compared against the target file.
+    """Drifted fence body with flush-left look-alike lines inside fence
+    tests in_fence boundary detection. Fence contains a flush-left '- **Field:**'-shaped line
+    that should NOT terminate field body extraction when inside a fence.
+    Fence drift is detected when extracted full body is compared against target.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2366,43 +2365,23 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
         project_root = tmp / "project"
         project_root.mkdir()
         (project_root / "src").mkdir()
-        # Target file contains the look-alike lines plus drift content
         (project_root / "src" / "target.py").write_text(
             "### Nested Heading\n- **SomeField:** value\nalpha\nbeta\n", encoding="utf-8",
         )
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        # Build batch file directly to isolate fence-aware extraction from _parse_cards card-boundary logic.
-        # The fence has look-alike lines at column 0 (to match the field-header regex)
-        # and drift indentation (2 spaces) only on the non-regex-matching lines.
-        batch = """# Batch: alpha
-
-```yaml
-task: test
-batch: alpha
-cards: 1
-verify: null
-depends-on: []
-```
-
-## Cards
-
-### Card 1: card 1
-
-- **Context:** none
-- **Edits:** `src/target.py`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:**
-```
-### Nested Heading
-- **SomeField:** value
-  alpha
-  beta
-```
-- **Commit:** feat(alpha): card 1
-"""
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "```\n"
+                "### Nested Heading\n"
+                "- **SomeField:** value\n"
+                "  alpha\n"
+                "  beta\n"
+                "```\n"
+            ),
+        )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
