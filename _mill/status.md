@@ -30,7 +30,9 @@ implementing  '2026-07-30T19:52:10Z'
 ```yaml
 batches:
   - name: phase-wait-foundation
-    state: pending
+    state: running
+    implementer_session: 02467530-890f-41d8-bbb9-c13771ce71e6
+    start_sha: 014978b75a56a2b2a2ab467ef486136595f4fa6e
   - name: mill-go-entry-wait
     state: pending
   - name: mill-plan-entry-wait
