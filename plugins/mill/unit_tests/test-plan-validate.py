@@ -2310,8 +2310,9 @@ def test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card() 
 
 def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> int:
     """Target file on disk uses CRLF; the plan's fence body uses LF, with a drift bug on top.
-    This exercises Path.read_text()'s built-in universal-newlines translation, ensuring
-    the comparison correctly handles mixed line-ending scenarios on disk vs. in the plan file.
+    Verifies that the check correctly detects the indent drift despite mismatched line-ending
+    styles on disk, relying on Path.read_text()'s built-in universal-newlines translation
+    which normalizes all line-ending styles to LF before comparison.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

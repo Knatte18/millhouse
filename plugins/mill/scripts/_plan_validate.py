@@ -1778,9 +1778,9 @@ def _check_requirements_quote_indent_drift(
                 )
                 if not existing:
                     continue
-                # Normalize CRLF to LF so a Windows checkout of the target
-                # file does not false-negative against an LF-authored fence.
-                content = existing[0].read_text(encoding="utf-8").replace("\r\n", "\n")
+                # Python's read_text(newline=None) already performs universal
+                # newline translation, converting all line-ending styles to LF.
+                content = existing[0].read_text(encoding="utf-8")
                 resolved_contents[token] = content
                 ordered_resolved_tokens.append(token)
 
@@ -1788,20 +1788,18 @@ def _check_requirements_quote_indent_drift(
                 continue
 
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
-                normalized_fence = fence_body.replace("\r\n", "\n")
-
                 # Already byte-exact -- nothing to flag. This also correctly
                 # no-ops for a fence with zero leading whitespace, since
                 # every N >= 1 strip on such a fence is a no-op that reduces
                 # to this same already-checked raw content.
                 if any(
-                    normalized_fence in resolved_contents[t]
+                    fence_body in resolved_contents[t]
                     for t in ordered_resolved_tokens
                 ):
                     continue
 
                 for n in range(1, 41):
-                    stripped = _strip_n_leading_spaces(normalized_fence, n)
+                    stripped = _strip_n_leading_spaces(fence_body, n)
                     matched_token = None
                     for token in ordered_resolved_tokens:
                         if stripped in resolved_contents[token]:
