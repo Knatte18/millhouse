@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-requirements-byte-exactness-gap
 branch: hanf/mill-plan-requirements-byte-exactness-gap
 plan: _mill/plan
@@ -23,4 +23,13 @@ plan-review-r2  '2026-07-30T11:09:45Z'
 plan-fix-r2  '2026-07-30T11:09:45Z'
 plan-review-r3  '2026-07-30T11:13:50Z'
 planned  '2026-07-30T11:13:59Z'
+implementing  '2026-07-30T11:15:28Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: requirements-quote-indent-drift-check
+    state: pending
 ```
