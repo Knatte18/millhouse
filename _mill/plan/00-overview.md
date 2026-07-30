@@ -3,7 +3,7 @@
 ```yaml
 task: Blocking phase-wait gate for mill-plan/mill-go chaining
 slug: phase-wait-gate
-approved: false
+approved: true
 started: 20260730-192330
 parent: main
 root: ""

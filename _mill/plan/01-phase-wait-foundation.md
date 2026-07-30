@@ -230,11 +230,21 @@ dependency beyond "helper exists before its test imports it."
       byte-for-byte CRLF-terminated regardless of the host platform). Call
       `build_wait_command(Path(path), "planned", 1, 5)`, then run the
       returned string via `subprocess.run(["bash", "-c", cmd],
-      capture_output=True, text=True, timeout=10)`. Assert the process
-      exits with code `0` and its stdout, stripped, equals exactly
-      `"READY"`. This proves the `tr -d '\r'` pipe actually makes the
-      trailing-`$` anchor match a CRLF-terminated line end-to-end, not
-      just that the generated string contains the right substrings.
+      capture_output=True, text=True, timeout=10)` wrapped in a
+      `try`/`except FileNotFoundError` — this is the first test file in
+      `plugins/mill/unit_tests/` to shell out to a `bash` binary (every
+      existing file, e.g. `test-builder-lock.py`, is pure in-memory
+      Python with no subprocess dependency), so a machine with no `bash`
+      on `PATH` must produce a clean `print("SKIP: bash not found on
+      PATH, cannot exercise CRLF end-to-end case")` and continue past
+      this case, not an uncaught exception that aborts the whole file
+      before its final `PASS`/`FAIL` summary — matching the rest of the
+      suite's uniform assertion-based failure contract. When `bash` IS
+      found, assert the process exits with code `0` and its stdout,
+      stripped, equals exactly `"READY"`. This proves the `tr -d '\r'`
+      pipe actually makes the trailing-`$` anchor match a CRLF-terminated
+      line end-to-end, not just that the generated string contains the
+      right substrings.
 
   Print a final `"All _phase_wait unit tests passed."` line and return 0
   on success, mirroring `test-builder-lock.py`'s ending.
@@ -311,11 +321,14 @@ dependency beyond "helper exists before its test imports it."
 runnable surface this batch introduces — `_phase_wait.py` is a new,
 self-contained module with no existing caller yet (batches 2/3 add the
 only callers), so no other existing test file can regress from this
-batch's changes. The two config-file edits (card 3) are inert data with
-no schema validator to run against them (confirmed: `_config.py` has no
-central key-allowlist/schema check), so they need no additional verify
-command beyond the config loader implicitly parsing the file as valid
-YAML, which the unit test run does not independently exercise but which
-a full-file YAML syntax error would immediately break every other mill
+batch's changes. The two config-file edits (card 3) need no additional
+verify command: `_config.py` does have a template-vs-actual key check
+(`walk_unknown_keys`/`warn_unknown_keys`), but it is warning-only (never
+load-blocking) and fires only on divergence between the hub config and
+the template — card 3 adds the identical two keys to both files, so no
+divergence exists and no warning fires. Beyond that, the only remaining
+risk is the config loader implicitly parsing the file as valid YAML,
+which the unit test run does not independently exercise but which a
+full-file YAML syntax error would immediately break every other mill
 skill and unit test that loads config — an easy, highly-visible failure
 mode that does not need a dedicated regression test.
