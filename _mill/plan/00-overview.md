@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan: Requirements find/replace fences lose byte-exactness under list-nested indentation'
 slug: mill-plan-requirements-byte-exactness-gap
-approved: false
+approved: true
 started: 20260730-105322
 parent: main
 root: ""
