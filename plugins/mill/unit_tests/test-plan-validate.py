@@ -2371,18 +2371,37 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
         )
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file(
-            "alpha",
-            edits=["src/target.py"],
-            requirements=(
-                "```\n"
-                "### Nested Heading\n"
-                "- **SomeField:** value\n"
-                "  alpha\n"
-                "  beta\n"
-                "```\n"
-            ),
-        )
+        # Bypass _make_batch_file to construct batch file as raw string directly
+        # (per plan: avoid _parse_cards's own pre-existing out-of-scope card-boundary
+        # logic mis-splitting on nested ### line before this check sees the card).
+        batch = """# Batch: alpha
+
+```yaml
+task: test
+batch: alpha
+cards: 1
+verify: null
+depends-on: []
+```
+
+## Cards
+
+### Card 1: card 1
+
+- **Context:** none
+- **Edits:** `src/target.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+```
+### Nested Heading
+- **SomeField:** value
+  alpha
+  beta
+```
+- **Commit:** feat(alpha): card 1
+"""
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
 
         result = _plan_validate.run(plan_dir, project_root)
