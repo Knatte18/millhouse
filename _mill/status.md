@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-07-30T18:23:18Z'
 discussion-fix-r7  '2026-07-30T19:11:42Z'
 discussed  '2026-07-30T19:11:42Z'
 planning  '2026-07-30T19:30:53Z'
+plan-review-r1  '2026-07-30T19:41:41Z'
+plan-fix-r1  '2026-07-30T19:41:41Z'
 ```

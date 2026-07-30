@@ -46,7 +46,7 @@ files with no shared card-level context beyond the already-independent
   Replace it with:
 
   ```
-     | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
+   | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
   ```
 
   Preserve the row's original 3-space indentation and its position
@@ -89,8 +89,20 @@ files with no shared card-level context beyond the already-independent
       Builder variable and retain it for the duration of this wait
       (mirrors the existing "record the `agentId`" step in "## Agent-mode
       dispatch" above).
-    - Wait for the `<task-notification>`. Branch on the notification's
-      single stdout line:
+    - Wait for the `<task-notification>`. A `Monitor` run of this poll
+      script delivers exactly one per-line event notification (the single
+      `READY` / `BLOCKED: ...` / `TIMEOUT after ...` line the script
+      echoes before exiting, carried in that notification's `<event>`
+      tag), immediately followed by a second, separate terminal
+      notification (`<status>completed</status>`, no `<event>` tag) once
+      the script's process actually exits — this two-notification shape
+      (confirmed by a live spike during this task's plan review, not
+      assumed from the Agent tool's differently-shaped single-result
+      notification) is expected and requires no special handling: act on
+      the first notification's `<event>` content; the second, event-less
+      completion notification for the same `task_id` carries no further
+      information and needs no separate branch. Branch on the `<event>`
+      content:
       - **`READY`** — re-run this Entry phase gate step from its top:
         re-read `status_path` via `_status.read_full` fresh, and
         re-evaluate the whole phase table again from scratch (do not

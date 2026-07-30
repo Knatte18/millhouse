@@ -63,6 +63,35 @@ subsection per decision. Batch-local decisions live in each batch file._
   discussion-phase scope decision.
 - **Applies to:** mill-go-entry-wait, mill-plan-entry-wait.
 
+### Decision: Monitor's task-identifier and notification-shape contract, empirically verified
+
+- **Decision:** the `Monitor` tool's initial call result exposes a task
+  identifier (analogous to the Agent tool's `agentId`, usable as the
+  `task_id` argument to `TaskOutput`/`TaskStop`), and a `Monitor` run of
+  the phase-wait poll script (which always echoes exactly one line before
+  exiting) delivers exactly two `<task-notification>`s: first a per-line
+  event notification carrying the echoed line in an `<event>` tag, then a
+  separate terminal notification (`<status>completed</status>`, no
+  `<event>` tag) once the script process exits. The orchestrator acts on
+  the first notification's `<event>` content and needs no separate
+  handling for the second.
+- **Verified:** this shape was confirmed by a live `Monitor` spike run
+  during this task's plan review (round 1), not assumed from documentation
+  or inferred solely from the structurally-different Agent-tool
+  notification contract this task's discussion phase had cited as a
+  precedent — a real `Monitor` call with a two-line script produced two
+  distinct per-line event notifications followed by one terminal
+  completion notification, and the tool's own launch confirmation
+  included a task identifier in the same position/role the Agent tool's
+  `agentId` occupies.
+- **Rationale:** plan review round 1 flagged the original discussion-phase
+  assumption ("mirrors the Agent tool's `agentId`/notification contract")
+  as unverified in-repo. Rather than defer this to an execution-time spike
+  (as the reviewer's fix suggested), the plan-writing session ran the
+  spike directly and recorded the actual confirmed shape here, so batches
+  2/3's implementer works from verified behavior instead of an assumption.
+- **Applies to:** mill-go-entry-wait, mill-plan-entry-wait.
+
 ### Decision: `pipeline.entry_wait` / `pipeline.entry_wait_timeout_minutes` are read at the point of use
 
 - **Decision:** Both new config keys are read with

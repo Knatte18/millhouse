@@ -56,12 +56,12 @@ dependency beyond "helper exists before its test imports it."
   ```bash
   elapsed=0
   while true; do
-    if grep -q "^phase: <ready_phase>$" "<status_path>"; then
+    if tr -d '\r' < "<status_path>" | grep -q "^phase: <ready_phase>$"; then
       echo "READY"
       exit 0
     fi
-    if grep -q "^phase: blocked$" "<status_path>"; then
-      reason_line=$(grep "^blocked_reason:" "<status_path>" | head -1)
+    if tr -d '\r' < "<status_path>" | grep -q "^phase: blocked$"; then
+      reason_line=$(tr -d '\r' < "<status_path>" | grep "^blocked_reason:" | head -1)
       reason=${reason_line#blocked_reason: }
       reason=${reason#\'}
       reason=${reason%\'}
@@ -84,15 +84,29 @@ dependency beyond "helper exists before its test imports it."
     user-supplied).
   - `<status_path>` is substituted as `str(status_path)` and appears
     wrapped in double quotes exactly as shown, in all three places it is
-    used (both `grep` targets and the `reason_line=$(...)` command
-    substitution) — this is what keeps a status path containing spaces
-    safe.
+    used (each `tr -d '\r' < "<status_path>"` redirect) — this is what
+    keeps a status path containing spaces safe.
+  - Every read of `<status_path>` is piped through `tr -d '\r'` before
+    `grep` ever sees it, exactly as shown (`tr -d '\r' < "<status_path>" |
+    grep ...`), never a bare `grep ... "<status_path>"`. `_status.py`
+    (`update_field`/`append_phase`/`set_blocked`) writes `status.md` via
+    `Path.write_text` with no `newline=` override, so on a Windows-authored
+    file the platform-default newline translation leaves CRLF line
+    endings; GNU/POSIX `grep`'s trailing `$` anchor does not match
+    immediately before a `\r`, so an un-piped `grep -q "^phase: ...$"`
+    would silently never see `READY`/`blocked` on such a file and the wait
+    would always run out the full `giveup_s` clock. Stripping `\r` first
+    makes the trailing-`$` anchor safe regardless of which platform wrote
+    `status.md`. This is a localized fix inside `_phase_wait.py` only —
+    `_status.py`'s own writers are unchanged and out of scope for this
+    task.
   - Both `grep -q "^phase: ..."` patterns (the `ready_phase` check and the
     `blocked` check) are anchored with a trailing `$` exactly as shown —
     this is deliberate defensive future-proofing against a hypothetical
     future phase value that string-prefix-extends an existing target
     (e.g. a future `planned-v2` falsely matching `grep "^phase: planned"`
-    without the trailing anchor).
+    without the trailing anchor), now combined with the CRLF-stripping
+    pipe above so the anchor is reliable on any platform's line endings.
   - The `blocked_reason` extraction uses only `grep`, `head`, and bash
     parameter expansion (`${var#prefix}` / `${var%suffix}`) — never `sed`
     (CLAUDE.md project rule). It strips the literal `blocked_reason: `
@@ -149,20 +163,29 @@ dependency beyond "helper exists before its test imports it."
   then `sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))`), a `main() ->
   int` function using bare `assert` plus `print("PASS: ...")` /
   `print(f"FAIL: {exc}", file=sys.stderr)` on `AssertionError`, `if
-  __name__ == "__main__": sys.exit(main())`). No pytest, no fixtures
-  beyond plain local variables — this is a pure in-memory/string test
-  with no real git/LLM/filesystem I/O beyond constructing a `Path` object
-  purely for string interpolation (the function under test never reads
-  the path from disk).
+  __name__ == "__main__": sys.exit(main())`). No pytest, no git/LLM
+  fixtures. Test cases 1-12 below are pure in-memory/string assertions
+  with no filesystem I/O beyond constructing a `Path` object purely for
+  string interpolation (`build_wait_command`/`matches_wait_trigger`
+  themselves never read the path from disk). Case 13 is the one
+  exception: it writes a real temp file and runs the generated command
+  via `subprocess.run` (with a bounded `timeout=10`) to prove the CRLF fix
+  end-to-end — import `subprocess` and `tempfile` for that case alone.
 
   Import `build_wait_command` and `matches_wait_trigger` from
   `_phase_wait`. Cover, at minimum, each of the following as a distinct
   assertion with its own `PASS:` print:
 
   1. `build_wait_command(Path("/tmp/status.md"), "planned", 10, 7200)`
-     contains the substring `grep -q "^phase: planned$" "/tmp/status.md"`.
+     contains the substring
+     `tr -d '\r' < "/tmp/status.md" | grep -q "^phase: planned$"`.
   2. The same call's returned string contains the substring
-     `grep -q "^phase: blocked$" "/tmp/status.md"`.
+     `tr -d '\r' < "/tmp/status.md" | grep -q "^phase: blocked$"`, and
+     contains no bare (un-piped-through-`tr`) `grep ... "/tmp/status.md"`
+     invocation anywhere — every `grep` reading `status_path` content is
+     preceded by a `tr -d '\r' < "<status_path>" |` pipe (confirming the
+     CRLF-safety fix from card 1's Requirements is actually present, not
+     just the plain unpiped anchors).
   3. The same call's returned string contains the substring
      `if [ "$elapsed" -ge 7200 ]; then`.
   4. The same call's returned string contains the substring
@@ -199,6 +222,19 @@ dependency beyond "helper exists before its test imports it."
       [])` — this confirms mill-plan's narrower trigger set (no regex
       widening) does not accidentally match mill-start's mid-loop phase
       value.
+  13. **CRLF end-to-end execution test (regression for the Windows
+      grep-anchor bug caught in plan review round 1).** Using
+      `tempfile.TemporaryDirectory()`, write a real file with
+      `open(path, "wb").write(b"phase: planned\r\n")` (raw bytes, bypassing
+      Python's own newline translation, so the on-disk file is
+      byte-for-byte CRLF-terminated regardless of the host platform). Call
+      `build_wait_command(Path(path), "planned", 1, 5)`, then run the
+      returned string via `subprocess.run(["bash", "-c", cmd],
+      capture_output=True, text=True, timeout=10)`. Assert the process
+      exits with code `0` and its stdout, stripped, equals exactly
+      `"READY"`. This proves the `tr -d '\r'` pipe actually makes the
+      trailing-`$` anchor match a CRLF-terminated line end-to-end, not
+      just that the generated string contains the right substrings.
 
   Print a final `"All _phase_wait unit tests passed."` line and return 0
   on success, mirroring `test-builder-lock.py`'s ending.
@@ -248,10 +284,23 @@ dependency beyond "helper exists before its test imports it."
   skill starts — there is no migration step, no schema version bump, and
   no risk of a running session crashing on an unrecognized key it never
   reads. This satisfies condition (a) of the `wiki-config-mutation` fix-table
-  row (a bootstrap card explaining why the change is safe mid-flight); the
-  plan-review self-validation step re-runs the validator with
-  `skip_checks=frozenset({"wiki-config-mutation"})` on the pass immediately
-  following this justification, per that row's documented resolution.
+  row (a bootstrap card explaining why the change is safe mid-flight).
+
+  **Where this justification actually gets applied (two distinct call
+  sites, precision corrected after plan review round 1's NIT):**
+  `mill-plan/SKILL.md`'s Phase: Plan self-validate step calls
+  `_plan_validate.run(...)` directly with `skip_checks=frozenset()`
+  hardcoded — that SKILL.md text has no documented override for this
+  specific call site. Passing `skip_checks=frozenset({"wiki-config-mutation"})`
+  there once this justification paragraph is present in the plan is an
+  interpretive application of this fix-table row's intent to that direct
+  self-run, not something `mill-plan/SKILL.md`'s text explicitly
+  pre-authorizes today — record it as such rather than asserting it is
+  already a documented mechanism. Separately, the CLI-driven review gate
+  (`millpy-review-plan.py`'s own Step 1.5 validator pass, and any
+  resulting halt inside Phase: Plan Review) DOES natively support
+  `--skip-check wiki-config-mutation` as a first-class flag — that path
+  needs no interpretive judgment call, only the flag.
 
 - **Commit:** `config: add pipeline.entry_wait / entry_wait_timeout_minutes to template and hub config`
 

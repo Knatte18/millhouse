@@ -49,8 +49,8 @@ shared card-level context beyond the already-independent
   the original:
 
   ```
-     | `phase: discussing` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
-     | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
+   | `phase: discussing` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
   ```
 
   Every other row in this table (`phase: discussed` with no `plan_dir`,
@@ -102,8 +102,20 @@ shared card-level context beyond the already-independent
       documented escape hatches; this wait introduces no new one).
     - **Record the `task_id` the `Monitor` tool call returns** in a local
       orchestrator variable and retain it for the duration of this wait.
-    - Wait for the `<task-notification>`. Branch on the notification's
-      single stdout line:
+    - Wait for the `<task-notification>`. A `Monitor` run of this poll
+      script delivers exactly one per-line event notification (the single
+      `READY` / `BLOCKED: ...` / `TIMEOUT after ...` line the script
+      echoes before exiting, carried in that notification's `<event>`
+      tag), immediately followed by a second, separate terminal
+      notification (`<status>completed</status>`, no `<event>` tag) once
+      the script's process actually exits — this two-notification shape
+      (confirmed by a live spike during this task's plan review, not
+      assumed from the Agent tool's differently-shaped single-result
+      notification) is expected and requires no special handling: act on
+      the first notification's `<event>` content; the second, event-less
+      completion notification for the same `task_id` carries no further
+      information and needs no separate branch. Branch on the `<event>`
+      content:
       - **`READY`** — re-run Entry step 4 from its top: re-read
         `status_path` fresh and re-evaluate the whole entry-branch table
         again from scratch (do not assume `discussed` is now the phase and
