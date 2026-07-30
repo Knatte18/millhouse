@@ -151,6 +151,65 @@ review is LLM judgment, not a deterministic gate.
 - Rejected: none seriously considered — this is a naming-convention-following choice,
   not a design trade-off.
 
+### fence-aware-boundary-detection
+
+- Decision: The card/field boundary scan the new check uses to locate a
+  `Requirements:` fence's full body must be fence-aware — while scanning lines to
+  determine where the `Requirements:` field (or, transitively, the card) ends, the scan
+  must track whether it is currently inside an open ``` fence (toggle an `in_fence`
+  boolean on every line that starts with ` ``` `) and must NOT treat a `### ` heading
+  line or a `- **Field:**`-shaped line as a boundary while `in_fence` is `True`.
+- Rationale: `_parse_cards` (card-boundary: any line starting with `### `) and
+  `_extract_requirements_text` (field-boundary: any line matching
+  `^-\s*\*\*[A-Za-z]+:\*\*`) both operate on raw lines with no fence-awareness today.
+  This task's whole premise is docs-editing cards quoting verbatim markdown source —
+  and the source most likely to be quoted is this repo's own SKILL.md files, which are
+  full of `### Phase: X` headings and `- **Field:**`-style bullets. A `Requirements:`
+  fence that quotes a chunk of `mill-plan/SKILL.md` (exactly the kind of fence this
+  check exists to catch, since `mill-plan/SKILL.md` itself is a plausible edit target)
+  will very plausibly contain a `### ` or `- **X:**` line inside its own fence body.
+  Reusing the two helpers unmodified would silently truncate the card or the
+  Requirements: field at that inner line, corrupting card-boundary parsing for
+  everything after it and producing a false negative on exactly the case the check
+  targets — the reviewer flagged this as a GAP; see the round-1 discussion review
+  finding "Reused line-based parsers can truncate a fence quoting markdown structure"
+  (`_mill/reviews/20260730-103537-discussion-review-r1.md`).
+- Scope of the fix: making `_parse_cards`/`_extract_requirements_text` themselves
+  fence-aware would touch every existing check that reuses them, which is out of scope
+  and unnecessary risk for this task (no other check has hit this edge case, since none
+  of them depend on multi-line fenced *content* the way this check does). Instead, the
+  new check owns its own fence-aware re-scan: after calling the existing
+  `_extract_requirements_text(card_text)` to locate the Requirements: header's starting
+  line index, re-walk from that index over the ORIGINAL (untruncated) `card_lines` with
+  the `in_fence` toggle described above, collecting lines until either (a) a true
+  field/card boundary is hit while `in_fence` is `False`, or (b) `card_lines` is
+  exhausted. This re-scan replaces reliance on the existing helper's return value for
+  fence-containing cards; the existing helper's output remains a correct fast-path for
+  the common case with no nested `### `/`- **X:**` lines (they agree on the boundary
+  when no such lines are fence-nested), but the new check must not assume they agree —
+  always use the fence-aware re-scan's boundary as authoritative for its own extraction.
+- Rejected: Generalizing `_parse_cards`/`_extract_requirements_text` to be fence-aware
+  globally (unnecessary blast radius across every existing check for a problem only
+  this new check's use case exhibits). Documenting the truncation as an accepted
+  limitation (rejected per the discussion-review GAP: this would defeat the check for
+  precisely the self-hosted, quote-SKILL.md-markdown scenario that motivated the task
+  in the first place — issue #749's own repro is a mill-plan run editing mill's own
+  markdown).
+
+### edits-tie-break
+
+- Decision: When a card's `Edits:` lists more than one file and the dedented fence
+  content is a literal substring of more than one of them, the check reports the
+  FIRST matching file in the card's `Edits:` declaration order (top-to-bottom as
+  written in the batch file) as the error's `path` field.
+- Rationale: Deterministic, simple, and matches how every other per-card check in this
+  file resolves ambiguity by declaration order rather than introducing a new ranking
+  heuristic (e.g. longest-match, alphabetical) that would need its own justification.
+- Rejected: Reporting all matching files (changes the error dict's `path` field from a
+  single string to a list, an unnecessary schema change for a rare tie case). Reporting
+  none / skipping ambiguous cards (would silently drop a real finding rather than
+  reporting it against a reasonable default target).
+
 ## Technical context
 
 - `plugins/mill/scripts/_plan_validate.py` is the module to edit. Its `run()` function
@@ -159,13 +218,26 @@ review is LLM judgment, not a deterministic gate.
   `{check, batch, card, path, message}`, appended via `errors.extend(...)`.
 - `_extract_requirements_text(card_text)` (around line 1384) already isolates a card's
   `Requirements:` field body (the header line plus every subsequent line up to the next
-  `- **<Field>:**` header or end of card). Reuse this — do not re-implement
-  Requirements-field extraction.
+  `- **<Field>:**` header or end of card). Reuse this to LOCATE the Requirements:
+  header's line index — do not re-implement that lookup — but do NOT trust its return
+  value as the final field body when the card's Requirements: contains a fence: per the
+  `fence-aware-boundary-detection` Decision above, re-walk from that header index over
+  the untruncated `card_lines` with fence-tracking before treating the collected text as
+  complete.
 - `_parse_cards(batch_text)` (around line 120) yields `(card_num, card_lines)` pairs per
   batch file; this is the existing per-card iteration primitive used by every other
   per-card check (e.g. `_check_context_completeness` at line 1462 iterates
   `_parse_cards(text)` then calls `_extract_requirements_text` per card — follow this
-  exact pattern).
+  exact pattern). `_parse_cards` itself is also not fence-aware (splits on any line
+  starting with `### `); per the `fence-aware-boundary-detection` Decision, this is a
+  pre-existing shared limitation this task does not fix globally — the new check must
+  not assume a fence-embedded `### `-looking line inside one card's Requirements: fence
+  has not already corrupted `_parse_cards`'s own card-boundary split for that batch file.
+  If a fixture/test needs a `### `-looking line inside a fence, verify empirically
+  during implementation whether `_parse_cards` already mis-splits on it; if so, the new
+  check's own tests must construct the card text directly (bypassing `_parse_cards`'s
+  batch-level split) to isolate testing of the Requirements-extraction fix from this
+  separate pre-existing limitation.
 - Per-card `Edits:` extraction: `_RE_REFS_HEADER = re.compile(r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$")`
   (line 79) captures the field name in group 1; `_RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")`
   (line 94) matches multi-line sub-bullets. There is no existing per-card
@@ -254,6 +326,22 @@ were surfaced during discussion beyond the scope/decisions above.
     (or vice versa) with a list-continuation indent otherwise matching the
     dirty case → error still fires (proves line-ending normalization works), OR
     conversely a case proving normalization prevents a false negative.
+  - `test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading`:
+    the drifted fence's body itself contains a `### `-prefixed line and a
+    `- **Field:**`-shaped line (simulating a Requirements: fence that quotes a chunk of
+    another SKILL.md, the primary self-hosted use case) → the check still correctly
+    extracts the full fence body (per the `fence-aware-boundary-detection` Decision) and
+    fires the error, proving the fence-tracking re-scan is not fooled by field/heading
+    look-alike lines nested inside the fence. If constructing this fixture via
+    `_make_batch_file`/`_make_batch_file_cards` triggers `_parse_cards`'s own
+    (pre-existing, out-of-scope) card-boundary mis-split on the nested `### ` line,
+    build the card text directly for this test instead of routing through those
+    fixture helpers, so the test isolates the new check's fence-awareness from that
+    separate limitation.
+  - `test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break`: a card
+    whose `Edits:` lists two files, both of which independently contain the dedented
+    fence content as a literal substring → exactly one error, whose `path` field names
+    the first-listed `Edits:` file (per the `edits-tie-break` Decision), not the second.
 - TDD candidate: `_check_requirements_quote_indent_drift` itself is the natural
   TDD-first unit — write the clean/dirty test pairs before the implementation, mirroring
   how every other check in this file already has its own clean/dirty pair.
