@@ -2309,7 +2309,10 @@ def test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card() 
 
 
 def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> int:
-    """Target file on disk uses CRLF; the plan's fence body uses LF, with a drift bug on top."""
+    """Target file on disk uses CRLF; the plan's fence body uses LF, with a drift bug on top.
+    This exercises Path.read_text()'s built-in universal-newlines translation, ensuring
+    the comparison correctly handles mixed line-ending scenarios on disk vs. in the plan file.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -2351,9 +2354,11 @@ def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> i
 
 
 def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
-    """Drifted fence body contains a '### ' heading and a '- **Field:**'-shaped line, both
-    themselves carrying the same drift indent (simulating a fence quoting a chunk of another
-    SKILL.md) -> the fence-aware re-scan still extracts the full body and fires the error.
+    """Drifted fence body with flush-left fence delimiters contains a flush-left '### ' heading
+    and a flush-left '- **Field:**'-shaped line (simulating a fence quoting a chunk of another
+    SKILL.md). The fence's content carries list-continuation-indent drift -> the fence-aware
+    in_fence tracking correctly retains the full body (not truncated at boundary-like lines)
+    and fires the drift error.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2370,12 +2375,12 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
             "alpha",
             edits=["src/target.py"],
             requirements=(
-                "  ```\n"
+                "```\n"
                 "  ### Nested Heading\n"
                 "  - **SomeField:** value\n"
                 "  alpha\n"
                 "  beta\n"
-                "  ```\n"
+                "```\n"
             ),
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
