@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-plan-requirements-byte-exactness-gap
 branch: hanf/mill-plan-requirements-byte-exactness-gap
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-07-30T11:15:28Z'
 approved-requirements-quote-indent-drift-check  '2026-07-30T11:25:43Z'
 holistic-reviewing  '2026-07-30T11:26:01Z'
 holistic-fixing  '2026-07-30T11:32:56Z'
+holistic-reviewing  '2026-07-30T11:36:46Z'
 ```
 
 ## Batches
