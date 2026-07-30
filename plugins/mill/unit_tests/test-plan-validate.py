@@ -2378,8 +2378,8 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
                 "```\n"
                 "### Nested Heading\n"
                 "- **SomeField:** value\n"
-                "alpha\n"
-                "beta\n"
+                "  alpha\n"
+                "  beta\n"
                 "```\n"
             ),
         )
