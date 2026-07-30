@@ -2354,10 +2354,10 @@ def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> i
 
 
 def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
-    """Drifted fence body with flush-left look-alike lines inside fence
-    tests in_fence boundary detection. Fence contains a flush-left '- **Field:**'-shaped line
-    that should NOT terminate field body extraction when inside a fence.
-    Fence drift is detected when extracted full body is compared against target.
+    """Fence body with look-alike lines inside tests in_fence boundary detection.
+    Fence contains a field-header-shaped line that should NOT terminate extraction
+    when in_fence is True. Fence has uniform drift with look-alike lines at column 0
+    so they match the field-header regex and test that in_fence guard prevents truncation.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2374,12 +2374,12 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
             "alpha",
             edits=["src/target.py"],
             requirements=(
-                "```\n"
-                "### Nested Heading\n"
-                "- **SomeField:** value\n"
+                "  ```\n"
+                "  ### Nested Heading\n"
+                "  - **SomeField:** value\n"
                 "  alpha\n"
                 "  beta\n"
-                "```\n"
+                "  ```\n"
             ),
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
