@@ -27,6 +27,10 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`. Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts. See step 6 for the explicit "do not treat PR-pending as termination" rule.
+   - `pipeline.entry_wait` — master on/off switch for the entry-gate
+     blocking wait (default `true` if the key is absent).
+   - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for
+     the entry-gate wait (default `120` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
@@ -78,9 +82,92 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | `planned` | fresh run — continue to Prepare |
    | `implementing` / `reviewing` / `fixing` | resume (see *Resume*) |
    | `blocked` | surface `blocked_reason` from status.md and halt |
-   | `discussed` / `discussing` / `planning` | tell user to finish mill-plan and halt |
+   | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
+
+### Entry-gate wait for upstream mill-plan
+
+Whenever the phase-table lookup above lands on the widened
+`discussed`/`discussing`/`planning`/`plan-review-r{N}`/`plan-fix-r{N}` row,
+run this procedure instead of jumping straight to its listed action:
+
+- Compute the match:
+  ```python
+  matched = _phase_wait.matches_wait_trigger(
+      phase, {"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]
+  )
+  ```
+- Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
+- **If `matched` is `True` and `entry_wait` is `True`:**
+  - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 120)` and compute `giveup_s = timeout_minutes * 60`.
+  - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "planned", 10, giveup_s)`.
+  - State one sentence to the user: waiting for the upstream mill-plan run
+    to reach `phase: planned`.
+  - Call the `Monitor` tool with `command=cmd`, `persistent: true`,
+    `description` naming the slug and the target phase (e.g. "waiting for
+    phase: planned (mill-plan handoff) for `<slug>`"). Do not set a
+    `timeout_ms` value distinct from the default — `persistent: true` makes
+    it irrelevant, matching the existing "Waiting is never a decision
+    point" convention already documented for Agent-mode dispatch elsewhere
+    in this file: state what is being waited for, then wait, with no
+    `AskUserQuestion` or free-text prompt in between.
+  - **Record the `task_id` the `Monitor` tool call returns** in a local
+    Builder variable and retain it for the duration of this wait (mirrors
+    the existing "record the `agentId`" step in "## Agent-mode dispatch"
+    above).
+  - Wait for the `<task-notification>`. A `Monitor` run of this poll script
+    delivers exactly one per-line event notification (the single `READY` /
+    `BLOCKED: ...` / `TIMEOUT after ...` line the script echoes before
+    exiting, carried in that notification's `<event>` tag), immediately
+    followed by a second, separate terminal notification
+    (`<status>completed</status>`, no `<event>` tag) once the script's
+    process actually exits — this two-notification shape (confirmed by a
+    live spike during this task's plan review, not assumed from the Agent
+    tool's differently-shaped single-result notification) is expected and
+    requires no special handling: act on the first notification's
+    `<event>` content; the second, event-less completion notification for
+    the same `task_id` carries no further information and needs no
+    separate branch. Branch on the `<event>` content:
+    - **`READY`** — re-run this Entry phase gate step from its top:
+      re-read `status_path` via `_status.read_full` fresh, and re-evaluate
+      the whole phase table again from scratch (do not assume `planned` is
+      now the phase and jump straight to Prepare; a fresh read could in
+      principle still show something else if the upstream state changed
+      again in the interim).
+    - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to
+      the operator using the same message shape as this table's existing
+      `blocked` row (`surface blocked_reason from status.md and halt`). Do
+      not re-arm the wait automatically.
+    - **`TIMEOUT after <N>s waiting for phase: planned`** — halt with a
+      message distinct from the `BLOCKED` case: state that the configured
+      give-up period (`pipeline.entry_wait_timeout_minutes`) elapsed
+      without mill-plan reaching `phase: planned`, and that the operator
+      should check on the upstream mill-plan session (it may be
+      abandoned, still legitimately working past the give-up window, or
+      never started) and re-run `/mill-go` to re-arm the wait if it is in
+      fact still in progress.
+  - **If the wait itself is stopped/interrupted at the harness level** (a
+    `TaskStop` or equivalent operator-level cancellation of the recorded
+    `task_id`, rather than one of the three outcomes above): treat it like
+    any other harness-level stop elsewhere in this file — no automatic
+    retry. Halt with a short message telling the operator the wait was
+    cancelled and that re-running `/mill-go` will re-evaluate the phase
+    (proceeding immediately if it has since become ready, or re-arming the
+    wait if not).
+- **If `matched` is `True` but `entry_wait` is `False`:** fall back to the
+  table's original action — tell the user to finish mill-plan and halt.
+  Disabling `pipeline.entry_wait` narrows only the *action* (wait vs.
+  halt), never the phase *classification* itself: even with the switch
+  off, a phase of `plan-review-r{N}` / `plan-fix-r{N}` still reaches this
+  same halt message (rather than falling through to the table's generic
+  "any other" row) — this is a deliberate, narrow improvement to the halt
+  path's message accuracy, independent of whether waiting is enabled.
+- **If `matched` is `False`:** this phase value does not match the
+  widened set at all; fall through to the remaining phase-table rows
+  unchanged (this case does not actually occur for any value in
+  `{discussed, discussing, planning}` plus the two regexes, since those
+  are exactly what the match set covers — stated for completeness only).
 
 6. Read the plan overview from `overview_path`. Confirm `approved: true` in the frontmatter. Extract the Batch Index via `_plan_dag.extract_batch_index(overview_text)`, validate via `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`, then compute `order = _plan_dag.topo_order(batches)`.
    `signature: _plan_dag.extract_batch_index(overview_text: str) -> list[dict]`
