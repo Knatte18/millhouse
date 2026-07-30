@@ -202,13 +202,37 @@ direct feature request from the operator, no specific incident driving it.
 ### Master on/off config switch
 
 - Decision: add `pipeline.entry_wait: true` under the existing `pipeline:` block
-  in `mill-config.yaml` (template + hub, kept in sync per CLAUDE.md). When
-  `false`, both entry-gates fall back to today's exact hard-halt behavior and
-  message text, unchanged.
+  in `mill-config.yaml` (template + hub, kept in sync per CLAUDE.md). This
+  switch gates only the **action** taken once a phase is classified as
+  "upstream still running" (wait vs. halt) — it does **not** gate the
+  **classification** itself (`matches_wait_trigger`'s widened phase-set match,
+  see "Exact phase-table edit sites", applies unconditionally regardless of
+  this switch). When `false`: mill-go halts with the existing "tell user to
+  finish mill-plan" message for every phase `matches_wait_trigger` classifies
+  as still-running — which now **includes** `plan-review-r{N}`/`plan-fix-r{N}`,
+  not just `discussed`/`discussing`/`planning`. mill-plan halts with the
+  existing "any other phase" message for `discussing`. This is a **narrow,
+  deliberate behavior change even with the switch off**: today,
+  `plan-review-r{N}`/`plan-fix-r{N}` fall into mill-go's generic "any other →
+  surface + halt" catch-all (verified against the current phase table, lines
+  76-83) rather than the specific "finish mill-plan" message, because today's
+  exact-string match doesn't recognize them as mill-plan-still-running at all.
+  Recognizing them correctly is a strict improvement to the halt path itself
+  (a more specific, more accurate message), independent of whether waiting is
+  enabled — so it is not conditioned on the switch.
 - Rationale: matches the existing `autonomous_mode`-style toggle convention
-  already present in this file; gives a no-code-change rollback lever if the new
-  mechanism misbehaves in practice.
-- Rejected: hardcoding the new behavior with no toggle — no rollback lever.
+  already present in this file; gives a no-code-change rollback lever for the
+  *waiting* behavior specifically if the new mechanism misbehaves in practice,
+  without also reverting the classification fix (which is correct regardless of
+  whether waiting is enabled).
+- Rejected: (a) hardcoding the new behavior with no toggle — no rollback lever.
+  (b) making the switch also gate the classification itself, i.e. giving
+  `matches_wait_trigger` an extra branch that narrows back to the old
+  three-value exact set when `entry_wait: false` — rejected because it would
+  mean deliberately re-introducing an already-identified classification gap
+  (mill-go's phase table not recognizing `plan-review-r{N}`/`plan-fix-r{N}` as
+  mill-plan-still-running) purely to preserve exact byte-for-byte parity with
+  today's halt path, which is not a goal worth the added branching complexity.
 
 ### Exact phase-table edit sites
 
@@ -524,3 +548,7 @@ direct feature request from the operator, no specific incident driving it.
 
 - **Q:** [GAP] Does the poll script's `BLOCKED: ${reason}` leak the `blocked_reason:` YAML key label (and any quoting) into the operator-facing message, since the grep captures the whole line? **A:** [auto-fix] Verified against `_status.py`'s `set_blocked` (writes `f"{key}: {quote_scalar(value)}{eol}"`) and `_yaml_writer.py`'s `quote_scalar` (wraps escaping-needed values in single quotes via `yaml.safe_dump`) — confirmed accurate. Fixed the poll script to strip the `blocked_reason: ` prefix and a possible surrounding single quote via plain bash parameter expansion (no `sed`, per CLAUDE.md's shell-tooling convention), documented as a deliberate partial unescape sufficient for a human-facing message only. **Why:** the operator should see the bare reason text, not a duplicated field label or raw YAML quoting.
 - **Q:** [NOTE] Does the "grows... to the full wait duration" framing in the concurrent-waiter Decision understate how quickly the builder lock actually goes stale? **A:** [auto-fix] Verified `STALE_WINDOW_SEC = 5 * 60` in `_builder_lock.py` — confirmed accurate; the risk is already at its maximum for all but the first ~5 minutes of any 120-minute wait, not a value that grows gradually. Corrected the wording; does not change the already-accepted out-of-scope verdict for that Decision. **Why:** precision matters for a risk-acceptance Decision even when the accepted conclusion doesn't change.
+
+## Discussion review round 6 — gap resolution
+
+- **Q:** [GAP] If `pipeline.entry_wait: false`, does mill-go's widened phase-trigger match (`plan-review-r{N}`/`plan-fix-r{N}`) still apply, contradicting the switch Decision's claim that disabling it reverts to "today's exact hard-halt behavior... unchanged"? **A:** [auto-fix] Verified against mill-go/SKILL.md's current phase table (lines 76-83) — today those two phase values fall into the generic "any other → halt" row, not the specific "finish mill-plan" row, confirming the contradiction was real. Resolved by clarifying that the switch gates only the wait-vs-halt *action*, never the *classification*: `matches_wait_trigger`'s widened match applies unconditionally, so even with the switch off, mill-go now halts with the more specific "finish mill-plan" message for these two phases instead of the old generic catch-all message — a deliberate, narrow improvement to the halt path itself, not something worth re-gating behind the switch. **Why:** the classification fix (recognizing these phases as mill-plan-still-running) is correct independent of whether waiting is enabled; adding a second narrowing branch to `matches_wait_trigger` purely to preserve exact old-message parity when disabled isn't worth the complexity.
