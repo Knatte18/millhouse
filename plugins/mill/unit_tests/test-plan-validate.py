@@ -2354,11 +2354,11 @@ def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> i
 
 
 def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
-    """Drifted fence body with flush-left fence delimiters contains a flush-left '### ' heading
-    and a flush-left '- **Field:**'-shaped line (simulating a fence quoting a chunk of another
-    SKILL.md). The fence's content carries list-continuation-indent drift -> the fence-aware
-    in_fence tracking correctly retains the full body (not truncated at boundary-like lines)
-    and fires the drift error.
+    """Drifted fence body with flush-left fence delimiters and look-alike lines inside a fence
+    should trigger in_fence guard. The fence contains a flush-left '- **Field:**'-shaped line
+    that should NOT terminate the field body extraction when inside a fence. The fence body
+    carries list-continuation-indent drift that is detected when the extracted full body is
+    compared against the target file.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2366,14 +2366,15 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
         project_root = tmp / "project"
         project_root.mkdir()
         (project_root / "src").mkdir()
+        # Target file contains the look-alike lines plus drift content
         (project_root / "src" / "target.py").write_text(
             "### Nested Heading\n- **SomeField:** value\nalpha\nbeta\n", encoding="utf-8",
         )
 
         overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        # Bypass _make_batch_file to construct batch file as raw string directly
-        # (per plan: avoid _parse_cards's own pre-existing out-of-scope card-boundary
-        # logic mis-splitting on nested ### line before this check sees the card).
+        # Build batch file directly to isolate fence-aware extraction from _parse_cards card-boundary logic.
+        # The fence has look-alike lines at column 0 (to match the field-header regex)
+        # and drift indentation (2 spaces) only on the non-regex-matching lines.
         batch = """# Batch: alpha
 
 ```yaml
@@ -2397,8 +2398,8 @@ depends-on: []
 ```
 ### Nested Heading
 - **SomeField:** value
-    alpha
-    beta
+  alpha
+  beta
 ```
 - **Commit:** feat(alpha): card 1
 """
