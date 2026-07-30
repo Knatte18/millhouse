@@ -2376,10 +2376,10 @@ def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_headi
             edits=["src/target.py"],
             requirements=(
                 "```\n"
-                "  ### Nested Heading\n"
-                "  - **SomeField:** value\n"
-                "  alpha\n"
-                "  beta\n"
+                "### Nested Heading\n"
+                "- **SomeField:** value\n"
+                "alpha\n"
+                "beta\n"
                 "```\n"
             ),
         )
