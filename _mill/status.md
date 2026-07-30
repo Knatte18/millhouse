@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-phase-wait-foundation
+phase: approved-mill-go-entry-wait
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-07-30T19:49:33Z'
 planned  '2026-07-30T19:49:49Z'
 implementing  '2026-07-30T19:52:10Z'
 approved-phase-wait-foundation  '2026-07-30T19:56:12Z'
+approved-mill-go-entry-wait  '2026-07-30T19:58:13Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     start_sha: 014978b75a56a2b2a2ab467ef486136595f4fa6e
     commit_sha: d3751884554f32c3ea658a2a33784c92bfbbdc60
   - name: mill-go-entry-wait
-    state: running
+    state: approved
     implementer_session: ed9f75a0-a0b6-405f-bf36-7198ee2b0814
     start_sha: 918700bf55a0c87a66a933cb8ba43d93ddc41f07
+    commit_sha: ee4e10c27464c528ae22031eaaff4a58f300fe95
   - name: mill-plan-entry-wait
     state: pending
 ```
