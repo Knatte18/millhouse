@@ -36,7 +36,9 @@ batches:
     start_sha: 014978b75a56a2b2a2ab467ef486136595f4fa6e
     commit_sha: d3751884554f32c3ea658a2a33784c92bfbbdc60
   - name: mill-go-entry-wait
-    state: pending
+    state: running
+    implementer_session: ed9f75a0-a0b6-405f-bf36-7198ee2b0814
+    start_sha: 918700bf55a0c87a66a933cb8ba43d93ddc41f07
   - name: mill-plan-entry-wait
     state: pending
 ```
