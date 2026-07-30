@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-plan-requirements-byte-exactness-gap
 branch: hanf/mill-plan-requirements-byte-exactness-gap
 plan: _mill/plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-07-30T10:25:07Z'
 discussed  '2026-07-30T10:47:37Z'
 planning  '2026-07-30T10:55:56Z'
+plan-review-r1  '2026-07-30T11:03:31Z'
+plan-fix-r1  '2026-07-30T11:03:31Z'
 ```

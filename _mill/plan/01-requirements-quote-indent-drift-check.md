@@ -42,11 +42,15 @@ bug this task exists to prevent. No batch-local decisions differ from
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Add three new module-level pieces to `plugins/mill/scripts/_plan_validate.py`,
-  inserted immediately after `_check_context_completeness`'s `return errors`
-  (around line 1581) and before the `# Check 8 — all-files-touched-mismatch`
-  section-separator comment (around line 1584). All three regexes/constants
-  below are written fresh for this check; do not reuse or modify
+  Add four new pieces (three helper functions plus the check function itself)
+  to `plugins/mill/scripts/_plan_validate.py`, inserted immediately after
+  `_check_context_completeness`'s `return errors` (around line 1581) and
+  before the `# Check 8 — all-files-touched-mismatch` section-separator
+  comment (around line 1584). Only item 4's fence regex is a genuine
+  module-level constant (defined near the other module-level regex constants,
+  lines 91-97); items 1-3 below are ordinary function definitions, and item
+  3's `Requirements:`-header regex is a local variable inside that function's
+  body, not a module-level constant. Do not reuse or modify
   `_extract_requirements_text`'s `header_re`/`any_field_header_re` objects
   themselves (they stay exactly as they are for `_check_context_completeness`
   and every other caller) — just replicate the same pattern strings locally.
@@ -198,8 +202,9 @@ bug this task exists to prevent. No batch-local decisions differ from
      157), following the exact `| check | mechanical fix |` column format of
      its neighbors. `check` column: `requirements-quote-indent-drift`.
      `mechanical fix` column text: "Locate the card's `Requirements:` fence
-     identified by the error payload's `message` (its first line/snippet and
-     the reported strip amount `N`). Strip exactly `N` leading space
+     identified by the error payload's `message` (its fence index and the
+     reported strip amount `N` — the message carries no content snippet).
+     Strip exactly `N` leading space
      characters from each line of the fence body (not necessarily to column
      0 — preserve whatever baseline indentation remains after the strip) so
      its content is a literal byte-exact substring of the target `Edits:`
@@ -252,18 +257,27 @@ bug this task exists to prevent. No batch-local decisions differ from
   `_write_plan`, call `_plan_validate.run(plan_dir, project_root)`, filter
   `result` for `e["check"] == "requirements-quote-indent-drift"`, assert the
   expected count and (for dirty tests) the expected `card`/`path` fields,
-  print `PASS <name>`/`FAIL <name>: <exc>`, return `0`/`1`). Insert the new
-  functions immediately after
-  `test_check_context_completeness_dirty_line_range_suffix_missing` (the
-  last existing `context-completeness` test) and before the
-  `# skip_checks filtering (Card 7 / #188)` comment (around line 4972-4973).
-  Also add all nine new function names to the `tests = [...]` list inside
-  `main()` (around line 4959-4972), inserted in the same location under a
-  new comment `# requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)`,
-  directly after the `test_check_context_completeness_*` entries and before
-  the `# skip_checks filtering (Card 7 / #188)` comment. The nine functions,
-  exactly as named and specified in `_mill/discussion.md`'s `## Testing`
-  section:
+  print `PASS <name>`/`FAIL <name>: <exc>`, return `0`/`1`). This card touches
+  two DISTINCT, far-apart locations in the file — do not conflate them:
+
+  - **Function definitions:** insert the nine new `def test_...():` functions
+    immediately after `test_check_context_completeness_dirty_line_range_suffix_missing`'s
+    body ends (that function's `def` starts at line 2011; its body — including
+    the `return 1` inside its `except AssertionError` block — ends at line
+    2046; line 2047 is blank and line 2049 begins the next existing function,
+    `def test_skip_checks_filters_wiki_config_mutation()`). Insert the nine
+    new function defs in that gap, between line 2046 and line 2049.
+  - **`tests = [...]` list entries:** separately, add all nine new function
+    names to the `tests = [...]` list literal inside `main()`, under a new
+    comment `# requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)`.
+    This list entry insertion point is near line 4972-4973 — specifically,
+    immediately after the existing `test_check_context_completeness_dirty_line_range_suffix_missing,`
+    entry (line 4972) and before the `# skip_checks filtering (Card 7 / #188)`
+    comment (line 4973), which is itself an in-list comment separating test
+    groups, not a top-level file comment.
+
+  The nine functions, exactly as named and specified in
+  `_mill/discussion.md`'s `## Testing` section:
 
   1. `test_check_requirements_quote_indent_drift_clean_exact_match`: a card
      with `edits=["src/target.py"]` where `src/target.py`'s on-disk content
@@ -304,9 +318,9 @@ bug this task exists to prevent. No batch-local decisions differ from
      fence has the list-continuation-indent drift bug against
      `src/target.py`'s content (the first fence is already byte-exact, or is
      an unrelated illustrative snippet) → assert exactly one error total,
-     and that its `message` identifies the drifted fence (e.g. via the
-     `fence_idx` reflected in the message, or by asserting the message's
-     content snippet matches the second fence's text, not the first's).
+     and that its `message` identifies the drifted fence via `fence_idx == 2`
+     (the message carries no content snippet — assert on the numeral, not on
+     matched text from either fence).
   7. `test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence`:
      write `src/target.py` to disk with `\r\n` line endings (e.g.
      `"line one\r\nline two\r\n"` containing the target snippet), while the
