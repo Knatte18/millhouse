@@ -43,6 +43,10 @@ Checks performed (check keys):
     context-completeness     — a card's Requirements: references a resolvable
                                file-path-shaped backtick token absent from that
                                card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
+    requirements-quote-indent-drift — a card's Requirements: fenced block quoting
+                               exact source text that only byte-matches its own
+                               Edits: file(s) after stripping a fixed per-line
+                               indent (list-continuation-indentation bug signature)
     move-format              — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant           — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
     move-source-missing      — Move source does not exist on disk and is not created/relocated by an earlier batch
@@ -98,6 +102,11 @@ _RE_LINE_RANGE = re.compile(r":\d+-\d+$")
 
 # Matches the "## Rename mechanic" heading in a batch that has non-empty Moves.
 _RE_MECHANIC_HEADING = re.compile(r"^##\s+Rename mechanic\b", re.MULTILINE)
+
+# Captures the body of a fenced code block (```<lang>\n<body>```), non-greedy
+# across multiple lines. Used by requirements-quote-indent-drift to pull the
+# literal quoted text out of a Requirements: field's fence(s).
+_RE_FENCE_BODY = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)
 
 # Captures everything after "--only " in a verify: command string, so the
 # candidate test-file tokens can be split off the flag's argument list.
@@ -1581,6 +1590,238 @@ def _check_context_completeness(
     return errors
 
 
+def _strip_n_leading_spaces(text: str, n: int) -> str:
+    """Strip up to ``n`` leading space characters from every line of ``text``.
+
+    For each line (split via ``.splitlines()``), remove exactly ``n``
+    leading space characters when the line has at least that many;
+    otherwise strip only however many leading spaces the line actually has
+    (no error on short/blank lines). This is a FIXED per-line strip, not
+    ``textwrap.dedent``'s common-minimum-strip -- per
+    ``_mill/discussion.md``'s ``trigger-heuristic-near-miss`` Decision,
+    ``textwrap.dedent`` silently misses drift when the true source excerpt
+    has nonzero baseline indentation of its own.
+    """
+    stripped_lines = []
+    for line in text.splitlines():
+        leading = len(line) - len(line.lstrip(" "))
+        strip_count = min(n, leading)
+        stripped_lines.append(line[strip_count:])
+    return "\n".join(stripped_lines)
+
+
+def _card_edits_tokens(card_text: str) -> list[str]:
+    """Return this card's own ``Edits:`` backtick tokens, in declaration order.
+
+    Walks ``card_text``'s lines matching ``_RE_REFS_HEADER`` where the field
+    name is ``Edits``, extracting either the inline value's backtick tokens
+    or the following ``_RE_REFS_SUB`` sub-bullets' tokens -- mirroring
+    ``_card_own_reference_set``'s inline/sub-bullet walk, but scoped to the
+    ``Edits`` field only and returned as an ordered list (not a set), since
+    declaration order is load-bearing for requirements-quote-indent-drift's
+    first-match tie-break.
+    """
+    tokens: list[str] = []
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_REFS_HEADER.match(line)
+        if m and m.group(1) == "Edits":
+            inline = m.group("inline").strip()
+            if inline:
+                # An inline "none" naturally yields zero tokens, since "none"
+                # is not backtick-wrapped.
+                tokens.extend(re.findall(r"`([^`]+)`", inline))
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                tokens.extend(re.findall(r"`([^`]+)`", sm.group(1)))
+                j += 1
+            i = j
+            continue
+        i += 1
+    return tokens
+
+
+def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
+    """Return the full, fence-aware body of a card's ``Requirements:`` field.
+
+    Locates the ``- **Requirements:**`` header line directly against
+    ``card_lines`` (does NOT call ``_extract_requirements_text`` for this --
+    per ``_mill/discussion.md``'s ``fence-aware-boundary-detection``
+    Decision, that function returns a joined string, not an index). Returns
+    ``None`` when no such header line exists.
+
+    The header line itself unconditionally seeds the result (it also
+    matches the stop-condition regex used below, so re-testing it would
+    make the scan a permanent no-op). From the line after the header, walks
+    forward over the ORIGINAL (untruncated) ``card_lines``, tracking a
+    boolean ``in_fence`` that toggles on every line starting with
+    ``` ``` ```. Collection stops at the first line matching a
+    ``- **Field:**``-shaped header while ``in_fence`` is ``False``, or at
+    the end of ``card_lines``. This re-scan exists so a fence quoting
+    another SKILL.md's ``### Phase: X`` heading or ``- **Field:**``-shaped
+    bullet is not mistaken for this field's own boundary, which would
+    truncate the fence body.
+    """
+    header_re = re.compile(r"^-\s*\*\*Requirements:\*\*")
+    any_field_header_re = re.compile(r"^-\s*\*\*[A-Za-z]+:\*\*")
+
+    start = None
+    for i, line in enumerate(card_lines):
+        if header_re.match(line):
+            start = i
+            break
+    if start is None:
+        return None
+
+    collected = [card_lines[start]]
+    in_fence = False
+    j = start + 1
+    while j < len(card_lines):
+        line = card_lines[j]
+        if not in_fence and any_field_header_re.match(line):
+            break
+        if line.startswith("```"):
+            in_fence = not in_fence
+        collected.append(line)
+        j += 1
+
+    return "\n".join(collected)
+
+
+def _check_requirements_quote_indent_drift(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag a card's Requirements: fence that only byte-matches its own Edits:
+    file(s) after stripping a fixed per-line indent.
+
+    This is the list-continuation-indentation bug's exact signature: a
+    ``Requirements:`` fence meant to quote exact source text as Edit-tool
+    ``old_string`` bait silently picks up a uniform per-line indent from the
+    surrounding Markdown list-continuation nesting, so the quoted text no
+    longer byte-matches the real source file even though it "looks right"
+    to a human or LLM reviewer.
+
+    For each card with a non-empty Edits: field and a Requirements: field
+    containing at least one fenced code block: for each fence, if the raw
+    (unstripped) fence content is already a literal substring of some
+    resolved Edits: file's content, the fence is clean -- no error. If not,
+    search ascending strip amounts N = 1..40 (a fixed per-line leading-space
+    strip, NOT textwrap.dedent's common-minimum-strip -- see
+    _strip_n_leading_spaces) for the first N whose stripped fence content IS
+    a literal substring of some resolved Edits: file (walked in the card's
+    own Edits: declaration order, first match wins on ties). The first
+    match wins and stops the search; a fence matching no N in range is an
+    illustrative snippet showing new/desired-state code, not a drifted
+    quote, and is silently skipped -- never flagged.
+
+    Per _mill/discussion.md's match-target-edits-only Decision, only a
+    card's own Edits: files are compared against (never Context:, Creates:,
+    or other cards' files) -- those files already exist on disk by
+    definition, so no creates_union/deletes_union/moves_targets threading
+    is needed here (contrast _check_context_completeness).
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (typically the worktree root).
+        root: Optional root subfolder for source refs.
+        wiki_root: Optional wiki root path for wiki/-prefixed refs.
+        git_root: Optional repo root for git_root-relative resolution.
+
+    Returns:
+        List of error dicts, one per drifted fence.
+    """
+    errors: list[dict] = []
+
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        for card_num, card_lines in cards:
+            card_text = "\n".join(card_lines)
+            edits_tokens = _card_edits_tokens(card_text)
+            if not edits_tokens:
+                continue
+
+            requirements_text = _requirements_fence_aware_body(card_lines)
+            if requirements_text is None:
+                continue
+
+            fence_bodies = _RE_FENCE_BODY.findall(requirements_text)
+            if not fence_bodies:
+                continue
+
+            # Resolve this card's own Edits: tokens to real on-disk files,
+            # preserving declaration order for the tie-break below. Tokens
+            # that don't resolve (e.g. a stale/typo'd Edits: entry) are
+            # silently dropped -- that's non-existent-path's concern, not
+            # this check's.
+            resolved_contents: dict[str, str] = {}
+            ordered_resolved_tokens: list[str] = []
+            for token in edits_tokens:
+                existing = resolve_existing_paths(
+                    [token], project_root, root,
+                    wiki_root=wiki_root, git_root=git_root,
+                )
+                if not existing:
+                    continue
+                # Python's read_text(newline=None) already performs universal
+                # newline translation, converting all line-ending styles to LF.
+                content = existing[0].read_text(encoding="utf-8")
+                resolved_contents[token] = content
+                ordered_resolved_tokens.append(token)
+
+            if not ordered_resolved_tokens:
+                continue
+
+            for fence_idx, fence_body in enumerate(fence_bodies, start=1):
+                # Already byte-exact -- nothing to flag. This also correctly
+                # no-ops for a fence with zero leading whitespace, since
+                # every N >= 1 strip on such a fence is a no-op that reduces
+                # to this same already-checked raw content.
+                if any(
+                    fence_body in resolved_contents[t]
+                    for t in ordered_resolved_tokens
+                ):
+                    continue
+
+                for n in range(1, 41):
+                    stripped = _strip_n_leading_spaces(fence_body, n)
+                    matched_token = None
+                    for token in ordered_resolved_tokens:
+                        if stripped in resolved_contents[token]:
+                            matched_token = token
+                            break
+                    if matched_token is not None:
+                        errors.append({
+                            "check": "requirements-quote-indent-drift",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": matched_token,
+                            "message": (
+                                f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"matches '{matched_token}' after stripping {n} "
+                                f"leading spaces per line (found N={n})"
+                            ),
+                        })
+                        break
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # Check 8 — all-files-touched-mismatch
 # ---------------------------------------------------------------------------
@@ -2499,6 +2740,11 @@ def run(
     errors.extend(_check_plugin_manifest_context_missing(batch_files))
     errors.extend(_check_context_completeness(
         batch_files, project_root, effective_root, creates_union, deletes_union, moves_targets,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_requirements_quote_indent_drift(
+        batch_files, project_root, effective_root,
         wiki_root=wiki_root,
         git_root=git_root,
     ))

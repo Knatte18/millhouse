@@ -2046,6 +2046,433 @@ def test_check_context_completeness_dirty_line_range_suffix_missing() -> int:
             return 1
 
 
+def test_check_requirements_quote_indent_drift_clean_exact_match() -> int:
+    """Fence content is already a byte-exact substring of the target Edits: file -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "def helper():\n    return 1\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "def helper():\n"
+                "    return 1\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_exact_match")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_exact_match: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_illustrative_snippet() -> int:
+    """Fence shows plausible but different code, not a substring at any N in 1..40 -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "def helper():\n    return 1\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Illustrative:\n"
+                "```\n"
+                "def other_func():\n"
+                "    return 999\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_illustrative_snippet")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_illustrative_snippet: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_no_edits_field() -> int:
+    """Card's Edits: is none -> check is a no-op, nothing to compare against."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=None,
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "def helper():\n"
+                "    return 1\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_no_edits_field")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_no_edits_field: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_list_continuation_indent() -> int:
+    """Flush-left source snippet, fence has a uniform 2-space list-continuation indent baked in."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "alpha\nbeta\ngamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  alpha\n"
+                "  beta\n"
+                "  gamma\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["card"] == 1, f"wrong card: {e['card']!r}"
+            assert e["path"] == "src/target.py", f"wrong path: {e['path']!r}"
+            assert "N=2" in e["message"], f"message missing N=2: {e['message']!r}"
+            print("PASS test_check_requirements_quote_indent_drift_dirty_list_continuation_indent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_list_continuation_indent: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_nonzero_baseline_indent() -> int:
+    """Source has its own 4-space baseline indent; fence adds a further uniform 2 spaces on top."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "    alpha\n    beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "      alpha\n"
+                "      beta\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert "N=2" in e["message"], f"message missing N=2: {e['message']!r}"
+            print("PASS test_check_requirements_quote_indent_drift_dirty_nonzero_baseline_indent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_nonzero_baseline_indent: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card() -> int:
+    """Two fences under one card; only the second has the drift bug -> exactly one error, fence 2."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "first_line\nsecond_line\nthird_line\nfourth_line\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Clean fence:\n"
+                "```\n"
+                "first_line\n"
+                "second_line\n"
+                "```\n"
+                "  Drifted fence:\n"
+                "  ```\n"
+                "   third_line\n"
+                "   fourth_line\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert "fence 2" in e["message"], f"message missing fence 2: {e['message']!r}"
+            print("PASS test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> int:
+    """Target file on disk uses CRLF; the plan's fence body uses LF, with a drift bug on top.
+    Verifies that the check correctly detects the indent drift despite mismatched line-ending
+    styles on disk, relying on Path.read_text()'s built-in universal-newlines translation
+    which normalizes all line-ending styles to LF before comparison.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "line one\r\nline two\r\n", encoding="utf-8", newline="",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  line one\n"
+                "  line two\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
+    """Fence body with flush-left look-alike lines tests in_fence boundary detection.
+    Fence contains a flush-left '- **Field:**'-shaped line that should NOT terminate
+    field body extraction when in_fence is True. The indented `### ` heading prevents
+    _parse_cards from mis-splitting the card, while flush-left look-alike line and
+    fence delimiters test that in_fence guard actually prevents boundary truncation.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "### Nested Heading\n- **SomeField:** value\nalpha\nbeta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # Build batch file as raw string to isolate from _parse_cards boundary logic:
+        # - Indented `### ` heading prevents _parse_cards from terminating the card
+        # - Flush-left fence delimiters and look-alike lines test in_fence guard
+        # - Drift indentation (2 spaces) only on lines that don't need regex matching
+        batch = """# Batch: alpha
+
+```yaml
+task: test
+batch: alpha
+cards: 1
+verify: null
+depends-on: []
+```
+
+## Cards
+
+### Card 1: card 1
+
+- **Context:** none
+- **Edits:** `src/target.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+```
+  ### Nested Heading
+- **SomeField:** value
+  alpha
+  beta
+```
+- **Commit:** feat(alpha): card 1
+"""
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break() -> int:
+    """Both Edits: files independently contain the stripped fence content -> error names the first."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "first.py").write_text(
+            "shared_line_one\nshared_line_two\n", encoding="utf-8",
+        )
+        (project_root / "src" / "second.py").write_text(
+            "shared_line_one\nshared_line_two\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/first.py", "src/second.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  shared_line_one\n"
+                "  shared_line_two\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "src/first.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_skip_checks_filters_wiki_config_mutation() -> int:
     """skip_checks={"wiki-config-mutation"} suppresses that check entirely."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -4970,6 +5397,16 @@ def main() -> int:
         test_check_context_completeness_clean_prohibition_marker,
         test_check_context_completeness_clean_line_range_suffix_in_context,
         test_check_context_completeness_dirty_line_range_suffix_missing,
+        # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
+        test_check_requirements_quote_indent_drift_clean_exact_match,
+        test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
+        test_check_requirements_quote_indent_drift_clean_no_edits_field,
+        test_check_requirements_quote_indent_drift_dirty_list_continuation_indent,
+        test_check_requirements_quote_indent_drift_dirty_nonzero_baseline_indent,
+        test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card,
+        test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence,
+        test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading,
+        test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,
