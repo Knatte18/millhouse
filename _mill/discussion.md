@@ -220,11 +220,20 @@ direct feature request from the operator, no specific incident driving it.
   Recognizing them correctly is a strict improvement to the halt path itself
   (a more specific, more accurate message), independent of whether waiting is
   enabled — so it is not conditioned on the switch.
-- Rationale: matches the existing `autonomous_mode`-style toggle convention
-  already present in this file; gives a no-code-change rollback lever for the
-  *waiting* behavior specifically if the new mechanism misbehaves in practice,
-  without also reverting the classification fix (which is correct regardless of
-  whether waiting is enabled).
+- Rationale: a static, operator-set feature toggle in `mill-config.yaml` is the
+  existing pattern this repo already uses for several `pipeline.*` keys (e.g.
+  `auto_merge`, `auto_report`, `done_gate`); gives a no-code-change rollback
+  lever for the *waiting* behavior specifically if the new mechanism misbehaves
+  in practice, without also reverting the classification fix (which is correct
+  regardless of whether waiting is enabled). (Note: `pipeline.autonomous_mode`
+  is *not* cited as the precedent here — `_autonomous.py`'s docstring confirms
+  it "Replaces the removed `pipeline.autonomous_mode` config key" with a
+  per-hub flag file, and this hub's own `mill-config.yaml` already omits it
+  from `pipeline:`, so it is itself a stale/in-flight migration, not a stable
+  convention to copy. It is also a materially different shape of state anyway
+  — a per-task ephemeral escalation flag, not a static operator-set toggle —
+  so its flag-file precedent wouldn't transfer to `entry_wait` even if it were
+  stable.)
 - Rejected: (a) hardcoding the new behavior with no toggle — no rollback lever.
   (b) making the switch also gate the classification itself, i.e. giving
   `matches_wait_trigger` an extra branch that narrows back to the old

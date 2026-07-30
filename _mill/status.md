@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-07-30T18:23:18Z'
+discussion-fix-r7  '2026-07-30T19:11:42Z'
+discussed  '2026-07-30T19:11:42Z'
 ```
