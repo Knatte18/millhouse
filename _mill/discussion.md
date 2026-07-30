@@ -88,11 +88,11 @@ direct feature request from the operator, no specific incident driving it.
   ```bash
   elapsed=0
   while true; do
-    if grep -q "^phase: <ready_phase>" "<status_path>"; then
+    if grep -q "^phase: <ready_phase>$" "<status_path>"; then
       echo "READY"
       exit 0
     fi
-    if grep -q "^phase: blocked" "<status_path>"; then
+    if grep -q "^phase: blocked$" "<status_path>"; then
       reason=$(grep "^blocked_reason:" "<status_path>" | head -1)
       echo "BLOCKED: ${reason}"
       exit 1
@@ -105,6 +105,20 @@ direct feature request from the operator, no specific incident driving it.
     elapsed=$((elapsed + <poll_interval_s>))
   done
   ```
+
+  Both `grep` patterns are end-anchored with a trailing `$` (in addition to the
+  existing `^phase: ` start-anchor). `build_wait_command`'s `ready_phase`
+  argument is always one of the two literal single-word targets used in this
+  task (`planned` for mill-go, `discussed` for mill-plan) — never a numbered
+  value — so today's closed phase set has no actual collision. The anchor is
+  added as defensive future-proofing: without it, a phase value added later
+  that happens to extend an existing target as a string-prefix (e.g. a
+  hypothetical future `planned-v2`) would false-positive-match
+  `grep "^phase: planned"` and end the wait prematurely on the wrong phase. The
+  `blocked`-detection grep gets the same trailing `$` for the identical reason.
+  (The separate `matches_wait_trigger` numbered-phase patterns — `plan-review-
+  r\d+`, `plan-fix-r\d+` — are already fully-anchored regexes via
+  `re.fullmatch`, not `grep`, so they have no analogous exposure.)
 
   `<status_path>` must be shell-quoted by the builder (double-quoted, path passed
   through as-is — no other escaping needed since it's a single trusted path built
@@ -304,6 +318,35 @@ direct feature request from the operator, no specific incident driving it.
 - Rejected: auto re-arming the wait immediately after an operator stop — ignores
   the explicit "I wanted to interrupt this" signal.
 
+### Concurrent-waiter builder-lock exclusion is unchanged, and now has a larger exposure window
+
+- Decision: accept this as a pre-existing risk, unchanged by this task. No new
+  exclusion mechanism is added to prevent two waiting sessions from both
+  observing `READY` and both proceeding.
+- Verified: `_builder_lock.acquire` (`plugins/mill/scripts/_builder_lock.py`
+  lines 117-145) treats a same-`slug` caller as idempotent — it refreshes the
+  lock's timestamp and succeeds rather than raising `LockBusy`, by design
+  ("a crashed mill-go restarting against the same task should not have to
+  manually clear its own lock"). This means two independent `/mill-go`
+  invocations for the *same task* (e.g. two terminals) have never been mutually
+  exclusive at the lock layer — only a *different*-slug caller gets rejected.
+  Today this window is effectively instantaneous, because a not-yet-`planned`
+  phase halts immediately. With this task's 120-minute default wait in place,
+  the window during which two such sessions could both be waiting — and then
+  both independently see `READY` and both proceed into Prepare/Execute for the
+  same batch — grows from near-zero to the full wait duration.
+- Rationale: fixing this would mean changing `_builder_lock.acquire`'s
+  same-slug semantics (e.g. tracking a per-waiting-session handle and rejecting
+  a second concurrent waiter) — a change to a shared locking primitive used by
+  every mill-go dispatch, not scoped to this task's actual goal (replacing a
+  halt with a wait). That is a materially separate concern with its own blast
+  radius across all of mill-go, not something to bundle into this task. The
+  risk is pre-existing (this task does not introduce it), only its exposure
+  window changes.
+- Rejected: adding same-slug waiter exclusion to `_builder_lock.py` as part of
+  this task — real improvement, but out of scope; mirrors the same
+  scope-discipline reasoning as the "Liveness ambiguity" Decision below.
+
 ### Liveness ambiguity: "still running" vs. "never started"
 
 - Decision: accept the ambiguity. `phase: discussed` / `discussing` / `planning`
@@ -349,14 +392,18 @@ direct feature request from the operator, no specific incident driving it.
   the "still running vs never started" ambiguity above.
 - `_phase_wait.py` should expose a second small pure function alongside
   `build_wait_command`, e.g. `matches_wait_trigger(phase: str, exact:
-  set[str], prefix_patterns: list[str]) -> bool`, used by the entry-gate
+  set[str], regex_patterns: list[str]) -> bool`, used by the entry-gate
   table check itself (distinct from the poll script's internal grep, which only
-  ever checks the single target `ready_phase` plus `blocked`). This is what lets
-  mill-go's wider trigger set (`discussed`/`discussing`/`planning` plus the
-  `plan-review-r\d+`/`plan-fix-r\d+` regexes — see "Exact phase-table edit
-  sites") and mill-plan's narrower one (`discussing` only) share one
-  unit-tested implementation instead of each SKILL.md hand-rolling its own
-  phase-matching logic.
+  ever checks the single target `ready_phase` plus `blocked`). The parameter is
+  named `regex_patterns`, not `prefix_patterns` — the values it holds
+  (`^plan-review-r\d+$`, `^plan-fix-r\d+$`) are fully-anchored full-match
+  regexes checked via `re.fullmatch`, not string prefixes checked via
+  `str.startswith()`; a `prefix_patterns` name would mislead an implementer into
+  reaching for the wrong string method. This is what lets mill-go's wider
+  trigger set (`discussed`/`discussing`/`planning` plus the two regexes — see
+  "Exact phase-table edit sites") and mill-plan's narrower one (`discussing`
+  only, empty `regex_patterns`) share one unit-tested implementation instead of
+  each SKILL.md hand-rolling its own phase-matching logic.
 
 ## Constraints
 
@@ -380,9 +427,10 @@ direct feature request from the operator, no specific incident driving it.
   detection branch, the correct `giveup_s` threshold and `poll_interval_s` sleep
   value substituted in, and that exactly the three exit markers (`READY`,
   `BLOCKED:`, `TIMEOUT`) appear with distinct exit codes (0, 1, 2). Also cover:
-  status path containing spaces is safely quoted in the emitted command.
-  In-memory/string-only fixture, no real git/LLM, per this repo's existing unit
-  test conventions.
+  status path containing spaces is safely quoted in the emitted command; both
+  `grep` patterns are end-anchored (trailing `$` present in the emitted
+  command's `ready_phase` and `blocked` checks). In-memory/string-only fixture,
+  no real git/LLM, per this repo's existing unit test conventions.
 - Same test file also covers `_phase_wait.matches_wait_trigger`: TDD candidate.
   Assert mill-go's wider pattern (`discussed`/`discussing`/`planning` exact, plus
   `plan-review-r\d+`/`plan-fix-r\d+` regex) matches all of `discussed`,
@@ -424,3 +472,9 @@ direct feature request from the operator, no specific incident driving it.
 
 - **Q:** [GAP] Is the "brief, post-approve window" framing for `plan-review-r{N}`/`plan-fix-r{N}` accurate, and are the cited line numbers (239/244) really inside steps 4a/4b? **A:** [auto-fix] No — re-verified against the actual file: lines 239/244 are inside step 4d (`REQUEST_CHANGES AND blocking_count > 0`, line 238), which does not break the loop and can repeat for many rounds; these two phase values persist for the entire duration of a multi-round blocking-findings review loop. 4a/4b (lines 208/210) separately each write the same two phase values right before their own "Break loop → Handoff," which is the short pre-Handoff window the original framing described — that part wasn't wrong, just incomplete (it missed the much longer 4d case). Corrected the citation and framing in the "Exact phase-table edit sites" Decision; the widened regex match (already decided in round 1) covers both cases without further changes, since mill-go's wait treats every non-`planned` occurrence identically. **Why:** verified line-by-line against the actual step structure rather than re-trusting the round-1 citation; the conclusion (widen the trigger set) was already correct, only the supporting citation and duration framing needed fixing.
 - **Q:** [GAP] What should the orchestrator do upon receiving `BLOCKED: <reason>` or `TIMEOUT after ...` as the wait's outcome — only `READY` had a decided action? **A:** [auto-fix] Added an explicit Decision: `BLOCKED` halts immediately reusing mill-go's existing `blocked`-phase halt shape (surface `blocked_reason`, no auto-retry); `TIMEOUT` halts with a distinct message pointing at the give-up config key and telling the operator to check on the upstream session, re-running the skill to re-arm the wait if it's still genuinely in progress. **Why:** the two failure modes are semantically different (upstream failed vs. upstream simply hasn't finished within budget) and deserve distinguishable operator-facing messages rather than one generic "wait didn't complete" halt.
+
+## Discussion review round 3 — gap/note resolutions
+
+- **Q:** [GAP] `_builder_lock.acquire` refreshes-and-succeeds for a same-slug caller with no other exclusion — does the much longer wait duration meaningfully worsen the risk of two sessions double-proceeding into the same batch? **A:** [auto-fix] Verified against `_builder_lock.py` lines 117-145 — confirmed accurate. Accepted as a pre-existing, unchanged risk: added a Decision documenting that this task does not add same-slug waiter exclusion, since that would mean changing `_builder_lock.acquire`'s shared locking semantics (used by every mill-go dispatch) — a materially separate concern from this task's actual goal of replacing a halt with a wait. **Why:** mirrors the same scope-discipline reasoning already used for the "Liveness ambiguity" Decision; fixing the lock's exclusion model is a bigger, separate task with its own blast radius, not something to bundle in here.
+- **Q:** [NOTE] Is `build_wait_command`'s `grep -q "^phase: <ready_phase>"` (and the `blocked` check) vulnerable to a future phase value false-positive-matching as a string-prefix? **A:** [auto-fix] Added a trailing `$` to both grep patterns. **Why:** cheap, safe, no downside; guards against a future phase value (e.g. a hypothetical `planned-v2`) extending an existing target as a prefix and ending the wait on the wrong phase. Confirmed `ready_phase` itself is always a single literal value (`planned`/`discussed`), never a numbered one, so today's set has no actual collision — this is pure defensive future-proofing, not a fix for a live bug.
+- **Q:** [NOTE] Does `matches_wait_trigger`'s proposed `prefix_patterns` parameter name match its documented semantics (fully-anchored regexes, not string prefixes)? **A:** [auto-fix] Renamed to `regex_patterns` throughout the discussion. **Why:** avoids misleading a future implementer into reaching for `str.startswith()` instead of `re.fullmatch()`.
