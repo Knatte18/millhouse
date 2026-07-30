@@ -24,12 +24,15 @@ direct feature request from the operator, no specific incident driving it.
 ## Scope
 
 **In:**
-- mill-go's entry-gate: when the phase indicates mill-plan is still in flight
-  (`discussed` / `discussing` / `planning`), wait for `phase: planned` instead of
-  halting.
+- mill-go's entry-gate: when the phase indicates mill-plan is still in flight —
+  `discussed` / `discussing` / `planning`, **or** the transient
+  `plan-review-r{N}` / `plan-fix-r{N}` window between a Plan Review round's
+  APPROVE-commit and mill-plan's own Handoff commit (see "Exact phase-table edit
+  sites" below) — wait for `phase: planned` instead of halting.
 - mill-plan's entry-gate: when the phase is `discussing` (mill-start still in
-  flight), wait for `phase: discussed` instead of falling into the "any other
-  phase" halt.
+  flight, for the entire duration of its own review loop — see "Exact
+  phase-table edit sites"), wait for `phase: discussed` instead of falling into
+  the "any other phase" halt.
 - A new shared helper (`_phase_wait.py`) that builds the polling shell command,
   unit-tested in isolation.
 - Two new `pipeline.*` config keys: a master on/off switch and a give-up timeout.
@@ -125,6 +128,13 @@ direct feature request from the operator, no specific incident driving it.
   mill-go batch chains while still bounding an abandoned/crashed upstream run,
   per the brief's own stated concern about indefinite blocking. The operator can
   always `TaskStop` the wait sooner if they know the upstream run is dead.
+- **Unit conversion, explicit:** `pipeline.entry_wait_timeout_minutes` is stored
+  in minutes; `_phase_wait.build_wait_command`'s `giveup_s` parameter is in
+  seconds. The SKILL.md call site in both mill-go and mill-plan (the point where
+  the config value is read and passed into `build_wait_command`) is the single
+  place that performs `giveup_s = entry_wait_timeout_minutes * 60` — the helper
+  itself takes only seconds and does no unit conversion, keeping it a pure,
+  unit-unambiguous function for the unit test to exercise directly.
 
 ### Terminal-state (`blocked`) detection inside the poll loop
 
@@ -165,18 +175,47 @@ direct feature request from the operator, no specific incident driving it.
 - Decision:
   - `mill-go/SKILL.md`, current row `| discussed / discussing / planning | tell
     user to finish mill-plan and halt |` (~line 81): replace the action with the
-    wait-for-`phase: planned` branch. The phase-value set triggering the wait is
-    unchanged (still exactly `discussed` / `discussing` / `planning`) — only the
-    action changes, from halt to wait.
+    wait-for-`phase: planned` branch, and **widen the trigger match** from an
+    exact-string set to a pattern match: `phase` equals `discussed`,
+    `discussing`, or `planning`, **or** matches the regex `^plan-review-r\d+$` /
+    `^plan-fix-r\d+$`. Verified against mill-plan/SKILL.md: step 4a/4b each
+    write `plan-review-r{N}` / `plan-fix-r{N}` via `_status.append_phase` and
+    commit+push *before* breaking to Handoff (lines ~239, ~244), and Handoff's
+    own `_status.append_phase(status_path, "planned", ...)` (line ~262) is a
+    **separate** commit+push after its own guard check — so there is a real,
+    externally-observable window where the pushed phase is `plan-review-r{N}`
+    or `plan-fix-r{N}` and mill-plan has not yet finished. Missing this window
+    would reintroduce a halt during what is often the bulk of mill-plan's
+    wall-clock time (the review loop), defeating the task's purpose. The
+    in-progress-loop phase itself (before any round's APPROVE) stays `planning`
+    the whole time — already covered — so only the two post-approve/pre-Handoff
+    values needed adding.
   - `mill-plan/SKILL.md`, current catch-all row `| any other phase (discussing,
     planned, …) | tell user what phase is set and which skill should run instead.
     Halt. |` (~line 39): carve `phase: discussing` out into its own
-    wait-for-`phase: discussed` branch. Every other phase value that would have
-    landed in that catch-all (`planned`, `implementing`, `reviewing`, `fixing`,
-    etc.) keeps the existing hard-halt behavior unchanged — those indicate the
-    wrong skill was invoked, not "upstream still running."
+    wait-for-`phase: discussed` branch, with **no widening needed** here (unlike
+    the mill-go side above). Verified against mill-start/SKILL.md: the only two
+    `_status.append_phase` call sites are line 228 (4b: `discussion-fix-r{N}`
+    immediately followed in the same commit by `discussed` — so
+    `discussion-fix-r{N}` is never itself pushed as a standalone, externally
+    observable phase; the pushed result of that commit is always already
+    `discussed`) and line 236 (Handoff: `discussed`). mill-start's GAPS_FOUND
+    loop (step 5) makes **no** `append_phase` call at all, so phase stays
+    `discussing` for every round of that loop too. The entire span of
+    mill-start's active work — including its own review loop, in both the
+    GAPS_FOUND and NOTE-only branches — is therefore covered by the single
+    value `discussing`; there is no equivalent post-approve/pre-Handoff race on
+    this side. Every other phase value that would have landed in the original
+    catch-all (`planned`, `implementing`, `reviewing`, `fixing`, etc.) keeps the
+    existing hard-halt behavior unchanged — those indicate the wrong skill was
+    invoked, not "upstream still running."
 - Rationale: matches the brief's own line citations and confirmed readiness
-  signals exactly; minimizes the diff to the two tables.
+  signals, verified line-by-line against both SKILL.md files' actual
+  `append_phase` call sites rather than assumed from the brief's phase-table
+  summary alone — the two sides of the chain are not symmetric (mill-go's needs
+  a wider match, mill-plan's does not) precisely because mill-plan's Plan Review
+  loop commits its approve-phase and its Handoff-phase separately, while
+  mill-start's discussion-fix path folds both into one commit.
 
 ### Resume behavior on `READY`
 
@@ -199,10 +238,29 @@ direct feature request from the operator, no specific incident driving it.
   message telling the operator the wait was cancelled and that re-running the
   skill will re-evaluate the phase (proceeding immediately if it has since become
   ready, or re-arming the wait if not).
+
+  **Handle retained, verified against tool contracts (not assumed):** mirroring
+  the Agent-mode dispatch pattern's "record the `agentId`" step
+  (`mill-go/SKILL.md` ~line 125), the orchestrator must record the `task_id`
+  that the `Monitor` tool call returns in its result and retain it for the
+  duration of the wait. This is confirmed by the general task-infrastructure
+  contract, not inferred solely from the Monitor-specific docs (which describe
+  usage, not the return shape): `TaskOutput`'s own description states
+  "Background tasks return their output file path in the tool result, and you
+  receive a `<task-notification>` with the same path when the task completes" —
+  i.e. every background task type (bash, agent, Monitor) shares one
+  notification/output-file/task_id contract, and `TaskStop`'s description
+  explicitly accepts "the ID of the background task to stop" for exactly this
+  purpose. A harness-level stop on a Monitor task therefore surfaces through the
+  same `<task-notification>` mechanism already used for Agent-tool dispatches
+  elsewhere in this repo (mill-go/SKILL.md's existing stopped/interrupted
+  handling), distinguished by the notification's status field rather than a
+  Monitor-specific signal shape.
 - Rationale: mirrors the existing stopped/interrupted handling precedent already
   documented for Agent-mode dispatch elsewhere in mill-go (treat an explicit
   harness-level stop as an operator signal, not a crash to silently auto-recover
-  from).
+  from), and is grounded in the shared task-notification contract rather than a
+  Monitor-only assumption.
 - Rejected: auto re-arming the wait immediately after an operator stop — ignores
   the explicit "I wanted to interrupt this" signal.
 
@@ -249,6 +307,16 @@ direct feature request from the operator, no specific incident driving it.
   mill-go's own per-batch implementer/reviewer dispatch lock, not an
   orchestrator-session liveness signal. Confirms no existing mechanism resolves
   the "still running vs never started" ambiguity above.
+- `_phase_wait.py` should expose a second small pure function alongside
+  `build_wait_command`, e.g. `matches_wait_trigger(phase: str, exact:
+  set[str], prefix_patterns: list[str]) -> bool`, used by the entry-gate
+  table check itself (distinct from the poll script's internal grep, which only
+  ever checks the single target `ready_phase` plus `blocked`). This is what lets
+  mill-go's wider trigger set (`discussed`/`discussing`/`planning` plus the
+  `plan-review-r\d+`/`plan-fix-r\d+` regexes — see "Exact phase-table edit
+  sites") and mill-plan's narrower one (`discussing` only) share one
+  unit-tested implementation instead of each SKILL.md hand-rolling its own
+  phase-matching logic.
 
 ## Constraints
 
@@ -275,6 +343,14 @@ direct feature request from the operator, no specific incident driving it.
   status path containing spaces is safely quoted in the emitted command.
   In-memory/string-only fixture, no real git/LLM, per this repo's existing unit
   test conventions.
+- Same test file also covers `_phase_wait.matches_wait_trigger`: TDD candidate.
+  Assert mill-go's wider pattern (`discussed`/`discussing`/`planning` exact, plus
+  `plan-review-r\d+`/`plan-fix-r\d+` regex) matches all of `discussed`,
+  `plan-review-r1`, `plan-fix-r12`, and does not match `planned` or
+  `implementing`; assert mill-plan's narrower pattern (`discussing` exact only)
+  matches `discussing` and does not match `planned` or `discussion-fix-r1`
+  (confirming the "no widening needed" conclusion in the "Exact phase-table edit
+  sites" Decision is exercised by a test, not just documented prose).
 - No integration test for the actual `Monitor` tool dispatch itself — that is a
   harness tool-calling behavior neither `unit_tests/` nor `integration_tests/`
   can exercise (matches how the rest of mill's Agent-mode dispatch code is
@@ -297,3 +373,9 @@ direct feature request from the operator, no specific incident driving it.
 - **Q:** How to handle the operator stopping the wait mid-flight (`TaskStop`)? **A:** [auto-pick] Halt with a message, no auto-retry; re-running the skill re-evaluates the phase. **Why:** mirrors the existing stopped/interrupted handling precedent for Agent-mode dispatch elsewhere in mill-go; treats an explicit stop as an operator signal, not a crash to auto-recover from.
 - **Q:** Since there's no liveness signal, should the wait apply unconditionally even though "still running" and "never started" look identical from status.md alone? **A:** [auto-pick] Yes, accept the ambiguity; the give-up timeout is the accepted mitigation, no new liveness lock. **Why:** the timeout already bounds the cost of guessing wrong; a real liveness/heartbeat mechanism would require new instrumentation across three skills for a benefit the timeout already covers — out of scope (YAGNI).
 - **Q:** Testing approach for a change that is mostly SKILL.md prose plus one small helper? **A:** [auto-pick] Unit test only the `_phase_wait.py` string-builder; no integration test for the live Monitor dispatch itself. **Why:** matches how the rest of mill's Agent-mode dispatch code is tested today — only the data/string-building helpers get coverage, not the live harness tool call.
+
+## Discussion review round 1 — gap/note resolutions
+
+- **Q:** [GAP] Does the wait phase-set need to cover mill-plan's mid-loop `plan-review-r{N}`/`plan-fix-r{N}` and mill-start's mid-loop `discussion-fix-r{N}`, or does it reintroduce babysitting for the review-loop portion of upstream work? **A:** [auto-fix] Verified against both SKILL.md files' actual `append_phase` call sites (not assumed from the brief's summary). mill-go's side: yes, real gap — `plan-review-r{N}`/`plan-fix-r{N}` are separately committed+pushed before mill-plan's own Handoff commit, so mill-go's trigger set is widened to match those two patterns via regex, in addition to the unchanged `discussed`/`discussing`/`planning`. mill-plan's side: not a gap — mill-start's `discussion-fix-r{N}` is folded into the same commit as the following `discussed` write (line 228) and is never itself pushed as an externally observable phase, and mill-start's GAPS_FOUND loop makes no `append_phase` call at all — so `discussing` alone already covers mill-start's entire active span; no widening needed there. **Why:** the two sides of the chain are asymmetric because mill-plan's approve-phase and Handoff-phase are separate commits while mill-start's discussion-fix and discussed writes are one commit — confirmed by reading the actual `_status.append_phase` call sites in both files rather than assuming symmetry.
+- **Q:** [GAP] Is the `TaskStop`/harness-stop handling for a `persistent: true` Monitor task grounded in an actual tool contract, and what handle does the orchestrator retain to recognize it? **A:** [auto-fix] Documented the handle explicitly: the orchestrator records the `task_id` the `Monitor` tool call returns (mirroring the Agent-mode dispatch's "record the `agentId`" step), grounded in `TaskOutput`'s description confirming one shared task_id/output-file/notification contract across all background task types, and `TaskStop`'s description confirming it accepts that same task_id to cancel. **Why:** avoids inventing a Monitor-specific interrupt mechanism where none is documented; reuses the general background-task contract instead.
+- **Q:** [NOTE] Where does the `pipeline.entry_wait_timeout_minutes` (minutes) → `build_wait_command`'s `giveup_s` (seconds) conversion happen? **A:** [auto-fix] Documented explicitly: the SKILL.md call site in both mill-go and mill-plan performs `giveup_s = entry_wait_timeout_minutes * 60`; `build_wait_command` itself only ever takes seconds and does no conversion. **Why:** keeps the helper a pure, unit-unambiguous function and removes the ambiguity the reviewer flagged.
