@@ -85,11 +85,20 @@ bug this task exists to prevent. No batch-local decisions differ from
      `card_lines` (do NOT call `_extract_requirements_text` for this
      purpose — per `_mill/discussion.md`'s `fence-aware-boundary-detection`
      Decision, that function returns a joined string, not an index). Return
-     `None` if no such line exists. From the found index, walk forward over
-     the ORIGINAL (untruncated) `card_lines`, tracking a boolean `in_fence`
-     that toggles on every line whose `.startswith("```")` (the header line
-     itself does not toggle it — fences never start on the header line in
-     this codebase's convention). Collect lines into the result until either
+     `None` if no such line exists. The header line itself ALSO matches the
+     stop-condition regex used below (`^-\s*\*\*[A-Za-z]+:\*\*` matches
+     `- **Requirements:**` too), so it must be appended to the result
+     UNCONDITIONALLY first, before the boundary scan begins — mirror
+     `_extract_requirements_text`'s own shape exactly: `collected = [card_lines[start]]`,
+     then start the boundary-scan loop at `start + 1`, not at `start` itself
+     (a loop that re-tests the header line against the stop condition
+     immediately stops before collecting anything, making the check a
+     permanent silent no-op). From `start + 1`, walk forward over the
+     ORIGINAL (untruncated) `card_lines`, tracking a boolean `in_fence` that
+     toggles on every line whose `.startswith("```")` (the header line
+     itself is never re-examined for this toggle, since the scan begins
+     after it — fences never start on the header line in this codebase's
+     convention regardless). Collect lines into the result until either
      (a) a line matches `re.compile(r"^-\s*\*\*[A-Za-z]+:\*\*")` (the same
      pattern as `_extract_requirements_text`'s `any_field_header_re`) while
      `in_fence` is `False` — stop before that line, or (b) `card_lines` is
@@ -107,9 +116,11 @@ bug this task exists to prevent. No batch-local decisions differ from
      check only ever compares against `Edits:` files, which by definition
      already exist on disk, per `_mill/discussion.md`'s
      `match-target-edits-only` Decision). Define a module-level fence regex
-     `re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)` (there is no existing
-     fence-parsing helper anywhere in this file — confirmed by grep) next to
-     the other module-level regex constants (near line 91-97), and use it,
+     constant named `_RE_FENCE_BODY = re.compile(r"```[^\n]*\n(.*?)```", re.DOTALL)`
+     (there is no existing fence-parsing helper anywhere in this file —
+     confirmed by grep) next to the other module-level regex constants (near
+     line 91-97), following the same `_RE_*` naming convention as
+     `_RE_REFS_HEADER`/`_RE_REFS_SUB`/etc., and use `_RE_FENCE_BODY` by name,
      not an inline literal, inside the check function. Body:
      - For each `batch_path` in `batch_files`, read its text and call
        `_parse_cards(text)` (line 120) exactly like `_check_context_completeness`
@@ -119,8 +130,8 @@ bug this task exists to prevent. No batch-local decisions differ from
        `continue` (no-op card per the `clean_no_edits_field` test).
      - Compute `requirements_text = _requirements_fence_aware_body(card_lines)`;
        if `None`, `continue`.
-     - Find all fence bodies via the module-level fence regex's
-       `.findall(requirements_text)`; if none, `continue`. Iterate every
+     - Find all fence bodies via `_RE_FENCE_BODY.findall(requirements_text)`;
+       if none, `continue`. Iterate every
        fence found (a Requirements: field may legitimately contain more than
        one fence) — 1-indexed as `fence_idx` for the error message.
      - Resolve `edits_tokens` to real files, in order, using
