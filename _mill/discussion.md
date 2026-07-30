@@ -178,18 +178,27 @@ direct feature request from the operator, no specific incident driving it.
     wait-for-`phase: planned` branch, and **widen the trigger match** from an
     exact-string set to a pattern match: `phase` equals `discussed`,
     `discussing`, or `planning`, **or** matches the regex `^plan-review-r\d+$` /
-    `^plan-fix-r\d+$`. Verified against mill-plan/SKILL.md: step 4a/4b each
-    write `plan-review-r{N}` / `plan-fix-r{N}` via `_status.append_phase` and
-    commit+push *before* breaking to Handoff (lines ~239, ~244), and Handoff's
-    own `_status.append_phase(status_path, "planned", ...)` (line ~262) is a
-    **separate** commit+push after its own guard check — so there is a real,
-    externally-observable window where the pushed phase is `plan-review-r{N}`
-    or `plan-fix-r{N}` and mill-plan has not yet finished. Missing this window
-    would reintroduce a halt during what is often the bulk of mill-plan's
-    wall-clock time (the review loop), defeating the task's purpose. The
-    in-progress-loop phase itself (before any round's APPROVE) stays `planning`
-    the whole time — already covered — so only the two post-approve/pre-Handoff
-    values needed adding.
+    `^plan-fix-r\d+$`. Verified against mill-plan/SKILL.md's actual step
+    numbering (corrected after an initial mis-citation — see the round-2
+    discussion-review Q&A log entry below): step 4d (`REQUEST_CHANGES AND
+    blocking_count > 0`, line 238) writes `plan-review-r{N}` (line 239) then,
+    after applying fixes, `plan-fix-r{N}` (line 244) — and 4d does **not** break
+    the loop; it falls through to steps 5/6 (non-progress check, max-rounds
+    escape) and repeats for however many rounds still have BLOCKING findings.
+    So these two phase values are the persisted phase for the **entire duration
+    of a multi-round blocking-findings review loop**, not a brief window —
+    correcting the earlier "brief, post-approve" framing, which mis-cited these
+    lines as belonging to 4a/4b. Separately, 4a (line 208) and 4b (line 210)
+    *also* each write `plan-review-r{N}` / `plan-fix-r{N}` respectively right
+    before their own "Break loop → Handoff", so there is additionally a short
+    pre-Handoff window with the same phase values even on a clean APPROVE round
+    — Handoff's `_status.append_phase(status_path, "planned", ...)` (line 262)
+    is its own separate commit+push after Handoff's guard check. Both the
+    long-running-loop case (4d) and the short pre-Handoff case (4a/4b) are
+    covered by the same widened regex match; no further distinction is needed
+    since mill-go's wait treats every non-`planned` occurrence identically
+    (keep waiting). The in-progress-loop phase before any round's first verdict
+    stays `planning` — already covered by the unwidened set.
   - `mill-plan/SKILL.md`, current catch-all row `| any other phase (discussing,
     planned, …) | tell user what phase is set and which skill should run instead.
     Halt. |` (~line 39): carve `phase: discussing` out into its own
@@ -216,6 +225,37 @@ direct feature request from the operator, no specific incident driving it.
   a wider match, mill-plan's does not) precisely because mill-plan's Plan Review
   loop commits its approve-phase and its Handoff-phase separately, while
   mill-start's discussion-fix path folds both into one commit.
+
+### Orchestrator reaction to `BLOCKED` and `TIMEOUT` wait outcomes
+
+- Decision: the Monitor notification's single stdout line is one of `READY`,
+  `BLOCKED: <blocked_reason>`, or `TIMEOUT after <N>s waiting for phase:
+  <ready_phase>` (see "Poll script contract"). The orchestrator branches on
+  which prefix matched:
+  - `READY` → proceed per "Resume behavior on `READY`" below.
+  - `BLOCKED: <reason>` → halt immediately, surfacing `<reason>` to the
+    operator with the same message shape mill-go's own existing `blocked`
+    phase-table row already uses today (`surface blocked_reason from status.md
+    and halt`) — i.e. this is not a new halt shape, it reuses the existing one,
+    just reached via the wait instead of via a direct phase-table hit. Do not
+    re-arm automatically; the upstream task is itself blocked and needs
+    operator attention there, not a retry here.
+  - `TIMEOUT after ...` → halt with a message distinct from the `BLOCKED` case:
+    state that the give-up period (`pipeline.entry_wait_timeout_minutes`)
+    elapsed without the upstream task reaching the target phase, and that the
+    operator should check on the upstream session (it may be abandoned, still
+    genuinely working past the give-up window, or the thread was never started
+    at all — see the "Liveness ambiguity" Decision above) and re-run this skill
+    to re-arm the wait if it is in fact still in progress.
+- Rationale: `BLOCKED` and `TIMEOUT` are semantically different failure modes
+  (an upstream task that failed vs. one that simply hasn't finished within the
+  configured budget) and conflating their halt messages would make the
+  `blocked_reason` signal — which is actionable and specific — indistinguishable
+  from a generic "took too long" message. Reusing the existing `blocked`
+  phase-table halt shape for the `BLOCKED` case avoids introducing a second,
+  parallel message format for the same underlying situation.
+- Rejected: a single generic "wait did not complete" halt message for both
+  cases — loses the actionable `blocked_reason` detail in the `BLOCKED` case.
 
 ### Resume behavior on `READY`
 
@@ -379,3 +419,8 @@ direct feature request from the operator, no specific incident driving it.
 - **Q:** [GAP] Does the wait phase-set need to cover mill-plan's mid-loop `plan-review-r{N}`/`plan-fix-r{N}` and mill-start's mid-loop `discussion-fix-r{N}`, or does it reintroduce babysitting for the review-loop portion of upstream work? **A:** [auto-fix] Verified against both SKILL.md files' actual `append_phase` call sites (not assumed from the brief's summary). mill-go's side: yes, real gap — `plan-review-r{N}`/`plan-fix-r{N}` are separately committed+pushed before mill-plan's own Handoff commit, so mill-go's trigger set is widened to match those two patterns via regex, in addition to the unchanged `discussed`/`discussing`/`planning`. mill-plan's side: not a gap — mill-start's `discussion-fix-r{N}` is folded into the same commit as the following `discussed` write (line 228) and is never itself pushed as an externally observable phase, and mill-start's GAPS_FOUND loop makes no `append_phase` call at all — so `discussing` alone already covers mill-start's entire active span; no widening needed there. **Why:** the two sides of the chain are asymmetric because mill-plan's approve-phase and Handoff-phase are separate commits while mill-start's discussion-fix and discussed writes are one commit — confirmed by reading the actual `_status.append_phase` call sites in both files rather than assuming symmetry.
 - **Q:** [GAP] Is the `TaskStop`/harness-stop handling for a `persistent: true` Monitor task grounded in an actual tool contract, and what handle does the orchestrator retain to recognize it? **A:** [auto-fix] Documented the handle explicitly: the orchestrator records the `task_id` the `Monitor` tool call returns (mirroring the Agent-mode dispatch's "record the `agentId`" step), grounded in `TaskOutput`'s description confirming one shared task_id/output-file/notification contract across all background task types, and `TaskStop`'s description confirming it accepts that same task_id to cancel. **Why:** avoids inventing a Monitor-specific interrupt mechanism where none is documented; reuses the general background-task contract instead.
 - **Q:** [NOTE] Where does the `pipeline.entry_wait_timeout_minutes` (minutes) → `build_wait_command`'s `giveup_s` (seconds) conversion happen? **A:** [auto-fix] Documented explicitly: the SKILL.md call site in both mill-go and mill-plan performs `giveup_s = entry_wait_timeout_minutes * 60`; `build_wait_command` itself only ever takes seconds and does no conversion. **Why:** keeps the helper a pure, unit-unambiguous function and removes the ambiguity the reviewer flagged.
+
+## Discussion review round 2 — gap resolutions
+
+- **Q:** [GAP] Is the "brief, post-approve window" framing for `plan-review-r{N}`/`plan-fix-r{N}` accurate, and are the cited line numbers (239/244) really inside steps 4a/4b? **A:** [auto-fix] No — re-verified against the actual file: lines 239/244 are inside step 4d (`REQUEST_CHANGES AND blocking_count > 0`, line 238), which does not break the loop and can repeat for many rounds; these two phase values persist for the entire duration of a multi-round blocking-findings review loop. 4a/4b (lines 208/210) separately each write the same two phase values right before their own "Break loop → Handoff," which is the short pre-Handoff window the original framing described — that part wasn't wrong, just incomplete (it missed the much longer 4d case). Corrected the citation and framing in the "Exact phase-table edit sites" Decision; the widened regex match (already decided in round 1) covers both cases without further changes, since mill-go's wait treats every non-`planned` occurrence identically. **Why:** verified line-by-line against the actual step structure rather than re-trusting the round-1 citation; the conclusion (widen the trigger set) was already correct, only the supporting citation and duration framing needed fixing.
+- **Q:** [GAP] What should the orchestrator do upon receiving `BLOCKED: <reason>` or `TIMEOUT after ...` as the wait's outcome — only `READY` had a decided action? **A:** [auto-fix] Added an explicit Decision: `BLOCKED` halts immediately reusing mill-go's existing `blocked`-phase halt shape (surface `blocked_reason`, no auto-retry); `TIMEOUT` halts with a distinct message pointing at the give-up config key and telling the operator to check on the upstream session, re-running the skill to re-arm the wait if it's still genuinely in progress. **Why:** the two failure modes are semantically different (upstream failed vs. upstream simply hasn't finished within budget) and deserve distinguishable operator-facing messages rather than one generic "wait didn't complete" halt.
