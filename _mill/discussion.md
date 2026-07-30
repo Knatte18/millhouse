@@ -142,6 +142,16 @@ direct feature request from the operator, no specific incident driving it.
   mill-go batch chains while still bounding an abandoned/crashed upstream run,
   per the brief's own stated concern about indefinite blocking. The operator can
   always `TaskStop` the wait sooner if they know the upstream run is dead.
+- Rejected: a shorter default (e.g. 60 minutes) — plausible for mill-plan's
+  wait (bounded by its own `max_review_rounds`-capped review loop), but too
+  tight for mill-go's wait, which can span an entire multi-batch implementation
+  run; since the same config key and default apply to both entry-gates (no
+  per-skill override was decided), the default is sized for the longer-running
+  case. A longer default (e.g. 4+ hours) — rejected as excessive: it would let
+  a genuinely-abandoned session block a second thread for most of a working day
+  before halting, when `TaskStop` already covers the "I know it's dead" case
+  and 120 minutes is generous enough for the "it's still legitimately running"
+  case.
 - **Unit conversion, explicit:** `pipeline.entry_wait_timeout_minutes` is stored
   in minutes; `_phase_wait.build_wait_command`'s `giveup_s` parameter is in
   seconds. The SKILL.md call site in both mill-go and mill-plan (the point where
@@ -202,17 +212,21 @@ direct feature request from the operator, no specific incident driving it.
     So these two phase values are the persisted phase for the **entire duration
     of a multi-round blocking-findings review loop**, not a brief window —
     correcting the earlier "brief, post-approve" framing, which mis-cited these
-    lines as belonging to 4a/4b. Separately, 4a (line 208) and 4b (line 210)
-    *also* each write `plan-review-r{N}` / `plan-fix-r{N}` respectively right
-    before their own "Break loop → Handoff", so there is additionally a short
-    pre-Handoff window with the same phase values even on a clean APPROVE round
-    — Handoff's `_status.append_phase(status_path, "planned", ...)` (line 262)
-    is its own separate commit+push after Handoff's guard check. Both the
-    long-running-loop case (4d) and the short pre-Handoff case (4a/4b) are
-    covered by the same widened regex match; no further distinction is needed
-    since mill-go's wait treats every non-`planned` occurrence identically
-    (keep waiting). The in-progress-loop phase before any round's first verdict
-    stays `planning` — already covered by the unwidened set.
+    lines as belonging to 4a/4b. Separately, 4a (line 208), 4b (line 210), and
+    **4c** (line 236, `REQUEST_CHANGES` + `blocking_count == 0`, which appends
+    `plan-fix-r{N}` to the status timeline in prose rather than a literal
+    `_status.append_phase(...)` call — easy to miss on a call-site grep, worth
+    calling out explicitly) *all three* write `plan-review-r{N}` / `plan-fix-
+    r{N}` respectively right before their own "Break loop → Handoff", so there
+    is additionally a short pre-Handoff window with the same phase values even
+    on a clean APPROVE-shaped round — Handoff's
+    `_status.append_phase(status_path, "planned", ...)` (line 262) is its own
+    separate commit+push after Handoff's guard check. Both the long-running-loop
+    case (4d) and the short pre-Handoff case (4a/4b/4c) are covered by the same
+    widened regex match; no further distinction is needed since mill-go's wait
+    treats every non-`planned` occurrence identically (keep waiting). The
+    in-progress-loop phase before any round's first verdict stays `planning` —
+    already covered by the unwidened set.
   - `mill-plan/SKILL.md`, current catch-all row `| any other phase (discussing,
     planned, …) | tell user what phase is set and which skill should run instead.
     Halt. |` (~line 39): carve `phase: discussing` out into its own
@@ -478,3 +492,8 @@ direct feature request from the operator, no specific incident driving it.
 - **Q:** [GAP] `_builder_lock.acquire` refreshes-and-succeeds for a same-slug caller with no other exclusion — does the much longer wait duration meaningfully worsen the risk of two sessions double-proceeding into the same batch? **A:** [auto-fix] Verified against `_builder_lock.py` lines 117-145 — confirmed accurate. Accepted as a pre-existing, unchanged risk: added a Decision documenting that this task does not add same-slug waiter exclusion, since that would mean changing `_builder_lock.acquire`'s shared locking semantics (used by every mill-go dispatch) — a materially separate concern from this task's actual goal of replacing a halt with a wait. **Why:** mirrors the same scope-discipline reasoning already used for the "Liveness ambiguity" Decision; fixing the lock's exclusion model is a bigger, separate task with its own blast radius, not something to bundle in here.
 - **Q:** [NOTE] Is `build_wait_command`'s `grep -q "^phase: <ready_phase>"` (and the `blocked` check) vulnerable to a future phase value false-positive-matching as a string-prefix? **A:** [auto-fix] Added a trailing `$` to both grep patterns. **Why:** cheap, safe, no downside; guards against a future phase value (e.g. a hypothetical `planned-v2`) extending an existing target as a prefix and ending the wait on the wrong phase. Confirmed `ready_phase` itself is always a single literal value (`planned`/`discussed`), never a numbered one, so today's set has no actual collision — this is pure defensive future-proofing, not a fix for a live bug.
 - **Q:** [NOTE] Does `matches_wait_trigger`'s proposed `prefix_patterns` parameter name match its documented semantics (fully-anchored regexes, not string prefixes)? **A:** [auto-fix] Renamed to `regex_patterns` throughout the discussion. **Why:** avoids misleading a future implementer into reaching for `str.startswith()` instead of `re.fullmatch()`.
+
+## Discussion review round 4 — gap/note resolutions
+
+- **Q:** [GAP] Does mill-plan step 4c also write a pre-Handoff `plan-fix-r{N}` phase, alongside the already-cited 4a/4b/4d sites? **A:** [auto-fix] Verified against the file — yes, line 236 (`REQUEST_CHANGES` + `blocking_count == 0`) appends `plan-fix-r{N}` to the status timeline (in prose, not a literal `_status.append_phase(...)` call, which is why the earlier call-site grep missed it) immediately before its own "Break loop → Handoff." Added 4c to the enumerated list alongside 4a/4b/4d. **Why:** no behavior change follows (the widened regex already covers `plan-fix-r{N}` regardless of which step writes it), but the Decision's claim to have verified every site should actually be complete.
+- **Q:** [NOTE] Should the give-up timeout Decision state a rejected alternative, for consistency with every other Decision in this document? **A:** [auto-fix] Added: a shorter default (60 min) is too tight for mill-go's potentially-long multi-batch runs given the single shared config key covers both entry-gates; a much longer default (4+ hours) was rejected as excessive given `TaskStop` already covers the "known-dead" case. **Why:** matches this document's established Decision shape (every other Decision states what was rejected and why).
