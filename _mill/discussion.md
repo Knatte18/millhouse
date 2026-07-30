@@ -93,7 +93,10 @@ direct feature request from the operator, no specific incident driving it.
       exit 0
     fi
     if grep -q "^phase: blocked$" "<status_path>"; then
-      reason=$(grep "^blocked_reason:" "<status_path>" | head -1)
+      reason_line=$(grep "^blocked_reason:" "<status_path>" | head -1)
+      reason=${reason_line#blocked_reason: }
+      reason=${reason#\'}
+      reason=${reason%\'}
       echo "BLOCKED: ${reason}"
       exit 1
     fi
@@ -105,6 +108,19 @@ direct feature request from the operator, no specific incident driving it.
     elapsed=$((elapsed + <poll_interval_s>))
   done
   ```
+
+  The `blocked_reason` extraction strips the `blocked_reason: ` key-label
+  prefix (`_status.py`'s `set_blocked` writes the line as
+  `f"{key}: {quote_scalar(value)}{eol}"`, verified — so the raw grep match
+  is the whole `blocked_reason: <value>` line, not just the value) and a
+  possible surrounding single quote (`quote_scalar` delegates to
+  `yaml.safe_dump`, which wraps values needing escaping in single quotes,
+  verified in `_yaml_writer.py`) via plain bash parameter expansion — no `sed`,
+  matching CLAUDE.md's shell-tooling convention. This is a deliberate, partial
+  unescape for a human-facing halt message only (never parsed back as data):
+  it does not handle PyYAML's doubled-single-quote escape sequence for a value
+  that itself contains a literal `'`, since a full YAML-scalar unescape is
+  unwarranted complexity for a display string that a human reads once.
 
   Both `grep` patterns are end-anchored with a trailing `$` (in addition to the
   existing `^phase: ` start-anchor). `build_wait_command`'s `ready_phase`
@@ -348,7 +364,13 @@ direct feature request from the operator, no specific incident driving it.
   phase halts immediately. With this task's 120-minute default wait in place,
   the window during which two such sessions could both be waiting — and then
   both independently see `READY` and both proceed into Prepare/Execute for the
-  same batch — grows from near-zero to the full wait duration.
+  same batch — grows from near-zero to (most of) the full wait duration: the
+  lock's own `STALE_WINDOW_SEC` is 5 minutes (`_builder_lock.py`, verified), far
+  shorter than the 120-minute default, so for nearly the entire wait the
+  same-slug lock is already stale and would be silently reclaimed by whichever
+  session (first or second) happens to touch it next — not a risk that grows
+  gradually to the full duration, but one that is already at its maximum for
+  all but the first ~5 minutes of any wait.
 - Rationale: fixing this would mean changing `_builder_lock.acquire`'s
   same-slug semantics (e.g. tracking a per-waiting-session handle and rejecting
   a second concurrent waiter) — a change to a shared locking primitive used by
@@ -497,3 +519,8 @@ direct feature request from the operator, no specific incident driving it.
 
 - **Q:** [GAP] Does mill-plan step 4c also write a pre-Handoff `plan-fix-r{N}` phase, alongside the already-cited 4a/4b/4d sites? **A:** [auto-fix] Verified against the file — yes, line 236 (`REQUEST_CHANGES` + `blocking_count == 0`) appends `plan-fix-r{N}` to the status timeline (in prose, not a literal `_status.append_phase(...)` call, which is why the earlier call-site grep missed it) immediately before its own "Break loop → Handoff." Added 4c to the enumerated list alongside 4a/4b/4d. **Why:** no behavior change follows (the widened regex already covers `plan-fix-r{N}` regardless of which step writes it), but the Decision's claim to have verified every site should actually be complete.
 - **Q:** [NOTE] Should the give-up timeout Decision state a rejected alternative, for consistency with every other Decision in this document? **A:** [auto-fix] Added: a shorter default (60 min) is too tight for mill-go's potentially-long multi-batch runs given the single shared config key covers both entry-gates; a much longer default (4+ hours) was rejected as excessive given `TaskStop` already covers the "known-dead" case. **Why:** matches this document's established Decision shape (every other Decision states what was rejected and why).
+
+## Discussion review round 5 — gap/note resolutions
+
+- **Q:** [GAP] Does the poll script's `BLOCKED: ${reason}` leak the `blocked_reason:` YAML key label (and any quoting) into the operator-facing message, since the grep captures the whole line? **A:** [auto-fix] Verified against `_status.py`'s `set_blocked` (writes `f"{key}: {quote_scalar(value)}{eol}"`) and `_yaml_writer.py`'s `quote_scalar` (wraps escaping-needed values in single quotes via `yaml.safe_dump`) — confirmed accurate. Fixed the poll script to strip the `blocked_reason: ` prefix and a possible surrounding single quote via plain bash parameter expansion (no `sed`, per CLAUDE.md's shell-tooling convention), documented as a deliberate partial unescape sufficient for a human-facing message only. **Why:** the operator should see the bare reason text, not a duplicated field label or raw YAML quoting.
+- **Q:** [NOTE] Does the "grows... to the full wait duration" framing in the concurrent-waiter Decision understate how quickly the builder lock actually goes stale? **A:** [auto-fix] Verified `STALE_WINDOW_SEC = 5 * 60` in `_builder_lock.py` — confirmed accurate; the risk is already at its maximum for all but the first ~5 minutes of any 120-minute wait, not a value that grows gradually. Corrected the wording; does not change the already-accepted out-of-scope verdict for that Decision. **Why:** precision matters for a risk-acceptance Decision even when the accepted conclusion doesn't change.
