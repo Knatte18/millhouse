@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: phase-wait-gate
 branch: hanf/phase-wait-gate
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-07-30T19:41:41Z'
 plan-fix-r1  '2026-07-30T19:41:41Z'
 plan-fix-r2  '2026-07-30T19:49:33Z'
 planned  '2026-07-30T19:49:49Z'
+implementing  '2026-07-30T19:52:10Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: phase-wait-foundation
+    state: pending
+  - name: mill-go-entry-wait
+    state: pending
+  - name: mill-plan-entry-wait
+    state: pending
 ```
