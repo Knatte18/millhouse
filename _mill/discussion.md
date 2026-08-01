@@ -144,6 +144,28 @@ task done — with no discussion round, no plan, no reviewer of any kind.
   session is the one agent, with the model already fixed by how the
   operator launched it).
 
+### concurrency-guard
+
+- Decision: mill-quick acquires the builder lock
+  (`millpy-builder-lock.py acquire <slug>`) at Entry, before writing
+  `phase: implementing` — on acquire failure (a second concurrent session
+  already holds it), surface the stderr message and halt. Releases the
+  lock at both terminal paths (`done` and `blocked`).
+- Rationale: mill-quick is architecturally closest to mill-go's Builder
+  role, which acquires this exact lock for exactly this reason —
+  preventing two concurrent sessions from mutating `status.md`/committing
+  on the same task branch (`mill-go/SKILL.md` Principles: "One task per
+  worktree. The builder lock enforces this at runtime."). This concern is
+  orthogonal to mill-quick's no-subagent/no-reviewer simplifications —
+  skipping review doesn't reduce the risk of two operators invoking
+  `/mill-quick` on the same task branch simultaneously. The lock already
+  exists and is directly reusable with zero new plumbing.
+- Rejected: No lock, relying on the `discussing`-only entry gate to make
+  double-invocation unlikely — the entry gate checks phase at the start,
+  not atomically with acquiring exclusive write access, so a race between
+  two sessions both reading `phase: discussing` before either writes
+  `implementing` is still possible without the lock.
+
 ### zero-artifacts
 
 - Decision: No `discussion.md`, `plan/`, or `reviews/` files are written.
@@ -215,40 +237,55 @@ build automatic crash recovery for this case.
   passed), while mill-quick hard-halts before any edit when `done_gate` is
   null/unset (see Decisions/verify-mechanism). A plan writer must not copy
   mill-go's skip-on-null branch verbatim.
-- **Commit-push discipline.** mill-quick is architecturally closest to
-  mill-go's Builder role (single session making commits over the task's
-  lifetime), whose own state commits (Prepare/Approve/blocked/done) do
-  **not** push immediately — `mill-go/SKILL.md` Board discipline: "mill-merge
-  pushes the full task branch at task end." mill-quick follows that same
-  rule for its `implementing` and `done` phase commits (and the fix commit
-  itself) — none are pushed immediately; `mill-finalize`/`mill-merge` push
-  the branch once the task reaches `done`. The one exception is the
-  `blocked` commit on verify failure: that **is** pushed immediately,
-  mirroring `mill-start`'s own `--auto`-mode blocked-halt precedent — a
-  blocked mill-quick task never reaches mill-merge, so without an
-  immediate push it would be invisible to an operator checking from a
-  different worktree or machine.
+- **Commit mechanism and push discipline — two distinct kinds of commit.**
+  mill-quick makes two kinds of commit, and they follow different
+  mechanisms and different push rules; the two must not be conflated:
+  - **The fix commit** (the actual code change): goes through the
+    `mill:git-commit` skill, exactly like every implementer commit
+    elsewhere in the codebase (`implementer-brief.md` step 1: "Stage the
+    affected files and commit by invoking the `git-commit` skill... Do not
+    call raw `git commit`"). This gets the same lint/codeguide-update
+    hygiene every other code commit gets, and pushes immediately as part
+    of that skill's own unconditional-push contract
+    (`git-commit/SKILL.md` Rules: "Push to remote. Set upstream if
+    needed"). Pushing the fix commit early is harmless — nothing
+    downstream (mill-merge, mill-finalize) acts on a task until
+    `phase: done`.
+  - **status.md phase-transition commits** (`implementing`, `done`): raw
+    `git add`/`git commit` — NOT the `git-commit` skill, since these are
+    pure state bookkeeping, not code changes needing lint/codeguide sync.
+    These mirror mill-go's own Builder-role state commits
+    (Prepare/Approve/blocked/done), which `mill-go/SKILL.md` Board
+    discipline documents as **not** pushing immediately: "mill-merge
+    pushes the full task branch at task end." mill-quick's `implementing`
+    and `done` phase commits follow that same rule — deferred, not
+    pushed immediately.
+  - **The `blocked` commit is the one exception**: raw git, like the other
+    phase commits, but pushed immediately — mirroring `mill-start`'s own
+    `--auto`-mode blocked-halt precedent, since a blocked mill-quick task
+    never reaches mill-merge and would otherwise be invisible to an
+    operator checking from a different worktree or machine.
 - No changes needed to `mill-config.yaml`'s schema — `roles:` is a
   reviewer-round registry, not a skill registry; no mill-* skill is
   declared anywhere in YAML, so `mill-quick` requires no new config key to
   exist as a skill. It only *reads* the existing `pipeline.done_gate` key.
-- Commit discipline mirrors the existing per-phase-transition commit
-  pattern used throughout `mill-start`/`mill-go`: one commit for the
-  actual fix (`git add` the changed files, message referencing the slug),
-  a separate small commit for each `status.md` phase-timeline write
-  (`implementing`, then `done` or `blocked`). See the Commit-push
-  discipline bullet above for exactly which of these commits push
-  immediately and which are deferred to mill-finalize/mill-merge.
+- Commit discipline: one `git-commit`-skill commit for the actual fix, a
+  separate raw-git commit for each `status.md` phase-timeline write
+  (`implementing`, then `done` or `blocked`). See the "Commit mechanism
+  and push discipline" bullet above for the full breakdown of which
+  mechanism and which push rule applies to each.
 - `mill-merge`/`mill-finalize` require nothing beyond `phase: done` in
   `status.md` (`mill-merge/SKILL.md`, `mill-finalize/SKILL.md`) — neither
   references `discussion.md` or `plan/` existence anywhere, so a
   `mill-quick`-completed task hands off to them unmodified.
 - No existing precedent in this codebase for a single-agent
   implement+verify skill with no reviewer split — every current
-  `mill-implementer-*` dispatch in `mill-go` is unconditionally followed
-  by a code-review loop. `mill-quick` is the first skill of this shape;
-  mill-plan should not assume any existing dispatch helper covers this
-  case.
+  `mill-implementer-*` dispatch in `mill-go` always structurally reaches a
+  review-loop code path, even when config disables it at runtime (e.g.
+  this hub's `roles.code-review.batch.reviewer: null` already skips
+  per-batch review). `mill-quick` is the first skill with no review-loop
+  code path at all; mill-plan should not assume any existing dispatch
+  helper covers this case.
 
 ## Constraints
 
@@ -331,3 +368,15 @@ Decisions above.
   automatic recovery — matches the single-shot, no-fixer design. Manual
   escape hatch: `mill-cleanup`/`mill-abandon`, or a manual
   `_status.set_blocked` call.
+- **Q:** (Discussion review r2 gap) Does mill-quick need a concurrency
+  guard against double-invocation? **A:** Yes — acquires the same builder
+  lock mill-go uses (`millpy-builder-lock.py`), at Entry before writing
+  `phase: implementing`, released at both `done` and `blocked`.
+- **Q:** (Discussion review r2 gap) Does the fix commit go through the
+  `git-commit` skill (gets lint/codeguide-update, pushes) or raw git
+  (matches the deferred-push rule, skips lint sync)? **A:** The fix commit
+  uses the `git-commit` skill like every other implementer commit in the
+  codebase — it pushes immediately, which is harmless since nothing acts
+  on the task before `phase: done`. The deferred-push rule applies only to
+  the separate, raw-git status.md phase-transition commits, not the fix
+  commit.
