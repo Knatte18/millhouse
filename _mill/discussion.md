@@ -53,7 +53,7 @@ task done — with no discussion round, no plan, no reviewer of any kind.
   states-handled table recognizes (both only handle `[ready-to-merge]` +
   `done`), so the task wouldn't get the "run /mill-merge" prompt the full
   pipeline produces.
-- On verify failure: `_status.set_blocked(status_path, reason, timestamp)`,
+- On verify failure: `_status.set_blocked(status_path, reason, timestamp=ts)`,
   then halt back to the operator. No retry loop, no self-fix rounds — a
   single attempt only.
 - Writes an intermediate `phase: implementing` (existing enum value,
@@ -206,7 +206,7 @@ task done — with no discussion round, no plan, no reviewer of any kind.
 ### failure-handling
 
 - Decision: On `done_gate` failure (non-zero exit), call
-  `_status.set_blocked(status_path, reason, timestamp)` and halt back to
+  `_status.set_blocked(status_path, reason, timestamp=ts)` and halt back to
   the operator. Single attempt only — no retry, no self-fix round.
 - Rationale: `set_blocked` (rather than leaving `phase: implementing`
   unchanged) makes the stuck task visible to `mill-status`/`mill-cleanup`
@@ -236,11 +236,15 @@ build automatic crash recovery for this case.
 ## Technical context
 
 - Path resolution mirrors `mill-start`'s Entry/Path Setup exactly:
-  `git_root = _paths.resolve_git_root()`, `worktree_root =
+  `git_root = _paths.resolve_git_root()`, `wiki_path =
+  _paths.resolve_wiki_path(git_root)`, `worktree_root =
   _paths.resolve_hub_path()`, `status_path =
-  _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`.
-  `mill-quick` needs no `discussion_path`/`reviews_dir` resolution since it
-  writes neither.
+  _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`,
+  `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)` (mirrors
+  mill-start's separate Entry step 3, not the Path Setup bullets — on
+  `MarkerError`, halt with "this worktree was not created by mill-spawn",
+  same as every other pipeline entry point). `mill-quick` needs no
+  `discussion_path`/`reviews_dir` resolution since it writes neither.
 - Task read: `_client.get_task(wiki_path, slug)` — same call and same
   `PYTHONIOENCODING=utf-8` wrapping `mill-start` Phase: Select/Explore use,
   for the same cp1252-on-Windows reason documented there.
@@ -414,3 +418,11 @@ Decisions above.
   contention and crash-resume bookkeeping only. Same-slug
   double-invocation is an accepted risk under the operator-trust model,
   not a new exclusion mechanism.
+- **Q:** (Discussion review r5 gaps) Two technical-accuracy fixes: is
+  `set_blocked`'s `timestamp` positional or keyword-only, and where do
+  `slug`/`wiki_path` come from in Path resolution? **A:** `timestamp` is
+  keyword-only (`set_blocked(status_path, reason, *, timestamp)`) — every
+  call site in this doc corrected to `timestamp=ts`. `slug` and
+  `wiki_path` were missing from the Path resolution bullet despite being
+  used throughout the doc — added, mirroring mill-start's Entry step 3
+  (`_marker.slug_from_branch`) and `_paths.resolve_wiki_path`.
