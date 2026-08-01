@@ -884,7 +884,9 @@ parent_branch = _parent_branch.resolve(status_path, interactive=False)
 in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
 ```
 
-If `in_scope_dirt` is non-empty, halt with:
+If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "mill-go: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`; no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`). Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
+
+If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), halt with:
 `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
 where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and fix.
 
@@ -896,7 +898,9 @@ If the list is empty, proceed to scope violations cleanup.
 removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)
 ```
 
-Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, halt with:
+Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, self-resolve once: for each path in `blocking_paths`, classify it against the plan's `All Files Touched` list (in `00-overview.md` — this is the only list checked; do not open any batch card body to do this classification, per mill-go's own "Lean Builder" principle) — a path that matches an entry in `All Files Touched` is in-scope work: `git -C <worktree> add <path>` and commit it as part of the single audit-trail commit below; a path that clearly matches a known ephemeral/cruft pattern (build artifacts, editor swap files, and similar — the same category `clean_ephemeral_scope_violations` already auto-removes, just not caught by its fixed pattern list) and matches nothing in `All Files Touched`: remove it (`git -C <worktree> clean -f -- <path>`) and log the removal (ASCII-only) the same way as the auto-removed ephemeral artifacts above; a path that cannot be confidently classified either way: leave it untouched (neither `add` nor `clean`) so it correctly reappears in `blocking_paths` on the re-run below and is caught by the halt. After classifying every path in `blocking_paths`: `_status.append_phase(status_path, "self-resolved-scope-violation", _timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: commit in-scope files at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`; no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`; the cruft removals via `git clean` are untracked-file deletions and have nothing to stage). Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
+
+If `blocking_paths` is STILL non-empty (a path could not be classified with confidence against the plan), halt with:
 `BLOCKED: out-of-scope untracked file(s): <file-list>`
 where `<file-list>` is the comma-separated list of blocking paths. Do NOT set `phase: done` when the gate fires; the task remains in its current phase so the operator can inspect and manually remove the files.
 
