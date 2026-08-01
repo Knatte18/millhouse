@@ -37,7 +37,9 @@ implementing  '2026-08-01T16:58:30Z'
 ```yaml
 batches:
   - name: mill-plan-autonomous-collapse
-    state: pending
+    state: running
+    implementer_session: 0e809d62-7200-4033-aa6e-eb6ee713205f
+    start_sha: 2b4ccf6875a2914416000bcaed62ad1f88c7189a
   - name: mill-go-stuck-escalation
     state: pending
   - name: mill-merge-self-resolve
