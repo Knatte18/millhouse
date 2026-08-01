@@ -39,6 +39,7 @@ exists with correct frontmatter.
   - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/scripts/_config.py`
+  - `plugins/mill/scripts/_timestamp.py`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/skills/mill-quick/SKILL.md`
