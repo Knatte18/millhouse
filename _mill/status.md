@@ -29,5 +29,7 @@ implementing  '2026-08-01T09:27:38Z'
 ```yaml
 batches:
   - name: mill-quick-skill
-    state: pending
+    state: running
+    implementer_session: ab5e5b87-18a6-41b6-b027-17e06ecb133e
+    start_sha: f89a475cb1c0dd0f361772a8339dd4842bd66883
 ```
