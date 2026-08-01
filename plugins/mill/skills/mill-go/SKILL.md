@@ -92,6 +92,17 @@ Whenever the phase-table lookup above lands on the widened
 `discussed`/`discussing`/`planning`/`plan-review-r{N}`/`plan-fix-r{N}` row,
 run this procedure instead of jumping straight to its listed action:
 
+**The phase-table match is authoritative — do not second-guess it.** Do not
+inspect `discussion.md`, `_mill/reviews/`, or any other artifact to judge
+whether the current phase "looks like" an abandoned or still-in-progress
+mill-start run, and do not conclude the operator invoked the wrong skill by
+mistake or present a menu of alternatives (e.g. "resume mill-start instead
+of waiting"). The upstream stage may well be actively progressing, or
+already correctly waiting, in a separate concurrent thread — that is normal
+multi-thread usage, not an error to flag. Whenever `matched` is `True`,
+enter the wait unconditionally; do not branch on which upstream skill
+"should" logically run next.
+
 - Compute the match:
   ```python
   matched = _phase_wait.matches_wait_trigger(
