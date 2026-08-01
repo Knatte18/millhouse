@@ -657,7 +657,7 @@ When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `re
 
 ## Holistic code review
 
-**Holistic session cleanup.** Whenever a `millpy-fix.py --scope holistic` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`. At any point where the holistic loop is about to dispatch a NEW `millpy-fix.py --scope holistic` round, AND at every loop terminus (APPROVE, autonomous-mode block, user-block, max-rounds), invoke the *holistic cleanup block* defined below.
+**Holistic session cleanup.** Whenever a `millpy-fix.py --scope holistic` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`. At any point where the holistic loop is about to dispatch a NEW `millpy-fix.py --scope holistic` round, AND at every loop terminus (APPROVE, blocked, max-rounds), invoke the *holistic cleanup block* defined below.
 
 The holistic cleanup block:
 
