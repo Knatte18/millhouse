@@ -43,7 +43,9 @@ batches:
     start_sha: 2b4ccf6875a2914416000bcaed62ad1f88c7189a
     commit_sha: 27172103fba3e41d390015b0e7024a12e7ceaf2f
   - name: mill-go-stuck-escalation
-    state: pending
+    state: running
+    implementer_session: 593857a4-2b9c-4fb9-9357-62636710c740
+    start_sha: a926051931a465b8398d1dae3be10a2812d775f9
   - name: mill-merge-self-resolve
     state: pending
   - name: mill-go-holistic-review
