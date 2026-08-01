@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -21,4 +21,6 @@ plan-review-r1  '2026-08-01T16:11:59Z'
 plan-fix-r1  '2026-08-01T16:11:59Z'
 plan-review-r2  '2026-08-01T16:17:53Z'
 plan-fix-r2  '2026-08-01T16:17:53Z'
+plan-review-r3  '2026-08-01T16:25:11Z'
+plan-fix-r3  '2026-08-01T16:25:11Z'
 ```
