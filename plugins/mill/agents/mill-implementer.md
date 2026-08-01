@@ -24,3 +24,7 @@ In addition to any skills the brief names, detect the implementation language fr
 ## Test Integrity Guardrail
 
 Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass. When verify fails, fix the code or tests properly; never gut coverage to go green.
+
+## Shell conventions
+
+Never use `sed` — it triggers a permission prompt on every invocation, which blocks unattended/autonomous runs. Use `Edit`/`Read`/`Write`, or `awk`/`grep`/plain `cat` for a genuine one-liner.

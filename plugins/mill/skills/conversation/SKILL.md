@@ -45,6 +45,10 @@ General behavior rules for Claude Code. These apply regardless of which plugins 
 - **Plugin-managed scratch:** All plugins share `.scratch/` for ephemeral files. Subdirectories (e.g. `test-review-<type>-<id>/`, `plans/`, `briefs/`) are created as needed and may be cleaned up at will.
 - `.scratch/` is gitignored via the repo-root `.gitignore` entry `**/.scratch/`.
 
+## Shell Commands
+
+- **Never use `sed`.** It triggers a permission prompt on every invocation, which blocks unattended/autonomous runs. Use `Edit`/`Read`/`Write`, or `awk`/`grep`/plain `cat` for a genuine one-liner. Applies to every Bash call made directly by the orchestrator (mill-start, mill-plan, mill-go, and any skill that loads this file) and to any `Agent(subagent_type: "fork")` dispatch, which inherits this rule along with the rest of the parent's context.
+
 ## Worktree isolation
 
 A session running from a child worktree operates on the child worktree only. These rules apply whenever the current git worktree is not the main worktree.
