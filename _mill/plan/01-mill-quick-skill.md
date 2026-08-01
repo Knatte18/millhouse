@@ -73,10 +73,11 @@ exists with correct frontmatter.
      - `git_root = _paths.resolve_git_root()`
      - `wiki_path = _paths.resolve_wiki_path(git_root)`
      - `worktree_root = _paths.resolve_hub_path()`
-     - `cfg = _config.load_config(worktree_root, worktree_root)` (signature:
+     - `cfg = _config.load_config(worktree_root, git_root)` (signature:
        `_config.load_config(hub_root: Path, worktree_root: Path) -> dict`;
-       here `hub_root` and `worktree_root` are the same path since
-       `worktree_root` was just resolved via `resolve_hub_path()`)
+       use this exact `(hub_root, git_root)` argument shape for consistency
+       with the established call pattern used elsewhere in the codebase,
+       e.g. `mill-go/SKILL.md`'s "0.55" block)
      - `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)` — on
        `_marker.MarkerError`, halt: "this worktree was not created by
        mill-spawn" (identical wording to `mill-start`'s Entry step 3 halt).
@@ -277,8 +278,12 @@ exists with correct frontmatter.
   the fix commit (via `git-commit` skill, pushes immediately, harmless);
   the `implementing`/`done` phase commits (raw git, deferred — pushed
   later by `mill-finalize`/`mill-merge`); the `blocked` phase commit (raw
-  git, pushed immediately — the one exception). State that hand-editing
-  `status.md`'s yaml block is banned outside the documented `_status.py`
+  git, pushed immediately — the one exception). Add a bullet noting the
+  wiki phase mutation on the success path —
+  `_client.set_phase(wiki_path, slug, "ready-to-merge")` — mirroring
+  `mill-go`'s Board discipline bullet for its own Handoff `[ready-to-merge]`
+  flip. State that hand-editing `status.md`'s yaml block is banned outside
+  the documented `_status.py`
   calls above, matching every other mill skill's Board discipline
   section.
 

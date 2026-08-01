@@ -3,7 +3,7 @@
 ```yaml
 task: 'Add mill-quick: skip-review pipeline for simple tasks'
 slug: mill-quick
-approved: false
+approved: true
 started: '20260801-090725'
 parent: main
 root: ""
