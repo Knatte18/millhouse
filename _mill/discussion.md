@@ -45,7 +45,14 @@ task done — with no discussion round, no plan, no reviewer of any kind.
   configure it first. `mill-quick` never proceeds with unverified work.
 - On verify success: `_status.append_phase(status_path, "done", ts)`
   directly (mirrors mill-go's Handoff Step 1 exactly — no `set_done`
-  helper exists in this codebase).
+  helper exists in this codebase), **followed by** `_client.set_phase(
+  wiki_path, slug, "ready-to-merge")` (mirrors mill-go's Handoff Step 2).
+  Both steps are required — Step 2 is not optional. Without it, Home.md
+  stays `[active]` while `status.md` says `phase: done`, a combination
+  neither `mill-status`'s phase-reference table nor `mill-cleanup`'s
+  states-handled table recognizes (both only handle `[ready-to-merge]` +
+  `done`), so the task wouldn't get the "run /mill-merge" prompt the full
+  pipeline produces.
 - On verify failure: `_status.set_blocked(status_path, reason, timestamp)`,
   then halt back to the operator. No retry loop, no self-fix rounds — a
   single attempt only.
@@ -380,3 +387,8 @@ Decisions above.
   on the task before `phase: done`. The deferred-push rule applies only to
   the separate, raw-git status.md phase-transition commits, not the fix
   commit.
+- **Q:** (Discussion review r3 gap) Does mill-quick's done-path flip the
+  wiki phase to `ready-to-merge`, mirroring mill-go's Handoff Step 2? **A:**
+  Yes — required, not optional. Without it, `mill-status`/`mill-cleanup`
+  don't recognize the resulting `[active]`+`done` combination and the task
+  wouldn't get the "run /mill-merge" prompt.
