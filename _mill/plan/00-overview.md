@@ -3,7 +3,7 @@
 ```yaml
 task: 'Non-interactive pipeline: only mill-start''s interview may prompt the operator'
 slug: pipeline-walkaway-mode
-approved: false
+approved: true
 started: '2026-08-01T15:51:41Z'
 parent: main
 root: ""
