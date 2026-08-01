@@ -596,7 +596,7 @@ def test_unknown_key_warning_emitted() -> None:
         _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: test\n")
         _write_yaml(
             wt_root / ".millhouse" / "config.local.yaml",
-            "pipeline:\n  autonomous_mode: true\n",
+            "pipeline:\n  some_unrecognized_key: true\n",
         )
 
         with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):

@@ -59,7 +59,6 @@ def make_minimal_cfg(**overrides) -> dict:
         "pipeline": {
             "auto_merge": False,
             "auto_report": False,
-            "autonomous_mode": False,
         },
         "notify": {
             "backend": "stdout",
