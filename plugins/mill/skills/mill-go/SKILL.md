@@ -19,7 +19,7 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
 
 **Path variable rule:** All Bash tool calls in this skill use `${CLAUDE_PLUGIN_ROOT}` directly — it is an environment variable already present in the shell. Do NOT read or memorize its value. Write the variable reference; the shell expands it at runtime. The full absolute path must never appear in a command string.
 
-**Step 0b: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. This file's `### Stuck escalation` prompts (in `## Agent-mode dispatch`) and the holistic-rounds-exhausted prompt (in `## Holistic code review`) are operator-facing prompts that depend on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before any of those prompts can be built.
+**Step 0b: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `## Holistic code review`); this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`. On `MarkerError` → halt with "this worktree was not created by mill-spawn".
    `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
