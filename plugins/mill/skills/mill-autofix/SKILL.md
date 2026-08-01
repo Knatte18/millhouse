@@ -7,8 +7,6 @@ description: Autonomously fetch open GitHub bug issues, synthesise discussion.md
 
 You are the autonomous bug-fix orchestrator. Your job: drain the GitHub bug queue. For each open issue labelled `bug`, claim it via mill-claim (in-place on the hub), write `_mill/discussion.md`, run mill-plan → mill-go → mill-merge in sequence, close the issue on success, then move to the next bug. You run entirely in a single CC session in the hub worktree — no sub-LLM spawning.
 
-**The cleanup phase is non-negotiable.** `pipeline.autonomous_mode: true` is a temporary mutation of `.millhouse/config.local.yaml`. It must be restored on every exit path: success, block, killswitch, or unhandled error.
-
 ## Arguments
 
 - `--dry-run` — read-only. Fetch issues, print a summary table, exit. **Config is never mutated in dry-run mode.**
@@ -82,46 +80,9 @@ If `--dry-run` was passed:
    ```
 3. Exit without mutating any state.
 
-## Phase 2: Pre-flight — enable autonomous mode
-
-Resolve `cfg_path = <git_root>/.millhouse/config.local.yaml`.
-
-Read the original file content (store as `original_cfg_text`, or `None` if the file does not exist):
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-from pathlib import Path
-cfg = Path('.millhouse/config.local.yaml')
-if cfg.exists():
-    print('EXISTS')
-    print(cfg.read_text(encoding='utf-8'), end='')
-else:
-    print('ABSENT')
-"
-```
-
-If the output starts with `EXISTS`, `original_cfg_text` = the rest. If `ABSENT`, `original_cfg_text = None`.
-
-Set `pipeline.autonomous_mode: true`:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-from pathlib import Path
-import yaml
-cfg_path = Path('.millhouse/config.local.yaml')
-cfg = yaml.safe_load(cfg_path.read_text(encoding='utf-8')) if cfg_path.exists() else {}
-if not isinstance(cfg, dict):
-    cfg = {}
-cfg.setdefault('pipeline', {})['autonomous_mode'] = True
-cfg_path.parent.mkdir(parents=True, exist_ok=True)
-cfg_path.write_text(yaml.dump(cfg, sort_keys=False, allow_unicode=True), encoding='utf-8')
-print('autonomous_mode enabled')
-"
-```
-
 ## Phase 3: Per-bug loop
 
-For each issue in `issues` (in order), execute steps 0–10. After the loop (or after the killswitch fires), proceed to Phase 4.
+For each issue in `issues` (in order), execute steps 0–10. After the loop (or after the killswitch fires), proceed to Phase 5: Report.
 
 ---
 
@@ -141,7 +102,7 @@ Check whether `.scratch/autofix-stop` exists:
 test -f .scratch/autofix-stop && echo STOP || echo GO
 ```
 
-If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 4 (Cleanup) then Phase 5 (Report).
+If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 5 (Report).
 
 ---
 
@@ -392,32 +353,6 @@ Note: the wiki `active/<slug>/` directory and the `[active]` marker in Home.md a
 
 ---
 
-## Phase 4: Cleanup — restore autonomous mode
-
-**Always run — even if an unhandled error escapes the per-bug loop.**
-
-Restore `config.local.yaml` to its original state:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-from pathlib import Path
-import sys
-cfg_path = Path('.millhouse/config.local.yaml')
-# original_cfg_text is passed as stdin
-original = sys.stdin.read()
-if original == '__ABSENT__':
-    cfg_path.unlink(missing_ok=True)
-    print('config.local.yaml removed (was absent before)')
-else:
-    cfg_path.write_text(original, encoding='utf-8')
-    print('config.local.yaml restored')
-" <<'EOF'
-<original_cfg_text or literal __ABSENT__>
-EOF
-```
-
-If `original_cfg_text` was `None` (file did not exist before): delete `.millhouse/config.local.yaml` (`missing_ok=True` — safe if already gone). Otherwise: write back the exact original text byte-for-byte.
-
 ## Phase 5: Report
 
 Record `end_ts`:
@@ -465,7 +400,7 @@ Print to the user:
 
 ## Principles
 
-- **Cleanup is non-skippable.** Treat the per-bug loop as a try block with a guaranteed finally (Phase 4). A crashed or manually interrupted run must be re-started from scratch; bugs already fixed will be skipped via the "already present [done]" path in step 2.
+- **Runs are restart-safe.** A crashed or manually interrupted run can be re-started from scratch; bugs already fixed will be skipped via the "already present [done]" path in step 2.
 - **Dry-run is truly read-only.** No config mutations, no wiki writes, no git state changes.
 - **Slug uniqueness across the run.** Add each derived slug to `existing_home_slugs` immediately — `_autofix.slug_from_title` only checks the set you pass in; it does not re-read Home.md.
 - **Killswitch is a soft stop.** `.scratch/autofix-stop` halts after the current bug completes (or after stuck cleanup if the current bug was in-flight). Do not delete the file.
