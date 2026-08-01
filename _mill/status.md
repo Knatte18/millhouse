@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-01T14:43:03Z'
+discussed  '2026-08-01T15:41:38Z'
 ```
