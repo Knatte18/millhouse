@@ -17,7 +17,7 @@ Batches 1-4 removed every `pipeline.autonomous_mode` read site in `mill-plan`/`m
 
 ## Cards
 
-### Card 12: Delete dead autonomous-mode code and config key
+### Card 14: Delete dead autonomous-mode code and config key
 
 - **Context:** none
 - **Edits:**
@@ -83,7 +83,7 @@ Batches 1-4 removed every `pipeline.autonomous_mode` read site in `mill-plan`/`m
   This test's synthetic template (`_setup_plugin_template`) has no real `pipeline:` section, so `autonomous_mode` there was always an arbitrary "any unrecognized key" example unrelated to the real schema — swapping the key name avoids a reader mistaking this line as coupled to the schema removal above, without changing what the test verifies (that unknown keys emit a stderr warning containing `"pipeline"`).
 - **Commit:** `chore(config): delete pipeline.autonomous_mode and dead _autonomous.py`
 
-### Card 13: Remove mill-autofix's autonomous-mode pre-flight/cleanup phases
+### Card 15: Remove mill-autofix's autonomous-mode pre-flight/cleanup phases
 
 - **Context:**
   - `.millhouse/config.local.yaml`
@@ -143,7 +143,7 @@ For each issue in `issues` (in order), execute steps 0–10. After the loop (or 
 ```
 - **Commit:** `docs(mill-autofix): remove autonomous-mode pre-flight and cleanup phases`
 
-### Card 14: Update mill-start's stale autonomous_mode doc line
+### Card 16: Update mill-start's stale autonomous_mode doc line
 
 - **Context:** none
 - **Edits:**
@@ -170,4 +170,4 @@ For each issue in `issues` (in order), execute steps 0–10. After the loop (or 
 
 ## Batch Tests
 
-`verify:` runs `test-config.py` (edited directly, and the sole remaining test asserting on the unknown-key-warning behavior touched by Card 12), `test-reviewers.py` and `test-large-prompt-switch.py` (both import `make_minimal_cfg` from the edited `_test_cfg.py` and must still construct a valid cfg dict after `autonomous_mode` is removed from the baseline). `test-autonomous.py` is deleted by this batch and is correctly absent from the `--only` list. `mill-autofix/SKILL.md` and `mill-start/SKILL.md` are prose-only edits with no runnable surface, verified by plan/code review reading the diff.
+`verify:` runs `test-config.py` (edited directly, and the sole remaining test asserting on the unknown-key-warning behavior touched by Card 14), `test-reviewers.py` and `test-large-prompt-switch.py` (both import `make_minimal_cfg` from the edited `_test_cfg.py` and must still construct a valid cfg dict after `autonomous_mode` is removed from the baseline). `test-autonomous.py` is deleted by this batch and is correctly absent from the `--only` list. `mill-autofix/SKILL.md` and `mill-start/SKILL.md` are prose-only edits with no runnable surface, verified by plan/code review reading the diff.

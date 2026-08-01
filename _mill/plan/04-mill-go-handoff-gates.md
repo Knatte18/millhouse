@@ -4,7 +4,7 @@
 task: 'Non-interactive pipeline: only mill-start''s interview may prompt the operator'
 batch: mill-go-handoff-gates
 number: 4
-cards: 3
+cards: 4
 verify: null
 depends-on: [3]
 ```
@@ -15,7 +15,7 @@ depends-on: [3]
 
 ## Cards
 
-### Card 7: Self-resolve mill-go's Nit-enforcement gate
+### Card 8: Self-resolve mill-go's Nit-enforcement gate
 
 - **Context:**
   - `plugins/mill/scripts/_nit_gate.py`
@@ -56,7 +56,7 @@ where `<scope-list>` is the joined list of scope names. Do NOT set `phase: done`
   Preserve the existing "If the list is empty, proceed to terminal cleanliness gate." sentence that follows — do not remove or duplicate it.
 - **Commit:** `docs(mill-go): self-resolve Handoff nit-enforcement gate`
 
-### Card 8: Self-resolve mill-go's Terminal cleanliness gate
+### Card 9: Self-resolve mill-go's Terminal cleanliness gate
 
 - **Context:** none
 - **Edits:**
@@ -94,7 +94,7 @@ where `<N>` is the count of dirty lines and `<file-list>` is the filenames extra
   Preserve the existing "If the list is empty, proceed to scope violations cleanup." sentence that follows.
 - **Commit:** `docs(mill-go): self-resolve Handoff terminal cleanliness gate`
 
-### Card 9: Self-resolve mill-go's Scope violations cleanup gate
+### Card 10: Self-resolve mill-go's Scope violations cleanup gate
 
 - **Context:** none
 - **Edits:**
@@ -131,6 +131,31 @@ where `<file-list>` is the comma-separated list of blocking paths. Do NOT set `p
   Preserve the existing "If the list is empty, proceed normally." sentence that follows.
 - **Commit:** `docs(mill-go): self-resolve Handoff scope-violations cleanup gate`
 
+### Card 11: Fix mill-go's stale Step 0b operator-prompt framing
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+
+  This card must run after batches 2 and 3 land (both remove the operator prompts this line describes) — the `depends-on: [3]` edge on this batch already guarantees that ordering; this card just documents which prior batches its accuracy depends on.
+
+  In `## Entry`, `**Step 0b: Load \`mill:conversation\`.**` currently reads exactly:
+
+```
+**Step 0b: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. This file's `### Stuck escalation` prompts (in `## Agent-mode dispatch`) and the holistic-rounds-exhausted prompt (in `## Holistic code review`) are operator-facing prompts that depend on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before any of those prompts can be built.
+```
+
+  Replace it with:
+
+```
+**Step 0b: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `## Holistic code review`); this skill is loaded defensively in case a future addition needs its numbered-options convention.
+```
+- **Commit:** `docs(mill-go): fix stale Step 0b operator-prompt framing`
+
 ## Batch Tests
 
-`verify: null` — this batch edits only `plugins/mill/skills/mill-go/SKILL.md`'s `## Handoff` section, a prose file interpreted by Claude Code at skill-invocation time. `_nit_gate.py` is read-only Context for Card 7 (to confirm the file-matching convention it mirrors) and is not modified. There is no runnable test surface for this batch. Correctness is verified by plan review (byte-exact old/new text matching against the actual worktree source) and, downstream, by mill-go's code review reading the resulting diff.
+`verify: null` — this batch edits only `plugins/mill/skills/mill-go/SKILL.md`'s `## Handoff` section, a prose file interpreted by Claude Code at skill-invocation time. `_nit_gate.py` is read-only Context for Card 8 (to confirm the file-matching convention it mirrors) and is not modified. There is no runnable test surface for this batch. Correctness is verified by plan review (byte-exact old/new text matching against the actual worktree source) and, downstream, by mill-go's code review reading the resulting diff.

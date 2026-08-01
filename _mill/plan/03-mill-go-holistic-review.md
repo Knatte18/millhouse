@@ -15,7 +15,7 @@ depends-on: [2]
 
 ## Cards
 
-### Card 4: Make holistic Rate-limit fallback unconditional
+### Card 5: Make holistic Rate-limit fallback unconditional
 
 - **Context:** none
 - **Edits:**
@@ -43,10 +43,10 @@ depends-on: [2]
    Operator interactive path (no `autonomous_mode`, no `fallback_reviewer`): user prompt remains identical to today (the existing step 5 ROUND-EXHAUSTION sub-section handles this case).
 ```
 
-  Delete this paragraph entirely — it describes an operator-interactive path that no longer exists (Card 6 in this batch makes step 5's round-exhaustion unconditional too, so there is no "user prompt" left for this paragraph to point at).
+  Delete this paragraph entirely — it describes an operator-interactive path that no longer exists (Card 7 in this batch makes step 5's round-exhaustion unconditional too, so there is no "user prompt" left for this paragraph to point at).
 - **Commit:** `docs(mill-go): make holistic rate-limit fallback halt unconditional`
 
-### Card 5: Make holistic REQUEST_CHANGES stuck_type branches self-resolve-then-escalate
+### Card 6: Make holistic REQUEST_CHANGES stuck_type branches self-resolve-then-escalate
 
 - **Context:** none
 - **Edits:**
@@ -75,7 +75,7 @@ depends-on: [2]
   The `- On success: increment H and loop.` bullet immediately following stays unchanged — do not touch it.
 - **Commit:** `docs(mill-go): make holistic fix-stuck branches self-resolve-then-escalate`
 
-### Card 6: Make holistic Rounds-exhausted unconditional
+### Card 7: Make holistic Rounds-exhausted unconditional
 
 - **Context:** none
 - **Edits:**

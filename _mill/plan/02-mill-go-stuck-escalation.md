@@ -15,7 +15,7 @@ depends-on: []
 
 ## Cards
 
-### Card 3: Rewrite Stuck escalation to unconditional self-resolve-then-escalate
+### Card 4: Rewrite Stuck escalation to unconditional self-resolve-then-escalate
 
 - **Context:** none
 - **Edits:**
@@ -63,6 +63,30 @@ For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastru
 ```
 
   Note the final "On user-chosen block" bullet from the original is intentionally NOT carried forward — its logic is now inlined into each bullet's own escalation path above (there is no more "user-chosen" block; every escalation is the agent's own decision after one self-resolve attempt).
+
+  Two other bullets elsewhere in this file point into `### Stuck escalation` and must be updated in this same commit so they don't contradict the rewrite above. In `## Implement` step 2's `**(b)` sub-bullet list, the line currently reads exactly:
+
+```
+   - **`stuck_type: logic`, reason "no structured report"** (no commits were made and no JSON was found) — reached only via the clean-turn-exhaustion sub-case of (b) above, since the stopped/interrupted sub-case already confirmed via the probe that the agent is no longer running before ever reaching this point — ask user per *Stuck escalation*, exactly as any other `stuck_type: logic` result.
+```
+
+  Replace it with:
+
+```
+   - **`stuck_type: logic`, reason "no structured report"** (no commits were made and no JSON was found) — reached only via the clean-turn-exhaustion sub-case of (b) above, since the stopped/interrupted sub-case already confirmed via the probe that the agent is no longer running before ever reaching this point — route to *Stuck escalation*, which self-resolves once before escalating, exactly as any other `stuck_type: logic` result.
+```
+
+  Separately, in `## Implement` step 2's plain-JSON bullet list, the line currently reads exactly:
+
+```
+- `status: stuck, stuck_type: verify | logic` → **ask user** per *Stuck escalation*.
+```
+
+  Replace it with:
+
+```
+- `status: stuck, stuck_type: verify | logic` → route to *Stuck escalation*, which self-resolves once before escalating.
+```
 - **Commit:** `docs(mill-go): make stuck escalation unconditionally self-resolve-then-escalate`
 
 ## Batch Tests

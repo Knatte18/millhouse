@@ -4,7 +4,7 @@
 task: 'Non-interactive pipeline: only mill-start''s interview may prompt the operator'
 batch: mill-plan-autonomous-collapse
 number: 1
-cards: 2
+cards: 3
 verify: null
 depends-on: []
 ```
@@ -83,6 +83,45 @@ depends-on: []
 - **Autonomous** — mill-plan never waits for an operator reply. The max-rounds escape and non-progress check resolve by halting via `_status.set_blocked` instead of prompting.
 ```
 - **Commit:** `docs(mill-plan): collapse max-rounds escape to unconditional halt`
+
+### Card 3: Fix mill-plan's stale operator-prompt framing at the top of the file
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-plan/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+
+  This card must run after Card 2 in implementation order (it fixes prose describing Card 2's own removed prompt) — both are in this batch so no DAG dependency is needed, but note it for the implementer.
+
+  The opening paragraph currently reads exactly:
+
+```
+You are an autonomous planner running on Opus. Your job is to turn `discussion.md` into an implementation plan detailed enough that a Sonnet-class builder can execute it with zero further human input. Never pause mid-phase to ask the user. Only the max-rounds escape (below) is allowed to break that rule.
+```
+
+  Replace it with:
+
+```
+You are an autonomous planner running on Opus. Your job is to turn `discussion.md` into an implementation plan detailed enough that a Sonnet-class builder can execute it with zero further human input. mill-plan never pauses mid-phase to ask the user — every halt (non-progress, max-rounds exhaustion) is a clean `_status.set_blocked` stop, not a prompt.
+```
+
+  Immediately below, in `## Entry`, `**Step 0: Load \`mill:conversation\`.**` currently reads exactly:
+
+```
+**Step 0: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. Phase: Plan Review's max-rounds-escape prompt (step 6) is an operator-facing prompt that depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before that prompt can be built.
+```
+
+  Replace it with:
+
+```
+**Step 0: Load `mill:conversation`.** Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review); this skill is loaded defensively in case a future addition needs its numbered-options convention.
+```
+
+  A third occurrence of the same stale framing sits mid-paragraph in Phase: Plan Review step 2 ("**Waiting is never a decision point.**"), immediately before "**Dispatch mode:**" on the same source line (no fenced quote is given here since the target text is a fragment mid-line, not its own line — matching it via a fenced old/new pair would introduce a spurious trailing-newline mismatch against the single-line source paragraph). Find the clause reading, verbatim: is banned here absent one of this phase's explicitly named escape hatches (the max-rounds prompt in step 6, the non-progress halt in step 5). Replace just that clause with: is banned here unconditionally — both the max-rounds escape (step 6) and the non-progress check (step 5) resolve by halting via `_status.set_blocked`, never by prompting. Leave every other word in the surrounding sentence and paragraph (including "`AskUserQuestion` (or any equivalent free-text operator prompt)" immediately before the clause, and "**Dispatch mode:** Resolve dispatch mode via..." immediately after it) untouched.
+- **Commit:** `docs(mill-plan): fix stale operator-prompt framing`
 
 ## Batch Tests
 

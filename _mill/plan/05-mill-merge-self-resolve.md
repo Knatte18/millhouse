@@ -15,7 +15,7 @@ depends-on: []
 
 ## Cards
 
-### Card 10: Replace mill-merge's stale-worktree prompt with agent-driven investigation
+### Card 12: Replace mill-merge's stale-worktree prompt with agent-driven investigation
 
 - **Context:**
   - `plugins/mill/scripts/_inplace.py`
@@ -43,7 +43,7 @@ depends-on: []
   Clarifying note on the (unchanged) trigger condition: "the branch matches" compares the worktree directory's checked-out branch (from the `git worktree list --porcelain` entry) against the active task's branch (`active_data`'s branch, from Entry Step 1). Because git does not allow the same branch to be checked out in two worktrees simultaneously, the `mode = 'worktree'` resolution above may rarely fire in practice for a fully live, current registration — it exists as the correct-by-construction counterpart to the `mode = 'inplace'` (stale-registration) branch, not because it is expected to fire often. This ambiguity in "the branch matches" is pre-existing in the source being edited (the trigger condition itself is not changed by this card) and is called out here only for the implementer's benefit, not as something to resolve by rewording the unchanged quoted trigger text above.
 - **Commit:** `docs(mill-merge): replace stale-worktree prompt with git-state investigation`
 
-### Card 11: Harden mill-merge's parent-branch resolve call site to non-interactive
+### Card 13: Harden mill-merge's parent-branch resolve call site to non-interactive
 
 - **Context:**
   - `plugins/mill/scripts/_parent_branch.py`
@@ -71,4 +71,4 @@ depends-on: []
 
 ## Batch Tests
 
-`verify: null` — this batch edits only `plugins/mill/skills/mill-merge/SKILL.md`, a prose file interpreted by Claude Code at skill-invocation time. `_inplace.py` is read-only Context for Card 10 and is not modified; `_parent_branch.py` already supports `interactive=False` and needs no change (confirmed during Phase: Plan by reading `_parent_branch.resolve`'s signature and body in the task worktree). There is no runnable test surface for this batch. Correctness is verified by plan review and, downstream, by mill-go's code review reading the resulting diff.
+`verify: null` — this batch edits only `plugins/mill/skills/mill-merge/SKILL.md`, a prose file interpreted by Claude Code at skill-invocation time. `_inplace.py` is read-only Context for Card 12 and is not modified; `_parent_branch.py` already supports `interactive=False` and needs no change (confirmed during Phase: Plan by reading `_parent_branch.resolve`'s signature and body in the task worktree). There is no runnable test surface for this batch. Correctness is verified by plan review and, downstream, by mill-go's code review reading the resulting diff.
