@@ -175,6 +175,21 @@ task done — with no discussion round, no plan, no reviewer of any kind.
   `blocked`); an in-skill retry/self-fix loop (directly contradicts the
   single-agent, no-fixer design).
 
+**Known limitation — orphaned `phase: implementing`.** If the invoking
+session itself crashes or is interrupted between writing `phase:
+implementing` and reaching the done_gate check, the task is left stuck at
+`implementing` with no automatic recovery — there is no fixer/retry loop to
+catch this, by design. mill-quick's own entry gate can't resume it (it
+requires `phase: discussing`), and `mill-go`'s `implementing`/`reviewing`/
+`fixing` resume path assumes a `plan.md`/`## Batches` structure mill-quick's
+zero-artifacts design never creates, so pointing a stray `/mill-go` at an
+orphaned mill-quick task would likely fail confusingly rather than
+surfacing a clear error. This is accepted as a known limitation consistent
+with the single-shot, no-fixer philosophy — the intended escape hatch is
+manual: the operator runs `mill-cleanup`/`mill-abandon`, or manually calls
+`_status.set_blocked` on the orphaned task. mill-plan should not attempt to
+build automatic crash recovery for this case.
+
 ## Technical context
 
 - Path resolution mirrors `mill-start`'s Entry/Path Setup exactly:
@@ -191,20 +206,39 @@ task done — with no discussion round, no plan, no reviewer of any kind.
   current phase, `append_phase(status_path, phase, timestamp)` for
   `implementing` → `done`, `set_blocked(status_path, reason, timestamp)`
   for the failure path.
-- `pipeline.done_gate` execution should mirror mill-go's Pre-done gate
-  exactly (`mill-go/SKILL.md` "0. Pre-done gate."): `subprocess.run(
-  gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)`,
-  non-zero exit → failure path.
+- `pipeline.done_gate` execution mirrors mill-go's Pre-done gate only in the
+  subprocess-construction and non-zero-exit handling (`mill-go/SKILL.md`
+  "0. Pre-done gate."): `subprocess.run(gate_cmd, cwd=git_root, shell=True,
+  capture_output=True, text=True)`, non-zero exit → failure path. It
+  deliberately does **not** mirror mill-go's null-handling: mill-go's gate
+  does `if not gate_cmd: sys.exit(0)` (skip verification, proceed as if
+  passed), while mill-quick hard-halts before any edit when `done_gate` is
+  null/unset (see Decisions/verify-mechanism). A plan writer must not copy
+  mill-go's skip-on-null branch verbatim.
+- **Commit-push discipline.** mill-quick is architecturally closest to
+  mill-go's Builder role (single session making commits over the task's
+  lifetime), whose own state commits (Prepare/Approve/blocked/done) do
+  **not** push immediately — `mill-go/SKILL.md` Board discipline: "mill-merge
+  pushes the full task branch at task end." mill-quick follows that same
+  rule for its `implementing` and `done` phase commits (and the fix commit
+  itself) — none are pushed immediately; `mill-finalize`/`mill-merge` push
+  the branch once the task reaches `done`. The one exception is the
+  `blocked` commit on verify failure: that **is** pushed immediately,
+  mirroring `mill-start`'s own `--auto`-mode blocked-halt precedent — a
+  blocked mill-quick task never reaches mill-merge, so without an
+  immediate push it would be invisible to an operator checking from a
+  different worktree or machine.
 - No changes needed to `mill-config.yaml`'s schema — `roles:` is a
   reviewer-round registry, not a skill registry; no mill-* skill is
   declared anywhere in YAML, so `mill-quick` requires no new config key to
   exist as a skill. It only *reads* the existing `pipeline.done_gate` key.
-- Commit discipline should mirror the existing per-phase-transition commit
+- Commit discipline mirrors the existing per-phase-transition commit
   pattern used throughout `mill-start`/`mill-go`: one commit for the
   actual fix (`git add` the changed files, message referencing the slug),
   a separate small commit for each `status.md` phase-timeline write
-  (`implementing`, then `done` or `blocked`), each pushed immediately —
-  matching every other mill skill's push-per-phase-commit discipline.
+  (`implementing`, then `done` or `blocked`). See the Commit-push
+  discipline bullet above for exactly which of these commits push
+  immediately and which are deferred to mill-finalize/mill-merge.
 - `mill-merge`/`mill-finalize` require nothing beyond `phase: done` in
   `status.md` (`mill-merge/SKILL.md`, `mill-finalize/SKILL.md`) — neither
   references `discussion.md` or `plan/` existence anywhere, so a
@@ -280,3 +314,20 @@ Decisions above.
   mill-quick? **A:** No — pure operator trust, matching mill-start's
   existing precedent of not second-guessing why the operator started a
   task a particular way.
+- **Q:** (Discussion review r1 gap) Does mill-quick's done_gate execution
+  fully mirror mill-go's Pre-done gate, including null-handling? **A:** No
+  — only the subprocess-construction/non-zero-exit handling mirrors
+  mill-go; null-handling deliberately diverges (mill-quick hard-halts on
+  null, mill-go skips verification and proceeds).
+- **Q:** (Discussion review r1 gap) Does mill-quick push every
+  phase-transition commit immediately? **A:** No — `implementing`/`done`
+  commits (and the fix commit) stay unpushed, deferred to
+  mill-finalize/mill-merge at task end, mirroring mill-go's Builder-role
+  commits. The `blocked` commit on verify failure is the one exception and
+  pushes immediately, since a blocked task never reaches mill-merge and
+  would otherwise be invisible remotely.
+- **Q:** (Discussion review r1 gap) What happens if the session crashes
+  while `phase: implementing`? **A:** Accepted as a known limitation, no
+  automatic recovery — matches the single-shot, no-fixer design. Manual
+  escape hatch: `mill-cleanup`/`mill-abandon`, or a manual
+  `_status.set_blocked` call.
