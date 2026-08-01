@@ -49,7 +49,9 @@ batches:
     start_sha: a926051931a465b8398d1dae3be10a2812d775f9
     commit_sha: 89e2439f1db0d69f2e6b202fb0647de7b36614c8
   - name: mill-merge-self-resolve
-    state: pending
+    state: running
+    implementer_session: 8863c20e-74f9-4aa3-966c-1047202d74d7
+    start_sha: 9158513b02543eb410bde374dfcaf6760cf68842
   - name: mill-go-holistic-review
     state: pending
   - name: mill-go-handoff-gates
