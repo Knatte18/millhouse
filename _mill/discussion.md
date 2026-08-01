@@ -47,13 +47,22 @@ agent cannot safely touch) still halt and wait for the operator.
   ambiguity (`prompt_stale_worktree`, a raw `input()` call) gets replaced
   with the agent investigating git state itself before falling back to
   abort-and-halt.
+- `mill-merge/SKILL.md` / `scripts/_parent_branch.py` — the parent-branch
+  resolution call site (`SKILL.md:45`) swaps its undefined
+  `interactive=<True unless called non-interactively>` placeholder for a
+  hardcoded `interactive=False`, catching `ParentBranchError` and
+  converting it to a `_status.set_blocked` halt. M2's halt *behavior* is
+  unchanged (still halts when `parent:` is missing) — only the
+  *mechanism* changes, from a potential stdin block to a clean exception
+  path. See Decision `stays-a-genuine-halt-list`.
 - Delete `pipeline.autonomous_mode` (config key, all read sites in
   mill-plan/mill-go, the write site in mill-autofix, its Phase 2
   pre-flight and Phase 4 cleanup-restore block) and delete
   `scripts/_autonomous.py` + `unit_tests/test-autonomous.py` (dead code,
   zero callers — confirmed by grep).
-- Update `unit_tests/_test_cfg.py:62` and `unit_tests/test-config.py:599`,
-  which reference the `autonomous_mode` fixture key, to match its removal.
+- Update `unit_tests/_test_cfg.py:62`, which mirrors the real `pipeline`
+  schema, to drop `autonomous_mode`. `unit_tests/test-config.py:599`'s
+  reference is optional hygiene only — see Technical context.
 - Every self-resolve action logs a `_status.append_phase`-style timeline
   row in `status.md` so the operator can review what was auto-decided
   after the fact.
@@ -70,12 +79,14 @@ agent cannot safely touch) still halt and wait for the operator.
   mill-go stops and tells the operator to run `/mill-finalize` manually;
   `require_pr_to_base: true` → mill-finalize creates the PR and halts at
   its Step 7 waiting for review). No change.
-- mill-merge's other halts: PR-still-open (`M3`, external GitHub state),
-  dirty-parent-worktree (`M4`, agent isn't allowed to touch the parent
-  worktree per the worktree-isolation rule), merge-lock timeout (`M6`,
-  external process contention), missing `parent:` row in status.md (`M2`,
-  a genuine mill-spawn setup bug, not a judgment call). All four stay
-  exactly as they are.
+- mill-merge's other halts, with zero code change: PR-still-open (`M3`,
+  external GitHub state), dirty-parent-worktree (`M4`, agent isn't
+  allowed to touch the parent worktree per the worktree-isolation rule),
+  merge-lock timeout (`M6`, external process contention). Note `M2`
+  (missing `parent:` row) is explicitly NOT in this list — its halt
+  behavior stays the same but its call site does get a mechanical edit
+  (see Scope "In" above); it is a genuine mill-spawn setup bug either
+  way, not a judgment call.
 - Any new opt-in flag or trigger mechanism. This is unconditional default
   behavior for mill-plan/mill-go, not something an operator switches on.
 
@@ -279,10 +290,19 @@ agent cannot safely touch) still halt and wait for the operator.
   accordingly. Also remove the reference at line `10`
   ("`pipeline.autonomous_mode: true` is a temporary mutation... must be
   restored on every exit path").
-- `plugins/mill/unit_tests/_test_cfg.py:62` and
-  `plugins/mill/unit_tests/test-config.py:599` — fixture/test references
-  to the `autonomous_mode` key; update to match its removal from the
-  schema.
+- `plugins/mill/unit_tests/_test_cfg.py:62` — genuine dead-baseline-field
+  cleanup; this fixture mirrors the real `pipeline` schema and must
+  drop `autonomous_mode` when the key is removed.
+- `plugins/mill/unit_tests/test-config.py:599`
+  (`test_unknown_key_warning_emitted`) — **optional hygiene only, not a
+  required fix.** This test builds its own synthetic template via
+  `_setup_plugin_template` (lines 56-84), which has no `pipeline:`
+  section at all; `autonomous_mode` here is just an arbitrary example of
+  "any unrecognized key" against that minimal template, unrelated to the
+  real production schema. Deleting the real `pipeline.autonomous_mode`
+  key has no effect on this test either way. A plan writer may swap the
+  placeholder key name to avoid reader confusion, but should not treat
+  this line as coupled to the schema removal.
 - `plugins/mill/skills/mill-start/SKILL.md:41` — documentation-only
   touch. The line currently reads "`--auto` is independent from
   `pipeline.autonomous_mode`: ... `pipeline.autonomous_mode` is a config
@@ -419,10 +439,13 @@ agent cannot safely touch) still halt and wait for the operator.
 
 - `plugins/mill/unit_tests/test-autonomous.py` — delete (tests the
   deleted `_autonomous.py`).
-- `plugins/mill/unit_tests/_test_cfg.py:62`,
-  `plugins/mill/unit_tests/test-config.py:599` — update fixtures that
-  reference the removed `autonomous_mode` config key; re-run
-  `run-all.py` after to confirm nothing else depended on it.
+- `plugins/mill/unit_tests/_test_cfg.py:62` — required update; this
+  fixture mirrors the real `pipeline` schema. `plugins/mill/unit_tests/
+  test-config.py:599` — optional hygiene only (see Technical context);
+  its `autonomous_mode` reference is an arbitrary unrelated-key example
+  in a synthetic template with no real `pipeline:` section, not coupled
+  to the schema removal. Re-run `run-all.py` after either edit to
+  confirm nothing else depended on the key.
 - No new unit-testable logic is introduced by the SKILL.md prose changes
   themselves (these are Claude-Code-interpreted instructions, not
   Python), but any new helper functions the plan chooses to extract for
