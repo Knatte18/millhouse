@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-stale-worktree-worktree
+phase: done
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -44,6 +44,7 @@ nits-fixed-holistic  '2026-08-01T17:56:09Z'
 holistic-approved  '2026-08-01T17:56:14Z'
 done  '2026-08-01T17:56:46Z'
 self-resolved-stale-worktree-worktree  '2026-08-01T17:58:23Z'
+done  '2026-08-01T17:59:36Z'
 ```
 
 ## Batches
