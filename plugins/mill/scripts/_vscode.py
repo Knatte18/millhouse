@@ -23,11 +23,6 @@ Public API:
         Render and write the settings.json to ``target``, creating parent
         directories as needed. Overwrites unconditionally — caller is
         responsible for any backup or skip decisions.
-    write_tasks(target)
-        Copy the static tasks.json (auto-opening a terminal, via the OS
-        default shell, on folder open) to ``target``, creating parent
-        directories as needed. Overwrites unconditionally, same as
-        write_settings.
 """
 from __future__ import annotations
 
@@ -36,7 +31,6 @@ from pathlib import Path
 import _render
 
 _TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "vscode-settings.json"
-_TASKS_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "templates" / "vscode-tasks.json"
 
 
 def _derive_window_title(
@@ -115,24 +109,5 @@ def write_settings(
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
         render_settings(color_hex, window_title=window_title, short_name=short_name, slug=slug),
-        encoding="utf-8",
-    )
-
-
-def write_tasks(target: Path) -> None:
-    """
-    Copy the static tasks.json (auto-opens a terminal, via the OS default
-    shell, on folder open) to ``target``, creating parent directories as
-    needed.
-
-    No token substitution — the task content is identical across the hub
-    and every worktree. Overwrites unconditionally, same as write_settings.
-
-    Args:
-        target: Path to write the file to.
-    """
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        _render.render(_TASKS_TEMPLATE_PATH, {}),
         encoding="utf-8",
     )
