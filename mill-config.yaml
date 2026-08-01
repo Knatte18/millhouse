@@ -58,7 +58,7 @@ roles:
     self_fix_rounds: 2
     model: sonnetmedium
   fixer:
-    model: haiku
+    model: sonnetmedium
 notify:
   backend: stdout
 groom:
