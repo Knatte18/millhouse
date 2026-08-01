@@ -380,10 +380,17 @@ agent cannot safely touch) still halt and wait for the operator.
   *, interactive=True, expected_slug=None) -> str` — already supports
   `interactive=False`, which raises `ParentBranchError` instead of
   blocking on stdin (used already by mill-finalize at
-  `mill-finalize/SKILL.md:34`). mill-merge's own call site
-  (`SKILL.md:45`) should use `interactive=False` too and turn a caught
-  `ParentBranchError` into a `_status.set_blocked` halt with the
-  exception's message, rather than ever calling with `interactive=True`.
+  `mill-finalize/SKILL.md:34`, which passes a hardcoded
+  `interactive=False`). mill-merge's own call site
+  (`SKILL.md:45`) currently reads `interactive=<True unless called
+  non-interactively>` — a templated placeholder with no defined
+  resolution mechanism anywhere else in the file (nothing in
+  `mill-merge/SKILL.md` currently sets or checks a "called
+  non-interactively" condition). There is no conditional logic to
+  preserve here: replace the placeholder outright with a hardcoded
+  `interactive=False`, matching mill-finalize's call exactly, and turn a
+  caught `ParentBranchError` into a `_status.set_blocked` halt with the
+  exception's message.
 
 **Already correct, no change needed:**
 - `mill-go/SKILL.md:966` (Handoff step 5) — `pipeline.auto_merge`
