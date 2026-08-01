@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-holistic-review
+phase: approved-mill-go-handoff-gates
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -34,6 +34,7 @@ approved-mill-plan-autonomous-collapse  '2026-08-01T17:01:31Z'
 approved-mill-go-stuck-escalation  '2026-08-01T17:04:11Z'
 approved-mill-merge-self-resolve  '2026-08-01T17:06:15Z'
 approved-mill-go-holistic-review  '2026-08-01T17:08:31Z'
+approved-mill-go-handoff-gates  '2026-08-01T17:11:11Z'
 ```
 
 ## Batches
@@ -61,9 +62,10 @@ batches:
     start_sha: 01100e3e19b20684108c6828ec048694ddec0171
     commit_sha: 9294c5b5cb46dbc1a7b4c54ac787810c46aa59c7
   - name: mill-go-handoff-gates
-    state: running
+    state: approved
     implementer_session: 0dcfad9d-5ef6-44ff-b8b6-5f295ab13468
     start_sha: 63645e1716050a965191859bd06aadff0866b05d
+    commit_sha: 95d8c8cb7753e0d5a980870b7be6cca281ffea07
   - name: cleanup-dead-autonomous-mode
     state: pending
 ```
