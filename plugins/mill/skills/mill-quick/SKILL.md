@@ -18,7 +18,9 @@ zero discussion round, zero plan, and no reviewer of any kind.
 
 Every check below is a precondition: if any of them fails, halt
 immediately with the stated message and do not proceed to a later step.
-No file under the worktree may be edited before step 6.
+No tracked `_mill/` file may be edited before step 6 — the one exception
+is step 5's builder-lock acquire, which writes the gitignored
+`.millhouse/builder.lock` file on a successful acquire.
 
 1. **Resolve paths, config, and slug.** Mirrors `mill-start`'s own Entry
    step 1 / Path Setup pattern — `mill-quick` writes neither
