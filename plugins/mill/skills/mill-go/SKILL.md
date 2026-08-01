@@ -855,12 +855,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): If the deep-merged config has `pipeline.autonomous_mode: true`: `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s) (autonomous-mode)")`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (autonomous-mode)"` and push; invoke the holistic cleanup block; halt with "Autonomous mode: holistic review exhausted. Task left as [active]." Otherwise surface to user with a **blocked-task halt** (not blocked-batch):
-   > Holistic review exhausted {max_holistic_rounds} round(s). Task is blocked.
-   > 1) Rethink — revise discussion and re-run mill-plan.
-   > 2) Skip holistic — accept remaining findings and proceed to Handoff.
-   > 3) Block — halt and leave for manual resolution.
-   On user choice of "3) Block": invoke the holistic cleanup block, then halt and leave for manual resolution. Wait for user choice before proceeding.
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`; `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s)")`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"` and push; invoke the holistic cleanup block; halt with "Holistic review exhausted {max_holistic_rounds} round(s). Task left as [active] for manual review."
 
 ## Handoff
 
