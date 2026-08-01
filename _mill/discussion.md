@@ -154,24 +154,38 @@ task done — with no discussion round, no plan, no reviewer of any kind.
 ### concurrency-guard
 
 - Decision: mill-quick acquires the builder lock
-  (`millpy-builder-lock.py acquire <slug>`) at Entry, before writing
-  `phase: implementing` — on acquire failure (a second concurrent session
-  already holds it), surface the stderr message and halt. Releases the
-  lock at both terminal paths (`done` and `blocked`).
+  (`millpy-builder-lock.py acquire <slug>`) at Entry, immediately after all
+  pre-lock precondition checks pass (wiki `status == 'active'`, `plan:
+  null`) and before writing `phase: implementing` — on acquire failure
+  (a *different* slug holds the lock in this worktree), surface the
+  stderr message and halt. Releases the lock at both terminal paths
+  (`done` and `blocked`). Every halt path that runs *before* acquisition
+  (the precondition checks) needs no release, since the lock is never
+  taken; no halt path exists between acquisition and the two release
+  points.
 - Rationale: mill-quick is architecturally closest to mill-go's Builder
-  role, which acquires this exact lock for exactly this reason —
-  preventing two concurrent sessions from mutating `status.md`/committing
-  on the same task branch (`mill-go/SKILL.md` Principles: "One task per
-  worktree. The builder lock enforces this at runtime."). This concern is
-  orthogonal to mill-quick's no-subagent/no-reviewer simplifications —
-  skipping review doesn't reduce the risk of two operators invoking
-  `/mill-quick` on the same task branch simultaneously. The lock already
-  exists and is directly reusable with zero new plumbing.
-- Rejected: No lock, relying on the `discussing`-only entry gate to make
-  double-invocation unlikely — the entry gate checks phase at the start,
-  not atomically with acquiring exclusive write access, so a race between
-  two sessions both reading `phase: discussing` before either writes
-  `implementing` is still possible without the lock.
+  role, which acquires this exact lock, and reusing it is zero new
+  plumbing. **Corrected scope of what this actually guards** (verified
+  against `_builder_lock.py:135`): `acquire()` raises `LockBusy` only when
+  `existing.slug != slug` — same-slug re-acquisition is deliberately
+  idempotent (a silent refresh, to support self-resume after a crash).
+  Since a worktree hosts exactly one slug for its lifetime, two concurrent
+  invocations against the *same* task always pass the same slug, so the
+  second call's `acquire()` succeeds silently rather than raising. The
+  lock therefore does **not** guard same-slug double-invocation (e.g. two
+  terminals both running `/mill-quick` in the same worktree) — that risk
+  is accepted, consistent with mill-quick's operator-trust model
+  (Scope/eligibility-gate): the operator is expected not to invoke
+  mill-quick twice concurrently in the same worktree, the same trust
+  boundary already relied on for eligibility. What the lock **does** guard
+  is cross-slug contention (a stray second worktree somehow targeting the
+  same lock file) and self-heals correctly across a crash-and-resume of
+  the same task.
+- Rejected: No lock at all (loses the cross-slug guard and crash-resume
+  bookkeeping for zero benefit, since the lock is free to reuse); a new
+  session-scoped exclusion token to actually close the same-slug race
+  (would genuinely close it, but is new plumbing this task's operator-
+  trust model doesn't otherwise require anywhere else in the design).
 
 ### zero-artifacts
 
@@ -392,3 +406,11 @@ Decisions above.
   Yes — required, not optional. Without it, `mill-status`/`mill-cleanup`
   don't recognize the resulting `[active]`+`done` combination and the task
   wouldn't get the "run /mill-merge" prompt.
+- **Q:** (Discussion review r4 gap) Does the reused builder lock actually
+  prevent two concurrent `mill-quick` invocations on the same task? **A:**
+  No — verified `_builder_lock.py` only raises `LockBusy` for a
+  *different* slug; same-slug re-acquisition is a silent idempotent
+  refresh (by design, for crash-resume). The lock guards cross-slug
+  contention and crash-resume bookkeeping only. Same-slug
+  double-invocation is an accepted risk under the operator-trust model,
+  not a new exclusion mechanism.
