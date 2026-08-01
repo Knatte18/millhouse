@@ -104,6 +104,18 @@ Batches 1-4 removed every `pipeline.autonomous_mode` read site in `mill-plan`/`m
 
   Delete the entire `## Phase 2: Pre-flight — enable autonomous mode` section — from that heading through its final fenced bash block ending `print('autonomous_mode enabled')\n"` and the closing triple-backtick — immediately preceding the `## Phase 3: Per-bug loop` heading. Nothing else in Phase 2 has any purpose beyond setting the now-deleted config key.
 
+  In `## Phase 3: Per-bug loop`, `### Step 0: Branch guard + killswitch check`, the killswitch sentence currently reads exactly:
+
+```
+If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 4 (Cleanup) then Phase 5 (Report).
+```
+
+  Replace it with:
+
+```
+If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 5 (Report).
+```
+
   In `## Phase 3: Per-bug loop`, the intro sentence currently reads exactly:
 
 ```
