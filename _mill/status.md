@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -40,6 +40,8 @@ holistic-reviewing  '2026-08-01T17:42:32Z'
 holistic-fixing  '2026-08-01T17:48:53Z'
 holistic-reviewing  '2026-08-01T17:51:12Z'
 holistic-fixing  '2026-08-01T17:54:55Z'
+nits-fixed-holistic  '2026-08-01T17:56:09Z'
+holistic-approved  '2026-08-01T17:56:14Z'
 ```
 
 ## Batches
