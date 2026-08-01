@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -29,4 +29,23 @@ plan-review-r5  '2026-08-01T16:49:52Z'
 plan-fix-r5  '2026-08-01T16:49:52Z'
 plan-fix-r6  '2026-08-01T16:57:37Z'
 planned  '2026-08-01T16:57:54Z'
+implementing  '2026-08-01T16:58:30Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-plan-autonomous-collapse
+    state: pending
+  - name: mill-go-stuck-escalation
+    state: pending
+  - name: mill-merge-self-resolve
+    state: pending
+  - name: mill-go-holistic-review
+    state: pending
+  - name: mill-go-handoff-gates
+    state: pending
+  - name: cleanup-dead-autonomous-mode
+    state: pending
 ```
