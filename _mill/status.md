@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanup-dead-autonomous-mode
+phase: holistic-reviewing
 slug: pipeline-walkaway-mode
 branch: hanf/pipeline-walkaway-mode
 plan: _mill/plan
@@ -36,6 +36,7 @@ approved-mill-merge-self-resolve  '2026-08-01T17:06:15Z'
 approved-mill-go-holistic-review  '2026-08-01T17:08:31Z'
 approved-mill-go-handoff-gates  '2026-08-01T17:11:11Z'
 approved-cleanup-dead-autonomous-mode  '2026-08-01T17:42:08Z'
+holistic-reviewing  '2026-08-01T17:42:32Z'
 ```
 
 ## Batches
