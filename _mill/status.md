@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-quick-skill
+phase: holistic-reviewing
 slug: mill-quick
 branch: hanf/mill-quick
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r2  '2026-08-01T09:19:42Z'
 planned  '2026-08-01T09:19:51Z'
 implementing  '2026-08-01T09:27:38Z'
 approved-mill-quick-skill  '2026-08-01T09:30:33Z'
+holistic-reviewing  '2026-08-01T09:30:52Z'
 ```
 
 ## Batches
