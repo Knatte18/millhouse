@@ -283,6 +283,16 @@ agent cannot safely touch) still halt and wait for the operator.
   `plugins/mill/unit_tests/test-config.py:599` — fixture/test references
   to the `autonomous_mode` key; update to match its removal from the
   schema.
+- `plugins/mill/skills/mill-start/SKILL.md:41` — documentation-only
+  touch. The line currently reads "`--auto` is independent from
+  `pipeline.autonomous_mode`: ... `pipeline.autonomous_mode` is a config
+  key controlling mill-go's stuck-handling... Operators opt into each
+  separately." This becomes factually wrong once the key is deleted and
+  mill-go has no opt-in left at all. Reword to state that mill-start's
+  `--auto` remains its own separate mechanism, without describing the
+  now-deleted key's semantics. This is the only edit inside mill-start's
+  Auto mode section (lines 13-41) — the rest of that section (the actual
+  `--auto` behavior) stays untouched, per Scope's "Out" list.
 
 **mill-plan/SKILL.md exact sites:**
 - Line `332`, Non-progress check: today branches on
