@@ -19,6 +19,7 @@ depends-on: [3]
 
 - **Context:**
   - `plugins/mill/scripts/_nit_gate.py`
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`
 - **Creates:** none
@@ -83,7 +84,7 @@ where `<N>` is the count of dirty lines and `<file-list>` is the filenames extra
   Replace the "If `in_scope_dirt` is non-empty" paragraph (leave the intro sentence and the Python code block above it unchanged) with:
 
 ```
-If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `git -C <worktree> add <in_scope_dirt files> && git -C <worktree> commit -m "mill-go: commit in-scope work at task completion"` and push. Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
+If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "mill-go: commit in-scope work at task completion"` and push (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`). Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
 
 If it is STILL non-empty (e.g. the dirt is genuinely ambiguous — neither clearly in-scope work nor clearly discardable), halt with:
 `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.`
@@ -120,7 +121,7 @@ where `<file-list>` is the comma-separated list of blocking paths. Do NOT set `p
   Replace the "Log the removed artifacts" paragraph (leave the intro sentence and the Python code block above it unchanged) with:
 
 ```
-Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, self-resolve once: for each path in `blocking_paths`, decide whether it is in-scope work or leftover cruft by checking it against the plan's `All Files Touched` list and the batch cards' `Edits:`/`Creates:` fields — a path that matches a planned target is in-scope work: `git -C <worktree> add <path> && git -C <worktree> commit -m "mill-go: commit in-scope file <path> at task completion"` and push; a path that matches neither is cruft: remove it (`git -C <worktree> clean -f -- <path>`) and log the removal (ASCII-only) the same way as the auto-removed ephemeral artifacts above. Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
+Log the removed artifacts (ASCII-only). If `blocking_paths` is non-empty, self-resolve once: for each path in `blocking_paths`, decide whether it is in-scope work or leftover cruft by checking it against the plan's `All Files Touched` list and the batch cards' `Edits:`/`Creates:` fields — a path that matches a planned target is in-scope work: `git -C <worktree> add <path>` and commit it as part of the single audit-trail commit below; a path that matches neither is cruft: remove it (`git -C <worktree> clean -f -- <path>`) and log the removal (ASCII-only) the same way as the auto-removed ephemeral artifacts above. After classifying every path in `blocking_paths`: `_status.append_phase(status_path, "self-resolved-scope-violation", _timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: commit in-scope files at task completion"` and push (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`; the cruft removals via `git clean` are untracked-file deletions and have nothing to stage). Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
 
 If `blocking_paths` is STILL non-empty (a path could not be classified with confidence against the plan), halt with:
 `BLOCKED: out-of-scope untracked file(s): <file-list>`

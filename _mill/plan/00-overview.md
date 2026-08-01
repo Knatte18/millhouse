@@ -50,7 +50,7 @@ batches:
 
 ### Decision: unconditional-default-not-a-flag
 
-- **Decision:** Self-resolving/always-halting behavior is the *only* behavior for mill-plan and mill-go after this task — there is no flag, no config key, and no distinction between an "interactive" and an "autonomous" session for these two skills. Every edit in batches 1-4 removes an `if pipeline.autonomous_mode: true` (or equivalent) gate and keeps only the body that gate used to guard, rather than adding any new gate.
+- **Decision:** Self-resolving/always-halting behavior is the *only* behavior for mill-plan and mill-go after this task — there is no flag, no config key, and no distinction between an "interactive" and an "autonomous" session for these two skills. Every edit in batches 1-3 removes an `if pipeline.autonomous_mode: true` (or equivalent) gate and keeps only the body that gate used to guard, rather than adding any new gate. Batch 4 is the exception: its three Handoff gates never had a `pipeline.autonomous_mode` branch to begin with, so it adds genuinely new self-resolve logic instead (see Decision `self-resolve-then-escalate-on-repeat`) — it still lands on the same unconditional, flag-free end state.
 - **Rationale:** See `_mill/discussion.md` Decision `unconditional-default-not-a-flag`. `_autonomous.py` is dead code with zero callers; `pipeline.autonomous_mode` is the live mechanism being made unconditional and then deleted (batch 6).
 - **Applies to:** all batches.
 

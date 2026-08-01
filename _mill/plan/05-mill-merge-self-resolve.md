@@ -43,7 +43,8 @@ depends-on: []
 
 ### Card 11: Harden mill-merge's parent-branch resolve call site to non-interactive
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_parent_branch.py`
 - **Edits:**
   - `plugins/mill/skills/mill-merge/SKILL.md`
 - **Creates:** none
