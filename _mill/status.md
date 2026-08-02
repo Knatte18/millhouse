@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -22,4 +22,25 @@ planning  '2026-08-02T16:37:07Z'
 plan-fix-r1  '2026-08-02T16:50:00Z'
 plan-review-r2  '2026-08-02T16:59:15Z'
 planned  '2026-08-02T16:59:29Z'
+implementing  '2026-08-02T17:00:01Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-validate-line-field
+    state: pending
+  - name: status-batch-baseline-field
+    state: pending
+  - name: implementer-common-signature-diff
+    state: pending
+  - name: plan-validate-line-field-tests
+    state: pending
+  - name: verify-baseline-refactor
+    state: pending
+  - name: baseline-stage-wiring
+    state: pending
+  - name: baseline-waiver-integration-test
+    state: pending
 ```
