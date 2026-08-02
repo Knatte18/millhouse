@@ -538,6 +538,7 @@ _BATCH_ALLOWED_KEYS = {
     "review_round",
     "review_file",
     "blocked_reason",
+    "verify_baseline_failures",
 }
 _BATCH_STATES = {
     "pending",
@@ -962,7 +963,7 @@ def set_batch_field(
     status_path: Path,
     name: str,
     key: str,
-    value: str | int | None,
+    value: str | int | list[str] | None,
 ) -> None:
     """Mutate one field on one batch entry in ``## Batches``.
 
@@ -995,7 +996,7 @@ def set_batch_field(
 def set_batch_fields(
     status_path: Path,
     name: str,
-    fields: dict[str, str | int | None],
+    fields: dict[str, str | int | list[str] | None],
 ) -> None:
     """Atomically mutate multiple fields on one batch entry in ``## Batches``.
 
