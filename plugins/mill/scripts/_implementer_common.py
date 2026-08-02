@@ -687,6 +687,66 @@ def _commit_formatter_drift(project_root: Path) -> bool:
         return False
 
 
+# Fixed prefix tuple recognizing failure-marker lines across the ecosystems this
+# codebase's verify commands actually produce: Go's per-test (`--- FAIL:`) and
+# package-summary (`FAIL\t`) forms, pytest's (`FAILED `) form, and mill's own
+# run-all.py per-test (`--- FAIL `) and summary (`FAIL -- `) forms.
+_FAILURE_MARKER_PREFIXES = (
+    "--- FAIL:", "FAIL\t", "FAILED ", "--- FAIL ", "FAIL -- ",
+)
+
+
+def _extract_failure_signatures(output: str) -> list[str]:
+    """
+    Scan every line of a verify command's combined stdout+stderr for known
+    failure-marker prefixes and return all matching lines, in order.
+
+    These raw (unnormalized) lines are the failure signature set used both for
+    the human-facing truncation excerpt (capped to the caller's own [:20] slice)
+    and, once passed through _normalize_failure_signature, for baseline/finalize
+    signature-set comparison. This helper itself is deliberately uncapped -- a
+    failure past the 20th matching line must still be detectable as a signature.
+
+    Returns:
+        A list of every line in output that starts with one of the fixed
+        failure-marker prefixes, in the order they appear. Empty when output
+        has no recognized failure lines (never raises).
+    """
+    return [
+        line for line in output.splitlines()
+        if line.startswith(_FAILURE_MARKER_PREFIXES)
+    ]
+
+
+def _normalize_failure_signature(line: str) -> str:
+    """
+    Strip volatile per-run duration substrings from a failure-marker line so a
+    genuinely pre-existing failure string-matches across separate verify runs.
+
+    Applies three regex substitutions in sequence, each matching anywhere in
+    the line (not anchored to line-end), covering every duration shape this
+    codebase's verify commands are known to produce:
+      1. A parenthetical duration `(<digits>[.<digits>]s)` or `(...ms)` --
+         covers Go's `--- FAIL: TestFoo (0.00s)` and mill's own run-all.py
+         per-test shape `--- FAIL some_test (1.2s) ---` (identical parenthetical
+         shape, position-independent).
+      2. A trailing tab-separated duration field `\\t<digits>[.<digits>]s` --
+         covers Go's package-summary shape `FAIL\\tgithub.com/pkg\\t0.123s`.
+      3. An ` in <digits>[.<digits>]s` token -- covers mill's own run-all.py
+         summary shape `FAIL -- 3 of 10 in 45.6s: [...]`.
+
+    A line with no embedded duration (e.g. pytest's `FAILED tests/test_x.py::test_y`)
+    passes through unchanged, since none of the three patterns match it.
+
+    Returns:
+        The line with all matching duration substrings removed.
+    """
+    result = re.sub(r"\(\d+(\.\d+)?m?s\)", "", line)
+    result = re.sub(r"\t\d+(\.\d+)?s\b", "", result)
+    result = re.sub(r"\s+in\s+\d+(\.\d+)?s", "", result)
+    return result
+
+
 def _run_verify_gate(
     project_root: Path,
     verify_cmd: str | None,
@@ -704,8 +764,13 @@ def _run_verify_gate(
     characters, reason is an omitted-content marker (byte count of the omitted
     prefix, plus up to 20 extracted earlier-failure summary lines when any are
     found) followed by the last 2000 characters; under 2000 characters, reason
-    is the stripped output unchanged. On success (rc 0) or when verify_cmd is
-    None, returns None.
+    is the stripped output unchanged. The non-zero-exit stuck dict also carries
+    a "signatures" field: every raw (unnormalized) failure-marker line extracted
+    from the FULL, untruncated output via _extract_failure_signatures, uncapped --
+    this is the set _run_verify_gates uses for baseline/finalize subset-diff
+    comparison. The separate exception-path stuck dict below never gains this
+    field, since it has no subprocess output to extract from. On success (rc 0)
+    or when verify_cmd is None, returns None.
 
     On Windows (sys.platform == "win32"), applies an additional gate: if the output
     contains a benign cleanup-race signature and no test failures (per
@@ -729,8 +794,10 @@ def _run_verify_gate(
             plain-string verify format.
 
     Returns:
-        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on
-        non-zero return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>,
+        "signatures": <raw failure lines>} on non-zero return (unless win32 benign
+        cleanup), or None on success or when verify_cmd is None. The separate
+        exception-path stuck dict (missing binary, etc.) has no "signatures" key.
     """
     if verify_cmd is None:
         return None
@@ -780,6 +847,11 @@ def _run_verify_gate(
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
+            # Extract every raw failure-marker line from the FULL, untruncated
+            # output -- this is the signature set _run_verify_gates uses (after
+            # normalization) for baseline/finalize subset-diff comparison, distinct
+            # from the capped excerpt used below for the human-facing reason.
+            signatures = _extract_failure_signatures(output)
             # Truncation enriches the reason with an omitted-content marker plus up
             # to 20 extracted earlier-failure summary lines recovered from the
             # omitted portion (#731) -- without this, an earlier failing
@@ -789,12 +861,7 @@ def _run_verify_gate(
             if len(output_stripped) > 2000:
                 tail = output_stripped[-2000:]
                 omitted = output_stripped[:-2000]
-                fail_lines = [
-                    line for line in omitted.splitlines()
-                    if line.startswith((
-                        "--- FAIL:", "FAIL\t", "FAILED ", "--- FAIL ", "FAIL -- ",
-                    ))
-                ][:20]
+                fail_lines = _extract_failure_signatures(omitted)[:20]
                 marker = f"[... {len(omitted)} earlier chars omitted"
                 if fail_lines:
                     marker += "; earlier failures:\n" + "\n".join(fail_lines)
@@ -806,6 +873,7 @@ def _run_verify_gate(
                 "status": "stuck",
                 "stuck_type": "verify",
                 "reason": reason,
+                "signatures": signatures,
             }
     except Exception as e:
         # On any exception (e.g., missing binary), return stuck dict so caller
