@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-02T10:05:53Z'
+discussed  '2026-08-02T10:15:28Z'
 ```
