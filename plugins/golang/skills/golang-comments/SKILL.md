@@ -11,7 +11,7 @@ Guidelines for code comments and documentation in Go.
 
 ## Introduction
 
-The goal is to write code with doc comments detailed enough that a reader learning Go understands what a function does, why it exists, and how it works without reading the implementation. Inline comments explain why something is done, not what is being done mechanically.
+The goal is to write code with doc comments detailed enough that a reader understands what a function does and why it exists, without reading the implementation — not how it works internally. Inline comments explain why something is done, never what is being done; the code already shows that.
 
 ---
 
@@ -60,7 +60,8 @@ All exported functions, types, methods, variables, and constants must have a doc
 
 - Place the doc comment immediately before the declaration with no blank line between comment and code.
 - Begin the comment with the name of the symbol being documented.
-- Explain **what the symbol does** AND **why it exists** — not just a restatement of the name.
+- Explain **what the symbol does** and **why it exists** — not just a restatement of the name.
+- Do **not** narrate **how** it works internally (algorithm steps, control flow); that belongs in the implementation, not the doc comment.
 - A reader should understand the symbol's purpose from its signature and doc comment alone, without reading the implementation.
 
 **Bad example:**
@@ -176,55 +177,10 @@ func (b *Buffer) Write(p []byte) (int, error) {
 
 ---
 
-## Inline comments — narrate the reasoning
+## Inline comments
 
-Inline comments are mandatory at each distinct logical step in non-trivial functions. They explain domain reasoning and why a step is needed, not mechanical restatement.
-
-Include one bad/good example pair:
-
-**Bad example:**
-
-```go
-func ProcessOrder(order *Order) error {
-	// Loop through items
-	for _, item := range order.Items {
-		// Check if in stock
-		if !warehouse.HasStock(item.ID) {
-			// Return error
-			return fmt.Errorf("item out of stock: %d", item.ID)
-		}
-		// Decrement stock
-		warehouse.DecrementStock(item.ID, item.Qty)
-	}
-	return nil
-}
-```
-
-**Good example:**
-
-```go
-func ProcessOrder(order *Order) error {
-	// Verify all items are in stock before making any changes;
-	// if we reserve partway and fail, we must not leak partial reservations.
-	for _, item := range order.Items {
-		if !warehouse.HasStock(item.ID) {
-			return fmt.Errorf("item out of stock: %d", item.ID)
-		}
-	}
-
-	// Reserve each item. We know they all exist from the check above.
-	for _, item := range order.Items {
-		warehouse.DecrementStock(item.ID, item.Qty)
-	}
-	return nil
-}
-```
-
-Rules:
-
-- Explain **why** this step is needed and what constraint or domain rule it satisfies.
-- Do **not** overdo it — trivial operations and obvious control flow need no comment.
-- Avoid "what" comments; if the code needs one, refactor for clarity instead.
+- Use inline comments only to explain **why**, never **what**.
+- If the code needs a "what" comment, the code itself is unclear — refactor instead.
 
 ---
 
