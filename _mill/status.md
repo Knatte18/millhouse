@@ -28,5 +28,7 @@ implementing  '2026-08-02T10:16:58Z'
 ```yaml
 batches:
   - name: add-signature-lines
-    state: pending
+    state: running
+    implementer_session: 2c9ee257-5bbe-4ecc-b8b3-9426e7497f69
+    start_sha: 9af22ea3139c3d80340e58c0c94d974f2e596515
 ```
