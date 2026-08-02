@@ -153,6 +153,45 @@ def main() -> int:
                     "end-to-end"
                 )
 
+        # Case 14: matches_wait_trigger — the six widened Entry-gate
+        # phase values mill-go/SKILL.md's "Mid-execution phase-gate
+        # widening" subsection routes on.
+        widened_exact = {
+            "implementing",
+            "reviewing",
+            "fixing",
+            "self-resolved-verify-logic",
+            "holistic-approved",
+        }
+        widened_regexes = [
+            r"^approved-.*$",
+            r"^reviewing-.*-r\d+$",
+            r"^fixing-.*-r\d+$",
+            r"^holistic-reviewing$",
+        ]
+        assert matches_wait_trigger("approved-foo", widened_exact, widened_regexes)
+        assert matches_wait_trigger("reviewing-foo-r1", widened_exact, widened_regexes)
+        assert matches_wait_trigger("fixing-foo-r3", widened_exact, widened_regexes)
+        assert matches_wait_trigger("holistic-reviewing", widened_exact, widened_regexes)
+        assert matches_wait_trigger(
+            "self-resolved-verify-logic", widened_exact, widened_regexes
+        )
+        assert matches_wait_trigger("holistic-approved", widened_exact, widened_regexes)
+        print(
+            "PASS: matches_wait_trigger matches all six widened "
+            "Entry-gate phase values"
+        )
+
+        assert not matches_wait_trigger("blocked", widened_exact, widened_regexes)
+        assert not matches_wait_trigger("done", widened_exact, widened_regexes)
+        # Near-miss: no trailing "-{name}", must not full-match
+        # "^approved-.*$".
+        assert not matches_wait_trigger("approved", widened_exact, widened_regexes)
+        print(
+            "PASS: matches_wait_trigger rejects non-matching phases and the "
+            "unsuffixed 'approved' near-miss against the widened set"
+        )
+
         print("All _phase_wait unit tests passed.")
         return 0
     except AssertionError as exc:

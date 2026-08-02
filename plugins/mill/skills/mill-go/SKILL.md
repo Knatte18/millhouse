@@ -80,11 +80,56 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | phase | action |
    | --- | --- |
    | `planned` | fresh run — continue to Prepare |
-   | `implementing` / `reviewing` / `fixing` | resume (see *Resume*) |
+   | `implementing` / `reviewing` / `fixing`, or matching the widened batch-scoped set (see "### Mid-execution phase-gate widening" below) | resume or routed continuation — see subsection |
    | `blocked` | surface `blocked_reason` from status.md and halt |
    | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
+
+### Mid-execution phase-gate widening
+
+Whenever the phase-table lookup above lands on the widened
+`implementing`/`reviewing`/`fixing` row, compute the match to determine
+which of the seven branches fired:
+
+```python
+matched = _phase_wait.matches_wait_trigger(
+    phase,
+    {"implementing", "reviewing", "fixing", "self-resolved-verify-logic", "holistic-approved"},
+    [r"^approved-.*$", r"^reviewing-.*-r\d+$", r"^fixing-.*-r\d+$", r"^holistic-reviewing$"],
+)
+```
+
+`matched` is always `True` here — the table row above is defined by this
+same predicate, so this call only distinguishes which branch fired. Route
+on the current `phase` value:
+
+- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to
+  `## Resume`, unchanged from today.
+- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to
+  `## Resume`. That batch's `state` in `## Batches` genuinely is
+  `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose
+  `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches
+  it unchanged.
+- `approved-{batch_name}` — fires *between* batches: the just-finished
+  batch is `state: approved`, every other batch is either already
+  `approved` or still `pending`, so no batch entry is
+  `running`/`reviewing`/`fixing` and `## Resume`'s step 1 has nothing to
+  match. Route instead to `## Execute — sequential loop`, continuing
+  from the next `pending` batch in `order` — the same continuation the
+  normal in-flow path already takes after a batch approves. **Edge
+  case:** if the just-approved batch was the last one in `order` (zero
+  `pending` batches remain), route to `## Holistic code review` instead,
+  mirroring the normal in-flow transition from the end of the Execute
+  loop into that section.
+- `holistic-reviewing` — fires *after all* batches are `approved`,
+  entirely outside the per-batch `## Batches` state machine. Route
+  directly to `## Holistic code review`; its own step 1 crash-recovery
+  scan already handles resuming a specific round. Do not route through
+  `## Resume` at all.
+- `self-resolved-verify-logic` — this literal phase string is appended at two call sites with identical text: the per-batch Stuck escalation section's verify/logic branch, and the Holistic code review section's own verify/logic branch. So `phase` alone cannot disambiguate which occurrence fired. Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (the self-resolve step only edits plan/batch files and records an audit-trail phase; it never changes `state`, so Resume's step 1 still finds the batch). If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review`, mirroring the `holistic-reviewing` row's routing.
+- `holistic-approved` — fires immediately before "Proceed to Handoff", after all holistic-review/NIT-fix work is already complete. Route directly to `## Handoff` — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas
+  routing to `## Resume` would find no non-terminal batch to act on.
 
 ### Entry-gate wait for upstream mill-plan
 
@@ -139,7 +184,8 @@ enter the wait unconditionally; do not branch on which upstream skill
     requires no special handling: act on the first notification's
     `<event>` content; the second, event-less completion notification for
     the same `task_id` carries no further information and needs no
-    separate branch. Branch on the `<event>` content:
+    separate branch. See `plugins/mill/docs/harness-tool-contracts.md`
+    for this contract's canonical write-up. Branch on the `<event>` content:
     - **`READY`** — re-run this Entry phase gate step from its top:
       re-read `status_path` via `_status.read_full` fresh, and re-evaluate
       the whole phase table again from scratch (do not assume `planned` is
@@ -203,6 +249,8 @@ On a fresh run only (no `## Batches` section in status.md):
 For each batch in `order`:
 
 ## Agent-mode dispatch
+
+> See `plugins/mill/docs/harness-tool-contracts.md` for the confirmed `Agent` tool notification/return-shape contract this section is built on.
 
 When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
@@ -593,7 +641,7 @@ For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastru
   - **If `commits_made > 0` in the stuck JSON** (the implementer timed out after committing some work): skip re-invocation of the implementer; proceed directly to the per-batch cleanliness gate (scope violations check) then code review as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
   - **Otherwise** (no commits made, the field is absent, or the timeout happened before any commit) → self-resolve once: re-fire the implementer fresh (no `--resume`) — a first-occurrence timeout with no commits is most often a transient LLM/network hiccup, so no plan edit is needed for this attempt. If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
 - **`incomplete`** (batch provably partial — some cards committed, not all; reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`; discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` in agent mode, `millpy-implement.py <batch_name> --resume-incomplete` in subprocess/psmux mode). If the auto-resume yields `success`, continue normally. If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name} (incomplete after resume)"` and push, invoke the per-batch cleanup block, and go to *Blocked*. Never re-fire with a fresh `start_sha`.
-- `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card. Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-go: self-resolved verify/logic stuck ({batch_name})"`. Then re-fire the implementer fresh for this batch. If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+- `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card. **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text. Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-go: self-resolved verify/logic stuck ({batch_name})"`. Then re-fire the implementer fresh for this batch. If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
 
 ### Blocked
 
@@ -850,7 +898,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch). The CLI handles `holistic-fixing` phase + commit + push itself.
    - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: invoke the holistic cleanup block, then re-invoke `millpy-fix.py --scope holistic` once (fresh). If the re-fire also fails with `infrastructure`: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"`, and go to *Blocked*. The re-fire is fresh (killed session cannot be reattached).
    - `stuck_type: transient`: one-retry policy (re-invoke once) — this retry IS the one-shot self-resolve attempt. If still transient after it: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"`, and go to *Blocked*.
-   - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card. Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-go: self-resolved verify/logic stuck (holistic)"`. Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round. If the retry produces the *same* `verify`/`logic` failure: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"`, and go to *Blocked*.
+   - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card. **Regardless of whether a plan edit was made**, append a `## Prior failure` section to `00-overview.md` (placed immediately after its frontmatter, before `## Batch Index` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text, regardless of whether the reason names a specific batch, spans several, or names none at all. Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-go: self-resolved verify/logic stuck (holistic)"`. Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round. If the retry produces the *same* `verify`/`logic` failure: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"`, and go to *Blocked*.
    - On success: increment H and loop.
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
