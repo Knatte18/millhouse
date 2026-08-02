@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: mill-pipeline-skill-doc-gaps
+branch: hanf/mill-pipeline-skill-doc-gaps
+plan: null
+parent: main
+task: Self-discovered mill-go/mill-plan skill-doc and behavior gaps
+task_description: |
+  Self-discovered mill-go/mill-plan skill-doc and behavior gaps
+```
+
+## Timeline
+
+```text
+discussing  '2026-08-02T10:26:17Z'
+```
