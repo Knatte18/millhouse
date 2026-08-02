@@ -47,6 +47,12 @@ Public API:
     compute_baseline(project_root, git_root, parent_branch, module_wide_verify_cmd) -> str
         Returns "clean" or "pre-existing-failures". Raises RuntimeError /
         OSError on infrastructure failure.
+    compute_batch_baselines(commands, checkout_path, project_root) -> dict[str, list[str]]
+        Per-batch, multi-command companion to compute_baseline: takes an
+        ALREADY-CHECKED-OUT checkout_path (no checkout/teardown of its own)
+        so many commands can share one transient checkout, and returns a
+        union-of-two-runs failure-signature list per command name instead
+        of a binary "clean"/"pre-existing-failures" verdict.
 """
 from __future__ import annotations
 
@@ -58,7 +64,7 @@ from pathlib import Path
 import _junction
 import _subprocess_util
 import _worktree
-from _implementer_common import _posix_shell_run_args
+from _implementer_common import _extract_failure_signatures, _posix_shell_run_args
 
 # Fixed candidate list of gitignored dependency directories to reuse from the
 # task worktree's already-installed state. There is no existing mill-config.yaml
@@ -320,3 +326,71 @@ def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> tuple[int, str]:
         **run_kwargs,
     )
     return result.returncode, result.stdout + result.stderr
+
+
+def compute_batch_baselines(
+    commands: list[tuple[str, str, Path | None]],
+    checkout_path: Path,
+    project_root: Path,
+) -> dict[str, list[str]]:
+    """
+    Compute per-batch verify-command failure-signature baselines.
+
+    Unlike `compute_baseline`, this function performs NO checkout and NO
+    teardown of its own -- `checkout_path` must already be a live, fully
+    linked transient worktree (e.g. produced by `_checkout_parent_branch` +
+    `_link_dependency_dirs`, shared across the module-wide command and every
+    per-batch command by the caller). This lets a caller batch many verify
+    commands against one shared checkout instead of checking out once per
+    command.
+
+    For each `(name, command, cwd_override)` triple, runs `command` via
+    `_run_verify_in` TWICE unconditionally against its own effective cwd
+    (`cwd_override` if not None, else `checkout_path` directly -- mirroring
+    `_run_verify_gate`'s `cwd_override` handling). Each run's combined
+    stdout+stderr is passed through `_extract_failure_signatures`; the
+    returned signature list for that command is the union (deduplicated,
+    order-preserving by first occurrence across both runs) of both runs'
+    extracted (unnormalized) signatures.
+
+    This is a union-of-two-runs corroboration, not the module-wide
+    algorithm's binary verdict with a third task-worktree control run: a
+    flaky pre-existing failure that reproduces on only one of the two runs
+    still needs to be in the baseline (so it doesn't spuriously block a
+    later batch), and finalize's own verify-replay run against the real,
+    in-progress worktree is the natural downstream corroboration point for
+    the module-wide path's control-run role. See
+    `_mill/discussion.md`'s `gap2-baseline-corroboration` Decision.
+
+    Args:
+        commands: A list of `(name, command, cwd_override)` triples.
+            `cwd_override` is `None` (use `checkout_path` directly) or an
+            already-resolved absolute `Path` to run `command` in instead.
+        checkout_path: An already-checked-out, already-linked transient
+            worktree path. Never checked out or torn down by this function.
+        project_root: Absolute path to the task worktree root. Unused by
+            this function's own logic today, but accepted for parity with
+            `compute_baseline`'s signature and to keep the caller's call
+            sites uniform; kept for forward compatibility.
+
+    Returns:
+        A dict keyed by `name`, each value the union (deduplicated,
+        order-preserving) of both runs' extracted raw failure-signature
+        lines for that command's `command`. A command with zero failures on
+        both runs maps to `[]` (present, not an absent key). Each value is
+        an independent list object, never aliased across names.
+    """
+    del project_root  # unused today; kept for signature parity/forward compat.
+    results: dict[str, list[str]] = {}
+    for name, command, cwd_override in commands:
+        effective_cwd = cwd_override if cwd_override is not None else checkout_path
+        signatures: list[str] = []
+        seen: set[str] = set()
+        for _run_index in range(2):
+            _rc, output = _run_verify_in(command, effective_cwd)
+            for line in _extract_failure_signatures(output):
+                if line not in seen:
+                    seen.add(line)
+                    signatures.append(line)
+        results[name] = signatures
+    return results
