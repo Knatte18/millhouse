@@ -30,6 +30,8 @@ from _implementer_common import (  # noqa: E402
     _is_benign_windows_cleanup,
     _go_build_tag_retiering_stuck,
     _is_valid_commit_sha,
+    _extract_failure_signatures,
+    _normalize_failure_signature,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
@@ -4764,6 +4766,203 @@ def main() -> int:
     except Exception as exc:
         print(f"FAIL: case 70 ({exc})", file=sys.stderr)
         errors += 1
+
+    # Case 71 -- _extract_failure_signatures direct coverage.
+    try:
+        assert _extract_failure_signatures("") == [], (
+            "empty string must yield an empty list"
+        )
+        go_line = "--- FAIL: TestFoo (0.00s)"
+        go_summary_line = "FAIL\tgithub.com/pkg\t0.123s"
+        go_sample = (
+            "=== RUN TestFoo\n"
+            f"{go_line}\n"
+            "ok other stuff\n"
+            f"{go_summary_line}\n"
+        )
+        assert _extract_failure_signatures(go_sample) == [go_line, go_summary_line], (
+            "Go-style sample must yield exactly the two FAIL-marker lines, in order"
+        )
+        pytest_line = "FAILED tests/test_x.py::test_y"
+        pytest_sample = f"collecting...\n{pytest_line}\n1 failed in 0.02s\n"
+        assert _extract_failure_signatures(pytest_sample) == [pytest_line], (
+            "pytest-style sample must yield exactly the FAILED line"
+        )
+        assert _extract_failure_signatures("no markers here\njust text\n") == [], (
+            "output with no recognized markers must yield an empty list, not raise"
+        )
+        print(
+            "PASS: case 71a - _extract_failure_signatures recognizes Go, pytest,"
+            " and marker-free inputs"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 71a ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 71b -- _normalize_failure_signature direct coverage.
+    try:
+        assert _normalize_failure_signature(
+            "--- FAIL: TestFoo (0.00s)"
+        ) == _normalize_failure_signature("--- FAIL: TestFoo (1.23s)"), (
+            "Go per-test durations must normalize to the same signature"
+        )
+        assert _normalize_failure_signature(
+            "FAIL\tgithub.com/pkg\t0.123s"
+        ) == _normalize_failure_signature("FAIL\tgithub.com/pkg\t0.456s"), (
+            "Go package-summary durations must normalize to the same signature"
+        )
+        pytest_line = "FAILED tests/test_x.py::test_y"
+        assert _normalize_failure_signature(pytest_line) == pytest_line, (
+            "a line with no embedded duration must be unchanged by normalization"
+        )
+        assert _normalize_failure_signature(
+            "--- FAIL some_test (1.2s) ---"
+        ) == _normalize_failure_signature("--- FAIL some_test (3.4s) ---"), (
+            "run-all.py per-test durations must normalize to the same signature"
+        )
+        assert _normalize_failure_signature(
+            "FAIL -- 3 of 10 in 45.6s: [...]"
+        ) == _normalize_failure_signature("FAIL -- 3 of 10 in 12.0s: [...]"), (
+            "run-all.py summary durations must normalize to the same signature"
+        )
+        print(
+            "PASS: case 71b - _normalize_failure_signature strips volatile"
+            " durations from all four known shapes"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 71b ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 72 -- _run_verify_gates batch_verify_baseline subset-diff matrix.
+    # (a) replay signatures are an exact/strict subset of a non-empty baseline -> waived (None).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
+            baseline = ["--- FAIL: TestFoo (9.99s)", "--- FAIL: TestBar (1.11s)"]
+            result = _run_verify_gates(
+                project_root, verify_cmd, None, batch_verify_baseline=baseline
+            )
+            assert result is None, (
+                f"case 72a: expected waiver (None) for subset match, got {result}"
+            )
+            print(
+                "PASS: case 72a - replay signatures a subset of baseline -> waived"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (b) replay signatures contain one entry absent from baseline -> still blocks.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            baseline = ["--- FAIL: TestFoo (9.99s)"]
+            result = _run_verify_gates(
+                project_root, verify_cmd, None, batch_verify_baseline=baseline
+            )
+            assert result is not None, (
+                "case 72b: expected a stuck dict for a non-baseline signature"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72b: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72b - a replay signature absent from baseline still blocks"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (c) batch_verify_baseline=None (not yet computed) -> falls back to today's
+    # strict behavior: any batch-level verify failure blocks.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
+            result = _run_verify_gates(
+                project_root, verify_cmd, None, batch_verify_baseline=None
+            )
+            assert result is not None, (
+                "case 72c: expected strict blocking when baseline is None"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72c: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72c - batch_verify_baseline=None falls back to strict"
+                " blocking (fail-safe default)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72c ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (d) replay signatures is an EMPTY list (no recognized FAIL-marker line) while
+    # batch_verify_baseline is non-empty -> still blocks (non-vacuous-subset rule).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            # This verify command fails but its output has no recognized marker line,
+            # so _run_verify_gate's returned "signatures" list is empty.
+            verify_cmd = "echo 'a build error with no recognized marker' && exit 1"
+            baseline = ["--- FAIL: TestFoo (9.99s)"]
+            result = _run_verify_gates(
+                project_root, verify_cmd, None, batch_verify_baseline=baseline
+            )
+            assert result is not None, (
+                "case 72d: an empty replay signature set must never be waived"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72d: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72d - empty replay signature set is never eligible for"
+                " waiver, even against a non-empty baseline"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72d ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (e) the stuck dict has NO "signatures" key at all (simulating _run_verify_gate's
+    # exception path) while batch_verify_baseline is non-empty -> still blocks.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            baseline = ["--- FAIL: TestFoo (9.99s)"]
+            exception_stuck_dict = {
+                "status": "stuck",
+                "stuck_type": "verify",
+                "reason": "verify gate raised: [Errno 2] No such file or directory",
+            }
+            with unittest.mock.patch(
+                "_implementer_common._run_verify_gate",
+                return_value=exception_stuck_dict,
+            ):
+                result = _run_verify_gates(
+                    project_root,
+                    "irrelevant, mocked",
+                    None,
+                    batch_verify_baseline=baseline,
+                )
+            assert result is not None, (
+                "case 72e: a stuck dict with no 'signatures' key must never be waived"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72e: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72e - a stuck dict with no 'signatures' key (exception"
+                " path) is never eligible for waiver"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72e ({exc})", file=sys.stderr)
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
