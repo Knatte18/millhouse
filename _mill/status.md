@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-bug1-holistic-verify-subshell-wrap
+phase: approved-bug2-nested-go-module-cwd
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-08-02T10:25:33Z'
 self-resolved-verify-logic  '2026-08-02T10:30:28Z'
 blocked  '2026-08-02T10:34:58Z'
 approved-bug1-holistic-verify-subshell-wrap  '2026-08-02T10:41:54Z'
+approved-bug2-nested-go-module-cwd  '2026-08-02T10:45:10Z'
 ```
 
 ## Batches
@@ -34,7 +35,8 @@ batches:
     implementer_session: 6a27d29a-b988-4891-9269-a04d30de5df8
     start_sha: 9477980e7b8d3ba754126bf2adf431efa9dbebc6
   - name: bug2-nested-go-module-cwd
-    state: running
+    state: approved
     implementer_session: 9dbd3765-2633-47e2-ac62-965054edc079
     start_sha: 258daa3b432bec476aab9c41533ee3d43d141d54
+    commit_sha: 799daae501fc57ddf43695e2340c93a3330a9328
 ```
