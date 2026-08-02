@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-in-plan-dag-signature-docs
 branch: hanf/mill-merge-in-plan-dag-signature-docs
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-08-02T10:12:42Z'
 planning  '2026-08-02T10:14:25Z'
 plan-review-r1  '2026-08-02T10:16:27Z'
 planned  '2026-08-02T10:16:40Z'
+implementing  '2026-08-02T10:16:58Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: add-signature-lines
+    state: pending
 ```
