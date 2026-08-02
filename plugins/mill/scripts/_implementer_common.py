@@ -1448,6 +1448,7 @@ def finalize_from_output(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
+    batch_verify_baseline: list[str] | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1489,6 +1490,11 @@ def finalize_from_output(
         module_wide_cwd_override: Explicit module-wide verify cwd resolved by
             parse_verify_field. Takes precedence over git_root/project_root;
             forwarded unchanged to _forward_output.
+        batch_verify_baseline: Cached, task-scoped stored signature set for
+            this batch's own verify command, forwarded unchanged to
+            _forward_output's _run_verify_gates calls. See _run_verify_gates
+            for the subset-diff waiver rule this enables. Defaults to None
+            (run strictly, as before this parameter existed).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1529,6 +1535,7 @@ def finalize_from_output(
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
+        batch_verify_baseline=batch_verify_baseline,
     )
 
 
@@ -1583,6 +1590,7 @@ def _forward_output(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
+    batch_verify_baseline: list[str] | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1627,6 +1635,10 @@ def _forward_output(
     takes precedence over git_root/project_root for its respective gate (batch-level
     and module-wide, respectively). Both default to None, which preserves the
     git_root/project_root fallback behavior for today's plain-string verify format.
+    batch_verify_baseline is forwarded unchanged to every _run_verify_gates call site
+    below: a cached, task-scoped stored signature set for this batch's own verify
+    command, enabling the subset-diff waiver rule documented on _run_verify_gates.
+    Defaults to None (run strictly, as before this parameter existed).
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -1658,6 +1670,7 @@ def _forward_output(
                 module_verify_baseline=module_verify_baseline,
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
+                batch_verify_baseline=batch_verify_baseline,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop
@@ -1886,6 +1899,7 @@ def _forward_output(
                                         module_verify_baseline=module_verify_baseline,
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
+                                        batch_verify_baseline=batch_verify_baseline,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is
@@ -1998,6 +2012,7 @@ def _forward_output(
                         module_verify_baseline=module_verify_baseline,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        batch_verify_baseline=batch_verify_baseline,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is
@@ -2109,6 +2124,7 @@ def _forward_output(
                         module_verify_baseline=module_verify_baseline,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        batch_verify_baseline=batch_verify_baseline,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is
