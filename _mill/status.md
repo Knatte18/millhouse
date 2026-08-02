@@ -42,7 +42,9 @@ batches:
     start_sha: 494c69abad61b309d4187aa04dd0ad50a4a856c6
     commit_sha: b916282149707e5116944899355220ca8d3e20b9
   - name: implementer-common-signature-diff
-    state: pending
+    state: running
+    implementer_session: f030abb2-03f8-4dc2-95f3-7209305d8bd5
+    start_sha: 67bebceffb3a831c5f76aee6c0b981035369613e
   - name: plan-validate-line-field-tests
     state: pending
   - name: verify-baseline-refactor
