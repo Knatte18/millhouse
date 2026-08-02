@@ -190,7 +190,31 @@ A batch that legitimately touches a cross-cutting helper that every test imports
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. Any `PlanDAGError` → fix the plan files, then re-validate. Do not commit a plan that fails this check.
 
-**Self-run the validator gate** before committing: call `_plan_validate.run(plan_dir, project_root, root=_load_root_from_overview(plan_dir / "00-overview.md"), git_root=git_root, wiki_root=wiki_root, skip_checks=frozenset(), parent_branch=<_parent_branch.resolve(status_path, interactive=False), falling back to None on any exception>, max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10), max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000))` directly. This mirrors `millpy-review-plan.py`'s own step-1.5 gate exactly — same seven keyword arguments (`root`, `git_root`, `wiki_root`, `skip_checks`, `parent_branch`, `max_cards_per_batch`, `max_batch_context_tokens`); the real gate passes `skip_checks=frozenset(args.skip_checks)`, but this self-run has no CLI args to source a skip-list from, so it passes `skip_checks=frozenset()` explicitly (also `_plan_validate.run`'s own default). `git_root` and `wiki_path` are already bound at mill-plan's Entry step, so this needs no new path resolution. Fix any findings using the Step 1.5 fix table below, then re-run, before committing the plan. There is no "or invoke the standalone CLI" fallback for this self-run — call `_plan_validate.run` directly.
+**Self-run the validator gate** before committing: call `_plan_validate.run` directly. This mirrors `millpy-review-plan.py`'s own step-1.5 gate exactly — same seven keyword arguments (`root`, `git_root`, `wiki_root`, `skip_checks`, `parent_branch`, `max_cards_per_batch`, `max_batch_context_tokens`). `git_root` and `wiki_path` are already bound at mill-plan's Entry step, and `worktree_root` at Path Setup, so this needs no new path resolution. There is no "or invoke the standalone CLI" fallback for this self-run — call `_plan_validate.run` directly.
+
+```python
+from _review_common import _load_root_from_overview
+
+skip_checks = frozenset()
+```
+
+**`wiki-config-mutation` skip-check override.** If any batch's `Edits:`/`Creates:` includes `mill-config.yaml`, apply the same two-condition test as Step 1.5's `wiki-config-mutation` fix-table row before calling `_plan_validate.run`: (a) a bootstrap card is present in the plan explaining why the `mill-config.yaml` change is safe mid-flight; or (b) the modified keys are provably unused — zero grep hits across `scripts/` and `skills/` for key *removal or rename* only; a key *addition* whose consuming code ships in this same plan never satisfies (b), even with zero grep hits. If either condition holds, set `skip_checks = frozenset({"wiki-config-mutation"})` and record the justification in the plan commit message (see "Commit on the task branch" below). If neither condition holds, leave `skip_checks` as the empty frozenset from above — let the check fire and halt per the `wiki-config-mutation` fix-table row instead.
+
+```python
+errors = _plan_validate.run(
+    plan_dir,
+    worktree_root,
+    root=_load_root_from_overview(plan_dir / "00-overview.md"),
+    git_root=git_root,
+    wiki_root=wiki_path,
+    skip_checks=skip_checks,
+    parent_branch=<_parent_branch.resolve(status_path, interactive=False), falling back to None on any exception>,
+    max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
+    max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+)
+```
+
+Fix any findings using the Step 1.5 fix table below, then re-run, before committing the plan.
 
 `signature: _status.read(status_path: Path) -> dict`
 
