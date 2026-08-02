@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-common-signature-diff
+phase: approved-plan-validate-line-field-tests
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-08-02T17:00:01Z'
 approved-plan-validate-line-field  '2026-08-02T17:03:10Z'
 approved-status-batch-baseline-field  '2026-08-02T17:06:03Z'
 approved-implementer-common-signature-diff  '2026-08-02T17:12:45Z'
+approved-plan-validate-line-field-tests  '2026-08-02T17:16:06Z'
 ```
 
 ## Batches
@@ -48,9 +49,10 @@ batches:
     start_sha: 67bebceffb3a831c5f76aee6c0b981035369613e
     commit_sha: 111e6e1b220c678e4fbedd6774741113170e8b02
   - name: plan-validate-line-field-tests
-    state: running
+    state: approved
     implementer_session: 6b20b3c8-7145-4d86-bd05-0676dfde186c
     start_sha: 851ddc897cc431ad5a5bc01e8d2e8bca01c7d67f
+    commit_sha: 68ef4aac54a709580d5f0bcfb2aa23f40e3cc729
   - name: verify-baseline-refactor
     state: pending
   - name: baseline-stage-wiring
