@@ -13,9 +13,11 @@ parent: main
 the "visible, counted skips" attribution logic in prose: for each batch,
 "read its frontmatter via `_plan_dag._read_batch_frontmatter()` and
 normalize its `verify:` via `_plan_dag.parse_verify_field()`". Neither
-call has the inline `signature: ...` annotation that every other helper
-call in this file family (`mill-go/SKILL.md`, `mill-merge-in/SKILL.md`,
-`mill-finalize/SKILL.md`) carries.
+call has the inline `signature: ...` annotation that helper calls
+elsewhere in this file family (`mill-go/SKILL.md`, `mill-finalize/SKILL.md`)
+carry — `mill-merge-in/SKILL.md` itself has zero `signature:` lines
+anywhere today (confirmed by grep), so this fix imports a sibling-file
+convention rather than extending one already present locally.
 
 Per `mill:workflow`'s anti-pattern #1 ("Don't Read or Grep helper
 internals... If a helper fails, handle the exception then"), an
@@ -66,11 +68,14 @@ Handoff → `mill-finalize` → `mill-merge-in` path.
   `signature: _plan_dag._read_batch_frontmatter(batch_path: Path) -> dict`
   `signature: _plan_dag.parse_verify_field(frontmatter: dict, hub_root: Path, git_root: Path) -> tuple[str | None, Path | None]`
   ```
-- Rationale: This exactly matches the established convention for a
-  single prose sentence naming multiple helper calls — see
-  `mill-go/SKILL.md:183-186`, where step 6's sentence names three
-  `_plan_dag` calls and is followed by three consecutive `signature:`
-  lines, one per call, in call order. Consistency with the sibling file
+- Rationale: This matches the established convention for a prose
+  sentence naming multiple helper calls, and specifically follows the
+  closer structural precedent at `mill-go/SKILL.md:434-437` — standalone,
+  unindented `signature:` lines following plain prose/a code block under
+  a step, not inside a numbered-list item. (`mill-go/SKILL.md:183-186`
+  is the same convention but as a numbered-list-item continuation,
+  which is a looser structural match since mill-merge-in step 4 is a
+  plain paragraph, not a list item.) Consistency with the sibling file
   in the same skill family outweighs any local formatting preference.
 - Rejected: Rewriting the whole step-4 paragraph into a bulleted list
   (one bullet per helper, mirroring mill-go's numbered-step-with-bullets
@@ -133,9 +138,11 @@ Handoff → `mill-finalize` → `mill-merge-in` path.
     line 343)
   - `parse_verify_field(frontmatter: dict, hub_root: Path, git_root: Path) -> tuple[str | None, Path | None]`
     (source line 366)
-- Convention reference: `plugins/mill/skills/mill-go/SKILL.md:183-186`
-  — the closest precedent for "one prose sentence, multiple helper
-  calls, multiple trailing `signature:` lines".
+- Convention reference: `plugins/mill/skills/mill-go/SKILL.md:434-437`
+  — the closest structural precedent (standalone, unindented
+  `signature:` lines following plain prose, not a numbered-list-item
+  continuation). `mill-go/SKILL.md:183-186` shows the same convention
+  in list-item form.
 - No other file in the repo currently documents these two functions'
   signatures inline (confirmed: `grep -n "signature:"` against
   `mill-merge-in/SKILL.md` returns nothing before this fix).
