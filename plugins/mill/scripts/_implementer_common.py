@@ -896,6 +896,7 @@ def _run_verify_gates(
     module_verify_baseline: str | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
+    batch_verify_baseline: list[str] | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -944,6 +945,24 @@ def _run_verify_gates(
         module_wide_cwd_override: Explicit verify cwd for the module-wide gate,
             resolved by parse_verify_field. Takes precedence over
             git_root/project_root; see _run_verify_gate.
+        batch_verify_baseline: Cached, task-scoped stored signature set (RAW,
+            unnormalized failure-marker lines) for this batch's own verify
+            command, computed once against the parent branch before this task
+            started. When the batch-level gate fails, and both
+            batch_verify_baseline and the failure's own "signatures" field
+            (from _run_verify_gate's non-zero-exit stuck dict) are non-empty
+            lists, both are normalized via _normalize_failure_signature and the
+            batch is waived (treated as passed) only when the normalized replay
+            signature set is a NON-EMPTY subset of the normalized baseline set.
+            In every other case -- batch_verify_baseline absent/None/empty, or
+            the failure's "signatures" absent/None/empty (covers both an
+            unrecognized failure shape and _run_verify_gate's exception path,
+            which never sets "signatures" at all) -- the gate blocks exactly as
+            it always has, unwaived. An empty signature set is never eligible
+            for waiver: it is mathematically a subset of any set, so treating it
+            as waivable would silently mask genuine new regressions and
+            infrastructure failures alike. Defaults to None (run strictly, as
+            before this parameter existed).
 
     Returns:
         A stuck dict on the first gate that fails, or None when both pass (or are
@@ -954,7 +973,27 @@ def _run_verify_gates(
         project_root, verify_cmd, git_root=git_root, cwd_override=cwd_override
     )
     if batch_result is not None:
-        return batch_result
+        # Subset-diff waiver: a batch-level failure is waived only when the
+        # replay's own extracted signatures are a non-empty subset of the
+        # stored baseline signature set (both normalized to strip volatile
+        # per-run durations first). Any other case -- no baseline yet, or an
+        # empty/absent replay signature set -- blocks exactly as today, since
+        # an empty set is vacuously a subset of anything and must never be
+        # treated as waivable.
+        replay_signatures = batch_result.get("signatures")
+        if batch_verify_baseline and replay_signatures:
+            normalized_replay = {
+                _normalize_failure_signature(line) for line in replay_signatures
+            }
+            normalized_baseline = {
+                _normalize_failure_signature(line) for line in batch_verify_baseline
+            }
+            if normalized_replay.issubset(normalized_baseline):
+                # Waived: fall through to the module-wide gate below exactly as
+                # the batch_result is None path already does.
+                batch_result = None
+        if batch_result is not None:
+            return batch_result
 
     # Batch gate passed (or was skipped); run the module-wide gate if configured.
     if module_wide_verify_cmd is None:
