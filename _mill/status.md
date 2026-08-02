@@ -41,5 +41,7 @@ batches:
     start_sha: a2f86ccf81bed4fc8e5a0b2d0a7e452922e58189
     commit_sha: beeb2e0fabda8ff866856cdc0fb268f2f0c44d0f
   - name: harness-tool-contracts-doc
-    state: pending
+    state: running
+    implementer_session: d3551dbe-3489-41d3-900e-dd237e4952a9
+    start_sha: 3cc08acdd6f8c47d1c3d84d563514a7bdab7f77e
 ```
