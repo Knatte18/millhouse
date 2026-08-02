@@ -30,5 +30,7 @@ implementing  '2026-08-02T11:42:22Z'
 ```yaml
 batches:
   - name: deprecated-key-suppression
-    state: pending
+    state: running
+    implementer_session: 6646d9ee-bef0-4e2a-bdd7-82ec95f304de
+    start_sha: 9806261f786ad70820b09a9de45c0f8a01631c97
 ```
