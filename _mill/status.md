@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-merge-in-plan-dag-signature-docs
 branch: hanf/mill-merge-in-plan-dag-signature-docs
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-08-02T10:16:58Z'
 approved-add-signature-lines  '2026-08-02T10:18:57Z'
 holistic-reviewing  '2026-08-02T10:19:17Z'
 holistic-approved  '2026-08-02T10:20:26Z'
+done  '2026-08-02T10:20:44Z'
 ```
 
 ## Batches
