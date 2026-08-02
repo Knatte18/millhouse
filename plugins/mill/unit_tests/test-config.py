@@ -1347,6 +1347,58 @@ def test_via_psmux_does_not_trigger_unknown_key_warning() -> None:
     print("PASS dispatch shim -- via_psmux does not trigger unknown-key warning")
 
 
+def test_pipeline_autonomous_mode_does_not_trigger_unknown_key_warning() -> None:
+    """pipeline.autonomous_mode does not trigger generic unknown-key warning."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _write_yaml(
+            tmp_path / "templates" / "mill-config.yaml",
+            "spawn:\n  branch_prefix: ''\n"
+            "git:\n"
+            "  parent-branch: null\n"
+            "  require_pr_to_base: false\n"
+            "  base_branch: main\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n"
+            "pipeline:\n"
+            "  auto_merge: true\n"
+        )
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / "mill-config.yaml",
+            "pipeline:\n  autonomous_mode: false\n"
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unknown key: pipeline.autonomous_mode" not in stderr_output, (
+            f"pipeline.autonomous_mode should not trigger unknown-key warning, stderr: {stderr_output!r}"
+        )
+    print("PASS pipeline.autonomous_mode does not trigger unknown-key warning")
+
+
 def test_dispatch_shim_unknown_value_falls_back_to_subprocess() -> None:
     """Unknown dispatch value falls back to subprocess with error message."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -1554,6 +1606,7 @@ def main() -> int:
         test_dispatch_shim_via_psmux_false_resolves_to_subprocess,
         test_dispatch_shim_explicit_dispatch_wins_over_via_psmux,
         test_via_psmux_does_not_trigger_unknown_key_warning,
+        test_pipeline_autonomous_mode_does_not_trigger_unknown_key_warning,
         test_dispatch_shim_unknown_value_falls_back_to_subprocess,
         test_git_namespace_no_unknown_key_warning,
         test_git_unknown_subkey_still_warns,
