@@ -30,7 +30,9 @@ implementing  '2026-08-02T17:00:01Z'
 ```yaml
 batches:
   - name: plan-validate-line-field
-    state: pending
+    state: running
+    implementer_session: 5e870143-32fe-4249-ac08-abe54217c43c
+    start_sha: 7d7fabe6f68b982ac5b1c0c2bf4fc8e4e0c74fd9
   - name: status-batch-baseline-field
     state: pending
   - name: implementer-common-signature-diff
