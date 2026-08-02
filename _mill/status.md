@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-plan-validate-false-positives
 branch: hanf/mill-plan-validate-false-positives
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-08-02T10:56:07Z'
 implementing  '2026-08-02T10:56:26Z'
 approved-fix-plan-validate-false-positives  '2026-08-02T10:59:38Z'
 holistic-reviewing  '2026-08-02T10:59:52Z'
+holistic-approved  '2026-08-02T11:01:24Z'
 ```
 
 ## Batches
