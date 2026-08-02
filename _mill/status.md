@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-waiver-integration-test
+phase: holistic-reviewing
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -32,6 +32,7 @@ self-resolved-verify-logic  '2026-08-02T17:36:10Z'
 blocked  '2026-08-02T17:39:35Z'
 approved-baseline-stage-wiring  '2026-08-02T17:58:51Z'
 approved-baseline-waiver-integration-test  '2026-08-02T18:10:58Z'
+holistic-reviewing  '2026-08-02T18:11:37Z'
 ```
 
 ## Batches
