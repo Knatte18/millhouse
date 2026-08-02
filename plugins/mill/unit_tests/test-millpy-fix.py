@@ -159,14 +159,14 @@ class TestMillpyFix(unittest.TestCase):
                     args=argv, returncode=0, stdout="0\n", stderr=""
                 )
             return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             )
 
         self.mock_subprocess_run = _p(
             millpy_fix._subprocess_util, "run",
             side_effect=_subprocess_routing,
             return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
+                args=[], returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             ),
         )
         self.mock_uuid4 = _p(
@@ -214,15 +214,15 @@ class TestMillpyFix(unittest.TestCase):
             # Track git rev-parse calls to return different values (start_sha vs final HEAD)
             if argv[0:2] == ["git", "rev-parse"]:
                 call_count[0] += 1
-                # First call (start_sha): return "abc1234"
-                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                # First call (start_sha): return the abc1234... full SHA
+                # Second call (final HEAD check): return the def5678... full SHA to simulate a commit was made
                 if call_count[0] == 1:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                        args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
                     )
                 else:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                        args=argv, returncode=0, stdout="def5678000000000000000000000000000000000\n", stderr=""
                     )
             # All other calls use the standard mock
             return self.mock_subprocess_run.return_value
@@ -433,15 +433,15 @@ class TestMillpyFix(unittest.TestCase):
             # Track git rev-parse calls to return different values (start_sha vs final HEAD)
             if argv[0:2] == ["git", "rev-parse"]:
                 call_count[0] += 1
-                # First call (start_sha): return "abc1234"
-                # Second call (final HEAD check): return "def5678" to simulate a commit was made
+                # First call (start_sha): return the abc1234... full SHA
+                # Second call (final HEAD check): return the def5678... full SHA to simulate a commit was made
                 if call_count[0] == 1:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                        args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
                     )
                 else:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                        args=argv, returncode=0, stdout="def5678000000000000000000000000000000000\n", stderr=""
                     )
             # All other calls use the standard mock
             return self.mock_subprocess_run.return_value
@@ -1268,14 +1268,14 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                     args=argv, returncode=0, stdout="0\n", stderr=""
                 )
             return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             )
 
         self.mock_subprocess_run = _p(
             millpy_fix._subprocess_util, "run",
             side_effect=_subprocess_routing,
             return_value=subprocess.CompletedProcess(
-                args=[], returncode=0, stdout="abc1234\n", stderr=""
+                args=[], returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             ),
         )
         self.mock_uuid4 = _p(
@@ -1372,14 +1372,14 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                 call_count[0] += 1
                 if call_count[0] == 1:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                        args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
                     )
                 else:
                     return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678\n", stderr=""
+                        args=argv, returncode=0, stdout="def5678000000000000000000000000000000000\n", stderr=""
                     )
             return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             )
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
@@ -1431,10 +1431,10 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         def mock_subprocess_run(argv, **kwargs):
             if argv[0:2] == ["git", "rev-parse"]:
                 return subprocess.CompletedProcess(
-                    args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                    args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
                 )
             return subprocess.CompletedProcess(
-                args=argv, returncode=0, stdout="abc1234\n", stderr=""
+                args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
             )
 
         def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
