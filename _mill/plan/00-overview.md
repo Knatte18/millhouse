@@ -73,7 +73,7 @@ batches:
 
 ### Decision: one shared parent-branch checkout for module-wide and every per-batch verify command
 
-- **Decision:** `--stage baseline` performs exactly one transient parent-branch checkout per invocation, used for both the module-wide command (when configured) and every per-batch command needing computation. Dependency-junction linking happens once per distinct effective cwd fragment actually present (at most two: git_root-anchored, hub-anchored).
+- **Decision:** `--stage baseline` performs exactly one transient parent-branch checkout per invocation whenever the module-wide command AND at least one per-batch command both need computing this invocation — the module-wide command is computed via `_run_module_wide_verify_algorithm` directly against that shared checkout, bypassing `compute_baseline` entirely (which would re-checkout). When only per-batch commands need computing (module-wide is unconfigured or already cached), the shared checkout still covers all of them. When only the module-wide command needs computing (no per-batch work this invocation), the existing standalone `compute_baseline` path runs unchanged — there is nothing to share a checkout with. Dependency-junction linking happens once per distinct effective cwd fragment actually present (at most two: git_root-anchored, hub-anchored).
 - **Rationale:** Checkout + junction setup is the expensive part of the mechanism; batching avoids N+1 checkouts. See `_mill/discussion.md`'s `gap2-shared-transient-checkout` and `gap2-checkout-teardown-extraction` Decisions.
 - **Applies to:** batches 5, 6.
 
