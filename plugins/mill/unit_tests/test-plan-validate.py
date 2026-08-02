@@ -1665,6 +1665,9 @@ def test_check_context_completeness_dirty_missing() -> int:
             assert e["check"] == "context-completeness", f"wrong check: {e['check']!r}"
             assert e["card"] == 1, f"wrong card: {e['card']!r}"
             assert e["path"] == "src/helper.py", f"wrong path: {e['path']!r}"
+            assert e["line"] == "See `src/helper.py` for the pattern to follow.", (
+                f"wrong line: {e['line']!r}"
+            )
             print("PASS test_check_context_completeness_dirty_missing")
             return 0
         except AssertionError as exc:
@@ -2141,6 +2144,63 @@ def test_check_context_completeness_clean_double_slash_token() -> int:
         except AssertionError as exc:
             print(
                 f"FAIL test_check_context_completeness_clean_double_slash_token: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_odd_backtick_count_line_field() -> int:
+    """Odd backtick count on one Requirements: line mis-pairs `findall` -> the
+    span between a stray, incompletely-closed backtick and the next backtick
+    (never meant to delimit a path reference) is captured as a token instead.
+    Reproduces the actual false-positive mechanism from discussion.md's Gap 1
+    Problem section: the line intends two independent references,
+    `src/a.py` (correct, and present in this card's own Edits:) and
+    `src/b.py` (correct, but never captured at all because its own opening
+    backtick gets consumed as the CLOSING backtick of the stray, unrelated
+    one before it) -- but a stray backtick left after "config" (as if from
+    an incompletely-closed inline-code span) makes `findall`'s greedy
+    left-to-right pairing group the text between that stray backtick and
+    `src/b.py`'s opening backtick -- which is exactly `src/other.py` -- as
+    its own mis-paired token. `src/other.py` is path-shaped (ends in .py),
+    exists on disk, and is absent from this card's own refs, so exactly one
+    context-completeness error should be raised, and its line field must
+    name this single malformed line verbatim (stripped), not any other."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        malformed_line = (
+            "  See `src/a.py` for pattern, per config`src/other.py`src/b.py` too.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=malformed_line,
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "src/other.py", f"wrong path: {e['path']!r}"
+            assert e["line"] == malformed_line.strip(), f"wrong line: {e['line']!r}"
+            print("PASS test_check_context_completeness_dirty_odd_backtick_count_line_field")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_odd_backtick_count_line_field: "
+                f"{exc}",
                 file=sys.stderr,
             )
             return 1
@@ -5583,6 +5643,7 @@ def main() -> int:
         test_check_context_completeness_clean_directory_reference,
         test_check_context_completeness_clean_directory_reference_not_on_disk,
         test_check_context_completeness_clean_double_slash_token,
+        test_check_context_completeness_dirty_odd_backtick_count_line_field,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
