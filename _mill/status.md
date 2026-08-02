@@ -29,7 +29,9 @@ implementing  '2026-08-02T11:40:54Z'
 ```yaml
 batches:
   - name: mill-plan-self-validate-fixes
-    state: pending
+    state: running
+    implementer_session: 7301ebf6-a340-479c-bbb8-1a50002ec19e
+    start_sha: 5a36c5adf859648b8cd13f22e54bec5461268c8b
   - name: mill-go-behavior-gaps
     state: pending
   - name: harness-tool-contracts-doc
