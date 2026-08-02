@@ -383,6 +383,37 @@ def main() -> int:
             )
             print("PASS: _serialise_batches leaves int review_round unquoted")
 
+            failures = ["--- FAIL: TestFoo", "FAILED tests/test_x.py::test_y"]
+            set_batch_field(sp, "foundation", "verify_baseline_failures", failures)
+            batches_list = read_batches(sp)
+            entry_list = next(b for b in batches_list if b["name"] == "foundation")
+            assert entry_list["verify_baseline_failures"] == failures, (
+                f"verify_baseline_failures not round-tripped: {entry_list['verify_baseline_failures']!r}"
+            )
+            # Setting a list-valued field must not disturb other fields already
+            # set on the same entry earlier in this test.
+            assert entry_list["state"] == "running", (
+                f"unrelated field 'state' corrupted by list-valued write: {entry_list['state']!r}"
+            )
+            assert entry_list["blocked_reason"] == "missing key: foo", (
+                f"unrelated field 'blocked_reason' corrupted by list-valued write: "
+                f"{entry_list['blocked_reason']!r}"
+            )
+            print("PASS: set_batch_field round-trips verify_baseline_failures without corrupting siblings")
+
+            set_batch_field(sp, "foundation", "verify_baseline_failures", [])
+            batches_empty = read_batches(sp)
+            entry_empty = next(b for b in batches_empty if b["name"] == "foundation")
+            assert entry_empty["verify_baseline_failures"] == [], (
+                "empty verify_baseline_failures list should round-trip as [] (clean baseline), "
+                f"not be dropped: {entry_empty!r}"
+            )
+            assert "verify_baseline_failures" in entry_empty, (
+                "empty verify_baseline_failures must remain present, distinguishing "
+                "'clean baseline' from 'field never computed'"
+            )
+            print("PASS: set_batch_field round-trips empty verify_baseline_failures list, not dropped")
+
         # --- read_status tests ---
         ts = "2026-04-22T14:32:05Z"
 
