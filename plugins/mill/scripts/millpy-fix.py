@@ -86,8 +86,11 @@ def _resolve_holistic_verify(
 
     Returns:
         `(joined_command, cwd_override)`. `joined_command` is every batch's
-        command joined with `" && "`, in the same order as `batch_verifies`.
-        `cwd_override` is the single distinct `cwd` shared by every batch that
+        command, each individually wrapped in its own subshell (`(command)`)
+        so a `cd` or other cwd/env-mutating construct in one batch's command
+        can never leak into the next, joined with `" && "` in the same order
+        as `batch_verifies`. `cwd_override` is the single distinct `cwd`
+        shared by every batch that
         specified one, or `None` when every batch's cwd was `None` (i.e. every
         contributing batch used the plain-string `verify:` form).
 
@@ -113,7 +116,7 @@ def _resolve_holistic_verify(
             f"batches, but found mixed cwd values: {conflicts}"
         )
 
-    joined_command = " && ".join(command for _, command, _ in batch_verifies)
+    joined_command = " && ".join(f"({command})" for _, command, _ in batch_verifies)
     # A single distinct cwd if any batch specified one, otherwise None (every
     # batch used the plain-string verify form with no cwd opinion).
     cwd_override = next(iter(cwd_to_batch_name), None)
