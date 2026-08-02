@@ -1,8 +1,7 @@
 # Status
 
 ```yaml
-phase: blocked
-blocked_reason: 'auto: discussion review gaps unresolved after 9 rounds'
+phase: discussing
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: null
@@ -17,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-02T14:55:52Z'
 blocked  '2026-08-02T15:58:28Z'
+discussing  '2026-08-02T16:13:41Z'
 ```
