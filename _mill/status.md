@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-pipeline-skill-doc-gaps
 branch: hanf/mill-pipeline-skill-doc-gaps
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-08-02T11:34:00Z'
 plan-review-r1  '2026-08-02T11:39:34Z'
 plan-fix-r1  '2026-08-02T11:40:01Z'
 planned  '2026-08-02T11:40:35Z'
+implementing  '2026-08-02T11:40:54Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-plan-self-validate-fixes
+    state: pending
+  - name: mill-go-behavior-gaps
+    state: pending
+  - name: harness-tool-contracts-doc
+    state: pending
 ```
