@@ -34,5 +34,7 @@ batches:
     implementer_session: 6a27d29a-b988-4891-9269-a04d30de5df8
     start_sha: 9477980e7b8d3ba754126bf2adf431efa9dbebc6
   - name: bug2-nested-go-module-cwd
-    state: pending
+    state: running
+    implementer_session: 9dbd3765-2633-47e2-ac62-965054edc079
+    start_sha: 258daa3b432bec476aab9c41533ee3d43d141d54
 ```
