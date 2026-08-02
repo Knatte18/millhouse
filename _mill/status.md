@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-validate-line-field
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-08-02T16:50:00Z'
 plan-review-r2  '2026-08-02T16:59:15Z'
 planned  '2026-08-02T16:59:29Z'
 implementing  '2026-08-02T17:00:01Z'
+approved-plan-validate-line-field  '2026-08-02T17:03:10Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-08-02T17:00:01Z'
 ```yaml
 batches:
   - name: plan-validate-line-field
-    state: running
+    state: approved
     implementer_session: 5e870143-32fe-4249-ac08-abe54217c43c
     start_sha: 7d7fabe6f68b982ac5b1c0c2bf4fc8e4e0c74fd9
+    commit_sha: f523c3ccea7230d7ebf6b43096a753ce7e64f02e
   - name: status-batch-baseline-field
     state: pending
   - name: implementer-common-signature-diff
