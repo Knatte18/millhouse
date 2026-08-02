@@ -143,12 +143,16 @@ quote drift) remain caught.
     different symptom (list-continuation indentation *within* the
     quoted content, already covered by the existing `N`-search itself
     and by `test_check_requirements_quote_indent_drift_dirty_list_continuation_indent`).
-  - The regex `\n[ \t]*\Z` is guaranteed to match at the end of every
-    `fence_body` the current extraction produces, because the body
-    always ends with `(last real content)\n(closing-fence's own
-    leading whitespace, possibly empty)` — there is no case where this
-    substitution is a no-op that accidentally deletes real trailing
-    content, since the closing fence delimiter itself is never part of
+  - The regex `\n[ \t]*\Z` matches at the end of `fence_body` whenever
+    the closing fence delimiter is on its own line — the conventional
+    markdown form, and the only form either #754 or #761 hits — because
+    the body then always ends with `(last real content)\n(closing-fence's
+    own leading whitespace, possibly empty)`. In the unconventional case
+    where the closer immediately follows content with no intervening
+    newline (e.g. `` ```\nfoo``` ``), the substitution is a no-op rather
+    than a match; that's still safe (it never deletes real trailing
+    content), it just means the normalization has nothing to strip
+    there, since the closing fence delimiter itself is never part of
     the captured group.
 - Rejected:
   - Two independent special-cases (one for single-line bodies, one

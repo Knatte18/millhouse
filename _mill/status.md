@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-plan-validate-false-positives
 branch: hanf/mill-plan-validate-false-positives
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-02T10:26:08Z'
+discussion-fix-r1  '2026-08-02T10:35:44Z'
+discussed  '2026-08-02T10:35:44Z'
 ```
