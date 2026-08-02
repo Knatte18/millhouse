@@ -36,7 +36,9 @@ batches:
     start_sha: 7d7fabe6f68b982ac5b1c0c2bf4fc8e4e0c74fd9
     commit_sha: f523c3ccea7230d7ebf6b43096a753ce7e64f02e
   - name: status-batch-baseline-field
-    state: pending
+    state: running
+    implementer_session: a9bbcdbe-3bf5-4955-b9f8-abc5086903e1
+    start_sha: 494c69abad61b309d4187aa04dd0ad50a4a856c6
   - name: implementer-common-signature-diff
     state: pending
   - name: plan-validate-line-field-tests
