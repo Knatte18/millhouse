@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: self-resolved-verify-logic
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-08-02T10:21:02Z'
 plan-fix-r1  '2026-08-02T10:25:02Z'
 planned  '2026-08-02T10:25:13Z'
 implementing  '2026-08-02T10:25:33Z'
+self-resolved-verify-logic  '2026-08-02T10:30:28Z'
 ```
 
 ## Batches
