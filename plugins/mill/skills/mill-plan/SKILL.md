@@ -88,7 +88,8 @@ run this procedure instead of jumping straight to its listed action:
     requires no special handling: act on the first notification's
     `<event>` content; the second, event-less completion notification for
     the same `task_id` carries no further information and needs no
-    separate branch. Branch on the `<event>` content:
+    separate branch. See `plugins/mill/docs/harness-tool-contracts.md`
+    for this contract's canonical write-up. Branch on the `<event>` content:
     - **`READY`** — re-run Entry step 4 from its top: re-read
       `status_path` fresh and re-evaluate the whole entry-branch table
       again from scratch (do not assume `discussed` is now the phase and
