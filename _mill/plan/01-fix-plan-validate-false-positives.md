@@ -250,8 +250,9 @@ def test_check_context_completeness_clean_directory_reference_not_on_disk() -> i
 
   Insert the remaining two functions directly after
   `test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break`
-  and before the `# skip_checks filtering (Card 7 / #188)` section
-  comment:
+  (the next function definition after that one is
+  `test_skip_checks_filters_wiki_config_mutation`, with no comment line
+  between them):
 
 ```python
 def test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer() -> int:

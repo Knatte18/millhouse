@@ -3,7 +3,7 @@
 ```yaml
 task: _plan_validate false positives block plan authoring
 slug: mill-plan-validate-false-positives
-approved: false
+approved: true
 started: '2026-08-02T10:42:16Z'
 parent: main
 root: ""
