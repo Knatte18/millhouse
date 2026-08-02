@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-config-autonomous-mode-unknown-key
 branch: hanf/mill-config-autonomous-mode-unknown-key
-plan: null
+plan: _mill/plan
 parent: main
 task: pipeline.autonomous_mode warns as unknown config key on every mill invocation
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-02T11:23:29Z'
 discussion-fix-r1  '2026-08-02T11:30:52Z'
 discussed  '2026-08-02T11:30:52Z'
+planning  '2026-08-02T11:35:31Z'
 ```
