@@ -3,7 +3,7 @@
 ```yaml
 task: Self-discovered mill-go/mill-plan skill-doc and behavior gaps
 slug: mill-pipeline-skill-doc-gaps
-approved: false
+approved: true
 started: 20260802-112647
 parent: main
 root: ""

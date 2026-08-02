@@ -11,7 +11,7 @@ depends-on: []
 
 ## Batch Scope
 
-Fixes two independent behavior gaps in `plugins/mill/skills/mill-go/SKILL.md` (closes #757 and #758), plus the test coverage #757 calls for in `plugins/mill/unit_tests/test-phase-wait.py`. Both gaps live in the same file — the Entry step 5 phase-gate table doesn't recognize batch-scoped `phase:` values as resumable (#757), and the `verify`/`logic` stuck-escalation self-resolve step only conditionally records its failure reason before re-firing (#758) — so they are grouped into one batch to avoid a same-file `parallel-modifies-overlap` finding between two otherwise-independent batches. Card 3 (#758) touches a different section of the file than Cards 1-2 (#757), so there is no overlap risk within the batch itself.
+Fixes two independent behavior gaps in `plugins/mill/skills/mill-go/SKILL.md` (closes #757 and #758), plus the test coverage #757 calls for in `plugins/mill/unit_tests/test-phase-wait.py`. Both gaps live in the same file — the Entry step 5 phase-gate table doesn't recognize batch-scoped `phase:` values as resumable (#757), and the `verify`/`logic` stuck-escalation self-resolve step only conditionally records its failure reason before re-firing (#758) — so they are grouped into one batch to avoid a same-file `parallel-modifies-overlap` finding between two otherwise-independent batches. Card 4 (#758) touches a different section of the file than Cards 2-3 (#757), so there is no overlap risk within the batch itself.
 
 ## Cards
 
