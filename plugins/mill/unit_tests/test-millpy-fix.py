@@ -999,7 +999,8 @@ class TestMillpyFix(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         # Only batch2's ("approved") command survives -- batch1 ("pending") is filtered.
-        self.assertEqual(captured_kwargs.get("verify_cmd"), "exit 0")
+        # A single contributing batch is still wrapped in its own subshell.
+        self.assertEqual(captured_kwargs.get("verify_cmd"), "(exit 0)")
         self.assertIn(
             "[millpy-fix] skipped batch1: batch not approved",
             stderr_buf.getvalue(),
@@ -1962,7 +1963,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             ])
 
         self.assertEqual(rc, 0)
-        self.assertEqual(captured_kwargs.get("verify_cmd"), "exit 0 && exit 0")
+        self.assertEqual(captured_kwargs.get("verify_cmd"), "(exit 0) && (exit 0)")
         self.assertEqual(captured_kwargs.get("cwd_override"), nested_hub)
 
     def test_holistic_scope_mixed_cwd_raises_value_error_naming_batches(self):
@@ -2040,6 +2041,28 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         message = str(ctx.exception)
         self.assertIn("batch1", message)
         self.assertIn("batch2", message)
+
+    def test_resolve_holistic_verify_wraps_each_command_in_own_subshell(self):
+        """Each contributing batch's command is wrapped in its own subshell before joining (bug1)."""
+        joined_command, cwd_override = millpy_fix._resolve_holistic_verify([
+            ("batch-a", "cd plugins/prowler && go test ./...", None),
+            ("batch-b", "bash plugins/prowler/scripts/selftest.sh", None),
+        ])
+
+        self.assertEqual(
+            joined_command,
+            "(cd plugins/prowler && go test ./...) && (bash plugins/prowler/scripts/selftest.sh)",
+        )
+        self.assertIsNone(cwd_override)
+
+    def test_resolve_holistic_verify_single_batch_still_wrapped(self):
+        """A single contributing batch is still wrapped in parens, with no bare `&&` needed (bug1)."""
+        joined_command, cwd_override = millpy_fix._resolve_holistic_verify([
+            ("batch-a", "echo hi", None),
+        ])
+
+        self.assertEqual(joined_command, "(echo hi)")
+        self.assertIsNone(cwd_override)
 
     def test_finalize_stage_batch_not_found_cwd_override_stays_none(self):
         """Finalize stage regression: batch_entry is None keeps cwd_override at pre-initialized None, not a NameError (Card 19)."""
