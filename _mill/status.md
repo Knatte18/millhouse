@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verify-baseline-refactor
+phase: self-resolved-verify-logic
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-status-batch-baseline-field  '2026-08-02T17:06:03Z'
 approved-implementer-common-signature-diff  '2026-08-02T17:12:45Z'
 approved-plan-validate-line-field-tests  '2026-08-02T17:16:06Z'
 approved-verify-baseline-refactor  '2026-08-02T17:22:42Z'
+self-resolved-verify-logic  '2026-08-02T17:36:10Z'
 ```
 
 ## Batches
