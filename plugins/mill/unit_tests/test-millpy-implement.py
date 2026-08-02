@@ -205,7 +205,8 @@ class TestMillpyImplement(unittest.TestCase):
         def routing_fn(argv, **kw):
             if argv[1] == "rev-parse":
                 rev_parse_calls.append(1)
-                sha = "start000" if len(rev_parse_calls) == 1 else "end11111"
+                # Full 40-char hex SHAs: _is_valid_commit_sha rejects short/non-hex values.
+                sha = "0" * 40 if len(rev_parse_calls) == 1 else "1" * 40
                 return subprocess.CompletedProcess(args=argv, returncode=0, stdout=sha + "\n", stderr="")
             return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
 
@@ -588,6 +589,12 @@ class TestMillpyImplement(unittest.TestCase):
         agent_output_path.write_text(
             '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
             encoding="utf-8"
+        )
+
+        # _forward_output re-derives commit_sha via `git rev-parse HEAD` and validates
+        # it (_is_valid_commit_sha); the setUp default ("abc1234") is too short/non-hex.
+        self.mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="a" * 40 + "\n", stderr=""
         )
 
         with unittest.mock.patch.object(
@@ -1866,9 +1873,10 @@ class TestMillpyImplement(unittest.TestCase):
 
         def routing_fn(argv, **kw):
             # rev-parse HEAD: return a SHA different from start_sha so no-content guard passes.
+            # Full 40-char hex: _is_valid_commit_sha rejects the short "end_sha" placeholder.
             if len(argv) >= 2 and argv[1] == "rev-parse":
                 return subprocess.CompletedProcess(
-                    args=argv, returncode=0, stdout="end_sha\n", stderr=""
+                    args=argv, returncode=0, stdout=("e" * 40) + "\n", stderr=""
                 )
             # rev-list --count: return 2 (1 housekeeping + 1 content commit).
             if "rev-list" in argv and "--count" in argv:
@@ -2165,7 +2173,7 @@ class TestForwardOutput(unittest.TestCase):
         buf = io.StringIO()
         with unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
-            return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
+            return_value=unittest.mock.MagicMock(returncode=0, stdout="a" * 40 + "\n"),
         ):
             with unittest.mock.patch.object(
                 _implementer_common._cleanliness, "compute_scope_violations",
@@ -2176,35 +2184,43 @@ class TestForwardOutput(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
-        """Bare JSON with status key on last line -> printed verbatim, exit 0."""
+        """Bare JSON with status key on last line -> printed verbatim (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         rc, out = self._call(f"some preamble\n{json_str}")
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_2_json_in_fence(self):
-        """JSON inside ```json fence -> extracted and printed, exit 0."""
+        """JSON inside ```json fence -> extracted and printed (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```"
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_3_json_in_fence_trailing_blank_lines(self):
-        """JSON in fence with trailing blank lines -> extracted correctly, exit 0."""
+        """JSON in fence with trailing blank lines -> extracted correctly (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```\n\n\n"
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_4_multiple_json_lines_last_wins(self):
-        """Multiple lines with status JSON -> last one printed."""
+        """Multiple lines with status JSON -> last one printed (commit_sha corrected)."""
         first = '{"status":"stuck","stuck_type":"verify","reason":"oops"}'
         last = '{"status":"success","commit_sha":"def"}'
         rc, out = self._call(f"{first}\n{last}")
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(last))
+        expected = json.loads(last)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_5_no_json_anywhere(self):
         """No JSON-like pattern in output -> stuck/logic sentinel printed, exit 0."""
@@ -2216,12 +2232,14 @@ class TestForwardOutput(unittest.TestCase):
         self.assertIn("no structured report", data["reason"])
 
     def test_fo_6_malformed_json_last_valid_earlier(self):
-        """Unclosed brace last (regex miss) + valid JSON earlier -> earlier valid one printed."""
+        """Unclosed brace last (regex miss) + valid JSON earlier -> earlier valid one printed (commit_sha corrected)."""
         valid = '{"status":"success","commit_sha":"x"}'
         output = f'{valid}\n{{"status":"broken"'
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(valid))
+        expected = json.loads(valid)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_7_sha_normalized(self):
         """git rev-parse success -> commit_sha in output replaced with HEAD sha."""
@@ -2244,7 +2262,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], sha)
 
     def test_fo_8_sha_git_failure(self):
-        """git rev-parse failure -> original commit_sha preserved in output."""
+        """git rev-parse failure -> fails safe with stuck/logic, never passes an unvalidated self-reported commit_sha (#744)."""
         buf = io.StringIO()
         with unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
@@ -2260,7 +2278,10 @@ class TestForwardOutput(unittest.TestCase):
                         Path("/fake"),
                     )
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], "abc1234")
+        data = json.loads(buf.getvalue().strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "logic")
+        self.assertNotIn("commit_sha", data)
 
 
 class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
