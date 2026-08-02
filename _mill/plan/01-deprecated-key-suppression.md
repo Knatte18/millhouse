@@ -61,14 +61,46 @@ deprecated_keys = {"llm.claude.psmux.via_psmux"}
 - **Requirements:** Add a new test function
   `test_pipeline_autonomous_mode_does_not_trigger_unknown_key_warning()`
   immediately after `test_via_psmux_does_not_trigger_unknown_key_warning`
-  (currently ends at line 1347 with its `print(...)` call), following
-  that function's exact structure line-for-line:
+  (currently ends at line 1347 with its `print(...)` call). It does NOT
+  call the shared `_setup_plugin_template` helper (that helper's synthetic
+  template has no top-level `pipeline:` key, so `walk_unknown_keys` would
+  flag the whole `"pipeline"` path as unknown at the top level rather than
+  recursing to produce `"pipeline.autonomous_mode"` — the assertion would
+  pass vacuously regardless of whether `deprecated_keys` contains the new
+  entry). Instead it writes its own dedicated template inline, identical
+  to `_setup_plugin_template`'s content plus a `pipeline:` section so the
+  recursion actually reaches the nested key:
   ```
   def test_pipeline_autonomous_mode_does_not_trigger_unknown_key_warning() -> None:
       """pipeline.autonomous_mode does not trigger generic unknown-key warning."""
       with tempfile.TemporaryDirectory() as tmp:
           tmp_path = Path(tmp)
-          _setup_plugin_template(tmp_path)
+          _write_yaml(
+              tmp_path / "templates" / "mill-config.yaml",
+              "spawn:\n  branch_prefix: ''\n"
+              "git:\n"
+              "  parent-branch: null\n"
+              "  require_pr_to_base: false\n"
+              "  base_branch: main\n"
+              "roles:\n"
+              "  discussion-review:\n"
+              "    holistic:\n"
+              "      reviewer: sonnetmax\n"
+              "  plan-review:\n"
+              "    holistic:\n"
+              "      reviewer: sonnetmax\n"
+              "    batch:\n"
+              "      reviewer: sonnetmedium\n"
+              "  code-review:\n"
+              "    holistic:\n"
+              "      reviewer: sonnetmedium\n"
+              "    batch:\n"
+              "      reviewer: sonnetmedium\n"
+              "  implementer:\n"
+              "    model: sonnethigh\n"
+              "pipeline:\n"
+              "  auto_merge: true\n"
+          )
           wt_root = tmp_path / "hub"
           _git_init(wt_root)
           _write_yaml(
@@ -94,10 +126,10 @@ deprecated_keys = {"llm.claude.psmux.via_psmux"}
   (around line 1556) immediately after the
   `test_via_psmux_does_not_trigger_unknown_key_warning,` entry, adding:
   `test_pipeline_autonomous_mode_does_not_trigger_unknown_key_warning,`
-  All helpers used (`tempfile`, `Path`, `_setup_plugin_template`,
-  `_git_init`, `_write_yaml`, `_paths`, `_config`, `io`, `patch`) are
-  already imported/defined in `test-config.py` for the existing
-  `via_psmux` test — no new imports needed.
+  All helpers used (`tempfile`, `Path`, `_git_init`, `_write_yaml`,
+  `_paths`, `_config`, `io`, `patch`) are already imported/defined in
+  `test-config.py` for existing tests — no new imports needed, and
+  `_setup_plugin_template` is not called by this test.
 - **Commit:** `test(config): assert pipeline.autonomous_mode suppresses unknown-key warning`
 
 ## Batch Tests
