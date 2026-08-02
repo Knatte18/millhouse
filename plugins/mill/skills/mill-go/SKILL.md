@@ -80,11 +80,56 @@ You are the **Builder** — a lean orchestrator. You coordinate per-batch implem
    | phase | action |
    | --- | --- |
    | `planned` | fresh run — continue to Prepare |
-   | `implementing` / `reviewing` / `fixing` | resume (see *Resume*) |
+   | `implementing` / `reviewing` / `fixing`, or matching the widened batch-scoped set (see "### Mid-execution phase-gate widening" below) | resume or routed continuation — see subsection |
    | `blocked` | surface `blocked_reason` from status.md and halt |
    | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
+
+### Mid-execution phase-gate widening
+
+Whenever the phase-table lookup above lands on the widened
+`implementing`/`reviewing`/`fixing` row, compute the match to determine
+which of the seven branches fired:
+
+```python
+matched = _phase_wait.matches_wait_trigger(
+    phase,
+    {"implementing", "reviewing", "fixing", "self-resolved-verify-logic", "holistic-approved"},
+    [r"^approved-.*$", r"^reviewing-.*-r\d+$", r"^fixing-.*-r\d+$", r"^holistic-reviewing$"],
+)
+```
+
+`matched` is always `True` here — the table row above is defined by this
+same predicate, so this call only distinguishes which branch fired. Route
+on the current `phase` value:
+
+- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to
+  `## Resume`, unchanged from today.
+- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to
+  `## Resume`. That batch's `state` in `## Batches` genuinely is
+  `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose
+  `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches
+  it unchanged.
+- `approved-{batch_name}` — fires *between* batches: the just-finished
+  batch is `state: approved`, every other batch is either already
+  `approved` or still `pending`, so no batch entry is
+  `running`/`reviewing`/`fixing` and `## Resume`'s step 1 has nothing to
+  match. Route instead to `## Execute — sequential loop`, continuing
+  from the next `pending` batch in `order` — the same continuation the
+  normal in-flow path already takes after a batch approves. **Edge
+  case:** if the just-approved batch was the last one in `order` (zero
+  `pending` batches remain), route to `## Holistic code review` instead,
+  mirroring the normal in-flow transition from the end of the Execute
+  loop into that section.
+- `holistic-reviewing` — fires *after all* batches are `approved`,
+  entirely outside the per-batch `## Batches` state machine. Route
+  directly to `## Holistic code review`; its own step 1 crash-recovery
+  scan already handles resuming a specific round. Do not route through
+  `## Resume` at all.
+- `self-resolved-verify-logic` — this literal phase string is appended at two call sites with identical text: the per-batch Stuck escalation section's verify/logic branch, and the Holistic code review section's own verify/logic branch. So `phase` alone cannot disambiguate which occurrence fired. Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (the self-resolve step only edits plan/batch files and records an audit-trail phase; it never changes `state`, so Resume's step 1 still finds the batch). If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review`, mirroring the `holistic-reviewing` row's routing.
+- `holistic-approved` — fires immediately before "Proceed to Handoff", after all holistic-review/NIT-fix work is already complete. Route directly to `## Handoff` — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas
+  routing to `## Resume` would find no non-terminal batch to act on.
 
 ### Entry-gate wait for upstream mill-plan
 
