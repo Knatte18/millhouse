@@ -3,7 +3,7 @@
 ```yaml
 task: Improve diagnosability of plan-validate errors and finalize verify-replay failures
 slug: mill-validate-verify-diagnostics-gaps
-approved: false
+approved: true
 started: '2026-08-02T16:31:04Z'
 parent: main
 root: ""
