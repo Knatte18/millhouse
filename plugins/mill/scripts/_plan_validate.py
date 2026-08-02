@@ -1556,8 +1556,9 @@ def _check_context_completeness(
                         [stripped_token], project_root, root,
                         wiki_root=wiki_root, git_root=git_root,
                     )
+                    existing_files = [p for p in existing if p.is_file()]
                     resolvable = (
-                        bool(existing)
+                        bool(existing_files)
                         or stripped_token in creates_union
                         or stripped_token in deletes_union
                         or stripped_token in moves_targets
@@ -1788,6 +1789,7 @@ def _check_requirements_quote_indent_drift(
                 continue
 
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
+                fence_body = re.sub(r"\n[ \t]*\Z", "", fence_body)
                 # Already byte-exact -- nothing to flag. This also correctly
                 # no-ops for a fence with zero leading whitespace, since
                 # every N >= 1 strip on such a fence is a no-op that reduces

@@ -50,22 +50,26 @@ def _go_gate_mock(build_returncode=0, build_stdout="", build_stderr=""):
     the git diff/status plumbing _go_build_tag_retiering_stuck depends on still
     works against the tempfile git fixture -- no real Go toolchain is invoked.
 
-    Returns (side_effect, calls): side_effect is passed to
+    Returns (side_effect, calls, cwd_calls): side_effect is passed to
     unittest.mock.patch.object(_subprocess_util, "run", side_effect=...); calls
-    accumulates every mocked 'go' argv for assertions.
+    accumulates every mocked 'go' argv for assertions; cwd_calls accumulates
+    each mocked call's cwd kwarg in lockstep, for asserting nested-go-module
+    scoping.
     """
     real_run = _subprocess_util.run
     calls: list[list[str]] = []
+    cwd_calls: list[Path | None] = []
 
     def _side_effect(argv, **kwargs):
         if argv and argv[0] == "go":
             calls.append(list(argv))
+            cwd_calls.append(kwargs.get("cwd"))
             return subprocess.CompletedProcess(
                 argv, build_returncode, build_stdout, build_stderr
             )
         return real_run(argv, **kwargs)
 
-    return _side_effect, calls
+    return _side_effect, calls, cwd_calls
 
 
 def _setup_fixture(project_root: Path) -> str:
@@ -4013,7 +4017,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag foo.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-a")
@@ -4057,7 +4061,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "untag bar.go"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-b")
@@ -4108,7 +4112,7 @@ def main() -> int:
                 ["git", "-C", str(project_root), "commit", "-am", "untag qux.go"],
                 check=True, capture_output=True,
             )
-            side_effect, calls = _go_gate_mock(build_returncode=0)
+            side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
             stderr_buf = io.StringIO()
             try:
                 with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
@@ -4163,7 +4167,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "retag value.go (beta)"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-d")
@@ -4185,7 +4189,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "readme only"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, base_sha, "sess-e1")
@@ -4224,7 +4228,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "change plain.go body"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-e2")
@@ -4269,7 +4273,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag broken.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(
+        side_effect, calls, cwd_calls = _go_gate_mock(
             build_returncode=1, build_stdout="", build_stderr="pkg/broken.go:1: syntax error"
         )
         try:
@@ -4327,7 +4331,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag baz.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(
+        side_effect, calls, cwd_calls = _go_gate_mock(
             build_returncode=1, build_stdout="", build_stderr="pkg/baz.go:1: syntax error"
         )
         captured = ""
@@ -4393,7 +4397,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-m", "delete pkg directory"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
@@ -4447,7 +4451,7 @@ def main() -> int:
         # Remove the directory from disk only -- git history at HEAD still has it,
         # so the diff-based classification still sees an added-tag transition.
         _safe_rmtree.safe_rmtree(pkg_dir, allowed_root=project_root)
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
@@ -4466,6 +4470,159 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 66i ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66j -- nested module root: the affected directory itself is a nested
+    # Go module (its own go.mod under project_root). The compile check must run
+    # with that nested module as cwd, not project_root (fixes #751).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        module_dir = project_root / "plugins" / "foo"
+        module_dir.mkdir(parents=True)
+        (module_dir / "go.mod").write_text("module foo\n\ngo 1.21\n", encoding="utf-8")
+        (module_dir / "bar.go").write_text("package foo\n\nfunc Bar() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "plugins/foo/go.mod", "plugins/foo/bar.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged nested module"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: add a //go:build constraint -- file now exits the default build.
+        (module_dir / "bar.go").write_text(
+            "//go:build integration\n\npackage foo\n\nfunc Bar() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag bar.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-j")
+            assert result is None, f"case 66j: expected None (compile passed), got {result}"
+            assert len(calls) == 1, f"case 66j: expected exactly one go build call, got {calls}"
+            assert calls[0] == ["go", "build", "./..."], (
+                f"case 66j: expected nested-module build of ./..., got {calls[0]}"
+            )
+            assert cwd_calls[0] == project_root / "plugins" / "foo", (
+                f"case 66j: expected cwd scoped to the nested module root,"
+                f" got {cwd_calls[0]}"
+            )
+            print(
+                "PASS: case 66j - nested module root: compile check scoped to"
+                " the module's own go.mod, not project_root"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66j ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66k -- nested module subpath: the affected directory is below the
+    # nested module root, so the pattern must be re-derived relative to that
+    # module root, not to project_root.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        module_dir = project_root / "plugins" / "foo"
+        sub_dir = module_dir / "sub"
+        sub_dir.mkdir(parents=True)
+        (module_dir / "go.mod").write_text("module foo\n\ngo 1.21\n", encoding="utf-8")
+        (sub_dir / "baz.go").write_text("package sub\n\nfunc Baz() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "plugins/foo/go.mod", "plugins/foo/sub/baz.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged nested module subpath"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: add a //go:build constraint -- file now exits the default build.
+        (sub_dir / "baz.go").write_text(
+            "//go:build integration\n\npackage sub\n\nfunc Baz() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag baz.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-k")
+            assert result is None, f"case 66k: expected None (compile passed), got {result}"
+            assert len(calls) == 1, f"case 66k: expected exactly one go build call, got {calls}"
+            assert calls[0] == ["go", "build", "./sub/..."], (
+                f"case 66k: expected pattern relative to the module root, got {calls[0]}"
+            )
+            assert cwd_calls[0] == project_root / "plugins" / "foo", (
+                f"case 66k: expected cwd scoped to the nested module root,"
+                f" got {cwd_calls[0]}"
+            )
+            print(
+                "PASS: case 66k - nested module subpath: pattern re-derived"
+                " relative to the module root, not project_root"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66k ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 66l -- fallback, no nested module: no go.mod exists anywhere between
+    # the affected directory and project_root, so the compile check must
+    # reproduce today's exact single-module-repo behavior byte-for-byte.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        pkg_dir = project_root / "plugins" / "bar"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "qux.go").write_text("package bar\n\nfunc Qux() {}\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "plugins/bar/qux.go"],
+            check=True, capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add untagged qux.go"],
+            check=True, capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        # Transition: add a //go:build constraint -- file now exits the default build.
+        (pkg_dir / "qux.go").write_text(
+            "//go:build integration\n\npackage bar\n\nfunc Qux() {}\n", encoding="utf-8"
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-am", "tag qux.go integration"],
+            check=True, capture_output=True,
+        )
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
+        try:
+            with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
+                result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-l")
+            assert result is None, f"case 66l: expected None (compile passed), got {result}"
+            assert len(calls) == 1, f"case 66l: expected exactly one go build call, got {calls}"
+            assert calls[0] == ["go", "build", "./plugins/bar/..."], (
+                f"case 66l: expected fallback pattern relative to project_root,"
+                f" got {calls[0]}"
+            )
+            assert cwd_calls[0] == project_root, (
+                f"case 66l: expected fallback cwd of project_root, got {cwd_calls[0]}"
+            )
+            print(
+                "PASS: case 66l - fallback: no nested module found, byte-identical"
+                " to the pre-fix single-module-repo behavior"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 66l ({exc})", file=sys.stderr)
             errors += 1
 
     # Case 67 -- finalize_from_output reports a clean error (not a raw

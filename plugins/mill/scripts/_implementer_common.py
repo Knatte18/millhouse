@@ -982,6 +982,41 @@ def _go_build_pattern(dir_str: str) -> str:
     return "./..." if dir_str == "." else f"./{dir_str}/..."
 
 
+def _nested_go_module_root_and_pattern(project_root: Path, dir_str: str) -> tuple[Path, str]:
+    """
+    Resolve the `go build` cwd/pattern for a go-build-tag-retiering compile check.
+
+    Walks up from the affected directory looking for the nearest enclosing
+    `go.mod`, stopping at `project_root`. When a `go.mod` is found strictly
+    under `project_root`, the compile check must run with that nested module
+    as cwd -- `go build` resolves module boundaries relative to cwd, so
+    pointing it at `project_root` for a nested module fails with "directory
+    prefix ... does not contain main module" even though the nested module
+    compiles fine on its own (fixes #751). When no nested `go.mod` is found,
+    this returns today's exact `(project_root, _go_build_pattern(dir_str))`
+    behavior unchanged -- the single-module-repo fallback.
+
+    Args:
+        project_root: Path to the worktree root (also the outermost fallback).
+        dir_str: The affected package directory, relative to project_root
+            ("." for the repo root).
+
+    Returns:
+        A (cwd, pattern) pair for the `go build` invocation.
+    """
+    affected_dir = project_root / dir_str
+    candidate = affected_dir
+    while not (candidate / "go.mod").exists() and candidate != project_root:
+        candidate = candidate.parent
+
+    if candidate == project_root:
+        return project_root, _go_build_pattern(dir_str)
+
+    if candidate == affected_dir:
+        return candidate, "./..."
+    return candidate, _go_build_pattern(affected_dir.relative_to(candidate).as_posix())
+
+
 def _is_qualifying_custom_tag(tag: str) -> bool:
     """
     Return True when a removed //go:build constraint is safe to translate to `-tags`.
@@ -1136,9 +1171,12 @@ def _go_build_tag_retiering_stuck(
                     file=sys.stderr,
                 )
                 continue
+            build_cwd, build_pattern = _nested_go_module_root_and_pattern(
+                project_root, dir_str
+            )
             build_result = _subprocess_util.run(
-                ["go", "build", _go_build_pattern(dir_str)],
-                cwd=project_root,
+                ["go", "build", build_pattern],
+                cwd=build_cwd,
             )
             if build_result.returncode != 0:
                 return _go_build_tag_stuck_dict(
@@ -1172,9 +1210,12 @@ def _go_build_tag_retiering_stuck(
                     file=sys.stderr,
                 )
                 continue
+            build_cwd, build_pattern = _nested_go_module_root_and_pattern(
+                project_root, dir_str
+            )
             build_result = _subprocess_util.run(
-                ["go", "build", "-tags", tag, _go_build_pattern(dir_str)],
-                cwd=project_root,
+                ["go", "build", "-tags", tag, build_pattern],
+                cwd=build_cwd,
             )
             if build_result.returncode != 0:
                 return _go_build_tag_stuck_dict(
