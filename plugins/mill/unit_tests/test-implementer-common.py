@@ -50,22 +50,26 @@ def _go_gate_mock(build_returncode=0, build_stdout="", build_stderr=""):
     the git diff/status plumbing _go_build_tag_retiering_stuck depends on still
     works against the tempfile git fixture -- no real Go toolchain is invoked.
 
-    Returns (side_effect, calls): side_effect is passed to
+    Returns (side_effect, calls, cwd_calls): side_effect is passed to
     unittest.mock.patch.object(_subprocess_util, "run", side_effect=...); calls
-    accumulates every mocked 'go' argv for assertions.
+    accumulates every mocked 'go' argv for assertions; cwd_calls accumulates
+    each mocked call's cwd kwarg in lockstep, for asserting nested-go-module
+    scoping.
     """
     real_run = _subprocess_util.run
     calls: list[list[str]] = []
+    cwd_calls: list[Path | None] = []
 
     def _side_effect(argv, **kwargs):
         if argv and argv[0] == "go":
             calls.append(list(argv))
+            cwd_calls.append(kwargs.get("cwd"))
             return subprocess.CompletedProcess(
                 argv, build_returncode, build_stdout, build_stderr
             )
         return real_run(argv, **kwargs)
 
-    return _side_effect, calls
+    return _side_effect, calls, cwd_calls
 
 
 def _setup_fixture(project_root: Path) -> str:
@@ -4013,7 +4017,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag foo.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-a")
@@ -4057,7 +4061,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "untag bar.go"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-b")
@@ -4108,7 +4112,7 @@ def main() -> int:
                 ["git", "-C", str(project_root), "commit", "-am", "untag qux.go"],
                 check=True, capture_output=True,
             )
-            side_effect, calls = _go_gate_mock(build_returncode=0)
+            side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
             stderr_buf = io.StringIO()
             try:
                 with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
@@ -4163,7 +4167,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "retag value.go (beta)"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-d")
@@ -4185,7 +4189,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "readme only"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, base_sha, "sess-e1")
@@ -4224,7 +4228,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "change plain.go body"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
                 result = _go_build_tag_retiering_stuck(project_root, start_sha, "sess-e2")
@@ -4269,7 +4273,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag broken.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(
+        side_effect, calls, cwd_calls = _go_gate_mock(
             build_returncode=1, build_stdout="", build_stderr="pkg/broken.go:1: syntax error"
         )
         try:
@@ -4327,7 +4331,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag baz.go integration"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(
+        side_effect, calls, cwd_calls = _go_gate_mock(
             build_returncode=1, build_stdout="", build_stderr="pkg/baz.go:1: syntax error"
         )
         captured = ""
@@ -4393,7 +4397,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-m", "delete pkg directory"],
             check=True, capture_output=True,
         )
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
@@ -4447,7 +4451,7 @@ def main() -> int:
         # Remove the directory from disk only -- git history at HEAD still has it,
         # so the diff-based classification still sees an added-tag transition.
         _safe_rmtree.safe_rmtree(pkg_dir, allowed_root=project_root)
-        side_effect, calls = _go_gate_mock(build_returncode=0)
+        side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
         try:
             with unittest.mock.patch.object(_subprocess_util, "run", side_effect=side_effect):
