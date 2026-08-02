@@ -48,7 +48,9 @@ batches:
     start_sha: 67bebceffb3a831c5f76aee6c0b981035369613e
     commit_sha: 111e6e1b220c678e4fbedd6774741113170e8b02
   - name: plan-validate-line-field-tests
-    state: pending
+    state: running
+    implementer_session: 6b20b3c8-7145-4d86-bd05-0676dfde186c
+    start_sha: 851ddc897cc431ad5a5bc01e8d2e8bca01c7d67f
   - name: verify-baseline-refactor
     state: pending
   - name: baseline-stage-wiring
