@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: blocked
+phase: approved-baseline-stage-wiring
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-plan-validate-line-field-tests  '2026-08-02T17:16:06Z'
 approved-verify-baseline-refactor  '2026-08-02T17:22:42Z'
 self-resolved-verify-logic  '2026-08-02T17:36:10Z'
 blocked  '2026-08-02T17:39:35Z'
+approved-baseline-stage-wiring  '2026-08-02T17:58:51Z'
 ```
 
 ## Batches
@@ -62,10 +63,10 @@ batches:
     start_sha: 6cd8faca39f4605248c83f11bac8535a26489473
     commit_sha: 34599c704c10ce409a99fa45b38282a355d80b56
   - name: baseline-stage-wiring
-    state: blocked
+    state: approved
     implementer_session: d2e7b623-50fe-469f-a2b0-05d8637a249f
     start_sha: 6f28a86e912e12c07f53a92cb771839b24107869
-    blocked_reason: 'verify/logic: unresolved after retry'
+    commit_sha: cd9496c2d319d3ff96577bddbf947a438f8a0798
   - name: baseline-waiver-integration-test
     state: pending
 ```
