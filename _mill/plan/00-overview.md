@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-merge-in SKILL.md: _plan_dag helper calls missing signature lines'
 slug: mill-merge-in-plan-dag-signature-docs
-approved: false
+approved: true
 started: 20260802-101327
 parent: main
 root: ""
