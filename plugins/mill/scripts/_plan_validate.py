@@ -1789,6 +1789,7 @@ def _check_requirements_quote_indent_drift(
                 continue
 
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
+                fence_body = re.sub(r"\n[ \t]*\Z", "", fence_body)
                 # Already byte-exact -- nothing to flag. This also correctly
                 # no-ops for a fence with zero leading whitespace, since
                 # every N >= 1 strip on such a fence is a no-op that reduces
