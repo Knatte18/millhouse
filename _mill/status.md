@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-stage-wiring
+phase: approved-baseline-waiver-integration-test
 slug: mill-validate-verify-diagnostics-gaps
 branch: hanf/mill-validate-verify-diagnostics-gaps
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-verify-baseline-refactor  '2026-08-02T17:22:42Z'
 self-resolved-verify-logic  '2026-08-02T17:36:10Z'
 blocked  '2026-08-02T17:39:35Z'
 approved-baseline-stage-wiring  '2026-08-02T17:58:51Z'
+approved-baseline-waiver-integration-test  '2026-08-02T18:10:58Z'
 ```
 
 ## Batches
@@ -68,7 +69,8 @@ batches:
     start_sha: 6f28a86e912e12c07f53a92cb771839b24107869
     commit_sha: cd9496c2d319d3ff96577bddbf947a438f8a0798
   - name: baseline-waiver-integration-test
-    state: running
+    state: approved
     implementer_session: f9ffc399-138e-4cea-b6e2-a6298abec834
     start_sha: 9cbed7a25b929cd37efcd79f88d44566e3517854
+    commit_sha: 01193e60957eb3ddddb81666e82c7116e5a4944c
 ```
