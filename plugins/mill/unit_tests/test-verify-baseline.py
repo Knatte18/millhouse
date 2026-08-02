@@ -50,7 +50,11 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _verify_baseline import compute_baseline, compute_batch_baselines  # noqa: E402
+from _verify_baseline import (
+    _link_dependency_dirs,
+    compute_baseline,
+    compute_batch_baselines,
+)
 
 
 def _run_compute_baseline_capturing_worktree_add(tmp: str) -> tuple[str, list[list[str]]]:
@@ -149,6 +153,102 @@ def _case_c_zero_failures_returns_empty_list() -> None:
     )
 
 
+def _case_d_union_of_two_runs() -> None:
+    """
+    Case (d): a signature that only reproduces on one of the two runs still
+    ends up in the union -- neither run's set silently overwrites the
+    other's.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    call_count = {"n": 0}
+
+    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        del cwd
+        assert command == "cmd-flaky"
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return 1, "--- FAIL: TestFlakyA (0.01s)\n"
+        return 1, "--- FAIL: TestFlakyB (0.02s)\n"
+
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(
+            [("flaky-batch", "cmd-flaky", None)], checkout_path, project_root
+        )
+
+    assert result["flaky-batch"] == [
+        "--- FAIL: TestFlakyA (0.01s)",
+        "--- FAIL: TestFlakyB (0.02s)",
+    ], f"expected union of both runs' signatures, got {result['flaky-batch']!r}"
+
+    print(
+        "PASS: compute_batch_baselines unions signatures from both runs "
+        "instead of one run's set overwriting the other"
+    )
+
+
+def _case_e_mixed_cwd_dependency_linking() -> None:
+    """
+    Case (e): `_link_dependency_dirs` called at two distinct resolved target
+    paths against one shared checkout (mirroring how a future shared-checkout
+    orchestrator calls it once per distinct effective-cwd fragment), then
+    `compute_batch_baselines` with commands resolving to each of those two
+    paths via their `cwd_override` entries -- confirming each command runs
+    at its own cwd within the one shared checkout and dependency dirs are
+    linked at both resolved paths.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        project_root = Path(tmp) / "project"
+        project_root.mkdir()
+        (project_root / ".venv").mkdir()
+
+        checkout_path = Path(tmp) / "checkout"
+        checkout_path.mkdir()
+        target_git_root = checkout_path
+        target_hub = checkout_path / "hub"
+        target_hub.mkdir()
+
+        linked_calls: list[tuple[Path, Path]] = []
+
+        def _fake_junction_create(src: Path, dst: Path) -> None:
+            linked_calls.append((src, dst))
+
+        with patch("_verify_baseline._junction.create", side_effect=_fake_junction_create):
+            _link_dependency_dirs(project_root, target_git_root)
+            _link_dependency_dirs(project_root, target_hub)
+
+        assert linked_calls == [
+            (project_root / ".venv", target_git_root / ".venv"),
+            (project_root / ".venv", target_hub / ".venv"),
+        ], f"expected dependency dirs linked at both resolved paths, got {linked_calls!r}"
+
+        seen_cwds: list[tuple[str, Path]] = []
+
+        def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+            seen_cwds.append((command, cwd))
+            return 0, "ok\n"
+
+        commands = [
+            ("root-batch", "cmd-root", target_git_root),
+            ("hub-batch", "cmd-hub", target_hub),
+        ]
+        with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+            result = compute_batch_baselines(commands, checkout_path, project_root)
+
+        assert result == {"root-batch": [], "hub-batch": []}, result
+
+        root_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-root"]
+        hub_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-hub"]
+        assert root_cwds == [target_git_root, target_git_root], root_cwds
+        assert hub_cwds == [target_hub, target_hub], hub_cwds
+
+        print(
+            "PASS: compute_batch_baselines runs each command at its own "
+            "resolved cwd within one shared checkout, with dependency dirs "
+            "linked at both resolved paths"
+        )
+
+
 def main() -> int:
     try:
         # Case 1: core.longpaths=true is always present in the worktree-add argv.
@@ -222,6 +322,8 @@ def main() -> int:
 
         _case_b_independent_signature_lists()
         _case_c_zero_failures_returns_empty_list()
+        _case_d_union_of_two_runs()
+        _case_e_mixed_cwd_dependency_linking()
 
         print("All _verify_baseline unit tests passed.")
         return 0
