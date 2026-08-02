@@ -28,5 +28,7 @@ implementing  '2026-08-02T10:56:26Z'
 ```yaml
 batches:
   - name: fix-plan-validate-false-positives
-    state: pending
+    state: running
+    implementer_session: 14d90744-c8ae-4db5-a7f0-ad776f568485
+    start_sha: 5ed717396a79d956a03ade03e8c8a211d4a5ec33
 ```
