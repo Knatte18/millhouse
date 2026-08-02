@@ -238,33 +238,79 @@ def compute_baseline(
     try:
         _link_dependency_dirs(project_root, effective_tmp_path)
 
-        if _run_verify_in(module_wide_verify_cmd, effective_tmp_path) == 0:
-            return "clean"
-
-        # Flakiness-guard retry: a single transient-worktree failure is never
-        # trusted on its own.
-        if _run_verify_in(module_wide_verify_cmd, effective_tmp_path) == 0:
-            return "clean"
-
-        # Second consecutive transient-worktree failure. Corroborate with a
-        # control run in the task worktree itself before caching a real
-        # pre-existing-failures verdict.
-        if _run_verify_in(module_wide_verify_cmd, project_root) != 0:
-            return "pre-existing-failures"
-
-        print(
-            "[_verify_baseline] warning: module-wide verify failed twice in "
-            "transient worktree but passed in task worktree -- treating as "
-            "path/environment-induced, caching 'clean'",
-            file=sys.stderr,
+        return _run_module_wide_verify_algorithm(
+            module_wide_verify_cmd, effective_tmp_path, project_root
         )
-        return "clean"
     finally:
         _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
 
 
-def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> int:
-    """Run `module_wide_verify_cmd` with cwd set to `cwd`; return the exit code."""
+def _run_module_wide_verify_algorithm(
+    module_wide_verify_cmd: str, effective_tmp_path: Path, project_root: Path
+) -> str:
+    """
+    Run the 3-run/control-check module-wide verify corroboration algorithm.
+
+    Implementation, in order:
+        1. Run `module_wide_verify_cmd` with cwd set to `effective_tmp_path`.
+           Exit code 0 -> return "clean" immediately.
+        2. On a non-zero exit, re-run the same command in the same
+           `effective_tmp_path` once more (the flakiness-guard retry). A pass
+           here means the first failure was a spurious fluke -> return "clean".
+        3. If the retry also fails, run `module_wide_verify_cmd` once more in
+           `project_root` itself (the task worktree -- always safe, no
+           mutation) as a control check. If the control run also fails,
+           return "pre-existing-failures" -- both flakiness and a
+           deterministic path/environment mismatch have been ruled out. If
+           the control run passes, the two `effective_tmp_path` failures are
+           path/environment-induced (not a real pre-existing failure): warn
+           on stderr and return "clean" instead.
+
+    Args:
+        module_wide_verify_cmd: The module-wide verify command string to run,
+            verbatim, in both `effective_tmp_path` and (for the control
+            check) `project_root`.
+        effective_tmp_path: The transient checkout's effective cwd to run the
+            command against for the first two runs.
+        project_root: Absolute path to the task worktree root, used as cwd
+            for the control-check run.
+
+    Returns:
+        The literal string "clean" or "pre-existing-failures".
+    """
+    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path)
+    if rc == 0:
+        return "clean"
+
+    # Flakiness-guard retry: a single transient-worktree failure is never
+    # trusted on its own.
+    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path)
+    if rc == 0:
+        return "clean"
+
+    # Second consecutive transient-worktree failure. Corroborate with a
+    # control run in the task worktree itself before caching a real
+    # pre-existing-failures verdict.
+    rc, _output = _run_verify_in(module_wide_verify_cmd, project_root)
+    if rc != 0:
+        return "pre-existing-failures"
+
+    print(
+        "[_verify_baseline] warning: module-wide verify failed twice in "
+        "transient worktree but passed in task worktree -- treating as "
+        "path/environment-induced, caching 'clean'",
+        file=sys.stderr,
+    )
+    return "clean"
+
+
+def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> tuple[int, str]:
+    """
+    Run `module_wide_verify_cmd` with cwd set to `cwd`.
+
+    Returns:
+        A tuple of (exit code, combined stdout + stderr).
+    """
     run_args, run_kwargs = _posix_shell_run_args(module_wide_verify_cmd)
     result = subprocess.run(
         run_args,
@@ -273,4 +319,4 @@ def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> int:
         cwd=cwd,
         **run_kwargs,
     )
-    return result.returncode
+    return result.returncode, result.stdout + result.stderr
