@@ -126,6 +126,34 @@ def _checkout_parent_branch(project_root: Path, git_root: Path, parent_branch: s
     return tmp_path
 
 
+def _link_dependency_dirs(project_root: Path, target_path: Path) -> None:
+    """
+    Junction every existing gitignored dependency dir into `target_path`.
+
+    For each name in `_DEPENDENCY_DIR_CANDIDATES` whose `project_root / name`
+    exists, junctions it into `target_path / name` via `_junction.create`.
+
+    Unlike the inline loop this was extracted from, this function does not
+    branch on `cwd_override_relative` -- the caller is responsible for
+    resolving that into a single, already-concrete `target_path` (either
+    `tmp_path / cwd_override_relative` or plain `tmp_path`) before calling.
+
+    Args:
+        project_root: Absolute path to the task worktree root, where
+            gitignored dependency dirs are probed for reuse.
+        target_path: The already-resolved effective checkout path to
+            junction dependency dirs into.
+
+    Raises:
+        OSError: junction creation failed.
+        ValueError: link_path already exists (dependency dir collision).
+    """
+    for name in _DEPENDENCY_DIR_CANDIDATES:
+        src = project_root / name
+        if src.exists():
+            _junction.create(src, target_path / name)
+
+
 def compute_baseline(
     project_root: Path,
     git_root: Path,
@@ -208,15 +236,7 @@ def compute_baseline(
     )
 
     try:
-        for name in _DEPENDENCY_DIR_CANDIDATES:
-            src = project_root / name
-            if src.exists():
-                _junction.create(
-                    src,
-                    (tmp_path / cwd_override_relative / name)
-                    if cwd_override_relative is not None
-                    else (tmp_path / name),
-                )
+        _link_dependency_dirs(project_root, effective_tmp_path)
 
         if _run_verify_in(module_wide_verify_cmd, effective_tmp_path) == 0:
             return "clean"
