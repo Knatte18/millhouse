@@ -1,0 +1,28 @@
+MILL_REVIEW_BEGIN
+# Review: Verify/build gates leak shell state and ignore nested Go modules — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewer_self_id: Claude Sonnet 4.5 (self-assessed; exact point version unconfirmed)
+reviewed_file: plan/
+date: 2026-08-02
+```
+
+## Findings
+
+### [NIT] `_resolve_holistic_verify` docstring not updated for subshell wrap
+**Location:** Batch 1, Card 1
+**Issue:** The docstring's Returns section still says "joined_command is every batch's command joined with ` && `" without mentioning each command is now individually parenthesized; Card 1 explicitly forbids changing any other line, leaving the doc stale.
+**Fix:** Add one clause to the Returns docstring noting each command is wrapped in its own subshell before joining.
+
+### [NIT] Walk-up order in `_nested_go_module_root_and_pattern` is textually ambiguous
+**Location:** Batch 2, Card 3
+**Issue:** Step 2's phrasing ("walks candidate up... via candidate = candidate.parent, at each step checking") could be misread as check-after-move-only, which would skip checking `go.mod` at `affected_dir` itself and break case 66j's `candidate == affected_dir` branch in step 4.
+**Fix:** Clarify that the go.mod check happens at the current candidate value starting with `affected_dir` (before any `.parent` advance) — non-blocking since case 66j/66k/66l pin the correct behavior in tests.
+
+## Verdict
+
+APPROVE
+Plan is thorough, precise, and fully source-grounded; only two non-blocking documentation-clarity nits found.
+MILL_REVIEW_END

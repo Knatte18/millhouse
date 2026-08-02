@@ -3,7 +3,7 @@
 ```yaml
 task: Verify/build gates leak shell state and ignore nested Go modules
 slug: mill-verify-gate-scoping-bugs
-approved: false
+approved: true
 started: 20260802-101909
 parent: main
 root: ""

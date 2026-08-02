@@ -45,13 +45,21 @@ edits).
   `_is_qualifying_custom_tag`. The function:
 
   1. Sets `affected_dir = project_root / dir_str` and `candidate = affected_dir`.
-  2. Walks `candidate` up toward `project_root` (via `candidate = candidate.parent`),
-     at each step checking `(candidate / "go.mod").exists()`, stopping the
-     walk as soon as either that check is `True` or `candidate == project_root`
-     (a plain filesystem check, no subprocess — matching the existing
-     fail-open `(project_root / "go.mod").exists()` convention in
+  2. Checks `(candidate / "go.mod").exists()` at the CURRENT `candidate`
+     value first — starting with `candidate == affected_dir` itself,
+     before any `.parent` advance — and only if that check is `False`
+     and `candidate != project_root` does it advance
+     `candidate = candidate.parent` and check again. The walk stops as
+     soon as either the check is `True` at the current candidate, or
+     `candidate == project_root` (a plain filesystem check, no
+     subprocess — matching the existing fail-open
+     `(project_root / "go.mod").exists()` convention in
      `_plan_validate.py`'s `_check_verify_excludes_integration_test`,
-     e.g. its `if not (project_root / "go.mod").exists(): return []` line).
+     e.g. its `if not (project_root / "go.mod").exists(): return []`
+     line). This ordering matters: `affected_dir` itself must be
+     checked before ever advancing to its parent, so a nested module
+     whose `go.mod` lives directly in the affected directory (case 66j)
+     is detected at `candidate == affected_dir`, not skipped past.
   3. If the walk stopped because `candidate == project_root` (no closer
      `go.mod` was found): return `(project_root, _go_build_pattern(dir_str))`
      — byte-identical to today's behavior.

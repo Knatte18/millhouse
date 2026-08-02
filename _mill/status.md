@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-02T10:05:53Z'
 discussed  '2026-08-02T10:15:28Z'
 planning  '2026-08-02T10:21:02Z'
+plan-fix-r1  '2026-08-02T10:25:02Z'
 ```

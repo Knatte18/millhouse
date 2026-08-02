@@ -45,7 +45,12 @@ no downstream consumer within this plan (batch 2 is independent).
   ```
   Each batch's original `command` text is preserved verbatim inside its
   own parenthesized subshell segment; segments are still joined with
-  `" && "` in the same order as `batch_verifies`. No other line in
+  `" && "` in the same order as `batch_verifies`. Also update the
+  function's docstring `Returns:` clause — currently "`joined_command`
+  is every batch's command joined with `" && "`, in the same order as
+  `batch_verifies`." — to additionally note that each command is
+  individually wrapped in its own subshell before joining, so the doc
+  stays accurate for the new behavior. No other line in
   `_resolve_holistic_verify` changes — the cwd-conflict detection above
   it (`cwd_to_batch_name` / the `ValueError` raise) and the two call
   sites (`plugins/mill/scripts/millpy-fix.py` around line 451 and around
