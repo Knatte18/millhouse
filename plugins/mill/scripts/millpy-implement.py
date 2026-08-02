@@ -723,6 +723,11 @@ def main(argv=None) -> int:
             project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
         )
         session_id = batch_status.get("implementer_session")
+        # Cached, task-scoped per-batch verify baseline (see batch 3/5/6) --
+        # a stored signature-set list, or None when never computed (fail-safe:
+        # the verify gate falls back to today's strict any-failure-blocks
+        # behavior).
+        batch_verify_baseline = batch_status.get("verify_baseline_failures")
         # Resolve batch verify command from the batch file's frontmatter, routing
         # through parse_verify_field so a `{cwd: hub|git_root, command: ...}`
         # mapping resolves to the correct verify-subprocess cwd in nested layouts.
@@ -739,6 +744,7 @@ def main(argv=None) -> int:
             verify_cmd=verify_cmd,
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_verify_baseline=module_verify_baseline,
+            batch_verify_baseline=batch_verify_baseline,
             card_ids=card_ids,
             commit_none_card_ids=commit_none_card_ids,
             task_dir=status_path.parent,
@@ -997,6 +1003,19 @@ def main(argv=None) -> int:
     verify_cmd, cwd_override = _plan_dag.parse_verify_field(
         batch_frontmatter, project_root, git_root
     )
+    # Cached, task-scoped per-batch verify baseline (see batch 3/5/6), read
+    # fresh here (mirroring the resume_incomplete branch's own lookup pattern
+    # above) since the earlier module_verify_baseline read at the top of
+    # main() has no per-batch equivalent to piggyback on.
+    _full_stage_batches = _status.read_batches(status_path)
+    _full_stage_batch_entry = next(
+        (b for b in _full_stage_batches if b.get("name") == args.batch_name), None
+    )
+    batch_verify_baseline = (
+        _full_stage_batch_entry.get("verify_baseline_failures")
+        if _full_stage_batch_entry is not None
+        else None
+    )
     return _forward_output(
         output,
         project_root,
@@ -1006,6 +1025,7 @@ def main(argv=None) -> int:
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
+        batch_verify_baseline=batch_verify_baseline,
         card_ids=card_ids,
         commit_none_card_ids=commit_none_card_ids,
         task_dir=status_path.parent,
