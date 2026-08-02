@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
-plan: null
+plan: _mill/plan
 parent: main
 task: Verify/build gates leak shell state and ignore nested Go modules
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-02T10:05:53Z'
 discussed  '2026-08-02T10:15:28Z'
+planning  '2026-08-02T10:21:02Z'
 ```
