@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-validate-false-positives
 branch: hanf/mill-plan-validate-false-positives
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-08-02T10:35:44Z'
 planning  '2026-08-02T10:47:23Z'
 plan-fix-r1  '2026-08-02T10:55:51Z'
 planned  '2026-08-02T10:56:07Z'
+implementing  '2026-08-02T10:56:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fix-plan-validate-false-positives
+    state: pending
 ```
