@@ -1556,8 +1556,9 @@ def _check_context_completeness(
                         [stripped_token], project_root, root,
                         wiki_root=wiki_root, git_root=git_root,
                     )
+                    existing_files = [p for p in existing if p.is_file()]
                     resolvable = (
-                        bool(existing)
+                        bool(existing_files)
                         or stripped_token in creates_union
                         or stripped_token in deletes_union
                         or stripped_token in moves_targets
