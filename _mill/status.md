@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ blocked  '2026-08-02T10:34:58Z'
 approved-bug1-holistic-verify-subshell-wrap  '2026-08-02T10:41:54Z'
 approved-bug2-nested-go-module-cwd  '2026-08-02T10:45:10Z'
 holistic-reviewing  '2026-08-02T10:45:38Z'
+holistic-approved  '2026-08-02T10:48:08Z'
 ```
 
 ## Batches
