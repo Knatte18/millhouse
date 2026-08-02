@@ -615,6 +615,7 @@ def _serialise_batches(batches: list[dict]) -> str:
         "review_round",
         "review_file",
         "blocked_reason",
+        "verify_baseline_failures",
     ]
     parts = ["batches:"]
     for entry in batches:
@@ -624,9 +625,14 @@ def _serialise_batches(batches: list[dict]) -> str:
                 continue
             value = entry[key]
             prefix = "  - " if first else "    "
+            # list values (e.g. verify_baseline_failures) serialize as a flow-sequence
+            # yaml scalar via safe_dump, never as a Python-repr-shaped raw str().
             # str values may contain YAML-special chars (e.g. blocked_reason); ints/bools
             # round-trip via str() and stay unquoted to preserve scalar type.
-            if isinstance(value, str):
+            if isinstance(value, list):
+                flow_value = yaml.safe_dump(value, default_flow_style=True).strip()
+                parts.append(f"{prefix}{key}: {flow_value}")
+            elif isinstance(value, str):
                 parts.append(f"{prefix}{key}: {quote_scalar(value)}")
             else:
                 parts.append(f"{prefix}{key}: {value}")
