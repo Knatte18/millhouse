@@ -205,7 +205,8 @@ class TestMillpyImplement(unittest.TestCase):
         def routing_fn(argv, **kw):
             if argv[1] == "rev-parse":
                 rev_parse_calls.append(1)
-                sha = "start000" if len(rev_parse_calls) == 1 else "end11111"
+                # Full 40-char hex SHAs: _is_valid_commit_sha rejects short/non-hex values.
+                sha = "0" * 40 if len(rev_parse_calls) == 1 else "1" * 40
                 return subprocess.CompletedProcess(args=argv, returncode=0, stdout=sha + "\n", stderr="")
             return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
 
@@ -588,6 +589,12 @@ class TestMillpyImplement(unittest.TestCase):
         agent_output_path.write_text(
             '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
             encoding="utf-8"
+        )
+
+        # _forward_output re-derives commit_sha via `git rev-parse HEAD` and validates
+        # it (_is_valid_commit_sha); the setUp default ("abc1234") is too short/non-hex.
+        self.mock_subprocess_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="a" * 40 + "\n", stderr=""
         )
 
         with unittest.mock.patch.object(
@@ -1306,6 +1313,358 @@ class TestMillpyImplement(unittest.TestCase):
         _, call_kwargs = mock_compute_baseline.call_args
         self.assertIsNone(call_kwargs.get("cwd_override_relative"))
 
+    def _write_two_batch_fixture(self, batch_a_verify_baseline=None, batch_b_verify_baseline=None):
+        """
+        Write a plan/status fixture with two batches (batch-a, batch-b), each
+        declaring its own plain-string `verify:` frontmatter command, and an
+        overview with `verify: null` (no module-wide command configured).
+
+        `batch_a_verify_baseline`/`batch_b_verify_baseline`, when not None,
+        seed that batch's `verify_baseline_failures` field in status.md's
+        `## Batches` section -- simulating a prior invocation that already
+        computed a baseline for that batch.
+        """
+        plan_dir = self.tmp_path / "task" / "plan"
+        (plan_dir / "01-batch-a.md").write_text(
+            "```yaml\nbatch: batch-a\nverify: echo a\n```\n\n# Batch: batch-a\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-batch-b.md").write_text(
+            "```yaml\nbatch: batch-b\nverify: echo b\n```\n\n# Batch: batch-b\n",
+            encoding="utf-8",
+        )
+
+        def _batch_yaml(name, baseline):
+            if baseline is None:
+                return f"  - name: {name}\n    state: pending\n"
+            return (
+                f"  - name: {name}\n    state: pending\n"
+                f"    verify_baseline_failures: {baseline!r}\n"
+            )
+
+        status_path = self.tmp_path / "task" / "status.md"
+        status_path.write_text(
+            "```yaml\n"
+            "phase: implementing\n"
+            "slug: test-slug\n"
+            "task: Test Task\n"
+            "branch: test-branch\n"
+            "parent: main\n"
+            "```\n\n"
+            "## Timeline\n\n"
+            "```text\n"
+            "implementing  2026-01-01T00:00:00Z\n"
+            "```\n\n"
+            "## Batches\n\n"
+            "```yaml\n"
+            "batches:\n"
+            + _batch_yaml("batch-a", batch_a_verify_baseline)
+            + _batch_yaml("batch-b", batch_b_verify_baseline)
+            + "```\n",
+            encoding="utf-8",
+        )
+
+    def test_baseline_stage_prints_exactly_two_lines_module_wide_then_per_batch(self):
+        """Module-wide + per-batch both need computing -> exactly two JSON lines, module_wide first."""
+        self._write_two_batch_fixture()
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
+            overview_with_verify, encoding="utf-8"
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_run_module_wide_verify_algorithm",
+                return_value="clean",
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=lambda commands, checkout_path, project_root: {commands[0][0]: []},
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        self.assertEqual(module_wide, {"stage": "baseline", "substage": "module_wide", "result": "computed", "value": "clean"})
+        self.assertEqual(per_batch["substage"], "per_batch")
+        self.assertEqual(sorted(per_batch["computed"]), ["batch-a", "batch-b"])
+        self.assertEqual(per_batch["cached"], [])
+        self.assertEqual(per_batch["errored"], {})
+
+    def test_baseline_stage_per_batch_idempotency_skips_already_cached_batch(self):
+        """batch-a already has a stored baseline -> not recomputed; batch-b computed."""
+        self._write_two_batch_fixture(batch_a_verify_baseline=[])
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines"
+            ) as mock_compute,
+        ):
+            mock_compute.side_effect = lambda commands, checkout_path, project_root: {
+                commands[0][0]: ["failure-b"]
+            }
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_compute.assert_called_once()
+        lines = out.strip().splitlines()
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        # No module-wide verify configured in this fixture's overview.
+        self.assertEqual(module_wide["result"], "skipped")
+        self.assertEqual(per_batch["computed"], ["batch-b"])
+        self.assertEqual(per_batch["cached"], ["batch-a"])
+        self.assertEqual(per_batch["errored"], {})
+
+        status_path = self.tmp_path / "task" / "status.md"
+        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
+        # batch-a's stored value is untouched.
+        self.assertEqual(batches["batch-a"]["verify_baseline_failures"], [])
+        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], ["failure-b"])
+
+    def test_baseline_stage_per_batch_failure_isolation(self):
+        """One batch's computation raises -> sibling batch still computed and persisted."""
+        self._write_two_batch_fixture()
+
+        def _side_effect(commands, checkout_path, project_root):
+            name = commands[0][0]
+            if name == "batch-a":
+                raise RuntimeError("boom")
+            return {name: ["failure-b"]}
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=_side_effect,
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        # Module-wide sub-step is unaffected (no module-wide verify configured here).
+        self.assertEqual(module_wide["result"], "skipped")
+        self.assertEqual(per_batch["computed"], ["batch-b"])
+        self.assertEqual(per_batch["errored"], {"batch-a": "boom"})
+
+        status_path = self.tmp_path / "task" / "status.md"
+        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
+        self.assertNotIn("verify_baseline_failures", batches["batch-a"])
+        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], ["failure-b"])
+
+    def test_baseline_stage_shared_checkout_failure_module_wide_unaffected(self):
+        """Checkout fails, no module-wide work needed this round -> module-wide line unaffected, all batches errored."""
+        self._write_two_batch_fixture()
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
+            overview_with_verify, encoding="utf-8"
+        )
+
+        with (
+            # Module-wide baseline already cached -- module-wide has nothing to compute this round.
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value="clean"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                side_effect=RuntimeError("worktree add failed"),
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        # Unaffected: reports its own cached value exactly as it would without the failure.
+        self.assertEqual(module_wide, {"stage": "baseline", "substage": "module_wide", "result": "cached", "value": "clean"})
+        self.assertEqual(per_batch["computed"], [])
+        self.assertIn("batch-a", per_batch["errored"])
+        self.assertIn("batch-b", per_batch["errored"])
+
+    def test_baseline_stage_shared_checkout_failure_module_wide_also_errored(self):
+        """Checkout fails, module-wide ALSO needed computing this round -> module-wide line also reports error."""
+        self._write_two_batch_fixture()
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
+            overview_with_verify, encoding="utf-8"
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                side_effect=RuntimeError("worktree add failed"),
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        self.assertEqual(module_wide["substage"], "module_wide")
+        self.assertEqual(module_wide["result"], "error")
+        self.assertEqual(per_batch["computed"], [])
+        self.assertIn("batch-a", per_batch["errored"])
+        self.assertIn("batch-b", per_batch["errored"])
+
+    def test_baseline_stage_enumerates_batch_own_verify_despite_later_deletes(self):
+        """A batch whose own verify: names a path a LATER batch's Deletes: removes still gets a baseline."""
+        plan_dir = self.tmp_path / "task" / "plan"
+        (plan_dir / "01-batch-a.md").write_text(
+            "```yaml\nbatch: batch-a\nverify: test tools/x\n```\n\n"
+            "# Batch: batch-a\n\n"
+            "- **Deletes:** none\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "02-batch-b.md").write_text(
+            "```yaml\nbatch: batch-b\nverify: echo b\n```\n\n"
+            "# Batch: batch-b\n\n"
+            "- **Deletes:** `tools/x`\n",
+            encoding="utf-8",
+        )
+        status_path = self.tmp_path / "task" / "status.md"
+        status_path.write_text(
+            "```yaml\n"
+            "phase: implementing\n"
+            "slug: test-slug\n"
+            "task: Test Task\n"
+            "branch: test-branch\n"
+            "parent: main\n"
+            "```\n\n"
+            "## Timeline\n\n"
+            "```text\n"
+            "implementing  2026-01-01T00:00:00Z\n"
+            "```\n\n"
+            "## Batches\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch-a\n"
+            "    state: pending\n"
+            "  - name: batch-b\n"
+            "    state: pending\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=lambda commands, checkout_path, project_root: {commands[0][0]: []},
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        per_batch = json.loads(out.strip().splitlines()[1])
+        # Unlike `_plan_dag.iter_batch_verifies` (which would suppress batch-a's
+        # verify since batch-b's Deletes: names the same path), direct
+        # frontmatter enumeration still computes batch-a's baseline.
+        self.assertIn("batch-a", per_batch["computed"])
+        self.assertIn("batch-b", per_batch["computed"])
+
     def test_real_brief_renders_parent_branch_token(self):
         """Rendering the real implementer-brief.md substitutes <PARENT_BRANCH> with the parent value."""
         plugin_root = HUB / "plugins" / "mill"
@@ -1514,9 +1873,10 @@ class TestMillpyImplement(unittest.TestCase):
 
         def routing_fn(argv, **kw):
             # rev-parse HEAD: return a SHA different from start_sha so no-content guard passes.
+            # Full 40-char hex: _is_valid_commit_sha rejects the short "end_sha" placeholder.
             if len(argv) >= 2 and argv[1] == "rev-parse":
                 return subprocess.CompletedProcess(
-                    args=argv, returncode=0, stdout="end_sha\n", stderr=""
+                    args=argv, returncode=0, stdout=("e" * 40) + "\n", stderr=""
                 )
             # rev-list --count: return 2 (1 housekeeping + 1 content commit).
             if "rev-list" in argv and "--count" in argv:
@@ -1813,7 +2173,7 @@ class TestForwardOutput(unittest.TestCase):
         buf = io.StringIO()
         with unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
-            return_value=unittest.mock.MagicMock(returncode=1, stdout=""),
+            return_value=unittest.mock.MagicMock(returncode=0, stdout="a" * 40 + "\n"),
         ):
             with unittest.mock.patch.object(
                 _implementer_common._cleanliness, "compute_scope_violations",
@@ -1824,35 +2184,43 @@ class TestForwardOutput(unittest.TestCase):
         return rc, buf.getvalue()
 
     def test_fo_1_bare_json_on_last_line(self):
-        """Bare JSON with status key on last line -> printed verbatim, exit 0."""
+        """Bare JSON with status key on last line -> printed verbatim (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         rc, out = self._call(f"some preamble\n{json_str}")
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_2_json_in_fence(self):
-        """JSON inside ```json fence -> extracted and printed, exit 0."""
+        """JSON inside ```json fence -> extracted and printed (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```"
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_3_json_in_fence_trailing_blank_lines(self):
-        """JSON in fence with trailing blank lines -> extracted correctly, exit 0."""
+        """JSON in fence with trailing blank lines -> extracted correctly (commit_sha corrected), exit 0."""
         json_str = '{"status":"success","commit_sha":"abc"}'
         output = f"```json\n{json_str}\n```\n\n\n"
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(json_str))
+        expected = json.loads(json_str)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_4_multiple_json_lines_last_wins(self):
-        """Multiple lines with status JSON -> last one printed."""
+        """Multiple lines with status JSON -> last one printed (commit_sha corrected)."""
         first = '{"status":"stuck","stuck_type":"verify","reason":"oops"}'
         last = '{"status":"success","commit_sha":"def"}'
         rc, out = self._call(f"{first}\n{last}")
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(last))
+        expected = json.loads(last)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_5_no_json_anywhere(self):
         """No JSON-like pattern in output -> stuck/logic sentinel printed, exit 0."""
@@ -1864,12 +2232,14 @@ class TestForwardOutput(unittest.TestCase):
         self.assertIn("no structured report", data["reason"])
 
     def test_fo_6_malformed_json_last_valid_earlier(self):
-        """Unclosed brace last (regex miss) + valid JSON earlier -> earlier valid one printed."""
+        """Unclosed brace last (regex miss) + valid JSON earlier -> earlier valid one printed (commit_sha corrected)."""
         valid = '{"status":"success","commit_sha":"x"}'
         output = f'{valid}\n{{"status":"broken"'
         rc, out = self._call(output)
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(out.strip()), json.loads(valid))
+        expected = json.loads(valid)
+        expected["commit_sha"] = "a" * 40
+        self.assertEqual(json.loads(out.strip()), expected)
 
     def test_fo_7_sha_normalized(self):
         """git rev-parse success -> commit_sha in output replaced with HEAD sha."""
@@ -1892,7 +2262,7 @@ class TestForwardOutput(unittest.TestCase):
         self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], sha)
 
     def test_fo_8_sha_git_failure(self):
-        """git rev-parse failure -> original commit_sha preserved in output."""
+        """git rev-parse failure -> fails safe with stuck/logic, never passes an unvalidated self-reported commit_sha (#744)."""
         buf = io.StringIO()
         with unittest.mock.patch.object(
             _implementer_common._subprocess_util, "run",
@@ -1908,7 +2278,10 @@ class TestForwardOutput(unittest.TestCase):
                         Path("/fake"),
                     )
         self.assertEqual(rc, 0)
-        self.assertEqual(json.loads(buf.getvalue().strip())["commit_sha"], "abc1234")
+        data = json.loads(buf.getvalue().strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "logic")
+        self.assertNotIn("commit_sha", data)
 
 
 class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
