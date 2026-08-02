@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: mill-config-autonomous-mode-unknown-key
 branch: hanf/mill-config-autonomous-mode-unknown-key
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-08-02T11:35:31Z'
 plan-review-r1  '2026-08-02T11:40:00Z'
 plan-fix-r1  '2026-08-02T11:40:00Z'
 plan-review-r2  '2026-08-02T11:41:49Z'
+planned  '2026-08-02T11:42:01Z'
 ```
