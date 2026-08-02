@@ -102,8 +102,8 @@ cached mill-autofix) deserve warning suppression going forward?
   feature-deletion commit already cleaned those up. Nothing stale remains to
   document or remove.
 - Rejected: adding a changelog-style note recording the historical
-  feature's existence/removal — scope creep, YAGNI; the deprecated_keys
-  entry's own inline comment is sufficient self-documentation.
+  feature's existence/removal — scope creep, YAGNI; the `deprecated_keys`
+  set's existing block comment is sufficient self-documentation.
 
 ## Technical context
 

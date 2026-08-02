@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-config-autonomous-mode-unknown-key
 branch: hanf/mill-config-autonomous-mode-unknown-key
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-02T11:23:29Z'
+discussion-fix-r1  '2026-08-02T11:30:52Z'
+discussed  '2026-08-02T11:30:52Z'
 ```
