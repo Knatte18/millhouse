@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-verify-gate-scoping-bugs
 branch: hanf/mill-verify-gate-scoping-bugs
 plan: _mill/plan
@@ -19,4 +19,15 @@ discussed  '2026-08-02T10:15:28Z'
 planning  '2026-08-02T10:21:02Z'
 plan-fix-r1  '2026-08-02T10:25:02Z'
 planned  '2026-08-02T10:25:13Z'
+implementing  '2026-08-02T10:25:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: bug1-holistic-verify-subshell-wrap
+    state: pending
+  - name: bug2-nested-go-module-cwd
+    state: pending
 ```
