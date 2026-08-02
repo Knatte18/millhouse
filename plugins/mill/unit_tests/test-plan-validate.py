@@ -2046,6 +2046,106 @@ def test_check_context_completeness_dirty_line_range_suffix_missing() -> int:
             return 1
 
 
+def test_check_context_completeness_clean_directory_reference() -> int:
+    """Directory-only backtick token that exists on disk as a directory (no file of that name) -> clean, no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "gitrepo").mkdir(parents=True)
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements="  See `internal/gitrepo` for the existing repo-handling conventions.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_directory_reference")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_clean_directory_reference: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_clean_directory_reference_not_on_disk() -> int:
+    """Same directory-shaped token, nothing exists at that path on disk -> also clean (deterministic regardless of on-disk state)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements="  See `internal/gitrepo` for the existing repo-handling conventions.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_directory_reference_not_on_disk")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_directory_reference_not_on_disk: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_double_slash_token() -> int:
+    """Root-path-shaped backtick token (two consecutive forward slashes) always resolves to the filesystem root and so always "exists" -> must still be clean, no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements="  See `//` for the existing repo-handling conventions.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_double_slash_token")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_double_slash_token: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_requirements_quote_indent_drift_clean_exact_match() -> int:
     """Fence content is already a byte-exact substring of the target Edits: file -> no error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -2468,6 +2568,89 @@ def test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break() 
         except AssertionError as exc:
             print(
                 f"FAIL test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer() -> int:
+    """Mid-line fragment quote, fence at zero indent, closer also zero indent -> clean (#761: previously reported a spurious N=1 via _strip_n_leading_spaces's splitlines() side effect of dropping the fence's own trailing newline)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "value = compute(x, y) + offset\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "compute(x, y)\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer() -> int:
+    """Byte-exact quoted content, closing fence carries list-continuation indentation -> clean (#754: previously fell through to the N-search and matched via incidental adjacent-content coincidence instead of the byte-exact pre-check)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "alpha\nbeta\ngamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "beta\n"
+                "gamma\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -5397,6 +5580,9 @@ def main() -> int:
         test_check_context_completeness_clean_prohibition_marker,
         test_check_context_completeness_clean_line_range_suffix_in_context,
         test_check_context_completeness_dirty_line_range_suffix_missing,
+        test_check_context_completeness_clean_directory_reference,
+        test_check_context_completeness_clean_directory_reference_not_on_disk,
+        test_check_context_completeness_clean_double_slash_token,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
@@ -5407,6 +5593,8 @@ def main() -> int:
         test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence,
         test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading,
         test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break,
+        test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer,
+        test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,
