@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: mill-validate-verify-diagnostics-gaps
+branch: hanf/mill-validate-verify-diagnostics-gaps
+plan: null
+parent: main
+task: Improve diagnosability of plan-validate errors and finalize verify-replay failures
+task_description: |
+  Improve diagnosability of plan-validate errors and finalize verify-replay failures
+```
+
+## Timeline
+
+```text
+discussing  '2026-08-02T14:55:52Z'
+```
