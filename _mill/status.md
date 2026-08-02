@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-behavior-gaps
+phase: approved-harness-tool-contracts-doc
 slug: mill-pipeline-skill-doc-gaps
 branch: hanf/mill-pipeline-skill-doc-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-08-02T11:40:35Z'
 implementing  '2026-08-02T11:40:54Z'
 approved-mill-plan-self-validate-fixes  '2026-08-02T11:43:12Z'
 approved-mill-go-behavior-gaps  '2026-08-02T11:46:05Z'
+approved-harness-tool-contracts-doc  '2026-08-02T11:48:38Z'
 ```
 
 ## Batches
@@ -41,7 +42,8 @@ batches:
     start_sha: a2f86ccf81bed4fc8e5a0b2d0a7e452922e58189
     commit_sha: beeb2e0fabda8ff866856cdc0fb268f2f0c44d0f
   - name: harness-tool-contracts-doc
-    state: running
+    state: approved
     implementer_session: d3551dbe-3489-41d3-900e-dd237e4952a9
     start_sha: 3cc08acdd6f8c47d1c3d84d563514a7bdab7f77e
+    commit_sha: 42a4ec87695b5f8ea243d1721852cc604700731b
 ```
