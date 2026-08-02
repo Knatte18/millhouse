@@ -1,0 +1,25 @@
+MILL_REVIEW_BEGIN
+# Review: mill-merge-in SKILL.md: _plan_dag helper calls missing signature lines — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-08-02
+```
+
+Verified: `mill-merge-in/SKILL.md:97-98` contains exactly two `signature:` lines, in the exact text and order specified by the plan's Shared Decision, inserted immediately after the step-4 attribution paragraph and before the "Before the loop..." paragraph. `grep -n "signature:"` against the file returns exactly these two lines and no others, matching the batch's manual-verification instruction.
+
+Both signature strings were cross-checked against the real source:
+- `_plan_dag._read_batch_frontmatter(batch_path: Path) -> dict` matches `_plan_dag.py:343`.
+- `_plan_dag.parse_verify_field(frontmatter: dict, hub_root: Path, git_root: Path) -> tuple[str | None, Path | None]` matches `_plan_dag.py:366-368` exactly, including the tuple return type (correctly resolving the #768 vs #762 conflict noted in the plan/discussion).
+
+Formatting follows the cited precedent at `mill-go/SKILL.md:434-437` (standalone, unindented, backtick-wrapped `signature:` lines following plain prose) rather than a list-item continuation, appropriate since mill-merge-in step 4 is a plain paragraph.
+
+Scope respected: no signature lines were added for `extract_batch_index`, `topo_order`, or `iter_batch_verifies`, per the discussion's explicit scope boundary. No other file in the batch's `Edits:` list was touched beyond `mill-merge-in/SKILL.md`; the plan's single batch, single card, `verify: null` docs-only shape is realized with no code changes to `_plan_dag.py`. No out-of-plan files, no duplicated helpers, no cross-batch contract concerns (single batch, no dependencies).
+
+## Verdict
+
+APPROVE
+Exact plan-specified signature lines inserted at the correct location with correct source-verified text; no deviations found.
+MILL_REVIEW_END
