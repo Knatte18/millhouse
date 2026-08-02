@@ -119,7 +119,7 @@ def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
         source_label: Label for the source (e.g., "mill-config.yaml").
     """
     # Known deprecated keys that should not trigger the generic unknown warning
-    deprecated_keys = {"llm.claude.psmux.via_psmux"}
+    deprecated_keys = {"llm.claude.psmux.via_psmux", "pipeline.autonomous_mode"}
 
     unknown = walk_unknown_keys(actual, template)
     for path in unknown:
