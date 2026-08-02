@@ -3,7 +3,7 @@
 ```yaml
 task: mill-config.yaml unknown-key warning for pipeline.autonomous_mode
 slug: mill-config-autonomous-mode-unknown-key
-approved: false
+approved: true
 started: 20260802-113219
 parent: main
 root: ""
