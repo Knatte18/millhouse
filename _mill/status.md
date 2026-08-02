@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-config-autonomous-mode-unknown-key
 branch: hanf/mill-config-autonomous-mode-unknown-key
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-08-02T11:42:22Z'
 approved-deprecated-key-suppression  '2026-08-02T11:45:04Z'
 holistic-reviewing  '2026-08-02T11:45:26Z'
 holistic-approved  '2026-08-02T11:46:27Z'
+done  '2026-08-02T11:46:47Z'
 ```
 
 ## Batches
