@@ -1503,7 +1503,7 @@ def _check_context_completeness(
     detected by this regex; future citations needing that format should be
     aware they won't be checked by context-completeness.
 
-    Error dict shape: ``{check, batch, card, path, message}``.
+    Error dict shape: ``{check, batch, card, path, message, line}``.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
@@ -1586,6 +1586,7 @@ def _check_context_completeness(
                             f"which is not in this card's "
                             f"Context:/Edits:/Creates:/Deletes:/Moves:"
                         ),
+                        "line": line.strip(),
                     })
 
     return errors
