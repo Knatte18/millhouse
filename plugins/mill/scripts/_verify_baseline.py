@@ -67,6 +67,65 @@ from _implementer_common import _posix_shell_run_args
 _DEPENDENCY_DIR_CANDIDATES = (".venv", "venv", "node_modules", "vendor")
 
 
+def _checkout_parent_branch(project_root: Path, git_root: Path, parent_branch: str) -> Path:
+    """
+    Check out `parent_branch`'s current tip into a fresh transient worktree.
+
+    Resolves the parent branch's current tip SHA via `git rev-parse`, then
+    creates a fresh, uniquely-named subdirectory under
+    `<project_root>/.scratch/` and runs `git worktree add` (detached HEAD, no
+    new branch) at that SHA, with `-c core.longpaths=true` scoped to this
+    single invocation (never a persistent git config write) so deep-path
+    Windows repos don't hit a transient "Filename too long" failure that
+    would silently disable the baseline gate -- see the module docstring and
+    #615/#620.
+
+    Args:
+        project_root: Absolute path to the task worktree root (where
+            `.scratch/` lives).
+        git_root: Absolute path to the repo root `git` commands run against.
+        parent_branch: Name of the parent branch to snapshot (e.g. "main").
+
+    Returns:
+        The absolute path to the newly-created transient worktree.
+
+    Raises:
+        RuntimeError: `git rev-parse` or `git worktree add` failed.
+    """
+    rev_parse_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "rev-parse", parent_branch],
+    )
+    if rev_parse_result.returncode != 0:
+        raise RuntimeError(
+            f"git rev-parse {parent_branch!r} failed: {rev_parse_result.stderr.strip()}"
+        )
+    parent_sha = rev_parse_result.stdout.strip()
+
+    scratch_dir = project_root / ".scratch"
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    # 12 hex characters (~2^48 combinations) is effectively collision-free for
+    # a short-lived per-invocation scratch directory, and reclaims path
+    # budget for Windows MAX_PATH on repos with deep fixture trees (#629).
+    # This is a best-effort mitigation, not a guaranteed fix -- the
+    # non-blocking fail-safe in `_run_baseline_stage` (which never raises; on
+    # any failure it leaves the baseline field unset and the next
+    # `_run_verify_gates` call runs the gate strictly) remains the actual
+    # safety net regardless of whether this shortening is sufficient for any
+    # given repo's fixture depth.
+    tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex[:12]}"
+
+    worktree_add_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "-c", "core.longpaths=true", "worktree", "add", str(tmp_path), parent_sha],
+    )
+    if worktree_add_result.returncode != 0:
+        raise RuntimeError(
+            f"git worktree add failed (target={tmp_path}, sha={parent_sha}): "
+            f"{worktree_add_result.stderr.strip()}"
+        )
+
+    return tmp_path
+
+
 def compute_baseline(
     project_root: Path,
     git_root: Path,
@@ -136,40 +195,7 @@ def compute_baseline(
         OSError: junction creation failed.
         ValueError: link_path already exists (dependency dir collision).
     """
-    rev_parse_result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "rev-parse", parent_branch],
-    )
-    if rev_parse_result.returncode != 0:
-        raise RuntimeError(
-            f"git rev-parse {parent_branch!r} failed: {rev_parse_result.stderr.strip()}"
-        )
-    parent_sha = rev_parse_result.stdout.strip()
-
-    scratch_dir = project_root / ".scratch"
-    scratch_dir.mkdir(parents=True, exist_ok=True)
-    # 12 hex characters (~2^48 combinations) is effectively collision-free for
-    # a short-lived per-invocation scratch directory, and reclaims path
-    # budget for Windows MAX_PATH on repos with deep fixture trees (#629).
-    # This is a best-effort mitigation, not a guaranteed fix -- the
-    # non-blocking fail-safe in `_run_baseline_stage` (which never raises; on
-    # any failure it leaves the baseline field unset and the next
-    # `_run_verify_gates` call runs the gate strictly) remains the actual
-    # safety net regardless of whether this shortening is sufficient for any
-    # given repo's fixture depth.
-    tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex[:12]}"
-
-    # core.longpaths is scoped to this single invocation (via -c, not a
-    # persistent git config write) so deep-path Windows repos don't hit a
-    # transient "Filename too long" failure that would silently disable the
-    # baseline gate -- see the module docstring and #615/#620.
-    worktree_add_result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "-c", "core.longpaths=true", "worktree", "add", str(tmp_path), parent_sha],
-    )
-    if worktree_add_result.returncode != 0:
-        raise RuntimeError(
-            f"git worktree add failed (target={tmp_path}, sha={parent_sha}): "
-            f"{worktree_add_result.stderr.strip()}"
-        )
+    tmp_path = _checkout_parent_branch(project_root, git_root, parent_branch)
 
     # The temp checkout at tmp_path mirrors git_root, not hub_root. When the
     # verify subprocess must run one or more levels below that (cwd: hub in a
