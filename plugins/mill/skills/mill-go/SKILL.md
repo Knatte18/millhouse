@@ -184,7 +184,8 @@ enter the wait unconditionally; do not branch on which upstream skill
     requires no special handling: act on the first notification's
     `<event>` content; the second, event-less completion notification for
     the same `task_id` carries no further information and needs no
-    separate branch. Branch on the `<event>` content:
+    separate branch. See `plugins/mill/docs/harness-tool-contracts.md`
+    for this contract's canonical write-up. Branch on the `<event>` content:
     - **`READY`** — re-run this Entry phase gate step from its top:
       re-read `status_path` via `_status.read_full` fresh, and re-evaluate
       the whole phase table again from scratch (do not assume `planned` is
@@ -248,6 +249,8 @@ On a fresh run only (no `## Batches` section in status.md):
 For each batch in `order`:
 
 ## Agent-mode dispatch
+
+> See `plugins/mill/docs/harness-tool-contracts.md` for the confirmed `Agent` tool notification/return-shape contract this section is built on.
 
 When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
