@@ -68,5 +68,7 @@ batches:
     start_sha: 6f28a86e912e12c07f53a92cb771839b24107869
     commit_sha: cd9496c2d319d3ff96577bddbf947a438f8a0798
   - name: baseline-waiver-integration-test
-    state: pending
+    state: running
+    implementer_session: f9ffc399-138e-4cea-b6e2-a6298abec834
+    start_sha: 9cbed7a25b929cd37efcd79f88d44566e3517854
 ```
