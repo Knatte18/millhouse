@@ -27,5 +27,7 @@ implementing  '2026-08-05T18:48:57Z'
 ```yaml
 batches:
   - name: semantic-line-breaks
-    state: pending
+    state: running
+    implementer_session: 971cb921-0e8f-49b2-aa28-5f67b8e1b301
+    start_sha: 93b51d40a1168aee4d06ccd64b22709e17e331b5
 ```
