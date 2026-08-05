@@ -495,6 +495,15 @@ fi
 
 If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
 
+For this dispatch instance only, immediately before step 6 of the
+pattern above (`--stage finalize`) runs, execute the "### 0.6. Per-batch
+baseline recapture (self-hosting only)" check.
+
+Immediately before this backgrounded dispatch is launched, execute the
+"### 0.6. Per-batch baseline recapture (self-hosting only)" check — this
+mode has no separate finalize call to hook before, so the check must run
+ahead of the dispatch itself.
+
 If `dispatch == subprocess` or `psmux`: background via millpy-bg:
 
 ```bash
