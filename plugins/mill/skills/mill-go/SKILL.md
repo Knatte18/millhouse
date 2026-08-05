@@ -407,6 +407,73 @@ The second line covers the `per_batch` substage: `{"stage": "baseline", "substag
 
 Why this must run before batch 1 specifically, eagerly and once: per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision ("Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**"), this ordering guarantees no implementer session has touched dependency manifests yet, so the transient worktree's reused dependency state is still guaranteed to match the parent branch tip. Skip this step entirely for every batch after the first.
 
+### 0.6. Per-batch baseline recapture (self-hosting only)
+
+This is a shared check-and-invoke block, referenced (not duplicated) from
+two different insertion points in "### 1. Implement" below — see the
+Agent-mode and subprocess/psmux dispatch branches there. It exists only
+to backfill a still-missing per-batch `verify_baseline_failures` baseline
+for a self-hosting task's own plan, using the task worktree's own copy of
+`millpy-implement.py` rather than the frozen `${CLAUDE_PLUGIN_ROOT}`
+cache — the cache is provably a no-op for this purpose since it never
+reflects this task's own in-progress commits.
+
+**Session-scoped cadence flag.** Before "## Execute — sequential loop"
+begins, initialize a local Builder variable
+`baseline_recapture_attempted = False`. This variable is never persisted
+to status.md or any file — it resets to `False` whenever a mill-go
+session (re)starts, matching the existing in-memory-only precedent of
+the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 3).
+
+**Trigger check.** At the hook point, run all of:
+1. `baseline_recapture_attempted is False`.
+2. `_paths.is_self_hosting_task(git_root)` is `True`.
+3. This batch's entry in `_status.read_batches(status_path)` (matched by
+   `name == <batch_name>`) has `verify_baseline_failures` still `None`.
+4. This batch's own resolved `verify:` command is non-`None` — resolved
+   the same way `_enumerate_batch_verify_triples` resolves it: read
+   `overview_text = overview_path.read_text(encoding="utf-8")` (mirroring
+   `millpy-implement.py:670-671`), look up this batch's `file` in
+   `_plan_dag.extract_batch_index(overview_text)`, read that file's
+   frontmatter via `_plan_dag._read_batch_frontmatter`, and pass it
+   through `_plan_dag.parse_verify_field(frontmatter, worktree_root,
+   git_root)` — a non-`None` first element of the returned tuple
+   satisfies this condition.
+
+If all four hold, proceed to Invoke below. If any one is false, skip
+this step entirely — no logging needed for the skip itself (the
+once-per-run budget and non-self-hosting no-op are both expected,
+high-frequency states, not anomalies).
+
+**Invoke.** Set `baseline_recapture_attempted = True` immediately
+(before running the command below), so the attempt is consumed even if
+the invocation itself fails or hangs. Then run, from the task worktree
+(same cwd convention as "0.5. Baseline pre-flight" above):
+
+```bash
+PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
+```
+
+Substitute the literal `git_root` path resolved at Path Setup — do NOT
+use `${CLAUDE_PLUGIN_ROOT}` here; this is the one deliberate, narrow
+exception to the cache-form convention (see the plan overview's
+"cache-vs-worktree execution path for the retry" Shared Decision and
+root `CLAUDE.md`'s "Hard constraints" / "Path invariants"). Parse the
+two JSON lines this call prints, in the identical shape "0.5. Baseline
+pre-flight" already documents (first line:
+`{"stage": "baseline", "substage": "module_wide", "result":
+"computed"|"cached"|"error"|"skipped", "value": ...}`; second line:
+`{"stage": "baseline", "substage": "per_batch", "computed": [...],
+"cached": [...], "errored": {...}}`), and log a one-line ASCII-only
+summary of the `per_batch` line's counts.
+
+**Failure handling.** Any failure of this invocation — non-zero exit,
+timeout, malformed or missing JSON output on either line, or `--stage
+baseline` not yet existing in the worktree's mid-development code — is
+logged (ASCII-only) and treated as a no-op: proceed to this batch's
+normal strict-mode finalize exactly as if no recapture had been
+attempted. Never escalate to `stuck`/blocked over a recapture failure.
+
 ### 1. Implement
 
 Background via millpy-bg:
