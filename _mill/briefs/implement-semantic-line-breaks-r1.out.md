@@ -1,0 +1,5 @@
+All 4 cards are committed and match the batch file's declared `Commit:` messages exactly (4 of 4 cards committed). Working tree is clean (no tracked in-scope modifications). `verify: null` in the batch frontmatter, so no verify command to run.
+
+Summary: I implemented all 4 cards of batch 01-semantic-line-breaks — rewrote the "No fixed-column hard-wrapping" section in `plugins/mill/skills/markdown/SKILL.md` with semantic-line-break guidance and a before/after example, then added equivalent new sections plus fixed pre-existing hard-wrapped examples in `plugins/python/skills/python-comments/SKILL.md`, `plugins/golang/skills/golang-comments/SKILL.md`, and added a new section (purely additive, no existing example to fix) to `plugins/csharp/skills/csharp-comments/SKILL.md`. All 4 of 4 cards committed and pushed; verify is null (documentation-only batch, no test surface).
+
+{"status":"success","commit_sha":"c94b8019c4756979acef3696f051651eb017cd61","session_id":"971cb921-0e8f-49b2-aa28-5f67b8e1b301","cards_done":[1,2,3,4]}

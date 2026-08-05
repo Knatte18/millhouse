@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-semantic-line-breaks
 slug: markdown-semantic-line-breaks
 branch: hanf/markdown-semantic-line-breaks
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-08-05T18:40:06Z'
 plan-fix-r1  '2026-08-05T18:47:38Z'
 planned  '2026-08-05T18:48:11Z'
 implementing  '2026-08-05T18:48:57Z'
+approved-semantic-line-breaks  '2026-08-05T18:53:29Z'
 ```
 
 ## Batches
@@ -27,7 +28,8 @@ implementing  '2026-08-05T18:48:57Z'
 ```yaml
 batches:
   - name: semantic-line-breaks
-    state: running
+    state: approved
     implementer_session: 971cb921-0e8f-49b2-aa28-5f67b8e1b301
     start_sha: 93b51d40a1168aee4d06ccd64b22709e17e331b5
+    commit_sha: c94b8019c4756979acef3696f051651eb017cd61
 ```
