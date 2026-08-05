@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-per-batch-baseline-preflight-gap
 branch: hanf/mill-go-per-batch-baseline-preflight-gap
 plan: _mill/plan
@@ -20,4 +20,15 @@ planning  '2026-08-05T18:18:10Z'
 plan-review-r1  '2026-08-05T18:24:31Z'
 plan-fix-r1  '2026-08-05T18:24:31Z'
 planned  '2026-08-05T18:25:06Z'
+implementing  '2026-08-05T18:25:44Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: self-hosting-detection-helper
+    state: pending
+  - name: per-batch-baseline-recapture-hook
+    state: pending
 ```
