@@ -27,9 +27,9 @@ Do not hard-wrap prose at a fixed column (e.g. ~80-88 characters).
 That habit lands a line break mid-word or mid-phrase (`file-` / `based`) instead of at a sentence or clause boundary, because the break is chosen by character count, not by meaning.
 
 Instead, write one sentence per line — that is a semantic line break.
-Break also inside a long sentence, at an internal independent-clause boundary.
-An internal independent-clause boundary is a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
-A comma followed by a coordinating conjunction that joins a list item or a compound predicate — with only one subject and verb — does not trigger a break.
+Break also inside a long sentence, at an internal independent-clause boundary: a semicolon, or a comma immediately followed by a coordinating conjunction ("but", "and", "or") that is itself immediately followed by an explicit subject — a pronoun (I/you/he/she/it/we/they/this/that/these/those) or a noun phrase — before the next verb.
+Standard punctuation already reserves comma-before-conjunction for joining two independent clauses — a compound predicate sharing one subject normally omits the comma — but this rule treats the explicit-subject test as authoritative over the source's own comma placement, since generated prose doesn't always follow that convention.
+When the explicit-subject test is ambiguous, don't break: under-splitting is the safe default, for a script applying this rule mechanically and for an LLM alike.
 
 When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
 Readability wins over mechanical rule compliance in that edge case.
