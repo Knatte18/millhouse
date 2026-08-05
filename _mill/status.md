@@ -34,5 +34,7 @@ batches:
     start_sha: 50ea6532dc6bc626a90c3673d363f2560290e004
     commit_sha: 71117ff1fae7a2bcd350cbc8eb0b6346e202217e
   - name: per-batch-baseline-recapture-hook
-    state: pending
+    state: running
+    implementer_session: 257c6b93-8eaf-4928-9a51-31da4554bf8a
+    start_sha: 6e55121f47dba2468aabc60fd9a1031598bcb6d8
 ```
