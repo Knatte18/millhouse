@@ -28,7 +28,9 @@ implementing  '2026-08-05T18:25:44Z'
 ```yaml
 batches:
   - name: self-hosting-detection-helper
-    state: pending
+    state: running
+    implementer_session: 15aac35d-1cf0-44f1-b557-646c0ec519b4
+    start_sha: 50ea6532dc6bc626a90c3673d363f2560290e004
   - name: per-batch-baseline-recapture-hook
     state: pending
 ```
