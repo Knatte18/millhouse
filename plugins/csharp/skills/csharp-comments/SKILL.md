@@ -26,6 +26,37 @@ Guidelines for code comments and XML documentation in C#/.NET.
 - Use inline comments only to explain **why**, never **what**.
 - If the code needs a "what" comment, the code itself is unclear — refactor instead.
 
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
+
+Do not hard-wrap a multi-line `/// <summary>` or inline comment at a fixed column.
+Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
+Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
+A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
+
+XML-doc tooling collapses consecutive `///` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
+
+**Bad example:**
+
+```csharp
+/// <summary>
+/// Validates the incoming order against the pricing catalog and applies any active
+/// discount codes. It then persists the finalized order, and it returns the
+/// confirmation number the caller displays to the customer.
+/// </summary>
+public string ProcessOrder(Order order) {
+```
+
+**Good example:**
+
+```csharp
+/// <summary>
+/// Validates the incoming order against the pricing catalog and applies any active discount codes.
+/// It then persists the finalized order,
+/// and it returns the confirmation number the caller displays to the customer.
+/// </summary>
+public string ProcessOrder(Order order) {
+```
+
 ## Prohibited patterns
 
 - **Never** comment out code. Delete it. Version control handles history.
