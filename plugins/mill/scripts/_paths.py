@@ -97,6 +97,11 @@ Public API:
         the result is a valid NTFS filename component. Replaces each of
         ``: \\ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
         snapshot filenames, and any other filename component construction.
+
+    is_self_hosting_task(git_root: Path) -> bool
+        Detect whether ``git_root`` is a millhouse-developing-millhouse
+        (self-hosting) task worktree by checking for
+        ``git_root/plugins/mill/scripts/millpy-implement.py`` on disk.
 """
 from __future__ import annotations
 
@@ -128,6 +133,7 @@ __all__ = [
     "require_status_path",
     "TaskHubError",
     "sanitize_filename_component",
+    "is_self_hosting_task",
 ]
 
 
