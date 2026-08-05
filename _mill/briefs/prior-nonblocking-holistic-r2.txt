@@ -1,1 +1,0 @@
-- `is_self_hosting_task` omitted from `_paths.py`'s `__all__` and module-docstring "Public API" index: Location: `plugins/mill/scripts/_paths.py:110-131` (`__all__`), `:9-99` (module docstring "Public API:" list)
