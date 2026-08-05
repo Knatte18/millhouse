@@ -97,6 +97,11 @@ Public API:
         the result is a valid NTFS filename component. Replaces each of
         ``: \\ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
         snapshot filenames, and any other filename component construction.
+
+    is_self_hosting_task(git_root: Path) -> bool
+        Detect whether ``git_root`` is a millhouse-developing-millhouse
+        (self-hosting) task worktree by checking for
+        ``git_root/plugins/mill/scripts/millpy-implement.py`` on disk.
 """
 from __future__ import annotations
 
@@ -128,6 +133,7 @@ __all__ = [
     "require_status_path",
     "TaskHubError",
     "sanitize_filename_component",
+    "is_self_hosting_task",
 ]
 
 
@@ -646,3 +652,18 @@ def sanitize_filename_component(name: str) -> str:
         Sanitized string with reserved characters replaced by hyphens.
     """
     return re.sub(r'[:\\/*?"<>|]', '-', name)
+
+
+def is_self_hosting_task(git_root: Path) -> bool:
+    """Detect whether git_root is a millhouse-developing-millhouse (self-hosting) task worktree.
+
+    Args:
+        git_root: Absolute path to the task worktree's git root.
+
+    Returns:
+        True when git_root/plugins/mill/scripts/millpy-implement.py exists on
+        disk, False otherwise -- including when git_root does not exist or is
+        a file rather than a directory (Path.exists() on a nested path under
+        a non-directory returns False rather than raising).
+    """
+    return (git_root / "plugins" / "mill" / "scripts" / "millpy-implement.py").exists()
