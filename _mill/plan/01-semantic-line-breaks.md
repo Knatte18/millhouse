@@ -15,7 +15,7 @@ _Not applicable — this batch has no `Moves:` entries in any card._
 
 ## Batch Scope
 
-This batch rewrites `plugins/mill/skills/markdown/SKILL.md`'s "No fixed-column hard-wrapping" section to prescribe semantic line breaks (one sentence per line, plus a clause-boundary trigger for long compound sentences) instead of "single unbroken line per paragraph," and adds the equivalent new guidance — with a before/after example — to the three language-specific comment skills (`python-comments`, `golang-comments`, `csharp-comments`), none of which currently has any line-wrap rule. Two of those three files also get a narrow in-place fix to an existing example that hard-wraps mid-sentence, contradicting the new rule being added to the same file. All four edits are independent (no card depends on another) and are grouped into one batch because each file is small (26-214 lines), a single Sonnet session holds all four easily, and every card is driven by the same rule text and the same "Decisions" reasoning documented in `00-overview.md`. There is no external interface — this is documentation-only, nothing downstream consumes an output of this batch.
+This batch rewrites `plugins/mill/skills/markdown/SKILL.md`'s "No fixed-column hard-wrapping" section to prescribe semantic line breaks (one sentence per line, plus a clause-boundary trigger for long compound sentences) instead of "single unbroken line per paragraph," and adds the equivalent new guidance — with a before/after example — to the three language-specific comment skills (`python-comments`, `golang-comments`, `csharp-comments`), none of which currently has any line-wrap rule. Two of those three files also get a narrow in-place fix to an existing example that hard-wraps mid-sentence, contradicting the new rule being added to the same file. All four edits are independent (no card depends on another) and are grouped into one batch because each file is small (26-213 lines), a single Sonnet session holds all four easily, and every card is driven by the same rule text and the same "Decisions" reasoning documented in `00-overview.md`. There is no external interface — this is documentation-only, nothing downstream consumes an output of this batch.
 
 ## Cards
 
@@ -96,7 +96,7 @@ This example is the one required (per the "Break granularity" decision) to demon
 Part A — add a new section. Insert the following new section body immediately before the `## Prohibited patterns` heading (i.e. immediately after the closing ` ``` ` of the second "Good vs bad examples" code block under `## Inline comments — narrate the reasoning`), with a blank line before and after. Reproduce it verbatim, including every individual line break:
 
 ```
-## Line-wrap style: semantic line breaks, not fixed-column wrapping
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
 
 Do not hard-wrap docstring or comment prose at a fixed column.
 Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole paragraph.
@@ -182,7 +182,7 @@ package auth
 Part B — add a new section. Insert the following new section immediately before the `## Inline comments` heading (i.e. immediately after the closing ` ``` ` of the `## Interface implementations` example, and its trailing `---` divider — keep that `---` divider where it is, then insert the new section, then its own `---` divider, matching this file's existing pattern of a `---` divider between every top-level section), with a blank line before and after. Reproduce it verbatim, including every individual line break and the two nested ` ```go ` fenced examples inside it:
 
 ````
-## Line-wrap style: semantic line breaks, not fixed-column wrapping
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
 
 Do not hard-wrap a multi-line doc comment at a fixed column.
 Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
@@ -229,7 +229,7 @@ The heading immediately following `## Inline comments` in the file today (`## Er
 Insert the following new section immediately before the `## Prohibited patterns` heading, with a blank line before and after (this file has no existing multi-line comment example of any kind, so this is purely additive). Reproduce it verbatim, including every individual line break and the two nested ` ```csharp ` fenced examples inside it:
 
 ````
-## Line-wrap style: semantic line breaks, not fixed-column wrapping
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
 
 Do not hard-wrap a multi-line `/// <summary>` or inline comment at a fixed column.
 Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.

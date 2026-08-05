@@ -3,7 +3,7 @@
 ```yaml
 task: 'markdown skill: use semantic line breaks instead of one unbroken line per paragraph'
 slug: markdown-semantic-line-breaks
-approved: false
+approved: true
 started: '20260805-183435'
 parent: main
 root: ""
@@ -50,6 +50,12 @@ A comma followed by a coordinating conjunction that joins a list item or a compo
 - **Decision:** the markdown skill's rule text must explicitly require a plain newline (soft break) — never a line ending in two trailing spaces or a backslash (both force a real `<br>` in rendered output).
 - **Rationale:** CommonMark renders a single bare newline inside a paragraph as a soft break (a space), which is what makes semantic line breaks invisible to a reader while staying addressable/diffable in source. A trailing-whitespace or backslash ending forces a visible break instead, and is easy to introduce by accident.
 - **Applies to:** Card 1 (`markdown/SKILL.md`) only — Python/Go/C# comment syntax has no equivalent trailing-whitespace hard-break behavior.
+
+### Decision: table cells and blockquotes are exceptions to the markdown rule
+
+- **Decision:** the rule applies to prose paragraphs. It does not apply inside table cells, where a bare newline breaks table parsing. Blockquote content stays on one line per default project style — CommonMark permits multi-line blockquotes to soft-wrap the same as a normal paragraph, so this is a stylistic default, not a syntax requirement.
+- **Rationale:** a bare newline inside a markdown table cell breaks the table's row-per-line syntax, so semantic line breaks are structurally incompatible there. Blockquotes have no such syntax constraint, but the repo's existing blockquotes are mostly short one-liners today (one 5-line exception exists at `plugins/mill/skills/mill-finalize/SKILL.md` lines 135-139, untouched by this task), so the rule keeps blockquote content single-line as a style default rather than forcing a change.
+- **Applies to:** Card 1 (`markdown/SKILL.md`) only — this is a markdown-syntax concern, not applicable to the three comment skills.
 
 ### Decision: scope extends to python-comments, golang-comments, csharp-comments
 
