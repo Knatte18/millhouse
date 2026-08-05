@@ -425,14 +425,7 @@ to status.md or any file — it resets to `False` whenever a mill-go
 session (re)starts, matching the existing in-memory-only precedent of
 the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 3).
 
-**Trigger check.** Conditions 2 and 4 below import `_paths`, `_plan_dag`,
-and `_status` using the same worktree-form
-`PYTHONPATH="<git_root>/plugins/mill/scripts"` as Invoke below — not the
-cache-form `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` used elsewhere in
-this file. The cache is frozen for the whole mill-go run and never
-reflects this self-hosting task's own in-progress commits, so evaluating
-the gate itself against stale cache code would undermine the mechanism
-this whole hook exists to provide. At the hook point, run all of:
+**Trigger check.** At the hook point, run all of:
 1. `baseline_recapture_attempted is False`.
 2. `_paths.is_self_hosting_task(git_root)` is `True`.
 3. This batch's entry in `_status.read_batches(status_path)` (matched by
