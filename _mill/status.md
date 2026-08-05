@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: markdown-semantic-line-breaks
 branch: hanf/markdown-semantic-line-breaks
 plan: _mill/plan
@@ -27,6 +27,7 @@ holistic-reviewing  '2026-08-05T19:00:24Z'
 holistic-fixing  '2026-08-05T19:03:54Z'
 nits-fixed-holistic  '2026-08-05T19:05:05Z'
 holistic-approved  '2026-08-05T19:05:15Z'
+done  '2026-08-05T19:06:16Z'
 ```
 
 ## Batches
