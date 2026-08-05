@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go-per-batch-baseline-preflight-gap
 branch: hanf/mill-go-per-batch-baseline-preflight-gap
 plan: _mill/plan
@@ -28,6 +28,7 @@ holistic-fixing  '2026-08-05T18:40:45Z'
 holistic-reviewing  '2026-08-05T18:44:29Z'
 holistic-fixing  '2026-08-05T18:49:08Z'
 holistic-reviewing  '2026-08-05T18:51:54Z'
+holistic-approved  '2026-08-05T18:54:28Z'
 ```
 
 ## Batches

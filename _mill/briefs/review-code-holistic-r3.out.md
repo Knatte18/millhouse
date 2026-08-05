@@ -1,0 +1,26 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go's one-shot pre-batch-1 baseline can't cover a task's own later per-batch-baseline capability — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-08-05
+```
+
+## Findings
+
+None. Verified against source:
+
+- Batch 1: `_paths.is_self_hosting_task` (plugins/mill/scripts/_paths.py:657-669) placed exactly after `sanitize_filename_component`, matches required body/docstring/`__all__` export/module docstring entry. `test_is_self_hosting_task` (plugins/mill/unit_tests/test-paths.py:196-221) covers all three required cases and is wired into `main()` immediately after `test_status_path()` (line 1132).
+- Batch 2: `### 0.6.` block (SKILL.md:410-475) inserted verbatim between `### 0.5.` and `### 1. Implement` as required. Card 4/5 hook references (SKILL.md:498-505) inserted at the exact two specified call sites, correctly asymmetric (Agent-mode before step-6 finalize; subprocess/psmux before dispatch).
+- Cross-batch contract verified: `_status.read_batches`, `_plan_dag.extract_batch_index`, `_plan_dag._read_batch_frontmatter`, `_plan_dag.parse_verify_field` all exist with signatures/return shapes matching the 0.6 block's description; `--stage baseline` in millpy-implement.py (line 663-666) is task-scoped (batch_name optional) as assumed.
+- Shared Decisions (cache-vs-worktree path, no new config key, trigger condition, once-per-session cadence, non-blocking failure handling, dispatch-mode-specific hook placement) are all applied consistently and verbatim in the SKILL.md text.
+- "All Files Touched" (`_paths.py`, `SKILL.md`, `test-paths.py`) matches the files actually present/changed — no out-of-plan files, no config-key additions.
+- No global utility duplication; no language pitfalls in the new Python code.
+
+## Verdict
+
+APPROVE
+Both batches fully and correctly realize the plan; no cross-batch or integration issues found.
+MILL_REVIEW_END
