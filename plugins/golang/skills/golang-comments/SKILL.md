@@ -27,8 +27,7 @@ Every `.go` file **must** begin with a comment that describes what this specific
 
 ```go
 // handlers_auth.go implements the HTTP handlers for login, logout, and token refresh.
-// Each handler validates the request, delegates to the auth service, and writes a
-// structured JSON response.
+// Each handler validates the request, delegates to the auth service, and writes a structured JSON response.
 
 package auth
 ```
@@ -173,6 +172,35 @@ When a method satisfies an interface, write a brief comment acknowledging the de
 func (b *Buffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
+```
+
+---
+
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
+
+Do not hard-wrap a multi-line doc comment at a fixed column.
+Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
+Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
+A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
+
+Godoc collapses consecutive `//` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
+
+**Bad example:**
+
+```go
+// LoadPortfolio reads every position file in dir and validates each one against the
+// schema. It merges the valid files into a single Portfolio, and it returns an error
+// if any file fails validation or two files declare the same position ID.
+func LoadPortfolio(dir string) (*Portfolio, error) {
+```
+
+**Good example:**
+
+```go
+// LoadPortfolio reads every position file in dir and validates each one against the schema.
+// It merges the valid files into a single Portfolio,
+// and it returns an error if any file fails validation or two files declare the same position ID.
+func LoadPortfolio(dir string) (*Portfolio, error) {
 ```
 
 ---
