@@ -64,12 +64,14 @@ modify).
   3. This batch's entry in `_status.read_batches(status_path)` (matched by
      `name == <batch_name>`) has `verify_baseline_failures` still `None`.
   4. This batch's own resolved `verify:` command is non-`None` — resolved
-     the same way `_enumerate_batch_verify_triples` resolves it: look up
-     this batch's `file` in `_plan_dag.extract_batch_index(overview_text)`,
-     read that file's frontmatter via `_plan_dag._read_batch_frontmatter`,
-     and pass it through `_plan_dag.parse_verify_field(frontmatter,
-     worktree_root, git_root)` — a non-`None` first element of the
-     returned tuple satisfies this condition.
+     the same way `_enumerate_batch_verify_triples` resolves it: read
+     `overview_text = overview_path.read_text(encoding="utf-8")` (mirroring
+     `millpy-implement.py:670-671`), look up this batch's `file` in
+     `_plan_dag.extract_batch_index(overview_text)`, read that file's
+     frontmatter via `_plan_dag._read_batch_frontmatter`, and pass it
+     through `_plan_dag.parse_verify_field(frontmatter, worktree_root,
+     git_root)` — a non-`None` first element of the returned tuple
+     satisfies this condition.
 
   If all four hold, proceed to Invoke below. If any one is false, skip
   this step entirely — no logging needed for the skip itself (the

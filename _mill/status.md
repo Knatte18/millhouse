@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-go-per-batch-baseline-preflight-gap
 branch: hanf/mill-go-per-batch-baseline-preflight-gap
 plan: _mill/plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-08-05T17:39:12Z'
 discussed  '2026-08-05T18:11:35Z'
 planning  '2026-08-05T18:18:10Z'
+plan-review-r1  '2026-08-05T18:24:31Z'
+plan-fix-r1  '2026-08-05T18:24:31Z'
 ```

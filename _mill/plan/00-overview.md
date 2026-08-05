@@ -3,7 +3,7 @@
 ```yaml
 task: mill-go's one-shot pre-batch-1 baseline can't cover a task's own later per-batch-baseline capability
 slug: mill-go-per-batch-baseline-preflight-gap
-approved: false
+approved: true
 started: 20260805-181448
 parent: main
 root: ""
