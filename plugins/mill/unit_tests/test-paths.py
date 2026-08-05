@@ -193,6 +193,34 @@ def test_status_path() -> None:
     print("PASS status_path case 5: cfg={'paths': {}} -> KeyError naming paths.status_md")
 
 
+def test_is_self_hosting_task() -> None:
+    # Case 1: millpy-implement.py present at the expected relative path -> True
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        scripts_dir = root / "plugins" / "mill" / "scripts"
+        scripts_dir.mkdir(parents=True)
+        (scripts_dir / "millpy-implement.py").write_text("", encoding="utf-8")
+        got = _paths.is_self_hosting_task(root)
+        assert got is True, f"case 1: got {got}"
+    print("PASS is_self_hosting_task case 1: millpy-implement.py present -> True")
+
+    # Case 2: no such path -> False
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        got = _paths.is_self_hosting_task(root)
+        assert got is False, f"case 2: got {got}"
+    print("PASS is_self_hosting_task case 2: path absent -> False")
+
+    # Case 3: git_root points at a plain file, not a directory -> False, no raise
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        plain_file = root / "not-a-directory"
+        plain_file.write_text("", encoding="utf-8")
+        got = _paths.is_self_hosting_task(plain_file)
+        assert got is False, f"case 3: got {got}"
+    print("PASS is_self_hosting_task case 3: git_root is a file -> False, no raise")
+
+
 def main() -> int:
     try:
         assert _paths.resolve_path is _sibling.resolve_path, \
@@ -1101,6 +1129,7 @@ def main() -> int:
 
         test_resolve_task_path()
         test_status_path()
+        test_is_self_hosting_task()
 
         # require_status_path — validates status.md existence with actionable error
         cfg = {"paths": {"status_md": "_mill/status.md"}}
