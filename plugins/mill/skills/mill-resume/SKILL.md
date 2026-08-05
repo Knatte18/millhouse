@@ -5,9 +5,11 @@ description: Resume an active task on another machine or after a fresh clone. Re
 
 # mill-resume
 
-One-shot. Finds an `[active]` task in `Home.md` that has no local worktree, then recreates the worktree from the remote branch so the user can continue with `mill-go`.
+One-shot.
+Finds an `[active]` task in `Home.md` that has no local worktree, then recreates the worktree from the remote branch so the user can continue with `mill-go`.
 
-**Task state lives on the branch.** `status.md`, `discussion.md`, `plan/`, and `reviews/` are committed files on the task branch — not in the wiki. After `git worktree add` in Phase 6, they are available at `<container>/wts/<slug>/status.md` etc. No separate wiki-state copy step is needed.
+**Task state lives on the branch.** `status.md`, `discussion.md`, `plan/`, and `reviews/` are committed files on the task branch — not in the wiki.
+After `git worktree add` in Phase 6, they are available at `<container>/wts/<slug>/status.md` etc. No separate wiki-state copy step is needed.
 
 **Cross-machine resume:** on a machine that has never checked out the task branch, run `git fetch origin` first to make the remote-tracking ref available. `git worktree add` will then check out the branch automatically.
 
@@ -20,7 +22,8 @@ mill-resume <slug>
 mill-resume
 ```
 
-If a slug is passed, resume that specific task. If no argument is provided, list resume candidates and let the user pick.
+If a slug is passed, resume that specific task.
+If no argument is provided, list resume candidates and let the user pick.
 
 ---
 
@@ -28,22 +31,15 @@ If a slug is passed, resume that specific task. If no argument is provided, list
 
 ### Phase 1: Verify setup
 
-If `_mill/status.md` exists at cwd (this is a genuine task worktree, just
-missing scaffolding) AND either `.millhouse/config.local.yaml` (or the
-legacy `.millhouse/config.yaml`) or the `.wiki` junction is missing, skip
-the two checks below and go directly to **Phase 1b: Repair an
-off-canonical worktree**.
+If `_mill/status.md` exists at cwd (this is a genuine task worktree, just missing scaffolding) AND either `.millhouse/config.local.yaml` (or the legacy `.millhouse/config.yaml`) or the `.wiki` junction is missing, skip the two checks below and go directly to **Phase 1b: Repair an off-canonical worktree**.
 
 Otherwise:
 
-If `.millhouse/config.local.yaml` (or the legacy `.millhouse/config.yaml`)
-does not exist, stop and tell the user to run `mill-setup` first.
+If `.millhouse/config.local.yaml` (or the legacy `.millhouse/config.yaml`) does not exist, stop and tell the user to run `mill-setup` first.
 
-If the `.wiki` junction does not exist at cwd, stop and tell the user to
-run `mill-setup` first (the wiki junction is required to read task state).
+If the `.wiki` junction does not exist at cwd, stop and tell the user to run `mill-setup` first (the wiki junction is required to read task state).
 
-Both present: verify the wiki daemon is healthy before proceeding to
-Phase 2.
+Both present: verify the wiki daemon is healthy before proceeding to Phase 2.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -57,23 +53,18 @@ if not _client.health_check(wiki_path):
 "
 ```
 
-If this fails, halt: tell the user the wiki daemon is unreachable or
-unhealthy and to inspect the reason `health_check()` printed to stderr
-before retrying.
+If this fails, halt: tell the user the wiki daemon is unreachable or unhealthy and to inspect the reason `health_check()` printed to stderr before retrying.
 
 ### Phase 1b: Repair an off-canonical worktree
 
-Reached only when Phase 1 found `_mill/status.md` at cwd but
-`.millhouse/config.local.yaml` or the `.wiki` junction is missing -- a
-task worktree that was hand-created (e.g. via `git worktree add`) outside
-any mill skill, at a non-canonical path, and never scaffolded. This repair
-is scoped to `mill-resume` alone -- if a different skill is run directly
-from inside such a worktree, that skill's own existing missing-scaffolding
-handling applies unchanged; direct the user to run `mill-resume` instead.
+Reached only when Phase 1 found `_mill/status.md` at cwd but `.millhouse/config.local.yaml` or the `.wiki` junction is missing -- a task worktree that was hand-created (e.g. via `git worktree add`) outside any mill skill, at a non-canonical path, and never scaffolded.
+This repair is scoped to `mill-resume` alone -- if a different skill is run directly from inside such a worktree, that skill's own existing missing-scaffolding handling applies unchanged;
+direct the user to run `mill-resume` instead.
 
 **Step 1 -- read slug and safety pre-check.**
 
-Read `_mill/status.md` at cwd; parse `slug:` from the YAML block.
+Read `_mill/status.md` at cwd;
+parse `slug:` from the YAML block.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -86,8 +77,8 @@ if lines:
 "
 ```
 
-If this halts: tell the user the worktree has uncommitted changes --
-commit or stash them, then re-run `mill-resume`. Do not proceed.
+If this halts: tell the user the worktree has uncommitted changes -- commit or stash them, then re-run `mill-resume`.
+Do not proceed.
 
 **Step 2 -- collision check.**
 
@@ -109,19 +100,13 @@ else:
 "
 ```
 
-If `COLLISION`: halt -- tell the user the canonical path already exists
-(a different task, or an unrelated directory) and to resolve manually
-before re-running `mill-resume`. Do not proceed; no mutation attempted.
+If `COLLISION`: halt -- tell the user the canonical path already exists (a different task,
+or an unrelated directory) and to resolve manually before re-running `mill-resume`.
+Do not proceed;
+no mutation attempted.
 
-If `RESUMABLE`: the canonical path already exists and its own
-`_mill/status.md` carries the *same* slug being repaired -- this is a
-worktree from a prior Phase 1b run whose `move()` step succeeded but
-whose scaffold steps (`.millhouse` copy / `.wiki` junction) did not
-complete. Skip Step 3's confirmation prompt (the operator already
-approved this relocation in the prior run) and go directly to Step 4 --
-`relocate_and_scaffold` (Card 8) is idempotent and will skip the
-already-done `move()`, re-run the safe-to-repeat `.millhouse` copy, and
-create the `.wiki` junction only if it is not already present.
+If `RESUMABLE`: the canonical path already exists and its own `_mill/status.md` carries the *same* slug being repaired -- this is a worktree from a prior Phase 1b run whose `move()` step succeeded but whose scaffold steps (`.millhouse` copy / `.wiki` junction) did not complete.
+Skip Step 3's confirmation prompt (the operator already approved this relocation in the prior run) and go directly to Step 4 -- `relocate_and_scaffold` (Card 8) is idempotent and will skip the already-done `move()`, re-run the safe-to-repeat `.millhouse` copy, and create the `.wiki` junction only if it is not already present.
 
 **Step 3 -- confirm with the user.**
 
@@ -157,54 +142,27 @@ print(canonical)
 "
 ```
 
-If this fails, report the printed stderr and stop. Tell the user:
-re-running `mill-resume` will retry safely -- `relocate_and_scaffold`
-(Card 8) is idempotent, so if the failure was in `git worktree move`
-itself (locked worktree, cross-filesystem move, permission error),
-nothing was mutated and the retry starts the move over from `<cwd>`;
-if the move already succeeded and a later scaffold step (`.millhouse`
-copy or `.wiki` junction) is what failed, the worktree now lives at
-`<canonical>` and Step 2's `RESUMABLE` branch on the next run will
-route straight back into Step 4 to finish scaffolding without
-re-attempting the move.
+If this fails, report the printed stderr and stop.
+Tell the user: re-running `mill-resume` will retry safely -- `relocate_and_scaffold` (Card 8) is idempotent, so if the failure was in `git worktree move` itself (locked worktree, cross-filesystem move, permission error), nothing was mutated and the retry starts the move over from `<cwd>`;
+if the move already succeeded and a later scaffold step (`.millhouse` copy or `.wiki` junction) is what failed, the worktree now lives at `<canonical>` and Step 2's `RESUMABLE` branch on the next run will route straight back into Step 4 to finish scaffolding without re-attempting the move.
 
-`hub_root` resolution is two steps, each closing a different bug: first
-`main_root = _paths.resolve_main_worktree_root(git_root)` -- resolved
-purely from git's own common-directory metadata, never consulting cwd's
-own `.millhouse/`. This step alone is necessary because Phase 1 branches
-into Phase 1b when *either* `.millhouse/config.local.yaml` *or* `.wiki`
-is missing, so `.millhouse/config.local.yaml` can still exist at cwd
-(the `.wiki`-only-missing case) -- a bare `_paths.resolve_hub_path()`
-call (which cwd-walks from `Path.cwd()` by default) would find that
-local file immediately and return the broken worktree itself, exactly
-the `cwd == old_worktree` situation `move()`'s own docstring (Card 7)
-warns against. Second, `hub_root = _paths.resolve_hub_path(cwd=main_root)`
--- passing the already-resolved `main_root` as `resolve_hub_path`'s
-explicit `cwd` argument runs its normal stub/`hub_relative_path`-aware
-walk (`_paths.py:159-225`) rooted at the true main worktree instead of
-at the broken worktree's cwd, so an M2+sub repo whose main-worktree hub
-`.millhouse` lives in a subdirectory (e.g. `src/csharp/NORCE.Models/.millhouse`
--- the same repo shape Batches 3/4 fix elsewhere in this task) still
-resolves to the correct `.millhouse` source. Using `resolve_main_worktree_root`
-alone (an earlier draft of this step) would silently source `.millhouse`
-from the wrong directory for exactly that repo shape -- `_worktree.copy_millhouse`
-no-ops without raising when its `src` argument does not exist
-(`_worktree.py:104-105`), so the failure would be silent, not an
-exception.
+`hub_root` resolution is two steps, each closing a different bug: first `main_root = _paths.resolve_main_worktree_root(git_root)` -- resolved purely from git's own common-directory metadata, never consulting cwd's own `.millhouse/`.
+This step alone is necessary because Phase 1 branches into Phase 1b when *either* `.millhouse/config.local.yaml` *or* `.wiki` is missing, so `.millhouse/config.local.yaml` can still exist at cwd (the `.wiki`-only-missing case) -- a bare `_paths.resolve_hub_path()` call (which cwd-walks from `Path.cwd()` by default) would find that local file immediately and return the broken worktree itself, exactly the `cwd == old_worktree` situation `move()`'s own docstring (Card 7) warns against.
+Second, `hub_root = _paths.resolve_hub_path(cwd=main_root)` -- passing the already-resolved `main_root` as `resolve_hub_path`'s explicit `cwd` argument runs its normal stub/`hub_relative_path`-aware walk (`_paths.py:159-225`) rooted at the true main worktree instead of at the broken worktree's cwd, so an M2+sub repo whose main-worktree hub `.millhouse` lives in a subdirectory (e.g. `src/csharp/NORCE.Models/.millhouse` -- the same repo shape Batches 3/4 fix elsewhere in this task) still resolves to the correct `.millhouse` source.
+Using `resolve_main_worktree_root` alone (an earlier draft of this step) would silently source `.millhouse` from the wrong directory for exactly that repo shape -- `_worktree.copy_millhouse` no-ops without raising when its `src` argument does not exist (`_worktree.py:104-105`), so the failure would be silent, not an exception.
 
 **Step 5 -- report and continue.**
 
-The worktree now lives at `<canonical>`. Report this explicitly:
-"Relocated to `<canonical>`." Every subsequent step in this session must
-reference `<canonical>` by absolute path -- do not assume the current
-shell's cwd followed the move. Continue directly to **Phase 9: Read and
-report phase**, using `<canonical>` as the worktree path; skip Phases
-2-8 (the slug is already known from `_mill/status.md`, the worktree
-already exists, and scaffolding is already done by Step 4 above).
+The worktree now lives at `<canonical>`.
+Report this explicitly: "Relocated to `<canonical>`."
+Every subsequent step in this session must reference `<canonical>` by absolute path -- do not assume the current shell's cwd followed the move.
+Continue directly to **Phase 9: Read and report phase**, using `<canonical>` as the worktree path;
+skip Phases 2-8 (the slug is already known from `_mill/status.md`, the worktree already exists, and scaffolding is already done by Step 4 above).
 
 ### Phase 2: Resolve the slug
 
-**If a slug argument was passed:** use it directly. Skip to Phase 4.
+**If a slug argument was passed:** use it directly.
+Skip to Phase 4.
 
 **If no argument was passed:** query the wiki for resume candidates:
 
@@ -220,7 +178,10 @@ print(json.dumps([t for t in tasks if t.get('status') == 'active'], indent=2))
 
 A resume candidate is a task with `status == "active"` that does NOT already have a local worktree at `<container>/wts/<slug>/` with a matching branch (`git branch --list <branch_name>` returns output).
 
-`<container>` is `_paths.resolve_container_path(git_root)`. Read `repo.branch-prefix` from config (if set). Derive `branch_name` for each slug: if prefix is set and non-empty, `branch_name = f"{prefix}/{slug}"`; otherwise `branch_name = slug`.
+`<container>` is `_paths.resolve_container_path(git_root)`.
+Read `repo.branch-prefix` from config (if set).
+Derive `branch_name` for each slug: if prefix is set and non-empty, `branch_name = f"{prefix}/{slug}"`;
+otherwise `branch_name = slug`.
 
 Present candidates as a numbered list:
 
@@ -231,7 +192,10 @@ Resume candidates:
 Pick a number:
 ```
 
-The phase shown is from the remote branch tip's `_mill/status.md`. Fetch and read it with `git show origin/<branch_name>:_mill/status.md`; parse the `phase:` field from the YAML block. If the file is absent or unreadable, show `(phase: unknown)`.
+The phase shown is from the remote branch tip's `_mill/status.md`.
+Fetch and read it with `git show origin/<branch_name>:_mill/status.md`;
+parse the `phase:` field from the YAML block.
+If the file is absent or unreadable, show `(phase: unknown)`.
 
 If there are no candidates (all active tasks already have a local worktree), print:
 
@@ -287,11 +251,14 @@ Where:
 - `<container>` is `_paths.resolve_container_path(<git-root>)`.
 - The worktree lands at `<container>/wts/<slug>/` — the canonical location for all task worktrees in the container layout.
 
-If the remote-tracking branch is not yet fetched locally, run `git fetch origin <branch_name>` first; `git worktree add` requires the tracking ref to be present. If `git worktree add` fails (branch already checked out elsewhere, disk error, etc.), report the error and stop.
+If the remote-tracking branch is not yet fetched locally, run `git fetch origin <branch_name>` first;
+`git worktree add` requires the tracking ref to be present.
+If `git worktree add` fails (branch already checked out elsewhere, disk error, etc.), report the error and stop.
 
 ### Phase 7: Copy `.millhouse/` from parent
 
-Copy `.millhouse/` (excluding `scratch/` and `children/`) from the parent worktree (cwd) to the new worktree. This gives the new worktree the config and wrapper scripts. (`_mill/` lives at the worktree root on the task branch and is not under `.millhouse/` — no exclusion needed.)
+Copy `.millhouse/` (excluding `scratch/` and `children/`) from the parent worktree (cwd) to the new worktree.
+This gives the new worktree the config and wrapper scripts. (`_mill/` lives at the worktree root on the task branch and is not under `.millhouse/` — no exclusion needed.)
 
 Also copy `.millhouse/config.local.yaml` from the parent to the new worktree if it exists.
 
@@ -308,7 +275,8 @@ junction_create(wiki_clone_path, new_worktree / ".wiki")
 
 ### Phase 9: Read and report phase
 
-Read `<container>/wts/<slug>/_mill/status.md` from the newly added worktree. Parse the `phase:` field from the YAML block.
+Read `<container>/wts/<slug>/_mill/status.md` from the newly added worktree.
+Parse the `phase:` field from the YAML block.
 
 ### Phase 10: Report
 

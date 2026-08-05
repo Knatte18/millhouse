@@ -1,6 +1,7 @@
 # Review Output Schema
 
-This file documents the canonical format for all review output files produced by the Layer 02 review system. Every file written by `_review_common.write_review_file()` must conform to this schema. `parse_verdict()` in `_review_common.py` validates against this schema — specifically the `verdict:` field inside the fenced yaml block.
+This file documents the canonical format for all review output files produced by the Layer 02 review system.
+Every file written by `_review_common.write_review_file()` must conform to this schema. `parse_verdict()` in `_review_common.py` validates against this schema — specifically the `verdict:` field inside the fenced yaml block.
 
 ---
 
@@ -25,8 +26,7 @@ date: <UTC YYYY-MM-DD>
 **Suggested fix:** ...
 
 ## Missing context
-(present only when verdict is NEED_CONTEXT — one bullet per file the
-reviewer needs but could not find in the bulk)
+(present only when verdict is NEED_CONTEXT — one bullet per file the reviewer needs but could not find in the bulk)
 
 - `path/to/needed_file.py` — why the reviewer needs it
 
@@ -76,16 +76,23 @@ Required section. Each finding uses this structure:
 ```
 
 **Finding severity:**
-- `BLOCKING` — must be resolved before the artefact can be approved. Causes `verdict: REQUEST_CHANGES`.
-- `NIT` — optional quality improvement. Does not block approval.
+- `BLOCKING` — must be resolved before the artefact can be approved.
+  Causes `verdict: REQUEST_CHANGES`.
+- `NIT` — optional quality improvement.
+  Does not block approval.
 
-**Severity vocabulary is closed, and unrecognized labels fail loud, not silent.** Each review type recognizes exactly two severity labels: `BLOCKING`/`NIT` for plan and code reviews, `GAP`/`NOTE` for discussion reviews. The reviewer prompt templates instruct reviewers to use ONLY these labels — never an invented word (e.g. `MAJOR`, `MINOR`, `CRITICAL`, `MEDIUM`, `HIGH`) — and to default an ambiguous finding to the blocking-equivalent label (`BLOCKING` or `GAP`) rather than the non-blocking one. As a code-level backstop against a reviewer LLM emitting an off-vocabulary label anyway, `count_unrecognized_severity_findings()` in `_review_common.py` scans every finding in a review's output — whether expressed as a markdown `### [XXX]` heading OR as a `severity:` entry inside a fenced ` ```yaml ` `findings:` block — and, for any label matching neither of the review type's two recognized labels, folds it into the blocking-equivalent counter (`blocking_count`) instead of silently dropping it from both `blocking_count` and `nit_count`. This runs inside `finalize_scope()` for every review, covering both output formats unconditionally so a mixed-format document (e.g. real `### [NIT]` headings alongside an unrecognized label expressed only in a YAML `findings:` entry) cannot hide an off-vocabulary finding in whichever format the two known severities did not use.
+**Severity vocabulary is closed, and unrecognized labels fail loud, not silent.**
+Each review type recognizes exactly two severity labels: `BLOCKING`/`NIT` for plan and code reviews, `GAP`/`NOTE` for discussion reviews.
+The reviewer prompt templates instruct reviewers to use ONLY these labels — never an invented word (e.g. `MAJOR`, `MINOR`, `CRITICAL`, `MEDIUM`, `HIGH`) — and to default an ambiguous finding to the blocking-equivalent label (`BLOCKING` or `GAP`) rather than the non-blocking one.
+As a code-level backstop against a reviewer LLM emitting an off-vocabulary label anyway, `count_unrecognized_severity_findings()` in `_review_common.py` scans every finding in a review's output — whether expressed as a markdown `### [XXX]` heading OR as a `severity:` entry inside a fenced ` ```yaml ` `findings:` block — and, for any label matching neither of the review type's two recognized labels, folds it into the blocking-equivalent counter (`blocking_count`) instead of silently dropping it from both `blocking_count` and `nit_count`.
+This runs inside `finalize_scope()` for every review, covering both output formats unconditionally so a mixed-format document (e.g. real `### [NIT]` headings alongside an unrecognized label expressed only in a YAML `findings:` entry) cannot hide an off-vocabulary finding in whichever format the two known severities did not use.
 
 If there are no findings, write `(no findings)` under `## Findings`.
 
 ### `## Verdict`
 
-Required section. Contains exactly two lines:
+Required section.
+Contains exactly two lines:
 
 ```
 APPROVE | REQUEST_CHANGES
@@ -129,6 +136,9 @@ Examples:
 | `NEED_CONTEXT` | Reviewer cannot evaluate without source files not provided in the bulk. The body's `## Missing context` section lists which files. Orchestrator responds by re-firing with `--extra-file <path>` per needed file, and must also notify + self-report the incomplete plan reference. Never guess. | yaml block + `## Verdict` body |
 | `ERROR` | Sub-review failed (LLM error, timeout, etc.). | `reviews[]` entries in `ReviewResult` only — never in review files |
 
-`ERROR` never appears inside a review file. It is only used in the `ReviewResult` JSON emitted by the API scripts when a sub-review fails at the LLM-provider layer.
+`ERROR` never appears inside a review file.
+It is only used in the `ReviewResult` JSON emitted by the API scripts when a sub-review fails at the LLM-provider layer.
 
-`NEED_CONTEXT` is the reviewer's escape hatch when it cannot evaluate without reading a file the orchestrator did not bulk. The discipline is: reviewers never fabricate file contents from filename/position clues. If a claim cannot be verified against the provided source, emit `NEED_CONTEXT` — the orchestrator owns the retry.
+`NEED_CONTEXT` is the reviewer's escape hatch when it cannot evaluate without reading a file the orchestrator did not bulk.
+The discipline is: reviewers never fabricate file contents from filename/position clues.
+If a claim cannot be verified against the provided source, emit `NEED_CONTEXT` — the orchestrator owns the retry.

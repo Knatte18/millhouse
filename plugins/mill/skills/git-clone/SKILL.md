@@ -27,7 +27,10 @@ Clone a repo into the mill container layout (default), or as a standard clone (`
 
 mill-setup later adds `<repo>/wiki/`, `<repo>/codeguide/`, and `<repo>/portals/` as siblings of `wts/`.
 
-**No bare-clone strategy.** The main worktree is a normal clone with `.git/` inside it. Task worktrees are added via `git -C wts/<repo>/ worktree add ../<slug>` so they land at `<container>/wts/<slug>/` as siblings. Bare clones were tried previously but conflicted with VS Code's repo extension.
+**No bare-clone strategy.**
+The main worktree is a normal clone with `.git/` inside it.
+Task worktrees are added via `git -C wts/<repo>/ worktree add ../<slug>` so they land at `<container>/wts/<slug>/` as siblings.
+Bare clones were tried previously but conflicted with VS Code's repo extension.
 
 ## Instructions
 
@@ -61,7 +64,9 @@ container_path="$(pwd)/$name"
 worktree_path="$container_path/wts/$name"
 ```
 
-`$name` is both the container directory name AND the main worktree's directory name (they match — see `## Hub Structure`). All subsequent commands use absolute paths. Do not use relative paths.
+`$name` is both the container directory name AND the main worktree's directory name (they match — see `## Hub Structure`).
+All subsequent commands use absolute paths.
+Do not use relative paths.
 
 #### 2.3. Check target doesn't exist
 
@@ -89,7 +94,8 @@ If the clone fails, report the error and stop.
 git -C "$worktree_path" symbolic-ref --short HEAD 2>/dev/null
 ```
 
-Returns the branch name that was checked out by `git clone` (e.g. `main`, `master`). If the result is empty (detached HEAD — rare), ask the user via `AskUserQuestion`.
+Returns the branch name that was checked out by `git clone` (e.g. `main`, `master`).
+If the result is empty (detached HEAD — rare), ask the user via `AskUserQuestion`.
 
 #### 2.7. Report
 
@@ -134,7 +140,8 @@ Check whether the repo root sits under a `wts/` directory:
 test "$(basename "$(dirname "$root")")" = "wts"
 ```
 
-If true, this repo is already in container-form (mill-managed). Report:
+If true, this repo is already in container-form (mill-managed).
+Report:
 
 > "This repo is already in container-form layout (`wts/<repo>/`)."
 
@@ -163,4 +170,5 @@ If no remote URL:
 - **Target directory exists:** abort with clear message (step 2.3)
 - **Clone fails:** report git error output (step 2.5)
 - **No default branch detected:** ask user (step 2.6)
-- **Partial failure cleanup:** if any step after 2.5 fails (container partially created), advise the user: "Hub creation failed. Delete `<container_path>` before retrying."
+- **Partial failure cleanup:** if any step after 2.5 fails (container partially created), advise the user: "Hub creation failed.
+  Delete `<container_path>` before retrying."

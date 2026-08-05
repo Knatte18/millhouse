@@ -5,11 +5,16 @@ description: Autonomously fetch open GitHub bug issues, synthesise discussion.md
 
 # mill-autofix
 
-You are the autonomous bug-fix orchestrator. Your job: drain the GitHub bug queue. For each open issue labelled `bug`, claim it via mill-claim (in-place on the hub), write `_mill/discussion.md`, run mill-plan → mill-go → mill-merge in sequence, close the issue on success, then move to the next bug. You run entirely in a single CC session in the hub worktree — no sub-LLM spawning.
+You are the autonomous bug-fix orchestrator.
+Your job: drain the GitHub bug queue.
+For each open issue labelled `bug`, claim it via mill-claim (in-place on the hub), write `_mill/discussion.md`, run mill-plan → mill-go → mill-merge in sequence, close the issue on success, then move to the next bug.
+You run entirely in a single CC session in the hub worktree — no sub-LLM spawning.
 
 ## Arguments
 
-- `--dry-run` — read-only. Fetch issues, print a summary table, exit. **Config is never mutated in dry-run mode.**
+- `--dry-run` — read-only.
+  Fetch issues, print a summary table, exit.
+  **Config is never mutated in dry-run mode.**
 - `--max-bugs N` — process at most `N` issues from the fetched list (default: unlimited).
 
 ## Phase 0: Init
@@ -47,7 +52,8 @@ json.dump(issues, sys.stdout, indent=2)
 
 Each issue dict: `number`, `title`, `body` (includes rendered comments), `labels`, `createdAt`.
 
-Store result as `all_issues`. Apply `--max-bugs` cap: `issues = all_issues[:N]` (or all if no cap).
+Store result as `all_issues`.
+Apply `--max-bugs` cap: `issues = all_issues[:N]` (or all if no cap).
 
 ### 1b. Load existing slugs from wiki
 
@@ -70,7 +76,8 @@ Maintain `existing_home_slugs` in working context throughout the run: `existing_
 If `--dry-run` was passed:
 
 1. For each issue in `all_issues` (up to `--max-bugs`):
-   - Derive slug using the algorithm below. Add it to `existing_home_slugs` so subsequent entries do not collide.
+   - Derive slug using the algorithm below.
+     Add it to `existing_home_slugs` so subsequent entries do not collide.
 2. Print a table:
    ```
    #    Issue#  Slug                           Title
@@ -82,7 +89,8 @@ If `--dry-run` was passed:
 
 ## Phase 3: Per-bug loop
 
-For each issue in `issues` (in order), execute steps 0–10. After the loop (or after the killswitch fires), proceed to Phase 5: Report.
+For each issue in `issues` (in order), execute steps 0–10.
+After the loop (or after the killswitch fires), proceed to Phase 5: Report.
 
 ---
 
@@ -102,7 +110,9 @@ Check whether `.scratch/autofix-stop` exists:
 test -f .scratch/autofix-stop && echo STOP || echo GO
 ```
 
-If `STOP`: halt the loop immediately. Do **not** delete the file. Proceed to Phase 5 (Report).
+If `STOP`: halt the loop immediately.
+Do **not** delete the file.
+Proceed to Phase 5 (Report).
 
 ---
 
@@ -117,7 +127,8 @@ Apply the slug algorithm to `issue["title"]` and `existing_home_slugs`:
 5. If length > 30: truncate at the last `-` boundary within the first 30 characters (or hard-cut at 30 if no boundary).
 6. If the result is in `existing_home_slugs`: append `-<issue_number>`.
 
-This is `_autofix.slug_from_title(title, existing_home_slugs, issue_number)`. You may apply the algorithm mentally or via subprocess:
+This is `_autofix.slug_from_title(title, existing_home_slugs, issue_number)`.
+You may apply the algorithm mentally or via subprocess:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -163,8 +174,11 @@ The `--summary` value is `issue["body"][:200].strip()` (use `""` if body is None
   " "<slug>"
   ```
 
-  - Status `active` or `done` → skip this issue. Do not record in any list. Continue to next issue.
-  - Status `unmarked` (or `not-found`) → the task entry exists but was never claimed. Proceed to step 3 (claim it).
+  - Status `active` or `done` → skip this issue.
+    Do not record in any list.
+    Continue to next issue.
+  - Status `unmarked` (or `not-found`) → the task entry exists but was never claimed.
+    Proceed to step 3 (claim it).
 
 - **Any other exit 1 reason:** record in `errored_list` as `{slug, issue_number, title, error: <stderr>}` and continue to next issue.
 
@@ -182,7 +196,8 @@ If output is non-empty (uncommitted changes in the working tree), run:
 git clean -fd _mill/
 ```
 
-Re-run `git status --porcelain`. If still non-empty: record in `errored_list` as `{slug, issue_number, title, error: "dirty tree after git clean -fd _mill/"}` and continue to next issue.
+Re-run `git status --porcelain`.
+If still non-empty: record in `errored_list` as `{slug, issue_number, title, error: "dirty tree after git clean -fd _mill/"}` and continue to next issue.
 
 ---
 
@@ -200,7 +215,8 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 
 ### Step 5: Synthesise discussion.md
 
-Use Glob, Grep, and Read to explore the codebase for evidence of the bug. Consult `issue["body"]` (includes rendered comments), `issue["title"]`, and `issue["labels"]`.
+Use Glob, Grep, and Read to explore the codebase for evidence of the bug.
+Consult `issue["body"]` (includes rendered comments), `issue["title"]`, and `issue["labels"]`.
 
 Read project-level constraints (may be empty):
 
@@ -273,9 +289,14 @@ print(s.get('blocked_reason') or '')
 
 `signature: _status.read_status(status_path: Path) -> {"phase": str, "task": str|None, "current_batch": str|None, "last_timeline_entry": str|None, "blocked_reason": str|None}`
 
-- `planned` → success. Proceed to step 8.
-- `blocked` → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-plan", blocked_reason: <value from status.md>}`. Run **Stuck cleanup helper**. Continue to next issue.
-- any other phase → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-plan", blocked_reason: "mill-plan ended in unexpected phase: <actual>"}`. Run **Stuck cleanup helper**. Continue to next issue.
+- `planned` → success.
+  Proceed to step 8.
+- `blocked` → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-plan", blocked_reason: <value from status.md>}`.
+  Run **Stuck cleanup helper**.
+  Continue to next issue.
+- any other phase → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-plan", blocked_reason: "mill-plan ended in unexpected phase: <actual>"}`.
+  Run **Stuck cleanup helper**.
+  Continue to next issue.
 
 ---
 
@@ -287,9 +308,14 @@ print(s.get('blocked_reason') or '')
 
 After it returns, read `_mill/status.md`'s `phase:` and `blocked_reason:` (same helper as step 7).
 
-- `done` → success. Proceed to step 9.
-- `blocked` → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-go", blocked_reason: <value>}`. Run **Stuck cleanup helper**. Continue to next issue.
-- any other phase → record in `stuck_list` as `{..., blocked_reason: "mill-go ended in unexpected phase: <actual>"}`. Run **Stuck cleanup helper**. Continue to next issue.
+- `done` → success.
+  Proceed to step 9.
+- `blocked` → record in `stuck_list` as `{slug, issue_number, title, phase: "mill-go", blocked_reason: <value>}`.
+  Run **Stuck cleanup helper**.
+  Continue to next issue.
+- any other phase → record in `stuck_list` as `{..., blocked_reason: "mill-go ended in unexpected phase: <actual>"}`.
+  Run **Stuck cleanup helper**.
+  Continue to next issue.
 
 ---
 
@@ -299,14 +325,21 @@ After it returns, read `_mill/status.md`'s `phase:` and `blocked_reason:` (same 
 /mill-merge
 ```
 
-mill-merge auto-detects in-place mode (the task is on a branch of the hub worktree; no separate worktree directory exists). After it returns:
+mill-merge auto-detects in-place mode (the task is on a branch of the hub worktree;
+no separate worktree directory exists).
+After it returns:
 
 ```bash
 git branch --show-current
 ```
 
-- Output equals `parent_branch` → mill-merge succeeded. The squash commit is now on `parent_branch`. Proceed to step 10.
-- Output does not equal `parent_branch` → mill-merge did not complete. Record in `stuck_list` as `{slug, issue_number, title, phase: "mill-merge", blocked_reason: "still on task branch after mill-merge"}`. Run **Stuck cleanup helper** (which force-checks out `parent_branch`). Continue to next issue.
+- Output equals `parent_branch` → mill-merge succeeded.
+  The squash commit is now on `parent_branch`.
+  Proceed to step 10.
+- Output does not equal `parent_branch` → mill-merge did not complete.
+  Record in `stuck_list` as `{slug, issue_number, title, phase: "mill-merge", blocked_reason: "still on task branch after mill-merge"}`.
+  Run **Stuck cleanup helper** (which force-checks out `parent_branch`).
+  Continue to next issue.
 
 ---
 
@@ -329,7 +362,9 @@ _gh_issues.close_with_comment(<issue_number>, 'Autonomously fixed by mill-autofi
 "
 ```
 
-On `GhError`: print the error to stderr but proceed — the fix landed; the GitHub close failed. The operator can close manually.
+On `GhError`: print the error to stderr but proceed — the fix landed;
+the GitHub close failed.
+The operator can close manually.
 
 Record in `fixed_list` as `{slug, issue_number, title, commit_sha: sha}`.
 
@@ -345,11 +380,14 @@ git clean -fd _mill/
 git checkout <parent_branch>
 ```
 
-**Why `git reset --hard HEAD` before `git checkout`:** the implementer session inside mill-go may have left uncommitted tracked-file changes. Without this reset, `git checkout <parent_branch>` aborts when tracked source files differ between branches.
+**Why `git reset --hard HEAD` before `git checkout`:** the implementer session inside mill-go may have left uncommitted tracked-file changes.
+Without this reset, `git checkout <parent_branch>` aborts when tracked source files differ between branches.
 
 On any git error in the stuck cleanup helper, print to stderr and continue — the report captures the partial state.
 
-Note: the wiki `active/<slug>/` directory and the `[active]` marker in Home.md are left as-is. They will be detected on the next autofix run (the "already present [active]" path in step 2) and skipped. Use `/mill-cleanup` to sweep stale wiki state after the run.
+Note: the wiki `active/<slug>/` directory and the `[active]` marker in Home.md are left as-is.
+They will be detected on the next autofix run (the "already present [active]" path in step 2) and skipped.
+Use `/mill-cleanup` to sweep stale wiki state after the run.
 
 ---
 
@@ -400,11 +438,24 @@ Print to the user:
 
 ## Principles
 
-- **Runs are restart-safe.** A crashed or manually interrupted run can be re-started from scratch; bugs already fixed will be skipped via the "already present [done]" path in step 2.
-- **Dry-run is truly read-only.** No config mutations, no wiki writes, no git state changes.
-- **Slug uniqueness across the run.** Add each derived slug to `existing_home_slugs` immediately — `_autofix.slug_from_title` only checks the set you pass in; it does not re-read Home.md.
-- **Killswitch is a soft stop.** `.scratch/autofix-stop` halts after the current bug completes (or after stuck cleanup if the current bug was in-flight). Do not delete the file.
-- **Each bug is independent.** A stuck or errored bug never blocks the next. The stuck cleanup helper restores invariants between bugs.
-- **Discussion.md is the handoff.** Include concrete evidence (file paths, function names, line numbers) in Problem and Technical context. mill-plan reads it cold — if the context is thin, the plan will be thin.
-- **Never guess timestamps.** Always call `_timestamp.now_utc_iso()` or `now_utc_compact()` via subprocess. The LLM clock is not reliable.
-- **Verify parent_branch after each bug.** Before the killswitch check at the top of the next iteration, confirm `git branch --show-current == parent_branch`. If not, run the stuck cleanup helper immediately — something went wrong in the previous iteration's teardown.
+- **Runs are restart-safe.**
+  A crashed or manually interrupted run can be re-started from scratch;
+  bugs already fixed will be skipped via the "already present [done]" path in step 2.
+- **Dry-run is truly read-only.**
+  No config mutations, no wiki writes, no git state changes.
+- **Slug uniqueness across the run.**
+  Add each derived slug to `existing_home_slugs` immediately — `_autofix.slug_from_title` only checks the set you pass in;
+  it does not re-read Home.md.
+- **Killswitch is a soft stop.** `.scratch/autofix-stop` halts after the current bug completes (or after stuck cleanup if the current bug was in-flight).
+  Do not delete the file.
+- **Each bug is independent.**
+  A stuck or errored bug never blocks the next.
+  The stuck cleanup helper restores invariants between bugs.
+- **Discussion.md is the handoff.**
+  Include concrete evidence (file paths, function names, line numbers) in Problem and Technical context. mill-plan reads it cold — if the context is thin, the plan will be thin.
+- **Never guess timestamps.**
+  Always call `_timestamp.now_utc_iso()` or `now_utc_compact()` via subprocess.
+  The LLM clock is not reliable.
+- **Verify parent_branch after each bug.**
+  Before the killswitch check at the top of the next iteration, confirm `git branch --show-current == parent_branch`.
+  If not, run the stuck cleanup helper immediately — something went wrong in the previous iteration's teardown.

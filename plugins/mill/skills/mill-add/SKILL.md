@@ -5,9 +5,12 @@ description: Turn the conversation that just ended into a task entry in the wiki
 
 # mill-add
 
-A thin skill wrapping `plugins/mill/scripts/millpy-add.py`. Use it when the user and you have just discussed something that deserves to be tracked as a task, and the user says "log this" / "legg det inn som en task" / similar.
+A thin skill wrapping `plugins/mill/scripts/millpy-add.py`.
+Use it when the user and you have just discussed something that deserves to be tracked as a task,
+and the user says "log this" / "legg det inn som en task" / similar.
 
-The script is mechanical (write files, regenerate sidebar, commit, push). The skill is judgment-heavy — you decide:
+The script is mechanical (write files, regenerate sidebar, commit, push).
+The skill is judgment-heavy — you decide:
 
 1. What slug captures the task concisely
 2. What title reads well as a wiki heading
@@ -32,7 +35,9 @@ Preconditions:
 
 ### Slug (required)
 
-Kebab-case, matches `[a-z][a-z0-9-]*`. Aim for 2–4 words. Prefer **what** over **where**:
+Kebab-case, matches `[a-z][a-z0-9-]*`.
+Aim for 2–4 words.
+Prefer **what** over **where**:
 
 - ✅ `reviewers-cache-warmup` — names the thing being done
 - ❌ `mill-review-improvement` — too generic
@@ -42,7 +47,9 @@ If you are unsure, propose a slug and ask the user to confirm or edit before run
 
 ### Title (required)
 
-Human-readable, sentence-case. This is the heading users see in Home.md. Examples:
+Human-readable, sentence-case.
+This is the heading users see in Home.md.
+Examples:
 
 - Slug: `reviewers-cache-warmup` → Title: `Warm reviewer caches on startup`
 - Slug: `rewrite-plan-validator` → Title: `Rewrite the plan validator for the flat card format`
@@ -51,15 +58,23 @@ Keep titles under ~60 characters — longer headings wrap awkwardly in the GitHu
 
 ### Summary (optional but usually wanted)
 
-One paragraph (≤150 words) that captures the problem and the rough approach. This goes straight below the heading in Home.md. Write prose, not a bullet list. Past tense ("we decided…") is fine; future tense ("we will…") is fine too. Do not include code blocks or headings here.
+One paragraph (≤150 words) that captures the problem and the rough approach.
+This goes straight below the heading in Home.md.
+Write prose, not a bullet list.
+Past tense ("we decided…") is fine;
+future tense ("we will…") is fine too.
+Do not include code blocks or headings here.
 
 If the conversation did not produce enough for a summary, pass just `--title` and skip `--summary`.
 
 ### Proposal body (optional)
 
-Extract when the discussion produced substantive background the user will want to re-read later. Heuristic: **more than ~150 words or more than 3 paragraphs** of substantive content (not counting your own clarifying questions). When in doubt, ask the user whether a proposal file is wanted.
+Extract when the discussion produced substantive background the user will want to re-read later.
+Heuristic: **more than ~150 words or more than 3 paragraphs** of substantive content (not counting your own clarifying questions).
+When in doubt, ask the user whether a proposal file is wanted.
 
-The proposal body is free-form markdown. Suggested structure when the conversation covers multiple concerns:
+The proposal body is free-form markdown.
+Suggested structure when the conversation covers multiple concerns:
 
 ```markdown
 # <Title> — background
@@ -81,7 +96,8 @@ The proposal body is free-form markdown. Suggested structure when the conversati
 <links to specs, issues, other tasks>
 ```
 
-The structure is a suggestion, not a contract. Match it to what the discussion actually covered.
+The structure is a suggestion, not a contract.
+Match it to what the discussion actually covered.
 
 ## How to call the script
 
@@ -102,8 +118,10 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 
 Notes:
 
-- `--proposal-body` accepts arbitrary markdown as a single string. For long bodies, write the content to a temp file first and read it into the argument — PowerShell handles heredoc-style strings via `@"..."@` or `Get-Content -Raw`.
-- For bodies longer than ~30 chars or containing backticks/quotes, prefer `--proposal-body-file <path>` — write the body to a temp file (e.g. `.scratch/proposal-<slug>.md`) and pass the path. Avoids heredoc-quoting issues that mangle markdown.
+- `--proposal-body` accepts arbitrary markdown as a single string.
+  For long bodies, write the content to a temp file first and read it into the argument — PowerShell handles heredoc-style strings via `@"..."@` or `Get-Content -Raw`.
+- For bodies longer than ~30 chars or containing backticks/quotes, prefer `--proposal-body-file <path>` — write the body to a temp file (e.g. `.scratch/proposal-<slug>.md`) and pass the path.
+  Avoids heredoc-quoting issues that mangle markdown.
 - The script acquires the wiki lock, so never run two mill-add invocations in parallel.
 - A duplicate slug is a hard error — the script exits 1 without writing anything.
 
@@ -144,7 +162,8 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 
 ### Example — task with proposal (file-based)
 
-Write the body to a temp file first, then pass the path. Recommended for any body longer than ~30 characters or containing backticks, code fences, or quotes.
+Write the body to a temp file first, then pass the path.
+Recommended for any body longer than ~30 characters or containing backticks, code fences, or quotes.
 
 ```powershell
 Set-Content .scratch/proposal-mill-review-ensemble.md @"
@@ -192,4 +211,5 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 - Deleting a task — same
 - Creating a worktree for the task — that is `/mill-spawn` (Layer 03)
 
-Keep this skill focused on "new task → wiki entry". Everything else belongs in another skill.
+Keep this skill focused on "new task → wiki entry".
+Everything else belongs in another skill.

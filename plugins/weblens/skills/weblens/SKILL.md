@@ -4,7 +4,8 @@ description: "Fetch blocked/restricted web pages and answer questions about thei
 argument-hint: "<url> [url2...] [question]"
 ---
 
-Fetch web pages that Claude Code's built-in WebFetch cannot read (Reddit, paywalled sites, bot-blocked sites). Uses a real browser user-agent and Readability extraction.
+Fetch web pages that Claude Code's built-in WebFetch cannot read (Reddit, paywalled sites, bot-blocked sites).
+Uses a real browser user-agent and Readability extraction.
 
 Only use this skill when the built-in WebFetch fails or returns unusable content.
 
@@ -19,6 +20,8 @@ Only use this skill when the built-in WebFetch fails or returns unusable content
 
 3. Read `_millhouse/scratch/weblens-output.md`.
 
-4. Answer the user's question based on the content. If no question was provided, give a brief summary (3-5 sentences per source).
+4. Answer the user's question based on the content.
+   If no question was provided, give a brief summary (3-5 sentences per source).
 
-5. Do NOT show the raw fetched content to the user. Only show your answer/summary.
+5. Do NOT show the raw fetched content to the user.
+   Only show your answer/summary.

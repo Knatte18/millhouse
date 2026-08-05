@@ -5,17 +5,22 @@ description: Git workflow and commit rules. Use for all git operations.
 
 # Git Skill
 
-Git workflow rules. No exceptions.
+Git workflow rules.
+No exceptions.
 
 ---
 
 ## Branch Rules
 
-- **Never switch to `main`/`master`.** If already on main, stay there for read-only work (log, diff, compare).
+- **Never switch to `main`/`master`.**
+  If already on main, stay there for read-only work (log, diff, compare).
 - **Never switch to an existing branch** other than the one currently active.
 - **Can create new branches** and switch to them when needed (e.g. to move work off main before committing).
-- **No rebase.** Merging to main happens via Pull Request. Use `/git-pr` to create a PR from the current branch, or create one manually on GitHub.
-- **Committing on `main` requires `--onmain`** passed as an argument to the commit command. Without it, refuse and suggest creating a new branch.
+- **No rebase.**
+  Merging to main happens via Pull Request.
+  Use `/git-pr` to create a PR from the current branch, or create one manually on GitHub.
+- **Committing on `main` requires `--onmain`** passed as an argument to the commit command.
+  Without it, refuse and suggest creating a new branch.
 
 ---
 
@@ -45,16 +50,19 @@ Add CSV export to reports
 
 ### Pre-commit hooks
 
-- **Never** use `--no-verify`. Respect pre-commit hooks.
+- **Never** use `--no-verify`.
+  Respect pre-commit hooks.
 - If a hook fails: fix the issue, re-stage, and commit again.
 
 ### No fixup commits
 
-- Do not use `git commit --fixup`. Each commit should be self-contained.
+- Do not use `git commit --fixup`.
+  Each commit should be self-contained.
 
 ---
 
 ## Push
 
-- Push to remote after committing. Set upstream if needed: `git push --set-upstream origin <branch>`.
+- Push to remote after committing.
+  Set upstream if needed: `git push --set-upstream origin <branch>`.
 - **Never** force-push.

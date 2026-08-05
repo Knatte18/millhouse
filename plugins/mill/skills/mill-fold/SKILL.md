@@ -5,7 +5,11 @@ description: Fold a GitHub issue or scope item into an existing Home.md backlog 
 
 # mill-fold
 
-A thin skill wrapping `millpy-fold.py`. Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md. The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`. Fold targets must be unclaimed: `status is None AND not deferred`. Any claimed, terminal, blocked, or deferred task rejects the fold — the allowlist auto-refuses any future status value, which is safe in the event of silent GitHub issue loss on refused folds.
+A thin skill wrapping `millpy-fold.py`.
+Use it when the user wants to attach a GitHub issue or a free-form scope note to an existing backlog task in Home.md.
+The script acquires the wiki lock, appends one bullet to the target task's body, commits and pushes, then (GH path only) closes the issue with comment `"Folded into wiki task: <slug>"`.
+Fold targets must be unclaimed: `status is None AND not deferred`.
+Any claimed, terminal, blocked, or deferred task rejects the fold — the allowlist auto-refuses any future status value, which is safe in the event of silent GitHub issue loss on refused folds.
 
 ## When the user invokes me
 
@@ -40,13 +44,17 @@ Typical triggers:
 
 ## Unclaimed-only guard
 
-Only unclaimed tasks (`status is None` and not `deferred`) accept folds. Any other task state rejects the fold with `SystemExit(1)`:
+Only unclaimed tasks (`status is None` and not `deferred`) accept folds.
+Any other task state rejects the fold with `SystemExit(1)`:
 
 ```
 Cannot fold into '<slug>': task is not unclaimed (status: <status-or-'deferred'>). Only unclaimed backlog tasks accept fold-ins.
 ```
 
-There is no `--force` flag. The rationale: folding closes the source GitHub issue with a pointer comment; folding into a claimed/terminal/blocked/deferred task silently loses the issue. The allowlist predicate — only unclaimed tasks — ensures that adding any new status value in the future will auto-refuse, which is safe in the event of silent issue loss.
+There is no `--force` flag.
+The rationale: folding closes the source GitHub issue with a pointer comment;
+folding into a claimed/terminal/blocked/deferred task silently loses the issue.
+The allowlist predicate — only unclaimed tasks — ensures that adding any new status value in the future will auto-refuse, which is safe in the event of silent issue loss.
 
 ## How to call the script
 
@@ -120,7 +128,8 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" `
 Cannot fold into 'mill-fold': task is not unclaimed (status: 'active'). Only unclaimed backlog tasks accept fold-ins.
 ```
 
-Exit code 1. No Home.md change.
+Exit code 1.
+No Home.md change.
 
 ## Error handling
 
