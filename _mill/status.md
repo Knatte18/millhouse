@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: markdown-semantic-line-breaks
 branch: hanf/markdown-semantic-line-breaks
 plan: _mill/plan
@@ -19,4 +19,13 @@ discussed  '2026-08-05T18:30:05Z'
 planning  '2026-08-05T18:40:06Z'
 plan-fix-r1  '2026-08-05T18:47:38Z'
 planned  '2026-08-05T18:48:11Z'
+implementing  '2026-08-05T18:48:57Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: semantic-line-breaks
+    state: pending
 ```
