@@ -41,7 +41,7 @@ The same example must also demonstrate a negative case — a comma+coordinating-
 - No reformatting of any already-committed generated markdown elsewhere in the repo or on other task branches (e.g. the sample `discussion.md` found on `mill-validate-verify-diagnostics-gaps`, which currently has 300-word single-line paragraphs). The user explicitly deferred this to a follow-up task — the new rule governs newly-written prose going forward only.
 - No reformatting of `plugins/mill/templates/discussion.md`'s own instructional HTML comment (lines 1-10), even though it was found to already hard-wrap mid-sentence at ~70-75 columns and technically violates the *current* rule too. Same follow-up-task deferral as above; it is not the file this task edits.
 - No automated linter, pre-commit hook, or CI check for markdown/comment line-wrap style. None exists today (confirmed during exploration) and none is being added — this remains a pure style convention enforced by the writing agent following the SKILL.md instruction.
-- No change to any other section of the four SKILL.md files being touched (e.g. `python-comments`'s docstring-style rules, `golang-comments`'s doc-comment-content rules, `csharp-comments`'s `<inheritdoc/>` rule) beyond adding the new line-wrap guidance and fixing the one contradictory example noted above.
+- No change to any other section of the four SKILL.md files being touched (e.g. `python-comments`'s docstring-style rules, `golang-comments`'s doc-comment-content rules, `csharp-comments`'s `<inheritdoc/>` rule) beyond adding the new line-wrap guidance and fixing the two contradictory examples noted above (golang-comments lines 29-31, python-comments lines 63-64/66-67).
 
 ## Decisions
 
@@ -107,7 +107,7 @@ No `CONSTRAINTS.md` exists at the hub root (confirmed absent during exploration)
 ## Testing
 
 This task changes only skill instruction text (four `SKILL.md` files) — there is no runtime code, so there is no automated test surface.
-Verification is by inspection: mill-plan should confirm that each rewritten/added section actually follows its own new rule (i.e. the rule text itself is written with one-sentence-per-line, dogfooding the convention it describes), and that the two fixed `golang-comments` examples no longer break mid-sentence.
+Verification is by inspection: mill-plan should confirm that each rewritten/added section actually follows its own new rule (i.e. the rule text itself is written with one-sentence-per-line, dogfooding the convention it describes), and that the fixed `golang-comments` example (lines 29-31) and the fixed `python-comments` example (lines 63-64/66-67) no longer break mid-sentence.
 No TDD candidates apply.
 
 ## Q&A log
@@ -123,3 +123,5 @@ No TDD candidates apply.
 - **Q:** (Discussion-review round 3, gap) The "mechanical" comma+conjunction clause-boundary trigger false-positives on lists/compound predicates (e.g. python-comments' own "...on how the index was created, and a "count" column..."). How to fix? **A:** Restate the trigger as requiring a second independent clause (subject+verb) after the comma/semicolon, not a bare pattern-match; require a negative worked example (comma+conjunction that should NOT break) alongside the positive one.
 - **Q:** (Discussion-review round 3, note) Line counts for markdown/SKILL.md and python-comments/SKILL.md were off by one. **A:** Corrected to 26 and 138 lines respectively (verified via `wc -l`).
 - **Q:** (Discussion-review round 3, note) The blockquote CommonMark justification conflated a syntax requirement with a single-line constraint that doesn't actually follow from it. **A:** Restated as a stylistic default (repo's existing blockquotes are short one-liners today) rather than a CommonMark-forced rule.
+- **Q:** (Discussion-review round 4, gap) Scope > Out still said "the one contradictory example" after round 3 added a second (python-comments). **A:** Corrected to name both: golang-comments lines 29-31, python-comments lines 63-64/66-67.
+- **Q:** (Discussion-review round 4, gap) Testing section misattributed both fixed examples to golang-comments. **A:** Corrected to attribute one fixed example to golang-comments (29-31) and the other to python-comments (63-64/66-67).
