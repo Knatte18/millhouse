@@ -60,11 +60,9 @@ def create_CBI_from_SSB_and_RSI(SSB_quarterly, RSI_weekly, RSI_stop_date=None):
     """
     Stitches together a CBI price index from two different price indices:
     1. Use SSB_quarterly for the period before RSI_weekly is sufficiently populated.
-       This is a quarterly sampled price index from SSB, with distinct regions
-       (covering all of Norway), but no count data.
+       This is a quarterly sampled price index from SSB, with distinct regions (covering all of Norway), but no count data.
     2. Use RSI_weekly for the main period, where this RSI is sufficiently populated.
-       This RSI is supplied as a LORSI cube class, which contains Logarithmic
-       Repeated Sales Indices (LORSI).
+       This RSI is supplied as a LORSI cube class, which contains Logarithmic Repeated Sales Indices (LORSI).
 
     Returns: DataFrame with "date" and "price" columns, plus additional information
         on how the index was created, and a "count" column representative of the
@@ -129,6 +127,36 @@ df = df[df['price_inc_debt'] != 0]
 df = df.dropna(subset=['grunnkrets_number', 'postcode', 'sold_date', 'location', 'BRA-i', 'price_inc_debt'])
 # Exclude zero-price transactions, which represent non-market transfers (gifts, inheritance).
 df = df[df['price_inc_debt'] != 0]
+```
+
+## Line-wrap style — semantic line breaks, not fixed-column wrapping
+
+Do not hard-wrap docstring or comment prose at a fixed column.
+Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole paragraph.
+Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
+A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
+
+When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
+Readability wins over mechanical rule compliance in that edge case.
+
+Raw Python docstrings preserve literal newlines, so tools like `help()`, `pydoc`, and IDE tooltips display sentence-per-line text as short lines rather than reflowing it into one paragraph.
+This is a display difference only — the text stays fully readable,
+and the addressing/diff-locality benefit holds regardless of how it renders.
+
+### Good vs bad examples
+
+```python
+# BAD — single unbroken line, hides sentence boundaries from diffs and citations
+"""
+Loads the raw transaction file and filters out zero-price rows. The result feeds directly into the CBI stitching step, and later steps assume the join has already happened.
+"""
+
+# GOOD — one sentence per line, with a clause-boundary break inside the second sentence
+"""
+Loads the raw transaction file and filters out zero-price rows.
+The result feeds directly into the CBI stitching step,
+and later steps assume the join has already happened.
+"""
 ```
 
 ## Prohibited patterns
