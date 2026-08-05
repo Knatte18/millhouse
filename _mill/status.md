@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-per-batch-baseline-preflight-gap
 branch: hanf/mill-go-per-batch-baseline-preflight-gap
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-05T17:39:12Z'
+discussed  '2026-08-05T18:11:35Z'
 ```
