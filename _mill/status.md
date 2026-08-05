@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-semantic-line-breaks
+phase: holistic-reviewing
 slug: markdown-semantic-line-breaks
 branch: hanf/markdown-semantic-line-breaks
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-08-05T18:47:38Z'
 planned  '2026-08-05T18:48:11Z'
 implementing  '2026-08-05T18:48:57Z'
 approved-semantic-line-breaks  '2026-08-05T18:53:29Z'
+holistic-reviewing  '2026-08-05T18:54:11Z'
 ```
 
 ## Batches
