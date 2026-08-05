@@ -183,6 +183,9 @@ Write one sentence per line instead — a semantic line break — so a diff or r
 Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
 A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
 
+When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
+Readability wins over mechanical rule compliance in that edge case.
+
 Godoc collapses consecutive `//` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
 
 **Bad example:**

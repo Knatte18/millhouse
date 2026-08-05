@@ -136,6 +136,9 @@ Write one sentence per line instead — a semantic line break — so a diff or r
 Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
 A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
 
+When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
+Readability wins over mechanical rule compliance in that edge case.
+
 Raw Python docstrings preserve literal newlines, so tools like `help()`, `pydoc`, and IDE tooltips display sentence-per-line text as short lines rather than reflowing it into one paragraph.
 This is a display difference only — the text stays fully readable,
 and the addressing/diff-locality benefit holds regardless of how it renders.
