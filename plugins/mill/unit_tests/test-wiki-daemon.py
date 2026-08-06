@@ -1,10 +1,14 @@
 """Unit tests for _daemon.DaemonBase logic.
 
-Covers: _write_state_file writes and reads back as JSON; _is_stale detects
-dead PIDs and current PIDs; O_EXCL behavior; idle-timeout predicate;
-.gitignore idempotent append; WikiServer.on_stop closes log handlers.
+Covers: _write_state_file writes and reads back as JSON;
+_is_stale detects dead PIDs and current PIDs;
+O_EXCL behavior;
+idle-timeout predicate;
+.gitignore idempotent append;
+WikiServer.on_stop closes log handlers.
 
-Uses tempfile dirs; no real TCP sockets or accept loop.
+Uses tempfile dirs;
+no real TCP sockets or accept loop.
 """
 from __future__ import annotations
 
@@ -181,9 +185,7 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir(parents=True, exist_ok=True)
             (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
-            # Force the production code path: SKIP_GIT=1 swaps RotatingFileHandler
-            # for NullHandler (see _server.py), which is what the rest of the
-            # suite uses but not what this test asserts on.
+            # Force the production code path: SKIP_GIT=1 swaps RotatingFileHandler for NullHandler (see _server.py), which is what the rest of the suite uses but not what this test asserts on.
             prev_skip = os.environ.pop("WIKI_DAEMON_SKIP_GIT", None)
             try:
                 wiki_server = WikiServer(wiki_path, idle_timeout=1)
@@ -359,8 +361,7 @@ def main() -> int:
 
             wiki_server = WikiServer(wiki_path, idle_timeout=1)
 
-            # Insert a task with group="Z" by directly calling _db.insert
-            # (bypassing upsert_task validation which rejects group keys)
+            # Insert a task with group="Z" by directly calling _db.insert (bypassing upsert_task validation which rejects group keys)
             task_with_group = {
                 "id": 0,
                 "slug": "task-z",
@@ -752,8 +753,7 @@ def main() -> int:
             wiki_path = tmp / "wiki"
             wiki_path.mkdir(parents=True, exist_ok=True)
             (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
-            # Force the production code path so the real RotatingFileHandler is
-            # exercised, matching case (g)'s SKIP_GIT pop/restore.
+            # Force the production code path so the real RotatingFileHandler is exercised, matching case (g)'s SKIP_GIT pop/restore.
             prev_skip = os.environ.pop("WIKI_DAEMON_SKIP_GIT", None)
             try:
                 wiki_server = WikiServer(wiki_path, idle_timeout=1)
@@ -811,9 +811,8 @@ def main() -> int:
         fail("_spawn_server stdio redirection, both platform branches", exc)
 
     # --- (z1) tasks.json handle is released before "git pull" runs ---
-    # Regression for: TinyDB's JSONStorage keeps tasks.json open for the life of
-    # the Store; if that handle is still open when "git pull --rebase" rewrites
-    # the working tree, Windows fails with "unable to unlink old 'tasks.json'".
+    # Regression for: TinyDB's JSONStorage keeps tasks.json open for the life of the Store;
+    # if that handle is still open when "git pull --rebase" rewrites the working tree, Windows fails with "unable to unlink old 'tasks.json'".
     try:
         import os as _os
         with safe_temp_dir() as tmp:

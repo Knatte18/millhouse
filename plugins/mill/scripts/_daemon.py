@@ -36,7 +36,8 @@ class DaemonBase(abc.ABC):
 
     @abc.abstractmethod
     def handle_request(self, msg: dict) -> dict:
-        """Handle authenticated request. Subclass must override.
+        """Handle authenticated request.
+Subclass must override.
 
         Args:
             msg: Parsed JSON request dict.
@@ -47,7 +48,8 @@ class DaemonBase(abc.ABC):
         ...
 
     def on_start(self, port: int, token: str) -> None:
-        """Lifecycle hook: called after bind/token-gen, before accept loop. Default no-op.
+        """Lifecycle hook: called after bind/token-gen, before accept loop.
+Default no-op.
 
         Args:
             port: Bound TCP port.
@@ -107,7 +109,8 @@ class DaemonBase(abc.ABC):
                 self._state_file_path.unlink(missing_ok=True)
 
     def _claim_state_file(self) -> bool:
-        """Claim state file with O_EXCL; on conflict check staleness.
+        """Claim state file with O_EXCL;
+on conflict check staleness.
 
         Returns:
             True if successfully claimed, False if another daemon is running.
@@ -129,12 +132,8 @@ class DaemonBase(abc.ABC):
         """Handle one connection: read JSON, auth, dispatch, respond."""
         try:
             try:
-                # Recv loop and decode/parse are all pre-dispatch: a peer that
-                # connects, sends nothing or a partial/malformed payload, and
-                # disconnects (the routine bare-connect reachability probe
-                # pattern) triggers one of these exception types, not a genuine
-                # protocol violation. Treat the whole region as diagnostic-only
-                # noise rather than the dispatch-and-beyond errors handled below.
+                # Recv loop and decode/parse are all pre-dispatch: a peer that connects, sends nothing or a partial/malformed payload, and disconnects (the routine bare-connect reachability probe pattern) triggers one of these exception types, not a genuine protocol violation.
+                # Treat the whole region as diagnostic-only noise rather than the dispatch-and-beyond errors handled below.
                 chunks = []
                 while True:
                     chunk = conn.recv(4096)
@@ -145,8 +144,8 @@ class DaemonBase(abc.ABC):
                 msg_text = b"".join(chunks).decode("utf-8")
                 msg = json.loads(msg_text)
             except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-                # No response is attempted; the outer method's
-                # `finally: conn.close()` still runs on this return.
+                # No response is attempted;
+                # the outer method's `finally: conn.close()` still runs on this return.
                 self._logger.debug(f"benign connection error before dispatch: {exc!r}")
                 return
 

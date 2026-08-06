@@ -1,18 +1,15 @@
 """Integration test: concurrent wiki lock serialisation.
 
-Regression gate for the 2026-04-28 bug where two overlapping mill-* invocations
-both ran `git pull --ff-only` against the same wiki clone, producing
-"Cannot fast-forward to multiple branches" and leaving one operation without a
-lock. This test verifies that `_wiki.sync_pull` in two concurrent subprocesses
-serialises correctly via the advisory lockfile — the second call waits for the
-first's lock, then succeeds.
+Regression gate for the 2026-04-28 bug where two overlapping mill-* invocations both ran `git pull --ff-only` against the same wiki clone, producing "Cannot fast-forward to multiple branches" and leaving one operation without a lock.
+This test verifies that `_wiki.sync_pull` in two concurrent subprocesses serialises correctly via the advisory lockfile — the second call waits for the first's lock, then succeeds.
 
-NOT part of run-all.py (requires a real git binary and real I/O). Run manually:
+NOT part of run-all.py (requires a real git binary and real I/O).
+Run manually:
 
     python plugins/mill/integration_tests/test-wiki-concurrency.py
 
-Exit 0 on PASS, 1 on FAIL. Scratch lives under <repo>/.scratch/ and is
-preserved on failure for inspection.
+Exit 0 on PASS, 1 on FAIL.
+Scratch lives under <repo>/.scratch/ and is preserved on failure for inspection.
 """
 from __future__ import annotations
 
@@ -75,9 +72,8 @@ def _make_sync_pull_script(wiki_path: Path, slug: str) -> str:
 
 
 def main() -> int:
-    # SKIP: V2 advisory lock model (_wiki.sync_pull) removed in V3
-    # V3 uses daemon-mediated lazy refresh; concurrency model is different
-    # See #<github-issue-pending> for V3 concurrency design
+    # SKIP: V2 advisory lock model (_wiki.sync_pull) removed in V3 V3 uses daemon-mediated lazy refresh;
+    # concurrency model is different See #<github-issue-pending> for V3 concurrency design
     print("SKIP: V2 advisory lock concurrency test; see #<github-issue-pending>")
     return 0
 

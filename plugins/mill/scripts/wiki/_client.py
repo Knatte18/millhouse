@@ -44,18 +44,15 @@ from wiki import (
 SPAWN_TIMEOUT: int = 20 if sys.platform == "win32" else 10
 _SERVER_MODULE: str = "wiki._server"
 
-# Connecting to the daemon is local and instant, so a short budget detects a
-# dead/unreachable port quickly. Receiving the *response*, however, waits for
-# the daemon to finish the op -- and a mutating op runs git pull + push (two
-# network round-trips), which routinely exceeds a few seconds, especially on a
-# cold daemon start. The read budget must therefore be far longer than the
-# connect budget, or a successful-but-slow op is misreported as WikiBusyError.
+# Connecting to the daemon is local and instant, so a short budget detects a dead/unreachable port quickly.
+# Receiving the *response*, however, waits for the daemon to finish the op -- and a mutating op runs git pull + push (two network round-trips), which routinely exceeds a few seconds, especially on a cold daemon start.
+# The read budget must therefore be far longer than the connect budget,
+# or a successful-but-slow op is misreported as WikiBusyError.
 _CONNECT_TIMEOUT_SECONDS: float = 5.0
 _READ_TIMEOUT_SECONDS: float = 30.0
 
 # Registry of in-process WikiServer instances, keyed by resolved wiki_path.
-# When a wiki_path is registered, all client ops route directly to the server's
-# handle_request method instead of spawning a subprocess and talking over TCP.
+# When a wiki_path is registered, all client ops route directly to the server's handle_request method instead of spawning a subprocess and talking over TCP.
 # Intended for the unit test suite — production code never touches this map.
 _INPROCESS_SERVERS: dict[str, "object"] = {}
 
@@ -63,12 +60,11 @@ _INPROCESS_SERVERS: dict[str, "object"] = {}
 def use_inprocess(wiki_path: Path) -> None:
     """Register an in-process WikiServer for ``wiki_path``, bypassing the daemon.
 
-    After this call, every client op on this wiki_path is dispatched in the
-    same Python process — no subprocess spawn, no socket, no token. Same
-    semantics as the daemon path (writes tasks.json, renders files, commits
-    via git; honours WIKI_DAEMON_SKIP_PUSH to skip the push step).
+    After this call, every client op on this wiki_path is dispatched in the same Python process — no subprocess spawn, no socket, no token.
+    Same semantics as the daemon path (writes tasks.json, renders files, commits via git; honours WIKI_DAEMON_SKIP_PUSH to skip the push step).
 
-    Intended for unit tests. Production callers must not use this.
+    Intended for unit tests.
+    Production callers must not use this.
 
     Idempotent: calling twice on the same path is a no-op.
     """
@@ -86,8 +82,8 @@ def use_inprocess(wiki_path: Path) -> None:
 def stop_inprocess(wiki_path: Path) -> None:
     """Unregister the in-process server for ``wiki_path``.
 
-    Safe to call when no server is registered. After this call, subsequent
-    ops on this path fall back to the daemon TCP path.
+    Safe to call when no server is registered.
+    After this call, subsequent ops on this path fall back to the daemon TCP path.
     """
     key = str(Path(wiki_path).resolve())
     server = _INPROCESS_SERVERS.pop(key, None)
@@ -132,13 +128,10 @@ def wait_for_socket_reachable(host: str, port: int, *, timeout: float, interval:
 def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     """Route an op to either the in-process server or the daemon over TCP.
 
-    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, a transient
-    in-process server is built per request and closed immediately afterwards.
-    No file handles accumulate across requests, so tests using
-    ``tempfile.TemporaryDirectory()`` can clean up reliably on Windows.
-    Tests that explicitly call ``use_inprocess(path)`` keep a persistent
-    server for that path (callers must call ``stop_inprocess(path)`` on
-    teardown). The env-var auto-mode is the default for the unit suite.
+    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, a transient in-process server is built per request and closed immediately afterwards.
+    No file handles accumulate across requests, so tests using ``tempfile.TemporaryDirectory()`` can clean up reliably on Windows.
+    Tests that explicitly call ``use_inprocess(path)`` keep a persistent server for that path (callers must call ``stop_inprocess(path)`` on teardown).
+    The env-var auto-mode is the default for the unit suite.
     """
     server = _inprocess_server(wiki_path)
     if server is not None:
@@ -169,14 +162,8 @@ def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
             )
         except ConnectionRefusedError:
             if attempt < 3:
-                # A refused connection means the daemon process itself is
-                # gone (not merely slow), so re-resolving it is the only way
-                # the next attempt can succeed. _ensure_daemon() is cheap and
-                # idempotent when the daemon is already healthy. If respawn
-                # itself fails, let WikiStartupError propagate uncaught --
-                # retrying against a target that just failed to start cannot
-                # succeed, so there is no point burning the remaining backoff
-                # budget only to raise WikiBusyError afterwards.
+                # A refused connection means the daemon process itself is gone (not merely slow), so re-resolving it is the only way the next attempt can succeed. _ensure_daemon() is cheap and idempotent when the daemon is already healthy.
+                # If respawn itself fails, let WikiStartupError propagate uncaught -- retrying against a target that just failed to start cannot succeed, so there is no point burning the remaining backoff budget only to raise WikiBusyError afterwards.
                 host, port, token = _ensure_daemon(wiki_path)
                 req[FIELD_TOKEN] = token
                 time.sleep(backoff_sleeps[attempt])
@@ -549,7 +536,8 @@ def rerender(wiki_path: Path) -> None:
 
 
 def shutdown(wiki_path: Path) -> bool:
-    """Request a clean daemon shutdown. Returns False if no daemon is running.
+    """Request a clean daemon shutdown.
+Returns False if no daemon is running.
 
     The daemon will respawn automatically on the next request.
 
@@ -585,17 +573,15 @@ def shutdown(wiki_path: Path) -> bool:
 def health_check(wiki_path: Path) -> bool:
     """Ensure the daemon is up and responding, spawning it if needed.
 
-    Semantically equivalent to every other client op: auto-spawns when the
-    state file is missing, stale, or the daemon is dead. Returns False only
-    when spawn itself fails (e.g. WikiStartupError) or the live daemon
-    rejects the health probe.
+    Semantically equivalent to every other client op: auto-spawns when the state file is missing, stale, or the daemon is dead.
+    Returns False only when spawn itself fails (e.g.
+    WikiStartupError) or the live daemon rejects the health probe.
 
     Args:
         wiki_path: Path to wiki clone root.
 
     Returns:
-        True if the daemon is alive (possibly after a fresh spawn), False
-        if it could not be brought up.
+        True if the daemon is alive (possibly after a fresh spawn), False if it could not be brought up.
     """
     try:
         resp = _dispatch(wiki_path, OP_HEALTH, {})
@@ -724,10 +710,10 @@ def _connect_send_recv(
         port: Server port.
         msg: Request dict to send.
         timeout: Connection (handshake) timeout in seconds (default 10.0).
-        read_timeout: Timeout in seconds for sending and receiving the
-            response once connected. Defaults to ``timeout`` when None. Pass a
-            larger value than ``timeout`` for ops the daemon services slowly
-            (e.g. mutating ops that run git pull + push).
+        read_timeout: Timeout in seconds for sending and receiving the response once connected.
+            Defaults to ``timeout`` when None.
+            Pass a larger value than ``timeout`` for ops the daemon services slowly (e.g.
+            mutating ops that run git pull + push).
 
     Returns:
         Response dict.

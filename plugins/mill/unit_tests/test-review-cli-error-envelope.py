@@ -1,13 +1,11 @@
 """Unit tests for review CLI exit-code contract (#338).
 
-Tests that the three review CLIs (discussion, code, plan) maintain the
-correct exit-code contract:
+Tests that the three review CLIs (discussion, code, plan) maintain the correct exit-code contract:
 - exit 0 + ERROR envelope: engine-internal failure
 - exit 1 + ERROR envelope + stderr: pre-launch failure
 - exit 0 + APPROVE envelope: success
 
-Uses unittest.mock.patch to stub all pre-launch dependencies and the
-backend run() function, avoiding real LLM calls.
+Uses unittest.mock.patch to stub all pre-launch dependencies and the backend run() function, avoiding real LLM calls.
 """
 from __future__ import annotations
 
@@ -62,10 +60,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         """Run a CLI module and capture exit code + stdout + stderr.
 
         Args:
-            cli_name: "discussion", "code", or "plan"
-            backend_return: dict to return from backend.run() (mocked), or None to skip mocking
-            raise_find_slug: if True, make find_active_slug raise ReviewError
-            skip_validate_flag: for plan CLI, whether to use --skip-validate
+            cli_name: "discussion", "code", or "plan" backend_return: dict to return from backend.run() (mocked), or None to skip mocking raise_find_slug: if True, make find_active_slug raise ReviewError skip_validate_flag: for plan CLI, whether to use --skip-validate
 
         Returns:
             (exit_code, stdout, stderr)

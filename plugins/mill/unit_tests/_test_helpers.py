@@ -3,15 +3,15 @@ Shared test fixtures for mill unit tests.
 
 Public API:
     _make_task_worktree(tmp, slug, title, *, branch_prefix="", phase="active", layout="prefix", seed_task=False)
-        Create a minimal git repo on a task branch plus a wiki stub.
-        Returns (worktree_path, wiki_path).
+    Create a minimal git repo on a task branch plus a wiki stub.
+    Returns (worktree_path, wiki_path).
     wait_for_daemon_exit(wiki_path, *, timeout=5.0) -> None
-        Poll for wiki daemon state file removal; return on disappearance or timeout.
+    Poll for wiki daemon state file removal; return on disappearance or timeout.
     init_wiki_repo(wiki_path) -> None
-        Initialize a git repo with bare origin at a wiki_path.
+    Initialize a git repo with bare origin at a wiki_path.
     safe_temp_dir() -> ContextManager[Path]
     write_local_overlay(mill_dir, **entries) -> None
-        Write reviewer registry entries to the hub's local overlay file.
+    Write reviewer registry entries to the hub's local overlay file.
 """
 from __future__ import annotations
 
@@ -30,13 +30,12 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 os.environ.setdefault("WIKI_DAEMON_IDLE_TIMEOUT", "1")
-# Test mode (cheap):
-# - SKIP_GIT: no pull/commit/push at all. Renders files in-place; no git history.
-#   Use this default — most tests don't assert on git state.
-# - INPROCESS: route every wiki._client op to an in-process WikiServer instead
-#   of spawning a Python subprocess. Saves ~1.5 s of interpreter startup per test.
-# A test that needs commit log behaviour overrides SKIP_GIT before importing
-# this module and sets WIKI_DAEMON_SKIP_PUSH=1 instead (commits, no push).
+# Test mode (cheap): - SKIP_GIT: no pull/commit/push at all.
+# Renders files in-place;
+# no git history.
+# Use this default — most tests don't assert on git state. - INPROCESS: route every wiki._client op to an in-process WikiServer instead of spawning a Python subprocess.
+# Saves ~1.5 s of interpreter startup per test.
+# A test that needs commit log behaviour overrides SKIP_GIT before importing this module and sets WIKI_DAEMON_SKIP_PUSH=1 instead (commits, no push).
 os.environ.setdefault("WIKI_DAEMON_SKIP_GIT", "1")
 os.environ.setdefault("WIKI_DAEMON_INPROCESS", "1")
 
@@ -50,13 +49,12 @@ from wiki._parse import parse_home_md  # noqa: E402
 def init_minimal_git_repo(path: Path, *, branch: str = "main") -> "pygit2.Repository":
     """Create a git repo at ``path`` with an empty initial commit on ``branch``.
 
-    Uses pygit2 directly (no subprocess) — ~60 ms vs ~600 ms for the
-    equivalent subprocess git init + config + add + commit chain on
-    Windows. Drop-in replacement for the four-or-five-call subprocess
-    pattern that pre-dates this helper.
+    Uses pygit2 directly (no subprocess) — ~60 ms vs ~600 ms for the equivalent subprocess git init + config + add + commit chain on Windows.
+    Drop-in replacement for the four-or-five-call subprocess pattern that pre-dates this helper.
 
     Args:
-        path: Repo root. Created if missing.
+        path: Repo root.
+        Created if missing.
         branch: Initial branch name (default ``"main"``).
 
     Returns:
@@ -105,9 +103,8 @@ def wait_for_daemon_exit(wiki_path: Path, *, timeout: float = 5.0) -> None:
 def init_wiki_repo(wiki_path: Path) -> None:
     """Initialize a git repo with bare origin.
 
-    Under WIKI_DAEMON_SKIP_GIT (test mode default), the wiki server never
-    invokes git, so the init/remote/commit/push dance is dead weight (~1 s
-    per test on Windows). Just create the directory and return.
+    Under WIKI_DAEMON_SKIP_GIT (test mode default), the wiki server never invokes git, so the init/remote/commit/push dance is dead weight (~1 s per test on Windows).
+    Just create the directory and return.
 
     Args:
         wiki_path: Path where wiki repo will be created.
@@ -193,12 +190,10 @@ def _make_task_worktree(
         slug: Task slug (used as branch suffix and Home.md slug).
         title: Human-readable task title for Home.md.
         branch_prefix: Optional branch prefix prepended to slug.
-        phase: Phase marker written in Home.md. Pass "none" to write the
-            slug line without any phase marker (task.phase will be None).
-        layout: Path layout mode: "prefix" (default, worktree at tmp/worktree)
-            or "container" (worktree at tmp/wts/slug).
-        seed_task: If True, initialize wiki as a real git repo with bare origin
-            and upsert the task to tasks.json via the wiki client.
+        phase: Phase marker written in Home.md.
+            Pass "none" to write the slug line without any phase marker (task.phase will be None).
+        layout: Path layout mode: "prefix" (default, worktree at tmp/worktree) or "container" (worktree at tmp/wts/slug).
+        seed_task: If True, initialize wiki as a real git repo with bare origin and upsert the task to tasks.json via the wiki client.
 
     Returns:
         (worktree_path, wiki_path) — absolute Paths.
@@ -245,11 +240,9 @@ def _make_task_worktree(
 def seed_wiki_config(wiki_root: Path, *, include_roles: bool = False) -> None:
     """Write a minimal wiki config.yaml that _review_common.load_config requires.
 
-    Creates wiki_root/config.yaml with the paths: and spawn: blocks. Review-flow
-    test fixtures that use a container-form layout need this file in the wiki
-    directory so load_config does not raise ReviewError(Missing config). Pass
-    include_roles=True to also write a roles: block with stub test_stub reviewer
-    entries for discussion-review, plan-review, and code-review.
+    Creates wiki_root/config.yaml with the paths: and spawn: blocks.
+    Review-flow test fixtures that use a container-form layout need this file in the wiki directory so load_config does not raise ReviewError(Missing config).
+    Pass include_roles=True to also write a roles: block with stub test_stub reviewer entries for discussion-review, plan-review, and code-review.
     """
     content = (
         "paths:\n"
@@ -278,8 +271,8 @@ def seed_wiki_config(wiki_root: Path, *, include_roles: bool = False) -> None:
 def safe_temp_dir():
     """Context manager for safe temp directory with daemon-exit wait.
 
-    Yields a temporary directory; on exit, waits for any wiki daemons
-    to exit before cleaning up with safe_rmtree.
+    Yields a temporary directory;
+    on exit, waits for any wiki daemons to exit before cleaning up with safe_rmtree.
     """
     tmp = Path(tempfile.mkdtemp())
     try:
@@ -305,14 +298,7 @@ def safe_temp_dir():
 def write_local_overlay(mill_dir: Path, **entries) -> None:
     """Write reviewer registry entries to the hub's local overlay file.
 
-    `_reviewers.load()` merges the plugin template (always present and
-    non-empty in this source tree) with `.millhouse/agents.local.yaml` --
-    the wiki `agents.yaml` fallback is only consulted when both the
-    template and the local overlay are empty, which never happens here.
-    `_test_registry.write_to` now targets this same `.millhouse/agents.local.yaml`
-    file (via the shared `_write_registry_file` helper) rather than the wiki.
-    Tests that need a specific named reviewer spec to actually resolve via
-    `reviewer_override` must seed it here, mirroring the local-overlay
-    convention already established in test-reviewers.py.
+    `_reviewers.load()` merges the plugin template (always present and non-empty in this source tree) with `.millhouse/agents.local.yaml` -- the wiki `agents.yaml` fallback is only consulted when both the template and the local overlay are empty, which never happens here. `_test_registry.write_to` now targets this same `.millhouse/agents.local.yaml` file (via the shared `_write_registry_file` helper) rather than the wiki.
+    Tests that need a specific named reviewer spec to actually resolve via `reviewer_override` must seed it here, mirroring the local-overlay convention already established in test-reviewers.py.
     """
     _test_registry._write_registry_file(mill_dir, entries)

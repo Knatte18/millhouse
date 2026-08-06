@@ -2,19 +2,14 @@
 Windows registry utilities for environment variable operations.
 
 Windows-only: both functions raise RuntimeError on any other platform.
-mill-setup Phase 4.7 (the only caller) is gated to skip this module on
-POSIX, where every mill script receives PYTHONPATH inline per invocation
-instead of relying on a persistent user-level environment variable.
+mill-setup Phase 4.7 (the only caller) is gated to skip this module on POSIX, where every mill script receives PYTHONPATH inline per invocation instead of relying on a persistent user-level environment variable.
 
-Exports
--------
-set_user_env_var(name: str, value: str) -> bool
-    Set a user-level Windows environment variable via winreg. Returns True
-    if the value was written, False if it was already correct (idempotent skip).
+Exports ------- set_user_env_var(name: str, value: str) -> bool Set a user-level Windows environment variable via winreg.
+Returns True if the value was written, False if it was already correct (idempotent skip).
 
 get_user_env_var(name: str) -> str | None
-    Read a user-level Windows environment variable via winreg. Returns the
-    value string, or None if the variable is not set.
+Read a user-level Windows environment variable via winreg. Returns the
+value string, or None if the variable is not set.
 """
 from __future__ import annotations
 
@@ -37,10 +32,9 @@ def _require_windows() -> None:
 def set_user_env_var(name: str, value: str) -> bool:
     r"""Set a user-level environment variable via Windows registry.
 
-    Opens HKEY_CURRENT_USER\Environment, checks if the value already equals
-    the target; if so, returns False (idempotent skip). Otherwise writes the
-    new value with winreg.REG_SZ type and broadcasts a WM_SETTINGCHANGE
-    message, returning True.
+    Opens HKEY_CURRENT_USER\Environment, checks if the value already equals the target;
+    if so, returns False (idempotent skip).
+    Otherwise writes the new value with winreg.REG_SZ type and broadcasts a WM_SETTINGCHANGE message, returning True.
 
     Always closes the registry key via try/finally, even on error.
 
@@ -49,7 +43,8 @@ def set_user_env_var(name: str, value: str) -> bool:
         value: Value to set.
 
     Returns:
-        True if the value was written; False if it was already correct.
+        True if the value was written;
+        False if it was already correct.
     """
     _require_windows()
     key = winreg.CreateKeyEx(
@@ -77,8 +72,9 @@ def set_user_env_var(name: str, value: str) -> bool:
 def _do_broadcast() -> None:
     """Broadcast WM_SETTINGCHANGE message via ctypes.
 
-    Sends a message to all windows notifying them that the user environment
-    has changed. May raise on failure; caller is responsible for error handling.
+    Sends a message to all windows notifying them that the user environment has changed.
+    May raise on failure;
+    caller is responsible for error handling.
     """
     import ctypes
 
@@ -101,8 +97,8 @@ def _do_broadcast() -> None:
 def _broadcast_setting_change() -> None:
     """Best-effort broadcast of WM_SETTINGCHANGE.
 
-    Calls _do_broadcast() and silently swallows any exception; broadcast
-    failures never propagate.
+    Calls _do_broadcast() and silently swallows any exception;
+    broadcast failures never propagate.
     """
     try:
         _do_broadcast()
@@ -113,8 +109,8 @@ def _broadcast_setting_change() -> None:
 def get_user_env_var(name: str) -> str | None:
     r"""Read a user-level environment variable via Windows registry.
 
-    Opens HKEY_CURRENT_USER\Environment read-only, retrieves the value,
-    and returns it. Returns None if the variable is not set (FileNotFoundError).
+    Opens HKEY_CURRENT_USER\Environment read-only, retrieves the value, and returns it.
+    Returns None if the variable is not set (FileNotFoundError).
 
     Always closes the registry key via try/finally, even on error.
 
@@ -122,7 +118,8 @@ def get_user_env_var(name: str) -> str | None:
         name: Environment variable name.
 
     Returns:
-        The value string, or None if not set.
+        The value string,
+        or None if not set.
     """
     _require_windows()
     key = winreg.CreateKeyEx(

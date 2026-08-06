@@ -1,8 +1,6 @@
 """Unit tests for plugins/mill/scripts/_phase_gate.absent_status_halt_message.
 
-Tests the absent_status_halt_message helper which generates readable error
-messages when mill-go Entry Step 5 encounters a missing _mill/status.md
-(indicating mill-merge cleanup ran but did not complete).
+Tests the absent_status_halt_message helper which generates readable error messages when mill-go Entry Step 5 encounters a missing _mill/status.md (indicating mill-merge cleanup ran but did not complete).
 """
 from __future__ import annotations
 

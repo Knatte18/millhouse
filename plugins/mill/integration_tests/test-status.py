@@ -1,8 +1,7 @@
 """
 Integration test for millpy-status.py.
 
-Builds a hub+wiki fixture under .scratch/ with five slug scenarios and
-verifies plain, --json, --sort phase, and main-worktree-guard runs.
+Builds a hub+wiki fixture under .scratch/ with five slug scenarios and verifies plain, --json, --sort phase, and main-worktree-guard runs.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-status.py
@@ -92,8 +91,7 @@ def _setup_fixture(container: Path) -> tuple[Path, Path]:
     hub.mkdir()
     _git_init(hub)
 
-    # Five slugs:
-    # 1. slug-alpha: [active] in Home.md + active-dir + worktree
+    # Five slugs: 1. slug-alpha: [active] in Home.md + active-dir + worktree
     _write_rendered_status(wiki / "active" / "slug-alpha" / "status.md", "slug-alpha", "implementing")
 
     # 2. slug-beta: [done] in Home.md + active-dir + no worktree
@@ -105,8 +103,7 @@ def _setup_fixture(container: Path) -> tuple[Path, Path]:
     # 4. slug-delta: active-dir + no Home.md entry + no worktree → HM?
     _write_rendered_status(wiki / "active" / "slug-delta" / "status.md", "slug-delta", "discussing")
 
-    # 5. slug-echo: Home.md entry only, no phase bracket → unclaimed, no active-dir
-    # (no status.md created)
+    # 5. slug-echo: Home.md entry only, no phase bracket → unclaimed, no active-dir (no status.md created)
 
     # Home.md
     home_md = (

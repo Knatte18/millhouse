@@ -1,8 +1,8 @@
 """Unit tests for wiki client transient-error retry logic in _dispatch.
 
-Covers: ConnectionResetError, ConnectionRefusedError, TimeoutError retries
-in _dispatch; non-retryable errors pass through; persistent failures raise
-WikiBusyError.
+Covers: ConnectionResetError, ConnectionRefusedError, TimeoutError retries in _dispatch;
+non-retryable errors pass through;
+persistent failures raise WikiBusyError.
 """
 from __future__ import annotations
 
@@ -248,9 +248,8 @@ def main() -> int:
 
     # --- (8) _connect_send_recv waits read_timeout for a slow response, not connect timeout ---
     try:
-        # A server that accepts instantly but delays its reply longer than the
-        # connect timeout. The recv must be governed by read_timeout, so a slow
-        # (but successful) op is not misreported as a timeout.
+        # A server that accepts instantly but delays its reply longer than the connect timeout.
+        # The recv must be governed by read_timeout, so a slow (but successful) op is not misreported as a timeout.
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(("127.0.0.1", 0))

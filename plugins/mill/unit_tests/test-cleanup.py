@@ -60,8 +60,7 @@ def _mock_branch_run(branch: str):
         if "--show-current" in argv:
             r.stdout = f"{branch}\n"
         elif "tag" in argv and "-l" in argv:
-            # Return the queried tag name (last arg is "archive/<slug>") so the
-            # mock correctly signals "tag present" for the specific slug being checked.
+            # Return the queried tag name (last arg is "archive/<slug>") so the mock correctly signals "tag present" for the specific slug being checked.
             tag_arg = next((a for a in argv if a.startswith("archive/")), "archive/slug")
             r.stdout = f"{tag_arg}\n"
         else:
@@ -185,13 +184,8 @@ def test_is_live_phase() -> None:
 def test_resolve_inplace_mode_topology_outcomes() -> None:
     """Exercise both post-topology-fix outcomes of `_resolve_inplace_mode` directly.
 
-    Calls `_resolve_inplace_mode` itself (not through `apply_plan`), patching
-    only `mill_cleanup._inplace.resolve_main_worktree_root` to force each
-    outcome. This covers the "worktree" fallback branch at
-    `millpy-cleanup.py:437`, which was unreachable before the topology
-    rewrite -- the old `is_inplace` recomputed the same path-existence check
-    the caller had already confirmed `False`, so it always returned `True`
-    at this call site.
+    Calls `_resolve_inplace_mode` itself (not through `apply_plan`), patching only `mill_cleanup._inplace.resolve_main_worktree_root` to force each outcome.
+    This covers the "worktree" fallback branch at `millpy-cleanup.py:437`, which was unreachable before the topology rewrite -- the old `is_inplace` recomputed the same path-existence check the caller had already confirmed `False`, so it always returned `True` at this call site.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -233,9 +227,7 @@ def test_resolve_inplace_mode_topology_outcomes() -> None:
             patch("mill_cleanup._inplace.resolve_main_worktree_root", return_value=elsewhere_root),
         ):
             result = _resolve_inplace_mode(record, hub_root, wiki_path, cfg={})
-        # Exercises millpy-cleanup.py:437's fallback, unreachable before the
-        # topology rewrite (the old is_inplace re-derived the same
-        # path-existence result the caller had already confirmed False).
+        # Exercises millpy-cleanup.py:437's fallback, unreachable before the topology rewrite (the old is_inplace re-derived the same path-existence result the caller had already confirmed False).
         assert result == ("worktree", ""), f"Case B: expected worktree fallback, got {result!r}"
         print("PASS _resolve_inplace_mode — topology differs -> ('worktree', '') fallback")
 
@@ -428,8 +420,7 @@ def main() -> int:
             wiki_path = container / "wiki"
             wiki_path.mkdir()
 
-            # Mock list_worktrees to include ghost-slug as a registered worktree
-            # (new behavior: only registered worktrees are reported as orphans)
+            # Mock list_worktrees to include ghost-slug as a registered worktree (new behavior: only registered worktrees are reported as orphans)
             def _mock_list(cwd):
                 return [
                     {"path": str(hub), "branch": "main"},
@@ -446,11 +437,9 @@ def main() -> int:
             print("PASS build_plan — orphan worktree (no active marker) -> reported")
 
         # --- in-use worktree dir on disk + Home.md [active]: WARNING, not delete ---
-        # A live worktree whose .active junction has drifted: the slug is
-        # [active] in Home.md AND a directory exists at container/wts/<slug>.
-        # mill-cleanup must NOT recommend 'git worktree remove --force' here --
-        # that command partially succeeds on Windows and corrupts the live
-        # session. Single consolidated WARNING in the report instead.
+        # A live worktree whose .active junction has drifted: the slug is [active] in Home.md AND a directory exists at container/wts/<slug>.
+        # mill-cleanup must NOT recommend 'git worktree remove --force' here -- that command partially succeeds on Windows and corrupts the live session.
+        # Single consolidated WARNING in the report instead.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             container = tmp
@@ -495,8 +484,7 @@ def main() -> int:
             print("PASS build_plan — in-use orphan worktree -> WARNING, not delete suggestion")
 
         # --- orphan Home.md marker ([active] with no active worktree) ---
-        # Card 7: a plain "active" orphan with no worktree/branch/portal is now
-        # promoted to to_reset_unclaimed (auto-reset) instead of to_report.
+        # Card 7: a plain "active" orphan with no worktree/branch/portal is now promoted to to_reset_unclaimed (auto-reset) instead of to_report.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             hub = tmp / "hub"
@@ -525,8 +513,7 @@ def main() -> int:
             print("PASS build_plan — orphan [active] Home.md marker -> to_reset_unclaimed (auto-reset)")
 
         # --- orphan active worktree (task branch but no Home.md entry) ---
-        # discover_active_worktrees skips worktrees not in Home.md, so build_plan
-        # receives active_worktrees=[] and detects the dir via container_path wts scan.
+        # discover_active_worktrees skips worktrees not in Home.md, so build_plan receives active_worktrees=[] and detects the dir via container_path wts scan.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             wts_dir = tmp / "wts"
@@ -867,8 +854,7 @@ def main() -> int:
             print("PASS test_apply_plan_removes_dangling_active_junction — Scenario B: dangling junction removed")
 
         # --- test_apply_inplace_record_reads_task_status_md ---
-        # task/status.md (done + parent=feature-branch) takes priority over
-        # root status.md (abandoned + parent=stale-branch).
+        # task/status.md (done + parent=feature-branch) takes priority over root status.md (abandoned + parent=stale-branch).
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             hub_root_ip = tmp / "hub"
@@ -1332,9 +1318,7 @@ def main() -> int:
             print("PASS build_plan — phase=pr-pending -> to_reap_pr")
 
         # --- build_plan: orphan check covers ready-to-merge, pr-pending, active ---
-        # Card 7 update: a plain "active" orphan with no worktree/branch/portal is
-        # promoted to to_reset_unclaimed (auto-reset) rather than to_report.
-        # "ready-to-merge" and "pr-pending" remain in to_report as before.
+        # Card 7 update: a plain "active" orphan with no worktree/branch/portal is promoted to to_reset_unclaimed (auto-reset) rather than to_report. "ready-to-merge" and "pr-pending" remain in to_report as before.
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             hub = tmp / "hub"
@@ -1484,11 +1468,9 @@ def main() -> int:
         test_is_live_phase()
         test_resolve_inplace_mode_topology_outcomes()
 
-        # Note: registry-based orphan detection (git worktree list --porcelain)
-        # is implemented in build_plan and thoroughly tested via mocked list_worktrees.
+        # Note: registry-based orphan detection (git worktree list --porcelain) is implemented in build_plan and thoroughly tested via mocked list_worktrees.
         # Real git worktree operations are tested in test-worktree.py.
-        # The logic: plain dirs are ignored, only registered git worktrees without
-        # active markers are reported as orphans. (See millpy-cleanup.py lines 186-226.)
+        # The logic: plain dirs are ignored, only registered git worktrees without active markers are reported as orphans. (See millpy-cleanup.py lines 186-226.)
 
         # --- Card 6: _apply_worktree_record issues push origin --delete after local delete ---
         with tempfile.TemporaryDirectory() as tmp:
@@ -1586,8 +1568,7 @@ def main() -> int:
             assert len(push_delete_calls_t) == 1, (
                 f"expected push --delete attempt, got: {run_calls_wrt}"
             )
-            # The "remote ref does not exist" message must NOT appear in stderr as a warning
-            # (it is tolerated silently)
+            # The "remote ref does not exist" message must NOT appear in stderr as a warning (it is tolerated silently)
             stderr_text_wrt = stderr_wrt.getvalue()
             assert "non-fatal" not in stderr_text_wrt, (
                 f"'remote ref does not exist' must not produce a non-fatal warning, got: {stderr_text_wrt!r}"

@@ -1,8 +1,8 @@
 """mill-abandon — mark the current task abandoned.
 
-Run from inside the task's worktree.  Updates `<active_hub>/_mill/status.md`
-on the task branch, commits, and pushes.  Then run mill-cleanup from the hub
-to remove the worktree and active dir.
+Run from inside the task's worktree.
+Updates `<active_hub>/_mill/status.md` on the task branch, commits, and pushes.
+Then run mill-cleanup from the hub to remove the worktree and active dir.
 """
 from __future__ import annotations
 
@@ -45,20 +45,14 @@ def main() -> int:
     except _marker.MarkerError as exc:
         sys.exit(f"Error: mill-abandon must run from a worktree. ({exc})")
 
-    # Step 3: resolve paths via the centralized helpers (post-task-32: status.md
-    # lives at <active_hub>/_mill/status.md on the task branch, not in the wiki).
-    # We use active_hub for both the file path and the git -C target so the
-    # relative argument "_mill/status.md" stays correct under sub-dir hub configs.
+    # Step 3: resolve paths via the centralized helpers (post-task-32: status.md lives at <active_hub>/_mill/status.md on the task branch, not in the wiki).
+    # We use active_hub for both the file path and the git -C target so the relative argument "_mill/status.md" stays correct under sub-dir hub configs.
     container_path = _paths.resolve_container_path(git_root)
     active_hub = _paths.resolve_active_hub(
         container_path, slug, cfg=cfg, git_root=git_root,
     )
-    # Reload cfg (and the mill_dir it's paired with) against the resolve_active_hub-
-    # corrected root: the bootstrap cfg above was loaded against hub_dir before this
-    # correction, so it can miss the hub's own mill-config.yaml whenever the hub
-    # lives in a subdirectory of the git repo (see cfg-reload-after-active-hub).
-    # This corrected mill_dir/cfg is what the builder-lock read and the branch-name
-    # resolution below observe.
+    # Reload cfg (and the mill_dir it's paired with) against the resolve_active_hub- corrected root: the bootstrap cfg above was loaded against hub_dir before this correction, so it can miss the hub's own mill-config.yaml whenever the hub lives in a subdirectory of the git repo (see cfg-reload-after-active-hub).
+    # This corrected mill_dir/cfg is what the builder-lock read and the branch-name resolution below observe.
     mill_dir = active_hub / ".millhouse"
     cfg = _review_common.load_config(active_hub, mill_dir)
 
@@ -116,21 +110,19 @@ def main() -> int:
     if commit_result.returncode != 0:
         sys.exit(f"Error: git commit failed: {commit_result.stderr.strip()!r}")
     # Resolve the branch name from status.md (with a config-derived fallback).
-    # We cannot use info["branch"] because read_status returns a summary dict
-    # that does not include the branch key; read_branch reads it from the YAML
-    # block and falls back via cfg and slug when the field is absent.
+    # We cannot use info["branch"] because read_status returns a summary dict that does not include the branch key;
+    # read_branch reads it from the YAML block and falls back via cfg and slug when the field is absent.
     branch = _status.read_branch(status_path, cfg=cfg, slug=slug)
 
     # Delete the remote branch so re-spawning the same slug starts clean.
-    # A missing remote ref (never-pushed branch, or already deleted) is treated
-    # as success -- teardown must be idempotent per the Shared Decision.
+    # A missing remote ref (never-pushed branch, or already deleted) is treated as success -- teardown must be idempotent per the Shared Decision.
     delete_result = _subprocess_util.run(
         ["git", "-C", str(active_hub), "push", "origin", "--delete", branch]
     )
     if delete_result.returncode != 0:
         stderr_lower = delete_result.stderr.lower()
-        # Git emits "remote ref does not exist" when the branch was never pushed
-        # or was already deleted; both cases are fine -- nothing to remove.
+        # Git emits "remote ref does not exist" when the branch was never pushed or was already deleted;
+        # both cases are fine -- nothing to remove.
         if "remote ref does not exist" not in stderr_lower and "unable to delete" not in stderr_lower:
             sys.exit(f"Error: git push --delete failed: {delete_result.stderr.strip()!r}")
 

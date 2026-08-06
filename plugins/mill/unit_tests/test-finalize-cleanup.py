@@ -1,8 +1,8 @@
 """Unit tests for _finalize_cleanup.base_tracks_task_dir detection.
 
-Covers: base branch tracking task_dir/status.md; base branch without _mill/;
-Step 3's delete-then-restore mechanic removing orphaned child-only files
-under task_dir that a bare checkout would leave behind (#653).
+Covers: base branch tracking task_dir/status.md;
+base branch without _mill/;
+Step 3's delete-then-restore mechanic removing orphaned child-only files under task_dir that a bare checkout would leave behind (#653).
 
 Uses a real tempfile bare repo + working clone (fast, deterministic, no mocks).
 """
@@ -169,9 +169,7 @@ def main() -> int:
                 capture_output=True,
             )
 
-            # Child branch has a superset _mill/ tree: status.md (inherited
-            # from main) plus discussion.md and plan/00-overview.md that
-            # main never had.
+            # Child branch has a superset _mill/ tree: status.md (inherited from main) plus discussion.md and plan/00-overview.md that main never had.
             (mill_dir / "discussion.md").write_text(
                 "discussion placeholder\n", encoding="utf-8"
             )

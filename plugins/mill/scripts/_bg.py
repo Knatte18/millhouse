@@ -1,11 +1,8 @@
 """Liveness probe for millpy-bg worker subprocesses; used by orchestrators after resume to decide whether to wait or re-fire.
 
 Completion detection (agent-mode dispatch preferred):
-  - Agent-mode dispatch (no subprocess) is the structural solution — no process
-    to lose and no detection needed.
-  - Subprocess mode (millpy-bg dispatch) relies on two mechanisms:
-    * EXIT sentinel write (best-effort, killed by hard termination).
-    * Trailing-JSON completion sentinel (kill-resilient backstop).
+  - Agent-mode dispatch (no subprocess) is the structural solution — no process to lose and no detection needed.
+  - Subprocess mode (millpy-bg dispatch) relies on two mechanisms: * EXIT sentinel write (best-effort, killed by hard termination). * Trailing-JSON completion sentinel (kill-resilient backstop).
 
 check_bg_status determines completion via this resolution order:
   (1) log missing -> dead
@@ -15,8 +12,7 @@ check_bg_status determines completion via this resolution order:
   (5) liveness probe (assumed-alive mtime-fresh fallback) -> running
   (6) otherwise -> dead
 
-Trailing-JSON contract: every millpy-bg-dispatched CLI MUST emit a single
-parseable JSON line as its final stdout (used by step 4 above).
+Trailing-JSON contract: every millpy-bg-dispatched CLI MUST emit a single parseable JSON line as its final stdout (used by step 4 above).
 """
 import json
 import logging
@@ -36,8 +32,7 @@ _STALE_LOG_SECONDS = 5 * 60
 def _has_valid_json_result(text: str) -> bool:
     """Check if text contains a valid JSON result as the last {-prefixed line.
 
-    Scans text in reverse for the first line where line.strip().startswith("{"),
-    attempts json.loads on that line, and returns True on success.
+    Scans text in reverse for the first line where line.strip().startswith("{"), attempts json.loads on that line, and returns True on success.
     Returns False if no such line is found or if parsing raises json.JSONDecodeError.
     Never raises.
     """
@@ -59,11 +54,10 @@ def _probe_liveness(log_path: Path) -> tuple[str, int | None]:
     Probes the PID via os.kill(pid, 0) with fallback to log mtime staleness.
 
     Returns (state, pid_or_None) where state is one of:
-      - "exit"               -> [mill-bg] EXIT sentinel present
-      - "affirmative-alive"  -> os.kill(pid, 0) succeeded or raised PermissionError
-      - "assumed-alive"      -> os.kill raised inconclusive OSError/SystemError,
-                               mtime is fresh (<=_STALE_LOG_SECONDS)
-      - "dead"               -> no PID line, mtime stale, or no log file
+      - "exit" -> [mill-bg] EXIT sentinel present
+      - "affirmative-alive" -> os.kill(pid, 0) succeeded or raised PermissionError
+      - "assumed-alive" -> os.kill raised inconclusive OSError/SystemError, mtime is fresh (<=_STALE_LOG_SECONDS)
+      - "dead" -> no PID line, mtime stale, or no log file
     """
     if not log_path.exists():
         return ("dead", None)
@@ -94,18 +88,16 @@ def _probe_liveness(log_path: Path) -> tuple[str, int | None]:
 def is_bg_worker_alive(log_path: Path) -> tuple[bool, int | None]:
     """Check if a millpy-bg worker process is alive based on its log file.
 
-    Thin wrapper over _probe_liveness that collapses the four liveness states
-    into a boolean (True for affirmative-alive or assumed-alive; False for exit or dead).
+    Thin wrapper over _probe_liveness that collapses the four liveness states into a boolean (True for affirmative-alive or assumed-alive; False for exit or dead).
 
     Returns (alive, pid_or_None):
-      - log file does not exist                   -> (False, None)
-      - log has no WORKER PID line                -> (False, None)
-      - log has WORKER PID AND [mill-bg] EXIT     -> (False, pid)
-      - kill probe succeeds (process alive)       -> (True, pid)
-      - kill(ESRCH) or kill(EPERM)                -> handled; EPERM is alive
-      - kill raises unknown OSError, fallback:
-        - log mtime > 5 min old                   -> (False, pid)
-        - log mtime <= 5 min old                  -> (True, pid)
+      - log file does not exist -> (False, None)
+      - log has no WORKER PID line -> (False, None)
+      - log has WORKER PID AND [mill-bg] EXIT -> (False, pid)
+      - kill probe succeeds (process alive) -> (True, pid)
+      - kill(ESRCH) or kill(EPERM) -> handled;
+          EPERM is alive
+      - kill raises unknown OSError, fallback: - log mtime > 5 min old -> (False, pid) - log mtime <= 5 min old -> (True, pid)
     """
     state, pid = _probe_liveness(log_path)
     if state in ("affirmative-alive", "assumed-alive"):
@@ -120,21 +112,18 @@ def check_bg_status(log_path: Path) -> tuple[str, int | None]:
     Performs exactly one status determination without looping or sleeping.
     The orchestrator owns the poll cadence.
 
-    Agent-mode dispatch (no subprocess) is the structural fix; this fallback applies
-    only to subprocess-mode workers.
+    Agent-mode dispatch (no subprocess) is the structural fix;
+    this fallback applies only to subprocess-mode workers.
 
     Resolution order (first match wins):
-      (1) log file does not exist                     -> ("dead", None)
-      (2) log contains [mill-bg] EXIT <code>          -> ("exit", code)
+      (1) log file does not exist -> ("dead", None)
+      (2) log contains [mill-bg] EXIT <code> -> ("exit", code)
       (3) probe is "affirmative-alive" (kill succeeded) -> ("running", pid)
-      (4) valid trailing JSON completion sentinel     -> ("exit", 0)
-      (5) probe is "assumed-alive" (mtime-fresh)     -> ("running", pid)
-      (6) otherwise                                   -> ("dead", pid)
+      (4) valid trailing JSON completion sentinel -> ("exit", 0)
+      (5) probe is "assumed-alive" (mtime-fresh) -> ("running", pid)
+      (6) otherwise -> ("dead", pid)
 
-    This ordering ensures a worker that finished (emitted trailing JSON) but was
-    hard-killed before writing EXIT is recognized as completed on the next poll,
-    while still respecting an affirmatively-alive process even if it has JSON-looking
-    output mid-stream.
+    This ordering ensures a worker that finished (emitted trailing JSON) but was hard-killed before writing EXIT is recognized as completed on the next poll, while still respecting an affirmatively-alive process even if it has JSON-looking output mid-stream.
     """
     if not log_path.exists():
         return ("dead", None)

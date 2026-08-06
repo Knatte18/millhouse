@@ -1,13 +1,9 @@
 """Unit parity test for agent-mode prepare/finalize round-trip.
 
-Tests that the prepare -> finalize round-trip (with captured agent output)
-produces byte-for-byte identical JSON envelopes and artifacts as the full
-(subprocess) path, for both implementer-class (millpy-implement.py) and
-reviewer-class (millpy-review-discussion.py) CLIs.
+Tests that the prepare -> finalize round-trip (with captured agent output) produces byte-for-byte identical JSON envelopes and artifacts as the full (subprocess) path, for both implementer-class (millpy-implement.py) and reviewer-class (millpy-review-discussion.py) CLIs.
 
-No real LLM calls or Agent tool. Uses fixtures to feed canned sub-agent output
-to the finalize stage and verifies the resulting JSON envelope matches what
-the full mode would produce.
+No real LLM calls or Agent tool.
+Uses fixtures to feed canned sub-agent output to the finalize stage and verifies the resulting JSON envelope matches what the full mode would produce.
 """
 from __future__ import annotations
 
@@ -168,9 +164,8 @@ class TestImplementerModeParity(unittest.TestCase):
             millpy_implement._paths, "resolve_wiki_path",
             return_value=self.tmp_path / "wiki",
         )
-        # project_root's rebind now resolves via resolve_container_path +
-        # resolve_active_hub instead of using git_root directly; mock both so
-        # the fixture's non-git tmp_path doesn't hit pygit2.
+        # project_root's rebind now resolves via resolve_container_path + resolve_active_hub instead of using git_root directly;
+        # mock both so the fixture's non-git tmp_path doesn't hit pygit2.
         self.mock_resolve_container_path = _p(
             millpy_implement._paths, "resolve_container_path",
             return_value=self.tmp_path,
@@ -191,31 +186,24 @@ class TestImplementerModeParity(unittest.TestCase):
             millpy_implement._marker, "slug_from_branch",
             return_value="test-slug",
         )
-        # The no-content-commit gate in _forward_output compares finalize's
-        # `git rev-parse HEAD` against the prepare-recorded start_sha. A flat
-        # constant-SHA mock makes the two equal and trips the gate (demoting
-        # success to stuck/logic). Instead, inspect the git argv: return the
-        # prepare-time SHA for `rev-parse HEAD` while self._in_finalize is False,
-        # and a distinct finalize-time SHA once the test flips the flag. All
-        # other git calls (config, branch, add, commit, push, log) return a
-        # sensible default CompletedProcess so prepare's commit sequence succeeds.
+        # The no-content-commit gate in _forward_output compares finalize's `git rev-parse HEAD` against the prepare-recorded start_sha.
+        # A flat constant-SHA mock makes the two equal and trips the gate (demoting success to stuck/logic).
+        # Instead, inspect the git argv: return the prepare-time SHA for `rev-parse HEAD` while self._in_finalize is False, and a distinct finalize-time SHA once the test flips the flag.
+        # All other git calls (config, branch, add, commit, push, log) return a sensible default CompletedProcess so prepare's commit sequence succeeds.
         self._in_finalize = False
         self._prepare_head_sha = "abc1234"
         self._finalize_head_sha = "def5678"
 
         def _git_side_effect(*args, **kwargs):
             argv = args[0] if args else kwargs.get("args", [])
-            # Detect the `git rev-parse HEAD` calls regardless of any leading
-            # `-C <path>` flags, since those are the only calls whose SHA the
-            # no-content-commit gate compares.
+            # Detect the `git rev-parse HEAD` calls regardless of any leading `-C <path>` flags, since those are the only calls whose SHA the no-content-commit gate compares.
             is_rev_parse_head = "rev-parse" in argv and "HEAD" in argv
             if is_rev_parse_head:
                 sha = self._finalize_head_sha if self._in_finalize else self._prepare_head_sha
                 return subprocess.CompletedProcess(
                     args=list(argv), returncode=0, stdout=f"{sha}\n", stderr=""
                 )
-            # Default for every non-rev-parse git call: succeed with the
-            # prepare-time SHA as stdout (used as branch name, log subject, etc.).
+            # Default for every non-rev-parse git call: succeed with the prepare-time SHA as stdout (used as branch name, log subject, etc.).
             return subprocess.CompletedProcess(
                 args=list(argv), returncode=0, stdout="abc1234\n", stderr=""
             )
@@ -302,10 +290,8 @@ class TestImplementerModeParity(unittest.TestCase):
             encoding="utf-8"
         )
 
-        # Flip the SHA mock into finalize mode so `git rev-parse HEAD` returns a
-        # SHA distinct from the prepare-recorded start_sha. Without this, the
-        # no-content-commit gate would see HEAD == start_sha and demote the
-        # success envelope to stuck/logic.
+        # Flip the SHA mock into finalize mode so `git rev-parse HEAD` returns a SHA distinct from the prepare-recorded start_sha.
+        # Without this, the no-content-commit gate would see HEAD == start_sha and demote the success envelope to stuck/logic.
         self._in_finalize = True
 
         # Run finalize
@@ -319,8 +305,8 @@ class TestImplementerModeParity(unittest.TestCase):
         self.assertEqual(rc, 0)
         # LLM should not be called in finalize stage
         mock_run.assert_not_called()
-        # Output should be the processed envelope; the distinct finalize-time HEAD
-        # makes a real content commit, so the gate passes and success is preserved.
+        # Output should be the processed envelope;
+        # the distinct finalize-time HEAD makes a real content commit, so the gate passes and success is preserved.
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "success")
         self.assertIn("commit_sha", data)
@@ -360,8 +346,7 @@ class TestReviewerModeParity(unittest.TestCase):
             },
         }
 
-        # Step 1: Prepare stage
-        # Guard that _reviewer_single.run is not called during prepare
+        # Step 1: Prepare stage Guard that _reviewer_single.run is not called during prepare
         with unittest.mock.patch.object(
             self._reviewer_single, "run"
         ) as mock_run:
@@ -389,8 +374,7 @@ class TestReviewerModeParity(unittest.TestCase):
         brief_content = brief_path.read_text(encoding="utf-8")
         self.assertEqual(brief_content, prepare_result["prompt_text"])
 
-        # Step 3: Finalize stage with canned agent output
-        # Guard that _reviewer_single.run is not called during finalize
+        # Step 3: Finalize stage with canned agent output Guard that _reviewer_single.run is not called during finalize
         agent_output = APPROVE_TEXT
         with unittest.mock.patch.object(
             self._reviewer_single, "run"

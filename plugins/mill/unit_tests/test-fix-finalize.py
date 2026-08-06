@@ -369,9 +369,7 @@ def main() -> int:
             print(f"FAIL: test 4 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Test 5: nested-layout batch-scope verify cwd threads cwd_override at the
-    # finalize stage (Card 19), distinct from the prepare/full-stage coverage
-    # added by batch 5's Card 21.
+    # Test 5: nested-layout batch-scope verify cwd threads cwd_override at the finalize stage (Card 19), distinct from the prepare/full-stage coverage added by batch 5's Card 21.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         (project_root / "_mill").mkdir(parents=True)
@@ -384,8 +382,7 @@ def main() -> int:
         overview_file = project_root / "_mill/plan/00-overview.md"
         overview_file.write_text("```yaml\nbatches: []\n```", encoding="utf-8")
 
-        # Sentinel path standing in for the resolved nested-hub cwd that
-        # parse_verify_field would return for a `verify: {cwd: hub, ...}` batch.
+        # Sentinel path standing in for the resolved nested-hub cwd that parse_verify_field would return for a `verify: {cwd: hub, ...}` batch.
         nested_hub = project_root / "hub"
 
         try:
@@ -419,18 +416,15 @@ def main() -> int:
             mock_modules["_reviewers"].resolve = unittest.mock.MagicMock(
                 return_value={"model": "claude-haiku-4-5-20251001"}
             )
-            # A single batch named "test-batch" is present in the overview so the
-            # finalize-stage batch-scope lookup (`batch_entry is not None`) resolves.
+            # A single batch named "test-batch" is present in the overview so the finalize-stage batch-scope lookup (`batch_entry is not None`) resolves.
             mock_modules["_plan_dag"].extract_batch_index = unittest.mock.MagicMock(
                 return_value=[{"name": "test-batch", "file": "01-test-batch.md", "depends-on": []}]
             )
             mock_modules["_plan_dag"]._read_batch_frontmatter = unittest.mock.MagicMock(
                 return_value={"verify": {"cwd": "hub", "command": "exit 0"}}
             )
-            # parse_verify_field is the single normalizer (batch 3) that
-            # millpy-fix.py's finalize-stage batch-scope site must route through;
-            # stub its resolution to the nested hub root, mirroring what it would
-            # return for a real `verify: {cwd: hub, command: exit 0}` mapping.
+            # parse_verify_field is the single normalizer (batch 3) that millpy-fix.py's finalize-stage batch-scope site must route through;
+            # stub its resolution to the nested hub root, mirroring what it would return for a real `verify: {cwd: hub, command: exit 0}` mapping.
             mock_modules["_plan_dag"].parse_verify_field = unittest.mock.MagicMock(
                 return_value=("exit 0", nested_hub)
             )

@@ -1,8 +1,8 @@
 """
 Integration test for millpy-abandon.py.
 
-Builds a hub+wiki fixture under .scratch/ with a real bare git repo and a
-wiki clone.  Tests the happy path, hub guard, and double-abandon guard.
+Builds a hub+wiki fixture under .scratch/ with a real bare git repo and a wiki clone.
+Tests the happy path, hub guard, and double-abandon guard.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-abandon.py
@@ -57,9 +57,8 @@ def _git_init(repo: Path) -> None:
 def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
     """Build hub+wiki fixture.
 
-    The worktree is placed on branch ``impl/<slug>`` and Home.md is seeded
-    with ``[slug] [active]`` so ``_marker.slug_from_branch`` succeeds without
-    a marker file. Returns ``(hub, wiki_clone, worktree, slug)``.
+    The worktree is placed on branch ``impl/<slug>`` and Home.md is seeded with ``[slug] [active]`` so ``_marker.slug_from_branch`` succeeds without a marker file.
+    Returns ``(hub, wiki_clone, worktree, slug)``.
     """
     container.mkdir(parents=True, exist_ok=True)
     bare = container / "wiki.git"

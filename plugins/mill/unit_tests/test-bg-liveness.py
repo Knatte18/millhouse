@@ -1,8 +1,6 @@
 """Unit tests for _bg.is_bg_worker_alive liveness probe.
 
-Tests that is_bg_worker_alive correctly parses millpy-bg worker logs,
-detects EXIT sentinels, probes process liveness via os.kill, and falls
-back to log mtime staleness on Windows EINVAL.
+Tests that is_bg_worker_alive correctly parses millpy-bg worker logs, detects EXIT sentinels, probes process liveness via os.kill, and falls back to log mtime staleness on Windows EINVAL.
 """
 from __future__ import annotations
 
@@ -244,9 +242,7 @@ class TestCheckBgStatus(unittest.TestCase):
     def test_check_bg_status_json_sentinel_completion_with_assumed_alive(self) -> None:
         """Regression test for #420/#424: log with valid trailing JSON + fresh mtime + inconclusive kill probe.
 
-        When a worker finishes and emits JSON but is hard-killed before writing EXIT,
-        the probe reports assumed-alive (kill inconclusive + fresh mtime), but the JSON
-        sentinel must override it to report completion on this poll.
+        When a worker finishes and emits JSON but is hard-killed before writing EXIT, the probe reports assumed-alive (kill inconclusive + fresh mtime), but the JSON sentinel must override it to report completion on this poll.
         """
         with tempfile.TemporaryDirectory() as tmp_str:
             log_path = Path(tmp_str) / "test.log"

@@ -1,24 +1,19 @@
 """
 _config — shared config-loading helpers for mill entrypoints.
 
-Exports
--------
-load_config(hub_root, worktree_root) -> dict
-    Load mill config deep-merged from plugin template, hub-root layer,
-    local-stub layer, real config, and environment overrides. Merge order
-    (lowest to highest precedence): plugin template -> hub overlay (if
-    present) -> local stub -> real config -> env overrides. Returns the
-    merged dict. Each layer is optional except the plugin template which
-    is always present.
+Exports ------- load_config(hub_root, worktree_root) -> dict Load mill config deep-merged from plugin template, hub-root layer, local-stub layer, real config, and environment overrides.
+Merge order (lowest to highest precedence): plugin template -> hub overlay (if present) -> local stub -> real config -> env overrides.
+Returns the merged dict.
+Each layer is optional except the plugin template which is always present.
 
 deep_merge(base, overlay) -> dict
-    Shallow-recursive deep merge; overlay wins on scalar conflicts.
+Shallow-recursive deep merge; overlay wins on scalar conflicts.
 
 set_local_wiki_overrides(cfg_path, repo_url, branch) -> bool
-    Write or update the ``wiki:`` block in a
-    ``.millhouse/config.local.yaml`` file. Returns True if the file
-    was created or modified, False if it was already up-to-date or
-    both arguments were None.
+Write or update the ``wiki:`` block in a
+``.millhouse/config.local.yaml`` file. Returns True if the file
+was created or modified, False if it was already up-to-date or
+both arguments were None.
 """
 from __future__ import annotations
 
@@ -65,8 +60,8 @@ def apply_env_overrides(cfg: dict) -> dict:
     """Apply environment variable overrides to a config dict.
 
     For each entry in ENV_REGISTRY, reads the corresponding environment variable.
-    If the value is non-empty, walks the key tuple in the config and sets the final
-    segment to the env value. Empty-string env values are treated as unset.
+    If the value is non-empty, walks the key tuple in the config and sets the final segment to the env value.
+    Empty-string env values are treated as unset.
 
     Args:
         cfg: Base configuration dict.
@@ -89,13 +84,13 @@ def apply_env_overrides(cfg: dict) -> dict:
 def walk_unknown_keys(actual: dict, template: dict, prefix: str = "") -> list[str]:
     """Find keys present in actual but not in template.
 
-    Recurses into nested dicts only when both actual[key] and template[key] are
-    dicts. Lists are treated as leaves (not descended).
+    Recurses into nested dicts only when both actual[key] and template[key] are dicts.
+    Lists are treated as leaves (not descended).
 
     Args:
-        actual:  The actual configuration dict.
+        actual: The actual configuration dict.
         template: The template configuration dict.
-        prefix:  Current key path prefix (for recursion).
+        prefix: Current key path prefix (for recursion).
 
     Returns:
         List of dotted key paths (e.g., ["a.b.c", "x.y"]).
@@ -130,8 +125,7 @@ def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
 def resolve_plugin_template_path(filename: str) -> Path:
     """Resolve a plugin template path.
 
-    Uses ${CLAUDE_PLUGIN_ROOT}/templates/<filename> when the env var is set,
-    otherwise falls back to the source-tree path relative to this file.
+    Uses ${CLAUDE_PLUGIN_ROOT}/templates/<filename> when the env var is set, otherwise falls back to the source-tree path relative to this file.
 
     Args:
         filename: The template filename (e.g., "mill-config.yaml").
@@ -157,15 +151,16 @@ def resolve_repo_config_path(hub_root: Path, worktree_root: Path) -> Path | None
     2. primary clone / "mill-config.yaml" (resolved via _paths.resolve_main_worktree_root)
     3. worktree_root / "mill-config.yaml"
 
-    When none exist, returns None. This allows config to be present in any of
-    the three locations, accommodating both standard and container layouts.
+    When none exist, returns None.
+    This allows config to be present in any of the three locations, accommodating both standard and container layouts.
 
     Args:
         hub_root: Absolute path to the hub directory.
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
-        Absolute Path to the repo-layer config, or None when none exist.
+        Absolute Path to the repo-layer config,
+        or None when none exist.
     """
     # Candidate 1: hub_root / mill-config.yaml
     candidate1 = _paths.resolve_mill_config_path(hub_root)
@@ -203,7 +198,7 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
     Returns an empty dict when no sources are found.
 
     Args:
-        hub_root:      Absolute path to the hub directory.
+        hub_root: Absolute path to the hub directory.
         worktree_root: Absolute path to the worktree git repository root.
 
     Returns:
@@ -217,10 +212,8 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         cfg = {}
     template_cfg = copy.deepcopy(cfg)
 
-    # Augment template_cfg with the source-tree template when it differs from the cache
-    # template (handles cache-lag: new keys in source not yet in the installed cache).
-    # Check both the current worktree and the hub root — task worktrees don't carry
-    # plugins/mill/, so only the hub check fires for non-self-modifying task branches.
+    # Augment template_cfg with the source-tree template when it differs from the cache template (handles cache-lag: new keys in source not yet in the installed cache).
+    # Check both the current worktree and the hub root — task worktrees don't carry plugins/mill/, so only the hub check fires for non-self-modifying task branches.
     for _candidate in (
         worktree_root / "plugins" / "mill" / "templates" / "mill-config.yaml",
         hub_root / "plugins" / "mill" / "templates" / "mill-config.yaml",
@@ -229,10 +222,8 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
             try:
                 _cand_cfg = yaml.safe_load(_candidate.read_text(encoding="utf-8")) or {}
             except yaml.YAMLError as e:
-                # A candidate that exists but fails to parse (e.g. a task worktree mid-merge-
-                # conflict, with literal conflict markers in its own template copy) must fall
-                # through exactly like .exists() being False -- try the next tuple entry rather
-                # than crashing or stopping the search.
+                # A candidate that exists but fails to parse (e.g.
+                # a task worktree mid-merge- conflict, with literal conflict markers in its own template copy) must fall through exactly like .exists() being False -- try the next tuple entry rather than crashing or stopping the search.
                 print(
                     f"[_config] warning: failed to parse {_candidate}: {e} -- skipping candidate",
                     file=sys.stderr,
@@ -250,10 +241,9 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         try:
             repo_cfg = yaml.safe_load(mill_cfg_path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
-            # A repo-layer mill-config.yaml with literal merge-conflict markers (e.g. mid-
-            # rebase or mid-merge-in) is present but unparseable. Treat that source as absent
-            # for this load rather than crashing -- the file is still "found" (source_label
-            # is still set below), it just contributes nothing to the merged config.
+            # A repo-layer mill-config.yaml with literal merge-conflict markers (e.g.
+            # mid- rebase or mid-merge-in) is present but unparseable.
+            # Treat that source as absent for this load rather than crashing -- the file is still "found" (source_label is still set below), it just contributes nothing to the merged config.
             print(
                 f"[_config] warning: failed to parse {mill_cfg_path}: {e} -- skipping repo-layer config",
                 file=sys.stderr,
@@ -306,22 +296,19 @@ def set_local_wiki_overrides(
 ) -> bool:
     """Write or update the ``wiki:`` block in a ``.millhouse/config.local.yaml`` file.
 
-    If both ``repo_url`` and ``branch`` are None this is a no-op and returns False
-    immediately — the caller passed no overrides to apply.
+    If both ``repo_url`` and ``branch`` are None this is a no-op and returns False immediately — the caller passed no overrides to apply.
 
-    Otherwise the file is read (if it exists), the ``wiki:`` sub-dict is created or
-    updated with only the non-None arguments (partial-update semantics: a key absent
-    from the call is not removed from the file), and the result is written back using
-    ``yaml.safe_dump(sort_keys=False)``.  If the resulting text is byte-for-byte
-    identical to the existing file the function returns False without touching the file.
+    Otherwise the file is read (if it exists), the ``wiki:`` sub-dict is created or updated with only the non-None arguments (partial-update semantics: a key absent from the call is not removed from the file), and the result is written back using ``yaml.safe_dump(sort_keys=False)``.
+    If the resulting text is byte-for-byte identical to the existing file the function returns False without touching the file.
 
-    Note: comments in the existing file are lost on rewrite — this is the documented
-    trade-off for this gitignored, per-machine file.
+    Note: comments in the existing file are lost on rewrite — this is the documented trade-off for this gitignored, per-machine file.
 
     Args:
         cfg_path: Absolute path to the config file (need not exist yet).
-        repo_url: URL to store under ``wiki.repo_url``, or None to leave unchanged.
-        branch:   Branch name to store under ``wiki.branch``, or None to leave unchanged.
+        repo_url: URL to store under ``wiki.repo_url``,
+        or None to leave unchanged.
+        branch: Branch name to store under ``wiki.branch``,
+        or None to leave unchanged.
 
     Returns:
         True if the file was created or modified, False if no-op.
@@ -355,10 +342,11 @@ def set_local_wiki_overrides(
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
-    """Shallow-recursive deep merge; overlay wins on scalar conflicts.
+    """Shallow-recursive deep merge;
+overlay wins on scalar conflicts.
 
     Args:
-        base:    Base dictionary.
+        base: Base dictionary.
         overlay: Dictionary whose values take precedence.
 
     Returns:
@@ -379,7 +367,7 @@ def _substitute_string(value: str, key_path: str) -> str:
     """Substitute ${VAR} and ${VAR:-default} patterns in a string.
 
     Args:
-        value:    The string to process.
+        value: The string to process.
         key_path: Dotted key path for error messages.
 
     Returns:
@@ -410,7 +398,7 @@ def _interpolate_env(cfg, key_path: str = ""):
     """Recursively interpolate env-var patterns in configuration values.
 
     Args:
-        cfg:      Configuration (dict, list, str, or scalar).
+        cfg: Configuration (dict, list, str, or scalar).
         key_path: Current dotted/bracketed key path.
 
     Returns:
@@ -440,9 +428,9 @@ def _interpolate_env(cfg, key_path: str = ""):
 def _apply_dispatch_shim(cfg: dict) -> None:
     """Apply back-compat shim for legacy psmux.via_psmux to dispatch enum.
 
-    Modifies cfg in-place. Handles migration from the deprecated via_psmux boolean
-    to the new dispatch enum. Emits deprecation warnings and validates the final
-    dispatch value.
+    Modifies cfg in-place.
+    Handles migration from the deprecated via_psmux boolean to the new dispatch enum.
+    Emits deprecation warnings and validates the final dispatch value.
 
     Args:
         cfg: Configuration dict (top-level).

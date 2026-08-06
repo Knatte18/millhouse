@@ -1,14 +1,9 @@
 """Unit tests for millpy-wiki-migrate.py's _ensure_utf8_stdout() stdout guard.
 
-Loads millpy-wiki-migrate.py via importlib.util.spec_from_file_location (the
-file has a hyphenated name and cannot be `import`ed directly -- same pattern
-as test-abandon.py's trampoline loader). Uses the ok()/fail() harness pattern
-from test-wiki-client-retry.py.
+Loads millpy-wiki-migrate.py via importlib.util.spec_from_file_location (the file has a hyphenated name and cannot be `import`ed directly -- same pattern as test-abandon.py's trampoline loader).
+Uses the ok()/fail() harness pattern from test-wiki-client-retry.py.
 
-Covers: #588 -- printing externally-authored wiki content (task titles,
-briefs) containing non-ASCII characters must not crash with
-UnicodeEncodeError on a Windows cp1252 console. _ensure_utf8_stdout()
-reconfigures sys.stdout to UTF-8 before any such content is printed.
+Covers: #588 -- printing externally-authored wiki content (task titles, briefs) containing non-ASCII characters must not crash with UnicodeEncodeError on a Windows cp1252 console. _ensure_utf8_stdout() reconfigures sys.stdout to UTF-8 before any such content is printed.
 """
 from __future__ import annotations
 
@@ -45,8 +40,7 @@ def main() -> int:
     try:
         original_stdout = sys.stdout
         try:
-            # Simulate a Windows cp1252 console -- the precondition that
-            # triggered #588's UnicodeEncodeError crash.
+            # Simulate a Windows cp1252 console -- the precondition that triggered #588's UnicodeEncodeError crash.
             sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
 
             _wiki_migrate._ensure_utf8_stdout()

@@ -48,15 +48,11 @@ def _capture_stdout(fn):
 def _go_gate_mock(build_returncode=0, build_stdout="", build_stderr=""):
     """Build a _subprocess_util.run side_effect that mocks 'go' invocations only.
 
-    Every non-'go' argv (git, etc.) delegates to the real _subprocess_util.run so
-    the git diff/status plumbing _go_build_tag_retiering_stuck depends on still
-    works against the tempfile git fixture -- no real Go toolchain is invoked.
+    Every non-'go' argv (git, etc.) delegates to the real _subprocess_util.run so the git diff/status plumbing _go_build_tag_retiering_stuck depends on still works against the tempfile git fixture -- no real Go toolchain is invoked.
 
-    Returns (side_effect, calls, cwd_calls): side_effect is passed to
-    unittest.mock.patch.object(_subprocess_util, "run", side_effect=...); calls
-    accumulates every mocked 'go' argv for assertions; cwd_calls accumulates
-    each mocked call's cwd kwarg in lockstep, for asserting nested-go-module
-    scoping.
+    Returns (side_effect, calls, cwd_calls): side_effect is passed to unittest.mock.patch.object(_subprocess_util, "run", side_effect=...);
+    calls accumulates every mocked 'go' argv for assertions;
+    cwd_calls accumulates each mocked call's cwd kwarg in lockstep, for asserting nested-go-module scoping.
     """
     real_run = _subprocess_util.run
     calls: list[list[str]] = []
@@ -1185,8 +1181,7 @@ def main() -> int:
         base_sha = _setup_fixture(project_root)
         snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
-        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha
-        # Verify must pass (so verify gate doesn't fire first)
+        # IMPORTANT: Do NOT make a new commit - HEAD == start_sha Verify must pass (so verify gate doesn't fire first)
         verify_cmd = "exit 0"
         agent_output = (
             '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
@@ -1216,8 +1211,7 @@ def main() -> int:
             print(f"FAIL: case 27 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27c: commit-none exemption fires -- a zero-commit batch whose reported
-    # cards_done are entirely Commit: none cards is not demoted to stuck/logic.
+    # Case 27c: commit-none exemption fires -- a zero-commit batch whose reported cards_done are entirely Commit: none cards is not demoted to stuck/logic.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1253,9 +1247,8 @@ def main() -> int:
             print(f"FAIL: case 27c ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27d: commit-none exemption does not overfire on a mixed batch -- card 2
-    # is a real card falsely reported alongside a commit-none card 1, with no
-    # actual commit made. The exemption requires a subset, not mere overlap.
+    # Case 27d: commit-none exemption does not overfire on a mixed batch -- card 2 is a real card falsely reported alongside a commit-none card 1, with no actual commit made.
+    # The exemption requires a subset, not mere overlap.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1295,9 +1288,8 @@ def main() -> int:
             print(f"FAIL: case 27d ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27e: commit_none_card_ids absent (default None) behaves exactly as
-    # today -- regression-proves the new parameter is opt-in. Repeats case 27's
-    # exact setup and assertions, without passing commit_none_card_ids at all.
+    # Case 27e: commit_none_card_ids absent (default None) behaves exactly as today -- regression-proves the new parameter is opt-in.
+    # Repeats case 27's exact setup and assertions, without passing commit_none_card_ids at all.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1334,12 +1326,8 @@ def main() -> int:
             print(f"FAIL: case 27e ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27f: _reclassify_verify_failure exemption -- called directly with a
-    # synthetic verify_stuck dict, zero content commits, and cards_done entirely
-    # covered by commit_none_card_ids. The premature content==0 "no content
-    # commit" hard-fail must be skipped (either verify_stuck is returned
-    # unchanged, or an incomplete reclassification occurs per
-    # _cards_incomplete_reason -- either way, NOT the content==0 dict).
+    # Case 27f: _reclassify_verify_failure exemption -- called directly with a synthetic verify_stuck dict, zero content commits, and cards_done entirely covered by commit_none_card_ids.
+    # The premature content==0 "no content commit" hard-fail must be skipped (either verify_stuck is returned unchanged, or an incomplete reclassification occurs per _cards_incomplete_reason -- either way, NOT the content==0 dict).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -1409,8 +1397,7 @@ def main() -> int:
         base_sha = _setup_fixture(project_root)
         snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
         _cleanliness.capture_snapshot(project_root, snapshot_path)
-        # NO new commit — HEAD == start_sha
-        # Output contains no API error and no JSON
+        # NO new commit — HEAD == start_sha Output contains no API error and no JSON
         rc, captured = _capture_stdout(
             lambda: _forward_output(
                 "plain garbage output with no error markers",
@@ -1432,8 +1419,8 @@ def main() -> int:
             print(f"FAIL: case 29 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 27: completeness gate (a) -- fewer commits than cards -> stuck/transient
-    # card_ids={1,2} but only 1 commit since start_sha; self-reported success is demoted.
+    # Case 27: completeness gate (a) -- fewer commits than cards -> stuck/transient card_ids={1,2} but only 1 commit since start_sha;
+    # self-reported success is demoted.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1507,11 +1494,9 @@ def main() -> int:
             print(f"FAIL: case 27b ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 28: dirty-tree gate (c) -- uncommitted in-scope tracked file -> stuck/logic
-    # Set up a real git repo with a parent branch and a task branch.
-    # README.md is committed on the task branch (owned by this task via parent-diff),
-    # then dirtied again without committing. compute_terminal_dirt must detect it as
-    # in-scope and dirty.
+    # Case 28: dirty-tree gate (c) -- uncommitted in-scope tracked file -> stuck/logic Set up a real git repo with a parent branch and a task branch.
+    # README.md is committed on the task branch (owned by this task via parent-diff), then dirtied again without committing.
+    # compute_terminal_dirt must detect it as in-scope and dirty.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1550,8 +1535,7 @@ def main() -> int:
             lambda: _forward_output(
                 agent_output,
                 project_root,
-                # Use base_sha (the initial commit) as start_sha so HEAD != start_sha
-                # (the card-1 commit advanced HEAD), passing the no-content-commit check.
+                # Use base_sha (the initial commit) as start_sha so HEAD != start_sha (the card-1 commit advanced HEAD), passing the no-content-commit check.
                 start_sha=base_sha,
                 verify_cmd=None,
                 task_dir=task_dir,
@@ -1615,9 +1599,7 @@ def main() -> int:
             print(f"FAIL: case 28d ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 29: backward compatibility (e) -- all new kwargs omitted -> no demotion
-    # Verifies that existing callers that do not pass card_ids/task_dir/parent_branch
-    # still get success when the report is valid and HEAD != start_sha.
+    # Case 29: backward compatibility (e) -- all new kwargs omitted -> no demotion Verifies that existing callers that do not pass card_ids/task_dir/parent_branch still get success when the report is valid and HEAD != start_sha.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1648,8 +1630,7 @@ def main() -> int:
             print(f"FAIL: case 29e ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 30: two-gate sequence -- batch passes, module-wide fails -> stuck/verify
-    # with "[module-wide verify]" prefix in reason.
+    # Case 30: two-gate sequence -- batch passes, module-wide fails -> stuck/verify with "[module-wide verify]" prefix in reason.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -1700,8 +1681,7 @@ def main() -> int:
             errors += 1
 
     # Case 31: module_wide_verify_cmd=None runs only the batch gate (backward compat)
-    # Verify that _run_verify_gates with None module_wide behaves identically to
-    # _run_verify_gate for both the pass and fail cases.
+    # Verify that _run_verify_gates with None module_wide behaves identically to _run_verify_gate for both the pass and fail cases.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -1769,15 +1749,10 @@ def main() -> int:
             print(f"FAIL: case 32 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 33: benign Go output -- cleanup race with "fail" only inside an ok-line path
-    # Regression for the bare-"fail"-substring over-match: before the fix, output like
-    # "ok  \tpkg/failover\t0.1s" was classified as a real failure because "fail" appeared
-    # as a substring. After the fix, line-anchored matching is used, so only lines that
-    # start with "fail" (for the package-summary) or contain "--- fail" (for per-test)
-    # trigger the failure marker -- a passing "ok" line with "failover" in the path does not.
+    # Case 33: benign Go output -- cleanup race with "fail" only inside an ok-line path Regression for the bare-"fail"-substring over-match: before the fix, output like "ok \tpkg/failover\t0.1s" was classified as a real failure because "fail" appeared as a substring.
+    # After the fix, line-anchored matching is used, so only lines that start with "fail" (for the package-summary) or contain "--- fail" (for per-test) trigger the failure marker -- a passing "ok" line with "failover" in the path does not.
     try:
-        # Output has a Windows cleanup-race signature (unlinkat / Access is denied) and
-        # Go test output whose only "fail" substring is inside an ok-line package path.
+        # Output has a Windows cleanup-race signature (unlinkat / Access is denied) and Go test output whose only "fail" substring is inside an ok-line package path.
         # The real TAB character is used in the ok-line (as produced by go test).
         benign_go_output = (
             "error: unlinkat ...\\X.test.exe: Access is denied\n"
@@ -1795,9 +1770,7 @@ def main() -> int:
         print(f"FAIL: case 33 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 34: real Go test failure -- cleanup race + "--- FAIL:" per-test line -> False
-    # Verifies that a real per-test failure line still triggers the failure marker even
-    # after the line-anchoring change.
+    # Case 34: real Go test failure -- cleanup race + "--- FAIL:" per-test line -> False Verifies that a real per-test failure line still triggers the failure marker even after the line-anchoring change.
     try:
         real_fail_per_test_output = (
             "error: unlinkat ...\\X.test.exe: Access is denied\n"
@@ -1813,9 +1786,7 @@ def main() -> int:
         print(f"FAIL: case 34 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 35: real Go package failure -- cleanup race + "FAIL\tpkg" summary line -> False
-    # Verifies that the package-summary line "FAIL\tgithub.com/..." (with a real TAB
-    # after FAIL at the start of the line) still triggers the failure marker.
+    # Case 35: real Go package failure -- cleanup race + "FAIL\tpkg" summary line -> False Verifies that the package-summary line "FAIL\tgithub.com/..." (with a real TAB after FAIL at the start of the line) still triggers the failure marker.
     try:
         real_fail_pkg_output = (
             "error: unlinkat ...\\X.test.exe: Access is denied\n"
@@ -1901,8 +1872,7 @@ def main() -> int:
             errors += 1
 
     # Test B2: cwd_override takes precedence over both git_root and project_root (#604)
-    # A synthetic cwd_override Path must win as the verify subprocess's cwd even when
-    # both git_root and project_root are also supplied.
+    # A synthetic cwd_override Path must win as the verify subprocess's cwd even when both git_root and project_root are also supplied.
     with tempfile.TemporaryDirectory() as tmpdir:
         hub_dir = Path(tmpdir) / "hub"
         repo_dir = Path(tmpdir) / "repo"
@@ -2044,9 +2014,7 @@ def main() -> int:
             print(f"FAIL: Test C ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test D: short combined output (<= 2000 chars) -- reason is the exact stripped
-    # output with no omitted-content marker (regression guard for the unchanged
-    # short-output path) (#731)
+    # Test D: short combined output (<= 2000 chars) -- reason is the exact stripped output with no omitted-content marker (regression guard for the unchanged short-output path) (#731)
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
@@ -2075,9 +2043,7 @@ def main() -> int:
             print(f"FAIL: Test D ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test E: truncated output with an earlier Go package-level failure line
-    # ("FAIL\t<package>") recovered from the omitted portion, plus the literal
-    # tail content (#731)
+    # Test E: truncated output with an earlier Go package-level failure line ("FAIL\t<package>") recovered from the omitted portion, plus the literal tail content (#731)
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
@@ -2117,8 +2083,8 @@ def main() -> int:
             print(f"FAIL: Test E ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test F: truncated output with no recognized failure-marker line anywhere in the
-    # omitted portion -- marker is byte-count-only, no "; earlier failures:" clause (#731)
+    # Test F: truncated output with no recognized failure-marker line anywhere in the omitted portion -- marker is byte-count-only, no ";
+    # earlier failures:" clause (#731)
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
@@ -2156,8 +2122,7 @@ def main() -> int:
             print(f"FAIL: Test F ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test G: truncated output with more than 20 matching failure lines in the omitted
-    # portion -- extracted list is capped at exactly 20 (#731)
+    # Test G: truncated output with more than 20 matching failure lines in the omitted portion -- extracted list is capped at exactly 20 (#731)
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
@@ -2192,9 +2157,8 @@ def main() -> int:
             print(f"FAIL: Test G ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test H: truncated output shaped like a run-all.py failure -- both the per-test
-    # "--- FAIL <name> (<elapsed>s) ---" line and the "FAIL -- <n> of <m> in
-    # <elapsed>s: [...]" summary line are recovered from the omitted portion (#731)
+    # Test H: truncated output shaped like a run-all.py failure -- both the per-test "--- FAIL <name> (<elapsed>s) ---" line and the "FAIL -- <n> of <m> in <elapsed>s: [...]"
+    # summary line are recovered from the omitted portion (#731)
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
@@ -2240,8 +2204,7 @@ def main() -> int:
             errors += 1
 
     # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
-    # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit,
-    # the parsed-success path emits stuck/logic rather than success.
+    # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit, the parsed-success path emits stuck/logic rather than success.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         pre_start_sha = _setup_fixture(project_root)
@@ -2294,8 +2257,7 @@ def main() -> int:
             errors += 1
 
     # Case 37 -- Bug #557 (start commit + code commit -> success, guard does not fire)
-    # When the implementer adds a real code commit after the start-batch commit, the guard
-    # must NOT fire and the result must be success.
+    # When the implementer adds a real code commit after the start-batch commit, the guard must NOT fire and the result must be success.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         pre_start_sha = _setup_fixture(project_root)
@@ -2357,8 +2319,7 @@ def main() -> int:
 
     # Case 38 -- Bug #557 (retry scenario: start_sha = start-batch commit, one code commit -> success)
     # In a retry, skip_start_commit already ran, so start_sha points at the housekeeping commit.
-    # With a real code commit after it, there is exactly one commit since start_sha and its
-    # message does NOT start with "mill-go: start batch", so the guard must NOT fire.
+    # With a real code commit after it, there is exactly one commit since start_sha and its message does NOT start with "mill-go: start batch", so the guard must NOT fire.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -2426,9 +2387,8 @@ def main() -> int:
             errors += 1
 
     # Case 39 -- Bug #557 (inference path, start-batch commit only, snapshot present -> stuck/logic)
-    # Exercises the snapshot-present clean-tree inference emit path (~line 851). When the only
-    # commit since pre_start_sha is the prepare housekeeping commit and the tree is clean,
-    # the guard must fire and emit stuck/logic before the success is printed.
+    # Exercises the snapshot-present clean-tree inference emit path (~line 851).
+    # When the only commit since pre_start_sha is the prepare housekeeping commit and the tree is clean, the guard must fire and emit stuck/logic before the success is printed.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         pre_start_sha = _setup_fixture(project_root)
@@ -2477,8 +2437,7 @@ def main() -> int:
 
     # Case 40 -- Bug #548 (completeness gate disabled when verify_cmd is not None)
     # Calls _batch_completeness_stuck directly with verify_cmd set to a non-None value.
-    # Even though card_ids={1,2} and only one commit was made (which would normally fire),
-    # the gate must return None because verify_cmd is present.
+    # Even though card_ids={1,2} and only one commit was made (which would normally fire), the gate must return None because verify_cmd is present.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         start_sha_40 = _setup_fixture(project_root)
@@ -2515,8 +2474,8 @@ def main() -> int:
             errors += 1
 
     # Case 41 -- Bug #548 (regression guard: gate fires when verify_cmd is None)
-    # Same setup as Case 40 but verify_cmd=None. Confirms the gate still fires on the
-    # same commit count so the fix in Case 40 did not accidentally disable it permanently.
+    # Same setup as Case 40 but verify_cmd=None.
+    # Confirms the gate still fires on the same commit count so the fix in Case 40 did not accidentally disable it permanently.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         start_sha_41 = _setup_fixture(project_root)
@@ -2623,9 +2582,7 @@ def main() -> int:
             print(f"FAIL: case 43 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 44a -- #570 partial-batch reclassify: inferred no-snapshot path, verify fails,
-    # k=1 content commit + 1 housekeeping commit (raw range=2) -> stuck_type:incomplete
-    # with commits_made=1 (content count, not raw count).
+    # Case 44a -- #570 partial-batch reclassify: inferred no-snapshot path, verify fails, k=1 content commit + 1 housekeeping commit (raw range=2) -> stuck_type:incomplete with commits_made=1 (content count, not raw count).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2671,8 +2628,7 @@ def main() -> int:
             print(f"FAIL: case 44a ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 45b -- #570 partial-batch reclassify: complete batch (content>=N), verify fails
-    # -> stuck_type:verify preserved (not reclassified to transient).
+    # Case 45b -- #570 partial-batch reclassify: complete batch (content>=N), verify fails -> stuck_type:verify preserved (not reclassified to transient).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2710,8 +2666,7 @@ def main() -> int:
             print(f"FAIL: case 45b ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 46c -- #570 partial-batch reclassify: zero content commits (only housekeeping),
-    # verify fails -> stuck_type:logic "no content commit".
+    # Case 46c -- #570 partial-batch reclassify: zero content commits (only housekeeping), verify fails -> stuck_type:logic "no content commit".
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2786,8 +2741,8 @@ def main() -> int:
             errors += 1
 
     # Case 48e -- #570 canonical case: parsed-success path, verify fails, 0<content<N.
-    # Exercises the _gate_session_id hoist in _forward_output; the inferred-path cases
-    # (44a-47d) do not cover this code path.
+    # Exercises the _gate_session_id hoist in _forward_output;
+    # the inferred-path cases (44a-47d) do not cover this code path.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2831,8 +2786,7 @@ def main() -> int:
             print(f"FAIL: case 48e ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 49f -- _batch_completeness_stuck with housekeeping commit: commits_made reflects
-    # content count (1), not raw range count (2).
+    # Case 49f -- _batch_completeness_stuck with housekeeping commit: commits_made reflects content count (1), not raw range count (2).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2909,10 +2863,8 @@ def main() -> int:
             print(f"FAIL: case 50g ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 51: #574 regression -- no-JSON inference path, verify_cmd set and PASSES,
-    # content-commits < len(card_ids) -> stuck/incomplete with commits_made and commit_sha.
-    # Before the fix, _batch_completeness_stuck was disabled when verify_cmd was set,
-    # so a partial batch on the no-JSON path would slip through as inferred success.
+    # Case 51: #574 regression -- no-JSON inference path, verify_cmd set and PASSES, content-commits < len(card_ids) -> stuck/incomplete with commits_made and commit_sha.
+    # Before the fix, _batch_completeness_stuck was disabled when verify_cmd was set, so a partial batch on the no-JSON path would slip through as inferred success.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -2962,9 +2914,8 @@ def main() -> int:
             print(f"FAIL: case 51 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 52: explicit status:success JSON + verify passes + content < len(card_ids) -> success
-    # preserved (not false incomplete). The explicit-success completeness gate is disabled
-    # when verify_cmd is set (ignore_verify stays False on that path).
+    # Case 52: explicit status:success JSON + verify passes + content < len(card_ids) -> success preserved (not false incomplete).
+    # The explicit-success completeness gate is disabled when verify_cmd is set (ignore_verify stays False on that path).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3000,8 +2951,7 @@ def main() -> int:
             errors += 1
 
     # Case 53: _forward_output normalizes implementer-emitted status:incomplete report.
-    # A bare {"status":"incomplete","cards_done":1,"cards_remaining":2,"session_id":"s"}
-    # must be normalized to the stuck/incomplete envelope with commits_made and commit_sha.
+    # A bare {"status":"incomplete","cards_done":1,"cards_remaining":2,"session_id":"s"} must be normalized to the stuck/incomplete envelope with commits_made and commit_sha.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3051,8 +3001,8 @@ def main() -> int:
             print(f"FAIL: case 53 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 54: _content_commit_count with two "mill-go: start batch" commits returns N
-    # (subtract-all). Verifies Card 1 fix: previously only the oldest was subtracted.
+    # Case 54: _content_commit_count with two "mill-go: start batch" commits returns N (subtract-all).
+    # Verifies Card 1 fix: previously only the oldest was subtracted.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3089,9 +3039,8 @@ def main() -> int:
             print(f"FAIL: case 54 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 55: reclassified incomplete envelope carries commit_sha (membership guard includes
-    # "incomplete"). Exercises the parsed-success -> verify-fail -> reclassify -> incomplete
-    # path and confirms commit_sha was attached by the membership guard.
+    # Case 55: reclassified incomplete envelope carries commit_sha (membership guard includes "incomplete").
+    # Exercises the parsed-success -> verify-fail -> reclassify -> incomplete path and confirms commit_sha was attached by the membership guard.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3143,10 +3092,8 @@ def main() -> int:
             errors += 1
 
     # Case 56: #582 regression - nits-only zero-commit pushback -> success (not stuck/logic).
-    # A --nits-only pass that legitimately pushes back on every NIT finding (per the
-    # mill-receiving-review decision tree) is expected to make zero content commits;
-    # this must be reported as success with the nits-fixed marker written, not demoted
-    # by the no-content-commit gate (HEAD == start_sha).
+    # A --nits-only pass that legitimately pushes back on every NIT finding (per the mill-receiving-review decision tree) is expected to make zero content commits;
+    # this must be reported as success with the nits-fixed marker written, not demoted by the no-content-commit gate (HEAD == start_sha).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3202,11 +3149,9 @@ def main() -> int:
             print(f"FAIL: case 56 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 57: #582 regression - nits-only with an in-scope dirty tracked file still hits
-    # the dirty-tree gate (stuck/logic), proving the gate's own logic is unaffected by the
-    # Card 5 change to the no-content-commit gate. task_dir/parent_branch are the inputs
-    # _in_scope_dirty_stuck() needs to run at all; millpy-fix.py's CLI never supplies them
-    # today (see Batch Scope), so this exercises the gate directly via _forward_output.
+    # Case 57: #582 regression - nits-only with an in-scope dirty tracked file still hits the dirty-tree gate (stuck/logic), proving the gate's own logic is unaffected by the Card 5 change to the no-content-commit gate.
+    # task_dir/parent_branch are the inputs _in_scope_dirty_stuck() needs to run at all;
+    # millpy-fix.py's CLI never supplies them today (see Batch Scope), so this exercises the gate directly via _forward_output.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3281,9 +3226,8 @@ def main() -> int:
             print(f"FAIL: case 57 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 58: regression guard -- nits_only=False (default) with the same zero-commit
-    # setup as case 56 still demotes to stuck/logic "no content commit". Proves the
-    # Card 5 "not nits_only" condition does not affect the non-nits-only path.
+    # Case 58: regression guard -- nits_only=False (default) with the same zero-commit setup as case 56 still demotes to stuck/logic "no content commit".
+    # Proves the Card 5 "not nits_only" condition does not affect the non-nits-only path.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3321,13 +3265,8 @@ def main() -> int:
             print(f"FAIL: case 58 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 59: module_verify_baseline="pre-existing-failures" with a failing
-    # module_wide_verify_cmd -- the module-wide gate is skipped entirely (never
-    # invoked), the batch gate's own pass/fail is unaffected, and the overall
-    # result is success, not stuck/verify. subprocess.run is spied on (real
-    # calls still execute via side_effect, so git plumbing inside
-    # _forward_output keeps working) so we can assert the module-wide command
-    # string never appears in any recorded call.
+    # Case 59: module_verify_baseline="pre-existing-failures" with a failing module_wide_verify_cmd -- the module-wide gate is skipped entirely (never invoked), the batch gate's own pass/fail is unaffected, and the overall result is success, not stuck/verify.
+    # subprocess.run is spied on (real calls still execute via side_effect, so git plumbing inside _forward_output keeps working) so we can assert the module-wide command string never appears in any recorded call.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3361,9 +3300,7 @@ def main() -> int:
             assert data["status"] == "success", (
                 f"case 59: expected success, got {data}"
             )
-            # Confirm the module-wide command ("exit 1") was never handed to
-            # subprocess.run -- only git plumbing and the batch gate's "exit 0"
-            # should appear in the recorded call history.
+            # Confirm the module-wide command ("exit 1") was never handed to subprocess.run -- only git plumbing and the batch gate's "exit 0" should appear in the recorded call history.
             for call in mock_run.call_args_list:
                 call_args = call.args[0] if call.args else []
                 flattened = (
@@ -3380,10 +3317,8 @@ def main() -> int:
             print(f"FAIL: case 59 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 60: module_verify_baseline="clean" -- the module-wide gate runs exactly
-    # as it did before this parameter existed. Mirrors Case 30 (batch passes,
-    # module-wide fails -> stuck/verify with "[module-wide verify]" prefix) and
-    # Case 31 (module-wide passes -> overall success/None).
+    # Case 60: module_verify_baseline="clean" -- the module-wide gate runs exactly as it did before this parameter existed.
+    # Mirrors Case 30 (batch passes, module-wide fails -> stuck/verify with "[module-wide verify]" prefix) and Case 31 (module-wide passes -> overall success/None).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3448,9 +3383,8 @@ def main() -> int:
             print(f"FAIL: case 60b ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 61: module_verify_baseline=None (the default, not yet computed) --
-    # identical behavior to Case 60 ("clean"): the module-wide gate still runs
-    # strictly. This is the fail-safe-toward-strict default.
+    # Case 61: module_verify_baseline=None (the default, not yet computed) -- identical behavior to Case 60 ("clean"): the module-wide gate still runs strictly.
+    # This is the fail-safe-toward-strict default.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -3479,10 +3413,9 @@ def main() -> int:
             print(f"FAIL: case 61 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 62: backward-compatibility guard -- calling _forward_output without
-    # passing module_verify_baseline at all (kwarg omitted) behaves identically
-    # to Case 61 (defaults to None, module-wide gate runs strictly). Confirms no
-    # existing caller (e.g. millpy-fix.py) changes behavior from this batch alone.
+    # Case 62: backward-compatibility guard -- calling _forward_output without passing module_verify_baseline at all (kwarg omitted) behaves identically to Case 61 (defaults to None, module-wide gate runs strictly).
+    # Confirms no existing caller (e.g.
+    # millpy-fix.py) changes behavior from this batch alone.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3524,12 +3457,9 @@ def main() -> int:
             print(f"FAIL: case 62 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 63: #605 regression -- finalize_from_output unescapes HTML entities in the
-    # agent-output file before delegating to _forward_output. The harness HTML-escapes
-    # the <task-notification> payload uniformly before delivery, so the raw file on disk
-    # may contain entities like "&amp;", "&lt;", "&gt;". Patch _forward_output to capture
-    # its first positional argument (the "output" string) so we can assert the captured
-    # text is the fully-unescaped original rather than exercising the real gate logic.
+    # Case 63: #605 regression -- finalize_from_output unescapes HTML entities in the agent-output file before delegating to _forward_output.
+    # The harness HTML-escapes the <task-notification> payload uniformly before delivery, so the raw file on disk may contain entities like "&amp;", "&lt;", "&gt;".
+    # Patch _forward_output to capture its first positional argument (the "output" string) so we can assert the captured text is the fully-unescaped original rather than exercising the real gate logic.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3573,8 +3503,8 @@ def main() -> int:
             errors += 1
 
     # Case 64: #619 - emit_prepare threads nits_only through the prepare envelope.
-    # nits_only=True must add "nits_only": true; the default (omitted) must leave
-    # the key entirely absent from the envelope, mirroring the start_sha pattern.
+    # nits_only=True must add "nits_only": true;
+    # the default (omitted) must leave the key entirely absent from the envelope, mirroring the start_sha pattern.
     with tempfile.TemporaryDirectory() as tmpdir:
         briefs_dir = Path(tmpdir) / "briefs"
         try:
@@ -3618,8 +3548,8 @@ def main() -> int:
             errors += 1
 
     # Case 65: #628/#633 - emit_prepare threads effort through the prepare envelope.
-    # effort="high" must add "effort": "high"; the default (omitted) must leave
-    # the key entirely absent from the envelope, mirroring the start_sha pattern.
+    # effort="high" must add "effort": "high";
+    # the default (omitted) must leave the key entirely absent from the envelope, mirroring the start_sha pattern.
     with tempfile.TemporaryDirectory() as tmpdir:
         briefs_dir = Path(tmpdir) / "briefs"
         try:
@@ -3672,9 +3602,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Only 1 content commit even though 3 cards are declared -- would fail the old
-        # raw-count heuristic, but cards_done self-reports all three as done (e.g. two
-        # cards were folded into this single commit per the "one combined commit" rule).
+        # Only 1 content commit even though 3 cards are declared -- would fail the old raw-count heuristic,
+        # but cards_done self-reports all three as done (e.g.
+        # two cards were folded into this single commit per the "one combined commit" rule).
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "cards 1-3 combined"],
             check=True, capture_output=True,
@@ -3698,8 +3628,7 @@ def main() -> int:
             print(f"FAIL: case 65a ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65b -- cards_done present but missing entries from card_ids -> stuck/incomplete
-    # with the missing card IDs named in the reason.
+    # Case 65b -- cards_done present but missing entries from card_ids -> stuck/incomplete with the missing card IDs named in the reason.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3730,8 +3659,7 @@ def main() -> int:
             print(f"FAIL: case 65b ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65c -- cards_done absent (None) with a batch that would pass the old count
-    # check -> no-stuck (absent-field fallback, passing case).
+    # Case 65c -- cards_done absent (None) with a batch that would pass the old count check -> no-stuck (absent-field fallback, passing case).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3759,8 +3687,7 @@ def main() -> int:
             print(f"FAIL: case 65c ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65d -- cards_done absent with a batch that would fail the old count check
-    # -> stuck/incomplete (fallback path, failing case).
+    # Case 65d -- cards_done absent with a batch that would fail the old count check -> stuck/incomplete (fallback path, failing case).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3788,13 +3715,12 @@ def main() -> int:
             print(f"FAIL: case 65d ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65e -- cards_done as JSON string card numbers (e.g. ["7","8"]) matching
-    # integer card_ids (e.g. {7,8}) -> coerces and passes.
+    # Case 65e -- cards_done as JSON string card numbers (e.g. ["7","8"]) matching integer card_ids (e.g. {7,8}) -> coerces and passes.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Only 1 commit for 2 declared cards -- would fail the raw-count check, but the
-        # string-coerced cards_done confirms both are done.
+        # Only 1 commit for 2 declared cards -- would fail the raw-count check,
+        # but the string-coerced cards_done confirms both are done.
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "cards 7,8 combined"],
             check=True, capture_output=True,
@@ -3818,8 +3744,7 @@ def main() -> int:
             print(f"FAIL: case 65e ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65f -- cards_done with one malformed non-numeric entry -> falls back to the
-    # count check rather than crashing.
+    # Case 65f -- cards_done with one malformed non-numeric entry -> falls back to the count check rather than crashing.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3849,9 +3774,7 @@ def main() -> int:
             print(f"FAIL: case 65f ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65g -- verify_cmd set and ignore_verify=False -> _batch_completeness_stuck
-    # still returns None regardless of cards_done/card_ids (verify-present short-circuit
-    # preserved).
+    # Case 65g -- verify_cmd set and ignore_verify=False -> _batch_completeness_stuck still returns None regardless of cards_done/card_ids (verify-present short-circuit preserved).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3879,13 +3802,11 @@ def main() -> int:
             print(f"FAIL: case 65g ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65h -- already_complete=True short-circuits the gate to pass regardless of
-    # every other argument.
+    # Case 65h -- already_complete=True short-circuits the gate to pass regardless of every other argument.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
-        # Deliberately contradictory inputs: only 1 commit for 3 cards, cards_done
-        # missing entries -- would fire the gate on every other check.
+        # Deliberately contradictory inputs: only 1 commit for 3 cards, cards_done missing entries -- would fire the gate on every other check.
         subprocess.run(
             ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "card-1"],
             check=True, capture_output=True,
@@ -3910,8 +3831,8 @@ def main() -> int:
             print(f"FAIL: case 65h ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65i -- _reclassify_verify_failure's content==0 branch is unaffected by any
-    # cards_done value; still reclassifies to stuck_type:logic "no content commit".
+    # Case 65i -- _reclassify_verify_failure's content==0 branch is unaffected by any cards_done value;
+    # still reclassifies to stuck_type:logic "no content commit".
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3941,8 +3862,7 @@ def main() -> int:
             print(f"FAIL: case 65i ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 65j -- _reclassify_verify_failure mirrors cases (a) and (b) above on its own
-    # 0<content<len(card_ids)-equivalent trigger path.
+    # Case 65j -- _reclassify_verify_failure mirrors cases (a) and (b) above on its own 0<content<len(card_ids)-equivalent trigger path.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -3952,8 +3872,7 @@ def main() -> int:
         )
         verify_stuck = {"status": "stuck", "stuck_type": "verify", "reason": "tests failed"}
         try:
-            # Mirrors (a): cards_done covers all declared cards -> verify_stuck returned
-            # unchanged (not reclassified to incomplete).
+            # Mirrors (a): cards_done covers all declared cards -> verify_stuck returned unchanged (not reclassified to incomplete).
             result_a = _reclassify_verify_failure(
                 verify_stuck,
                 project_root,
@@ -3991,8 +3910,7 @@ def main() -> int:
             print(f"FAIL: case 65j ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66a -- _go_build_tag_retiering_stuck: added-tag transition (file exits
-    # the default build) -> gate invokes (mocked) `go build ./<dir>/...`.
+    # Case 66a -- _go_build_tag_retiering_stuck: added-tag transition (file exits the default build) -> gate invokes (mocked) `go build ./<dir>/...`.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4035,8 +3953,7 @@ def main() -> int:
             print(f"FAIL: case 66a ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66b -- removed-tag transition (single custom tag) -> gate invokes
-    # (mocked) `go build -tags <tag> ./<dir>/...`.
+    # Case 66b -- removed-tag transition (single custom tag) -> gate invokes (mocked) `go build -tags <tag> ./<dir>/...`.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4079,8 +3996,7 @@ def main() -> int:
             print(f"FAIL: case 66b ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66c -- removed compound/negated/GOOS-only constraints are logged and
-    # skipped, never translated to a -tags compile check.
+    # Case 66c -- removed compound/negated/GOOS-only constraints are logged and skipped, never translated to a -tags compile check.
     for _label, _constraint in (
         ("compound", "a && b"),
         ("negated", "!a"),
@@ -4140,8 +4056,7 @@ def main() -> int:
                 print(f"FAIL: case 66c ({_label}) ({exc})", file=sys.stderr)
                 errors += 1
 
-    # Case 66d -- a //go:build line whose value changes but is present both before
-    # and after (value-only edit) -> gate does not fire (not a membership transition).
+    # Case 66d -- a //go:build line whose value changes but is present both before and after (value-only edit) -> gate does not fire (not a membership transition).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4180,9 +4095,7 @@ def main() -> int:
             print(f"FAIL: case 66d ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66e -- no .go files changed, or a .go file changed with no //go:build
-    # lines touched -> gate returns None silently (no compile check, no log line).
-    # (i) no .go files changed at all.
+    # Case 66e -- no .go files changed, or a .go file changed with no //go:build lines touched -> gate returns None silently (no compile check, no log line). (i) no .go files changed at all.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         base_sha = _setup_fixture(project_root)
@@ -4246,8 +4159,7 @@ def main() -> int:
             print(f"FAIL: case 66e (ii) ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66f -- mocked compile-check failure (non-zero exit) -> gate returns a
-    # stuck_type=verify dict naming the directory and transition direction.
+    # Case 66f -- mocked compile-check failure (non-zero exit) -> gate returns a stuck_type=verify dict naming the directory and transition direction.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4305,9 +4217,7 @@ def main() -> int:
             print(f"FAIL: case 66f ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66g -- case 66f's scenario reached via the no-snapshot no-JSON inference
-    # path in _forward_output (not the explicit-success path) -- confirms the gate
-    # is wired into all four call sites (Card 9), not just the explicit-success one.
+    # Case 66g -- case 66f's scenario reached via the no-snapshot no-JSON inference path in _forward_output (not the explicit-success path) -- confirms the gate is wired into all four call sites (Card 9), not just the explicit-success one.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4365,10 +4275,9 @@ def main() -> int:
             print(f"FAIL: case 66g ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 66h -- removed_dirs: the whole package directory was deleted via `git
-    # rm -r` (not just detagged in place). The diff still classifies this as a
-    # removed-tag transition, but the directory no longer exists on disk -- the
-    # compile check must be skipped, not run against a missing path.
+    # Case 66h -- removed_dirs: the whole package directory was deleted via `git rm -r` (not just detagged in place).
+    # The diff still classifies this as a removed-tag transition,
+    # but the directory no longer exists on disk -- the compile check must be skipped, not run against a missing path.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4389,8 +4298,8 @@ def main() -> int:
             ["git", "-C", str(project_root), "rev-parse", "HEAD"],
             check=True, capture_output=True, text=True,
         ).stdout.strip()
-        # Delete the whole directory via git -- the diff classifies bar.go's
-        # //go:build removal as a removed-tag transition, but "pkg" is now gone.
+        # Delete the whole directory via git -- the diff classifies bar.go's //go:build removal as a removed-tag transition,
+        # but "pkg" is now gone.
         subprocess.run(
             ["git", "-C", str(project_root), "rm", "-r", "-q", "pkg"],
             check=True, capture_output=True,
@@ -4420,10 +4329,9 @@ def main() -> int:
             print(f"FAIL: case 66h ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66i -- added_dirs: the package directory gained a //go:build tag per
-    # git history (still present at HEAD in the diff), but was then removed from
-    # the filesystem without committing that removal. The gate must consult the
-    # filesystem, not just the diff, before compile-checking.
+    # Case 66i -- added_dirs: the package directory gained a //go:build tag per git history (still present at HEAD in the diff),
+    # but was then removed from the filesystem without committing that removal.
+    # The gate must consult the filesystem, not just the diff, before compile-checking.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4450,8 +4358,7 @@ def main() -> int:
             ["git", "-C", str(project_root), "commit", "-am", "tag foo.go integration"],
             check=True, capture_output=True,
         )
-        # Remove the directory from disk only -- git history at HEAD still has it,
-        # so the diff-based classification still sees an added-tag transition.
+        # Remove the directory from disk only -- git history at HEAD still has it, so the diff-based classification still sees an added-tag transition.
         _safe_rmtree.safe_rmtree(pkg_dir, allowed_root=project_root)
         side_effect, calls, cwd_calls = _go_gate_mock(build_returncode=0)
         stderr_buf = io.StringIO()
@@ -4474,9 +4381,8 @@ def main() -> int:
             print(f"FAIL: case 66i ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66j -- nested module root: the affected directory itself is a nested
-    # Go module (its own go.mod under project_root). The compile check must run
-    # with that nested module as cwd, not project_root (fixes #751).
+    # Case 66j -- nested module root: the affected directory itself is a nested Go module (its own go.mod under project_root).
+    # The compile check must run with that nested module as cwd, not project_root (fixes #751).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4525,9 +4431,7 @@ def main() -> int:
             print(f"FAIL: case 66j ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66k -- nested module subpath: the affected directory is below the
-    # nested module root, so the pattern must be re-derived relative to that
-    # module root, not to project_root.
+    # Case 66k -- nested module subpath: the affected directory is below the nested module root, so the pattern must be re-derived relative to that module root, not to project_root.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4577,9 +4481,7 @@ def main() -> int:
             print(f"FAIL: case 66k ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 66l -- fallback, no nested module: no go.mod exists anywhere between
-    # the affected directory and project_root, so the compile check must
-    # reproduce today's exact single-module-repo behavior byte-for-byte.
+    # Case 66l -- fallback, no nested module: no go.mod exists anywhere between the affected directory and project_root, so the compile check must reproduce today's exact single-module-repo behavior byte-for-byte.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4627,9 +4529,7 @@ def main() -> int:
             print(f"FAIL: case 66l ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 67 -- finalize_from_output reports a clean error (not a raw
-    # FileNotFoundError traceback) when --agent-output names a file that does
-    # not exist on disk (issue #704).
+    # Case 67 -- finalize_from_output reports a clean error (not a raw FileNotFoundError traceback) when --agent-output names a file that does not exist on disk (issue #704).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4658,9 +4558,8 @@ def main() -> int:
             print(f"FAIL: case 67 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case 68 -- commit_sha correction still applies to an abbreviated self-report:
-    # the implementer's own JSON claims commit_sha "abc", but the corrective
-    # git rev-parse HEAD must overwrite it with the real new-HEAD SHA.
+    # Case 68 -- commit_sha correction still applies to an abbreviated self-report: the implementer's own JSON claims commit_sha "abc",
+    # but the corrective git rev-parse HEAD must overwrite it with the real new-HEAD SHA.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4700,9 +4599,7 @@ def main() -> int:
             print(f"FAIL: case 68 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 69 -- corrective git rev-parse HEAD failure is not silently passed
-    # through: when the guard's own rev-parse call fails, the agent's raw
-    # self-reported commit_sha ("abc") must never leak into the emitted JSON.
+    # Case 69 -- corrective git rev-parse HEAD failure is not silently passed through: when the guard's own rev-parse call fails, the agent's raw self-reported commit_sha ("abc") must never leak into the emitted JSON.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4833,8 +4730,7 @@ def main() -> int:
         print(f"FAIL: case 71b ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 72 -- _run_verify_gates batch_verify_baseline subset-diff matrix.
-    # (a) replay signatures are an exact/strict subset of a non-empty baseline -> waived (None).
+    # Case 72 -- _run_verify_gates batch_verify_baseline subset-diff matrix. (a) replay signatures are an exact/strict subset of a non-empty baseline -> waived (None).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4877,8 +4773,7 @@ def main() -> int:
             print(f"FAIL: case 72b ({exc})", file=sys.stderr)
             errors += 1
 
-    # (c) batch_verify_baseline=None (not yet computed) -> falls back to today's
-    # strict behavior: any batch-level verify failure blocks.
+    # (c) batch_verify_baseline=None (not yet computed) -> falls back to today's strict behavior: any batch-level verify failure blocks.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -4901,14 +4796,12 @@ def main() -> int:
             print(f"FAIL: case 72c ({exc})", file=sys.stderr)
             errors += 1
 
-    # (d) replay signatures is an EMPTY list (no recognized FAIL-marker line) while
-    # batch_verify_baseline is non-empty -> still blocks (non-vacuous-subset rule).
+    # (d) replay signatures is an EMPTY list (no recognized FAIL-marker line) while batch_verify_baseline is non-empty -> still blocks (non-vacuous-subset rule).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
         try:
-            # This verify command fails but its output has no recognized marker line,
-            # so _run_verify_gate's returned "signatures" list is empty.
+            # This verify command fails but its output has no recognized marker line, so _run_verify_gate's returned "signatures" list is empty.
             verify_cmd = "echo 'a build error with no recognized marker' && exit 1"
             baseline = ["--- FAIL: TestFoo (9.99s)"]
             result = _run_verify_gates(
@@ -4928,8 +4821,7 @@ def main() -> int:
             print(f"FAIL: case 72d ({exc})", file=sys.stderr)
             errors += 1
 
-    # (e) the stuck dict has NO "signatures" key at all (simulating _run_verify_gate's
-    # exception path) while batch_verify_baseline is non-empty -> still blocks.
+    # (e) the stuck dict has NO "signatures" key at all (simulating _run_verify_gate's exception path) while batch_verify_baseline is non-empty -> still blocks.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)

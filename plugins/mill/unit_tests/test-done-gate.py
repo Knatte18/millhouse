@@ -1,17 +1,10 @@
 """
 Unit test for `plugins/mill/scripts/_done_gate.py`.
 
-Regresses #650: `pipeline.done_gate` had no pre-implementation baseline
-pre-flight, so a self-capturing regression/snapshot test suite used as the
-done_gate silently captured its "baseline" from the task's own
-just-finished implementation at Handoff. This test covers
-`_done_gate.run_preflight`'s result shapes directly and confirms its
-never-raise contract, mocking `subprocess.run` throughout -- no real shell
-command is ever executed.
+Regresses #650: `pipeline.done_gate` had no pre-implementation baseline pre-flight, so a self-capturing regression/snapshot test suite used as the done_gate silently captured its "baseline" from the task's own just-finished implementation at Handoff.
+This test covers `_done_gate.run_preflight`'s result shapes directly and confirms its never-raise contract, mocking `subprocess.run` throughout -- no real shell command is ever executed.
 
-Follows `test-verify-baseline.py`'s style: a single `main() -> int`
-function with inline numbered cases, `PASS`/`FAIL` prints, an accumulated
-error count, and `sys.exit(main())` at the bottom.
+Follows `test-verify-baseline.py`'s style: a single `main() -> int` function with inline numbered cases, `PASS`/`FAIL` prints, an accumulated error count, and `sys.exit(main())` at the bottom.
 """
 from __future__ import annotations
 
@@ -29,8 +22,7 @@ def main() -> int:
     errors = 0
     git_root = Path("/fake/git-root")
 
-    # Case 1: gate_cmd is None -- nothing configured, run_preflight never
-    # touches subprocess at all.
+    # Case 1: gate_cmd is None -- nothing configured, run_preflight never touches subprocess at all.
     try:
         with patch("_done_gate.subprocess.run") as mock_run:
             result = run_preflight(None, git_root)
@@ -56,8 +48,7 @@ def main() -> int:
         print(f"FAIL: case 2 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 3: mocked exit 1 with captured stdout/stderr -- gate command fails,
-    # reason must match the concatenated captured output.
+    # Case 3: mocked exit 1 with captured stdout/stderr -- gate command fails, reason must match the concatenated captured output.
     try:
         with patch(
             "_done_gate.subprocess.run",
@@ -75,9 +66,8 @@ def main() -> int:
         print(f"FAIL: case 3 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 4: mocked exit 1 with output longer than 2000 chars -- reason is
-    # tail-truncated to exactly 2000 chars, same truncation shape as the
-    # existing Handoff-time "0. Pre-done gate" block.
+    # Case 4: mocked exit 1 with output longer than 2000 chars -- reason is tail-truncated to exactly 2000 chars, same truncation shape as the existing Handoff-time "0.
+    # Pre-done gate" block.
     try:
         long_output = "x" * 3000
         with patch(
@@ -97,9 +87,8 @@ def main() -> int:
         print(f"FAIL: case 4 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 5: subprocess.run itself raises (e.g. missing binary) -- confirms
-    # the never-raise contract: run_preflight still returns a result dict
-    # instead of propagating the exception.
+    # Case 5: subprocess.run itself raises (e.g.
+    # missing binary) -- confirms the never-raise contract: run_preflight still returns a result dict instead of propagating the exception.
     try:
         with patch(
             "_done_gate.subprocess.run",

@@ -8,12 +8,13 @@ Exercise the one-shot migration script with:
 
 Uses a real spawned daemon, real TinyDB, and real git repo under `.scratch/`.
 
-NOT part of run-all.py (requires a real git binary and real I/O). Run manually:
+NOT part of run-all.py (requires a real git binary and real I/O).
+Run manually:
 
     PYTHONPATH=plugins/mill/scripts uv run python plugins/mill/integration_tests/test-wiki-migrate.py
 
-Exit 0 on PASS, 1 on FAIL. Scratch lives under <repo>/.scratch/ and is
-preserved on failure for inspection.
+Exit 0 on PASS, 1 on FAIL.
+Scratch lives under <repo>/.scratch/ and is preserved on failure for inspection.
 """
 from __future__ import annotations
 

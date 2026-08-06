@@ -143,8 +143,7 @@ def main() -> int:
     else:
         print("PASS: render/empty-comments — body unchanged")
 
-    # 2. Single comment — starts with original body, has exactly one --- line,
-    #    one header line, comment body verbatim.
+    # 2. Single comment — starts with original body, has exactly one --- line, one header line, comment body verbatim.
     _single = [{"author": {"login": "alice"}, "createdAt": "2026-01-01T00:00:00Z", "body": "great idea"}]
     _result = _render_body_with_comments("base body", _single)
     if not _result.startswith("base body"):

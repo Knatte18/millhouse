@@ -2,10 +2,7 @@
 
 Batch: brief-commit-uniformity
 
-Card 5: Regression-lock the brief-commit steps
-  Lock _mill/briefs/ commit steps in orchestrator SKILLs:
-  - mill-start: Handoff, discussion-gap-fix, and discussion-fix commits include _mill/briefs/
-  - mill-merge-in: New step 5.5 commit stages and commits _mill/briefs/ files
+Card 5: Regression-lock the brief-commit steps Lock _mill/briefs/ commit steps in orchestrator SKILLs: - mill-start: Handoff, discussion-gap-fix, and discussion-fix commits include _mill/briefs/ - mill-merge-in: New step 5.5 commit stages and commits _mill/briefs/ files
 """
 from __future__ import annotations
 
@@ -20,9 +17,8 @@ def test_mill_start_brief_commits() -> list[str]:
     """
     Assert mill-start/SKILL.md references _mill/briefs/ in commit steps.
 
-    Primary form: assert the substrings related to commit messages contain
-    _mill/briefs/ within a reasonable window. Fallback: count total occurrences
-    to catch dropped sites.
+    Primary form: assert the substrings related to commit messages contain _mill/briefs/ within a reasonable window.
+    Fallback: count total occurrences to catch dropped sites.
 
     Returns list of failure messages (empty list = all passed).
     """
@@ -35,8 +31,7 @@ def test_mill_start_brief_commits() -> list[str]:
         failures.append(f"FAIL: could not read {mill_start_path}: {e}")
         return failures
 
-    # Check for three commit message contexts
-    # Primary checks: look for the commit message markers with _mill/briefs/ nearby
+    # Check for three commit message contexts Primary checks: look for the commit message markers with _mill/briefs/ nearby
     checks = [
         ("mill-start: handoff", "Handoff commit must include _mill/briefs/"),
         ("mill-start: discussion-gap-fix", "discussion-gap-fix commit must include _mill/briefs/"),
@@ -71,9 +66,7 @@ def test_mill_start_brief_commits() -> list[str]:
                 f"(commit message '{commit_msg}' found but no _mill/briefs/ nearby)"
             )
 
-    # Fallback check: total occurrence count must be >= 4
-    # This tolerates wording drift while catching a dropped site:
-    # 4b interactive, 4b --auto, step 5 gap-fix, Handoff guard, plus --auto halt guards
+    # Fallback check: total occurrence count must be >= 4 This tolerates wording drift while catching a dropped site: 4b interactive, 4b --auto, step 5 gap-fix, Handoff guard, plus --auto halt guards
     briefs_count = text.count("_mill/briefs/")
     if briefs_count < 4:
         failures.append(
@@ -101,16 +94,15 @@ def test_mill_merge_in_brief_commits() -> list[str]:
         failures.append(f"FAIL: could not read {mill_merge_in_path}: {e}")
         return failures
 
-    # Check for _mill/briefs/ in git add context
-    # Look for "git" followed by "add" followed by "_mill/briefs/" within a reasonable distance
+    # Check for _mill/briefs/ in git add context Look for "git" followed by "add" followed by "_mill/briefs/" within a reasonable distance
     if "git" not in text or "add" not in text or "_mill/briefs/" not in text:
         failures.append(
             f"FAIL: mill-merge-in/SKILL.md: missing expected git add _mill/briefs/ pattern"
         )
         return failures
 
-    # More specific check: ensure they appear in the same command or nearby
-    # Look for patterns like "git -C ... add _mill/briefs/" or similar
+    # More specific check: ensure they appear in the same command or nearby Look for patterns like "git -C ...
+    # add _mill/briefs/" or similar
     if "add _mill/briefs/" not in text and "add _mill/briefs" not in text:
         failures.append(
             f"FAIL: mill-merge-in/SKILL.md: _mill/briefs/ is present but not in an add command context"

@@ -1,22 +1,16 @@
 """
 Single-reviewer dispatcher.
 
-Takes a fully-flattened reviewer spec (as returned by _reviewers.resolve) and
-dispatches to the appropriate _llm_<provider> module. The spec carries all
-dispatch information — provider, model, effort, tooluse — so no per-call
-overrides are needed or accepted.
+Takes a fully-flattened reviewer spec (as returned by _reviewers.resolve) and dispatches to the appropriate _llm_<provider> module.
+The spec carries all dispatch information — provider, model, effort, tooluse — so no per-call overrides are needed or accepted.
 
 Spec contract:
-    {
-        "type": "single",
-        "provider": "<name>",   # e.g. "claude"; drives importlib.import_module("_llm_<provider>")
-        "model": "<model-id>",
-        "effort": "<effort>",   # optional; passed verbatim to the LLM provider
-        "tooluse": bool,        # false → run_bulk; true → run_tool_use
+    { "type": "single", "provider": "<name>", # e.g. "claude";
+        drives importlib.import_module("_llm_<provider>") "model": "<model-id>", "effort": "<effort>", # optional; passed verbatim to the LLM provider "tooluse": bool, # false → run_bulk;
+        true → run_tool_use
     }
 
-Cluster specs are detected and raise ReviewerError immediately — cluster dispatch
-is deferred to task 13.
+Cluster specs are detected and raise ReviewerError immediately — cluster dispatch is deferred to task 13.
 """
 from __future__ import annotations
 
@@ -37,8 +31,7 @@ def run(
     Forwards session_id, resume, and (when not None) timeout to the provider.
 
     Raises:
-        ReviewerError: when spec.type == "cluster", provider is unknown, or
-            the provider module cannot be imported.
+        ReviewerError: when spec.type == "cluster", provider is unknown, or the provider module cannot be imported.
     """
     if spec["type"] == "cluster":
         from _reviewers import ReviewerError

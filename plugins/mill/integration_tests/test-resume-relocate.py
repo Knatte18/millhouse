@@ -1,35 +1,23 @@
 """
 Integration test: mill-resume off-canonical worktree relocate+scaffold coverage.
 
-Builds real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and
-exercises ``_resume_repair.check_uncommitted_changes`` /
-``_resume_repair.relocate_and_scaffold`` (Card 8) the same way
-``mill-resume/SKILL.md`` Phase 1b's embedded Python snippets (Card 10) call
-them, plus the two-step ``hub_root`` resolution Phase 1b Step 4 uses for
-hub-in-subdirectory repos.
+Builds real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and exercises ``_resume_repair.check_uncommitted_changes`` / ``_resume_repair.relocate_and_scaffold`` (Card 8) the same way ``mill-resume/SKILL.md`` Phase 1b's embedded Python snippets (Card 10) call them, plus the two-step ``hub_root`` resolution Phase 1b Step 4 uses for hub-in-subdirectory repos.
 
-Covers the five ``discussion.md`` Testing-section scenarios from Card 11's
-brief, split across seven functions below (``scenario_a`` .. ``scenario_g``):
+Covers the five ``discussion.md`` Testing-section scenarios from Card 11's brief, split across seven functions below (``scenario_a`` .. ``scenario_g``):
 
   (a) clean off-canonical worktree relocates and scaffolds successfully.
   (b) an uncommitted change halts before any relocation is attempted.
   (c) the "user declines" path has no Python surface -- documented no-op.
-  (d) canonical path occupied by an unrelated task is classified as a
-      genuine collision, and a blind ``relocate_and_scaffold`` call onto it
-      raises rather than silently succeeding.
-  (e) after a successful relocation the worktree's own files (``_mill/status.md``)
-      are readable at the new canonical location and gone from the old one.
-  (f) hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models
-      repro) -- Card 10 Step 4's exact two-step ``hub_root`` resolution
-      finds the subdirectory hub, not the main worktree root, and scaffolding
-      pulls from the correct source.
-  (g) partial-failure retry -- a prior run's ``move()`` succeeded but its
-      scaffold steps didn't; a second ``relocate_and_scaffold`` call
-      completes the remaining work without re-attempting the move.
+  (d) canonical path occupied by an unrelated task is classified as a genuine collision,
+      and a blind ``relocate_and_scaffold`` call onto it raises rather than silently succeeding.
+  (e) after a successful relocation the worktree's own files (``_mill/status.md``) are readable at the new canonical location and gone from the old one.
+  (f) hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro) -- Card 10 Step 4's exact two-step ``hub_root`` resolution finds the subdirectory hub, not the main worktree root, and scaffolding pulls from the correct source.
+  (g) partial-failure retry -- a prior run's ``move()`` succeeded but its scaffold steps didn't;
+      a second ``relocate_and_scaffold`` call completes the remaining work without re-attempting the move.
 
-No LLM is invoked; no claude / sonnet subprocess fires. Git operations run
-via subprocess and ``_worktree``/``_resume_repair`` against a real ``git``
-in PATH.
+No LLM is invoked;
+no claude / sonnet subprocess fires.
+Git operations run via subprocess and ``_worktree``/``_resume_repair`` against a real ``git`` in PATH.
 
 Run from hub root:
     PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-resume-relocate.py
@@ -71,17 +59,12 @@ def _git_init(path: Path) -> None:
 
 def _make_hub(tmp: Path, *, hub_relative: str | None = None) -> tuple[Path, Path, Path]:
     """
-    Build a hub git repo (optionally with a sub-directory hub layout) plus a
-    fake wiki clone directory.
+    Build a hub git repo (optionally with a sub-directory hub layout) plus a fake wiki clone directory.
 
     Args:
         tmp: Temporary directory root (already exists).
-        hub_relative: When ``None``, ``.millhouse/`` lives at the repo root
-            (``hub_root == main_root``). When set (e.g.
-            ``"src/csharp/NORCE.Models"``), ``.millhouse/`` lives in that
-            subdirectory, and a ``hub_relative_path`` stub is written at
-            ``main_root/.millhouse/config.local.yaml`` so
-            ``_paths.resolve_hub_path`` can find the subdirectory hub.
+        hub_relative: When ``None``, ``.millhouse/`` lives at the repo root (``hub_root == main_root``).
+            When set (e.g. ``"src/csharp/NORCE.Models"``), ``.millhouse/`` lives in that subdirectory, and a ``hub_relative_path`` stub is written at ``main_root/.millhouse/config.local.yaml`` so ``_paths.resolve_hub_path`` can find the subdirectory hub.
 
     Returns:
         ``(main_root, hub_root, wiki_path)``.
@@ -111,12 +94,11 @@ def _make_off_canonical_worktree(
     main_root: Path, tmp: Path, slug: str, *, dirty: str | None = None
 ) -> Path:
     """
-    Create a non-canonical worktree (registered via ``_worktree.create``) with
-    a committed ``_mill/status.md`` carrying ``slug``.
+    Create a non-canonical worktree (registered via ``_worktree.create``) with a committed ``_mill/status.md`` carrying ``slug``.
 
     Args:
-        dirty: ``None`` for a clean worktree; ``"tracked"`` to leave an
-            uncommitted modification to the tracked ``status.md``;
+        dirty: ``None`` for a clean worktree;
+            ``"tracked"`` to leave an uncommitted modification to the tracked ``status.md``;
             ``"untracked"`` to leave an untracked file.
     """
     old = tmp / "off-canonical-location" / slug
@@ -169,8 +151,7 @@ def scenario_b() -> None:
 
         dirty = _resume_repair.check_uncommitted_changes(old)
         assert dirty != [], "expected a non-empty dirty-status list"
-        # The caller (Phase 1b Step 1) halts here without calling
-        # relocate_and_scaffold at all -- assert nothing moved.
+        # The caller (Phase 1b Step 1) halts here without calling relocate_and_scaffold at all -- assert nothing moved.
 
         registered = [Path(e["path"]) for e in _worktree.list_worktrees(cwd=main_root)]
         assert old in registered, f"expected {old} still registered, got {registered}"
@@ -181,20 +162,17 @@ def scenario_b() -> None:
 
 def scenario_c() -> None:
     """
-    Step 3 (the "confirm with the user" numbered-options prompt) is pure
-    conversational text in SKILL.md with no Python component to invoke
-    directly. Declining ("2) Cancel") is equivalent to the caller simply
-    never calling relocate_and_scaffold -- exactly the no-mutation shape
-    scenarios (a)/(b)/(d) already exercise by omission. This function is a
-    documented no-op standing in for that scenario.
+    Step 3 (the "confirm with the user" numbered-options prompt) is pure conversational text in SKILL.md with no Python component to invoke directly.
+    Declining ("2) Cancel") is equivalent to the caller simply never calling relocate_and_scaffold -- exactly the no-mutation shape scenarios (a)/(b)/(d) already exercise by omission.
+    This function is a documented no-op standing in for that scenario.
     """
     print("PASS scenario (c): user-decline path has no Python surface (documented no-op)")
 
 
 def scenario_d() -> None:
     """
-    Canonical path occupied by an unrelated task is classified as a genuine
-    collision, and a blind relocate_and_scaffold call onto it raises.
+    Canonical path occupied by an unrelated task is classified as a genuine collision,
+    and a blind relocate_and_scaffold call onto it raises.
     """
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
@@ -205,8 +183,7 @@ def scenario_d() -> None:
         canonical = tmp / "wts" / slug
         canonical.parent.mkdir(parents=True, exist_ok=True)
 
-        # Occupy canonical with an unrelated task's own worktree state --
-        # its own _mill/status.md carrying a *different* slug.
+        # Occupy canonical with an unrelated task's own worktree state -- its own _mill/status.md carrying a *different* slug.
         canonical.mkdir(parents=True)
         (canonical / "_mill").mkdir()
         (canonical / "_mill" / "status.md").write_text(
@@ -219,11 +196,7 @@ def scenario_d() -> None:
         is_collision = canonical.exists() and status_slug != slug
         assert is_collision, "expected genuine COLLISION classification (mismatched slug)"
 
-        # git worktree move behaves like `mv`: it nests into an existing
-        # empty/absent slot rather than failing (see _worktree.move's own
-        # file-collision test in test-worktree.py), so the real refusal
-        # trigger is the nested destination slot (dest/<old-basename>)
-        # already holding real content.
+        # git worktree move behaves like `mv`: it nests into an existing empty/absent slot rather than failing (see _worktree.move's own file-collision test in test-worktree.py), so the real refusal trigger is the nested destination slot (dest/<old-basename>) already holding real content.
         (canonical / old.name).mkdir()
         (canonical / old.name / "occupied.txt").write_text("occupied\n", encoding="utf-8")
 
@@ -268,10 +241,7 @@ def scenario_e() -> None:
 
 def scenario_f() -> None:
     """
-    Hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models
-    repro): Card 10 Step 4's exact two-step hub_root resolution finds the
-    subdirectory hub, not the main worktree root, and scaffolding pulls from
-    the correct source.
+    Hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro): Card 10 Step 4's exact two-step hub_root resolution finds the subdirectory hub, not the main worktree root, and scaffolding pulls from the correct source.
     """
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
@@ -282,8 +252,7 @@ def scenario_f() -> None:
         canonical = tmp / "wts" / slug
         canonical.parent.mkdir(parents=True, exist_ok=True)
 
-        # Card 10 Step 4's exact two-step resolution, simulating cwd == old
-        # (the broken worktree).
+        # Card 10 Step 4's exact two-step resolution, simulating cwd == old (the broken worktree).
         git_root = old
         resolved_main_root = _paths.resolve_main_worktree_root(git_root)
         resolved_hub_root = _paths.resolve_hub_path(cwd=resolved_main_root)
@@ -300,10 +269,7 @@ def scenario_f() -> None:
 
         _resume_repair.relocate_and_scaffold(old, canonical, resolved_hub_root, wiki_path)
 
-        # Regression guard: using resolved_main_root directly (skipping the
-        # resolve_hub_path step) would silently source .millhouse from a
-        # location with no marker.txt, since copy_millhouse no-ops without
-        # raising when its src argument does not exist.
+        # Regression guard: using resolved_main_root directly (skipping the resolve_hub_path step) would silently source .millhouse from a location with no marker.txt, since copy_millhouse no-ops without raising when its src argument does not exist.
         assert (canonical / ".millhouse" / "marker.txt").read_text(encoding="utf-8") == "hub-marker\n"
     print(
         "PASS scenario (f): hub-in-subdirectory two-step hub_root resolution "
@@ -313,9 +279,8 @@ def scenario_f() -> None:
 
 def scenario_g() -> None:
     """
-    Partial-failure retry: a prior run's move() succeeded but its scaffold
-    steps didn't; a second relocate_and_scaffold call completes the
-    remaining work without re-attempting the move.
+    Partial-failure retry: a prior run's move() succeeded but its scaffold steps didn't;
+    a second relocate_and_scaffold call completes the remaining work without re-attempting the move.
     """
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)
@@ -338,9 +303,7 @@ def scenario_g() -> None:
         is_resumable = status_slug == slug
         assert is_resumable, "expected RESUMABLE classification (matching slug)"
 
-        # Retry: relocate_and_scaffold must complete without re-attempting the
-        # move (old no longer exists to move from -- a second move() call
-        # would itself raise "is not a working tree" if wrongly attempted).
+        # Retry: relocate_and_scaffold must complete without re-attempting the move (old no longer exists to move from -- a second move() call would itself raise "is not a working tree" if wrongly attempted).
         _resume_repair.relocate_and_scaffold(old, canonical, hub_root, wiki_path)
 
         registered = [Path(e["path"]) for e in _worktree.list_worktrees(cwd=main_root)]

@@ -1,13 +1,14 @@
 """Unit-test flow harness for _review_code.run.
 
-Uses _reviewer_test_stub as the reviewer backend. All tests run in-process
+Uses _reviewer_test_stub as the reviewer backend.
+    All tests run in-process
 with no real LLM, no network calls. Covers the bugs fixed in batches 01-05:
-  - Per-scope round counter (#21/#62/#63)
-  - Manifest presence in prompts (#5/#7 prevention)
-  - creates_union suppression (#60)
-  - Hard-fail on missing refs (#41/#43)
-  - NEED_CONTEXT resume fallback (#5/#7 recovery)
-  - moves_sources_union suppression of stale cross-batch Context: refs (#686)
+- Per-scope round counter (#21/#62/#63)
+- Manifest presence in prompts (#5/#7 prevention)
+- creates_union suppression (#60)
+- Hard-fail on missing refs (#41/#43)
+- NEED_CONTEXT resume fallback (#5/#7 recovery)
+- moves_sources_union suppression of stale cross-batch Context: refs (#686)
 """
 from __future__ import annotations
 
@@ -96,8 +97,11 @@ def _make_fixture(tmp_path: Path) -> tuple[Path, Path, Path, dict]:
     """Build a standard 3-batch (alpha, beta, gamma) fixture under tmp_path.
 
     Returns (mill_dir, wiki_root, project_root, cfg).
-    project_root is the worktree path; callers must os.chdir(project_root).
-    alpha Reads src/a.py; beta Reads src/b.py; gamma Reads src/c.py.
+    project_root is the worktree path;
+    callers must os.chdir(project_root).
+    alpha Reads src/a.py;
+    beta Reads src/b.py;
+    gamma Reads src/c.py.
     All three source files are created on disk.
     """
     worktree = tmp_path / "container" / "wts" / SLUG
@@ -175,25 +179,15 @@ def _seed_approve(n: int) -> None:
 def _make_nested_code_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     """Build a nested-hub-layout code-review fixture under tmp_path.
 
-    Unlike _make_fixture, the git root and the mill hub_root are different
-    directories: hub_root lives one level under git_root (git_root/hub),
-    mirroring a repo where .millhouse/ sits in a subdirectory of the git
-    toplevel rather than at its root (M2+sub layout).
+    Unlike _make_fixture, the git root and the mill hub_root are different directories: hub_root lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits in a subdirectory of the git toplevel rather than at its root (M2+sub layout).
 
-    A single batch "alpha" reads src/a.py; the plan is written directly
-    under hub_root/_mill/plan/ (the CLI's default plan_dir).
+    A single batch "alpha" reads src/a.py;
+    the plan is written directly under hub_root/_mill/plan/ (the CLI's default plan_dir).
 
-    Returns (mill_dir, wiki_root, hub_root, git_root). Callers must
-    os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path()
-    walks up from hub_root and finds .millhouse/config.local.yaml there,
-    while _paths.resolve_git_root() still resolves to git_root.
+    Returns (mill_dir, wiki_root, hub_root, git_root).
+    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root() still resolves to git_root.
 
-    wiki_root deliberately uses the container-form sibling default
-    (<container>/wiki, resolved via _sibling.resolve_path) rather than a
-    paths.wiki override in hub_root's config.local.yaml -- see
-    _make_nested_plan_fixture in test-review-plan-flow.py for the full
-    rationale (resolve_wiki_path is called with both hub_root and
-    git_root, and only the sibling default agrees across both call sites).
+    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml -- see _make_nested_plan_fixture in test-review-plan-flow.py for the full rationale (resolve_wiki_path is called with both hub_root and git_root, and only the sibling default agrees across both call sites).
     """
     git_root = tmp_path / "container" / "wts" / SLUG
     git_root.mkdir(parents=True)
@@ -213,9 +207,7 @@ def _make_nested_code_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     )
     wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        # hub_relative_path declares hub_root's own offset from git_root --
-        # the real mill-claim convention for M2+sub (nested-hub) layouts,
-        # consumed by _paths.resolve_active_hub to rebase onto hub_root.
+        # hub_relative_path declares hub_root's own offset from git_root -- the real mill-claim convention for M2+sub (nested-hub) layouts, consumed by _paths.resolve_active_hub to rebase onto hub_root.
         "hub_relative_path: hub\n"
         "spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
@@ -243,9 +235,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test 1 — per-scope round counter on sequential per-batch calls
-    # Regression pin for #21/#62/#63: holistic must start at r1 even after
-    # multiple per-batch rounds have been recorded.
+    # Test 1 — per-scope round counter on sequential per-batch calls Regression pin for #21/#62/#63: holistic must start at r1 even after multiple per-batch rounds have been recorded.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
@@ -329,9 +319,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 3 — creates_union suppression
-    # A batch's Reads: path that is in another batch's Creates: must not
-    # raise ReviewError even when the file doesn't exist on disk (#60).
+    # Test 3 — creates_union suppression A batch's Reads: path that is in another batch's Creates: must not raise ReviewError even when the file doesn't exist on disk (#60).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         worktree = tmpdir / "container" / "wts" / SLUG
@@ -473,8 +461,8 @@ def main() -> int:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # src/a.py exists on disk (created by _make_fixture); NEED_CONTEXT_TEXT
-        # claims it is missing so resolve_existing_paths returns it -> retry fires.
+        # src/a.py exists on disk (created by _make_fixture);
+        # NEED_CONTEXT_TEXT claims it is missing so resolve_existing_paths returns it -> retry fires.
         stub.seed([
             (NEED_CONTEXT_TEXT, "sid-1"),
             (APPROVE_TEXT,      "sid-2"),
@@ -1227,9 +1215,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 19 — Move targets included in code review bulk (Card 19)
-    # A batch declares a Moves: entry; the target file exists on disk
-    # (simulating post-implementation state). The code-review prompt must
-    # reference the target file path so the reviewer can inspect the result.
+    # A batch declares a Moves: entry;
+    # the target file exists on disk (simulating post-implementation state).
+    # The code-review prompt must reference the target file path so the reviewer can inspect the result.
     # ------------------------------------------------------------------
     def _make_batch_file_with_moves(
         name: str,
@@ -1304,9 +1292,7 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 21 — Rename NIT spliced into per-batch finalize (Card 21)
-    # When a batch declares Moves: and git diff reports add+delete (not a
-    # rename), finalize must splice an advisory [NIT] into the written
-    # review file without changing the verdict from APPROVE.
+    # When a batch declares Moves: and git diff reports add+delete (not a rename), finalize must splice an advisory [NIT] into the written review file without changing the verdict from APPROVE.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
@@ -1343,10 +1329,9 @@ def main() -> int:
                 encoding="utf-8",
             )
 
-            # Write status.md with a start_sha so _splice_rename_nit_findings
-            # can find a start_sha for the batch.  The SHA value is a
-            # plausible git hash; the actual git diff is mocked so validity
-            # does not matter.
+            # Write status.md with a start_sha so _splice_rename_nit_findings can find a start_sha for the batch.
+            # The SHA value is a plausible git hash;
+            # the actual git diff is mocked so validity does not matter.
             fake_start_sha = "aabbccdd1234567890abcdef1234567890abcdef"
             mill_state_dir = project_root / "_mill"
             mill_state_dir.mkdir(parents=True, exist_ok=True)
@@ -1362,8 +1347,7 @@ def main() -> int:
                 encoding="utf-8",
             )
 
-            # Mock _subprocess_util.run so git diff returns an add+delete diff
-            # (no R-status line), which the rename check must flag as a NIT.
+            # Mock _subprocess_util.run so git diff returns an add+delete diff (no R-status line), which the rename check must flag as a NIT.
             add_delete_diff = "A\tnew/module.py\nD\told/module.py\n"
             fake_completed = subprocess.CompletedProcess(
                 args=[], returncode=0, stdout=add_delete_diff, stderr=""
@@ -1423,10 +1407,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 22 — nested-hub-layout: prepare-stage brief_path resolves under
-    # the nested hub_root's _mill/briefs/, not under git_root's (#607).
-    # Regression test for the bug fixed by Card 7: millpy-review-code.py
-    # used to write briefs under git_root instead of hub_root/project_root.
+    # Test 22 — nested-hub-layout: prepare-stage brief_path resolves under the nested hub_root's _mill/briefs/, not under git_root's (#607).
+    # Regression test for the bug fixed by Card 7: millpy-review-code.py used to write briefs under git_root instead of hub_root/project_root.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, hub_root, git_root = _make_nested_code_fixture(tmpdir)
@@ -1478,17 +1460,11 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 23 — Moves: source suppresses a stale cross-batch Context: ref
-    # (#686). Batch "alpha"'s Card 1 Context: references docs/old-name.md.
-    # Batch "beta" (later in the plan, depends on alpha) relocates that
-    # exact path via Moves:. Post-implementation, docs/new-name.md exists
-    # on disk and docs/old-name.md does not. Before the fix, prepare()
-    # discarded the moves-sources half of compute_moves_union()'s return
-    # value, so the stale ref hard-failed resolve_ref_paths with
-    # ReviewError instead of being suppressed the same way an
-    # already-deleted path is (mirrors test3's creates_union-suppression
-    # baseline and test4's confirmation that an unsuppressed missing path
-    # still hard-fails).
+    # Test 23 — Moves: source suppresses a stale cross-batch Context: ref (#686).
+    # Batch "alpha"'s Card 1 Context: references docs/old-name.md.
+    # Batch "beta" (later in the plan, depends on alpha) relocates that exact path via Moves:.
+    # Post-implementation, docs/new-name.md exists on disk and docs/old-name.md does not.
+    # Before the fix, prepare() discarded the moves-sources half of compute_moves_union()'s return value, so the stale ref hard-failed resolve_ref_paths with ReviewError instead of being suppressed the same way an already-deleted path is (mirrors test3's creates_union-suppression baseline and test4's confirmation that an unsuppressed missing path still hard-fails).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         worktree = tmpdir / "container" / "wts" / SLUG
@@ -1545,17 +1521,14 @@ def main() -> int:
             _make_batch_with_context_and_moves("alpha", context=["docs/old-name.md"]),
             encoding="utf-8",
         )
-        # Batch B ("beta"), later in the plan and depending on alpha, relocates
-        # the exact path alpha's Context: still references.
+        # Batch B ("beta"), later in the plan and depending on alpha, relocates the exact path alpha's Context: still references.
         (plan_dir / "02-beta.md").write_text(
             _make_batch_with_context_and_moves(
                 "beta", moves=[("docs/old-name.md", "docs/new-name.md")]
             ),
             encoding="utf-8",
         )
-        # Post-implementation disk state: the move landed -- target present,
-        # source absent -- so alpha's stale Context: ref cannot resolve to a
-        # file on disk and must fall back to deletes_union-style suppression.
+        # Post-implementation disk state: the move landed -- target present, source absent -- so alpha's stale Context: ref cannot resolve to a file on disk and must fall back to deletes_union-style suppression.
         (project_root / "docs").mkdir(parents=True)
         (project_root / "docs" / "new-name.md").write_text("# relocated\n", encoding="utf-8")
 
@@ -1583,16 +1556,9 @@ def main() -> int:
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
-            # File-content delimiters bulk the *resolved absolute* path, not
-            # the raw plan-relative token. docs/old-name.md still appears as
-            # literal text inside beta's own bulked batch-file content (its
-            # Moves: declaration names both sides of the relocation) -- that
-            # is expected and not what this assertion is about. What must
-            # NOT happen is a bulked "file contents" delimiter for the
-            # moved-away source, which is what resolve_ref_paths would have
-            # produced had it not suppressed the stale ref (and what a
-            # hard-fail ReviewError would have pre-empted entirely before
-            # any prompt was ever built).
+            # File-content delimiters bulk the *resolved absolute* path, not the raw plan-relative token.
+            # docs/old-name.md still appears as literal text inside beta's own bulked batch-file content (its Moves: declaration names both sides of the relocation) -- that is expected and not what this assertion is about.
+            # What must NOT happen is a bulked "file contents" delimiter for the moved-away source, which is what resolve_ref_paths would have produced had it not suppressed the stale ref (and what a hard-fail ReviewError would have pre-empted entirely before any prompt was ever built).
             old_path = project_root / "docs" / "old-name.md"
             new_path = project_root / "docs" / "new-name.md"
             assert f"--- FILE: {old_path} ---" not in first_prompt, (
@@ -1616,15 +1582,12 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # project_root rebind: briefs_dir resolves under resolve_active_hub,
-    # not resolve_hub_path's decoy (#675)
+    # project_root rebind: briefs_dir resolves under resolve_active_hub, not resolve_hub_path's decoy (#675)
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
     # ------------------------------------------------------------------
-    # Context: soft-fail gitignore path -- a missing but confirmed
-    # git-ignored Context: ref degrades to a warning instead of a hard
-    # ReviewError (#733).
+    # Context: soft-fail gitignore path -- a missing but confirmed git-ignored Context: ref degrades to a warning instead of a hard ReviewError (#733).
     # ------------------------------------------------------------------
     errors += test_context_only_gitignored_ref_soft_fails_prepare()
 
@@ -1638,27 +1601,15 @@ def main() -> int:
 def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
     """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's decoy.
 
-    millpy-review-code.py's main() imports every module it needs (_agent_dispatch,
-    _paths, _reviewers, _review_cli, _review_common, _review_code) inline, so this
-    test loads the CLI script via importlib.util.spec_from_file_location and injects
-    MagicMock stand-ins for each of those names into sys.modules before exec_module,
-    exactly as test-review-discussion-flow.py's test_brief_path_nested_layout does.
+    millpy-review-code.py's main() imports every module it needs (_agent_dispatch, _paths, _reviewers, _review_cli, _review_common, _review_code) inline, so this test loads the CLI script via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each of those names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout does.
 
-    resolve_hub_path returns a decoy directory standing in for a stale/escaped
-    resolve_hub_path() fallback; resolve_active_hub -- called after slug
-    resolution, per the Card 13 rebind -- returns a distinct directory standing
-    in for the corrected active task worktree. briefs_dir (surfaced via
-    --stage prepare's brief_path in the printed envelope, and via the recorded
-    resolve_task_path/write_brief call args) must resolve under the
-    resolve_active_hub value, proving project_root was rebound and not left at
-    resolve_hub_path's original value.
+    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path() fallback;
+    resolve_active_hub -- called after slug resolution, per the Card 13 rebind -- returns a distinct directory standing in for the corrected active task worktree.
+    briefs_dir (surfaced via --stage prepare's brief_path in the printed envelope, and via the recorded resolve_task_path/write_brief call args) must resolve under the resolve_active_hub value, proving project_root was rebound and not left at resolve_hub_path's original value.
 
-    A reversion of the Card 13 fix (never calling resolve_active_hub) causes the
-    assertion to fail because resolve_task_path is called with the decoy
-    directory instead.
+    A reversion of the Card 13 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator
-    convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
     """
     import importlib.util
     import tempfile
@@ -1729,9 +1680,7 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
                 try:
                     mod.main()
                 except (TypeError, SystemExit, Exception):
-                    # The resolve_active_hub/resolve_task_path calls are
-                    # already recorded before any crash on a bare MagicMock
-                    # field reaching json.dumps(envelope).
+                    # The resolve_active_hub/resolve_task_path calls are already recorded before any crash on a bare MagicMock field reaching json.dumps(envelope).
                     pass
 
         if not mock_paths.resolve_active_hub.called:
@@ -1805,22 +1754,13 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
 def test_context_only_gitignored_ref_soft_fails_prepare() -> int:
     """Context:-only refs confirmed git-ignored soft-fail prepare() instead of hard-failing (#733).
 
-    Scenario (a): alpha's Context: field gains a missing ref
-    (.scratch/probe.md) covered by an appended .gitignore rule. prepare()
-    must not raise ReviewError, and the soft-skipped ref must not surface
-    as its own bulked "--- FILE: ... ---" section in the rendered
-    prompt_text (mirrors the moved-away-source assertion in test23 above --
-    a missing file is never bulked in regardless of soft-fail vs hard-fail,
-    so the real assertion of interest is that prepare() completes at all).
+    Scenario (a): alpha's Context: field gains a missing ref (.scratch/probe.md) covered by an appended .gitignore rule.
+    prepare() must not raise ReviewError,
+    and the soft-skipped ref must not surface as its own bulked "--- FILE: ... ---" section in the rendered prompt_text (mirrors the moved-away-source assertion in test23 above -- a missing file is never bulked in regardless of soft-fail vs hard-fail, so the real assertion of interest is that prepare() completes at all).
 
-    Scenario (b) is a regression guard, run in the same fixture shape:
-    a DIFFERENT missing ref NOT covered by the .gitignore must still
-    hard-fail prepare() with ReviewError -- soft-fail only fires on a
-    confirmed git-ignore hit, exactly as resolve_ref_paths's own unit
-    coverage in test-review-common.py.
+    Scenario (b) is a regression guard, run in the same fixture shape: a DIFFERENT missing ref NOT covered by the .gitignore must still hard-fail prepare() with ReviewError -- soft-fail only fires on a confirmed git-ignore hit, exactly as resolve_ref_paths's own unit coverage in test-review-common.py.
 
-    Returns 0 on success, 1 on failure (errors-accumulator convention used
-    throughout this file).
+    Returns 0 on success, 1 on failure (errors-accumulator convention used throughout this file).
     """
     errors = 0
 

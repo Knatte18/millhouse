@@ -1,6 +1,8 @@
 """End-to-end integration test for millpy-claude-sub.py against real psmux + claude.
 
-Local-dev only. Requires psmux, claude, and pwsh in PATH. Skips gracefully if any are missing.
+Local-dev only.
+Requires psmux, claude, and pwsh in PATH.
+Skips gracefully if any are missing.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-claude-psmux.py
@@ -185,8 +187,7 @@ def test_implementer() -> int:
     """Test implementer mode: claude with all tools including Bash.
 
     This also serves as the regression guard for --allowedTools pre-grant semantics.
-    A future Claude CLI version that re-introduces per-Bash permission prompts will
-    time out here.
+    A future Claude CLI version that re-introduces per-Bash permission prompts will time out here.
     """
     prompt = "Use the Bash tool to run exactly: echo __INTEGRATION_OK__"
     try:

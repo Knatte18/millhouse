@@ -14,8 +14,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _treeguard import check_and_restore  # noqa: E402
 
-# Seeded file contents, keyed by hub-relative path -- shared by every
-# scenario that builds a fresh seeded repo via _seed_repo.
+# Seeded file contents, keyed by hub-relative path -- shared by every scenario that builds a fresh seeded repo via _seed_repo.
 _SEED_FILES = {
     "_mill/status.md": "status content\n",
     "_mill/discussion.md": "discussion content\n",
@@ -33,10 +32,7 @@ def _seed_repo(repo_root: Path) -> None:
     """
     Initialize a real git repo at repo_root with a committed _mill/ tree.
 
-    Creates status.md, discussion.md, briefs/x.md, reviews/y.md under
-    repo_root/_mill (per _SEED_FILES), configures a throwaway user.email/
-    user.name so the commit succeeds without relying on global git config,
-    then commits the whole tree with `git add -A && git commit -m "seed"`.
+    Creates status.md, discussion.md, briefs/x.md, reviews/y.md under repo_root/_mill (per _SEED_FILES), configures a throwaway user.email/ user.name so the commit succeeds without relying on global git config, then commits the whole tree with `git add -A && git commit -m "seed"`.
     """
     _run_git(["init"], repo_root)
     _run_git(["config", "user.email", "treeguard-test@example.com"], repo_root)
@@ -120,8 +116,7 @@ def main() -> int:
                 "restored discussion.md content does not match committed blob"
             )
 
-            # Confirm the file is tracked and unmodified again -- no leftover
-            # porcelain entry for it.
+            # Confirm the file is tracked and unmodified again -- no leftover porcelain entry for it.
             status_result = subprocess.run(
                 ["git", "status", "--porcelain", "--", "_mill/discussion.md"],
                 cwd=repo_root,
@@ -257,9 +252,7 @@ def main() -> int:
             (repo_root / "_mill" / "reviews" / "y.md").unlink()
 
             def _partial_restore_side_effect(argv, cwd=None, **kwargs):
-                # Simulate git's real per-pathspec partial-success behavior:
-                # only reviews/y.md actually gets restored from HEAD, while
-                # status.md is deliberately left missing.
+                # Simulate git's real per-pathspec partial-success behavior: only reviews/y.md actually gets restored from HEAD, while status.md is deliberately left missing.
                 subprocess.run(
                     ["git", "checkout", "HEAD", "--", "_mill/reviews/y.md"],
                     cwd=cwd,

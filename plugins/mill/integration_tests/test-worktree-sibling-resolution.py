@@ -1,20 +1,17 @@
 """
 Integration test: cross-resolver worktree-context regression guard.
 
-Creates real ``git init`` + ``git worktree add`` fixtures under ``tempfile``
-and asserts that ``_paths.resolve_wiki_path``,
-``_paths.resolve_worktrees_dir``, and codeguide's
-``resolve._sibling_anchor_default`` return identical paths whether called
-from the main worktree's cwd or from a child worktree's cwd.
+Creates real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and asserts that ``_paths.resolve_wiki_path``, ``_paths.resolve_worktrees_dir``, and codeguide's ``resolve._sibling_anchor_default`` return identical paths whether called from the main worktree's cwd or from a child worktree's cwd.
 
-Run for both hub-form (repo dir named ``"hub"``) and prefix-form (arbitrary
-repo name) layouts.
+Run for both hub-form (repo dir named ``"hub"``) and prefix-form (arbitrary repo name) layouts.
 
-A regression in the walk-up logic — e.g. dropping the
-``git rev-parse --git-common-dir`` call — flips the four worktree-form
-assertions from PASS to FAIL.
+A regression in the walk-up logic — e.g.
+dropping the
+``git rev-parse --git-common-dir`` call — flips the four worktree-form assertions from PASS to FAIL.
 
-Local-dev only. Requires a working ``git`` in PATH. No network, no claude CLI.
+Local-dev only.
+Requires a working ``git`` in PATH.
+No network, no claude CLI.
 
 Run from the hub root:
     python plugins/mill/integration_tests/test-worktree-sibling-resolution.py
@@ -49,8 +46,8 @@ def _make_fixture(tmp: Path, repo_dir_name: str) -> tuple[Path, Path]:
 
     Args:
         tmp: Temporary directory root (already exists).
-        repo_dir_name: Name for the hub directory.  Pass ``"hub"`` for
-            hub-form layout, anything else for prefix-form.
+        repo_dir_name: Name for the hub directory.
+            Pass ``"hub"`` for hub-form layout, anything else for prefix-form.
 
     Returns:
         ``(hub_root, worktree_root)`` — both are real git checkout roots.
@@ -89,8 +86,7 @@ def _assert_resolvers_match(
 ) -> None:
     """Run six resolver assertions: three from hub root, three from worktree root.
 
-    Imports ``_paths`` and ``resolve`` (codeguide) lazily so ``sys.path`` is
-    guaranteed to be fully set before any import occurs.
+    Imports ``_paths`` and ``resolve`` (codeguide) lazily so ``sys.path`` is guaranteed to be fully set before any import occurs.
     """
     import _paths
     import resolve as codeguide_resolve

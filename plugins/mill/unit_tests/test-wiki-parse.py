@@ -1,7 +1,6 @@
 """Unit tests for wiki._parse parse_home_md function.
 
-Covers: layer header with parenthetical suffix, info-only headings, multi-paragraph
-brief collapsing, [s] status, [abandoned] status, and title stripping.
+Covers: layer header with parenthetical suffix, info-only headings, multi-paragraph brief collapsing, [s] status, [abandoned] status, and title stripping.
 """
 from __future__ import annotations
 

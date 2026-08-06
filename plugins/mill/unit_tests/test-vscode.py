@@ -1,7 +1,6 @@
 """Unit tests for plugins/mill/scripts/_vscode.py and _vscode_processes.py.
 
-Two small helpers consolidated into one file (was test-vscode.py +
-test-vscode-processes.py, merged 2026-05-28 for #388).
+Two small helpers consolidated into one file (was test-vscode.py + test-vscode-processes.py, merged 2026-05-28 for #388).
 """
 from __future__ import annotations
 

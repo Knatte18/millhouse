@@ -3,8 +3,8 @@ Autonomous bug-fix pipeline helpers.
 
 Public API:
     slug_from_title(title, existing_slugs, issue_number) -> str
-        Derive a URL-safe slug from an issue title. Guaranteed to be unique
-        within existing_slugs by appending the issue number on collision.
+    Derive a URL-safe slug from an issue title. Guaranteed to be unique
+    within existing_slugs by appending the issue number on collision.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def slug_from_title(title: str, existing_slugs: set[str], issue_number: int) -> 
     3. Collapse consecutive ``-`` runs to a single ``-``.
     4. Strip leading and trailing ``-``.
     5. Truncate to 30 characters at the last ``-`` boundary within the prefix;
-       hard-cut at 30 if no boundary exists.
+        hard-cut at 30 if no boundary exists.
     6. If the result is already in ``existing_slugs``, append ``-<issue_number>``.
     """
     slug = title.lower()

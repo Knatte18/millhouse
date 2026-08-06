@@ -5,8 +5,7 @@ Covers:
   - model_to_tier: maps model families, raises on unknown
   - write_brief: writes files, creates parents, overwrites, returns path
   - output_path_for: the ".md" -> ".out.md" mapping
-  - write_brief output_contract footer, default-off byte-identity, and
-    unconditional stale-".out.md" truncation
+  - write_brief output_contract footer, default-off byte-identity, and unconditional stale-".out.md" truncation
 """
 from __future__ import annotations
 
@@ -199,9 +198,8 @@ def test_write_brief_sanitizes_slash_in_scope() -> None:
 def test_output_path_for_maps_md_to_out_md() -> None:
     """output_path_for maps foo-r1.md -> foo-r1.out.md, preserving parent and absoluteness."""
     with tempfile.TemporaryDirectory() as tmp:
-        # Path(tmp) is guaranteed absolute on both POSIX and Windows (unlike a
-        # hand-written "/abs/..." literal, which pathlib treats as relative --
-        # drive-less -- on Windows).
+        # Path(tmp) is guaranteed absolute on both POSIX and Windows (unlike a hand-written "/abs/..."
+        # literal, which pathlib treats as relative -- drive-less -- on Windows).
         brief_path = Path(tmp) / "briefs" / "foo-r1.md"
         out_path = _agent_dispatch.output_path_for(brief_path)
 
@@ -254,8 +252,7 @@ def test_write_brief_truncates_stale_out_md() -> None:
             briefs_dir = Path(tmp) / "briefs"
             role, scope, round_n = "review-code", "holistic", 1
 
-            # Pre-create the brief once to learn its path, then plant a stale
-            # .out.md next to it as if a prior round's reviewer had run.
+            # Pre-create the brief once to learn its path, then plant a stale .out.md next to it as if a prior round's reviewer had run.
             first_brief_path = _agent_dispatch.write_brief(
                 briefs_dir, role, scope, round_n, "first prompt"
             )

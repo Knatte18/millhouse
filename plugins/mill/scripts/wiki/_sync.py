@@ -1,21 +1,20 @@
 """
 Git operations layer for wiki clone management.
 
-All operations are subprocess-based, running git commands against the wiki
-directory. This module provides atomic write, pull, and commit/push operations
-with rebase retry on non-fast-forward conflicts.
+All operations are subprocess-based, running git commands against the wiki directory.
+This module provides atomic write, pull, and commit/push operations with rebase retry on non-fast-forward conflicts.
 
 Public API:
     path_guard(rel_path)
-        Validate a relative path before read/write.
+    Validate a relative path before read/write.
     atomic_write(wiki_path, rel_path, content)
-        Write content to a file atomically (via temp + rename).
+    Write content to a file atomically (via temp + rename).
     pull(wiki_path)
-        Fetch + fast-forward the wiki clone. Returns True if updated.
+    Fetch + fast-forward the wiki clone. Returns True if updated.
     verify_git_repo(wiki_path)
-        Raise WikiPushError if wiki_path is not a valid git repository.
+    Raise WikiPushError if wiki_path is not a valid git repository.
     commit_push(wiki_path, rel_paths, message)
-        Stage, commit, and push with one rebase retry on non-fast-forward.
+    Stage, commit, and push with one rebase retry on non-fast-forward.
 
 Exceptions:
     WikiPushError -- any unrecoverable git failure.
@@ -31,18 +30,15 @@ from pathlib import Path
 from wiki import WikiPathError, WikiPushError
 
 
-# Bound network git operations so an unreachable remote -- or one waiting on a
-# credential prompt the headless daemon can never answer -- fails fast instead
-# of blocking every wiki op forever.
+# Bound network git operations so an unreachable remote -- or one waiting on a credential prompt the headless daemon can never answer -- fails fast instead of blocking every wiki op forever.
 _GIT_NETWORK_TIMEOUT_SECONDS = 30.0
 
 
 def _git_env() -> dict:
     """Environment for git subprocesses that forbids interactive prompts.
 
-    The wiki daemon launches with no console (CREATE_NO_WINDOW), so any git
-    credential or host-key prompt would block forever and starve every wiki
-    op. These vars make git fail with a non-zero exit instead of prompting.
+    The wiki daemon launches with no console (CREATE_NO_WINDOW), so any git credential or host-key prompt would block forever and starve every wiki op.
+    These vars make git fail with a non-zero exit instead of prompting.
     """
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
@@ -56,7 +52,8 @@ def path_guard(rel_path: str) -> None:
     Raises WikiPathError if rel_path is:
     - Empty string
     - Absolute path
-    - Contains ".." component
+    - Contains ".."
+    component
 
     Args:
         rel_path: Relative path to validate.
@@ -78,7 +75,8 @@ def path_guard(rel_path: str) -> None:
 def atomic_write(wiki_path: Path, rel_path: str, content: str) -> None:
     """Write content to a file atomically via temp file + rename.
 
-    Creates parent directories if needed. Writes content as UTF-8.
+    Creates parent directories if needed.
+    Writes content as UTF-8.
 
     Args:
         wiki_path: Path to wiki clone root.
@@ -122,15 +120,16 @@ def _run(
         args: Command arguments (e.g. ["git", "-C", "<path>", "status"]).
         cwd: Working directory (for context only; "-C" args override).
         check: If True, raise WikiPushError on non-zero exit.
-        timeout: Seconds to wait before killing the command. None means no
-            limit; pass a value for network ops that could hang on a remote.
+        timeout: Seconds to wait before killing the command.
+            None means no limit;
+            pass a value for network ops that could hang on a remote.
 
     Returns:
         subprocess.CompletedProcess with returncode, stdout, stderr.
 
     Raises:
-        WikiPushError: (if check=True) Command exited with non-zero rc, or the
-            command exceeded ``timeout``.
+        WikiPushError: (if check=True) Command exited with non-zero rc,
+            or the command exceeded ``timeout``.
     """
     try:
         result = subprocess.run(
@@ -158,8 +157,9 @@ def _run(
 def pull(wiki_path: Path) -> bool:
     """Fetch + fast-forward the wiki clone.
 
-    Runs "git pull --ff-only" to refresh the wiki. Returns True if the
-    working tree was updated (i.e. "Already up to date." was not printed).
+    Runs "git pull --ff-only" to refresh the wiki.
+    Returns True if the working tree was updated (i.e. "Already up to date."
+    was not printed).
 
     Args:
         wiki_path: Path to wiki clone root.
@@ -182,16 +182,14 @@ def pull(wiki_path: Path) -> bool:
 def verify_git_repo(wiki_path: Path) -> None:
     """Verify wiki_path is a valid git repository.
 
-    Runs "git rev-parse --git-dir" against wiki_path and raises WikiPushError
-    if the command fails, times out, or otherwise errors -- covers a missing
-    ".git" directory, a corrupted repository, or a hung git process.
+    Runs "git rev-parse --git-dir" against wiki_path and raises WikiPushError if the command fails, times out, or otherwise errors -- covers a missing ".git" directory, a corrupted repository, or a hung git process.
 
     Args:
         wiki_path: Path to wiki clone root.
 
     Raises:
-        WikiPushError: wiki_path is not a git repository, or the check
-            timed out (5.0s) or failed for any other reason.
+        WikiPushError: wiki_path is not a git repository,
+            or the check timed out (5.0s) or failed for any other reason.
     """
     # Use a subprocess.run call directly to avoid any potential issues with _run.
     try:
@@ -226,9 +224,7 @@ def commit_push(
     1. git add -- <rel_paths>
     2. git diff --cached --quiet (check if staged)
     3. git commit -m <message>
-    4. git push origin HEAD:<branch> (explicit refspec)
-       - On non-fast-forward: git pull --rebase, retry push
-       - On rebase conflict: git rebase --abort, raise WikiPushError
+    4. git push origin HEAD:<branch> (explicit refspec) - On non-fast-forward: git pull --rebase, retry push - On rebase conflict: git rebase --abort, raise WikiPushError
 
     A commit with nothing staged returns immediately (idempotent).
 

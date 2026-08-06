@@ -1,15 +1,9 @@
 """
 Integration test: detached millpy-bg worker survives a job-bound parent.
 
-Manufactures the job-bound parent condition via ctypes (CreateJobObjectW +
-SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) +
-AssignProcessToJobObject(job, GetCurrentProcess())), spawns millpy-bg.py
-from inside that job, and asserts both the WORKER START sentinel and the
-EXIT sentinel land in the log file within budget.
+Manufactures the job-bound parent condition via ctypes (CreateJobObjectW + SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) + AssignProcessToJobObject(job, GetCurrentProcess())), spawns millpy-bg.py from inside that job, and asserts both the WORKER START sentinel and the EXIT sentinel land in the log file within budget.
 
-This exercises the end-to-end behaviour of batch 1's two-stage cmd /c
-start /B launch: the worker must escape the parent job object and write
-both sentinels even when the parent process is kill-on-close enrolled.
+This exercises the end-to-end behaviour of batch 1's two-stage cmd /c start /B launch: the worker must escape the parent job object and write both sentinels even when the parent process is kill-on-close enrolled.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-millpy-bg-detached.py
@@ -36,8 +30,8 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-# HANDLE is pointer-sized on 64-bit Windows; override the ctypes default (c_int)
-# so handle values are not truncated.
+# HANDLE is pointer-sized on 64-bit Windows;
+# override the ctypes default (c_int) so handle values are not truncated.
 kernel32.CreateJobObjectW.restype = ctypes.c_void_p
 kernel32.SetInformationJobObject.restype = ctypes.c_int
 kernel32.SetInformationJobObject.argtypes = [
@@ -75,9 +69,7 @@ class IO_COUNTERS(ctypes.Structure):
 
 
 class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (0x2000) is an extended flag and
-    # must be set via JobObjectExtendedLimitInformation (info-class 9), not
-    # via JobObjectBasicLimitInformation (info-class 2).
+    # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE (0x2000) is an extended flag and must be set via JobObjectExtendedLimitInformation (info-class 9), not via JobObjectBasicLimitInformation (info-class 2).
     _fields_ = [
         ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
         ("IoInfo", IO_COUNTERS),
@@ -94,13 +86,9 @@ def _assert(cond: bool, msg: str) -> None:
 
 
 def main() -> None:
-    # os._exit(rc) is used for ALL exit paths so that ExitProcess(rc) runs and
-    # records the exit code BEFORE Windows releases the job handle during handle-table
-    # cleanup. If we used sys.exit + finally: CloseHandle(job), the finally block
-    # would fire CloseHandle, which triggers KILL_ON_JOB_CLOSE on this very process
-    # before sys.exit can record exit code 0. os._exit bypasses finally blocks and
-    # calls ExitProcess directly; the job handle is released by the OS after the exit
-    # code is already set, so the subsequent TerminateJobObject call is a no-op.
+    # os._exit(rc) is used for ALL exit paths so that ExitProcess(rc) runs and records the exit code BEFORE Windows releases the job handle during handle-table cleanup.
+    # If we used sys.exit + finally: CloseHandle(job), the finally block would fire CloseHandle, which triggers KILL_ON_JOB_CLOSE on this very process before sys.exit can record exit code 0. os._exit bypasses finally blocks and calls ExitProcess directly;
+    # the job handle is released by the OS after the exit code is already set, so the subsequent TerminateJobObject call is a no-op.
     rc = 1
     try:
         job = kernel32.CreateJobObjectW(None, None)
@@ -122,8 +110,7 @@ def main() -> None:
         _assert(ok, f"AssignProcessToJobObject failed: error={ctypes.get_last_error()}")
 
         # Spawn millpy-bg.py from inside the job-bound test process.
-        # PYTHONPATH injection is required: the worker subprocess imports
-        # _subprocess_util from scripts/ which is not on sys.path by default.
+        # PYTHONPATH injection is required: the worker subprocess imports _subprocess_util from scripts/ which is not on sys.path by default.
         env = {**os.environ, "PYTHONPATH": str(SCRIPTS)}
         proc = subprocess.Popen(
             [

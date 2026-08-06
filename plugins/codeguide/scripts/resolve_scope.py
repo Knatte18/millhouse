@@ -3,44 +3,23 @@ Scope-resolution for codeguide-update.
 
 Scope-resolution chain
 ----------------------
-1. **No-arg** (``args`` is empty): detect the parent branch via the
-   three-step fallback below (optionally overridden by ``--parent``/``parent=``),
-   then emit the union of ``<parent>..HEAD`` (committed files) with the
-   current diff (staged + unstaged).
-2. **Time arg** (single token matching ``^\d+[hdw]$``, case-insensitive):
-   use ``git log --since="N hour|day|week ago" --name-only --pretty=format:``
-   and collect unique non-empty file paths.
-3. **Single-token ref arg**: any single token that resolves as a git ref via
-   ``git rev-parse --verify --quiet <token>^{commit}`` (a literal trailing
-   ``..HEAD`` suffix is stripped before the check) uses ``git diff
-   --name-only <resolved>..HEAD``. This subsumes hex SHAs, ``HEAD``,
-   ``HEAD~N``, and branch/tag names.
-4. **Explicit paths** (anything else): treat each token as a path, resolve
-   relative to git toplevel, emit deduped absolute paths. No git invocation.
+1. **No-arg** (``args`` is empty): detect the parent branch via the three-step fallback below (optionally overridden by ``--parent``/``parent=``), then emit the union of ``<parent>..HEAD`` (committed files) with the current diff (staged + unstaged).
+2. **Time arg** (single token matching ``^\d+[hdw]$``, case-insensitive): use ``git log --since="N hour|day|week ago" --name-only --pretty=format:`` and collect unique non-empty file paths.
+3. **Single-token ref arg**: any single token that resolves as a git ref via ``git rev-parse --verify --quiet <token>^{commit}`` (a literal trailing ``..HEAD`` suffix is stripped before the check) uses ``git diff --name-only <resolved>..HEAD``.
+    This subsumes hex SHAs, ``HEAD``, ``HEAD~N``, and branch/tag names.
+4. **Explicit paths** (anything else): treat each token as a path, resolve relative to git toplevel, emit deduped absolute paths.
+    No git invocation.
 
-Parent detection
-----------------
-1. Try ``git symbolic-ref --short refs/remotes/origin/HEAD`` — strip the
-   ``origin/`` prefix from the output (e.g. ``origin/main`` → ``main``).
+Parent detection ----------------
+1. Try ``git symbolic-ref --short refs/remotes/origin/HEAD`` — strip the ``origin/`` prefix from the output (e.g. ``origin/main`` → ``main``).
 2. On non-zero, try ``git rev-parse --verify origin/main`` → use ``main``.
 3. On non-zero, try ``git rev-parse --verify origin/master`` → use ``master``.
 4. On non-zero, ``base_branch = None``.
 
-Public API
-----------
-CLI: ``python resolve_scope.py [--parent <ref>] [<args>]``
-    stdout  — newline-separated absolute paths (empty output is valid)
-    stderr  — last non-empty line is a JSON summary
-              ``{"mode", "parent", "base_branch", "included_committed",
-                "included_diff"}``
-    exit    — 0 unless not in a git repo
+Public API ---------- CLI: ``python resolve_scope.py [--parent <ref>] [<args>]`` stdout — newline-separated absolute paths (empty output is valid) stderr — last non-empty line is a JSON summary ``{"mode", "parent", "base_branch", "included_committed", "included_diff"}`` exit — 0 unless not in a git repo
 
-Function: ``enumerate_scope(args, cwd=None, parent=None) -> (list[Path], dict)``
-    ``args``   — the positional argument list (strings from ``$ARGUMENTS.split()``)
-    ``cwd``    — working directory override for tests (defaults to ``os.getcwd()``)
-    ``parent`` — optional base-branch override consulted only in no-arg mode;
-                 falls back to git-native detection when it doesn't resolve
-    Returns    — ``(absolute_paths_deduped, summary_dict)``
+Function: ``enumerate_scope(args, cwd=None, parent=None) -> (list[Path], dict)`` ``args`` — the positional argument list (strings from ``$ARGUMENTS.split()``) ``cwd`` — working directory override for tests (defaults to ``os.getcwd()``) ``parent`` — optional base-branch override consulted only in no-arg mode;
+    falls back to git-native detection when it doesn't resolve Returns — ``(absolute_paths_deduped, summary_dict)``
 """
 
 import argparse
@@ -99,8 +78,7 @@ def _ref_resolves(toplevel: pathlib.Path, ref: str) -> bool:
     """
     Check whether a git reference resolves to a commit.
 
-    Uses `git rev-parse --verify --quiet <ref>^{commit}` to determine
-    if the ref can be resolved locally.
+    Uses `git rev-parse --verify --quiet <ref>^{commit}` to determine if the ref can be resolved locally.
 
     Args:
         toplevel: The git repository root.
@@ -137,9 +115,7 @@ def _no_arg_scope(toplevel: pathlib.Path, parent: str | None = None) -> tuple[li
     current_branch = out.strip() if rc == 0 else "HEAD"
 
     # An explicit --parent override takes precedence over git-native detection,
-    # but only when it actually resolves -- a stale/deleted parent ref falls
-    # through to the origin/HEAD -> origin/main -> origin/master chain exactly
-    # as if --parent had never been supplied.
+    # but only when it actually resolves -- a stale/deleted parent ref falls through to the origin/HEAD -> origin/main -> origin/master chain exactly as if --parent had never been supplied.
     base_branch: str | None = None
     if parent is not None and _ref_resolves(toplevel, parent):
         base_branch = parent
@@ -221,16 +197,11 @@ def _resolve_ref_token(toplevel: pathlib.Path, token: str) -> str | None:
     """
     Determine whether a single scope-arg token names a git-resolvable ref.
 
-    Strips a literal trailing ``..HEAD`` suffix (the shape mill-merge-in's
-    checkpoint range produces) before checking, since git itself cannot
-    resolve ``<ref>..HEAD`` as a single commit-ish. Any other token
-    containing ``..`` (a genuine range) is passed through unstripped — it
-    will simply fail the rev-parse check below, per the "literal ..HEAD
-    suffix stripping only" design decision.
+    Strips a literal trailing ``..HEAD`` suffix (the shape mill-merge-in's checkpoint range produces) before checking, since git itself cannot resolve ``<ref>..HEAD`` as a single commit-ish.
+    Any other token containing ``..`` (a genuine range) is passed through unstripped — it will simply fail the rev-parse check below, per the "literal ..HEAD suffix stripping only" design decision.
 
     Returns:
-        The candidate ref string (with the ``..HEAD`` suffix already
-        stripped, if present) when it resolves to a commit, else None.
+        The candidate ref string (with the ``..HEAD`` suffix already stripped, if present) when it resolves to a commit, else None.
     """
     suffix = "..HEAD"
     candidate = token[: -len(suffix)] if token.endswith(suffix) else token
@@ -251,14 +222,11 @@ def enumerate_scope(
 
     if len(args) == 1:
         token = args[0]
-        # Time-form tokens (3d, 1h, ...) must never attempt ref resolution --
-        # a token like "1h" could theoretically collide with a branch name,
-        # so the time check stays first and short-circuits ref dispatch.
+        # Time-form tokens (3d, 1h, ...)
+        # must never attempt ref resolution -- a token like "1h" could theoretically collide with a branch name, so the time check stays first and short-circuits ref dispatch.
         if _TIME_RE.match(token):
             return _time_scope(toplevel, token)
-        # Any token that git itself can resolve as a commit-ish (hex SHA,
-        # HEAD, HEAD~N, or a plain branch/tag name, with an optional literal
-        # ..HEAD suffix stripped first) routes through the head-rev path.
+        # Any token that git itself can resolve as a commit-ish (hex SHA, HEAD, HEAD~N, or a plain branch/tag name, with an optional literal ..HEAD suffix stripped first) routes through the head-rev path.
         resolved = _resolve_ref_token(toplevel, token)
         if resolved is not None:
             return _head_rev_scope(toplevel, resolved)

@@ -1,9 +1,7 @@
 """Unit tests for plugins/mill/scripts/_plan_dag.py.
 
-The fixtures below are intentionally throwaway dummy data — they do NOT
-reflect what mill-plan will actually name batches in real plans.
-_plan_dag has no knowledge of specific batch names; it parses whatever
-the overview declares.
+The fixtures below are intentionally throwaway dummy data — they do NOT reflect what mill-plan will actually name batches in real plans. _plan_dag has no knowledge of specific batch names;
+it parses whatever the overview declares.
 """
 from __future__ import annotations
 
@@ -145,9 +143,7 @@ def test_topo_order() -> None:
 def test_iter_batch_verifies() -> None:
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
-        # Flat layout fixture: hub_root == git_root == plan_dir's parent,
-        # matching the Shared Decision that flat-layout output must stay
-        # byte-identical after the verify-cwd mapping form was introduced.
+        # Flat layout fixture: hub_root == git_root == plan_dir's parent, matching the Shared Decision that flat-layout output must stay byte-identical after the verify-cwd mapping form was introduced.
         hub_root = plan_dir.parent
         git_root = plan_dir.parent
         (plan_dir / "00-overview.md").write_text(
@@ -222,8 +218,7 @@ def test_parse_verify_field() -> None:
     except ValueError as exc:
         assert "cwd" in str(exc), str(exc)
 
-    # Missing cwd on the mapping form also raises -- mapping form has no
-    # implicit default, unlike the plain-string form.
+    # Missing cwd on the mapping form also raises -- mapping form has no implicit default, unlike the plain-string form.
     try:
         parse_verify_field(
             {"verify": {"command": "pytest tests/a -q"}}, hub_root, git_root
@@ -239,8 +234,7 @@ def test_parse_verify_field() -> None:
     except ValueError as exc:
         assert "command" in str(exc), str(exc)
 
-    # Absent, None, and empty/whitespace-only verify all normalize to
-    # (None, None) -- "nothing to run".
+    # Absent, None, and empty/whitespace-only verify all normalize to (None, None) -- "nothing to run".
     assert parse_verify_field({}, hub_root, git_root) == (None, None)
     assert parse_verify_field({"verify": None}, hub_root, git_root) == (None, None)
     assert parse_verify_field({"verify": ""}, hub_root, git_root) == (None, None)
@@ -411,12 +405,7 @@ def test_parse_commit_none_card_ids_missing_field_not_included() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cross-batch verify-suppression fixtures (iter_batch_verifies Card 3/4)
-#
-# These fixtures write real batch markdown files (not just the overview's
-# yaml block) because the suppression logic under test reads each batch
-# file's own ``- **Deletes:**`` / ``- **Moves:**`` bullets, not just its
-# fenced-yaml frontmatter.
+# Cross-batch verify-suppression fixtures (iter_batch_verifies Card 3/4) These fixtures write real batch markdown files (not just the overview's yaml block) because the suppression logic under test reads each batch file's own ``- **Deletes:**`` / ``- **Moves:**`` bullets, not just its fenced-yaml frontmatter.
 # ---------------------------------------------------------------------------
 
 
@@ -434,8 +423,8 @@ def _write_batch(
     verify: str,
     deletes: str | None = None,
 ) -> None:
-    """Write a batch markdown file with a fenced-yaml ``verify:`` frontmatter
-    and an optional ``- **Deletes:**`` bullet (inline, backtick-quoted)."""
+    """Write a batch markdown file with a fenced-yaml ``verify:`` frontmatter and an optional ``- **Deletes:**`` bullet (inline, backtick-quoted).
+"""
     lines = [f"# Batch: {name}", "", "```yaml", f"batch: {name}", verify, "```", ""]
     if deletes is not None:
         lines.append(f"- **Deletes:** `{deletes}`")
@@ -444,8 +433,7 @@ def _write_batch(
 
 
 def test_iter_batch_verifies_suppresses_target_removed_by_later_batch() -> None:
-    # #689's exact fixture: batches 1-3 build the same package, batch 4
-    # deletes that package's directory and builds everything else instead.
+    # #689's exact fixture: batches 1-3 build the same package, batch 4 deletes that package's directory and builds everything else instead.
     # Only batch 4's triple should survive.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
@@ -500,8 +488,7 @@ def test_iter_batch_verifies_suppresses_target_removed_by_later_batch() -> None:
 
 
 def test_iter_batch_verifies_self_delete_not_suppressed() -> None:
-    # A batch that deletes a path its own verify: references must NOT be
-    # suppressed -- only strictly-later removals count.
+    # A batch that deletes a path its own verify: references must NOT be suppressed -- only strictly-later removals count.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -523,9 +510,7 @@ def test_iter_batch_verifies_self_delete_not_suppressed() -> None:
 
 
 def test_iter_batch_verifies_tokenizer_edge_cases_not_spuriously_matched() -> None:
-    # Ellipsis/glob-style Go build targets and flag-form tokens must never
-    # be treated as path candidates, even against a maximally-tempting
-    # later Deletes: set.
+    # Ellipsis/glob-style Go build targets and flag-form tokens must never be treated as path candidates, even against a maximally-tempting later Deletes: set.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -563,8 +548,7 @@ def test_iter_batch_verifies_tokenizer_edge_cases_not_spuriously_matched() -> No
 
 
 def test_iter_batch_verifies_directory_containment_not_suppressed() -> None:
-    # Exact-match only, no directory-containment: Deletes: tools/x/ must
-    # NOT suppress a verify referencing tools/x/cmd/app.
+    # Exact-match only, no directory-containment: Deletes: tools/x/ must NOT suppress a verify referencing tools/x/cmd/app.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -600,8 +584,7 @@ def test_iter_batch_verifies_directory_containment_not_suppressed() -> None:
 
 
 def test_iter_batch_verifies_multi_target_existential_suppression() -> None:
-    # A multi-target command is fully suppressed if any single target
-    # matches -- including a still-valid second target.
+    # A multi-target command is fully suppressed if any single target matches -- including a still-valid second target.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -637,9 +620,7 @@ def test_iter_batch_verifies_multi_target_existential_suppression() -> None:
 
 
 def test_iter_batch_verifies_coordinate_space_mismatch_not_suppressed() -> None:
-    # A mapping-form verify: {cwd: ..., command: ...} authored under a
-    # different coordinate space than a later Deletes: token degrades to
-    # "still runs" -- purely lexical matching, no root resolution.
+    # A mapping-form verify: {cwd: ..., command: ...} authored under a different coordinate space than a later Deletes: token degrades to "still runs" -- purely lexical matching, no root resolution.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -682,8 +663,7 @@ def test_iter_batch_verifies_coordinate_space_mismatch_not_suppressed() -> None:
 
 
 def test_iter_batch_verifies_status_path_mixed_states() -> None:
-    # Only "approved" batches' triples are returned when status_path is
-    # passed; omitting status_path stays byte-for-byte unchanged.
+    # Only "approved" batches' triples are returned when status_path is passed; omitting status_path stays byte-for-byte unchanged.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)
         hub_root = plan_dir.parent
@@ -770,8 +750,7 @@ def test_iter_batch_verifies_malformed_batches_block_returns_empty() -> None:
         _write_batch(plan_dir, "01-a.md", name="a", verify="verify: pytest tests/a -q")
 
         status_path = plan_dir / "status.md"
-        # Unterminated fenced-yaml block under ## Batches -- read_batches
-        # raises ValueError, which must degrade to [] rather than propagate.
+        # Unterminated fenced-yaml block under ## Batches -- read_batches raises ValueError, which must degrade to [] rather than propagate.
         status_path.write_text(
             "## Batches\n\n```yaml\nbatches:\n  - name: a\n    state: approved\n",
             encoding="utf-8",
@@ -785,9 +764,8 @@ def test_iter_batch_verifies_malformed_batches_block_returns_empty() -> None:
 
 
 def test_iter_batch_verifies_decision2_x_decision4_composition() -> None:
-    # The exact composition fixture from _mill/discussion.md: batches 1-3
-    # approved with a shared verify:, batch 4 declares the removal. Batch
-    # 4 pending -> batches 1-3 still run (remover not yet approved).
+    # The exact composition fixture from _mill/discussion.md: batches 1-3 approved with a shared verify:, batch 4 declares the removal.
+    # Batch 4 pending -> batches 1-3 still run (remover not yet approved).
     # Batch 4 approved -> batches 1-3 now suppressed.
     with tempfile.TemporaryDirectory() as td:
         plan_dir = Path(td)

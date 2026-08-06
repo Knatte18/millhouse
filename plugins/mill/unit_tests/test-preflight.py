@@ -119,8 +119,7 @@ def test_check_helpers_missing_prints_message() -> None:
 
 def test_check_helpers_fallback_to_own_dir() -> None:
     """check_helpers falls back to _preflight.py's own dir when CLAUDE_PLUGIN_ROOT unset."""
-    # When CLAUDE_PLUGIN_ROOT is unset, check_helpers should use _preflight.py's own directory
-    # and find _preflight.py itself there, so check_helpers(["_preflight"]) should return 0.
+    # When CLAUDE_PLUGIN_ROOT is unset, check_helpers should use _preflight.py's own directory and find _preflight.py itself there, so check_helpers(["_preflight"]) should return 0.
 
     with patch.dict(os.environ, {}, clear=False):
         # Make sure CLAUDE_PLUGIN_ROOT is not set

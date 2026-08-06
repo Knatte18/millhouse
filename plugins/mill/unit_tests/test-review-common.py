@@ -31,14 +31,12 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     """Create a container-form git fixture at ``<tmp>/container/wts/<slug>``.
 
     Layout:
-        <tmp>/container/wts/<slug>/  ← git repo on task branch ``hanf/<slug>``
-        <tmp>/container/wiki/        ← wiki with Home.md and config.yaml
+        <tmp>/container/wts/<slug>/ ← git repo on task branch ``hanf/<slug>`` <tmp>/container/wiki/ ← wiki with Home.md and config.yaml
 
     Returns:
         ``(container_path, worktree_path)``
 
-    The caller must ``os.chdir(worktree_path)`` so that ``Path.cwd()`` resolves
-    inside the fixture when calling ``resolve_path``.
+    The caller must ``os.chdir(worktree_path)`` so that ``Path.cwd()`` resolves inside the fixture when calling ``resolve_path``.
     """
     container = Path(tmp) / "container"
     worktree = container / "wts" / slug
@@ -254,8 +252,7 @@ def main() -> int:
         assert find_active_slug(wt, wiki, cfg) == "my-task"
         print("PASS: find_active_slug: 'my-task'")
 
-    # find_active_slug: daemon-skip when a confirmed on-disk marker agrees
-    # with the current branch (on-disk-first fast path).
+    # find_active_slug: daemon-skip when a confirmed on-disk marker agrees with the current branch (on-disk-first fast path).
     try:
         with _test_helpers.safe_temp_dir() as tmpdir:
             wt, wiki = _make_task_worktree(
@@ -291,9 +288,7 @@ def main() -> int:
         )
         errors += 1
 
-    # find_active_slug: a stale on-disk marker (branch mismatch) must NOT
-    # short-circuit the daemon call -- regression test for the plan-review
-    # round 1 correctness fix.
+    # find_active_slug: a stale on-disk marker (branch mismatch) must NOT short-circuit the daemon call -- regression test for the plan-review round 1 correctness fix.
     try:
         with _test_helpers.safe_temp_dir() as tmpdir:
             wt, wiki = _make_task_worktree(
@@ -301,8 +296,7 @@ def main() -> int:
             )
             mill_dir = wt / "_mill"
             mill_dir.mkdir(parents=True, exist_ok=True)
-            # Leftover marker from an aborted claim, naming a DIFFERENT slug
-            # than the branch the worktree is actually on.
+            # Leftover marker from an aborted claim, naming a DIFFERENT slug than the branch the worktree is actually on.
             (mill_dir / "stale-slug.active").write_text("", encoding="utf-8")
             cfg = {"spawn": {"branch_prefix": "hanf/"}}
 
@@ -349,8 +343,7 @@ def main() -> int:
         assert load_task_title(Path(tmpdir), Path(tmpdir), {}, "my-task") == "my-task"
         print("PASS: load_task_title non-task branch -> fallback to slug")
 
-    # load_task_title: daemon-skip when status.md is present and well-formed
-    # (on-disk-first fast path).
+    # load_task_title: daemon-skip when status.md is present and well-formed (on-disk-first fast path).
     try:
         with _test_helpers.safe_temp_dir() as tmpdir:
             git_root = Path(tmpdir)
@@ -409,10 +402,7 @@ def main() -> int:
         assert p == expected, f"Expected {expected}, got {p}"
         print("PASS: resolve_path('discussion.md', slug) -> worktree/discussion.md")
 
-    # resolve_path: skip_slug_validation=True (its own resolve_active_hub call) avoids
-    # the daemon-backed _marker.slug_from_branch round-trip -- resolve_path is always
-    # called with an already-resolved slug, so it never needs slug_from_branch's
-    # re-validation.
+    # resolve_path: skip_slug_validation=True (its own resolve_active_hub call) avoids the daemon-backed _marker.slug_from_branch round-trip -- resolve_path is always called with an already-resolved slug, so it never needs slug_from_branch's re-validation.
     with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
@@ -475,8 +465,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         slug = "my-task"
         container, worktree = _make_worktree_fixture(tmp, slug)
-        # Create a directory named "wrong-slug" but checked out on branch "hanf/my-task"
-        # (directory slug ≠ branch-derived slug -> mismatch).
+        # Create a directory named "wrong-slug" but checked out on branch "hanf/my-task" (directory slug ≠ branch-derived slug -> mismatch).
         wrong_slug = "wrong-slug"
         wrong_dir = container / "wts" / wrong_slug
         wrong_dir.mkdir(parents=True)
@@ -528,16 +517,11 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        # Real git repo (not a bare mkdir'd dir) -- resolve_path's internal
-        # resolve_active_hub call now passes skip_slug_validation=True, whose
-        # fast path calls _pygit2_util.current_branch(git_root) against the
-        # real filesystem instead of the daemon-backed _marker.slug_from_branch.
+        # Real git repo (not a bare mkdir'd dir) -- resolve_path's internal resolve_active_hub call now passes skip_slug_validation=True, whose fast path calls _pygit2_util.current_branch(git_root) against the real filesystem instead of the daemon-backed _marker.slug_from_branch.
         repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root
         slug = "my-inplace-task"
-        # cfg has no spawn.branch_prefix (neither the wiki config.yaml below nor
-        # the hub's config.local.yaml sets one), so the cheap prefix-strip check
-        # compares the raw branch name against slug with an empty prefix.
+        # cfg has no spawn.branch_prefix (neither the wiki config.yaml below nor the hub's config.local.yaml sets one), so the cheap prefix-strip check compares the raw branch name against slug with an empty prefix.
         _test_helpers.checkout_new_branch(repo, slug)
 
         wiki_root = tmp_path / "wiki"
@@ -579,9 +563,7 @@ def main() -> int:
     with _test_helpers.safe_temp_dir() as tmp:
         tmp_path = Path(tmp)
         git_root = tmp_path / "git_root"
-        # Real git repo -- same reasoning as the M2 in-place case above: the
-        # branch-derived slug now comes from a real _pygit2_util.current_branch
-        # call, not the (patched-out) daemon-backed _marker.slug_from_branch.
+        # Real git repo -- same reasoning as the M2 in-place case above: the branch-derived slug now comes from a real _pygit2_util.current_branch call, not the (patched-out) daemon-backed _marker.slug_from_branch.
         repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
         hub = git_root / "src" / "Models"
         slug = "my-subdir-inplace-task"
@@ -729,16 +711,13 @@ def main() -> int:
     assert out == "```yaml\nverdict: APPROVE\nreviewer_model: sonnet\n```\n"
     print("PASS: apply_actual_model_override rewrites existing reviewer_model line")
 
-    # apply_actual_model_override: injects a reviewer_model line right after the
-    # opening ```yaml fence of the block carrying the verdict, when the input
-    # text has no reviewer_model line at all
+    # apply_actual_model_override: injects a reviewer_model line right after the opening ```yaml fence of the block carrying the verdict, when the input text has no reviewer_model line at all
     raw = "```yaml\nverdict: APPROVE\nreviewed_file: x\n```\n"
     out = apply_actual_model_override(raw, "haiku")
     assert out == "```yaml\nreviewer_model: haiku\nverdict: APPROVE\nreviewed_file: x\n```\n"
     print("PASS: apply_actual_model_override injects reviewer_model line after opening fence")
 
-    # apply_actual_model_override: a malformed reviewer_model line (no value)
-    # is treated as not-found and does not swallow the rest of the block
+    # apply_actual_model_override: a malformed reviewer_model line (no value) is treated as not-found and does not swallow the rest of the block
     raw = "```yaml\nverdict: APPROVE\nreviewer_model:\n```\n"
     out = apply_actual_model_override(raw, "opus")
     assert out == "```yaml\nreviewer_model: opus\nverdict: APPROVE\nreviewer_model:\n```\n"
@@ -749,8 +728,7 @@ def main() -> int:
     assert apply_actual_model_override(raw, None) == raw
     print("PASS: apply_actual_model_override identity when actual_model is None")
 
-    # apply_actual_model_override: leaves a reviewer_self_id: line untouched
-    # when rewriting reviewer_model: -- only the reviewer_model: line changes.
+    # apply_actual_model_override: leaves a reviewer_self_id: line untouched when rewriting reviewer_model: -- only the reviewer_model: line changes.
     raw = (
         "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n"
         "reviewer_self_id: claude-sonnet-4-6 (self-reported)\n```\n"
@@ -1070,10 +1048,7 @@ def main() -> int:
             "PASS: load_config hub_relative_path in config.local.yaml does not emit unknown-key warning"
         )
 
-    # load_config delegation inherits _config.load_config's worktree-template
-    # cache-lag augmentation (regression test for #676/#670: the old duplicate
-    # load_config had no augmentation logic at all, so this exact scenario
-    # would have printed the unknown-key warning under the pre-refactor code).
+    # load_config delegation inherits _config.load_config's worktree-template cache-lag augmentation (regression test for #676/#670: the old duplicate load_config had no augmentation logic at all, so this exact scenario would have printed the unknown-key warning under the pre-refactor code).
     with _test_helpers.safe_temp_dir() as tmpdir:
         tmpdir_path = Path(tmpdir)
         mill = tmpdir_path / ".millhouse"
@@ -1140,8 +1115,7 @@ def main() -> int:
         assert refs == ["path/a", "path/b"], f"Got {refs}"
         print("PASS: parse_batch_refs multi-line bullet form returns both paths")
 
-    # parse_batch_refs: sub-bullet with a leading real path and a parenthetical
-    # carrying further backtick-quoted prose keeps only the leading token (#580).
+    # parse_batch_refs: sub-bullet with a leading real path and a parenthetical carrying further backtick-quoted prose keeps only the leading token (#580).
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
@@ -2313,8 +2287,7 @@ def main() -> int:
     assert result == 1, f"expected 1, got {result}"
     print("PASS: count_unrecognized_severity_findings one [MAJOR] heading -> 1")
 
-    # Other off-vocabulary words count identically to MAJOR -- no
-    # special-casing by which word the reviewer used.
+    # Other off-vocabulary words count identically to MAJOR -- no special-casing by which word the reviewer used.
     for word in ("MEDIUM", "HIGH", "MINOR"):
         result = count_unrecognized_severity_findings(
             f"### [{word}] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
@@ -2324,8 +2297,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings [MEDIUM]/[HIGH]/[MINOR] each count as 1"
     )
 
-    # A recognized BLOCKING heading is not double-counted by this helper --
-    # parse_blocking_count(severity="BLOCKING") already counts it elsewhere.
+    # A recognized BLOCKING heading is not double-counted by this helper -- parse_blocking_count(severity="BLOCKING") already counts it elsewhere.
     result = count_unrecognized_severity_findings(
         "### [BLOCKING] foo\n", blocking_severity="BLOCKING", nit_severity="NIT"
     )
@@ -2339,10 +2311,7 @@ def main() -> int:
     assert result == 0, f"expected 0, got {result}"
     print("PASS: count_unrecognized_severity_findings [NIT] heading -> 0")
 
-    # Heading matching is case-sensitive, consistent with parse_blocking_count's
-    # existing case-sensitive heading behavior -- mixed-case spellings of a
-    # recognized severity are not "unrecognized findings" here, they simply
-    # fail to match anything (neither known nor counted as unrecognized).
+    # Heading matching is case-sensitive, consistent with parse_blocking_count's existing case-sensitive heading behavior -- mixed-case spellings of a recognized severity are not "unrecognized findings" here, they simply fail to match anything (neither known nor counted as unrecognized).
     result = count_unrecognized_severity_findings(
         "### [Major] foo\n### [major] bar\n",
         blocking_severity="BLOCKING",
@@ -2361,8 +2330,7 @@ def main() -> int:
     assert result == 1, f"expected 1, got {result}"
     print("PASS: count_unrecognized_severity_findings yaml-only MAJOR entry -> 1")
 
-    # YAML severity matching is case-insensitive, mirroring parse_blocking_count's
-    # existing YAML-path case-insensitivity.
+    # YAML severity matching is case-insensitive, mirroring parse_blocking_count's existing YAML-path case-insensitivity.
     raw = "```yaml\nfindings:\n  - severity: major\n    title: foo\n```\n"
     result = count_unrecognized_severity_findings(
         raw, blocking_severity="BLOCKING", nit_severity="NIT"
@@ -2372,10 +2340,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings yaml-only lowercase 'major' entry -> 1"
     )
 
-    # Unconditional scan proof #1: a document has a real [MAJOR] heading AND a
-    # real [NIT] heading (heading_count > 0 for NIT, so parse_blocking_count's
-    # own YAML fallback would never fire for NIT) -- the helper must still find
-    # the [MAJOR] heading rather than skipping the heading scan.
+    # Unconditional scan proof #1: a document has a real [MAJOR] heading AND a real [NIT] heading (heading_count > 0 for NIT, so parse_blocking_count's own YAML fallback would never fire for NIT) -- the helper must still find the [MAJOR] heading rather than skipping the heading scan.
     raw = "### [MAJOR] foo\n### [NIT] bar\n"
     result = count_unrecognized_severity_findings(
         raw, blocking_severity="BLOCKING", nit_severity="NIT"
@@ -2385,11 +2350,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings finds [MAJOR] heading alongside a real [NIT] heading"
     )
 
-    # Unconditional scan proof #2: same document as above, plus an ADDITIONAL
-    # unrecognized severity expressed ONLY as a yaml findings: entry (no
-    # corresponding heading) -- the helper must count both the [MAJOR] heading
-    # AND the yaml-only entry, proving the scan is never gated on which
-    # mechanism the known severities happened to use.
+    # Unconditional scan proof #2: same document as above, plus an ADDITIONAL unrecognized severity expressed ONLY as a yaml findings: entry (no corresponding heading) -- the helper must count both the [MAJOR] heading AND the yaml-only entry, proving the scan is never gated on which mechanism the known severities happened to use.
     raw = (
         "### [MAJOR] foo\n"
         "### [NIT] bar\n"
@@ -2407,8 +2368,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings counts both a heading-only and a yaml-only unrecognized entry"
     )
 
-    # The helper is not hardcoded to BLOCKING/NIT -- it works for the
-    # discussion review type's GAP/NOTE pair too.
+    # The helper is not hardcoded to BLOCKING/NIT -- it works for the discussion review type's GAP/NOTE pair too.
     result = count_unrecognized_severity_findings(
         "### [MAJOR] foo\n", blocking_severity="GAP", nit_severity="NOTE"
     )
@@ -2417,11 +2377,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings works for the GAP/NOTE severity pair"
     )
 
-    # Double-counting is accepted, documented behavior (see the "Accepted
-    # risk" note in _mill/discussion.md), not a bug: a heading and a
-    # mirroring yaml entry for what a human would consider "the same
-    # finding" are counted twice because the two mechanisms are scanned
-    # unconditionally and independently, with no dedup logic.
+    # Double-counting is accepted, documented behavior (see the "Accepted risk" note in _mill/discussion.md), not a bug: a heading and a mirroring yaml entry for what a human would consider "the same finding" are counted twice because the two mechanisms are scanned unconditionally and independently, with no dedup logic.
     raw = "### [MAJOR] foo\n```yaml\nfindings:\n  - severity: MAJOR\n    title: foo\n```\n"
     result = count_unrecognized_severity_findings(
         raw, blocking_severity="BLOCKING", nit_severity="NIT"
@@ -2431,9 +2387,7 @@ def main() -> int:
         "PASS: count_unrecognized_severity_findings double-counts a heading + mirroring yaml entry (accepted risk, not a bug)"
     )
 
-    # finalize_scope integration: unrecognized-severity findings fold into
-    # blocking_count alongside the existing BLOCKING count, while a
-    # recognized NIT heading still lands in nit_count only.
+    # finalize_scope integration: unrecognized-severity findings fold into blocking_count alongside the existing BLOCKING count, while a recognized NIT heading still lands in nit_count only.
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir / "reviews"
         raw = (
@@ -2457,11 +2411,7 @@ def main() -> int:
             "PASS: finalize_scope folds unrecognized-severity findings into blocking_count"
         )
 
-        # Isolated case: a [MEDIUM]-only response (no recognized [BLOCKING]/[NIT]
-        # heading at all) must still fold into blocking_count via
-        # count_unrecognized_severity_findings, with nit_count staying 0.
-        # Uses round 2 (distinct from round 1 above) so write_review_file does
-        # not collide on filename.
+        # Isolated case: a [MEDIUM]-only response (no recognized [BLOCKING]/[NIT] heading at all) must still fold into blocking_count via count_unrecognized_severity_findings, with nit_count staying 0. Uses round 2 (distinct from round 1 above) so write_review_file does not collide on filename.
         raw_medium_only = (
             "```yaml\n"
             "verdict: REQUEST_CHANGES\n"
@@ -3910,11 +3860,8 @@ def main() -> int:
     # Regression: parse_batch_refs must NOT return tokens from Moves: bullets
     # ---------------------------------------------------------------------------
 
-    # A Moves: bullet uses two-path grammar (`src` -> `dst`) which is incompatible
-    # with the reads-not-backtick-path validator rule (rejects >1 backtick per
-    # sub-bullet when processed by parse_batch_refs).  parse_batch_refs must
-    # stay blind to Moves: headers so that move tokens never contaminate the
-    # Context/Edits/Creates/Deletes bulk.
+    # A Moves: bullet uses two-path grammar (`src` -> `dst`) which is incompatible with the reads-not-backtick-path validator rule (rejects >1 backtick per sub-bullet when processed by parse_batch_refs).
+    # parse_batch_refs must stay blind to Moves: headers so that move tokens never contaminate the Context/Edits/Creates/Deletes bulk.
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch = Path(tmpdir) / "batch.md"
         batch.write_text(
@@ -3946,9 +3893,7 @@ def main() -> int:
     # ---------------------------------------------------------------------------
 
     # (a) Non-agent cells stay byte-identical to today's pre-agent-mode text.
-    # Pinned as literals so a future edit that collaterally changes these
-    # strings is caught here -- these are also what the reviewer's
-    # `--stage full` API-error fallback relies on staying verbatim.
+    # Pinned as literals so a future edit that collaterally changes these strings is caught here -- these are also what the reviewer's `--stage full` API-error fallback relies on staying verbatim.
     _EXPECTED_BULK_NON_AGENT = (
         "**CRITICAL: Do NOT request tool calls. All content you need is in this prompt.**\n"
         "**CRITICAL: Review-only. Do NOT suggest modifications. Findings only.**\n"
@@ -3971,9 +3916,8 @@ def main() -> int:
     )
     print("PASS: build_tool_rule bulk/tool-use x non-agent byte-identical to pinned literals")
 
-    # (e) agent_mode defaults to False: a single positional argument must
-    # equal the non-agent cell. This pins the default that keeps the file's
-    # seven existing positional callsites green.
+    # (e) agent_mode defaults to False: a single positional argument must equal the non-agent cell.
+    # This pins the default that keeps the file's seven existing positional callsites green.
     assert build_tool_rule("bulk") == _EXPECTED_BULK_NON_AGENT, (
         "build_tool_rule('bulk') with one positional arg must default to non-agent"
     )
@@ -3982,9 +3926,8 @@ def main() -> int:
     )
     print("PASS: build_tool_rule agent_mode defaults to False (positional-callsite compatibility)")
 
-    # (b) bulk x agent: must NOT contain the bare "Do NOT request tool calls"
-    # clause (it would contradict the Write grant below), and must grant
-    # exactly one Write for the report.
+    # (b) bulk x agent: must NOT contain the bare "Do NOT request tool calls" clause (it would contradict the Write grant below),
+    # and must grant exactly one Write for the report.
     bulk_agent = build_tool_rule("bulk", agent_mode=True)
     assert "Do NOT request tool calls" not in bulk_agent, (
         f"bulk x agent must not contain the bare non-agent tool-call ban: {bulk_agent!r}"
@@ -3995,8 +3938,8 @@ def main() -> int:
     )
     print("PASS: build_tool_rule bulk x agent avoids bare tool-call ban and grants exactly one Write")
 
-    # (c) tool-use x agent: still grants Read/Grep/Glob, and grants Write for
-    # the report.
+    # (c) tool-use x agent: still grants Read/Grep/Glob,
+    # and grants Write for the report.
     tool_use_agent = build_tool_rule("tool-use", agent_mode=True)
     assert "MAY use Read, Grep, and Glob" in tool_use_agent, (
         f"tool-use x agent must still grant Read/Grep/Glob: {tool_use_agent!r}"

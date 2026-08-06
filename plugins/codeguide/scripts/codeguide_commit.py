@@ -8,24 +8,17 @@ Inline mode — stage files in the current repo (caller's cwd); the outer
 
     python codeguide_commit.py --mode inline --file <path> [--file <path> ...] -m "<msg>"
 
-Sibling mode — stage AND commit files inside the sibling repo, which has
-its own git history independent of the target repo::
+Sibling mode — stage AND commit files inside the sibling repo, which has its own git history independent of the target repo::
 
     python codeguide_commit.py --mode sibling --sibling-anchor <path> --file <path> [--file <path> ...] -m "<msg>"
 
-The caller (codeguide-update) already holds ``mode`` and
-``sibling_anchor`` from its own ``resolve.py`` call. Those are passed
-explicitly so this helper does NOT re-run resolve.py (which would be
-fragile if cwd differs from the repo root and couples commit-time
-behavior to import-time side effects).
+The caller (codeguide-update) already holds ``mode`` and ``sibling_anchor`` from its own ``resolve.py`` call.
+Those are passed explicitly so this helper does NOT re-run resolve.py (which would be fragile if cwd differs from the repo root and couples commit-time behavior to import-time side effects).
 
-Output
-------
-Stdout: one-line JSON summary ``{"mode": ..., "committed": true|false, "files": [...]}``.
+Output ------ Stdout: one-line JSON summary ``{"mode": ..., "committed": true|false, "files": [...]}``.
 Stderr: subprocess transcripts on failure.
 
-Exit codes
-----------
+Exit codes ----------
 0 — success
 1 — git subprocess failed
 2 — argument validation failed

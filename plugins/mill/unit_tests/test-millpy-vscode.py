@@ -1,7 +1,6 @@
 """Unit tests for plugins/mill/scripts/millpy-vscode.py.
 
-All discover_active_worktrees calls are mocked with return_value which accepts
-the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
+All discover_active_worktrees calls are mocked with return_value which accepts the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
 """
 from __future__ import annotations
 
@@ -48,8 +47,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test: two worktrees, user picks first -> subprocess called with
-    # first worktree's path as sole positional arg.
+    # Test: two worktrees, user picks first -> subprocess called with first worktree's path as sole positional arg.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -190,8 +188,7 @@ def main() -> int:
             print("PASS: --list prints candidates without launching VS Code")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path set in per-worktree config -> VS Code
-    # launched with <worktree>/src/csharp/X as workspace folder.
+    # Test: hub_relative_path set in per-worktree config -> VS Code launched with <worktree>/src/csharp/X as workspace folder.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -283,8 +280,7 @@ def main() -> int:
             print("PASS: hub_relative_path=. -> VS Code launched at worktree root")
 
     # ------------------------------------------------------------------
-    # Regression: hub config has hub_relative_path: "hub-sub", selected
-    # worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
+    # Regression: hub config has hub_relative_path: "hub-sub", selected worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -537,8 +533,7 @@ def main() -> int:
             print("PASS: --slug with empty active list -> spawn not called")
 
     # ------------------------------------------------------------------
-    # Test: filter_excludes_open_worktree — alpha open -> only beta shown,
-    # input "1" selects beta.
+    # Test: filter_excludes_open_worktree — alpha open -> only beta shown, input "1" selects beta.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -579,8 +574,7 @@ def main() -> int:
             print("PASS: filter_excludes_open_worktree — open worktree filtered, remaining selected")
 
     # ------------------------------------------------------------------
-    # Test: filter_empties_list_calls_spawn_then_opens — one worktree open,
-    # filter empties list, spawn called, new worktree opened.
+    # Test: filter_empties_list_calls_spawn_then_opens — one worktree open, filter empties list, spawn called, new worktree opened.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -669,8 +663,7 @@ def main() -> int:
             print("PASS: q_quits_with_zero — q input -> exit 0, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: enter_spawns_and_opens — empty input triggers spawn, new
-    # worktree (gamma) opened via pre/post diff.
+    # Test: enter_spawns_and_opens — empty input triggers spawn, new worktree (gamma) opened via pre/post diff.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -725,8 +718,7 @@ def main() -> int:
             print("PASS: enter_spawns_and_opens — <Enter> -> spawn + open new worktree (gamma)")
 
     # ------------------------------------------------------------------
-    # Test: new_flag_skips_list_and_opens_new — --new flag bypasses filter
-    # and prompt, spawns and opens new worktree.
+    # Test: new_flag_skips_list_and_opens_new — --new flag bypasses filter and prompt, spawns and opens new worktree.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -783,8 +775,7 @@ def main() -> int:
             print("PASS: new_flag_skips_list_and_opens_new — --new skips filter+prompt, opens new worktree")
 
     # ------------------------------------------------------------------
-    # Test: spawn_returns_zero_no_new_entries — <Enter> at prompt, spawn
-    # succeeds but post-diff finds no new worktree -> exit 0, no VS Code.
+    # Test: spawn_returns_zero_no_new_entries — <Enter> at prompt, spawn succeeds but post-diff finds no new worktree -> exit 0, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -826,8 +817,7 @@ def main() -> int:
             print("PASS: spawn_returns_zero_no_new_entries — spawn ok but no new entry -> exit 0, no VS Code")
 
     # ------------------------------------------------------------------
-    # Test: spawn_returns_nonzero — <Enter> at prompt, spawn returns 1 ->
-    # exit 1, no VS Code.
+    # Test: spawn_returns_nonzero — <Enter> at prompt, spawn returns 1 -> exit 1, no VS Code.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -880,8 +870,8 @@ def main() -> int:
             errors += 1
 
     # ------------------------------------------------------------------
-    # Test: probe_failure_falls_back — empty probe result means all
-    # worktrees shown unfiltered; input "1" selects first (alpha).
+    # Test: probe_failure_falls_back — empty probe result means all worktrees shown unfiltered;
+    # input "1" selects first (alpha).
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -920,8 +910,8 @@ def main() -> int:
             print("PASS: probe_failure_falls_back — empty probe -> all shown, user picks 1 (alpha)")
 
     # ------------------------------------------------------------------
-    # Test: probe_returns_unrelated_paths — unrelated paths don't filter
-    # anything; input "2" selects beta.
+    # Test: probe_returns_unrelated_paths — unrelated paths don't filter anything;
+    # input "2" selects beta.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -960,8 +950,7 @@ def main() -> int:
             print("PASS: probe_returns_unrelated_paths — unrelated probe paths -> no filter, user picks 2 (beta)")
 
     # ------------------------------------------------------------------
-    # Test: default_no_probe — without --filter-open, find_open_vscode_paths
-    # is never called.
+    # Test: default_no_probe — without --filter-open, find_open_vscode_paths is never called.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -991,8 +980,7 @@ def main() -> int:
             print("PASS: default_no_probe — without --filter-open, probe not called")
 
     # ------------------------------------------------------------------
-    # Test: filter_open_probe_called — with --filter-open, find_open_vscode_paths
-    # is called exactly once.
+    # Test: filter_open_probe_called — with --filter-open, find_open_vscode_paths is called exactly once.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

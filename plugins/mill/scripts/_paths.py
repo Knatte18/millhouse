@@ -2,106 +2,99 @@
 Single home for path resolution in the mill plugin.
 
 Collects helpers that turn (git context, config) into concrete paths.
-Scripts MUST use these helpers instead of reaching for ``.millhouse/wiki``
-or other junctions directly — junctions are IDE/terminal convenience, not
-a code contract. See CLAUDE.md ``## Path invariants``.
+Scripts MUST use these helpers instead of reaching for ``.millhouse/wiki`` or other junctions directly — junctions are IDE/terminal convenience, not a code contract.
+See CLAUDE.md ``## Path invariants``.
 
 Public API:
     resolve_path(role, repo_root)
-        Re-exported from ``_sibling`` — canonical (role, repo_root) →
-        sibling directory. Hub-form vs prefix-form detection lives there.
+    Re-exported from ``_sibling`` — canonical (role, repo_root) →
+    sibling directory. Hub-form vs prefix-form detection lives there.
 
     resolve_git_root()
-        Thin wrapper around ``git rev-parse --show-toplevel``. Raises
-        ``SystemExit`` with a user-facing message on non-zero exit.
+    Thin wrapper around ``git rev-parse --show-toplevel``. Raises
+    ``SystemExit`` with a user-facing message on non-zero exit.
 
     resolve_wiki_path(git_toplevel)
-        Local-override-first, sibling-default-second resolution for the
-        wiki clone. Stub-aware: when a worktree carries a stub with
-        ``hub_relative_path``, the ``paths.wiki:`` override is read from
-        the real config at ``hub / .millhouse / config.local.yaml``; when
-        no stub is present (or ``hub_relative_path == "."``) the stub itself
-        is the real config. Falls back to ``resolve_path("wiki", main_root)``
-        when no override is found. Does NOT check on-disk existence.
+    Local-override-first, sibling-default-second resolution for the
+    wiki clone. Stub-aware: when a worktree carries a stub with
+    ``hub_relative_path``, the ``paths.wiki:`` override is read from
+    the real config at ``hub / .millhouse / config.local.yaml``; when
+    no stub is present (or ``hub_relative_path == "."``) the stub itself
+    is the real config. Falls back to ``resolve_path("wiki", main_root)``
+    when no override is found. Does NOT check on-disk existence.
 
     resolve_main_worktree_root(git_root)
-        Walk up from any worktree's ``git_root`` to the main worktree
-        root using ``git rev-parse --git-common-dir``. From the main
-        worktree the command returns ``".git"`` (relative); from a child
-        worktree it returns the absolute path to the main worktree's
-        ``.git`` directory. Both cases resolve to the main worktree root
-        after ``.parent``. Raises ``SystemExit`` on non-zero exit.
+    Walk up from any worktree's ``git_root`` to the main worktree
+    root using ``git rev-parse --git-common-dir``. From the main
+    worktree the command returns ``".git"`` (relative); from a child
+    worktree it returns the absolute path to the main worktree's
+    ``.git`` directory. Both cases resolve to the main worktree root
+    after ``.parent``. Raises ``SystemExit`` on non-zero exit.
 
     resolve_worktrees_dir(cfg, git_root)
-        Return the worktrees container directory from config. When
-        ``cfg["spawn"]["worktrees_dir"]`` is set, treat it as a
-        ``<TOKEN>``-template and substitute path tokens derived from
-        ``git_root`` (no slug — this returns the *container* dir, not a
-        per-task subdir). Falls back to ``main_root.parent`` (the direct
-        parent of the main worktree, which equals ``wts/`` in container-form).
-        Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly.
+    Return the worktrees container directory from config. When
+    ``cfg["spawn"]["worktrees_dir"]`` is set, treat it as a
+    ``<TOKEN>``-template and substitute path tokens derived from
+    ``git_root`` (no slug — this returns the *container* dir, not a
+    per-task subdir). Falls back to ``main_root.parent`` (the direct
+    parent of the main worktree, which equals ``wts/`` in container-form).
+    Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly.
 
     resolve_container_path(git_root)
-        Return the container directory for any worktree. In container-form
-        (``main_root.parent.name == "wts"``) returns ``main_root.parent.parent``.
-        In prefix-form returns ``main_root.parent``.
+    Return the container directory for any worktree. In container-form
+    (``main_root.parent.name == "wts"``) returns ``main_root.parent.parent``.
+    In prefix-form returns ``main_root.parent``.
 
     resolve_canonical_worktree_path(container_path, slug)
-        Return the canonical worktree path for ``slug`` under
-        ``container_path``, with no existence check.
+    Return the canonical worktree path for ``slug`` under
+    ``container_path``, with no existence check.
 
     resolve_hub_relative_path(worktree_root, hub_subpath)
-        Translate the ``hub_relative_path`` value from
-        ``.millhouse/config.local.yaml`` into an absolute path.
-        ``"."`` returns ``worktree_root`` unchanged; any relative subpath
-        returns ``worktree_root / hub_subpath`` (trailing slash normalised).
-        Absolute values raise ``ValueError``.
+    Translate the ``hub_relative_path`` value from
+    ``.millhouse/config.local.yaml`` into an absolute path.
+    ``"."`` returns ``worktree_root`` unchanged; any relative subpath
+    returns ``worktree_root / hub_subpath`` (trailing slash normalised).
+    Absolute values raise ``ValueError``.
 
     resolve_active_worktree(container_path, slug, *, cfg, git_root, skip_slug_validation=False)
-        Return the git checkout root for the active task with the given slug.
-        Detection order: (1) in-place mode — when the current branch of
-        ``git_root`` yields a slug (via ``_marker.slug_from_branch``) matching
-        ``slug`` AND ``_inplace.is_inplace`` returns True, return ``git_root``;
-        (2) worktree mode — when ``container_path / "wts" / slug`` exists and
-        its current branch slug matches ``slug``, return that path.
-        Raises ``ActiveWorktreeNotFound`` when neither mode applies.
-        Raises ``ActiveWorktreeSlugMismatch`` when the worktree dir exists but
-        its branch-derived slug differs.
-        ``skip_slug_validation=True`` skips the daemon-backed
-        ``_marker.slug_from_branch`` call in favor of a cheap, git-only
-        branch-prefix comparison — see the function's own docstring.
+    Return the git checkout root for the active task with the given slug.
+    Detection order: (1) in-place mode — when the current branch of ``git_root`` yields a slug (via ``_marker.slug_from_branch``) matching ``slug`` AND ``_inplace.is_inplace`` returns True, return ``git_root``;
+    (2) worktree mode — when ``container_path / "wts" / slug`` exists and its current branch slug matches ``slug``, return that path.
+    Raises ``ActiveWorktreeNotFound`` when neither mode applies.
+    Raises ``ActiveWorktreeSlugMismatch`` when the worktree dir exists but its branch-derived slug differs. ``skip_slug_validation=True`` skips the daemon-backed ``_marker.slug_from_branch`` call in favor of a cheap, git-only
+    branch-prefix comparison — see the function's own docstring.
 
     resolve_active_hub(container_path, slug, *, cfg, git_root, skip_slug_validation=False)
-        Return the hub directory (where ``.millhouse/`` and ``_mill/`` live)
-        for the active task with the given slug. Calls
-        ``resolve_active_worktree`` (threading ``skip_slug_validation``
-        through) then resolves ``hub_relative_path`` with a two-tier lookup:
-        (1) default from ``cfg.get("hub_relative_path", ".")``; (2) override
-        from the resolved worktree's own ``.millhouse/config.local.yaml``
-        when it declares ``hub_relative_path:``. Propagates
-        ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch`` from
-        the inner call.
+    Return the hub directory (where ``.millhouse/`` and ``_mill/`` live)
+    for the active task with the given slug. Calls
+    ``resolve_active_worktree`` (threading ``skip_slug_validation``
+    through) then resolves ``hub_relative_path`` with a two-tier lookup:
+    (1) default from ``cfg.get("hub_relative_path", ".")``; (2) override
+    from the resolved worktree's own ``.millhouse/config.local.yaml``
+    when it declares ``hub_relative_path:``. Propagates
+    ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch`` from
+    the inner call.
 
     resolve_hub_path(cwd)
-        Return the hub directory — assumes CC's cwd equals the hub when mill
-        scripts run. Pass an explicit path for testing; omit for production use.
+    Return the hub directory — assumes CC's cwd equals the hub when mill
+    scripts run. Pass an explicit path for testing; omit for production use.
 
     status_path(worktree_root, cfg)
-        Return the status.md path for ``worktree_root`` driven by
-        ``cfg['paths']['status_md']``, with ``_mill/`` -> ``task/`` compat
-        fallback via ``resolve_task_path``. Raises ``KeyError`` naming
-        ``paths.status_md`` when the key is absent from ``cfg``.
+    Return the status.md path for ``worktree_root`` driven by
+    ``cfg['paths']['status_md']``, with ``_mill/`` -> ``task/`` compat
+    fallback via ``resolve_task_path``. Raises ``KeyError`` naming
+    ``paths.status_md`` when the key is absent from ``cfg``.
 
     sanitize_filename_component(name: str) -> str
-        Replace Windows-reserved characters in ``name`` with hyphens to ensure
-        the result is a valid NTFS filename component. Replaces each of
-        ``: \\ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
-        snapshot filenames, and any other filename component construction.
+    Replace Windows-reserved characters in ``name`` with hyphens to ensure
+    the result is a valid NTFS filename component. Replaces each of
+    ``: \\ / * ? " < > |`` with ``-``. Safe for use in brief filenames,
+    snapshot filenames, and any other filename component construction.
 
     is_self_hosting_task(git_root: Path) -> bool
-        Detect whether ``git_root`` is a millhouse-developing-millhouse
-        (self-hosting) task worktree by checking for
-        ``git_root/plugins/mill/scripts/millpy-implement.py`` on disk.
+    Detect whether ``git_root`` is a millhouse-developing-millhouse
+    (self-hosting) task worktree by checking for
+    ``git_root/plugins/mill/scripts/millpy-implement.py`` on disk.
 """
 from __future__ import annotations
 
@@ -170,24 +163,14 @@ def resolve_git_root(start: Path | None = None) -> Path:
 def resolve_hub_path(cwd: Path | None = None) -> Path:
     """Return the hub directory (the main worktree, where mill-config.yaml lives).
 
-    Primary strategy — cwd walk:
-        Walk upward from the actual cwd toward the git root, checking each
-        directory for ``.millhouse/config.local.yaml``. The first directory
-        that contains it is the hub, *unless* that directory is the git root
-        itself and its config declares ``hub_relative_path``, in which case
-        the hub is that subpath (handles a worktree-root stub pointing to a
-        hub subdirectory).
+    Primary strategy — cwd walk: Walk upward from the actual cwd toward the git root, checking each directory for ``.millhouse/config.local.yaml``.
+        The first directory that contains it is the hub, *unless* that directory is the git root itself and its config declares ``hub_relative_path``, in which case the hub is that subpath (handles a worktree-root stub pointing to a hub subdirectory).
 
-        This handles M2+sub repos (e.g. ``src/csharp/NORCE.Models``) where
-        ``.millhouse/`` lives in a git subdirectory without requiring a stub
-        file at the worktree root.  It also handles the common case (hub ==
-        git root) and cwd-inside-``.millhouse/`` (walks up one level).
+        This handles M2+sub repos (e.g. ``src/csharp/NORCE.Models``) where ``.millhouse/`` lives in a git subdirectory without requiring a stub file at the worktree root.
+        It also handles the common case (hub == git root) and cwd-inside-``.millhouse/`` (walks up one level).
 
-    Fallback — main-worktree stub:
-        When the walk finds nothing (cwd outside git root, or no
-        ``.millhouse/`` anywhere in the tree), check whether the main worktree
-        root has an explicit stub with ``hub_relative_path``.  Rarely needed
-        after the walk, kept for edge-case compatibility.
+    Fallback — main-worktree stub: When the walk finds nothing (cwd outside git root, or no ``.millhouse/`` anywhere in the tree), check whether the main worktree root has an explicit stub with ``hub_relative_path``.
+        Rarely needed after the walk, kept for edge-case compatibility.
 
     Terminal fallback: ``main_root`` (historic behaviour).
     """
@@ -211,16 +194,14 @@ def resolve_hub_path(cwd: Path | None = None) -> Path:
                         return resolve_hub_relative_path(git_root, sub)
                 except Exception:
                     pass
-                # Either no hub_relative_path or we found .millhouse/ inside a
-                # subdir that IS the hub itself — return this directory.
+                # Either no hub_relative_path or we found .millhouse/ inside a subdir that IS the hub itself — return this directory.
                 return check
             if check == git_root_resolved or check == check.parent:
                 break
             check = check.parent
 
-        # Fallback: explicit stub at main worktree root when the walk above
-        # found nothing (e.g. cwd was already the worktree root for an M2+sub
-        # repo and no stub exists there yet).
+        # Fallback: explicit stub at main worktree root when the walk above found nothing (e.g.
+        # cwd was already the worktree root for an M2+sub repo and no stub exists there yet).
         stub_path = main_root / ".millhouse" / "config.local.yaml"
         if stub_path.exists():
             try:
@@ -239,10 +220,10 @@ def resolve_hub_path(cwd: Path | None = None) -> Path:
 def resolve_main_worktree_root(git_root: Path) -> Path:
     """Return the main worktree root from any worktree (including main itself).
 
-    Uses pygit2 to resolve the git common directory. From the main worktree
-    this is the ``.git`` directory; from a child worktree it is the main
-    worktree's ``.git`` directory. Both cases collapse to the main worktree
-    root after ``.parent``.
+    Uses pygit2 to resolve the git common directory.
+    From the main worktree this is the ``.git`` directory;
+    from a child worktree it is the main worktree's ``.git`` directory.
+    Both cases collapse to the main worktree root after ``.parent``.
 
     Args:
         git_root: Absolute path to any worktree's git checkout root.
@@ -262,15 +243,12 @@ def resolve_main_worktree_root(git_root: Path) -> Path:
 def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
     """Return the worktrees container directory.
 
-    When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly, treat it as a
-    ``<TOKEN>``-template and substitute path-level tokens derived from the
-    main worktree root. The slug is intentionally absent — callers that need
-    a per-task path append ``/ slug`` themselves.
+    When ``cfg["spawn"]["worktrees_dir"]`` is set explicitly, treat it as a ``<TOKEN>``-template and substitute path-level tokens derived from the main worktree root.
+    The slug is intentionally absent — callers that need a per-task path append ``/ slug`` themselves.
 
-    Falls back to ``main_root.parent`` (the direct parent of the main worktree)
-    when the key is absent. In container-form this equals ``<container>/wts/``.
-    Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly — there is
-    no automatic prefix-form fallback for the worktrees directory.
+    Falls back to ``main_root.parent`` (the direct parent of the main worktree) when the key is absent.
+    In container-form this equals ``<container>/wts/``.
+    Prefix-form repos must set ``spawn.worktrees_dir:`` explicitly — there is no automatic prefix-form fallback for the worktrees directory.
 
     Args:
         cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
@@ -300,13 +278,10 @@ def resolve_worktrees_dir(cfg: dict, git_root: Path) -> Path:
 def resolve_container_path(git_root: Path) -> Path:
     """Return the container directory for any worktree.
 
-    The canonical answer to "what is the container directory" for
-    cross-worktree operations that need to resolve ``<container>/portals/``,
-    ``<container>/wts/``, or ``<container>/wiki/``.
+    The canonical answer to "what is the container directory" for cross-worktree operations that need to resolve ``<container>/portals/``, ``<container>/wts/``, or ``<container>/wiki/``.
 
-    In container-form (``main_root.parent.name == "wts"``) the container is
-    the grandparent of the main worktree. In prefix-form the container is the
-    direct parent of the main worktree.
+    In container-form (``main_root.parent.name == "wts"``) the container is the grandparent of the main worktree.
+    In prefix-form the container is the direct parent of the main worktree.
 
     Args:
         git_root: Absolute path to any worktree's git checkout root.
@@ -329,8 +304,7 @@ def resolve_short_name(cfg: dict, repo_name: str) -> str:
     """Return the repository short name from config or derive a default.
 
     Returns ``cfg["repo"]["short_name"]`` when set to a non-empty string.
-    Falls back to ``repo_name[:2].upper()`` when the ``repo:`` block is
-    absent, ``short_name`` key is missing, or the value is an empty string.
+    Falls back to ``repo_name[:2].upper()`` when the ``repo:`` block is absent, ``short_name`` key is missing, or the value is an empty string.
 
     Args:
         cfg: Deep-merged config dict (wiki config.yaml + config.local.yaml).
@@ -348,9 +322,9 @@ def resolve_short_name(cfg: dict, repo_name: str) -> str:
 def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
     """Return the hub directory path within a worktree.
 
-    Translates the ``hub_relative_path`` value from ``.millhouse/config.local.yaml``
-    into an absolute path. The caller reads the config; this function only performs
-    path arithmetic.
+    Translates the ``hub_relative_path`` value from ``.millhouse/config.local.yaml`` into an absolute path.
+    The caller reads the config;
+    this function only performs path arithmetic.
 
     Args:
         worktree_root: Absolute path to the worktree's git checkout root.
@@ -365,9 +339,9 @@ def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:
         ValueError: When ``hub_subpath`` is an absolute path.
     """
     sub = Path(hub_subpath)
-    # Check for absolute paths. Path.is_absolute() handles Windows drive-letter paths
-    # (e.g. "C:\foo"); the additional startswith("/") check catches Unix-rooted paths
-    # on Windows where pathlib considers them only drive-relative.
+    # Check for absolute paths.
+    # Path.is_absolute() handles Windows drive-letter paths (e.g. "C:\foo");
+    # the additional startswith("/") check catches Unix-rooted paths on Windows where pathlib considers them only drive-relative.
     if sub.is_absolute() or hub_subpath.startswith("/"):
         raise ValueError(
             f"hub_subpath must be a relative path or '.', got: {hub_subpath!r}"
@@ -402,30 +376,14 @@ def resolve_active_worktree(
     """Return the git checkout root for the active task with the given slug.
 
     Detection order:
-    1. In-place mode: when the current branch of ``git_root`` yields slug
-       (via ``_marker.slug_from_branch``) matching ``slug`` AND
-       ``_inplace.is_inplace`` returns True, return ``git_root``.
-    2. Worktree mode: when ``container_path / "wts" / slug`` exists and its
-       current branch-derived slug matches ``slug``, return that path.
+    1. In-place mode: when the current branch of ``git_root`` yields slug (via ``_marker.slug_from_branch``) matching ``slug`` AND ``_inplace.is_inplace`` returns True, return ``git_root``.
+    2. Worktree mode: when ``container_path / "wts" / slug`` exists and its current branch-derived slug matches ``slug``, return that path.
 
     Args:
-        skip_slug_validation: When True, skip the daemon-backed
-            ``_marker.slug_from_branch`` call used to determine in-place
-            mode's marker slug, and instead derive it with a cheap,
-            daemon-free branch comparison: strip ``cfg["spawn"]["branch_prefix"]``
-            (default ``""``) off the current branch of ``git_root`` and
-            compare directly to ``slug``. This is for callers that already
-            hold a ``slug`` validated by some other means (e.g. an on-disk
-            source) and want to avoid the round-trip ``slug_from_branch``
-            makes to the wiki daemon's ``_dispatch()`` retry loop. It trades
-            ``slug_from_branch``'s full validation (including its
-            non-standard-branch-name fallbacks against Home.md) for a
-            simple prefix-strip comparison, which is correct for the
-            standard ``<branch_prefix><slug>`` branch-naming convention
-            every ``mill-spawn``/``mill-claim`` worktree uses, but will not
-            detect in-place mode for a non-standard branch name — an
-            acceptable trade-off since this parameter is only used by
-            callers in the standard dispatch path.
+        skip_slug_validation: When True, skip the daemon-backed ``_marker.slug_from_branch`` call used to determine in-place mode's marker slug, and instead derive it with a cheap, daemon-free branch comparison: strip ``cfg["spawn"]["branch_prefix"]`` (default ``""``) off the current branch of ``git_root`` and compare directly to ``slug``.
+            This is for callers that already hold a ``slug`` validated by some other means (e.g.
+            an on-disk source) and want to avoid the round-trip ``slug_from_branch`` makes to the wiki daemon's ``_dispatch()`` retry loop.
+            It trades ``slug_from_branch``'s full validation (including its non-standard-branch-name fallbacks against Home.md) for a simple prefix-strip comparison, which is correct for the standard ``<branch_prefix><slug>`` branch-naming convention every ``mill-spawn``/``mill-claim`` worktree uses, but will not detect in-place mode for a non-standard branch name — an acceptable trade-off since this parameter is only used by callers in the standard dispatch path.
 
     Raises:
         ActiveWorktreeNotFound: neither mode applies.
@@ -477,27 +435,20 @@ def resolve_active_hub(
     """Return the hub directory (where ``.millhouse/`` and ``_mill/`` live) for the slug.
 
     Calls ``resolve_active_worktree`` (threading ``skip_slug_validation``
-    through) then resolves ``hub_relative_path``. Resolution order:
+    through) then resolves ``hub_relative_path``.
+        Resolution order:
     1. Default from the caller's cfg: ``cfg.get("hub_relative_path", ".")``.
-    2. Override from the resolved worktree's own ``.millhouse/config.local.yaml``
-       when that file exists and declares ``hub_relative_path:``.
+    2. Override from the resolved worktree's own ``.millhouse/config.local.yaml`` when that file exists and declares ``hub_relative_path:``.
 
     The two-tier resolution covers both cases:
-    - In-place mode (mill-claim): mill-claim writes the stub only at the hub
-      (``<git_root>/<hub_rel>/.millhouse/``), never at ``<git_root>/.millhouse/``.
-      So the worktree-root stub is absent for M2+sub and the caller's cfg is the
-      authoritative source.
-    - Worktree mode (mill-spawn): mill-spawn bootstraps a stub at
-      ``<wt>/.millhouse/config.local.yaml`` carrying ``hub_relative_path:`` so
-      cross-worktree consumers (cleanup, status) that have no cfg about the
-      target can still resolve correctly.
+    - In-place mode (mill-claim): mill-claim writes the stub only at the hub (``<git_root>/<hub_rel>/.millhouse/``), never at ``<git_root>/.millhouse/``.
+        So the worktree-root stub is absent for M2+sub and the caller's cfg is the authoritative source.
+    - Worktree mode (mill-spawn): mill-spawn bootstraps a stub at ``<wt>/.millhouse/config.local.yaml`` carrying ``hub_relative_path:`` so cross-worktree consumers (cleanup, status) that have no cfg about the target can still resolve correctly.
 
     Args:
-        skip_slug_validation: Forwarded to ``resolve_active_worktree`` — see
-            that function's docstring for the daemon-free fast-path tradeoff.
+        skip_slug_validation: Forwarded to ``resolve_active_worktree`` — see that function's docstring for the daemon-free fast-path tradeoff.
 
-    Propagates ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch``
-    from the inner call.
+    Propagates ``ActiveWorktreeNotFound`` and ``ActiveWorktreeSlugMismatch`` from the inner call.
     """
     import yaml
 
@@ -526,17 +477,15 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
 
     Resolution order:
     1. ``<git-toplevel>/.millhouse/config.local.yaml`` ``paths.wiki:`` override.
-       Absolute paths returned as-is; relative paths resolved against the
-       main worktree root (not ``git_toplevel``, which may be a child worktree).
+        Absolute paths returned as-is;
+        relative paths resolved against the main worktree root (not ``git_toplevel``, which may be a child worktree).
     2. ``resolve_path("wiki", main_root)`` — the sibling-path default.
 
-    The local config read is stub-aware: when a worktree carries a stub with
-    ``hub_relative_path``, the ``paths.wiki:`` override is read from the real
-    config at ``hub / .millhouse / config.local.yaml``.
+    The local config read is stub-aware: when a worktree carries a stub with ``hub_relative_path``, the ``paths.wiki:`` override is read from the real config at ``hub / .millhouse / config.local.yaml``.
 
-    The ``.millhouse/wiki`` junction is never consulted. Junctions are
-    IDE/terminal convenience; the real wiki path is computed from the
-    repo's own git-toplevel.
+    The ``.millhouse/wiki`` junction is never consulted.
+    Junctions are IDE/terminal convenience;
+    the real wiki path is computed from the repo's own git-toplevel.
     """
     if Path(git_toplevel).name == "wiki":
         raise SystemExit(
@@ -640,10 +589,8 @@ def require_status_path(project_root: Path, cfg: dict) -> Path:
 def sanitize_filename_component(name: str) -> str:
     """Replace Windows-reserved characters in a string to make it NTFS-safe.
 
-    Replaces every Windows-reserved character (colon, backslash, forward-slash,
-    asterisk, question-mark, double-quote, less-than, greater-than, pipe) with
-    a single hyphen. The result is guaranteed to be a valid filename component
-    on Windows NTFS, macOS, and Linux.
+    Replaces every Windows-reserved character (colon, backslash, forward-slash, asterisk, question-mark, double-quote, less-than, greater-than, pipe) with a single hyphen.
+    The result is guaranteed to be a valid filename component on Windows NTFS, macOS, and Linux.
 
     Args:
         name: String to sanitize (e.g., batch name).
@@ -661,9 +608,6 @@ def is_self_hosting_task(git_root: Path) -> bool:
         git_root: Absolute path to the task worktree's git root.
 
     Returns:
-        True when git_root/plugins/mill/scripts/millpy-implement.py exists on
-        disk, False otherwise -- including when git_root does not exist or is
-        a file rather than a directory (Path.exists() on a nested path under
-        a non-directory returns False rather than raising).
+        True when git_root/plugins/mill/scripts/millpy-implement.py exists on disk, False otherwise -- including when git_root does not exist or is a file rather than a directory (Path.exists() on a nested path under a non-directory returns False rather than raising).
     """
     return (git_root / "plugins" / "mill" / "scripts" / "millpy-implement.py").exists()

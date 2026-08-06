@@ -1,14 +1,14 @@
 """
 Integration test for millpy-review-code.py
 
-The .millhouse/ layout, wiki junction, and slug file are placed inside
-$tmp/project/ (not directly in $tmp/) because the code backend uses
-cwd=project_root for its git commands (git merge-base, git diff).
+The .millhouse/ layout, wiki junction, and slug file are placed inside $tmp/project/ (not directly in $tmp/) because the code backend uses cwd=project_root for its git commands (git merge-base, git diff).
 
 Setup:
   1. Init git repo in $tmp/project/ with main branch.
   2. Create base-file.py, commit as "base" on main.
-  3. Checkout task-branch; apply sample-code-diff.patch; commit.
+  3. Checkout task-branch;
+  apply sample-code-diff.patch;
+  commit.
   4. Seed .millhouse/ + wiki junction + slug file inside $tmp/project/.
   5. Seed active/test-slug/plan/00-overview.md in the fixture wiki.
   6. Invoke millpy-review-code.py with cwd=$tmp/project/.
@@ -217,9 +217,8 @@ def main() -> int:
 
         _git(project_root, "checkout", "-b", "task-branch")
 
-        # Instead of applying a brittle patch fixture, write the modified
-        # base-file.py directly and commit. Diff is generated naturally by
-        # `git diff main..HEAD` inside the code-review backend.
+        # Instead of applying a brittle patch fixture, write the modified base-file.py directly and commit.
+        # Diff is generated naturally by `git diff main..HEAD` inside the code-review backend.
         base_file.write_text(_MODIFIED_FILE_CONTENT, encoding="utf-8")
         _git(project_root, "add", "base-file.py")
         _git(project_root, "commit", "-m", "apply diff")

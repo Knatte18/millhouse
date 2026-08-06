@@ -1,15 +1,12 @@
 """
 mill-color — override the current worktree's VS Code title-bar color.
 
-Rewrites ``.vscode/settings.json`` in the current working directory with
-the selected palette color. The window title is preserved from any existing
-settings.json; if settings.json is absent the title is derived from the repo
-short name (via ``_paths.resolve_short_name``) and the slug derived from the
-current git branch (via ``_marker.slug_from_branch``).
+Rewrites ``.vscode/settings.json`` in the current working directory with the selected palette color.
+The window title is preserved from any existing settings.json;
+if settings.json is absent the title is derived from the repo short name (via ``_paths.resolve_short_name``) and the slug derived from the current git branch (via ``_marker.slug_from_branch``).
 
 Usage:
-    python mill-color.py <color-name>
-    Valid color names: green, purple, blue, yellow, red, cyan, indigo, orange
+    python mill-color.py <color-name> Valid color names: green, purple, blue, yellow, red, cyan, indigo, orange
 
 Exit codes:
     0 — settings.json written successfully
@@ -46,12 +43,12 @@ def _read_existing_window_title(settings_path: Path) -> str | None:
 def main(argv: list[str] | None = None) -> int:
     """Set the VS Code title-bar color for the current worktree.
 
-    Reads an optional existing ``window.title`` from ``.vscode/settings.json``
-    to preserve it. Derives a fallback title from the repo short name and
-    active slug when settings.json is absent.
+    Reads an optional existing ``window.title`` from ``.vscode/settings.json`` to preserve it.
+    Derives a fallback title from the repo short name and active slug when settings.json is absent.
 
     Args:
-        argv: Argument vector. Defaults to ``sys.argv[1:]``.
+        argv: Argument vector.
+        Defaults to ``sys.argv[1:]``.
 
     Returns:
         Exit code (0 = success, 2 = invalid color name, 1 = other error).

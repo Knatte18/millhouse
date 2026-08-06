@@ -146,8 +146,7 @@ def main() -> int:
         except _sandbox_report.SandboxReportError:
             print("PASS: read/invalid-json — SandboxReportError raised")
 
-        # 8. A file whose top-level parsed JSON value is not an object -> raises
-        #    SandboxReportError, not an uncaught AttributeError.
+        # 8. A file whose top-level parsed JSON value is not an object -> raises SandboxReportError, not an uncaught AttributeError.
         for _name, _bad_top_level in (("top-level-array.json", [1, 2, 3]), ("top-level-string.json", "hello")):
             _path = _write_fixture(tmp_dir, _name, _bad_top_level)
             try:

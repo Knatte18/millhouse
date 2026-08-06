@@ -2,24 +2,22 @@
 Review backend for plan artefacts.
 
 Per-batch reviews run in parallel via ThreadPoolExecutor (bulk mode).
-An optional holistic review follows (also bulk). Results are aggregated
-worst-case; all-ERROR runs return ERROR (no raise) so the caller
-receives valid JSON even when every sub-review fails (#84, #228).
+An optional holistic review follows (also bulk).
+Results are aggregated worst-case;
+all-ERROR runs return ERROR (no raise) so the caller receives valid JSON even when every sub-review fails (#84, #228).
 
-Agent mode drives one scope per cycle (this hub disables plan batch review via
-`roles.plan-review.batch.reviewer: null`, so holistic is the only enabled
-scope in practice).
+Agent mode drives one scope per cycle (this hub disables plan batch review via `roles.plan-review.batch.reviewer: null`, so holistic is the only enabled scope in practice).
 
 Public API:
     prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root) -> dict
-        Render prompt and resolve spec for a single scope; return prepare dict.
+    Render prompt and resolve spec for a single scope; return prepare dict.
     finalize(cfg, slug, raw_text, *, scope, round_n, reviews_dir, mill_dir, project_root, wiki_root, git_root) -> dict
-        Parse verdict and write review file for a single scope; return review entry dict.
+    Parse verdict and write review file for a single scope; return review entry dict.
     run(cfg, slug, mill_dir, wiki_root, project_root, *, ...) -> ReviewResult
-        Legacy API; orchestrates parallel per-batch + holistic reviews.
+    Legacy API; orchestrates parallel per-batch + holistic reviews.
 
-resolve_ref_paths is the canonical version from _review_common; no local
-shadow is defined here.
+resolve_ref_paths is the canonical version from _review_common;
+no local shadow is defined here.
 """
 from __future__ import annotations
 
@@ -68,13 +66,11 @@ from _review_common import (
 
 
 def _scan_approved_batches(reviews_dir: Path) -> dict[str, dict]:
-    """Scan reviews_dir for plan-batch reviews; return {stem: carryforward_entry} for approved batches.
+    """Scan reviews_dir for plan-batch reviews;
+return {stem: carryforward_entry} for approved batches.
 
-    For each unique batch stem found via RE_BATCH (with type=='plan'),
-    find the file with the highest round number, parse its verdict, and
-    if APPROVE, build a carryforward dict to splice into reviews[].
-    RE_SIMPLE is checked first per file to avoid mis-attributing a plan-
-    holistic review to a batch.
+    For each unique batch stem found via RE_BATCH (with type=='plan'), find the file with the highest round number, parse its verdict, and if APPROVE, build a carryforward dict to splice into reviews[].
+    RE_SIMPLE is checked first per file to avoid mis-attributing a plan- holistic review to a batch.
     """
     if not reviews_dir.exists():
         return {}
@@ -144,18 +140,19 @@ def _review_one_batch(
     git_root: Path,
     bulk_timeout: int | None,
 ) -> dict:
-    """Review a single plan batch file. Returns a reviews[] entry dict.
+    """Review a single plan batch file.
+Returns a reviews[] entry dict.
 
     Args:
         moves_sources: Plan-wide set of Move source paths (raw token strings).
-            Sources exist pre-implementation, so plan reviewers can see the
-            file being relocated. Resolved via resolve_existing_paths and
-            added to the bulk after deduplication.
+            Sources exist pre-implementation, so plan reviewers can see the file being relocated.
+            Resolved via resolve_existing_paths and added to the bulk after deduplication.
         moves_targets: Plan-wide set of Move target paths (raw token strings).
-            Targets don't exist on disk at plan-review time (they're created as
-            part of the rename). Suppressed in resolve_ref_paths alongside
-            creates_union so downstream batches referencing a move target don't
-            raise ReviewError.
+        Targets don't exist on disk at plan-review time (they're created as
+        part of the rename).
+            Suppressed in resolve_ref_paths alongside
+        creates_union so downstream batches referencing a move target don't
+        raise ReviewError.
     """
     try:
         round_n = discover_round(reviews_dir, "plan", batch_path.stem)
@@ -166,8 +163,7 @@ def _review_one_batch(
 
         raw_refs = parse_batch_refs(batch_path)
         raw_refs_set = set(raw_refs)
-        # Merge move targets into creates suppression set so downstream batches
-        # referencing a move target don't raise ReviewError.
+        # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
@@ -186,8 +182,7 @@ def _review_one_batch(
         ancestors_on_disk = [p for p in ancestors_on_disk if p not in reads_set]
 
         # Resolve Move sources that are not already covered by the batch's own refs.
-        # Sources exist pre-implementation, so resolve_existing_paths is appropriate:
-        # it silently skips any source not on disk rather than hard-failing.
+        # Sources exist pre-implementation, so resolve_existing_paths is appropriate: it silently skips any source not on disk rather than hard-failing.
         moves_on_disk = resolve_existing_paths(
             [s for s in moves_sources if s not in raw_refs_set],
             project_root,
@@ -334,17 +329,11 @@ def prepare(
 
     Args:
         scope: Batch name (e.g., "01-setup") or None for holistic.
-        agent_mode: When True, both the batch-scope and holistic-scope
-            build_tool_rule calls in this function return the agent-mode
-            cell (adds the single Write carve-out for the .out.md report).
-            Defaults to False. This does NOT propagate to
-            ``_review_one_batch``'s or ``run()``'s own build_tool_rule
-            calls -- those belong to the `--stage full` path, which is a
-            separate, non-prepare code path for plan review.
-        reviewer_override: When not None, overrides the config-resolved
-            plan-review holistic reviewer for this call only -- nothing is
-            written back to config. Bypasses the `reviewer: null`
-            disablement and skips the large-prompt auto-switch entirely.
+        agent_mode: When True, both the batch-scope and holistic-scope build_tool_rule calls in this function return the agent-mode cell (adds the single Write carve-out for the .out.md report).
+            Defaults to False.
+            This does NOT propagate to ``_review_one_batch``'s or ``run()``'s own build_tool_rule calls -- those belong to the `--stage full` path, which is a separate, non-prepare code path for plan review.
+        reviewer_override: When not None, overrides the config-resolved plan-review holistic reviewer for this call only -- nothing is written back to config.
+            Bypasses the `reviewer: null` disablement and skips the large-prompt auto-switch entirely.
             No-op when `scope is not None` (batch scope is unaffected).
 
     Returns:
@@ -363,8 +352,8 @@ def prepare(
     root = _load_root_from_overview(overview_path)
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
-    # Move sources exist pre-implementation; plan reviewers should see the file
-    # being relocated so they can verify the move is structurally sound.
+    # Move sources exist pre-implementation;
+    # plan reviewers should see the file being relocated so they can verify the move is structurally sound.
     moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
 
     hub_dir = project_root
@@ -383,8 +372,7 @@ def prepare(
 
         raw_refs = parse_batch_refs(batch_path)
         raw_refs_set = set(raw_refs)
-        # Merge move targets into creates suppression set so downstream batches
-        # referencing a move target don't raise ReviewError.
+        # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets_union
         reads = resolve_ref_paths(
             raw_refs, project_root, root,
@@ -488,8 +476,7 @@ def prepare(
         for batch_path in batch_files:
             for ref in parse_batch_refs(batch_path):
                 all_raw_refs[ref] = None
-        # Merge move targets into creates suppression set so downstream batches
-        # referencing a move target don't raise ReviewError.
+        # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets_union
         all_reads = resolve_ref_paths(
             list(all_raw_refs.keys()), project_root, root,
@@ -583,17 +570,15 @@ def finalize(
     git_root: Path,
     actual_model: str | None = None,
 ) -> dict:
-    """Finalize a plan review for a single scope; return a review entry dict.
+    """Finalize a plan review for a single scope;
+return a review entry dict.
 
     Args:
         raw_text: Raw review output from the reviewer.
         scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
-        actual_model: The model that actually produced this review, used to
-            correct an unreliable self-reported ``reviewer_model:`` line
-            before verdict parsing or disk write; passed through to
-            ``finalize_scope`` on the success path only.
+        actual_model: The model that actually produced this review, used to correct an unreliable self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through to ``finalize_scope`` on the success path only.
 
     Returns:
         Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file", "session_id"}.
@@ -646,24 +631,23 @@ def run(
     """Run plan review: parallel per-batch + optional holistic.
 
     Steps:
-    1. Resolve plan_dir and reviews_dir; discover round.
-    2. Verify overview exists; collect batch files.
-    3. Load reviewers; verify bulk mode.
+    1. Resolve plan_dir and reviews_dir;
+        discover round.
+    2. Verify overview exists;
+        collect batch files.
+    3. Load reviewers;
+        verify bulk mode.
     4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer is null).
-       Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
+        Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
     5. Holistic review (skipped if cfg["roles"]["plan-review"]["holistic"]["reviewer"] is None or no_holistic).
     6. Aggregate and return ReviewResult (all-ERROR → ERROR; no raise).
 
     Args:
-        reviewer_override: When not None, overrides the config-resolved
-            plan-review holistic reviewer for this call only -- nothing is
-            written back to config. Bypasses the `holistic_name is None`
-            disablement in step 3, but not the separate
-            `cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0` gate,
-            which is checked independently and still applies. Skips the
-            large-prompt auto-switch entirely. The per-batch reviewer
-            resolution (the immediately-preceding half of step 3) is
-            completely untouched by this parameter.
+        reviewer_override: When not None, overrides the config-resolved plan-review holistic reviewer for this call only -- nothing is written back to config.
+            Bypasses the `holistic_name is None` disablement in step 3,
+            but not the separate `cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0` gate, which is checked independently and still applies.
+            Skips the large-prompt auto-switch entirely.
+            The per-batch reviewer resolution (the immediately-preceding half of step 3) is completely untouched by this parameter.
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
@@ -699,8 +683,8 @@ def run(
         root = _load_root_from_overview(overview_path)
         creates_union = compute_creates_union(plan_dir)
         deletes_union = compute_deletes_union(plan_dir)
-        # Move sources exist pre-implementation; plan review should see the
-        # file being relocated so the reviewer can verify the move intent.
+        # Move sources exist pre-implementation;
+        # plan review should see the file being relocated so the reviewer can verify the move intent.
         moves_sources_union, moves_targets_union = compute_moves_union(plan_dir)
 
         # 3. Load reviewers via registry
@@ -716,10 +700,8 @@ def run(
 
         holistic_name = cfg["roles"]["plan-review"]["holistic"]["reviewer"]
         if reviewer_override is not None and cfg["roles"]["plan-review"]["holistic"]["rounds"] != 0:
-            # An explicit --reviewer bypasses the `holistic_name is None`
-            # disablement below, but not the independent `rounds == 0` gate
-            # -- a round-0 config still returns no holistic spec even with
-            # an override, per the overview's null-bypass Decision.
+            # An explicit --reviewer bypasses the `holistic_name is None` disablement below,
+            # but not the independent `rounds == 0` gate -- a round-0 config still returns no holistic spec even with an override, per the overview's null-bypass Decision.
             try:
                 holistic_spec = _reviewers.resolve_reviewer_override(
                     registry, reviewer_override, reject_non_claude=False
@@ -867,8 +849,7 @@ def run(
             for batch_path in batch_files:
                 for ref in parse_batch_refs(batch_path):
                     all_raw_refs[ref] = None
-            # Merge move targets into creates suppression set so downstream batches
-            # referencing a move target don't raise ReviewError.
+            # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
             combined_creates = creates_union | moves_targets_union
             all_reads = resolve_ref_paths(
                 list(all_raw_refs.keys()), project_root, root,
@@ -886,8 +867,7 @@ def run(
             reads_set = {*all_reads, overview_path, *batch_files}
             all_creates_on_disk = [p for p in all_creates_on_disk if p not in reads_set]
 
-            # Add move sources to the holistic bulk so the reviewer sees the file
-            # being relocated across all batches in a single prompt.
+            # Add move sources to the holistic bulk so the reviewer sees the file being relocated across all batches in a single prompt.
             run_hol_already_included = reads_set | set(all_creates_on_disk)
             run_hol_moves_on_disk = resolve_existing_paths(
                 [s for s in moves_sources_union if s not in all_raw_refs],

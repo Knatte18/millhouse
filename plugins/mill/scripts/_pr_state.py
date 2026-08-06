@@ -1,15 +1,11 @@
 """
 Shared helper for resolving the state of a GitHub PR associated with a branch.
 
-Provides a single function, ``resolve_pr_state``, that queries the GitHub CLI
-and normalises the result into a stable dict. Both ``millpy-cleanup.py`` (for
-pr-reap teardown) and the ``mill-merge`` skill (to detect pre-merged or
-pre-closed PRs) use this helper, ensuring identical precedence logic and
-fallback behaviour across both callers.
+Provides a single function, ``resolve_pr_state``, that queries the GitHub CLI and normalises the result into a stable dict.
+Both ``millpy-cleanup.py`` (for pr-reap teardown) and the ``mill-merge`` skill (to detect pre-merged or pre-closed PRs) use this helper, ensuring identical precedence logic and fallback behaviour across both callers.
 
 Precedence rule when a branch has multiple PRs: MERGED > OPEN > CLOSED.
-Any condition that prevents a definitive answer (gh absent, non-zero exit,
-empty or malformed output) returns ``state="none"`` without raising.
+Any condition that prevents a definitive answer (gh absent, non-zero exit, empty or malformed output) returns ``state="none"`` without raising.
 """
 from __future__ import annotations
 
@@ -21,21 +17,16 @@ import _subprocess_util
 
 def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
     """
-    Query GitHub for all PRs whose head branch matches ``branch`` and return
-    a normalised state dict.
+    Query GitHub for all PRs whose head branch matches ``branch`` and return a normalised state dict.
 
     The function calls:
         gh pr list --head <branch> --state all --json state,mergeCommit,number,url
 
-    The full JSON array is parsed (no ``--jq`` filter) so that when a branch
-    has accumulated multiple PRs the precedence rule MERGED > OPEN > CLOSED is
-    applied: the "highest priority" state wins regardless of array order. The
-    winning PR object supplies ``number``, ``url``, and ``mergeCommit``.
+    The full JSON array is parsed (no ``--jq`` filter) so that when a branch has accumulated multiple PRs the precedence rule MERGED > OPEN > CLOSED is applied: the "highest priority" state wins regardless of array order.
+    The winning PR object supplies ``number``, ``url``, and ``mergeCommit``.
 
-    The ``merge_commit`` value is kept as the raw gh ``mergeCommit`` object
-    (a dict with at minimum an ``"oid"`` key when the PR was merged), NOT a
-    flattened string. This lets callers use ``(merge_commit or {}).get("oid")``
-    safely.
+    The ``merge_commit`` value is kept as the raw gh ``mergeCommit`` object (a dict with at minimum an ``"oid"`` key when the PR was merged), NOT a flattened string.
+    This lets callers use ``(merge_commit or {}).get("oid")`` safely.
 
     All error conditions collapse to ``state="none"`` without raising:
     - ``_subprocess_util.run`` raises (e.g. ``FileNotFoundError`` when gh is absent)
@@ -48,8 +39,8 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
     Args:
         branch: The head branch name to query (e.g. ``"hanf/my-task"``).
         cwd: Absolute path to the git/hub root passed to the gh subprocess.
-            The caller always supplies this; the helper never defaults to the
-            process cwd.
+            The caller always supplies this;
+            the helper never defaults to the process cwd.
 
     Returns:
         A dict with keys:
@@ -61,8 +52,8 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
     # Sentinel returned whenever no definitive state can be determined.
     _none_result = {"state": "none", "number": None, "url": None, "merge_commit": None}
 
-    # Run the gh query, catching any exception (e.g. FileNotFoundError when
-    # gh is not installed) and mapping it to the "none" fallback.
+    # Run the gh query, catching any exception (e.g.
+    # FileNotFoundError when gh is not installed) and mapping it to the "none" fallback.
     try:
         result = _subprocess_util.run(
             [
@@ -89,9 +80,8 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
     if not isinstance(pr_list, list) or not pr_list:
         return dict(_none_result)
 
-    # Apply precedence MERGED > OPEN > CLOSED across all PR objects in the
-    # array. A branch with a MERGED PR must never be masked by a stale CLOSED
-    # PR that appears earlier in the list.
+    # Apply precedence MERGED > OPEN > CLOSED across all PR objects in the array.
+    # A branch with a MERGED PR must never be masked by a stale CLOSED PR that appears earlier in the list.
     _priority = {"MERGED": 2, "OPEN": 1, "CLOSED": 0}
     winning_obj = None
     winning_priority = -1
@@ -117,7 +107,6 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
         "state": normalised_state,
         "number": winning_obj.get("number"),
         "url": winning_obj.get("url"),
-        # Keep the raw mergeCommit object so callers can do
-        # (merge_commit or {}).get("oid") without extra unwrapping.
+        # Keep the raw mergeCommit object so callers can do (merge_commit or {}).get("oid") without extra unwrapping.
         "merge_commit": winning_obj.get("mergeCommit"),
     }

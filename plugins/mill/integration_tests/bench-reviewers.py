@@ -1,7 +1,6 @@
 """Benchmark harness for named reviewers.
 
-Loads the reviewer registry, renders prompts from fixtures, invokes reviewers
-via _reviewer_single.run(), collects metrics, and writes a results table to .scratch/.
+Loads the reviewer registry, renders prompts from fixtures, invokes reviewers via _reviewer_single.run(), collects metrics, and writes a results table to .scratch/.
 """
 from __future__ import annotations
 

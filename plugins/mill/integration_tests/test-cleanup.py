@@ -1,10 +1,8 @@
 """
 Integration test for millpy-cleanup.py.
 
-Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios
-(done, abandoned, live, orphan-worktree, orphan-active, malformed-status).
-Asserts --dry-run plan output, then asserts the default (apply) run produces
-the correct artefact removals and one wiki commit.
+Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios (done, abandoned, live, orphan-worktree, orphan-active, malformed-status).
+Asserts --dry-run plan output, then asserts the default (apply) run produces the correct artefact removals and one wiki commit.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-cleanup.py
@@ -83,8 +81,7 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path]:
     hub.mkdir()
     _git_init(hub)
 
-    # Seed six scenarios in wiki
-    # 1. done-slug
+    # Seed six scenarios in wiki 1. done-slug
     _write_status_md(wiki / "active" / "done-slug" / "status.md", "done")
 
     # 2. abandoned-slug
@@ -93,8 +90,7 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path]:
     # 3. live-slug
     _write_status_md(wiki / "active" / "live-slug" / "status.md", "implementing")
 
-    # 4. orphan-wt-slug — worktree only, no active/ dir
-    # (no status.md created)
+    # 4. orphan-wt-slug — worktree only, no active/ dir (no status.md created)
 
     # 5. orphan-active-slug — active/ dir only, no Home.md [active] entry
     _write_status_md(wiki / "active" / "orphan-active-slug" / "status.md", "implementing")

@@ -245,8 +245,7 @@ def test_slug_from_branch_retries_on_cold_daemon() -> None:
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
-        # Capture the real task list before patching, so the retry's second
-        # call can still return genuine data.
+        # Capture the real task list before patching, so the retry's second call can still return genuine data.
         real_tasks = _marker.wiki.list_tasks_brief(wiki_path)
         with unittest.mock.patch.object(
             _marker.wiki,
@@ -267,8 +266,7 @@ def test_slug_from_branch_exhausted_retry_propagates_wiki_startup_error() -> Non
             tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active", seed_task=True
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
-        # Both the initial call and the post-wake retry raise, so the
-        # daemon never recovers within the single retry budget.
+        # Both the initial call and the post-wake retry raise, so the daemon never recovers within the single retry budget.
         with unittest.mock.patch.object(
             _marker.wiki, "list_tasks_brief", side_effect=_marker.wiki.WikiStartupError("still cold")
         ), unittest.mock.patch.object(_marker.wiki, "health_check"):
@@ -288,10 +286,7 @@ def test_task_data_retries_on_cold_daemon() -> None:
         )
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         real_tasks = _marker.wiki.list_tasks_brief(wiki_path)
-        # task_data() makes 3 total list_tasks_brief calls after the retry
-        # fix: 2 inside its own slug_from_branch() call (1 failure + 1
-        # retry-success), plus a 3rd from task_data()'s own separate
-        # _list_tasks_brief_with_retry() call.
+        # task_data() makes 3 total list_tasks_brief calls after the retry fix: 2 inside its own slug_from_branch() call (1 failure + 1 retry-success), plus a 3rd from task_data()'s own separate _list_tasks_brief_with_retry() call.
         with unittest.mock.patch.object(
             _marker.wiki,
             "list_tasks_brief",

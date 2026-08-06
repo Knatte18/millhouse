@@ -1,7 +1,8 @@
 """Smoke test for _llm_gemini.run_bulk + run_tool_use + resume-not-supported.
 
-Local-dev only. Requires `gemini` in PATH. Exits 0 on success or when gemini
-is not installed, 1 on failure.
+Local-dev only.
+Requires `gemini` in PATH.
+Exits 0 on success or when gemini is not installed, 1 on failure.
 
 Run from hub root:
     python plugins/mill/integration_tests/smoke-llm-gemini.py
@@ -15,9 +16,8 @@ from pathlib import Path
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
-# Gemini CLI only accesses files inside its workspace and skips gitignored paths.
-# .scratch/ is gitignored, so tool-use tests use a non-gitignored tmp dir next
-# to this file (integration_tests/). The dir is deleted on success.
+# Gemini CLI only accesses files inside its workspace and skips gitignored paths. .scratch/ is gitignored, so tool-use tests use a non-gitignored tmp dir next to this file (integration_tests/).
+# The dir is deleted on success.
 INTEGRATION_TESTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 

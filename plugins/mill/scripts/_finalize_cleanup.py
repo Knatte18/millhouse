@@ -1,9 +1,7 @@
 """
 Helpers for mill-finalize's stacked-branch cleanup logic.
 
-Detects whether a PR base branch tracks the task state directory,
-informing whether cleanup should restore the directory from the base
-(stacked branch case) or remove it (normal case).
+Detects whether a PR base branch tracks the task state directory, informing whether cleanup should restore the directory from the base (stacked branch case) or remove it (normal case).
 """
 from __future__ import annotations
 
@@ -16,9 +14,7 @@ def base_tracks_task_dir(worktree: Path, base_branch: str, task_dir: Path) -> bo
     """
     Check whether ``base_branch`` tracks ``task_dir`` in the repository.
 
-    Used by mill-finalize's PR cleanup to decide whether to restore
-    task_dir from the base branch (stacked case) or remove it
-    (normal case).
+    Used by mill-finalize's PR cleanup to decide whether to restore task_dir from the base branch (stacked case) or remove it (normal case).
 
     Args:
         worktree: Absolute path to the task worktree.
@@ -29,9 +25,8 @@ def base_tracks_task_dir(worktree: Path, base_branch: str, task_dir: Path) -> bo
         True if ``base_branch`` tracks a status.md file inside ``task_dir``;
         False otherwise (including errors).
 
-    The check uses ``git ls-tree <base_branch> -- <task_dir-relative>/status.md``
-    to avoid false positives from empty directories. Forward slashes are
-    enforced for the pathspec via ``.as_posix()`` to handle Windows paths.
+    The check uses ``git ls-tree <base_branch> -- <task_dir-relative>/status.md`` to avoid false positives from empty directories.
+    Forward slashes are enforced for the pathspec via ``.as_posix()`` to handle Windows paths.
     """
     # Compute the worktree-relative form and convert to forward slashes for git.
     try:

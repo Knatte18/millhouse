@@ -116,12 +116,9 @@ def test_render_block_contains_glob_entries() -> int:
 
 
 def test_glob_entries_contains_new_junction_names() -> int:
-    # No trailing slash on these three: .wiki/.portals/.active are junction
-    # targets, which are symlinks on POSIX. Git's trailing-slash patterns
-    # only match real directories, never symlinks — even ones that point at
-    # a directory — so a dir-only pattern silently fails to ignore them on
-    # POSIX while still matching on Windows (junctions are real dir entries
-    # there). Dropping the slash matches both.
+    # No trailing slash on these three: .wiki/.portals/.active are junction targets, which are symlinks on POSIX.
+    # Git's trailing-slash patterns only match real directories, never symlinks — even ones that point at a directory — so a dir-only pattern silently fails to ignore them on POSIX while still matching on Windows (junctions are real dir entries there).
+    # Dropping the slash matches both.
     errors = 0
     for expected in ("**/.portals", "**/.wiki", "**/.active"):
         if expected not in GLOB_ENTRIES:

@@ -1,8 +1,11 @@
 """Unit tests for wiki._sync git operations layer.
 
-Covers: pull() on up-to-date; atomic_write() writes and reads back;
-commit_push() after changes; commit_push() idempotent on no changes;
-non-fast-forward rebase retry; path_guard validation.
+Covers: pull() on up-to-date;
+atomic_write() writes and reads back;
+commit_push() after changes;
+commit_push() idempotent on no changes;
+non-fast-forward rebase retry;
+path_guard validation.
 
 Uses a real tempfile bare repo + working clone (fast, deterministic, no mocks).
 """
@@ -464,10 +467,7 @@ def main() -> int:
             import _setup  # noqa: F811
             from _setup import WikiSetupError  # noqa: E402
 
-            # Build a fake _subprocess_util.run that:
-            #   - allows git clone (returncode 0, stdout/stderr empty)
-            #   - allows rev-parse --abbrev-ref HEAD (returncode 0, stdout "main")
-            #   - makes the first git config (branch.main.remote) fail (returncode 1)
+            # Build a fake _subprocess_util.run that: - allows git clone (returncode 0, stdout/stderr empty) - allows rev-parse --abbrev-ref HEAD (returncode 0, stdout "main") - makes the first git config (branch.main.remote) fail (returncode 1)
             call_count = [0]
 
             def _fake_run(cmd, **kwargs):

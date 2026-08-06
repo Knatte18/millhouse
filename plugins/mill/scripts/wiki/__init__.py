@@ -85,9 +85,7 @@ class WikiValidationError(WikiError):
 class WikiStoreFormatError(WikiError):
     """On-disk tasks.json has a shape the Python store cannot read.
 
-    Raised before TinyDB indexes the data, so the message can name the
-    offending table/doc/task instead of leaking a bare TypeError such as
-    "list indices must be integers or slices, not str".
+    Raised before TinyDB indexes the data, so the message can name the offending table/doc/task instead of leaking a bare TypeError such as "list indices must be integers or slices, not str".
     """
     pass
 

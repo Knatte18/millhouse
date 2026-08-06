@@ -2,9 +2,7 @@
 """
 Unit-level smoke tests for mill-spawn pure helpers.
 
-``pick_task`` and ``pick_worktree_color`` are the two functions with
-enough branching to warrant standalone checks — the rest of mill-spawn
-is covered by ``test-spawn.py``'s end-to-end run.
+``pick_task`` and ``pick_worktree_color`` are the two functions with enough branching to warrant standalone checks — the rest of mill-spawn is covered by ``test-spawn.py``'s end-to-end run.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-spawn-units.py
@@ -21,8 +19,8 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-# millpy-spawn.py has a dash in its filename so plain ``import mill_spawn``
-# doesn't work. Load it directly via importlib.
+# millpy-spawn.py has a dash in its filename so plain ``import mill_spawn`` doesn't work.
+# Load it directly via importlib.
 spec = importlib.util.spec_from_file_location(
     "mill_spawn", SCRIPTS / "millpy-spawn.py"
 )
@@ -88,8 +86,9 @@ def test_pick_worktree_color_skips_used() -> None:
 
 
 def main() -> int:
-    # SKIP: mill-spawn API redesigned in V3; pick_task and pick_worktree_color functions
-    # removed/refactored; test file requires complete rewrite
+    # SKIP: mill-spawn API redesigned in V3;
+    # pick_task and pick_worktree_color functions removed/refactored;
+    # test file requires complete rewrite
     print("SKIP: mill-spawn unit tests require V3 API redesign; see #<github-issue-pending>")
     return 0
 

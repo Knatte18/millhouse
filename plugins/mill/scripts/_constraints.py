@@ -1,20 +1,16 @@
 """
 Read ``CONSTRAINTS.md`` from the hub root, if present.
 
-Some projects ship a top-level ``CONSTRAINTS.md`` listing invariants the
-implementer must respect (e.g. "touch no files under ``vendored/``"). The
-review pipeline and ``mill-start`` both want to inject that content into
-prompts when it exists. Centralising the "find hub root + read file"
-dance in one helper avoids divergent implementations.
+Some projects ship a top-level ``CONSTRAINTS.md`` listing invariants the implementer must respect (e.g. "touch no files under ``vendored/``").
+The review pipeline and ``mill-start`` both want to inject that content into prompts when it exists.
+Centralising the "find hub root + read file" dance in one helper avoids divergent implementations.
 
-Hub-root resolution uses ``git rev-parse --show-toplevel`` so the helper
-works from any subfolder of the hub. Scripts invoked deep inside
-``plugins/mill/scripts/`` get the same answer as scripts run from the
-top level.
+Hub-root resolution uses ``git rev-parse --show-toplevel`` so the helper works from any subfolder of the hub.
+Scripts invoked deep inside ``plugins/mill/scripts/`` get the same answer as scripts run from the top level.
 
 Public API:
     read_if_exists(cwd=None) -> str | None
-        Return the text of ``<hub-root>/CONSTRAINTS.md`` or ``None``.
+    Return the text of ``<hub-root>/CONSTRAINTS.md`` or ``None``.
 """
 from __future__ import annotations
 
@@ -39,20 +35,17 @@ def read_if_exists(cwd: Path | None = None) -> str | None:
     """
     Return the contents of ``CONSTRAINTS.md`` at the hub root, or None.
 
-    ``cwd`` is the directory from which ``git rev-parse --show-toplevel``
-    is run — defaults to the current working directory. Passing an
-    explicit ``cwd`` is useful for tests that want to point at a scratch
-    hub without chdir'ing the calling process.
+    ``cwd`` is the directory from which ``git rev-parse --show-toplevel`` is run — defaults to the current working directory.
+    Passing an explicit ``cwd`` is useful for tests that want to point at a scratch hub without chdir'ing the calling process.
 
     Args:
-        cwd: Directory from which to resolve the git toplevel. If the
-            directory is outside any git repo, returns ``None``.
+        cwd: Directory from which to resolve the git toplevel.
+            If the directory is outside any git repo, returns ``None``.
 
     Returns:
-        The file contents as a string, or ``None`` when either the
-        directory isn't inside a git repo or ``CONSTRAINTS.md`` does not
-        exist at its toplevel. Callers that want to distinguish "no
-        repo" from "no file" should call ``_hub_root`` directly.
+        The file contents as a string,
+        or ``None`` when either the directory isn't inside a git repo or ``CONSTRAINTS.md`` does not exist at its toplevel.
+        Callers that want to distinguish "no repo" from "no file" should call ``_hub_root`` directly.
     """
     root = _hub_root(cwd)
     if root is None:

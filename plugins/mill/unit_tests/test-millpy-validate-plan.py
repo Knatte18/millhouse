@@ -1,9 +1,8 @@
 """Unit tests for millpy-validate-plan.py CLI main().
 
-Tests invoke main() in-process via importlib, patching helpers that require
-real git/wiki state. Four test paths: clean/dirty fixture, --skip-check single,
-and --skip-check multiple. find_active_slug is patched via return_value which
-accepts the new (git_root, wiki_path, cfg) signature without assertion changes.
+Tests invoke main() in-process via importlib, patching helpers that require real git/wiki state.
+Four test paths: clean/dirty fixture, --skip-check single, and --skip-check multiple.
+find_active_slug is patched via return_value which accepts the new (git_root, wiki_path, cfg) signature without assertion changes.
 """
 from __future__ import annotations
 
@@ -292,15 +291,12 @@ def test_cli_multiple_skip_checks_suppress_multiple_checks() -> int:
 
 
 def test_cli_uses_resolve_hub_path_not_cwd_for_project_root() -> int:
-    """#728 repro: hub-in-subdirectory. project_root must come from resolve_hub_path(),
-    not Path.cwd() -- and that same corrected project_root must thread through to
-    load_config, find_active_slug (hub_root param), and _plan_validate.run.
+    """#728 repro: hub-in-subdirectory.
+    project_root must come from resolve_hub_path(), not Path.cwd() -- and that same corrected project_root must thread through to load_config, find_active_slug (hub_root param), and _plan_validate.run.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         fixture_root = Path(tmpdir)
-        # The hub lives in a subdirectory of the outer repo root -- cwd (below)
-        # is deliberately the outer fixture_root, not hub_dir, so a regression to
-        # Path.cwd() would resolve the wrong root and fail these assertions.
+        # The hub lives in a subdirectory of the outer repo root -- cwd (below) is deliberately the outer fixture_root, not hub_dir, so a regression to Path.cwd() would resolve the wrong root and fail these assertions.
         hub_dir = fixture_root / "sub" / "hub"
         plan_dir = hub_dir / "plan"
         wiki_dir = fixture_root / "wiki"
