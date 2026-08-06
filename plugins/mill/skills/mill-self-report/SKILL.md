@@ -6,19 +6,26 @@ argument-hint: "[--auto | free-text steering]"
 
 # mill-self-report
 
-You are reflecting on the work session that just ended (or that you are currently in). Your job: scan your session context for clear bugs in mill tooling — failures, prompt mismatches, tool errors, surprising behavior — distill them into focused bug candidates, present a numbered list to the user, and file the user's selections as GitHub issues via the `millhouse-issue` skill. Be specific and reproducible: each candidate should name the affected component, what went wrong, and (when possible) why.
+You are reflecting on the work session that just ended (or that you are currently in).
+Your job: scan your session context for clear bugs in mill tooling — failures, prompt mismatches, tool errors, surprising behavior — distill them into focused bug candidates, present a numbered list to the user, and file the user's selections as GitHub issues via the `millhouse-issue` skill.
+Be specific and reproducible: each candidate should name the affected component, what went wrong, and (when possible) why.
 
 ## 1. Entry checks
 
-Verify `gh auth status` succeeds. If `gh` is not installed or not authenticated, stop early and tell the user:
+Verify `gh auth status` succeeds.
+If `gh` is not installed or not authenticated, stop early and tell the user:
 
 > `gh` is not authenticated. Run `gh auth login` and re-invoke `/mill-self-report`. (Skipping bug-filing for this run.)
 
-Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the underlying `gh issue create` would fail without auth in either case, and an explicit early message is clearer than letting `millhouse-issue` fall back to a browser URL silently.
+Exit cleanly.
+This check fires for BOTH manual and auto-fire invocations — the underlying `gh issue create` would fail without auth in either case,
+and an explicit early message is clearer than letting `millhouse-issue` fall back to a browser URL silently.
 
 ## 2. Invocation modes
 
-- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged mill-config.yaml + .millhouse/config.local.yaml. The skill receives `--auto` as its argument. This signals auto-file-all mode: all distilled candidates are filed without user confirmation. mill-go fires it at Handoff step 6, AFTER invoking `/mill-merge` in step 5 — including after PR-pending halts (mill-go's step 6 explicitly says "do not treat PR-pending as termination"). mill-merge does not self-report — only the orchestrator does.
+- **Auto-fire from `mill-plan` and `mill-go`:** they invoke this skill at end-of-work IF `pipeline.auto_report: true` in the deep-merged mill-config.yaml + .millhouse/config.local.yaml.
+  The skill receives `--auto` as its argument.
+  This signals auto-file-all mode: all distilled candidates are filed without user confirmation. mill-go fires it at Handoff step 6, AFTER invoking `/mill-merge` in step 5 — including after PR-pending halts (mill-go's step 6 explicitly says "do not treat PR-pending as termination"). mill-merge does not self-report — only the orchestrator does.
 - **Manual:** the user invokes `/mill-self-report` directly.
   - With NO argument, reflect on the current session's events broadly.
   - With a free-text argument (e.g. `/mill-self-report "the Gemini reviewer hung on card 5"`), use the argument as a steering hint focusing the reflection on the topic mentioned.
@@ -26,7 +33,8 @@ Exit cleanly. This check fires for BOTH manual and auto-fire invocations — the
 
 ## 3. Step 1 — Reflect on session context
 
-If you need task-state context (e.g. the current phase, recent plan decisions), read `<worktree-root>/status.md` — task state lives on the task branch at the worktree root, not in the wiki. `<worktree-root>` is `git rev-parse --show-toplevel` from cwd; `status.md` and `discussion.md` are committed files on the branch.
+If you need task-state context (e.g. the current phase, recent plan decisions), read `<worktree-root>/status.md` — task state lives on the task branch at the worktree root, not in the wiki. `<worktree-root>` is `git rev-parse --show-toplevel` from cwd;
+`status.md` and `discussion.md` are committed files on the branch.
 
 Scan your session memory for:
 
@@ -60,7 +68,9 @@ Then exit silently — no toast, no Slack ping, no GH issue, no prompt.
 
 ## 6. Step 4 — Present numbered list
 
-**If the skill argument is `--auto`:** skip the numbered list entirely. Proceed directly to Step 5 with all distilled candidates selected (equivalent to the user having typed `all`). Step 6 (the summary line) always runs regardless of mode.
+**If the skill argument is `--auto`:** skip the numbered list entirely.
+Proceed directly to Step 5 with all distilled candidates selected (equivalent to the user having typed `all`).
+Step 6 (the summary line) always runs regardless of mode.
 
 **Otherwise** (no argument or free-text steering argument): print the candidates as a numbered text list per `mill:conversation` rules (no `AskUserQuestion`):
 
@@ -77,7 +87,8 @@ Followed by:
 
 ## 7. Step 5 — File selected candidates
 
-For each selected candidate, invoke the `millhouse-issue` skill via the Skill tool, passing the candidate's title as the slash-command argument. The body is constructed by `millhouse-issue` from the title plus the auto-collected context (origin, branch, timestamp).
+For each selected candidate, invoke the `millhouse-issue` skill via the Skill tool, passing the candidate's title as the slash-command argument.
+The body is constructed by `millhouse-issue` from the title plus the auto-collected context (origin, branch, timestamp).
 
 For richer body content, this skill MAY pre-write the candidate body to `.scratch/self-report-body-<slug>.md` and reference it from the `/millhouse-issue` invocation if needed — but the simpler approach (title-only invocation, let `millhouse-issue` auto-build the body) is the default.
 
@@ -98,5 +109,8 @@ Filed 0 issues.
 ## Rules
 
 - Never invent bugs that didn't actually happen in this session — when in doubt, leave it off the list.
-- Bugs are about MILL TOOLING, not about the implementation work the user asked for. A failing test in user code is NOT a mill bug; a failing reviewer subprocess IS.
-- Auth is checked at entry (Section 1). The `millhouse-issue` skill itself does NOT check auth — its `gh issue create` invocation falls back to a browser URL on failure — but this skill stops early when unauthenticated for clearer signal in the auto-fire path.
+- Bugs are about MILL TOOLING, not about the implementation work the user asked for.
+  A failing test in user code is NOT a mill bug;
+  a failing reviewer subprocess IS.
+- Auth is checked at entry (Section 1).
+  The `millhouse-issue` skill itself does NOT check auth — its `gh issue create` invocation falls back to a browser URL on failure — but this skill stops early when unauthenticated for clearer signal in the auto-fire path.

@@ -6,7 +6,8 @@ argument-hint: "[base-branch]"
 
 # Create Pull Request
 
-Create a PR from the current branch to a base branch. Auto-generates title and body from commit history.
+Create a PR from the current branch to a base branch.
+Auto-generates title and body from commit history.
 
 ## Usage
 
@@ -15,7 +16,8 @@ Create a PR from the current branch to a base branch. Auto-generates title and b
 /git-pr develop
 ```
 
-No argument: base branch is resolved automatically. With argument: use the given branch as base.
+No argument: base branch is resolved automatically.
+With argument: use the given branch as base.
 
 ## Instructions
 
@@ -33,14 +35,11 @@ If on `main` or `master`: stop and tell the user "You're on main — switch to a
 
 ### 1.5 Detect task branch
 
-Skip this entire check if the `--skip-task-branch-guard` token is present among the
-tokens of `$ARGUMENTS` — mill-finalize passes this flag after it has already handled
-cleanup (removed or restored task_dir), so the guard must not block PR creation.
+Skip this entire check if the `--skip-task-branch-guard` token is present among the tokens of `$ARGUMENTS` — mill-finalize passes this flag after it has already handled cleanup (removed or restored task_dir), so the guard must not block PR creation.
 
 Otherwise, resolve the task state directory via config and check whether it exists.
-When both `$MILL_PYTHON` and `$CLAUDE_PLUGIN_ROOT` are set, use them to resolve the
-status.md path via `_config.load_config` + `_paths.resolve_task_path`; otherwise fall
-back to the literal `$GIT_ROOT/_mill/status.md` check (standalone git-pr outside mill):
+When both `$MILL_PYTHON` and `$CLAUDE_PLUGIN_ROOT` are set, use them to resolve the status.md path via `_config.load_config` + `_paths.resolve_task_path`;
+otherwise fall back to the literal `$GIT_ROOT/_mill/status.md` check (standalone git-pr outside mill):
 
 ```bash
 if case " $ARGUMENTS " in *" --skip-task-branch-guard "*) true ;; *) false ;; esac; then
@@ -73,8 +72,7 @@ else
 fi
 ```
 
-If the task state file is detected to exist via any of the above checks, halt with the
-following message and return without running any subsequent step:
+If the task state file is detected to exist via any of the above checks, halt with the following message and return without running any subsequent step:
 
 > This is a mill task branch — `_mill/` files would land in the PR. Use `/mill-merge` to handle the cleanup commit, archive tag, and Home.md flip in one shot. For mid-task collaborator review, push the branch directly with `git push` and open a draft PR via the GitHub UI.
 
@@ -85,7 +83,8 @@ Otherwise, proceed to step 2.
 Resolve the base branch in this order:
 
 1. **Argument** — strip/ignore the `--skip-task-branch-guard` token from `$ARGUMENTS` first (it is a coordination flag, not the base branch), then take the first remaining non-flag token, if any (e.g. `/git-pr develop` or `/git-pr develop --skip-task-branch-guard`), and use it as the base branch.
-2. **`.millhouse/config.yaml`** — if the file exists and contains a `git.parent-branch` key, use its value. If the file doesn't exist, skip silently.
+2. **`.millhouse/config.yaml`** — if the file exists and contains a `git.parent-branch` key, use its value.
+   If the file doesn't exist, skip silently.
 3. **Default** — `main`.
 
 Verify the base branch exists on the remote:
@@ -107,7 +106,8 @@ git status
 If a merge is in progress:
 
 1. Read `.git/MERGE_HEAD` and `.git/MERGE_MSG` to identify what merge is in progress.
-2. Report to the user: "A merge is in progress: `<MERGE_MSG summary>`. Continue?"
+2. Report to the user: "A merge is in progress: `<MERGE_MSG summary>`.
+   Continue?"
 3. Wait for explicit confirmation before running `git merge --continue`.
 4. If confirmed: complete the merge, then run `git fetch origin <base>` (to ensure remote ref is current) and continue to step 5 (verify).
 5. If denied: stop.
@@ -123,7 +123,8 @@ git merge origin/<base>
 
 If merge conflicts occur:
 - Help the user resolve each conflict.
-- After resolution, stop and tell the user: "Conflicts resolved. Run `/git-pr` again to continue."
+- After resolution, stop and tell the user: "Conflicts resolved.
+  Run `/git-pr` again to continue."
 
 If already up to date or merge succeeds cleanly: continue.
 
@@ -143,7 +144,8 @@ Do not silently skip.
 git push --set-upstream origin <branch>
 ```
 
-Never force-push. Never use `--no-verify`.
+Never force-push.
+Never use `--no-verify`.
 
 ### 7. Check for existing PR
 
@@ -151,9 +153,11 @@ Never force-push. Never use `--no-verify`.
 gh pr view --json url -q .url
 ```
 
-If a PR already exists for this branch: report the URL and stop. Do not create a duplicate.
+If a PR already exists for this branch: report the URL and stop.
+Do not create a duplicate.
 
-If `gh` is not installed: tell the user "Skipping existing-PR check — `gh` not available." Proceed to step 8.
+If `gh` is not installed: tell the user "Skipping existing-PR check — `gh` not available."
+Proceed to step 8.
 
 ### 8. Detect repository
 
@@ -178,7 +182,8 @@ Parsing rules for the fallback:
 
 Result: `owner/repo` (e.g. `Knatte18/millhouse-legacy`).
 
-If both methods fail, stop and tell the user: "Could not detect the repository. Are you in a git repo with a GitHub remote?"
+If both methods fail, stop and tell the user: "Could not detect the repository.
+Are you in a git repo with a GitHub remote?"
 
 ### 9. Generate PR content
 
@@ -188,11 +193,17 @@ Read the commit log for the branch:
 git log origin/<base>..HEAD --oneline
 ```
 
-**Filter noise:** Skip commits whose messages contain any of: `wip`, `fixup`, `typo`, `fmt`, `format`, `merge branch` (case-insensitive). These are housekeeping commits that don't belong in the PR description.
+**Filter noise:** Skip commits whose messages contain any of: `wip`, `fixup`, `typo`, `fmt`, `format`, `merge branch` (case-insensitive).
+These are housekeeping commits that don't belong in the PR description.
 
-**Generate title:** A concise summary of the overall change. If only one meaningful commit, use its message. If multiple, write a summary that captures the intent.
+**Generate title:** A concise summary of the overall change.
+If only one meaningful commit, use its message.
+If multiple, write a summary that captures the intent.
 
-**Generate body:** A markdown summary of the meaningful changes. Group related commits, explain the "why" not the "what". Use bullet points. Keep it concise — a few sentences, not a wall of text.
+**Generate body:** A markdown summary of the meaningful changes.
+Group related commits, explain the "why" not the "what".
+Use bullet points.
+Keep it concise — a few sentences, not a wall of text.
 
 ### 10. Create the PR
 
@@ -218,8 +229,10 @@ open "https://github.com/<owner/repo>/compare/<base>...<branch>?expand=1&title=<
 xdg-open "https://github.com/<owner/repo>/compare/<base>...<branch>?expand=1&title=<url-encoded-title>&body=<url-encoded-body>"
 ```
 
-URL-encode title and body. Detect the platform from the environment.
+URL-encode title and body.
+Detect the platform from the environment.
 
 ### 12. Report
 
-Tell the user the PR URL from `gh` output, or that the browser was opened as fallback.
+Tell the user the PR URL from `gh` output,
+or that the browser was opened as fallback.

@@ -21,7 +21,8 @@ go test ./...
 golangci-lint run
 ```
 
-**Convention: Writing formatters (goimports -w) run on changed files only, never on the whole project. Whole-project build, test, and read-only lint stay whole-project.**
+**Convention: Writing formatters (goimports -w) run on changed files only, never on the whole project.
+Whole-project build, test, and read-only lint stay whole-project.**
 
 ## Failure Handling
 
@@ -41,18 +42,14 @@ The following tools are required and must be installed before running the build 
 - **golangci-lint** — comprehensive linter aggregator
   - Install: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
 
-Before running the build workflow, detect each tool with a bare `PATH` check first, then a
-`$GOPATH/bin` fallback — `go install` (the method recommended above) places binaries in
-`$(go env GOPATH)/bin`, which is not guaranteed to be on `PATH`:
+Before running the build workflow, detect each tool with a bare `PATH` check first, then a `$GOPATH/bin` fallback — `go install` (the method recommended above) places binaries in `$(go env GOPATH)/bin`, which is not guaranteed to be on `PATH`:
 
 ```bash
 command -v goimports >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/goimports"
 command -v golangci-lint >/dev/null 2>&1 || test -x "$(go env GOPATH)/bin/golangci-lint"
 ```
 
-When a tool resolves only via the fallback (bare `command -v` failed but
-`$(go env GOPATH)/bin/<tool>` exists), invoke it via that full path
-(`"$(go env GOPATH)/bin/<tool>"`) for the remainder of the build workflow.
+When a tool resolves only via the fallback (bare `command -v` failed but `$(go env GOPATH)/bin/<tool>` exists), invoke it via that full path (`"$(go env GOPATH)/bin/<tool>"`) for the remainder of the build workflow.
 
 Only when BOTH the bare check and the `$GOPATH/bin` fallback fail for a tool:
 - **Missing goimports**: Report "goimports not found — install with: `go install golang.org/x/tools/cmd/goimports@latest`" and stop.
@@ -70,8 +67,10 @@ Do not silently skip these steps.
 
 Before running tests, verify the project is testable:
 
-1. **Test files:** Look for `*_test.go` files in the project. If none are found, report "No test files found" rather than running `go test` on an empty package.
-2. **Test packages:** Test files are in the same directory as the code they test. A package with at least one `*_test.go` file is testable.
+1. **Test files:** Look for `*_test.go` files in the project.
+   If none are found, report "No test files found" rather than running `go test` on an empty package.
+2. **Test packages:** Test files are in the same directory as the code they test.
+   A package with at least one `*_test.go` file is testable.
 
 ### Defaults
 

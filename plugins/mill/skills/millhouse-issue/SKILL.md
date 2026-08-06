@@ -32,7 +32,9 @@ date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date
 
 ### 2. Auto-pick label
 
-Determine the label from the **user's message** (case-insensitive). If it contains any of these words: `fix`, `crash`, `broken`, `error`, `fail`, `wrong`, `bug` — the label is `bug`. Otherwise the label is `enhancement`.
+Determine the label from the **user's message** (case-insensitive).
+If it contains any of these words: `fix`, `crash`, `broken`, `error`, `fail`, `wrong`, `bug` — the label is `bug`.
+Otherwise the label is `enhancement`.
 
 ### 3. Try creating a GitHub issue with `gh`
 
@@ -71,9 +73,11 @@ open "https://github.com/Knatte18/millhouse/issues/new?labels=<auto-picked label
 xdg-open "https://github.com/Knatte18/millhouse/issues/new?labels=<auto-picked label>&title=<url-encoded title>&body=<url-encoded body>"
 ```
 
-URL-encode the title, body, and label name. Detect the platform from the environment.
+URL-encode the title, body, and label name.
+Detect the platform from the environment.
 
-Note: GitHub's browser URL may not reliably pre-fill labels. Tell the user to verify the label was applied after the page opens.
+Note: GitHub's browser URL may not reliably pre-fill labels.
+Tell the user to verify the label was applied after the page opens.
 
 ### 5. Confirm to the user
 

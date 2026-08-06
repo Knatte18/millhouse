@@ -25,8 +25,10 @@ See `@code:testing` for language-agnostic rules (assertion strictness, mock disc
 
 ### Fixtures over setup
 
-- Use `@pytest.fixture` for shared setup. Avoid `setup_method` / `teardown_method`.
-- Prefer function-scoped fixtures (the default). Use broader scopes (`session`, `module`) only when setup is expensive.
+- Use `@pytest.fixture` for shared setup.
+  Avoid `setup_method` / `teardown_method`.
+- Prefer function-scoped fixtures (the default).
+  Use broader scopes (`session`, `module`) only when setup is expensive.
 - Use `tmp_path` for temporary files instead of manual cleanup.
 
 ### Parametrize for variants
@@ -46,7 +48,8 @@ def test_classify_number(input_value, expected):
 
 ### Assertions
 
-- Use plain `assert` statements. No assertion libraries needed.
+- Use plain `assert` statements.
+  No assertion libraries needed.
 - Compare exact values: `assert result == expected`, not `assert result` or `assert expected in result`.
 - For floating point: `assert result == pytest.approx(expected)`.
 - For exceptions: `with pytest.raises(ValueError, match="specific message")`.

@@ -1,6 +1,8 @@
 # Unit-test timings — tracking #388
 
-Each column = one snapshot. Each row = one test file. Times are wall-clock seconds (Windows, single-threaded `uv run` invocation).
+Each column = one snapshot.
+Each row = one test file.
+Times are wall-clock seconds (Windows, single-threaded `uv run` invocation).
 
 Columns left-to-right: oldest -> newest.
 
@@ -21,40 +23,65 @@ Baseline source: issue #388 (created 2026-05-27 12:36).
 
 ## What's in each column
 
-- **Baseline** — from the issue body. Pre-fix, V3-daemon-per-test.
-- **After SKIP_PUSH (v1)** — server respects `WIKI_DAEMON_SKIP_PUSH=1` (commits run, push is skipped). Modest win; still pays daemon-subprocess spawn cost (~1.5 s) per test.
+- **Baseline** — from the issue body.
+  Pre-fix, V3-daemon-per-test.
+- **After SKIP_PUSH (v1)** — server respects `WIKI_DAEMON_SKIP_PUSH=1` (commits run, push is skipped).
+  Modest win;
+  still pays daemon-subprocess spawn cost (~1.5 s) per test.
 - **After in-process + SKIP_GIT (v2)** — three new test-mode env vars working together:
-  - `WIKI_DAEMON_INPROCESS=1` — `wiki._client._dispatch` routes ops directly to an in-process `WikiServer.handle_request` call. No subprocess, no socket, no token. Saves ~1.5 s of Python interpreter startup per test that hits the daemon.
-  - `WIKI_DAEMON_SKIP_GIT=1` — server skips pull/commit/push entirely. Renders files and updates TinyDB; no git invocations. Saves ~3 × 150 ms per op on Windows. Most tests don't assert on git state.
-  - `WIKI_DAEMON_SKIP_PUSH=1` — fallback when a test does assert on commit log (e.g. test-spawn-core). Commits still happen; only the network push is skipped.
+  - `WIKI_DAEMON_INPROCESS=1` — `wiki._client._dispatch` routes ops directly to an in-process `WikiServer.handle_request` call.
+    No subprocess, no socket, no token.
+    Saves ~1.5 s of Python interpreter startup per test that hits the daemon.
+  - `WIKI_DAEMON_SKIP_GIT=1` — server skips pull/commit/push entirely.
+    Renders files and updates TinyDB;
+    no git invocations.
+    Saves ~3 × 150 ms per op on Windows.
+    Most tests don't assert on git state.
+  - `WIKI_DAEMON_SKIP_PUSH=1` — fallback when a test does assert on commit log (e.g. test-spawn-core).
+    Commits still happen;
+    only the network push is skipped.
   - Test fixture helpers (`_test_helpers.init_wiki_repo`, `test-fold._setup_tempfile_wiki`) also detect `SKIP_GIT` and skip their own dead-weight `git init --bare` + push setup.
 
-  All three default to off in production. `_test_helpers.py` enables `INPROCESS + SKIP_GIT` by default; individual tests that need real commits opt out by clearing `SKIP_GIT` and setting `SKIP_PUSH` before importing helpers.
+  All three default to off in production. `_test_helpers.py` enables `INPROCESS + SKIP_GIT` by default;
+  individual tests that need real commits opt out by clearing `SKIP_GIT` and setting `SKIP_PUSH` before importing helpers.
 
 ## Where the time goes (after-fix, test-fold.py)
 
 - 1 test ~= 1 daemon spawn (~3 s) + N daemon ops (~0.2-0.5 s each, no push).
 - Floor is the daemon spawn — each test creates a fresh tempdir = fresh wiki_path = fresh daemon process.
-- To break that floor: share wiki_path across tests in a file (module-scoped daemon). Bigger change; not done here.
+- To break that floor: share wiki_path across tests in a file (module-scoped daemon).
+  Bigger change;
+  not done here.
 
 ## Tests not yet remeasured
 
-The 9 above are the ones #388 listed. The full suite has ~70 more `test-*.py` files but they were sub-baseline in the issue. If we want a complete picture, run them in batches and append rows.
+The 9 above are the ones #388 listed.
+The full suite has ~70 more `test-*.py` files but they were sub-baseline in the issue.
+If we want a complete picture, run them in batches and append rows.
 
 ## Observations after batch 1
 
 - **Biggest absolute wins:** test-fold (-80 s), test-marker (-53 s), test-millpy-terminal (-31 s).
-- **test-millpy-terminal at 2.8 s** — the SKIP_PUSH path is essentially free here; the previous 34 s was almost all push/pull overhead inside daemons that the test mocked away anyway.
-- **test-claude-sub barely moved (15 -> 14.6 s)** — daemon is not the bottleneck. LLM-stub idle-wait loops are; would need their own optimisation.
-- **test-fold at 23.6 s is now spawn-bound** — 16 fresh tempdirs = 16 daemon spawns × ~1.5 s each. To break that floor, share wiki_path across tests in a file (module-scoped daemon fixture).
-- **test-marker still at 39 s** — each test creates a worktree + wiki + seeds via daemon. Same spawn-per-test floor.
+- **test-millpy-terminal at 2.8 s** — the SKIP_PUSH path is essentially free here;
+  the previous 34 s was almost all push/pull overhead inside daemons that the test mocked away anyway.
+- **test-claude-sub barely moved (15 -> 14.6 s)** — daemon is not the bottleneck.
+  LLM-stub idle-wait loops are;
+  would need their own optimisation.
+- **test-fold at 23.6 s is now spawn-bound** — 16 fresh tempdirs = 16 daemon spawns × ~1.5 s each.
+  To break that floor, share wiki_path across tests in a file (module-scoped daemon fixture).
+- **test-marker still at 39 s** — each test creates a worktree + wiki + seeds via daemon.
+  Same spawn-per-test floor.
 
 ## Next levers (not yet pulled)
 
-1. **Module-scoped daemon fixture** — one wiki_path per test file, reset state between tests. Expected: test-fold ~5 s, test-marker ~8 s.
-2. **Drop bare-origin setup in tests** — with SKIP_PUSH there's no push, so the `bare.git` repo + `git push --set-upstream` calls in `_setup_tempfile_wiki` are dead weight. Maybe 0.5-1 s/test back.
-3. **Reduce daemon-spawn poll cadence** (0.1 s -> 0.02 s in `_ensure_daemon`) — saves 50-100 ms per spawn. Small absolute, but applies to every test.
-4. **Parallelise `run-all.py`** — independent of per-file fixes; could halve wall time on multi-core boxes.
+1. **Module-scoped daemon fixture** — one wiki_path per test file, reset state between tests.
+   Expected: test-fold ~5 s, test-marker ~8 s.
+2. **Drop bare-origin setup in tests** — with SKIP_PUSH there's no push, so the `bare.git` repo + `git push --set-upstream` calls in `_setup_tempfile_wiki` are dead weight.
+   Maybe 0.5-1 s/test back.
+3. **Reduce daemon-spawn poll cadence** (0.1 s -> 0.02 s in `_ensure_daemon`) — saves 50-100 ms per spawn.
+   Small absolute, but applies to every test.
+4. **Parallelise `run-all.py`** — independent of per-file fixes;
+   could halve wall time on multi-core boxes.
 
 ---
 
@@ -94,8 +121,10 @@ Top 10 slowest (still in suite):
 
 ### Architectural changes shipped
 
-1. `WIKI_DAEMON_INPROCESS=1` — auto-register in-process `WikiServer`; bypass subprocess spawn for tests.
-2. `WIKI_DAEMON_SKIP_GIT=1` — server writes `tasks.json` + Home.md only; no git ops at all.
+1. `WIKI_DAEMON_INPROCESS=1` — auto-register in-process `WikiServer`;
+   bypass subprocess spawn for tests.
+2. `WIKI_DAEMON_SKIP_GIT=1` — server writes `tasks.json` + Home.md only;
+   no git ops at all.
 3. `WIKI_DAEMON_SKIP_PUSH=1` — server commits locally but skips push (for tests asserting on commit log).
 4. `_test_helpers.init_minimal_git_repo` — pygit2 implementation, 60ms vs 600ms for subprocess `git init+commit`.
 5. `run-all.py --only test-X.py test-Y.py` — scoped subsets so per-batch `verify:` can avoid the full suite.

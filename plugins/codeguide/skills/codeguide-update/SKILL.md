@@ -4,38 +4,60 @@ description: "Update docs for recently changed source files. Default: current gi
 argument-hint: "[1h | 3d | HEAD~3 | file1 file2 ...]"
 ---
 
-Update `_codeguide/` docs for source files that changed recently. Designed to be fast and non-intrusive — only touches docs for files in scope.
+Update `_codeguide/` docs for source files that changed recently.
+Designed to be fast and non-intrusive — only touches docs for files in scope.
 
 Commit behavior is mode-aware:
-- **Inline mode** → `codeguide_commit.py` stages doc files in the current repo. The outer `@git-commit` skill that invoked us will commit them alongside the source changes.
-- **Sibling mode** → `codeguide_commit.py` stages AND commits doc files inside the sibling repo (its own history). The outer `@git-commit` must NOT try to stage sibling-rooted paths.
+- **Inline mode** → `codeguide_commit.py` stages doc files in the current repo.
+  The outer `@git-commit` skill that invoked us will commit them alongside the source changes.
+- **Sibling mode** → `codeguide_commit.py` stages AND commits doc files inside the sibling repo (its own history).
+  The outer `@git-commit` must NOT try to stage sibling-rooted paths.
 
 ## Resolution
 
-Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo. The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`. If `found == false`, halt and tell the user to run `/codeguide-setup` first.
+Before doing anything else, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` to find the codeguide root for this repo.
+The script prints a JSON object: `{mode, cg_root, sibling_anchor, found}`.
+If `found == false`, halt and tell the user to run `/codeguide-setup` first.
 
 ## Scope
 
 `$ARGUMENTS` controls which source files are in scope:
 
-- No argument → files in the current git diff (staged + unstaged). This is the default when called by `@git-commit`.
+- No argument → files in the current git diff (staged + unstaged).
+  This is the default when called by `@git-commit`.
 - `1h`, `3d`, `2w` → files with git commits in the last hour / 3 days / 2 weeks
 - `HEAD~3` → files changed in the last 3 commits
 - Explicit file/folder paths → only those
 
-On a non-base branch with no argument, the no-arg default expands to `<parent-branch>..HEAD ∪ current-diff` so the post-commit / pre-PR case (clean tree, work already committed) is non-empty. Parent detection is git-native: `origin/HEAD` first, then `origin/main`, then `origin/master`; if none exist, the helper degrades to current-diff-only. File enumeration is delegated to `resolve_scope.py` — see Step 1b below.
+On a non-base branch with no argument, the no-arg default expands to `<parent-branch>..HEAD ∪ current-diff` so the post-commit / pre-PR case (clean tree, work already committed) is non-empty.
+Parent detection is git-native: `origin/HEAD` first, then `origin/main`, then `origin/master`;
+if none exist, the helper degrades to current-diff-only.
+File enumeration is delegated to `resolve_scope.py` — see Step 1b below.
 
 ## Steps
 
-1. **Resolve codeguide root.** See `## Resolution` above.
+1. **Resolve codeguide root.**
+   See `## Resolution` above.
 
-2. **Enumerate source files in scope.** Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve_scope.py $ARGUMENTS` from the repo root. Stdout is one absolute path per line, deduped. Stderr's last non-empty line is a JSON summary `{mode, parent, base_branch, included_committed, included_diff}` for traceability. The helper handles `$ARGUMENTS` parsing (no-arg / `1h` / `HEAD~3` / explicit paths), parent-branch detection via `origin/HEAD`/`origin/main`/`origin/master`, and the `<parent>..HEAD ∪ current-diff` union for the no-arg-on-task-branch case. An optional `--parent <ref>` token may also be present in `$ARGUMENTS` (forwarded by mill callers such as `git-commit`) and takes precedence over this git-native detection when it resolves to a valid ref; an unresolvable `--parent` falls back to the git-native detection unchanged.
+2. **Enumerate source files in scope.**
+   Run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve_scope.py $ARGUMENTS` from the repo root.
+   Stdout is one absolute path per line, deduped.
+   Stderr's last non-empty line is a JSON summary `{mode, parent, base_branch, included_committed, included_diff}` for traceability.
+   The helper handles `$ARGUMENTS` parsing (no-arg / `1h` / `HEAD~3` / explicit paths), parent-branch detection via `origin/HEAD`/`origin/main`/`origin/master`, and the `<parent>..HEAD ∪ current-diff` union for the no-arg-on-task-branch case.
+   An optional `--parent <ref>` token may also be present in `$ARGUMENTS` (forwarded by mill callers such as `git-commit`) and takes precedence over this git-native detection when it resolves to a valid ref;
+   an unresolvable `--parent` falls back to the git-native detection unchanged.
 
-3. **Resolve per file → group by cg-root.** For each source file from Step 2, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` from that file's directory to get `{mode, cg_root, sibling_anchor}`. Group files whose resolve result shares the same `cg_root`. Files with `found == false` (no governing codeguide) → flag and skip. Most repos have a single root codeguide, so typically you get one group. Multi-codeguide repos (repo-level + one-or-more subfolder workspaces) get one group per subtree.
+3. **Resolve per file → group by cg-root.**
+   For each source file from Step 2, run `python ${CLAUDE_PLUGIN_ROOT}/scripts/resolve.py --json` from that file's directory to get `{mode, cg_root, sibling_anchor}`.
+   Group files whose resolve result shares the same `cg_root`.
+   Files with `found == false` (no governing codeguide) → flag and skip.
+   Most repos have a single root codeguide, so typically you get one group.
+   Multi-codeguide repos (repo-level + one-or-more subfolder workspaces) get one group per subtree.
 
 4. **For each group** — each group has its own `mode`, `cg_root`, and (for sibling) `sibling_anchor`:
 
-   a. **Read config:** Load source extensions from `<cg_root>/config.yaml`. Filter the group's files to recognized source extensions only.
+   a. **Read config:** Load source extensions from `<cg_root>/config.yaml`.
+   Filter the group's files to recognized source extensions only.
 
    b. **Read `cgignore.md` and `cgexclude.md`:** Skip files matching ignore or exclude patterns.
 
@@ -46,14 +68,21 @@ On a non-base branch with no argument, the no-arg default expands to `<parent-br
    e. **For each source file in the group's filtered scope:**
 
       - Find the corresponding doc using the guide's naming rules (two-step lookup via Overview.md).
-      - **If source file ends in `.ipynb`:** Read it via `python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <abs-path>` (stdout), never the Read tool. A non-zero exit means skip the file and flag it to the user. When creating a new notebook doc, use the Notebooks doc shape and verbatim-stem naming from `DocumentationGuide.md`.
-      - **If doc exists:** Read the doc and the source file. If the doc is stale or inaccurate, update it. Preserve accurate content.
-      - **If no doc exists and not in cgexclude:** Create it following the guide structure. Update the Overview.md module table.
-      - **If source was deleted** (only applies to git diff scope): Flag the orphan doc to the user. Do not delete it.
+      - **If source file ends in `.ipynb`:** Read it via `python ${CLAUDE_PLUGIN_ROOT}/scripts/nb_digest.py <abs-path>` (stdout), never the Read tool.
+        A non-zero exit means skip the file and flag it to the user.
+        When creating a new notebook doc, use the Notebooks doc shape and verbatim-stem naming from `DocumentationGuide.md`.
+      - **If doc exists:** Read the doc and the source file.
+        If the doc is stale or inaccurate, update it.
+        Preserve accurate content.
+      - **If no doc exists and not in cgexclude:** Create it following the guide structure.
+        Update the Overview.md module table.
+      - **If source was deleted** (only applies to git diff scope): Flag the orphan doc to the user.
+        Do not delete it.
 
    f. **Update Overview.md routing tables** if any docs were added or if routing hints changed.
 
-   g. **Stage / commit for this group:** Collect all absolute paths of docs that were created or updated for this group into a `--file` list. Run:
+   g. **Stage / commit for this group:** Collect all absolute paths of docs that were created or updated for this group into a `--file` list.
+   Run:
 
       ```
       python ${CLAUDE_PLUGIN_ROOT}/scripts/codeguide_commit.py \
@@ -63,9 +92,11 @@ On a non-base branch with no argument, the no-arg default expands to `<parent-br
         -m "codeguide-update: <summary>"
       ```
 
-      Pass the `mode` and (if sibling) `sibling-anchor` that resolve.py returned for THIS group. Never re-invoke `resolve.py` from the helper.
+      Pass the `mode` and (if sibling) `sibling-anchor` that resolve.py returned for THIS group.
+      Never re-invoke `resolve.py` from the helper.
 
-5. **Report** per group: cg_root, mode, files updated/created/flagged. In sibling mode, report the sibling commit SHA for traceability.
+5. **Report** per group: cg_root, mode, files updated/created/flagged.
+   In sibling mode, report the sibling commit SHA for traceability.
 
 ## Rules
 
@@ -73,6 +104,7 @@ On a non-base branch with no argument, the no-arg default expands to `<parent-br
 - Do not touch docs outside the scope.
 - Do not include API signatures, code-derived values, or line-by-line walkthroughs.
 - Inline mode: do NOT commit (the outer `@git-commit` does that). `codeguide_commit.py --mode inline` only stages.
-- Sibling mode: `codeguide_commit.py --mode sibling` stages + commits in the sibling repo. One commit per group.
+- Sibling mode: `codeguide_commit.py --mode sibling` stages + commits in the sibling repo.
+  One commit per group.
 - Multi-codeguide: always process each cg-root's group with its own mode + anchor, never a mixed call.
 - Never read a raw `.ipynb` — obtain its content via `nb_digest.py` (see the Documentation Guide's Notebooks rules).

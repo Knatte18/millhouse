@@ -5,21 +5,25 @@ description: Markdown formatting rules for generated files. Use when writing .md
 
 # Markdown Formatting Skill
 
-Rules for metadata formatting in generated markdown files. Language-agnostic.
+Rules for metadata formatting in generated markdown files.
+Language-agnostic.
 
 ---
 
 ## Fenced YAML for metadata
 
-Use fenced YAML code blocks (` ```yaml `) for all metadata in generated `.md` files. This includes status files, review reports, child registry entries, and any other machine-written markdown.
+Use fenced YAML code blocks (` ```yaml `) for all metadata in generated `.md` files.
+This includes status files, review reports, child registry entries, and any other machine-written markdown.
 
-YAML frontmatter (`---`) is reserved for system-parsed metadata in skill definitions (`SKILL.md`) and plugin manifests. Never use frontmatter for human-facing metadata in generated files — previewers hide it.
+YAML frontmatter (`---`) is reserved for system-parsed metadata in skill definitions (`SKILL.md`) and plugin manifests.
+Never use frontmatter for human-facing metadata in generated files — previewers hide it.
 
 ## Structure
 
 - Use markdown headings (`#`, `##`) to structure the document.
 - Place metadata in fenced YAML code blocks immediately after their heading.
-- Group related fields in a single block. Use separate blocks for separate concerns (e.g., task metadata vs. timeline).
+- Group related fields in a single block.
+  Use separate blocks for separate concerns (e.g., task metadata vs. timeline).
 
 ## No fixed-column hard-wrapping
 
@@ -27,7 +31,8 @@ Do not hard-wrap prose at a fixed column (e.g. ~80-88 characters).
 That habit lands a line break mid-word or mid-phrase (`file-` / `based`) instead of at a sentence or clause boundary, because the break is chosen by character count, not by meaning.
 
 Instead, write one sentence per line — that is a semantic line break.
-Break also inside a long sentence, at an internal independent-clause boundary: a semicolon, or a comma immediately followed by a coordinating conjunction ("but", "and", "or") that is itself immediately followed by an explicit subject — a pronoun (I/you/he/she/it/we/they/this/that/these/those) or a noun phrase — before the next verb.
+Break also inside a long sentence, at an internal independent-clause boundary: a semicolon,
+or a comma immediately followed by a coordinating conjunction ("but", "and", "or") that is itself immediately followed by an explicit subject — a pronoun (I/you/he/she/it/we/they/this/that/these/those) or a noun phrase — before the next verb.
 Standard punctuation already reserves comma-before-conjunction for joining two independent clauses — a compound predicate sharing one subject normally omits the comma — but this rule treats the explicit-subject test as authoritative over the source's own comma placement, since generated prose doesn't always follow that convention.
 When the explicit-subject test is ambiguous, don't break: under-splitting is the safe default, for a script applying this rule mechanically and for an LLM alike.
 

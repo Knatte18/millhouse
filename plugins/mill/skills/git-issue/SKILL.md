@@ -15,7 +15,9 @@ Create a GitHub issue on the repo you're currently working in.
 /git-issue Fix login redirect loop: The redirect happens after OAuth callback
 ```
 
-The first `:` separates title from body. If no `:` is present, the entire argument is the title and no body is set. Both title and body are trimmed of leading/trailing whitespace.
+The first `:` separates title from body.
+If no `:` is present, the entire argument is the title and no body is set.
+Both title and body are trimmed of leading/trailing whitespace.
 
 ## Instructions
 
@@ -57,17 +59,23 @@ Parsing rules for the fallback:
 
 Result: `owner/repo` (e.g. `Knatte18/millhouse-legacy`).
 
-If both methods fail, stop and tell the user: "Could not detect the repository. Are you in a git repo with a GitHub remote?"
+If both methods fail, stop and tell the user: "Could not detect the repository.
+Are you in a git repo with a GitHub remote?"
 
 ### 3. Auto-pick label
 
-Determine the label from the **title** (case-insensitive). If the title contains any of these words: `fix`, `crash`, `broken`, `error`, `fail`, `wrong`, `bug` — the label is `bug`. Otherwise the label is `enhancement`.
+Determine the label from the **title** (case-insensitive).
+If the title contains any of these words: `fix`, `crash`, `broken`, `error`, `fail`, `wrong`, `bug` — the label is `bug`.
+Otherwise the label is `enhancement`.
 
-No `gh label list` call. No user prompt. Apply the label silently.
+No `gh label list` call.
+No user prompt.
+Apply the label silently.
 
 ### 4. Create the issue
 
-Run `gh issue create`. Use simple quoting for `--title` and heredoc quoting for `--body` (to safely handle quotes, newlines, and special characters):
+Run `gh issue create`.
+Use simple quoting for `--title` and heredoc quoting for `--body` (to safely handle quotes, newlines, and special characters):
 
 ```bash
 gh issue create --repo <owner/repo> \
@@ -95,9 +103,13 @@ open "https://github.com/<owner/repo>/issues/new?title=<url-encoded-title>&body=
 xdg-open "https://github.com/<owner/repo>/issues/new?title=<url-encoded-title>&body=<url-encoded-body>&labels=<auto-picked label>"
 ```
 
-URL-encode title, body, and label name. Omit `&body=` if no body was provided. Always include `&labels=`. Detect the platform from the environment.
+URL-encode title, body, and label name.
+Omit `&body=` if no body was provided.
+Always include `&labels=`.
+Detect the platform from the environment.
 
-Note: GitHub's browser URL may not reliably pre-fill labels. Tell the user to verify the label was applied after the page opens.
+Note: GitHub's browser URL may not reliably pre-fill labels.
+Tell the user to verify the label was applied after the page opens.
 
 ### 6. Confirm
 

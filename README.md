@@ -1,8 +1,12 @@
 # Millhouse
 
-Millhouse (MH) is a task orchestration system for [Claude Code](https://claude.ai/code). It manages the full lifecycle of coding tasks — from triaging GitHub issues to merging finished code — using AI subagents for design, planning, implementation, and review.
+Millhouse (MH) is a task orchestration system for [Claude Code](https://claude.ai/code).
+It manages the full lifecycle of coding tasks — from triaging GitHub issues to merging finished code — using AI subagents for design, planning, implementation, and review.
 
-Each task runs in its own isolated git worktree. A separate wiki repository holds the task index. Claude subagents do the heavy lifting; the operator approves at key checkpoints.
+Each task runs in its own isolated git worktree.
+A separate wiki repository holds the task index.
+Claude subagents do the heavy lifting;
+the operator approves at key checkpoints.
 
 ## Inspiration
 
@@ -41,11 +45,13 @@ GitHub issues
 
 ### Worktree isolation
 
-Every task lives on its own branch in its own worktree under `wts/<slug>/`. A junction-based portal (`portals/<slug>/`) gives skills a stable path to the task's `_mill/` state directory (status, plan, reviews, briefs) without hard-coding worktree paths.
+Every task lives on its own branch in its own worktree under `wts/<slug>/`.
+A junction-based portal (`portals/<slug>/`) gives skills a stable path to the task's `_mill/` state directory (status, plan, reviews, briefs) without hard-coding worktree paths.
 
 ### AI subagents
 
-`mill-go` is a lean orchestrator — it reads only `status.md` and plan metadata. The actual work is done by two subagent types:
+`mill-go` is a lean orchestrator — it reads only `status.md` and plan metadata.
+The actual work is done by two subagent types:
 
 - **Implementer** (`mill:mill-implementer`) — reads a batch of cards, writes code, runs the verify command, commits.
 - **Reviewer** (`mill:mill-reviewer`) — reviews diffs, returns a structured verdict (APPROVE / REQUEST_CHANGES with BLOCKING / NIT findings).
@@ -54,11 +60,13 @@ The Builder loops until all batches approve, then optionally runs a holistic rev
 
 ### Wiki
 
-The task index lives in a sibling git clone (`../wiki/`). Skills never write directly to the wiki directory — all mutations go through the wiki daemon client (`wiki/_client.py`), which holds a write lock and commits atomically.
+The task index lives in a sibling git clone (`../wiki/`).
+Skills never write directly to the wiki directory — all mutations go through the wiki daemon client (`wiki/_client.py`), which holds a write lock and commits atomically.
 
 ## Configuration
 
-`mill-config.yaml` in the hub root controls reviewer models, batch sizes, dispatch mode, and pipeline behaviour. A local override at `.millhouse/config.local.yaml` is gitignored.
+`mill-config.yaml` in the hub root controls reviewer models, batch sizes, dispatch mode, and pipeline behaviour.
+A local override at `.millhouse/config.local.yaml` is gitignored.
 
 Key settings:
 
