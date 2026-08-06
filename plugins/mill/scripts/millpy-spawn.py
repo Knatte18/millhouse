@@ -2,12 +2,16 @@
 mill-spawn — claim one task from the wiki Home.md and spin up a worktree for it.
 
 Flow:
-    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction for IDE/terminal convenience only).
+    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction
+        for IDE/terminal convenience only).
         2. Fast-forward pull the wiki so we pick against current state.
         3. Parse ``Home.md``;
-        pick a task via ``pick_task_single_or_multi`` (numbered picker on unmarked tasks, exit 0 when backlog is empty).
-        4. Under the wiki lock: mark the chosen task ``[active]``, regenerate ``_Sidebar.md``, and commit+push.
-        5. Create the worktree at ``<worktrees-dir>/<slug>`` on branch ``<branch-prefix>/<slug>`` (prefix optional).
+        pick a task via ``pick_task_single_or_multi`` (numbered picker on unmarked tasks, exit 0
+            when backlog is empty).
+        4. Under the wiki lock: mark the chosen task ``[active]``, regenerate ``_Sidebar.md``, and
+            commit+push.
+        5. Create the worktree at ``<worktrees-dir>/<slug>`` on branch ``<branch-prefix>/<slug>``
+            (prefix optional).
         6. Propagate ``.millhouse/`` (minus ``wiki``, ``active`` junctions).
         7. Recreate junctions from the wiki config's ``junctions:`` block inside the new worktree.
         8. Pick a non-green VS Code title-bar colour not in use by sibling worktrees;
@@ -16,7 +20,8 @@ Flow:
    10. Print worktree-path, branch, and status path on stdout.
 
 Usage:
-    python plugins/mill/scripts/mill-spawn.py [--slug <slug>] # skip the picker, claim this specific slug [--dry-run] # print decisions;
+    python plugins/mill/scripts/mill-spawn.py [--slug <slug>] # skip the picker, claim this specific
+        slug [--dry-run] # print decisions;
         make no changes
 
 Exit codes:

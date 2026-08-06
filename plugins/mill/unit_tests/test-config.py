@@ -747,7 +747,8 @@ def test_load_config_sub_project_hub_overlay() -> None:
 
 
 def test_load_config_repo_layer_yaml_crash_falls_back() -> None:
-    """load_config falls back to template defaults instead of raising when the repo-layer mill-config.yaml contains literal merge-conflict markers.
+    """load_config falls back to template defaults instead of raising when the repo-layer
+    mill-config.yaml contains literal merge-conflict markers.
 """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -782,7 +783,8 @@ def test_load_config_repo_layer_yaml_crash_falls_back() -> None:
 
 
 def test_load_config_repo_layer_clean_yaml_unaffected() -> None:
-    """A clean, valid repo-layer mill-config.yaml still merges normally -- Card 1's try/except does not change the non-crash path's behavior.
+    """A clean, valid repo-layer mill-config.yaml still merges normally -- Card 1's try/except does
+    not change the non-crash path's behavior.
 """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -897,10 +899,14 @@ def test_worktree_template_augments_template_cfg() -> None:
 
 
 def test_worktree_template_crash_falls_through_to_hub_template() -> None:
-    """load_config falls through to the hub-root cache-lag template candidate when the worktree-root candidate exists but fails to parse (literal merge-conflict markers).
+    """load_config falls through to the hub-root cache-lag template candidate when the worktree-root
+    candidate exists but fails to parse (literal merge-conflict markers).
 
-    Deliberately uses DISTINCT directories for hub_root and worktree_root -- unlike test_worktree_template_augments_template_cfg, which reuses one directory for both.
-    Reusing one directory here would make "the worktree_root candidate" and "the hub_root candidate" the same file on disk, so breaking one breaks both loop candidates and assertion (c) below would pass even against a still-broken (non-fall-through) implementation.
+    Deliberately uses DISTINCT directories for hub_root and worktree_root -- unlike
+    test_worktree_template_augments_template_cfg, which reuses one directory for both.
+    Reusing one directory here would make "the worktree_root candidate" and "the hub_root candidate"
+    the same file on disk, so breaking one breaks both loop candidates and assertion (c) below would
+    pass even against a still-broken (non-fall-through) implementation.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -1124,10 +1130,14 @@ def test_review_common_load_config_container_layout() -> None:
 
 
 def test_review_common_load_config_unparseable_repo_layer_does_not_raise() -> None:
-    """_review_common.load_config does not raise ReviewError when the repo-layer mill-config.yaml exists but is unparseable (literal merge-conflict markers).
+    """_review_common.load_config does not raise ReviewError when the repo-layer mill-config.yaml
+    exists but is unparseable (literal merge-conflict markers).
 
-    The missing-source strictness raise at _review_common.py:2003-2007 fires only on the conjunction ``not template_path.exists() and mill_cfg_path is None``.
-    resolve_repo_config_path (which feeds mill_cfg_path) returns a non-None path whenever a candidate file EXISTS on disk, regardless of whether it parses -- so a present-but-broken repo-layer file makes the conjunction False and no raise occurs.
+    The missing-source strictness raise at _review_common.py:2003-2007 fires only on the conjunction
+    ``not template_path.exists() and mill_cfg_path is None``.
+    resolve_repo_config_path (which feeds mill_cfg_path) returns a non-None path whenever a
+    candidate file EXISTS on disk, regardless of whether it parses -- so a present-but-broken
+    repo-layer file makes the conjunction False and no raise occurs.
     This documents existing behavior (verified against _review_common.py:2001-2007);
     no production edit is needed or made by this test.
     """
@@ -1407,7 +1417,8 @@ def test_dispatch_shim_unknown_value_falls_back_to_subprocess() -> None:
 
 def test_git_namespace_no_unknown_key_warning() -> None:
     """
-    The git namespace is registered in the template with parent-branch, require_pr_to_base, and base_branch, so loading a valid git block should not emit unknown-key warning.
+    The git namespace is registered in the template with parent-branch, require_pr_to_base, and
+    base_branch, so loading a valid git block should not emit unknown-key warning.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -1439,7 +1450,8 @@ def test_git_namespace_no_unknown_key_warning() -> None:
 
 def test_git_unknown_subkey_still_warns() -> None:
     """
-    Even though git is registered, a typo in a git subkey (e.g., bogus-key) should still emit an unknown-key warning for git.bogus-key.
+    Even though git is registered, a typo in a git subkey (e.g., bogus-key) should still emit an
+    unknown-key warning for git.bogus-key.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -1469,7 +1481,8 @@ def test_git_unknown_subkey_still_warns() -> None:
 
 def test_load_config_rename_detect_pct_key_present() -> None:
     """
-    Verify that the real mill-config.yaml template registers pipeline.rename_detect_pct with a default value of 30 and that loading it does not emit an unknown-key warning.
+    Verify that the real mill-config.yaml template registers pipeline.rename_detect_pct with a
+    default value of 30 and that loading it does not emit an unknown-key warning.
     """
     real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
     assert real_template_path.exists(), f"Real template not found at {real_template_path}"
@@ -1502,7 +1515,8 @@ def test_load_config_rename_detect_pct_key_present() -> None:
 
 def test_load_config_done_gate_key_present() -> None:
     """
-    Verify that the real mill-config.yaml template contains the pipeline.done_gate key with a null value.
+    Verify that the real mill-config.yaml template contains the pipeline.done_gate key with a null
+    value.
     """
     # Resolve the real template path (not synthetic via _setup_plugin_template)
     real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"

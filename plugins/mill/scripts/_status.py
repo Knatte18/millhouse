@@ -2,11 +2,17 @@
 Render + mutate ``status.md`` — the per-task state file.
 
 mill-spawn writes the initial file via :func:`render_initial`;
-all later skills (mill-start, mill-plan, mill-go) mutate fields with :func:`update_field` or :func:`append_phase`, and mill-go owns the ``## Batches`` section via :func:`init_batches` / :func:`set_batch_field` / :func:`read_batches`.
+all later skills (mill-start, mill-plan, mill-go) mutate fields with :func:`update_field` or
+:func:`append_phase`, and mill-go owns the ``## Batches`` section via :func:`init_batches` /
+:func:`set_batch_field` / :func:`read_batches`.
 
-Why ``## Batches`` is its own fenced-yaml block rather than a key inside the top ``` ```yaml ``` ``` block: the top block contains ``task_description: |`` — a literal-block scalar whose indentation is fragile.
-Re-serialising the whole top block via ``yaml.safe_dump`` to mutate one list item would risk collapsing the block scalar into a quoted string.
-Keeping ``batches:`` in its own section lets us parse and rewrite just that block, never touching the top block.
+Why ``## Batches`` is its own fenced-yaml block rather than a key inside the top ``` ```yaml ``` ```
+block: the top block contains ``task_description: |`` — a literal-block scalar whose indentation is
+fragile.
+Re-serialising the whole top block via ``yaml.safe_dump`` to mutate one list item would risk
+collapsing the block scalar into a quoted string.
+Keeping ``batches:`` in its own section lets us parse and rewrite just that block, never touching
+the top block.
 
 Public API:
     render_initial(task_title, task_description, timestamp, parent_branch, slug, branch) -> str
@@ -47,12 +53,15 @@ def _require_path(status_path, fn_name: str) -> None:
     """Guard against callers passing a plain ``str`` instead of a ``Path``.
 
     Every public function below reads ``status_path`` with ``Path.read_text`` / ``Path.exists``;
-    a plain ``str`` has neither method, so without this guard the failure surfaces as a bare, unexplained ``AttributeError`` deep inside this module (GitHub #597).
-    Raising a clear ``TypeError`` naming both the offending function and the expected type lets a caller fix the bug at the call site instead of debugging this module's internals.
+    a plain ``str`` has neither method, so without this guard the failure surfaces as a bare,
+    unexplained ``AttributeError`` deep inside this module (GitHub #597).
+    Raising a clear ``TypeError`` naming both the offending function and the expected type lets a
+    caller fix the bug at the call site instead of debugging this module's internals.
 
     Args:
         status_path: The value passed by the caller in place of a ``pathlib.Path``.
-        fn_name: The public function's own name, as a literal string, used verbatim in the error message.
+        fn_name: The public function's own name, as a literal string, used verbatim in the error
+        message.
     """
     if not isinstance(status_path, Path):
         raise TypeError(
@@ -71,8 +80,10 @@ def _strip_leading_comment(text: str) -> str:
     """Drop the leading ``<!-- ... -->`` template header if present.
 
     The template file has a human-facing HTML comment describing its tokens;
-    that comment is useful for anyone browsing the repo but would be noise in an actual ``status.md``.
-    We strip only a comment that starts at the very first character of the file — trailing comments or comments mid-file are preserved.
+    that comment is useful for anyone browsing the repo but would be noise in an actual
+    ``status.md``.
+    We strip only a comment that starts at the very first character of the file — trailing comments
+    or comments mid-file are preserved.
     """
     stripped = text.lstrip()
     if not stripped.startswith("<!--"):
@@ -95,15 +106,18 @@ def render_initial(
     """
     Render the phase=discussing status.md for ``task_title``.
 
-    Reads the template once per call (cheap; the file is tiny), strips the leading documentation comment, and substitutes placeholders via ``_render.render``.
+    Reads the template once per call (cheap; the file is tiny), strips the leading documentation
+    comment, and substitutes placeholders via ``_render.render``.
     Callers typically write the returned string to ``<wiki>/active/<slug>/status.md``.
 
     Args:
         task_title: Human-readable task name;
             appears as the YAML ``task:`` value.
-        task_description: One-or-more-paragraph description; injected under the YAML ``task_description: |`` key so multi-line values render as a literal block.
+        task_description: One-or-more-paragraph description; injected under the YAML
+            ``task_description: |`` key so multi-line values render as a literal block.
             Newlines in the input are preserved as-is;
-            the template's `` `` indent applies to the first line only, so multi-line values remain valid YAML only when the caller does not include leading spaces.
+            the template's `` `` indent applies to the first line only, so multi-line values remain
+                valid YAML only when the caller does not include leading spaces.
         timestamp: ISO-8601 UTC timestamp for the timeline entry, e.g. ``"2026-04-22T14:32:05Z"``.
         parent_branch: The branch the hub was on at spawn time.
             mill-merge / mill-cleanup read this to know where to merge back to.
@@ -136,8 +150,10 @@ def render_initial(
 
 def _split_fences(text: str, fence_open: str) -> tuple[int, int]:
     """
-    Return ``(block_start, block_end)`` line indices for the first fenced block opened by ``fence_open``.
-    Indices point at the content lines (between the open and close fences), i.e. ``text.splitlines()`` slice ``[block_start:block_end]`` is the body.
+    Return ``(block_start, block_end)`` line indices for the first fenced block opened by
+    ``fence_open``.
+    Indices point at the content lines (between the open and close fences), i.e.
+    ``text.splitlines()`` slice ``[block_start:block_end]`` is the body.
 
     Raises ``ValueError`` if the block is missing or unterminated.
     """
@@ -187,18 +203,22 @@ def update_field(status_path: Path, key: str, value: str) -> None:
     """
     Rewrite ``<key>:`` in the top ``` ```yaml ``` ``` block of ``status_path``.
 
-    Only single-line ``key: value`` rows are supported — multi-line ``task_description: |`` style blocks cannot be updated via this helper because the indent rules require awareness of the surrounding block-scalar shape.
+    Only single-line ``key: value`` rows are supported — multi-line ``task_description: |`` style
+    blocks cannot be updated via this helper because the indent rules require awareness of the
+    surrounding block-scalar shape.
     Callers that need multi-line updates should re-render the whole file.
 
     Args:
         status_path: Absolute path to the status.md file.
         key: YAML key to mutate (must already exist in the block).
-        value: Written via ``_yaml_writer.quote_scalar`` so values containing YAML-special characters (``:``, ``#``, leading ``-``, etc.) are quoted automatically.
+        value: Written via ``_yaml_writer.quote_scalar`` so values containing YAML-special
+            characters (``:``, ``#``, leading ``-``, etc.) are quoted automatically.
             Strict-key behaviour is preserved — ``key`` must already exist in the YAML block;
             absent keys raise ``ValueError``.
 
     Raises:
-        ValueError: the file lacks a yaml block, the block is unterminated, or ``key`` is not present at a scalar row.
+        ValueError: the file lacks a yaml block, the block is unterminated, or ``key`` is not
+        present at a scalar row.
     """
     _require_path(status_path, "update_field")
     text = status_path.read_text(encoding="utf-8")
@@ -223,8 +243,10 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
 
     Three mutations happen atomically from the caller's viewpoint:
 
-    1. ``phase:`` in the top yaml block is overwritten with ``blocked`` (via ``_yaml_writer.quote_scalar`` for consistency with ``append_phase``).
-    2. ``blocked_reason:`` in the top yaml block is written with ``reason`` (via ``_yaml_writer.quote_scalar``).
+    1. ``phase:`` in the top yaml block is overwritten with ``blocked`` (via
+        ``_yaml_writer.quote_scalar`` for consistency with ``append_phase``).
+    2. ``blocked_reason:`` in the top yaml block is written with ``reason`` (via
+        ``_yaml_writer.quote_scalar``).
         If the key already exists it is rewritten in place;
         if absent, a new row is inserted immediately after the ``phase:`` row.
     3. A ``blocked '<quoted timestamp>'`` row is appended to the ``## Timeline`` code block.
@@ -234,12 +256,14 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
     Args:
         status_path: Absolute path to the status.md file.
         reason: Human-readable explanation for the block;
-            written through ``_yaml_writer.quote_scalar`` so colons and other YAML-special characters are handled automatically.
+            written through ``_yaml_writer.quote_scalar`` so colons and other YAML-special
+                characters are handled automatically.
         timestamp: ISO-8601 UTC timestamp for the timeline row;
             written through ``_yaml_writer.quote_scalar`` to match ``render_initial``'s quoted form.
 
     Raises:
-        ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block, or the timeline block is absent.
+        ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block,
+        or the timeline block is absent.
     """
     _require_path(status_path, "set_blocked")
     text = status_path.read_text(encoding="utf-8")
@@ -296,7 +320,9 @@ def get_module_verify_baseline(status_path: Path) -> str | None:
     """
     Return the cached ``module_verify_baseline:`` value from the top yaml block.
 
-    This is the task-scoped cache the baseline-aware module-wide verify gate reads: ``None`` means "not yet computed" (the key is absent, or present as an explicit ``null``) -- the expected state before the task's first baseline computation runs, not an error condition.
+    This is the task-scoped cache the baseline-aware module-wide verify gate reads: ``None`` means
+    "not yet computed" (the key is absent, or present as an explicit ``null``) -- the expected state
+    before the task's first baseline computation runs, not an error condition.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -305,7 +331,8 @@ def get_module_verify_baseline(status_path: Path) -> str | None:
         ``"clean"``, ``"pre-existing-failures"``, or ``None``.
 
     Raises:
-        ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to parse as yaml.
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to
+        parse as yaml.
     """
     _require_path(status_path, "get_module_verify_baseline")
     data = read(status_path)
@@ -316,16 +343,21 @@ def set_module_verify_baseline(status_path: Path, value: str) -> None:
     """
     Write ``module_verify_baseline:`` in the top yaml block of ``status_path``.
 
-    Mirrors ``set_blocked``'s insert-in-place-or-append pattern for ``blocked_reason:``: if a ``module_verify_baseline:`` row already exists in the block it is rewritten in place;
-    otherwise a new row is inserted immediately after ``parent:`` -- that field's natural neighbor in the template's field ordering, since the row does not exist in ``status-discussing.md``'s template and must be inserted the first time a baseline is computed.
+    Mirrors ``set_blocked``'s insert-in-place-or-append pattern for ``blocked_reason:``: if a
+    ``module_verify_baseline:`` row already exists in the block it is rewritten in place;
+    otherwise a new row is inserted immediately after ``parent:`` -- that field's natural neighbor
+    in the template's field ordering, since the row does not exist in ``status-discussing.md``'s
+    template and must be inserted the first time a baseline is computed.
 
     Args:
         status_path: Absolute path to the status.md file.
         value: Must be the literal string ``"clean"`` or ``"pre-existing-failures"``.
-            Written through ``_yaml_writer.quote_scalar`` for consistency with every other string field in this module.
+            Written through ``_yaml_writer.quote_scalar`` for consistency with every other string
+                field in this module.
 
     Raises:
-        ValueError: ``value`` is not one of the two allowed states, the file lacks a yaml block, the block is unterminated, or the block has no ``parent:`` row to insert after.
+        ValueError: ``value`` is not one of the two allowed states, the file lacks a yaml block, the
+        block is unterminated, or the block has no ``parent:`` row to insert after.
     """
     _require_path(status_path, "set_module_verify_baseline")
     if value not in _MODULE_VERIFY_BASELINE_STATES:
@@ -363,7 +395,9 @@ def clear_module_verify_baseline(status_path: Path) -> None:
     """
     Remove the ``module_verify_baseline:`` row from the top yaml block, if present.
 
-    A no-op (not an error) when the row is already absent, so this function is safe to call unconditionally before every baseline recompute -- including the very first one, where the field has never been written.
+    A no-op (not an error) when the row is already absent, so this function is safe to call
+    unconditionally before every baseline recompute -- including the very first one, where the field
+    has never been written.
     Mirrors ``append_phase``'s ``blocked_reason:`` deletion mechanics.
 
     Args:
@@ -396,20 +430,27 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
     1. ``phase:`` in the top yaml block is overwritten with the new value.
     2. A ``<phase> <timestamp>`` row is appended to the ``## Timeline`` code block.
 
-    The function reads, rewrites, and writes the file once — we don't use ``update_field`` for step 1 because it would re-read and re-write the file, doubling I/O for no gain.
-    When the new phase is anything other than ``blocked``, any existing ``blocked_reason:`` row in the top yaml
-    block is removed in the same write — ``blocked_reason:`` only has meaning while ``phase: blocked``.
+    The function reads, rewrites, and writes the file once — we don't use ``update_field`` for step
+    1 because it would re-read and re-write the file, doubling I/O for no gain.
+    When the new phase is anything other than ``blocked``, any existing ``blocked_reason:`` row in
+    the top yaml
+    block is removed in the same write — ``blocked_reason:`` only has meaning while ``phase:
+    blocked``.
 
     Args:
         status_path: Absolute path to the status.md file.
         phase: Written via ``_yaml_writer.quote_scalar`` inside the YAML block.
-            Phase names from the closed v2 set (``discussing``, ``planning``, ``coding``, ``done``, plus per-round variants like ``plan-review-r1``) are YAML-safe and pass through unquoted;
+            Phase names from the closed v2 set (``discussing``, ``planning``, ``coding``, ``done``,
+                plus per-round variants like ``plan-review-r1``) are YAML-safe and pass through
+                unquoted;
             the helper guards against future phase names that might contain YAML-special characters.
         timestamp: ISO-8601 UTC timestamp for the timeline row.
-            The value is written through `_yaml_writer.quote_scalar` so the on-disk row matches `render_initial`'s quoted form.
+            The value is written through `_yaml_writer.quote_scalar` so the on-disk row matches
+                `render_initial`'s quoted form.
 
     Raises:
-        ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block, or the timeline block is absent.
+        ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block,
+        or the timeline block is absent.
     """
     _require_path(status_path, "append_phase")
     text = status_path.read_text(encoding="utf-8")
@@ -488,7 +529,8 @@ def _find_batches_block(lines: list[str]) -> tuple[int, int, int, int] | None:
     - ``heading_idx`` points at the ``## Batches`` line,
     - ``fence_open_idx`` points at ``\`\`\`yaml``,
     - ``fence_close_idx`` points at the closing ``\`\`\``,
-    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or EOF).
+    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or
+    EOF).
 
     Returns ``None`` if the heading is absent.
     """
@@ -575,8 +617,10 @@ def _serialise_batches(batches: list[dict]) -> str:
 def _write_batches(status_path: Path, batches: list[dict]) -> None:
     """Replace or insert the ``## Batches`` section with ``batches``.
 
-    If the section already exists, the fenced-yaml block is rewritten in place (preserving everything around it).
-    If it does not, the new section is appended to the end of the file with a leading blank-line separator.
+    If the section already exists, the fenced-yaml block is rewritten in place (preserving
+    everything around it).
+    If it does not, the new section is appended to the end of the file with a leading blank-line
+    separator.
     """
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -604,7 +648,8 @@ def read_batches(status_path: Path) -> list[dict]:
     """Return the batches list from ``## Batches``,
 or ``[]`` if absent.
 
-    Raises ``ValueError`` if the section exists but its yaml fence is malformed — that is a corruption we want to surface, not silently mask with an empty list.
+    Raises ``ValueError`` if the section exists but its yaml fence is malformed — that is a
+    corruption we want to surface, not silently mask with an empty list.
     """
     _require_path(status_path, "read_batches")
     text = status_path.read_text(encoding="utf-8")
@@ -626,10 +671,12 @@ def read_status(status_path: Path) -> dict:
     """Return a summary dict parsed from ``status_path``.
 
     Returns:
-        ``{"phase": str, "task": str|None, "current_batch": str|None, "last_timeline_entry": str|None, "blocked_reason": str|None}``
+        ``{"phase": str, "task": str|None, "current_batch": str|None, "last_timeline_entry":
+        str|None, "blocked_reason": str|None}``
 
     Raises:
-        ValueError: file missing, no yaml block, yaml parse error, missing ``phase:`` key, or ``read_batches`` raises ValueError.
+        ValueError: file missing, no yaml block, yaml parse error, missing ``phase:`` key, or
+        ``read_batches`` raises ValueError.
     """
     _require_path(status_path, "read_status")
     if not status_path.exists():
@@ -692,13 +739,17 @@ def read_status(status_path: Path) -> dict:
 def read_full(status_path: Path) -> dict:
     """Return the complete yaml block and full timeline from ``status_path``.
 
-    Unlike ``read_status``, which returns a slim summary, this returns the raw parsed contents without lossy summarisation — suitable for display tools that need to show everything.
+    Unlike ``read_status``, which returns a slim summary, this returns the raw parsed contents
+    without lossy summarisation — suitable for display tools that need to show everything.
 
     Returns:
-        ``{"yaml": dict, "timeline": list[str]}`` ``yaml`` contains all keys from the top yaml block. ``timeline`` is the list of non-empty raw lines from the ``## Timeline`` text fence, in file order.
+        ``{"yaml": dict, "timeline": list[str]}`` ``yaml`` contains all keys from the top yaml
+        block. ``timeline`` is the list of non-empty raw lines from the ``## Timeline`` text fence,
+        in file order.
 
     Raises:
-        ValueError: file missing, yaml block missing/unterminated/malformed, or timeline block missing/unterminated.
+        ValueError: file missing, yaml block missing/unterminated/malformed, or timeline block
+        missing/unterminated.
     """
     _require_path(status_path, "read_full")
     if not status_path.exists():
@@ -733,8 +784,11 @@ def read_full(status_path: Path) -> dict:
 def read_parent_branch(status_path: Path) -> str | None:
     """Return the ``parent:`` value from the top yaml block of ``status_path``.
 
-    Used by ``mill-cleanup`` to determine which branch to check out after an in-place task is cleaned up.
-    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or the ``parent:`` key is not present — callers that need the value to exist must raise their own error.
+    Used by ``mill-cleanup`` to determine which branch to check out after an in-place task is
+    cleaned up.
+    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or the
+    ``parent:`` key is not present — callers that need the value to exist must raise their own
+    error.
 
     Args:
         status_path: Absolute path to the task's ``status.md`` file.
@@ -772,7 +826,8 @@ def phase_entry_timestamp(
 
     Returns:
         The ISO-8601 timestamp string (with surrounding quotes stripped),
-        or ``None`` if fewer than ``occurrence`` matches are found, the matched row has no timestamp field, or ``status_path`` does not exist.
+        or ``None`` if fewer than ``occurrence`` matches are found, the matched row has no timestamp
+        field, or ``status_path`` does not exist.
 
     Raises:
         ValueError: if the timeline block is malformed (unterminated).
@@ -812,7 +867,8 @@ def read_slug(status_path: Path) -> str:
     """Return the ``slug:`` value from the top yaml block,
 or the parent dir name.
 
-    Falls back silently to ``status_path.parent.name`` when the field is absent — the slug is fully derivable from the directory, so the fallback produces no warning.
+    Falls back silently to ``status_path.parent.name`` when the field is absent — the slug is fully
+    derivable from the directory, so the fallback produces no warning.
 
     Args:
         status_path: Absolute path to the task's ``status.md`` file.
@@ -872,7 +928,8 @@ def init_batches(status_path: Path, names: list[str]) -> None:
     """Seed the ``## Batches`` section with every batch in ``pending`` state.
 
     Idempotent: calling with the same ``names`` list produces the same output.
-    Calling with a different list REPLACES the existing section — intended for use only at mill-go's entry before any batch has started.
+    Calling with a different list REPLACES the existing section — intended for use only at mill-go's
+    entry before any batch has started.
     Callers resuming an existing run must not pass through this function.
     """
     _require_path(status_path, "init_batches")
@@ -888,8 +945,10 @@ def set_batch_field(
 ) -> None:
     """Mutate one field on one batch entry in ``## Batches``.
 
-    Validates ``key`` is in the small known set and (for ``state:``) that the value is one of the declared states.
-    Unknown keys raise ``ValueError`` so typos fail loudly rather than silently writing a field no consumer reads.
+    Validates ``key`` is in the small known set and (for ``state:``) that the value is one of the
+    declared states.
+    Unknown keys raise ``ValueError`` so typos fail loudly rather than silently writing a field no
+    consumer reads.
     """
     _require_path(status_path, "set_batch_field")
     if key not in _BATCH_ALLOWED_KEYS:
@@ -919,7 +978,8 @@ def set_batch_fields(
 ) -> None:
     """Atomically mutate multiple fields on one batch entry in ``## Batches``.
 
-    Validates all keys before any mutation — a single ``read_batches → mutate all → _write_batches`` cycle ensures no partial write is possible.
+    Validates all keys before any mutation — a single ``read_batches → mutate all → _write_batches``
+    cycle ensures no partial write is possible.
     """
     _require_path(status_path, "set_batch_fields")
     for key in fields:
@@ -953,13 +1013,16 @@ def _find_recovery_log_block(lines: list[str]) -> tuple[int, int, int, int] | No
     r"""Locate the recovery-log section's heading and fenced-text body.
 
     Structurally mirrors ``_find_batches_block``,
-    but scans for ``_RECOVERY_LOG_HEADING`` and the ``\`\`\`text`` fence (``_TIMELINE_FENCE``) instead of ``_BATCHES_HEADING`` and a yaml fence — the recovery log is a plain append-only text block, not a yaml list.
+    but scans for ``_RECOVERY_LOG_HEADING`` and the ``\`\`\`text`` fence (``_TIMELINE_FENCE``)
+    instead of ``_BATCHES_HEADING`` and a yaml fence — the recovery log is a plain append-only text
+    block, not a yaml list.
 
     Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)`` where:
     - ``heading_idx`` points at the ``## Tracked-file recovery log`` line,
     - ``fence_open_idx`` points at the opening ``\`\`\`text``,
     - ``fence_close_idx`` points at the closing ``\`\`\``,
-    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or EOF).
+    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or
+    EOF).
 
     Returns ``None`` if the heading is absent.
     """
@@ -1005,21 +1068,30 @@ def append_recovery_log(
     """
     Append one audit row recording a tracked-file restore to ``status.md``.
 
-    The ``## Tracked-file recovery log`` section is created lazily on first call, mirroring ``_write_batches``'s lazy-insert-if-absent pattern for ``## Batches`` — but unlike ``## Batches``, which replaces its whole section on every write, this section is append-only on every subsequent call, matching ``## Timeline``'s append-only convention instead: each call adds one new row inside the existing fenced block, never rewriting or dropping a prior row.
+    The ``## Tracked-file recovery log`` section is created lazily on first call, mirroring
+    ``_write_batches``'s lazy-insert-if-absent pattern for ``## Batches`` — but unlike ``##
+    Batches``, which replaces its whole section on every write, this section is append-only on every
+    subsequent call, matching ``## Timeline``'s append-only convention instead: each call adds one
+    new row inside the existing fenced block, never rewriting or dropping a prior row.
 
-    This function is the caller's explicit, separate audit-append step. ``_treeguard.check_and_restore`` itself never calls this function or touches ``status.md`` — callers that want the deletion-and-restore event logged must call this helper themselves after inspecting ``check_and_restore``'s return value.
+    This function is the caller's explicit, separate audit-append step.
+    ``_treeguard.check_and_restore`` itself never calls this function or touches ``status.md`` —
+    callers that want the deletion-and-restore event logged must call this helper themselves after
+    inspecting ``check_and_restore``'s return value.
 
     Args:
         status_path: Absolute path to the status.md file.
         timestamp: ISO-8601 UTC timestamp for the restore event;
-            written through ``_yaml_writer.quote_scalar`` to match ``append_phase``'s quoted timeline-row convention.
+            written through ``_yaml_writer.quote_scalar`` to match ``append_phase``'s quoted
+                timeline-row convention.
         restored_paths: The hub-relative paths that were restored, in the
         order ``_treeguard.check_and_restore`` reported them.
             Joined
         with ``", "`` into a single row.
 
     Raises:
-        ValueError: the recovery-log heading is present but its fenced block is missing or unterminated.
+        ValueError: the recovery-log heading is present but its fenced block is missing or
+        unterminated.
     """
     _require_path(status_path, "append_recovery_log")
     text = status_path.read_text(encoding="utf-8")

@@ -1,10 +1,14 @@
 """Unit tests for plugins/mill/scripts/_claude_settings.py.
 
 Covers:
-  - merge_permission_allowlist: settings file absent -> created with permissions.allow containing exactly MILL_SUBAGENT_TOOLS
-  - merge_permission_allowlist: pre-existing allow/deny/additionalDirectories block survives the merge, with new tool names appended and no existing entries removed, duplicated, or reordered
-  - merge_permission_allowlist: calling twice in a row is idempotent -- same allow list both times, second call skips the write entirely
-  - MILL_SUBAGENT_TOOLS: matches the union of mill-implementer.md's and mill-reviewer.md's tools: frontmatter, so the two can never drift
+  - merge_permission_allowlist: settings file absent -> created with permissions.allow containing
+  exactly MILL_SUBAGENT_TOOLS
+  - merge_permission_allowlist: pre-existing allow/deny/additionalDirectories block survives the
+  merge, with new tool names appended and no existing entries removed, duplicated, or reordered
+  - merge_permission_allowlist: calling twice in a row is idempotent -- same allow list both times,
+  second call skips the write entirely
+  - MILL_SUBAGENT_TOOLS: matches the union of mill-implementer.md's and mill-reviewer.md's tools:
+  frontmatter, so the two can never drift
 """
 from __future__ import annotations
 

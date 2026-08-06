@@ -1,22 +1,40 @@
 """
 Integration test for `_verify_baseline.compute_baseline`.
 
-`compute_baseline` inherently exercises real `git worktree add`/`remove`, real junction creation, and real subprocess verify commands -- none of which unit tests may use per CLAUDE.md's repo-layout convention ("`unit_tests/` -- in-memory/tempfile fixtures; no real git/LLM. `integration_tests/` -- invokes real git and optionally real claude; uses `.scratch/` for fixtures.").
+`compute_baseline` inherently exercises real `git worktree add`/`remove`, real junction creation,
+and real subprocess verify commands -- none of which unit tests may use per CLAUDE.md's repo-layout
+convention ("`unit_tests/` -- in-memory/tempfile fixtures; no real git/LLM. `integration_tests/` --
+invokes real git and optionally real claude; uses `.scratch/` for fixtures.").
 This is the dedicated real-git coverage `_mill/discussion.md`'s Testing section calls for.
 
 Layout mirrors `test-merge.py`:
 
-    <container>/remote.git bare "remote" for the fixture repo <container>/hub hub clone (parent branch "main" + a "collision-branch" used only by case 6) <container>/case<N> one task-branch worktree per case, each playing the role of `project_root`/`git_root` for a single `compute_baseline` call <container>/scripts/*.py tiny verify-command fixture scripts `compute_baseline` runs verbatim
+    <container>/remote.git bare "remote" for the fixture repo <container>/hub hub clone (parent
+    branch "main" + a "collision-branch" used only by case 6) <container>/case<N> one task-branch
+    worktree per case, each playing the role of `project_root`/`git_root` for a single
+    `compute_baseline` call <container>/scripts/*.py tiny verify-command fixture scripts
+    `compute_baseline` runs verbatim
 
-Six cases, matching `06-baseline-integration-test.md` Card 13's Requirements exactly, each calling the real (unmocked) `compute_baseline` function:
+Six cases, matching `06-baseline-integration-test.md` Card 13's Requirements exactly, each calling
+the real (unmocked) `compute_baseline` function:
 
-    1. Clean baseline: a verify command that always passes -> "clean", transient worktree cleaned up.
-    2. Confirmed pre-existing failure: a verify command that always fails -> "pre-existing-failures" only after both the transient-worktree retry and the task-worktree control run have been exercised (asserted via an invocation counter).
-    3. Flaky-then-passes: a verify command that fails once then passes -> "clean" via retry corroboration; asserted invoked more than once.
-    4. Path-sensitive deterministic failure: a verify command that fails specifically at the transient worktree's path but passes at the task worktree's path -> "clean" via control-run corroboration.
-    5. Dependency-junction reuse: a `.venv`-shaped marker directory at the task worktree's top level is junctioned into the transient worktree and read successfully;
+    1. Clean baseline: a verify command that always passes -> "clean", transient worktree cleaned
+        up.
+    2. Confirmed pre-existing failure: a verify command that always fails -> "pre-existing-failures"
+        only after both the transient-worktree retry and the task-worktree control run have been
+        exercised (asserted via an invocation counter).
+    3. Flaky-then-passes: a verify command that fails once then passes -> "clean" via retry
+        corroboration; asserted invoked more than once.
+    4. Path-sensitive deterministic failure: a verify command that fails specifically at the
+        transient worktree's path but passes at the task worktree's path -> "clean" via control-run
+        corroboration.
+    5. Dependency-junction reuse: a `.venv`-shaped marker directory at the task worktree's top level
+        is junctioned into the transient worktree and read successfully;
         the real marker directory in the task worktree survives cleanup untouched.
-    6. Cleanup on exception: `compute_baseline` is forced to raise (junction-creation collision -- the parent branch itself tracks a `.venv` path, so junctioning the task worktree's real `.venv` into the freshly-checked-out transient worktree collides) and the transient worktree is still torn down.
+    6. Cleanup on exception: `compute_baseline` is forced to raise (junction-creation collision --
+        the parent branch itself tracks a `.venv` path, so junctioning the task worktree's real
+        `.venv` into the freshly-checked-out transient worktree collides) and the transient worktree
+        is still torn down.
 
 Exits 0 on PASS, 1 on any failure;
 scratch is preserved on failure for inspection.
@@ -56,10 +74,14 @@ def _assert(cond: bool, msg: str) -> None:
 
 def _setup_hub(container: Path) -> Path:
     """
-    Build a bare "remote" + a working `hub` clone with one commit on `main`, plus a second `collision-branch` whose tip tracks a real `.venv/tracked.txt` file -- used only by case 6 to force a junction-creation collision inside `compute_baseline`'s transient worktree.
+    Build a bare "remote" + a working `hub` clone with one commit on `main`, plus a second
+    `collision-branch` whose tip tracks a real `.venv/tracked.txt` file -- used only by case 6 to
+    force a junction-creation collision inside `compute_baseline`'s transient worktree.
 
     Returns the `hub` clone path.
-    Every case's task worktree is created as a linked `git worktree` off this same repo (via `_new_worktree`), so `compute_baseline`'s internal `git -C <git_root> rev-parse` / `worktree add` calls always resolve against the same ref namespace.
+    Every case's task worktree is created as a linked `git worktree` off this same repo (via
+    `_new_worktree`), so `compute_baseline`'s internal `git -C <git_root> rev-parse` / `worktree
+    add` calls always resolve against the same ref namespace.
     """
     bare = container / "remote.git"
     hub = container / "hub"
@@ -105,7 +127,11 @@ def _write_script(scripts_dir: Path, name: str, body: str) -> Path:
 
 def _verify_cmd(python_exe: str, script_path: Path) -> str:
     """
-    Build a `module_wide_verify_cmd` string in the project's standard shape -- literal empty `PYTHONPATH=` prefix (CLAUDE.md's "Verify command shape" convention) followed by the absolute interpreter and script paths, forward-slashed and quoted so it survives `bash -c` on Windows (compute_baseline routes POSIX-shaped verify commands through bash via `_implementer_common._posix_shell_run_args`).
+    Build a `module_wide_verify_cmd` string in the project's standard shape -- literal empty
+    `PYTHONPATH=` prefix (CLAUDE.md's "Verify command shape" convention) followed by the absolute
+    interpreter and script paths, forward-slashed and quoted so it survives `bash -c` on Windows
+    (compute_baseline routes POSIX-shaped verify commands through bash via
+    `_implementer_common._posix_shell_run_args`).
     """
     posix_python = str(python_exe).replace("\\", "/")
     posix_script = str(script_path).replace("\\", "/")

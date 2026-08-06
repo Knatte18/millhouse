@@ -1,21 +1,40 @@
 """
 Transient-worktree computation of the module-wide verify baseline.
 
-The baseline-aware verify gate (`_implementer_common._run_verify_gates`) needs a one-time, task-scoped answer to "does the parent branch's own module-wide verify command already fail, independent of anything this task's batches have done?"
-This module is the ONLY place that runs `module_wide_verify_cmd` against the parent branch's own content -- `_run_verify_gates` only ever reads the cached result `compute_baseline` produces (via `_status.get_module_verify_baseline`/`set_module_verify_baseline`);
+The baseline-aware verify gate (`_implementer_common._run_verify_gates`) needs a one-time,
+task-scoped answer to "does the parent branch's own module-wide verify command already fail,
+independent of anything this task's batches have done?"
+This module is the ONLY place that runs `module_wide_verify_cmd` against the parent branch's own
+content -- `_run_verify_gates` only ever reads the cached result `compute_baseline` produces (via
+`_status.get_module_verify_baseline`/`set_module_verify_baseline`);
 it never computes or persists a baseline itself.
 
-The computation checks out the parent branch's current tip into a fresh, throwaway worktree under `<project_root>/.scratch/` (never the system temp directory, never the task worktree's own working tree/index), reuses the task worktree's already-installed gitignored dependency state via filesystem junctions, and runs `module_wide_verify_cmd` there.
+The computation checks out the parent branch's current tip into a fresh, throwaway worktree under
+`<project_root>/.scratch/` (never the system temp directory, never the task worktree's own working
+tree/index), reuses the task worktree's already-installed gitignored dependency state via filesystem
+junctions, and runs `module_wide_verify_cmd` there.
 
 Return contract -- `compute_baseline` returns one of exactly two strings:
 
-    "clean" -- the parent branch's own module-wide verify passes (directly, or after the retry/control corroboration below rules out flakiness and path/environment mismatch). "pre-existing-failures" -- the parent branch's own module-wide verify is genuinely broken, confirmed by two consecutive transient-worktree failures AND a matching failure in the task worktree itself.
+    "clean" -- the parent branch's own module-wide verify passes (directly, or after the
+    retry/control corroboration below rules out flakiness and path/environment mismatch).
+    "pre-existing-failures" -- the parent branch's own module-wide verify is genuinely broken,
+    confirmed by two consecutive transient-worktree failures AND a matching failure in the task
+    worktree itself.
 
-A single failing run is never trusted on its own: caching "pre-existing-failures" on a first failure would silently disable the regression-catching gate this baseline check feeds (#541) for the rest of the task, which is the unsafe direction (a false "clean" merely costs one over-strict gate later; a false "pre-existing-failures" removes the gate entirely).
-See the retry-then-control-check sequence in `compute_baseline`'s docstring for the two corroboration steps.
+A single failing run is never trusted on its own: caching "pre-existing-failures" on a first failure
+would silently disable the regression-catching gate this baseline check feeds (#541) for the rest of
+the task, which is the unsafe direction (a false "clean" merely costs one over-strict gate later; a
+false "pre-existing-failures" removes the gate entirely).
+See the retry-then-control-check sequence in `compute_baseline`'s docstring for the two
+corroboration steps.
 
-`compute_baseline` raises on any INFRASTRUCTURE failure (parent-branch rev-parse failure, `git worktree add` failure, junction creation failure) -- it does not itself decide the fail-safe policy for those cases.
-The caller (`millpy-implement.py`'s `--stage baseline`) is responsible for catching such exceptions and falling back to "leave the baseline unset," which makes the next `_run_verify_gates` call run the module-wide gate strictly (the same fail-safe behavior as an inconclusive read).
+`compute_baseline` raises on any INFRASTRUCTURE failure (parent-branch rev-parse failure, `git
+worktree add` failure, junction creation failure) -- it does not itself decide the fail-safe policy
+for those cases.
+The caller (`millpy-implement.py`'s `--stage baseline`) is responsible for catching such exceptions
+and falling back to "leave the baseline unset," which makes the next `_run_verify_gates` call run
+the module-wide gate strictly (the same fail-safe behavior as an inconclusive read).
 
 Public API:
     compute_baseline(project_root, git_root, parent_branch, module_wide_verify_cmd) -> str
@@ -49,7 +68,12 @@ def _checkout_parent_branch(project_root: Path, git_root: Path, parent_branch: s
     """
     Check out `parent_branch`'s current tip into a fresh transient worktree.
 
-    Resolves the parent branch's current tip SHA via `git rev-parse`, then creates a fresh, uniquely-named subdirectory under `<project_root>/.scratch/` and runs `git worktree add` (detached HEAD, no new branch) at that SHA, with `-c core.longpaths=true` scoped to this single invocation (never a persistent git config write) so deep-path Windows repos don't hit a transient "Filename too long" failure that would silently disable the baseline gate -- see the module docstring and #615/#620.
+    Resolves the parent branch's current tip SHA via `git rev-parse`, then creates a fresh,
+    uniquely-named subdirectory under `<project_root>/.scratch/` and runs `git worktree add`
+    (detached HEAD, no new branch) at that SHA, with `-c core.longpaths=true` scoped to this single
+    invocation (never a persistent git config write) so deep-path Windows repos don't hit a
+    transient "Filename too long" failure that would silently disable the baseline gate -- see the
+    module docstring and #615/#620.
 
     Args:
         project_root: Absolute path to the task worktree root (where `.scratch/` lives).
@@ -94,12 +118,17 @@ def _link_dependency_dirs(project_root: Path, target_path: Path) -> None:
     """
     Junction every existing gitignored dependency dir into `target_path`.
 
-    For each name in `_DEPENDENCY_DIR_CANDIDATES` whose `project_root / name` exists, junctions it into `target_path / name` via `_junction.create`.
+    For each name in `_DEPENDENCY_DIR_CANDIDATES` whose `project_root / name` exists, junctions it
+    into `target_path / name` via `_junction.create`.
 
-    Unlike the inline loop this was extracted from, this function does not branch on `cwd_override_relative` -- the caller is responsible for resolving that into a single, already-concrete `target_path` (either `tmp_path / cwd_override_relative` or plain `tmp_path`) before calling.
+    Unlike the inline loop this was extracted from, this function does not branch on
+    `cwd_override_relative` -- the caller is responsible for resolving that into a single,
+    already-concrete `target_path` (either `tmp_path / cwd_override_relative` or plain `tmp_path`)
+    before calling.
 
     Args:
-        project_root: Absolute path to the task worktree root, where gitignored dependency dirs are probed for reuse.
+        project_root: Absolute path to the task worktree root, where gitignored dependency dirs are
+        probed for reuse.
         target_path: The already-resolved effective checkout path to junction dependency dirs into.
 
     Raises:
@@ -125,13 +154,19 @@ def compute_baseline(
 
     Implementation, in order:
         1. Resolve the parent branch's current tip SHA.
-        2. Create a fresh, uniquely-named subdirectory under `<project_root>/.scratch/` as the transient worktree target.
+        2. Create a fresh, uniquely-named subdirectory under `<project_root>/.scratch/` as the
+            transient worktree target.
         3. `git worktree add <tmp-path> <parent-sha>` (detached HEAD, no new branch) at that SHA.
-        4. From here on, everything is wrapped in try/finally so the transient worktree is torn down via `_worktree.remove_safe` unconditionally -- on success, on a verify failure, and on any exception raised inside the try block.
-        5. Reuse the task worktree's already-installed gitignored dependency state: for each name in `_DEPENDENCY_DIR_CANDIDATES` that exists at the task worktree's top level, junction it into the transient worktree.
+        4. From here on, everything is wrapped in try/finally so the transient worktree is torn down
+            via `_worktree.remove_safe` unconditionally -- on success, on a verify failure, and on
+            any exception raised inside the try block.
+        5. Reuse the task worktree's already-installed gitignored dependency state: for each name in
+            `_DEPENDENCY_DIR_CANDIDATES` that exists at the task worktree's top level, junction it
+            into the transient worktree.
         6. Run `module_wide_verify_cmd` with cwd set to the transient worktree.
             Exit code 0 -> return "clean" immediately.
-        7. On a non-zero exit, re-run the same command in the same transient worktree once more (the flakiness-guard retry).
+        7. On a non-zero exit, re-run the same command in the same transient worktree once more (the
+            flakiness-guard retry).
             A pass here means the first failure was a spurious fluke -> return "clean".
         8. If the retry also fails, run `module_wide_verify_cmd` once more in
         `project_root` itself (the task worktree -- always safe, no
@@ -145,13 +180,22 @@ def compute_baseline(
         on stderr and return "clean" instead.
 
     Args:
-        project_root: Absolute path to the task worktree root (where `.scratch/` lives and where gitignored dependency dirs are probed for reuse).
-        git_root: Absolute path to the repo root `git` commands run against (passed to `git -C <git_root> ...` for rev-parse and worktree add/remove).
+        project_root: Absolute path to the task worktree root (where `.scratch/` lives and where
+            gitignored dependency dirs are probed for reuse).
+        git_root: Absolute path to the repo root `git` commands run against (passed to `git -C
+            <git_root> ...` for rev-parse and worktree add/remove).
         parent_branch: Name of the parent branch to snapshot (e.g. "main").
-        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both the transient worktree and (for the control check) the task worktree.
-        cwd_override_relative: Hub-relative path fragment (not an absolute cwd) resolved by `_plan_dag.parse_verify_field` when the overview's `verify:` mapping resolves to `cwd: hub` in a nested-hub-layout repo.
-            When set, both the transient-worktree verify subprocess's cwd and the dependency-junction targets are re-anchored to `tmp_path / cwd_override_relative` -- the temp checkout's equivalent of the real worktree's hub sub-directory -- instead of `tmp_path` (which mirrors `git_root`, not `hub_root`).
-            When None (plain-string `verify:` or a `cwd: git_root` resolution), behavior is unchanged: everything runs at `tmp_path` directly.
+        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both the
+            transient worktree and (for the control check) the task worktree.
+        cwd_override_relative: Hub-relative path fragment (not an absolute cwd) resolved by
+            `_plan_dag.parse_verify_field` when the overview's `verify:` mapping resolves to `cwd:
+            hub` in a nested-hub-layout repo.
+            When set, both the transient-worktree verify subprocess's cwd and the
+                dependency-junction targets are re-anchored to `tmp_path / cwd_override_relative` --
+                the temp checkout's equivalent of the real worktree's hub sub-directory -- instead
+                of `tmp_path` (which mirrors `git_root`, not `hub_root`).
+            When None (plain-string `verify:` or a `cwd: git_root` resolution), behavior is
+                unchanged: everything runs at `tmp_path` directly.
 
     Returns:
         The literal string "clean" or "pre-existing-failures".
@@ -189,7 +233,8 @@ def _run_module_wide_verify_algorithm(
     Implementation, in order:
         1. Run `module_wide_verify_cmd` with cwd set to `effective_tmp_path`.
             Exit code 0 -> return "clean" immediately.
-        2. On a non-zero exit, re-run the same command in the same `effective_tmp_path` once more (the flakiness-guard retry).
+        2. On a non-zero exit, re-run the same command in the same `effective_tmp_path` once more
+            (the flakiness-guard retry).
             A pass here means the first failure was a spurious fluke -> return "clean".
         3. If the retry also fails, run `module_wide_verify_cmd` once more in
         `project_root` itself (the task worktree -- always safe, no
@@ -203,9 +248,12 @@ def _run_module_wide_verify_algorithm(
         on stderr and return "clean" instead.
 
     Args:
-        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both `effective_tmp_path` and (for the control check) `project_root`.
-        effective_tmp_path: The transient checkout's effective cwd to run the command against for the first two runs.
-        project_root: Absolute path to the task worktree root, used as cwd for the control-check run.
+        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both
+        `effective_tmp_path` and (for the control check) `project_root`.
+        effective_tmp_path: The transient checkout's effective cwd to run the command against for
+        the first two runs.
+        project_root: Absolute path to the task worktree root, used as cwd for the control-check
+        run.
 
     Returns:
         The literal string "clean" or "pre-existing-failures".
@@ -260,28 +308,42 @@ def compute_batch_baselines(
     """
     Compute per-batch verify-command failure-signature baselines.
 
-    Unlike `compute_baseline`, this function performs NO checkout and NO teardown of its own -- `checkout_path` must already be a live, fully linked transient worktree (e.g.
-    produced by `_checkout_parent_branch` + `_link_dependency_dirs`, shared across the module-wide command and every per-batch command by the caller).
-    This lets a caller batch many verify commands against one shared checkout instead of checking out once per command.
+    Unlike `compute_baseline`, this function performs NO checkout and NO teardown of its own --
+    `checkout_path` must already be a live, fully linked transient worktree (e.g.
+    produced by `_checkout_parent_branch` + `_link_dependency_dirs`, shared across the module-wide
+    command and every per-batch command by the caller).
+    This lets a caller batch many verify commands against one shared checkout instead of checking
+    out once per command.
 
-    For each `(name, command, cwd_override)` triple, runs `command` via `_run_verify_in` TWICE unconditionally against its own effective cwd (`cwd_override` if not None, else `checkout_path` directly -- mirroring `_run_verify_gate`'s `cwd_override` handling).
+    For each `(name, command, cwd_override)` triple, runs `command` via `_run_verify_in` TWICE
+    unconditionally against its own effective cwd (`cwd_override` if not None, else `checkout_path`
+    directly -- mirroring `_run_verify_gate`'s `cwd_override` handling).
     Each run's combined stdout+stderr is passed through `_extract_failure_signatures`;
-    the returned signature list for that command is the union (deduplicated, order-preserving by first occurrence across both runs) of both runs' extracted (unnormalized) signatures.
+    the returned signature list for that command is the union (deduplicated, order-preserving by
+    first occurrence across both runs) of both runs' extracted (unnormalized) signatures.
 
-    This is a union-of-two-runs corroboration, not the module-wide algorithm's binary verdict with a third task-worktree control run: a flaky pre-existing failure that reproduces on only one of the two runs still needs to be in the baseline (so it doesn't spuriously block a later batch), and finalize's own verify-replay run against the real, in-progress worktree is the natural downstream corroboration point for the module-wide path's control-run role.
+    This is a union-of-two-runs corroboration, not the module-wide algorithm's binary verdict with a
+    third task-worktree control run: a flaky pre-existing failure that reproduces on only one of the
+    two runs still needs to be in the baseline (so it doesn't spuriously block a later batch), and
+    finalize's own verify-replay run against the real, in-progress worktree is the natural
+    downstream corroboration point for the module-wide path's control-run role.
     See `_mill/discussion.md`'s `gap2-baseline-corroboration` Decision.
 
     Args:
-        commands: A list of `(name, command, cwd_override)` triples. `cwd_override` is `None` (use `checkout_path` directly) or an already-resolved absolute `Path` to run `command` in instead.
+        commands: A list of `(name, command, cwd_override)` triples. `cwd_override` is `None` (use
+            `checkout_path` directly) or an already-resolved absolute `Path` to run `command` in
+            instead.
         checkout_path: An already-checked-out, already-linked transient worktree path.
             Never checked out or torn down by this function.
         project_root: Absolute path to the task worktree root.
             Unused by this function's own logic today,
-            but accepted for parity with `compute_baseline`'s signature and to keep the caller's call sites uniform;
+            but accepted for parity with `compute_baseline`'s signature and to keep the caller's
+                call sites uniform;
             kept for forward compatibility.
 
     Returns:
-        A dict keyed by `name`, each value the union (deduplicated, order-preserving) of both runs' extracted raw failure-signature lines for that command's `command`.
+        A dict keyed by `name`, each value the union (deduplicated, order-preserving) of both runs'
+        extracted raw failure-signature lines for that command's `command`.
         A command with zero failures on both runs maps to `[]` (present, not an absent key).
         Each value is an independent list object, never aliased across names.
     """

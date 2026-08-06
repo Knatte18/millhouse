@@ -2,14 +2,16 @@
 """
 mill-claim — claim a task from the wiki Home.md in the current worktree.
 
-Unlike mill-spawn, which creates a new worktree directory, mill-claim operates on the git checkout you are already in.
+Unlike mill-spawn, which creates a new worktree directory, mill-claim operates on the git checkout
+you are already in.
 After claiming, you stay in the same directory on a new branch for the task.
 
 Flow:
     1. Resolve the wiki clone via ``_paths.resolve_wiki_path``.
         2. Fast-forward pull the wiki so we pick against current state.
         3. Parse ``Home.md``;
-        pick a task via ``pick_task_single_or_multi`` (``--slug`` short-circuit, numbered prompt for unmarked tasks).
+        pick a task via ``pick_task_single_or_multi`` (``--slug`` short-circuit, numbered prompt for
+            unmarked tasks).
         4. Mark the chosen task ``[active]`` under the wiki lock.
         5. Capture the current branch name as the parent for status.md.
         6. If the working tree is dirty, prompt: stash, carry, or abort.
@@ -103,7 +105,8 @@ _HUB_COLOR_PATTERN = '"titleBar.activeBackground": "#2d7d46"'
 def _update_hub_vscode_title(git_root: Path, cfg: dict, slug: str) -> None:
     """Flip the hub's VS Code title to '<short>: <slug>' when cwd is the hub.
 
-    Skips silently when the settings file is absent, unreadable, or does not have the hub green background (indicating cwd is a differently-coloured worktree, not the hub).
+    Skips silently when the settings file is absent, unreadable, or does not have the hub green
+    background (indicating cwd is a differently-coloured worktree, not the hub).
     """
     settings_path = resolve_hub_path() / ".vscode" / "settings.json"
     if not settings_path.exists():

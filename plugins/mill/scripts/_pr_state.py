@@ -1,11 +1,15 @@
 """
 Shared helper for resolving the state of a GitHub PR associated with a branch.
 
-Provides a single function, ``resolve_pr_state``, that queries the GitHub CLI and normalises the result into a stable dict.
-Both ``millpy-cleanup.py`` (for pr-reap teardown) and the ``mill-merge`` skill (to detect pre-merged or pre-closed PRs) use this helper, ensuring identical precedence logic and fallback behaviour across both callers.
+Provides a single function, ``resolve_pr_state``, that queries the GitHub CLI and normalises the
+result into a stable dict.
+Both ``millpy-cleanup.py`` (for pr-reap teardown) and the ``mill-merge`` skill (to detect pre-merged
+or pre-closed PRs) use this helper, ensuring identical precedence logic and fallback behaviour
+across both callers.
 
 Precedence rule when a branch has multiple PRs: MERGED > OPEN > CLOSED.
-Any condition that prevents a definitive answer (gh absent, non-zero exit, empty or malformed output) returns ``state="none"`` without raising.
+Any condition that prevents a definitive answer (gh absent, non-zero exit, empty or malformed
+output) returns ``state="none"`` without raising.
 """
 from __future__ import annotations
 
@@ -17,15 +21,19 @@ import _subprocess_util
 
 def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
     """
-    Query GitHub for all PRs whose head branch matches ``branch`` and return a normalised state dict.
+    Query GitHub for all PRs whose head branch matches ``branch`` and return a normalised state
+    dict.
 
     The function calls:
         gh pr list --head <branch> --state all --json state,mergeCommit,number,url
 
-    The full JSON array is parsed (no ``--jq`` filter) so that when a branch has accumulated multiple PRs the precedence rule MERGED > OPEN > CLOSED is applied: the "highest priority" state wins regardless of array order.
+    The full JSON array is parsed (no ``--jq`` filter) so that when a branch has accumulated
+    multiple PRs the precedence rule MERGED > OPEN > CLOSED is applied: the "highest priority" state
+    wins regardless of array order.
     The winning PR object supplies ``number``, ``url``, and ``mergeCommit``.
 
-    The ``merge_commit`` value is kept as the raw gh ``mergeCommit`` object (a dict with at minimum an ``"oid"`` key when the PR was merged), NOT a flattened string.
+    The ``merge_commit`` value is kept as the raw gh ``mergeCommit`` object (a dict with at minimum
+    an ``"oid"`` key when the PR was merged), NOT a flattened string.
     This lets callers use ``(merge_commit or {}).get("oid")`` safely.
 
     All error conditions collapse to ``state="none"`` without raising:

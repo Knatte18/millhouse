@@ -1,13 +1,16 @@
 """Phase gate helpers for mill-go.
 
-Provides decision logic for handling edge cases in mill-go's phase transitions, particularly when working state files (e.g., _mill/status.md) have been removed by interrupted merge/teardown operations.
+Provides decision logic for handling edge cases in mill-go's phase transitions, particularly when
+working state files (e.g., _mill/status.md) have been removed by interrupted merge/teardown
+operations.
 """
 
 
 def absent_status_halt_message(task: dict | None, slug: str) -> str:
     """Generate a halt message when _mill/status.md is missing.
 
-    Called by mill-go Entry Step 5 when status_path does not exist, indicating that mill-merge's cleanup ran but did not complete.
+    Called by mill-go Entry Step 5 when status_path does not exist, indicating that mill-merge's
+    cleanup ran but did not complete.
     Converts a wiki task dict into a readable error message.
 
     Args:

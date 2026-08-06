@@ -1,6 +1,7 @@
 """Unit tests for wiki._store.Store TinyDB-backed implementation.
 
-Covers: id-from-0, identifier dispatch, get_task, remove_task, set_phase, list_tasks_brief, list_tasks_full, upsert_tasks_batch, merge_tasks, reload.
+Covers: id-from-0, identifier dispatch, get_task, remove_task, set_phase, list_tasks_brief,
+list_tasks_full, upsert_tasks_batch, merge_tasks, reload.
 """
 from __future__ import annotations
 

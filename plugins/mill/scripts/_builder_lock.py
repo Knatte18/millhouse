@@ -2,15 +2,18 @@
 mill-go builder lock — per-worktree mutex.
 
 The design rule for mill-v2 is exactly one active task per worktree.
-The orchestrator still needs a runtime check: the user could re-invoke ``/mill-go`` from a second Claude tab while the first is mid-batch,
+The orchestrator still needs a runtime check: the user could re-invoke ``/mill-go`` from a second
+Claude tab while the first is mid-batch,
 or they could restart mill-go after a crash and we need to tell a stale lock from a live one.
 
 Lock file: ``<mill_dir>/builder.lock``.
 Contents: a fenced-yaml block with ``timestamp: <UTC iso>`` and ``slug: <task-slug>``.
 We do not include a PID: on Windows there is no reliable cross-process check that generalises,
-and the 5-minute stale window makes PID-tracking unnecessary for our workload (a single implementer run plus a single reviewer run fits comfortably).
+and the 5-minute stale window makes PID-tracking unnecessary for our workload (a single implementer
+run plus a single reviewer run fits comfortably).
 
-Stale detection: a lock whose ``timestamp`` is older than ``STALE_WINDOW_SEC`` is considered orphaned and may be overwritten.
+Stale detection: a lock whose ``timestamp`` is older than ``STALE_WINDOW_SEC`` is considered
+orphaned and may be overwritten.
 Callers use :func:`acquire` which does this check automatically.
 
 Public API:
@@ -54,7 +57,8 @@ def _now_iso() -> str:
 def _parse_iso(ts: str) -> datetime:
     """Parse the ``Z``-suffixed ISO timestamp the lock writer produces.
 
-    Raising ``ValueError`` here is fine — callers treat a malformed lock as "ignore the timestamp, prefer a fresh acquire" via the stale path.
+    Raising ``ValueError`` here is fine — callers treat a malformed lock as "ignore the timestamp,
+    prefer a fresh acquire" via the stale path.
     """
     return datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
 
@@ -64,7 +68,8 @@ def read(mill_dir: Path) -> LockInfo | None:
 or ``None`` if the lock is free.
 
     Malformed contents → ``None``.
-    We deliberately never raise from ``read()``: the caller uses it to decide whether to complain or proceed,
+    We deliberately never raise from ``read()``: the caller uses it to decide whether to complain or
+    proceed,
     and a corrupted lock is functionally the same as a missing one for that decision.
     """
     lp = _lock_path(mill_dir)
@@ -95,7 +100,8 @@ or ``None`` if the lock is free.
 def _is_stale(info: LockInfo) -> bool:
     """Return True when the lock's timestamp is outside the stale window.
 
-    A malformed timestamp counts as stale — a lock we can't dateparse is safer to reclaim than to leave holding the worktree hostage.
+    A malformed timestamp counts as stale — a lock we can't dateparse is safer to reclaim than to
+    leave holding the worktree hostage.
     """
     try:
         ts = _parse_iso(info.timestamp)
@@ -118,7 +124,8 @@ def acquire(mill_dir: Path, slug: str) -> LockInfo:
         Stale → overwrite.
         Fresh → raise ``LockBusy`` with the existing holder's slug and timestamp in the message.
 
-    The lock file is written atomically via ``Path.write_text`` which on Windows/Python implements a create-truncate-write that is adequate for this single-writer, single-reader scenario.
+    The lock file is written atomically via ``Path.write_text`` which on Windows/Python implements a
+    create-truncate-write that is adequate for this single-writer, single-reader scenario.
     """
     mill_dir.mkdir(parents=True, exist_ok=True)
     existing = read(mill_dir)
@@ -140,7 +147,8 @@ def release(mill_dir: Path) -> None:
 Tolerates absence silently.
 
     Callers typically put this in a ``finally:`` clause;
-    a release call against a not-yet-acquired lock must not raise or we defeat the whole cleanup pattern.
+    a release call against a not-yet-acquired lock must not raise or we defeat the whole cleanup
+    pattern.
     """
     lp = _lock_path(mill_dir)
     try:

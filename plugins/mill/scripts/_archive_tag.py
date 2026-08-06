@@ -1,8 +1,10 @@
 """
 Idempotent archive-tag creation with conflict resolution.
 
-When re-running mill-merge after a partial teardown, the archive tag may already exist from a prior attempt.
-This module provides create_or_resolve, which handles three conflict cases: same-SHA no-op, ancestor force-update, and divergent move-aside with numeric suffix.
+When re-running mill-merge after a partial teardown, the archive tag may already exist from a prior
+attempt.
+This module provides create_or_resolve, which handles three conflict cases: same-SHA no-op, ancestor
+force-update, and divergent move-aside with numeric suffix.
 """
 from __future__ import annotations
 
@@ -24,7 +26,8 @@ def create_or_resolve(
     When the tag already exists, inspects its relationship to the new target SHA:
     - Same SHA: no-op (tag already points at the desired commit).
     - Ancestor: force-update to the new SHA (tag is stale).
-    - Divergent: move the existing tag aside with a numeric suffix (-01, -02, ...), then create a new tag at the new SHA.
+    - Divergent: move the existing tag aside with a numeric suffix (-01, -02, ...), then create a
+    new tag at the new SHA.
 
     Args:
         worktree: Path to the git worktree.

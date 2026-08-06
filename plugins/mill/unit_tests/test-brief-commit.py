@@ -2,7 +2,9 @@
 
 Batch: brief-commit-uniformity
 
-Card 5: Regression-lock the brief-commit steps Lock _mill/briefs/ commit steps in orchestrator SKILLs: - mill-start: Handoff, discussion-gap-fix, and discussion-fix commits include _mill/briefs/ - mill-merge-in: New step 5.5 commit stages and commits _mill/briefs/ files
+Card 5: Regression-lock the brief-commit steps Lock _mill/briefs/ commit steps in orchestrator
+SKILLs: - mill-start: Handoff, discussion-gap-fix, and discussion-fix commits include _mill/briefs/
+- mill-merge-in: New step 5.5 commit stages and commits _mill/briefs/ files
 """
 from __future__ import annotations
 
@@ -17,7 +19,8 @@ def test_mill_start_brief_commits() -> list[str]:
     """
     Assert mill-start/SKILL.md references _mill/briefs/ in commit steps.
 
-    Primary form: assert the substrings related to commit messages contain _mill/briefs/ within a reasonable window.
+    Primary form: assert the substrings related to commit messages contain _mill/briefs/ within a
+    reasonable window.
     Fallback: count total occurrences to catch dropped sites.
 
     Returns list of failure messages (empty list = all passed).

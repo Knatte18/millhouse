@@ -6,7 +6,9 @@ Covers:
   - create_or_resolve: ancestor SHA -- force updates tag to new SHA
   - create_or_resolve: divergent SHA -- moves old tag aside with -01 suffix
   - create_or_resolve: multiple divergences -- increments suffix to -02, -03, etc.
-  - create_or_resolve: push outcomes (push_failed/push_error) for each of the four actions, using a bare-remote fixture with a pre-receive hook that deterministically accepts or rejects specific ref pushes.
+  - create_or_resolve: push outcomes (push_failed/push_error) for each of the four actions, using a
+  bare-remote fixture with a pre-receive hook that deterministically accepts or rejects specific ref
+  pushes.
 """
 from __future__ import annotations
 
@@ -100,7 +102,12 @@ class TestArchiveTagConflict(unittest.TestCase):
         """
         Create a bare "origin" remote for worktree, optionally rejecting specific refs.
 
-        When reject_ref_names is given, installs a pre-receive hook that reads each "<old> <new> <refname>" line git feeds it on stdin and exits non-zero (after printing "rejected: <refname>" to stderr) if any line's refname is in reject_ref_names, else exits 0. This gives deterministic, per-push accept/reject control without depending on --force-with-lease's remote-tracking-ref semantics (this fixture never runs `git fetch`, so real lease-conflict detection would be git-version-dependent).
+        When reject_ref_names is given, installs a pre-receive hook that reads each "<old> <new>
+        <refname>" line git feeds it on stdin and exits non-zero (after printing "rejected:
+        <refname>" to stderr) if any line's refname is in reject_ref_names, else exits 0. This gives
+        deterministic, per-push accept/reject control without depending on --force-with-lease's
+        remote-tracking-ref semantics (this fixture never runs `git fetch`, so real lease-conflict
+        detection would be git-version-dependent).
 
         Returns the bare repo path.
         """

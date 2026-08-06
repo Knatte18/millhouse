@@ -184,8 +184,11 @@ def test_is_live_phase() -> None:
 def test_resolve_inplace_mode_topology_outcomes() -> None:
     """Exercise both post-topology-fix outcomes of `_resolve_inplace_mode` directly.
 
-    Calls `_resolve_inplace_mode` itself (not through `apply_plan`), patching only `mill_cleanup._inplace.resolve_main_worktree_root` to force each outcome.
-    This covers the "worktree" fallback branch at `millpy-cleanup.py:437`, which was unreachable before the topology rewrite -- the old `is_inplace` recomputed the same path-existence check the caller had already confirmed `False`, so it always returned `True` at this call site.
+    Calls `_resolve_inplace_mode` itself (not through `apply_plan`), patching only
+    `mill_cleanup._inplace.resolve_main_worktree_root` to force each outcome.
+    This covers the "worktree" fallback branch at `millpy-cleanup.py:437`, which was unreachable
+    before the topology rewrite -- the old `is_inplace` recomputed the same path-existence check the
+    caller had already confirmed `False`, so it always returned `True` at this call site.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)

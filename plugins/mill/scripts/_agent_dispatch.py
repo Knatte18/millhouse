@@ -1,7 +1,8 @@
 """
 _agent_dispatch -- shared Agent tool dispatch helpers.
 
-Exports ------- resolve_dispatch_mode(cfg: dict) -> str Read cfg["llm"]["claude"]["dispatch"], validate it is one of {"subprocess","psmux","agent"}, and return it.
+Exports ------- resolve_dispatch_mode(cfg: dict) -> str Read cfg["llm"]["claude"]["dispatch"],
+validate it is one of {"subprocess","psmux","agent"}, and return it.
 Defaults to "agent".
 Raises ValueError on unrecognized value.
 
@@ -110,7 +111,9 @@ def model_to_tier(model: str) -> str:
 def resolve_subagent_type(base: str, effort: str | None) -> str:
     """Compute the tier-suffixed subagent_type for an Agent-tool dispatch.
 
-    This is the single place every envelope-construction call site computes a tier-suffixed subagent_type string, rather than each re-implementing the "{base}-{effort}" f-string pattern inline.
+    This is the single place every envelope-construction call site computes a tier-suffixed
+    subagent_type string, rather than each re-implementing the "{base}-{effort}" f-string pattern
+    inline.
 
     Args:
         base: The base subagent_type, e.g.
@@ -119,8 +122,11 @@ def resolve_subagent_type(base: str, effort: str | None) -> str:
             or None when the alias carries no effort field.
 
     Returns:
-        base unchanged when effort is None or not a member of EFFORT_TIERED_SUBAGENT_TYPES -- this fallback is deliberate and forward-compatible: an unrecognized future tier (e.g.
-        someone adding "effort: ultra" to mill-agents.yaml before a matching agent-definition file exists) degrades to today's base behavior rather than raising or constructing a subagent_type with no matching file on disk.
+        base unchanged when effort is None or not a member of EFFORT_TIERED_SUBAGENT_TYPES -- this
+        fallback is deliberate and forward-compatible: an unrecognized future tier (e.g.
+        someone adding "effort: ultra" to mill-agents.yaml before a matching agent-definition file
+        exists) degrades to today's base behavior rather than raising or constructing a
+        subagent_type with no matching file on disk.
         Otherwise returns f"{base}-{effort}", e.g.
         resolve_subagent_type(SUBAGENT_REVIEWER, "high") -> "mill:mill-reviewer-high".
     """
@@ -139,12 +145,20 @@ def write_brief(
 ) -> Path:
     """Write a brief file and return its path.
 
-    Two behaviours run on every call, regardless of ``output_contract``: the brief is written to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md, and any stale ``.out.md`` left over from a prior dispatch to that same path is unlinked first.
-    The unlink matters because a transient-retry re-dispatch reuses the same role/scope/round -- hence the same ``.out.md`` path -- so without it an attempt-1 output file could be misread as attempt-2's result (e.g.
+    Two behaviours run on every call, regardless of ``output_contract``: the brief is written to
+    briefs_dir/<role>-<sanitized_scope>-r<round_n>.md, and any stale ``.out.md`` left over from a
+    prior dispatch to that same path is unlinked first.
+    The unlink matters because a transient-retry re-dispatch reuses the same role/scope/round --
+    hence the same ``.out.md`` path -- so without it an attempt-1 output file could be misread as
+    attempt-2's result (e.g.
     a stale ``APPROVE`` from a reviewer that never actually ran this round).
 
-    When ``output_contract`` is True, an output-contract footer is appended to ``prompt_text`` before writing: it names the absolute ``.out.md`` path (via ``output_path_for``) as the file the agent must write its full report to, and instructs the agent's final chat message to be a one-line ``WROTE <path>`` ack and nothing else.
-    This flag defaults to False so every pre-existing caller keeps writing ``prompt_text`` byte-for-byte.
+    When ``output_contract`` is True, an output-contract footer is appended to ``prompt_text``
+    before writing: it names the absolute ``.out.md`` path (via ``output_path_for``) as the file the
+    agent must write its full report to, and instructs the agent's final chat message to be a
+    one-line ``WROTE <path>`` ack and nothing else.
+    This flag defaults to False so every pre-existing caller keeps writing ``prompt_text``
+    byte-for-byte.
 
     Args:
         briefs_dir: Parent directory for briefs.
@@ -157,7 +171,8 @@ def write_brief(
             Defaults to False (no footer, no behaviour change from today).
 
     Returns:
-        Path to the written brief file (never a tuple -- callers that need the output path call ``output_path_for`` themselves).
+        Path to the written brief file (never a tuple -- callers that need the output path call
+        ``output_path_for`` themselves).
     """
     briefs_dir = Path(briefs_dir)
     briefs_dir.mkdir(parents=True, exist_ok=True)
@@ -179,8 +194,12 @@ def write_brief(
 def output_path_for(brief_path: Path) -> Path:
     """Return the ``.out.md`` path a brief's agent-mode output is written to.
 
-    This is the single home of the ``.md`` -> ``.out.md`` rule: every briefs/<role>-<scope>-r<round>.md file has a corresponding briefs/<role>-<scope>-r<round>.out.md that an agent-mode dispatch writes its full report to.
-    Callers that need the output path (the dispatcher itself, or a caller unlinking a stale prior output) compute it from the brief path through this function rather than re-deriving the suffix swap inline, so the rule has exactly one definition.
+    This is the single home of the ``.md`` -> ``.out.md`` rule: every
+    briefs/<role>-<scope>-r<round>.md file has a corresponding briefs/<role>-<scope>-r<round>.out.md
+    that an agent-mode dispatch writes its full report to.
+    Callers that need the output path (the dispatcher itself, or a caller unlinking a stale prior
+    output) compute it from the brief path through this function rather than re-deriving the suffix
+    swap inline, so the rule has exactly one definition.
 
     Args:
         brief_path: Path to a brief file, ending in ".md".
@@ -196,14 +215,19 @@ def output_path_for(brief_path: Path) -> Path:
 def _build_output_contract_footer(brief_path: Path) -> str:
     """Return the output-contract footer appended when ``output_contract=True``.
 
-    States the absolute ``.out.md`` path (as literal text, never an ``<UPPERCASE>`` token) that the agent must write its full report to, and disambiguates the interaction with the review templates' existing ``MILL_REVIEW_BEGIN`` / ``MILL_REVIEW_END`` wrapping instruction: that wrapped report is the *content of the file*, not something to also repeat in chat.
-    The chat reply is a one-line ack and nothing else, so the orchestrator never has to read (or pay context for) the full report.
+    States the absolute ``.out.md`` path (as literal text, never an ``<UPPERCASE>`` token) that the
+    agent must write its full report to, and disambiguates the interaction with the review
+    templates' existing ``MILL_REVIEW_BEGIN`` / ``MILL_REVIEW_END`` wrapping instruction: that
+    wrapped report is the *content of the file*, not something to also repeat in chat.
+    The chat reply is a one-line ack and nothing else, so the orchestrator never has to read (or pay
+    context for) the full report.
 
     Args:
         brief_path: Path to the brief this footer is appended to.
 
     Returns:
-        Markdown footer text, including its own leading blank-line separator from the preceding prompt body.
+        Markdown footer text, including its own leading blank-line separator from the preceding
+        prompt body.
     """
     out_path = output_path_for(brief_path)
     return (
@@ -221,10 +245,15 @@ def _build_output_contract_footer(brief_path: Path) -> str:
 def language_skills_directive(batch_file: Path) -> str:
     """Detect languages from a batch's touched files and return a skills block.
 
-    Reads the batch file's ``Edits`` and ``Creates`` fields (not ``Context``) and both endpoints of every ``Moves:`` pair (source and destination) for language detection, then detects languages by file suffix.
-    Move endpoints are included because a rename is still an edit of that language: the implementer needs the right comment and testing skills whether the file is being moved, created, or directly edited.
+    Reads the batch file's ``Edits`` and ``Creates`` fields (not ``Context``) and both endpoints of
+    every ``Moves:`` pair (source and destination) for language detection, then detects languages by
+    file suffix.
+    Move endpoints are included because a rename is still an edit of that language: the implementer
+    needs the right comment and testing skills whether the file is being moved, created, or directly
+    edited.
 
-    For each detected language, names the matching ``{lang}-comments`` and ``{lang}-testing`` skills plus ``code-quality`` for all batches.
+    For each detected language, names the matching ``{lang}-comments`` and ``{lang}-testing`` skills
+    plus ``code-quality`` for all batches.
 
     Args:
         batch_file: Path to the batch file.

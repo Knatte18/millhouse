@@ -1,11 +1,15 @@
 """
 Pure rename-finding helper for the code-review backend.
 
-git does not record renames: rename detection is a similarity-based heuristic applied at diff time using ``git diff --find-renames``.
+git does not record renames: rename detection is a similarity-based heuristic applied at diff time
+using ``git diff --find-renames``.
 This module therefore acts as a surgical-edit-vs-rewrite proxy, not proof of a rename.
-A planned move that is not detected as a rename may be a legitimate low-similarity extraction (seam split, kernel extraction) -- the LLM code-review criterion is the layer that escalates genuine rewrites to BLOCKING.
+A planned move that is not detected as a rename may be a legitimate low-similarity extraction (seam
+split, kernel extraction) -- the LLM code-review criterion is the layer that escalates genuine
+rewrites to BLOCKING.
 
-Per the ``mechanical-rename-check-advisory`` Shared Decision, every finding emitted here is NIT severity only.
+Per the ``mechanical-rename-check-advisory`` Shared Decision, every finding emitted here is NIT
+severity only.
 The NIT advises the reviewer to confirm that ``git mv`` was used;
 it never automatically escalates to BLOCKING.
 
@@ -25,7 +29,10 @@ def planned_rename_findings(
     """
     Compare planned move pairs against git rename-detection output.
 
-    Parses name_status_text (output of ``git diff --name-status --find-renames``), builds the set of ``(old, new)`` pairs that git detected as renames (status lines whose first column starts with ``R``), and for each planned ``(src, dst)`` pair in ``moves`` that is NOT present in that rename set, returns one advisory NIT finding block.
+    Parses name_status_text (output of ``git diff --name-status --find-renames``), builds the set of
+    ``(old, new)`` pairs that git detected as renames (status lines whose first column starts with
+    ``R``), and for each planned ``(src, dst)`` pair in ``moves`` that is NOT present in that rename
+    set, returns one advisory NIT finding block.
 
     Finding block format (review-code-batch schema):
 
@@ -42,13 +49,17 @@ def planned_rename_findings(
     Args:
         name_status_text: Raw output of ``git diff --name-status --find-renames=<N>%``.
             May be LF- or CRLF-terminated;
-            any trailing ``\\r`` is stripped per line before tab-splitting so Windows subprocess stdout is handled transparently.
-        moves: List of ``(source, destination)`` path string pairs from the batch plan's ``Moves:`` field.
+            any trailing ``\\r`` is stripped per line before tab-splitting so Windows subprocess
+                stdout is handled transparently.
+        moves: List of ``(source, destination)`` path string pairs from the batch plan's ``Moves:``
+            field.
             An empty list returns ``[]`` immediately without parsing the diff text.
 
     Returns:
-        List of NIT finding block strings, one per planned move pair that was not detected as a git rename.
-        Returns ``[]`` when all planned moves were detected as renames, when ``moves`` is empty, or when ``name_status_text`` is blank/malformed.
+        List of NIT finding block strings, one per planned move pair that was not detected as a git
+        rename.
+        Returns ``[]`` when all planned moves were detected as renames, when ``moves`` is empty, or
+        when ``name_status_text`` is blank/malformed.
     """
     if not moves:
         return []

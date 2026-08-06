@@ -1,6 +1,7 @@
 """Unit tests for millpy-abandon.py logic.
 
-Uses a trampoline subprocess that pre-patches sys.modules with mock _paths, _marker, _review_common, and _subprocess_util modules so no real git or wiki I/O occurs.
+Uses a trampoline subprocess that pre-patches sys.modules with mock _paths, _marker, _review_common,
+and _subprocess_util modules so no real git or wiki I/O occurs.
 """
 from __future__ import annotations
 

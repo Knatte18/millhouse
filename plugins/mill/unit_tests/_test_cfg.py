@@ -1,8 +1,10 @@
 """
 Baseline cfg dict builder for unit tests using the NEW roles: schema.
 
-Provides make_minimal_cfg(**overrides) that returns a cfg dict shaped for the post-batch-2-flip schema (roles: replaces review:).
-Tests that previously constructed cfg dicts inline should switch to this helper to avoid repeating the boilerplate and to stay in sync as the schema evolves.
+Provides make_minimal_cfg(**overrides) that returns a cfg dict shaped for the post-batch-2-flip
+schema (roles: replaces review:).
+Tests that previously constructed cfg dicts inline should switch to this helper to avoid repeating
+the boilerplate and to stay in sync as the schema evolves.
 """
 from __future__ import annotations
 
@@ -21,7 +23,8 @@ def _deep_merge(base: dict, override: dict) -> dict:
 def make_minimal_cfg(**overrides) -> dict:
     """Return a baseline cfg dict using the new roles: schema.
 
-    All reviewer slots reference "test_stub" so tests that use _reviewer_test_stub.seed() work without a real reviewers.yaml.
+    All reviewer slots reference "test_stub" so tests that use _reviewer_test_stub.seed() work
+    without a real reviewers.yaml.
     The **overrides kwargs are deep-merged into the baseline.
     """
     baseline: dict = {

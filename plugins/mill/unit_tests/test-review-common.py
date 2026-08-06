@@ -31,12 +31,14 @@ def _make_worktree_fixture(tmp: str, slug: str) -> tuple[Path, Path]:
     """Create a container-form git fixture at ``<tmp>/container/wts/<slug>``.
 
     Layout:
-        <tmp>/container/wts/<slug>/ ← git repo on task branch ``hanf/<slug>`` <tmp>/container/wiki/ ← wiki with Home.md and config.yaml
+        <tmp>/container/wts/<slug>/ ← git repo on task branch ``hanf/<slug>`` <tmp>/container/wiki/
+        ← wiki with Home.md and config.yaml
 
     Returns:
         ``(container_path, worktree_path)``
 
-    The caller must ``os.chdir(worktree_path)`` so that ``Path.cwd()`` resolves inside the fixture when calling ``resolve_path``.
+    The caller must ``os.chdir(worktree_path)`` so that ``Path.cwd()`` resolves inside the fixture
+    when calling ``resolve_path``.
     """
     container = Path(tmp) / "container"
     worktree = container / "wts" / slug

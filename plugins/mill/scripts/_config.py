@@ -1,8 +1,10 @@
 """
 _config — shared config-loading helpers for mill entrypoints.
 
-Exports ------- load_config(hub_root, worktree_root) -> dict Load mill config deep-merged from plugin template, hub-root layer, local-stub layer, real config, and environment overrides.
-Merge order (lowest to highest precedence): plugin template -> hub overlay (if present) -> local stub -> real config -> env overrides.
+Exports ------- load_config(hub_root, worktree_root) -> dict Load mill config deep-merged from
+plugin template, hub-root layer, local-stub layer, real config, and environment overrides.
+Merge order (lowest to highest precedence): plugin template -> hub overlay (if present) -> local
+stub -> real config -> env overrides.
 Returns the merged dict.
 Each layer is optional except the plugin template which is always present.
 
@@ -60,7 +62,8 @@ def apply_env_overrides(cfg: dict) -> dict:
     """Apply environment variable overrides to a config dict.
 
     For each entry in ENV_REGISTRY, reads the corresponding environment variable.
-    If the value is non-empty, walks the key tuple in the config and sets the final segment to the env value.
+    If the value is non-empty, walks the key tuple in the config and sets the final segment to the
+    env value.
     Empty-string env values are treated as unset.
 
     Args:
@@ -125,7 +128,8 @@ def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
 def resolve_plugin_template_path(filename: str) -> Path:
     """Resolve a plugin template path.
 
-    Uses ${CLAUDE_PLUGIN_ROOT}/templates/<filename> when the env var is set, otherwise falls back to the source-tree path relative to this file.
+    Uses ${CLAUDE_PLUGIN_ROOT}/templates/<filename> when the env var is set, otherwise falls back to
+    the source-tree path relative to this file.
 
     Args:
         filename: The template filename (e.g., "mill-config.yaml").
@@ -152,7 +156,8 @@ def resolve_repo_config_path(hub_root: Path, worktree_root: Path) -> Path | None
     3. worktree_root / "mill-config.yaml"
 
     When none exist, returns None.
-    This allows config to be present in any of the three locations, accommodating both standard and container layouts.
+    This allows config to be present in any of the three locations, accommodating both standard and
+    container layouts.
 
     Args:
         hub_root: Absolute path to the hub directory.
@@ -296,12 +301,17 @@ def set_local_wiki_overrides(
 ) -> bool:
     """Write or update the ``wiki:`` block in a ``.millhouse/config.local.yaml`` file.
 
-    If both ``repo_url`` and ``branch`` are None this is a no-op and returns False immediately — the caller passed no overrides to apply.
+    If both ``repo_url`` and ``branch`` are None this is a no-op and returns False immediately — the
+    caller passed no overrides to apply.
 
-    Otherwise the file is read (if it exists), the ``wiki:`` sub-dict is created or updated with only the non-None arguments (partial-update semantics: a key absent from the call is not removed from the file), and the result is written back using ``yaml.safe_dump(sort_keys=False)``.
-    If the resulting text is byte-for-byte identical to the existing file the function returns False without touching the file.
+    Otherwise the file is read (if it exists), the ``wiki:`` sub-dict is created or updated with
+    only the non-None arguments (partial-update semantics: a key absent from the call is not removed
+    from the file), and the result is written back using ``yaml.safe_dump(sort_keys=False)``.
+    If the resulting text is byte-for-byte identical to the existing file the function returns False
+    without touching the file.
 
-    Note: comments in the existing file are lost on rewrite — this is the documented trade-off for this gitignored, per-machine file.
+    Note: comments in the existing file are lost on rewrite — this is the documented trade-off for
+    this gitignored, per-machine file.
 
     Args:
         cfg_path: Absolute path to the config file (need not exist yet).

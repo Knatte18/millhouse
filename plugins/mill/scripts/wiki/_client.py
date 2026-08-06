@@ -60,8 +60,10 @@ _INPROCESS_SERVERS: dict[str, "object"] = {}
 def use_inprocess(wiki_path: Path) -> None:
     """Register an in-process WikiServer for ``wiki_path``, bypassing the daemon.
 
-    After this call, every client op on this wiki_path is dispatched in the same Python process — no subprocess spawn, no socket, no token.
-    Same semantics as the daemon path (writes tasks.json, renders files, commits via git; honours WIKI_DAEMON_SKIP_PUSH to skip the push step).
+    After this call, every client op on this wiki_path is dispatched in the same Python process — no
+    subprocess spawn, no socket, no token.
+    Same semantics as the daemon path (writes tasks.json, renders files, commits via git; honours
+    WIKI_DAEMON_SKIP_PUSH to skip the push step).
 
     Intended for unit tests.
     Production callers must not use this.
@@ -128,9 +130,12 @@ def wait_for_socket_reachable(host: str, port: int, *, timeout: float, interval:
 def _dispatch(wiki_path: Path, op: str, payload: dict) -> dict:
     """Route an op to either the in-process server or the daemon over TCP.
 
-    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, a transient in-process server is built per request and closed immediately afterwards.
-    No file handles accumulate across requests, so tests using ``tempfile.TemporaryDirectory()`` can clean up reliably on Windows.
-    Tests that explicitly call ``use_inprocess(path)`` keep a persistent server for that path (callers must call ``stop_inprocess(path)`` on teardown).
+    When ``WIKI_DAEMON_INPROCESS=1`` is set in the environment, a transient in-process server is
+    built per request and closed immediately afterwards.
+    No file handles accumulate across requests, so tests using ``tempfile.TemporaryDirectory()`` can
+    clean up reliably on Windows.
+    Tests that explicitly call ``use_inprocess(path)`` keep a persistent server for that path
+    (callers must call ``stop_inprocess(path)`` on teardown).
     The env-var auto-mode is the default for the unit suite.
     """
     server = _inprocess_server(wiki_path)
@@ -573,7 +578,8 @@ Returns False if no daemon is running.
 def health_check(wiki_path: Path) -> bool:
     """Ensure the daemon is up and responding, spawning it if needed.
 
-    Semantically equivalent to every other client op: auto-spawns when the state file is missing, stale, or the daemon is dead.
+    Semantically equivalent to every other client op: auto-spawns when the state file is missing,
+    stale, or the daemon is dead.
     Returns False only when spawn itself fails (e.g.
     WikiStartupError) or the live daemon rejects the health probe.
 
@@ -581,7 +587,8 @@ def health_check(wiki_path: Path) -> bool:
         wiki_path: Path to wiki clone root.
 
     Returns:
-        True if the daemon is alive (possibly after a fresh spawn), False if it could not be brought up.
+        True if the daemon is alive (possibly after a fresh spawn), False if it could not be brought
+        up.
     """
     try:
         resp = _dispatch(wiki_path, OP_HEALTH, {})

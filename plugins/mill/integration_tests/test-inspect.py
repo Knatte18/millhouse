@@ -1,7 +1,9 @@
 """
 Integration test for millpy-inspect.py.
 
-Builds a hub+wiki fixture under .scratch/ with two active slugs and verifies default output, single-slug filter, unknown-slug error, --json schema, --since filter, no-active case, and [WARN] home-marker detection.
+Builds a hub+wiki fixture under .scratch/ with two active slugs and verifies default output,
+single-slug filter, unknown-slug error, --json schema, --since filter, no-active case, and [WARN]
+home-marker detection.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-inspect.py

@@ -1,8 +1,11 @@
 """
 Shared hub-link creation and wiki-setup helpers.
 
-Creates junctions and hardlinks in a worktree by reading the ``junctions:`` and ``hardlinks:`` blocks from ``mill-config.yaml``.
-A token-scope filter silently skips any entry whose target template references a token absent from the supplied ``tokens`` dict — this lets the same helper serve mill-setup (no ``<SLUG>`` token → ``<SLUG>``-bearing entries skipped) and mill-spawn (``<SLUG>`` present → all entries created).
+Creates junctions and hardlinks in a worktree by reading the ``junctions:`` and ``hardlinks:``
+blocks from ``mill-config.yaml``.
+A token-scope filter silently skips any entry whose target template references a token absent from
+the supplied ``tokens`` dict — this lets the same helper serve mill-setup (no ``<SLUG>`` token →
+``<SLUG>``-bearing entries skipped) and mill-spawn (``<SLUG>`` present → all entries created).
 
 Public API:
     create_hub_links(target_root, wiki_path, tokens) -> dict[str, list[Path]]
@@ -50,10 +53,13 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
     Path C — dest does not exist, branch is None: Runs git clone <url> <dest> (remote HEAD).
         Returns {"action": "cloned", "branch_existed_on_remote": None}.
 
-    Path D — dest does not exist, branch is not None: Checks remote branch existence via git ls-remote --heads.
+    Path D — dest does not exist, branch is not None: Checks remote branch existence via git
+        ls-remote --heads.
         Branch exists → git clone -b <branch> --single-branch <url> <dest>.
         Returns {"action": "cloned", "branch_existed_on_remote": True}.
-        Branch missing → git init <dest>, git remote add origin <url>, git checkout --orphan <branch>, git config branch.<branch>.remote/merge so the first write_commit_push pushes upstream-cleanly.
+        Branch missing → git init <dest>, git remote add origin <url>, git checkout --orphan
+            <branch>, git config branch.<branch>.remote/merge so the first write_commit_push pushes
+            upstream-cleanly.
         Returns {"action": "initialized", "branch_existed_on_remote": False}.
 
     This helper does NOT log or print — the caller shapes all user-facing messages.
@@ -68,7 +74,8 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
 
     Returns:
         dict with keys:
-          "action": "cloned" | "pulled" | "initialized" "branch_existed_on_remote": True | False | None
+          "action": "cloned" | "pulled" | "initialized" "branch_existed_on_remote": True | False |
+          None
 
     Raises:
         WikiSetupError: Unrecoverable clone/init/mismatch failure.
@@ -240,17 +247,21 @@ def create_hub_links(
     * Scans the target template for ``<TOKEN>`` references.
     * Intersects with the supplied *tokens* dict.
     * Silently **skips** the entry if any required token is absent (token-scope filter).
-        This is how mill-setup (no ``SLUG``) and mill-spawn (``SLUG`` present) share one helper without separate config blocks.
+        This is how mill-setup (no ``SLUG``) and mill-spawn (``SLUG`` present) share one helper
+            without separate config blocks.
 
     Junction creation:
         Calls ``_junction.resolve_target`` then ``_junction.create``.
-        Ensures the resolved target directory exists first when the template carries ``<SLUG>`` (mimics the pre-existing mill-spawn behaviour).
-        The strict ``ValueError`` from ``_junction.resolve_target`` on unknown tokens is preserved — filtering happens before the call so unknown tokens still raise.
+        Ensures the resolved target directory exists first when the template carries ``<SLUG>``
+        (mimics the pre-existing mill-spawn behaviour).
+        The strict ``ValueError`` from ``_junction.resolve_target`` on unknown tokens is preserved —
+        filtering happens before the call so unknown tokens still raise.
 
     Hardlink creation (idempotent):
         * *link_path* absent → create directly via ``Path.hardlink_to``.
         * *link_path* present, inode matches target → skip (already correct).
-        * *link_path* present, inode differs → back up to ``<name>.bak``, remove original, then create via ``Path.hardlink_to``.
+        * *link_path* present, inode differs → back up to ``<name>.bak``, remove original, then
+        create via ``Path.hardlink_to``.
 
     Args:
         target_root: Directory where junctions and hardlinks are created.
@@ -261,11 +272,14 @@ def create_hub_links(
             values are concrete strings.
 
     Returns:
-        ``{"junctions": [link_path, ...], "hardlinks": [link_path, ...]}`` listing every link that was created or updated (skipped entries are not included).
+        ``{"junctions": [link_path, ...], "hardlinks": [link_path, ...]}`` listing every link that
+        was created or updated (skipped entries are not included).
 
     Raises:
-        ValueError: Cross-volume hardlink failure (OSError re-raised with source and target paths named);
-            or ``_junction.resolve_target`` finding an unknown token after filtering (logic error in caller).
+        ValueError: Cross-volume hardlink failure (OSError re-raised with source and target paths
+            named);
+            or ``_junction.resolve_target`` finding an unknown token after filtering (logic error in
+                caller).
     """
     hub_root = target_root
     junctions_cfg = _junction.read_junctions(hub_root)

@@ -1,7 +1,8 @@
 """
 Integration test for millpy-status.py.
 
-Builds a hub+wiki fixture under .scratch/ with five slug scenarios and verifies plain, --json, --sort phase, and main-worktree-guard runs.
+Builds a hub+wiki fixture under .scratch/ with five slug scenarios and verifies plain, --json,
+--sort phase, and main-worktree-guard runs.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-status.py

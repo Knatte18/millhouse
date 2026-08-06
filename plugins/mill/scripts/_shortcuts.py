@@ -1,10 +1,12 @@
 """
 Shortcut-wrapper writer for mill-setup Phase 4.7.
 
-Renders ``plugins/mill/templates/shortcut-wrapper.cmd`` once per user-callable script and writes the result to ``.millhouse/<script>.cmd``.
+Renders ``plugins/mill/templates/shortcut-wrapper.cmd`` once per user-callable script and writes the
+result to ``.millhouse/<script>.cmd``.
 Idempotent: a file that already contains identical content is not rewritten.
 
-After writing CMD wrappers, any legacy ``.py`` or ``.ps1`` wrappers for the same scripts that still exist in ``mill_dir`` are deleted (idempotent cleanup).
+After writing CMD wrappers, any legacy ``.py`` or ``.ps1`` wrappers for the same scripts that still
+exist in ``mill_dir`` are deleted (idempotent cleanup).
 
 Public API:
     write_all(mill_dir, latest_path)
@@ -44,15 +46,19 @@ def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
     """
     Render and write all shortcut wrappers under ``mill_dir``.
 
-    For each script in ``SHORTCUT_SCRIPTS``, the template is rendered and written to ``mill_dir / f"{script}.cmd"``.
+    For each script in ``SHORTCUT_SCRIPTS``, the template is rendered and written to ``mill_dir /
+    f"{script}.cmd"``.
     A file is skipped when its on-disk content is already byte-equal to the rendered output.
 
-    After the write loop, any legacy ``.py`` or ``.ps1`` wrappers whose stem matches a ``SHORTCUT_SCRIPTS`` entry are deleted.
+    After the write loop, any legacy ``.py`` or ``.ps1`` wrappers whose stem matches a
+    ``SHORTCUT_SCRIPTS`` entry are deleted.
 
     Args:
-        mill_dir: Directory in which to write the wrappers (typically ``.millhouse/`` at the repo root).
+        mill_dir: Directory in which to write the wrappers (typically ``.millhouse/`` at the repo
+            root).
             Must already exist.
-        latest_path: Absolute path to the latest plugin cache entry; used to construct SCRIPT_PATH and MILL_PYTHON tokens.
+        latest_path: Absolute path to the latest plugin cache entry; used to construct SCRIPT_PATH
+            and MILL_PYTHON tokens.
 
     Returns:
         List of ``Path`` objects for every .cmd file that was created or rewritten.

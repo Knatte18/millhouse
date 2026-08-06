@@ -1,7 +1,8 @@
 """
 Single template-substitution helper used by every mill artefact format.
 
-Per the v2 format-discipline rules, every artefact type lives as a `.md` template in `plugins/mill/templates/` with `<PLACEHOLDER>` tokens.
+Per the v2 format-discipline rules, every artefact type lives as a `.md` template in
+`plugins/mill/templates/` with `<PLACEHOLDER>` tokens.
 
 Public API:
     render(template_path, values)

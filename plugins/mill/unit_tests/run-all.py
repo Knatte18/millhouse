@@ -2,7 +2,8 @@
 
 Exits 0 when all tests pass, 1 when any fails.
 Each test runs in its own subprocess, parallelised across CPU cores.
-Per-test stdout/stderr is buffered and printed atomically after the test finishes so output from concurrent runs does not interleave.
+Per-test stdout/stderr is buffered and printed atomically after the test finishes so output from
+concurrent runs does not interleave.
 Override the worker count with ``--jobs N`` (default: ``os.cpu_count()``).
 """
 from __future__ import annotations

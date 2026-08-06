@@ -57,7 +57,8 @@ def detect_repo(git_root: Path | None = None) -> str:
 def _render_body_with_comments(body: str, comments: list[dict]) -> str:
     """Return ``body`` with rendered comment blocks appended.
 
-    Sorts ``comments`` by ``createdAt`` ascending, caps at 10, renders each as a Markdown block after a horizontal rule.
+    Sorts ``comments`` by ``createdAt`` ascending, caps at 10, renders each as a Markdown block
+    after a horizontal rule.
     Returns ``body`` unchanged when ``comments`` is empty.
     """
     if not comments:
@@ -92,7 +93,8 @@ def fetch(
 
     Each entry has number, title, body, labels, createdAt (per the gh ``--json`` fields requested).
     When an issue has comments, body includes rendered comments appended after the original body.
-    When ``label_filter`` is provided, only issues carrying at least one of the named labels are returned.
+    When ``label_filter`` is provided, only issues carrying at least one of the named labels are
+    returned.
     Raises ``GhError`` on any non-zero gh exit or unparseable output.
     """
     repo_name = repo or detect_repo(git_root=git_root)
@@ -136,7 +138,8 @@ def fetch_one(
 ) -> dict[str, Any]:
     """Return a single issue dict for ``number``.
 
-    Invokes ``gh issue view`` with the ``state`` field included in the JSON response — this is load-bearing because ``gh issue view`` exits 0 for both OPEN and CLOSED issues.
+    Invokes ``gh issue view`` with the ``state`` field included in the JSON response — this is
+    load-bearing because ``gh issue view`` exits 0 for both OPEN and CLOSED issues.
     After a successful parse the ``state`` field is inspected;
     only ``"OPEN"`` issues are returned.
     Raises ``GhError`` when the issue is closed or otherwise not actionable.
@@ -148,11 +151,14 @@ def fetch_one(
         git_root: Override the git root used for repo detection.
 
     Returns:
-        The parsed issue dict including ``number``, ``title``, ``body``, ``state``, ``labels``, ``createdAt``. ``body`` includes rendered comments appended after the original body when comments exist.
+        The parsed issue dict including ``number``, ``title``, ``body``, ``state``, ``labels``,
+        ``createdAt``. ``body`` includes rendered comments appended after the original body when
+        comments exist.
 
     Raises:
         GhError: The ``gh`` CLI returned a non-zero exit code (e.g.
-            404, auth failure), JSON parsing failed, or the issue state is not ``"OPEN"`` (closed-issue guard).
+            404, auth failure), JSON parsing failed, or the issue state is not ``"OPEN"``
+                (closed-issue guard).
     """
     repo_name = repo or detect_repo(git_root=git_root)
     if not repo_name:
@@ -187,16 +193,22 @@ def fetch_one(
 def to_contract(issues: list[dict[str, Any]], repo: str) -> dict[str, Any]:
     """Map fetch()-shaped issue dicts into the triage-report contract shape.
 
-    Each entry of ``issues`` is shaped like one element of ``fetch()``'s return value (``number, title, body, labels, createdAt``).
-    This function does not call ``gh`` itself -- it is a pure mapping step that sits between ``fetch()``/``fetch_one()`` and the source-agnostic ``mill-triage-to-tasks`` skill, which consumes the returned envelope (see ``plugins/mill/templates/triage-report.schema.md``).
+    Each entry of ``issues`` is shaped like one element of ``fetch()``'s return value (``number,
+    title, body, labels, createdAt``).
+    This function does not call ``gh`` itself -- it is a pure mapping step that sits between
+    ``fetch()``/``fetch_one()`` and the source-agnostic ``mill-triage-to-tasks`` skill, which
+    consumes the returned envelope (see ``plugins/mill/templates/triage-report.schema.md``).
 
     Args:
         issues: List of issue dicts as returned by ``fetch()``.
         repo: ``owner/repo`` string to record in the envelope's ``meta``.
 
     Returns:
-        The full contract envelope: ``{"source": "ghissues", "meta": {"repo": repo}, "items": [...], "ref_prefix": "#", "detail_hint": "Run 'gh issue view #{ref}' for full detail.", "embed_body": False}``. ``items`` preserves the input order;
-        each item is ``{"ref": str(issue["number"]), "title": issue["title"], "body": issue["body"]}``.
+        The full contract envelope: ``{"source": "ghissues", "meta": {"repo": repo}, "items": [...],
+        "ref_prefix": "#", "detail_hint": "Run 'gh issue view #{ref}' for full detail.",
+        "embed_body": False}``. ``items`` preserves the input order;
+        each item is ``{"ref": str(issue["number"]), "title": issue["title"], "body":
+        issue["body"]}``.
     """
     items = [
         {"ref": str(issue["number"]), "title": issue["title"], "body": issue["body"]}
@@ -220,8 +232,10 @@ def close_with_comment(
 ) -> None:
     """Post ``comment`` on issue ``number``, then close it.
 
-    Used by mill-ghissues-to-tasks when an issue has been turned into — or folded into — a wiki task.
-    Leaving claimed-but-still-open issues on GitHub is a forgetting hazard; closing with a pointer comment makes the pipeline state explicit.
+    Used by mill-ghissues-to-tasks when an issue has been turned into — or folded into — a wiki
+    task.
+    Leaving claimed-but-still-open issues on GitHub is a forgetting hazard; closing with a pointer
+    comment makes the pipeline state explicit.
 
     Raises ``GhError`` on any non-zero gh exit.
     """

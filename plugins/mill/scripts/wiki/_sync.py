@@ -2,7 +2,8 @@
 Git operations layer for wiki clone management.
 
 All operations are subprocess-based, running git commands against the wiki directory.
-This module provides atomic write, pull, and commit/push operations with rebase retry on non-fast-forward conflicts.
+This module provides atomic write, pull, and commit/push operations with rebase retry on
+non-fast-forward conflicts.
 
 Public API:
     path_guard(rel_path)
@@ -37,7 +38,8 @@ _GIT_NETWORK_TIMEOUT_SECONDS = 30.0
 def _git_env() -> dict:
     """Environment for git subprocesses that forbids interactive prompts.
 
-    The wiki daemon launches with no console (CREATE_NO_WINDOW), so any git credential or host-key prompt would block forever and starve every wiki op.
+    The wiki daemon launches with no console (CREATE_NO_WINDOW), so any git credential or host-key
+    prompt would block forever and starve every wiki op.
     These vars make git fail with a non-zero exit instead of prompting.
     """
     env = dict(os.environ)
@@ -182,7 +184,9 @@ def pull(wiki_path: Path) -> bool:
 def verify_git_repo(wiki_path: Path) -> None:
     """Verify wiki_path is a valid git repository.
 
-    Runs "git rev-parse --git-dir" against wiki_path and raises WikiPushError if the command fails, times out, or otherwise errors -- covers a missing ".git" directory, a corrupted repository, or a hung git process.
+    Runs "git rev-parse --git-dir" against wiki_path and raises WikiPushError if the command fails,
+    times out, or otherwise errors -- covers a missing ".git" directory, a corrupted repository, or
+    a hung git process.
 
     Args:
         wiki_path: Path to wiki clone root.
@@ -224,7 +228,8 @@ def commit_push(
     1. git add -- <rel_paths>
     2. git diff --cached --quiet (check if staged)
     3. git commit -m <message>
-    4. git push origin HEAD:<branch> (explicit refspec) - On non-fast-forward: git pull --rebase, retry push - On rebase conflict: git rebase --abort, raise WikiPushError
+    4. git push origin HEAD:<branch> (explicit refspec) - On non-fast-forward: git pull --rebase,
+    retry push - On rebase conflict: git rebase --abort, raise WikiPushError
 
     A commit with nothing staged returns immediately (idempotent).
 

@@ -1,10 +1,14 @@
-"""Unit tests for wiki daemon health-check: git-validity, cross-machine staleness, debounced pull, hard/soft failure classification, and the liveness-only exemption.
+"""Unit tests for wiki daemon health-check: git-validity, cross-machine staleness, debounced pull,
+hard/soft failure classification, and the liveness-only exemption.
 
-Covers `_handle_health()` (wiki/_server.py) and `health_check()`/`_ensure_daemon()`'s reuse-probe (wiki/_client.py).
+Covers `_handle_health()` (wiki/_server.py) and `health_check()`/`_ensure_daemon()`'s reuse-probe
+(wiki/_client.py).
 Uses real tempfile git repos (bare origin + clone) for the git-validity and staleness cases,
 and mocks for the debounce/soft-warning call-count assertions.
 
-This file overrides `_test_helpers.py`'s WIKI_DAEMON_SKIP_GIT=1 default -- most of this suite is specifically about real git behavior (verify_git_repo, pull), so it needs the daemon to actually invoke git.
+This file overrides `_test_helpers.py`'s WIKI_DAEMON_SKIP_GIT=1 default -- most of this suite is
+specifically about real git behavior (verify_git_repo, pull), so it needs the daemon to actually
+invoke git.
 """
 from __future__ import annotations
 

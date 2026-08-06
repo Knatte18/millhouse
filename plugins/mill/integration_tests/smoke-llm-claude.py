@@ -159,7 +159,8 @@ def test_tool_use() -> int:
 def test_session_reuse() -> int:
     """Seed a fact in one call, resume the session, ask claude to recall it.
 
-    This is the hard prerequisite for mill-go's warm-implementer pattern: context must carry across `claude -p --resume <id>` calls.
+    This is the hard prerequisite for mill-go's warm-implementer pattern: context must carry across
+    `claude -p --resume <id>` calls.
     If this breaks, mill-go's whole design needs rethinking.
     """
     print("=" * 60, file=sys.stderr)

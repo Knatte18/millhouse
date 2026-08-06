@@ -2,14 +2,21 @@
 Integration test for mill-plan assets.
 
 mill-plan itself is interactive Opus reasoning;
-we do not exercise the full skill end-to-end here (that would burn real tokens and require a live reviewer).
+we do not exercise the full skill end-to-end here (that would burn real tokens and require a live
+reviewer).
 Instead we verify the supporting assets the skill depends on:
 
-    - ``plan-overview.md`` + ``plan-batch.md`` templates render without KeyError once every token is supplied,
-        and the rendered output has the structure the skill promises (fenced-yaml frontmatter, Batch Index block, Cards section).
-    - ``_plan_dag.extract_batch_index`` + ``validate`` accept a small hand-written dummy plan and reject a cyclic variant of it.
-    - ``_review_plan._load_root_from_overview`` reads the ``root:`` field from the fenced-yaml frontmatter — the function used to only understand ``---`` frontmatter, which would silently drop ``root:``.
-    - ``_timestamp.now_utc_compact`` + ``now_utc_iso`` produce the shapes the skill substitutes into templates.
+    - ``plan-overview.md`` + ``plan-batch.md`` templates render without KeyError once every token is
+        supplied,
+        and the rendered output has the structure the skill promises (fenced-yaml frontmatter, Batch
+            Index block, Cards section).
+    - ``_plan_dag.extract_batch_index`` + ``validate`` accept a small hand-written dummy plan and
+        reject a cyclic variant of it.
+    - ``_review_plan._load_root_from_overview`` reads the ``root:`` field from the fenced-yaml
+        frontmatter — the function used to only understand ``---`` frontmatter, which would silently
+        drop ``root:``.
+    - ``_timestamp.now_utc_compact`` + ``now_utc_iso`` produce the shapes the skill substitutes into
+        templates.
 
 Keeps a tiny fixture under ``.scratch/`` so a failure leaves inspectable artefacts behind;
 on PASS the fixture is removed.

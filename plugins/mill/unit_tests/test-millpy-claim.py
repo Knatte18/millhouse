@@ -3,7 +3,8 @@
 Verifies:
   - top-level import succeeds (smoke test)
   - main() dry-run with --slug exits 0 and prints expected lines
-  - main() happy path calls claim_in_wiki, write_initial_status, and recreate_active_junction in order
+  - main() happy path calls claim_in_wiki, write_initial_status, and recreate_active_junction in
+  order
   - dirty-tree path with option 3 (Abort) exits 1
   - dirty-tree path with option 1 (Stash) invokes git stash
   - multi-select path skips claim_in_wiki and uses merged task
@@ -398,7 +399,8 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
 
 
 def test_main_multi_path_skips_claim_in_wiki() -> None:
-    """Multi mode uses the merged task from multi_select_groom_then_claim and skips the standard claim_in_wiki call.
+    """Multi mode uses the merged task from multi_select_groom_then_claim and skips the standard
+    claim_in_wiki call.
 """
     task_a = _make_fake_task(slug="task-a", title="Task A")
     task_b = _make_fake_task(slug="task-b", title="Task B")
@@ -570,7 +572,8 @@ def test_portal_before_recreate_active_junction_order() -> None:
 
 
 def test_portal_idempotent_when_already_correct() -> None:
-    """Re-claiming the same slug when portal already points at the correct worktree must not call _junction.create and must exit 0.
+    """Re-claiming the same slug when portal already points at the correct worktree must not call
+    _junction.create and must exit 0.
 """
     task = _make_fake_task(slug="my-task", title="My Task")
 

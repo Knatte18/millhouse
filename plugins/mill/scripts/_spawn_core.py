@@ -1,7 +1,9 @@
 """
 Shared spawn-flow helpers used by both ``mill-spawn`` and ``mill-claim``.
 
-``mill-spawn`` creates a worktree and then delegates the task-picking, wiki-claiming, and status-writing steps to the helpers here. ``mill-claim`` picks and claims a task in an existing worktree without creating a new one;
+``mill-spawn`` creates a worktree and then delegates the task-picking, wiki-claiming, and
+status-writing steps to the helpers here. ``mill-claim`` picks and claims a task in an existing
+worktree without creating a new one;
 it calls the same helpers to keep parity.
 
 Public API:
@@ -122,9 +124,11 @@ def pick_worktree_color(worktrees_dir: Path) -> str:
     """
     Pick the first non-green palette color not used by any sibling worktree.
 
-    Scans ``<worktrees_dir>/*/.vscode/settings.json`` for existing ``titleBar.activeBackground`` values.
+    Scans ``<worktrees_dir>/*/.vscode/settings.json`` for existing ``titleBar.activeBackground``
+    values.
     Returns the first non-green palette color missing from that set.
-    If every non-green color is in use, wraps to the first non-green (never green — that is reserved for the hub).
+    If every non-green color is in use, wraps to the first non-green (never green — that is reserved
+    for the hub).
 
     Args:
         worktrees_dir: Directory holding per-task worktrees.
@@ -162,9 +166,13 @@ def discover_active_worktrees(
     """
     Discover task worktrees under ``worktrees_dir`` whose branch matches Home.md.
 
-    Uses ``git worktree list --porcelain`` (single git call) instead of walking ``worktrees_dir`` and running ``git branch --show-current`` per entry — orphan directories on disk (leftover from failed mill-merge teardowns) are not in the worktree registry, so they don't appear at all and don't waste git subprocess calls.
+    Uses ``git worktree list --porcelain`` (single git call) instead of walking ``worktrees_dir``
+    and running ``git branch --show-current`` per entry — orphan directories on disk (leftover from
+    failed mill-merge teardowns) are not in the worktree registry, so they don't appear at all and
+    don't waste git subprocess calls.
 
-    Skips worktrees whose path is not under ``worktrees_dir``, whose branch does not start with ``branch_prefix`` (when non-empty), or whose slug is not present in ``home_tasks``.
+    Skips worktrees whose path is not under ``worktrees_dir``, whose branch does not start with
+    ``branch_prefix`` (when non-empty), or whose slug is not present in ``home_tasks``.
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
@@ -265,7 +273,8 @@ def pick_task_single(
 
     When ``slug`` is ``None`` the standard interactive flow runs:
 
-    1. If at least one unmarked task (status is None) exists, present the numbered picker and return the chosen task.
+    1. If at least one unmarked task (status is None) exists, present the numbered picker and return
+        the chosen task.
         A failed picker (EOF or out-of-range input) propagates as ``ValueError``.
     2. If nothing is pickable, raise ``BacklogEmpty``.
 
@@ -279,7 +288,8 @@ def pick_task_single(
 
     Raises:
         BacklogEmpty: No pickable task exists (slug=None path only).
-        ValueError: The requested slug is unknown, already claimed/done/abandoned, or the numbered picker returned no selection.
+        ValueError: The requested slug is unknown, already claimed/done/abandoned, or the numbered
+        picker returned no selection.
     """
     if slug is not None:
         matched = next(
@@ -385,12 +395,14 @@ def pick_task_single_or_multi(
     """
     Pick one or more tasks from ``tasks`` for claiming, with multi-select support.
 
-    Extends ``pick_task_single`` by allowing the numbered interactive prompt to return multiple tasks when the user enters comma-separated indices.
+    Extends ``pick_task_single`` by allowing the numbered interactive prompt to return multiple
+    tasks when the user enters comma-separated indices.
     The ``--slug`` short-circuit always resolves to a single task (single-only);
     multi only fires from the numbered prompt.
 
     Return shape:
-        - ``("single", task, [])`` — one task picked (slug bypass or numbered prompt with a single index).
+        - ``("single", task, [])`` — one task picked (slug bypass or numbered prompt with a single
+        index).
         - ``("multi", [task_a, ...], [])`` — two or more tasks from the prompt.
         - ``("empty", None, [])`` — no pickable (unmarked) tasks exist.
 
@@ -400,7 +412,8 @@ def pick_task_single_or_multi(
         always single-only bypass.
 
     Returns:
-        3-tuple ``(mode, picked, candidates)`` where ``candidates`` is always an empty list (reserved for future use).
+        3-tuple ``(mode, picked, candidates)`` where ``candidates`` is always an empty list
+        (reserved for future use).
 
     Raises:
         ValueError: Invalid slug,
@@ -446,7 +459,8 @@ def multi_select_groom_then_claim(
 
     1. Remove each source slug's entry via ``wiki.merge_tasks(... remove_slugs=...)``.
     2. Upsert the merged entry via ``wiki.merge_tasks(... upsert=...)``.
-    3. Mark the merged entry ``"active"`` via ``wiki.merge_tasks(... set_phase=(merged_slug, "active"))``.
+    3. Mark the merged entry ``"active"`` via ``wiki.merge_tasks(... set_phase=(merged_slug,
+    "active"))``.
 
     Args:
         wiki_path: Directory containing the wiki clone.
@@ -496,7 +510,8 @@ def prompt_merged_entry(
     3. ``Extract to proposal? (y/N):`` — ``y`` sets ``has_proposal=True``.
     4. Body lines read until a line containing only ``END``.
 
-    When ``has_proposal=True``: ``body_for_home`` is set to the wiki link reference form and ``proposal_body`` holds the typed body text.
+    When ``has_proposal=True``: ``body_for_home`` is set to the wiki link reference form and
+    ``proposal_body`` holds the typed body text.
     When ``has_proposal=False``: ``body_for_home`` is the typed body and ``proposal_body`` is None.
 
     Args:
@@ -594,7 +609,8 @@ def capture_parent_branch(git_root: Path) -> str:
     Return the current HEAD branch name for the hub at ``git_root``.
 
     Runs ``git rev-parse --abbrev-ref HEAD`` against ``git_root``.
-    This is called before a worktree is created so the result reflects the hub's branch, which mill-merge / mill-cleanup need to know where to merge back to.
+    This is called before a worktree is created so the result reflects the hub's branch, which
+    mill-merge / mill-cleanup need to know where to merge back to.
 
     Args:
         git_root: Absolute path to the hub git checkout.
@@ -630,15 +646,19 @@ def write_initial_status(
     Render + write ``_mill/status.md`` at worktree root;
     create ``_mill/`` directory if absent.
 
-    Uses ``_status.render_initial`` to produce the file body, writes the file to ``worktree_path / "status.md"``, stages and commits on the task branch, and returns the absolute path.
+    Uses ``_status.render_initial`` to produce the file body, writes the file to ``worktree_path /
+    "status.md"``, stages and commits on the task branch, and returns the absolute path.
 
     Args:
-        worktree_path: Root directory of the task worktree (the git checkout directory, not ``.millhouse/``). ``status.md`` is written here and tracked by git on the task branch.
+        worktree_path: Root directory of the task worktree (the git checkout directory, not
+            ``.millhouse/``). ``status.md`` is written here and tracked by git on the task branch.
         slug: Task slug; embedded in the commit message and in status.md.
-        title: Human-readable task title used both as the ``task:`` value and as the description placeholder.
+        title: Human-readable task title used both as the ``task:`` value and as the description
+            placeholder.
         ts: ISO-8601 UTC timestamp for the timeline entry.
         parent_branch: Hub branch name recorded so mill-merge knows where to merge back to.
-        branch: The task branch the worktree is on; recorded so the status file is self-describing without inferring from per-developer cfg.branch_prefix.
+        branch: The task branch the worktree is on; recorded so the status file is self-describing
+            without inferring from per-developer cfg.branch_prefix.
         cfg: Loaded mill config dict;
             supplies cfg["paths"]["status_md"] to _paths.status_path.
 
@@ -690,15 +710,19 @@ def recreate_active_junction(
     """
     Delete-then-create the ``.active`` junction at ``hub_root / ".active"``.
 
-    Points the junction at ``hub_root / "_mill"`` -- the on-branch working directory for the current task.
-    Called by ``mill-claim`` after claiming a task in an existing worktree where the junction may already exist pointing at a previous task,
+    Points the junction at ``hub_root / "_mill"`` -- the on-branch working directory for the current
+    task.
+    Called by ``mill-claim`` after claiming a task in an existing worktree where the junction may
+    already exist pointing at a previous task,
     and by ``mill-spawn`` after ``_setup.create_hub_links``.
 
-    The target ``_mill/`` directory is created (parents included) if it does not yet exist, so ``_junction.create`` does not fail on a missing target.
+    The target ``_mill/`` directory is created (parents included) if it does not yet exist, so
+    ``_junction.create`` does not fail on a missing target.
 
     Args:
         hub_root: Absolute path to the hub git checkout.
-            The junction is placed at ``hub_root / ".active"`` and points at ``hub_root / "_mill/"``.
+            The junction is placed at ``hub_root / ".active"`` and points at ``hub_root /
+                "_mill/"``.
     """
     target = hub_root / "_mill"
     target.mkdir(parents=True, exist_ok=True)

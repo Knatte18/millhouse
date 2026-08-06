@@ -2,7 +2,8 @@
 Detect approved scopes with unfixed nits.
 
 This module provides a gate to prevent tasks from completing when approved scopes have pending nits.
-It reads the status timeline to find all approved scopes, checks whether their final code-review files contain NIT headings, and verifies that nits-fixed markers are present in the timeline.
+It reads the status timeline to find all approved scopes, checks whether their final code-review
+files contain NIT headings, and verifies that nits-fixed markers are present in the timeline.
 
 Public API:
     compute_unfixed_nits(worktree, reviews_dir, status_path) -> list[str]
@@ -26,8 +27,12 @@ def compute_unfixed_nits(
     """
     Compute the list of approved scopes with unfixed nits.
 
-    Reads the status timeline to find all approved scopes (per-batch scopes from `approved-<batch>` rows and `holistic` from `holistic-approved` rows).
-    For each approved scope, locates the latest-timestamp code-review file matching RE_BATCH (per-batch) or RE_SIMPLE (holistic) patterns, counts `### [NIT]` headings via parse_blocking_count, and includes the scope in the result when nit_count > 0 AND no nits-fixed-<scope> row exists in the timeline.
+    Reads the status timeline to find all approved scopes (per-batch scopes from `approved-<batch>`
+    rows and `holistic` from `holistic-approved` rows).
+    For each approved scope, locates the latest-timestamp code-review file matching RE_BATCH
+    (per-batch) or RE_SIMPLE (holistic) patterns, counts `### [NIT]` headings via
+    parse_blocking_count, and includes the scope in the result when nit_count > 0 AND no
+    nits-fixed-<scope> row exists in the timeline.
 
     Args:
         worktree: Path to the worktree root (unused; accepted for API consistency).

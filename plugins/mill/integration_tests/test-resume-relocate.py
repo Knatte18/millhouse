@@ -1,23 +1,32 @@
 """
 Integration test: mill-resume off-canonical worktree relocate+scaffold coverage.
 
-Builds real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and exercises ``_resume_repair.check_uncommitted_changes`` / ``_resume_repair.relocate_and_scaffold`` (Card 8) the same way ``mill-resume/SKILL.md`` Phase 1b's embedded Python snippets (Card 10) call them, plus the two-step ``hub_root`` resolution Phase 1b Step 4 uses for hub-in-subdirectory repos.
+Builds real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and exercises
+``_resume_repair.check_uncommitted_changes`` / ``_resume_repair.relocate_and_scaffold`` (Card 8) the
+same way ``mill-resume/SKILL.md`` Phase 1b's embedded Python snippets (Card 10) call them, plus the
+two-step ``hub_root`` resolution Phase 1b Step 4 uses for hub-in-subdirectory repos.
 
-Covers the five ``discussion.md`` Testing-section scenarios from Card 11's brief, split across seven functions below (``scenario_a`` .. ``scenario_g``):
+Covers the five ``discussion.md`` Testing-section scenarios from Card 11's brief, split across seven
+functions below (``scenario_a`` .. ``scenario_g``):
 
   (a) clean off-canonical worktree relocates and scaffolds successfully.
   (b) an uncommitted change halts before any relocation is attempted.
   (c) the "user declines" path has no Python surface -- documented no-op.
   (d) canonical path occupied by an unrelated task is classified as a genuine collision,
       and a blind ``relocate_and_scaffold`` call onto it raises rather than silently succeeding.
-  (e) after a successful relocation the worktree's own files (``_mill/status.md``) are readable at the new canonical location and gone from the old one.
-  (f) hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro) -- Card 10 Step 4's exact two-step ``hub_root`` resolution finds the subdirectory hub, not the main worktree root, and scaffolding pulls from the correct source.
+  (e) after a successful relocation the worktree's own files (``_mill/status.md``) are readable at
+      the new canonical location and gone from the old one.
+  (f) hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro) -- Card 10 Step
+      4's exact two-step ``hub_root`` resolution finds the subdirectory hub, not the main worktree
+      root, and scaffolding pulls from the correct source.
   (g) partial-failure retry -- a prior run's ``move()`` succeeded but its scaffold steps didn't;
-      a second ``relocate_and_scaffold`` call completes the remaining work without re-attempting the move.
+      a second ``relocate_and_scaffold`` call completes the remaining work without re-attempting the
+          move.
 
 No LLM is invoked;
 no claude / sonnet subprocess fires.
-Git operations run via subprocess and ``_worktree``/``_resume_repair`` against a real ``git`` in PATH.
+Git operations run via subprocess and ``_worktree``/``_resume_repair`` against a real ``git`` in
+PATH.
 
 Run from hub root:
     PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-resume-relocate.py
@@ -59,12 +68,17 @@ def _git_init(path: Path) -> None:
 
 def _make_hub(tmp: Path, *, hub_relative: str | None = None) -> tuple[Path, Path, Path]:
     """
-    Build a hub git repo (optionally with a sub-directory hub layout) plus a fake wiki clone directory.
+    Build a hub git repo (optionally with a sub-directory hub layout) plus a fake wiki clone
+    directory.
 
     Args:
         tmp: Temporary directory root (already exists).
-        hub_relative: When ``None``, ``.millhouse/`` lives at the repo root (``hub_root == main_root``).
-            When set (e.g. ``"src/csharp/NORCE.Models"``), ``.millhouse/`` lives in that subdirectory, and a ``hub_relative_path`` stub is written at ``main_root/.millhouse/config.local.yaml`` so ``_paths.resolve_hub_path`` can find the subdirectory hub.
+        hub_relative: When ``None``, ``.millhouse/`` lives at the repo root (``hub_root ==
+            main_root``).
+            When set (e.g. ``"src/csharp/NORCE.Models"``), ``.millhouse/`` lives in that
+                subdirectory, and a ``hub_relative_path`` stub is written at
+                ``main_root/.millhouse/config.local.yaml`` so ``_paths.resolve_hub_path`` can find
+                the subdirectory hub.
 
     Returns:
         ``(main_root, hub_root, wiki_path)``.
@@ -94,7 +108,8 @@ def _make_off_canonical_worktree(
     main_root: Path, tmp: Path, slug: str, *, dirty: str | None = None
 ) -> Path:
     """
-    Create a non-canonical worktree (registered via ``_worktree.create``) with a committed ``_mill/status.md`` carrying ``slug``.
+    Create a non-canonical worktree (registered via ``_worktree.create``) with a committed
+    ``_mill/status.md`` carrying ``slug``.
 
     Args:
         dirty: ``None`` for a clean worktree;
@@ -162,8 +177,10 @@ def scenario_b() -> None:
 
 def scenario_c() -> None:
     """
-    Step 3 (the "confirm with the user" numbered-options prompt) is pure conversational text in SKILL.md with no Python component to invoke directly.
-    Declining ("2) Cancel") is equivalent to the caller simply never calling relocate_and_scaffold -- exactly the no-mutation shape scenarios (a)/(b)/(d) already exercise by omission.
+    Step 3 (the "confirm with the user" numbered-options prompt) is pure conversational text in
+    SKILL.md with no Python component to invoke directly.
+    Declining ("2) Cancel") is equivalent to the caller simply never calling relocate_and_scaffold
+    -- exactly the no-mutation shape scenarios (a)/(b)/(d) already exercise by omission.
     This function is a documented no-op standing in for that scenario.
     """
     print("PASS scenario (c): user-decline path has no Python surface (documented no-op)")
@@ -241,7 +258,9 @@ def scenario_e() -> None:
 
 def scenario_f() -> None:
     """
-    Hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro): Card 10 Step 4's exact two-step hub_root resolution finds the subdirectory hub, not the main worktree root, and scaffolding pulls from the correct source.
+    Hub-in-subdirectory main worktree (mirrors issue #728's NORCE.Models repro): Card 10 Step 4's
+    exact two-step hub_root resolution finds the subdirectory hub, not the main worktree root, and
+    scaffolding pulls from the correct source.
     """
     with tempfile.TemporaryDirectory() as tmp_str:
         tmp = Path(tmp_str)

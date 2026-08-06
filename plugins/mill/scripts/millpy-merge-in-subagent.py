@@ -1,12 +1,15 @@
 """millpy-merge-in-subagent.py — merge-in conflict/verify-fix sub-agent dispatcher.
 
-Dispatches a Sonnet sub-agent session to handle either merge conflict resolution or verify-command failures after a merge.
+Dispatches a Sonnet sub-agent session to handle either merge conflict resolution or verify-command
+failures after a merge.
 The Builder reads only the JSON verdict on stdout;
 all context-heavy work happens inside the sub-agent session.
 
 Flags:
-    --mode conflicts|verify-fix which delegation mode to run; required unless --recompute-baseline is set
-    --recompute-baseline reset and eagerly recompute the cached module_verify_baseline after a successful parent-branch sync.
+    --mode conflicts|verify-fix which delegation mode to run; required unless --recompute-baseline
+        is set
+    --recompute-baseline reset and eagerly recompute the cached module_verify_baseline after a
+        successful parent-branch sync.
         Independent of --mode;
         a synchronous computation with no LLM session involved.
 
@@ -15,7 +18,8 @@ Flags:
     paths of files with conflict markers
 
   verify-fix mode:
-    --cmd CMD the verify command to re-run --checkpoint SHA git SHA of the merge commit; used to diff what the merge changed
+    --cmd CMD the verify command to re-run --checkpoint SHA git SHA of the merge commit; used to
+    diff what the merge changed
 
 Exit codes:
     0 — sub-agent ran;
@@ -55,7 +59,8 @@ def _collect_task_intent(project_root: Path) -> str:
     """
     Gather task-intent excerpts from discussion.md and plan/*.md files.
 
-    Returns a string containing excerpts from this branch's _mill/discussion.md and _mill/plan/*.md that describe the branch's intent.
+    Returns a string containing excerpts from this branch's _mill/discussion.md and _mill/plan/*.md
+    that describe the branch's intent.
     Extracts the top YAML block and the Edits/Creates/Deletes bullets from each plan file.
     Returns empty string if _mill directory does not exist.
     """
@@ -113,17 +118,26 @@ def _collect_task_intent(project_root: Path) -> str:
 
 def _verify_conflict_markers(files: list[str], project_root: Path) -> dict | None:
     """
-    Verify that none of ``files`` still carries an unresolved merge conflict after a conflicts-mode sub-agent self-reports success (#713).
+    Verify that none of ``files`` still carries an unresolved merge conflict after a conflicts-mode
+    sub-agent self-reports success (#713).
 
-    A sub-agent's own ``{"status": "success"}`` claim is not proof: it may have edited a file without ever running ``git add`` on it,
-    or it may have left ``<<<<<<<``/``=======``/``>>>>>>>`` markers in place while still staging the file.
-    This function runs two independent git checks, both scoped to ``files`` and both always executed (neither short-circuits the other), to catch either failure mode before the caller's success envelope reaches the Builder:
+    A sub-agent's own ``{"status": "success"}`` claim is not proof: it may have edited a file
+    without ever running ``git add`` on it,
+    or it may have left ``<<<<<<<``/``=======``/``>>>>>>>`` markers in place while still staging the
+    file.
+    This function runs two independent git checks, both scoped to ``files`` and both always executed
+    (neither short-circuits the other), to catch either failure mode before the caller's success
+    envelope reaches the Builder:
 
     1. ``git diff --name-only --diff-filter=U`` — lists paths still marked unmerged in the index.
-        Any of ``files`` appearing here was never staged at all (same idiom as ``mill-merge-in/SKILL.md`` step 3 and ``millpy-wikipush.py``'s dirty-wiki check).
-    2. ``git diff --cached --check`` — greps the staged diff for git's own ``"conflict marker"`` warning, which fires when a staged hunk still contains literal marker lines.
+        Any of ``files`` appearing here was never staged at all (same idiom as
+            ``mill-merge-in/SKILL.md`` step 3 and ``millpy-wikipush.py``'s dirty-wiki check).
+    2. ``git diff --cached --check`` — greps the staged diff for git's own ``"conflict marker"``
+        warning, which fires when a staged hunk still contains literal marker lines.
 
-    A file resolved via ``git rm`` (a modify/delete resolution) needs no special-casing: it is absent from both check outputs by construction -- already resolved out of check 1's unmerged list,
+    A file resolved via ``git rm`` (a modify/delete resolution) needs no special-casing: it is
+    absent from both check outputs by construction -- already resolved out of check 1's unmerged
+    list,
     and nothing left to diff for check 2.
 
     Args:
@@ -132,8 +146,11 @@ def _verify_conflict_markers(files: list[str], project_root: Path) -> dict | Non
 
     Returns:
         ``None`` when both checks are clean.
-        Otherwise a ``{"status": "stuck", "stuck_type": "logic", "reason": ...}`` dict the caller substitutes for the sub-agent's own success envelope -- either because a check found a real marker/staging problem, or because a check's own git invocation failed (e.g.
-        lock contention), signaled by a ``"fatal:"`` prefix in its output, which makes that check's finding untrustworthy and short-circuits immediately ahead of the two ordinary findings.
+        Otherwise a ``{"status": "stuck", "stuck_type": "logic", "reason": ...}`` dict the caller
+        substitutes for the sub-agent's own success envelope -- either because a check found a real
+        marker/staging problem, or because a check's own git invocation failed (e.g.
+        lock contention), signaled by a ``"fatal:"`` prefix in its output, which makes that check's
+        finding untrustworthy and short-circuits immediately ahead of the two ordinary findings.
     """
     unmerged_result = _subprocess_util.run(
         ["git", "diff", "--name-only", "--diff-filter=U", "--", *files],
@@ -181,11 +198,19 @@ def _verify_conflict_markers(files: list[str], project_root: Path) -> dict | Non
 
 def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> int:
     """
-    Reset and eagerly recompute the cached ``module_verify_baseline`` after a successful parent-branch sync in ``mill-merge-in``.
+    Reset and eagerly recompute the cached ``module_verify_baseline`` after a successful
+    parent-branch sync in ``mill-merge-in``.
 
-    Mirrors ``millpy-implement.py``'s ``_run_baseline_stage`` in structure and error-handling shape -- the two functions compute the same thing from two different entry points (task-start pre-flight vs. post-merge-in recompute) -- but always clears the cached value first (via ``_status.clear_module_verify_baseline``) so a stale, already-cached baseline from before the merge is never reused: ``--stage baseline``'s own idempotent no-op-if-cached behavior is exactly why a bare call to it would not recompute after a merge-in without this explicit reset.
+    Mirrors ``millpy-implement.py``'s ``_run_baseline_stage`` in structure and error-handling shape
+    -- the two functions compute the same thing from two different entry points (task-start
+    pre-flight vs. post-merge-in recompute) -- but always clears the cached value first (via
+    ``_status.clear_module_verify_baseline``) so a stale, already-cached baseline from before the
+    merge is never reused: ``--stage baseline``'s own idempotent no-op-if-cached behavior is exactly
+    why a bare call to it would not recompute after a merge-in without this explicit reset.
 
-    Never raises -- every failure path (no module-wide verify configured, parent branch unresolvable, or the computation itself raising) prints a JSON line describing the outcome and returns 0 without blocking the merge-in;
+    Never raises -- every failure path (no module-wide verify configured, parent branch
+    unresolvable, or the computation itself raising) prints a JSON line describing the outcome and
+    returns 0 without blocking the merge-in;
     a baseline-recompute failure must never fail an otherwise successful merge.
 
     Args:

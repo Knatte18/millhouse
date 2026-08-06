@@ -1,7 +1,9 @@
 """
 VS Code open-window process probe.
 
-Detects which paths are currently open in a running VS Code editor by examining OS process tables, then provides a boundary-safe predicate for testing whether a given launch path appears in a VS Code process cmdline.
+Detects which paths are currently open in a running VS Code editor by examining OS process tables,
+then provides a boundary-safe predicate for testing whether a given launch path appears in a VS Code
+process cmdline.
 
 Public API:
     find_open_vscode_paths() -> set[Path]
@@ -98,11 +100,14 @@ def signature_matches(launch_path: Path, slug: str, signature: str) -> bool:
 
     Two complementary checks:
 
-    1. POSIX cmdline-form: ``code /path/to/worktree`` — uses bounded path match via ``_path_matches_cmdline``.
-    2. Windows title-form: ``<short_name>: <slug>`` from our ``.vscode/settings.json`` window.title template — uses slug-substring match (case-insensitive on Windows).
+    1. POSIX cmdline-form: ``code /path/to/worktree`` — uses bounded path match via
+    ``_path_matches_cmdline``.
+    2. Windows title-form: ``<short_name>: <slug>`` from our ``.vscode/settings.json`` window.title
+    template — uses slug-substring match (case-insensitive on Windows).
 
     Either match passes.
-    The two checks are independent: tests that mock signatures as paths still hit the cmdline branch;
+    The two checks are independent: tests that mock signatures as paths still hit the cmdline
+    branch;
     real Windows runtime hits the slug branch.
     """
     if _path_matches_cmdline(launch_path, signature):

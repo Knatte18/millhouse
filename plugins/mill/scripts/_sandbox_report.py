@@ -1,7 +1,10 @@
 """
 Sandbox-report helper — reads and validates a local sandbox-report.json file.
 
-Sister module to ``_gh_issues.py``: where ``_gh_issues.to_contract()`` maps ``gh``-fetched issues into the triage-report contract, this module reads a local JSON file already shaped like that contract and validates it strictly before handing it to ``mill-triage-to-tasks`` (see ``plugins/mill/templates/triage-report.schema.md``).
+Sister module to ``_gh_issues.py``: where ``_gh_issues.to_contract()`` maps ``gh``-fetched issues
+into the triage-report contract, this module reads a local JSON file already shaped like that
+contract and validates it strictly before handing it to ``mill-triage-to-tasks`` (see
+``plugins/mill/templates/triage-report.schema.md``).
 It performs no network or ``gh`` calls -- the input is an already-resolved ``Path`` on disk.
 
 Public API:
@@ -27,8 +30,12 @@ class SandboxReportError(RuntimeError):
 def read(path: Path) -> dict[str, Any]:
     """Parse and strictly validate ``path`` as a sandbox-report.json file.
 
-    A sandbox-report.json file carries internal QA verdicts produced by an external sandbox suite (see ``_mill/discussion.md``).
-    This function treats any deviation from the expected shape -- wrong ``source``, a malformed item, a duplicate ``ref`` -- as "wrong file passed" and fails loudly rather than coercing the input, since a silently-accepted bad file would corrupt the decision table inside ``mill-triage-to-tasks``.
+    A sandbox-report.json file carries internal QA verdicts produced by an external sandbox suite
+    (see ``_mill/discussion.md``).
+    This function treats any deviation from the expected shape -- wrong ``source``, a malformed
+    item, a duplicate ``ref`` -- as "wrong file passed" and fails loudly rather than coercing the
+    input, since a silently-accepted bad file would corrupt the decision table inside
+    ``mill-triage-to-tasks``.
 
     Steps:
         1. Open and parse ``path`` as JSON.
@@ -41,17 +48,25 @@ def read(path: Path) -> dict[str, Any]:
         that split belongs to the entry skill (empty array, knowable
         from the file alone) and the shared skill (every item routed to
         skip, only knowable after grouping).
-        4. Validate each item has non-empty string ``ref``, ``title``, ``body`` fields, and that no ``ref`` repeats across items.
-        5. Map ``items`` into the contract's item shape and return the full envelope, passing ``meta`` through verbatim from the file (or ``{}`` when absent) -- this function never reads or interprets ``meta``'s contents.
+        4. Validate each item has non-empty string ``ref``, ``title``, ``body`` fields, and that no
+            ``ref`` repeats across items.
+        5. Map ``items`` into the contract's item shape and return the full envelope, passing
+            ``meta`` through verbatim from the file (or ``{}`` when absent) -- this function never
+            reads or interprets ``meta``'s contents.
 
     Args:
         path: Path to the sandbox-report.json file to read.
 
     Returns:
-        The full triage-report contract envelope: ``{"source": "sandbox-report", "meta": <passthrough>, "items": [{"ref": str, "title": str, "body": str}, ...], "ref_prefix": "", "detail_hint": None, "embed_body": True}``.
+        The full triage-report contract envelope: ``{"source": "sandbox-report", "meta":
+        <passthrough>, "items": [{"ref": str, "title": str, "body": str}, ...], "ref_prefix": "",
+        "detail_hint": None, "embed_body": True}``.
 
     Raises:
-        SandboxReportError: ``path`` does not exist, is not valid JSON, is not a JSON object, has the wrong (or missing) ``source`` value, is missing or has a malformed ``items`` array, has an item missing/with an empty ``ref``/``title``/``body``, or has a duplicate ``ref`` across items.
+        SandboxReportError: ``path`` does not exist, is not valid JSON, is not a JSON object, has
+        the wrong (or missing) ``source`` value, is missing or has a malformed ``items`` array, has
+        an item missing/with an empty ``ref``/``title``/``body``, or has a duplicate ``ref`` across
+        items.
     """
     try:
         raw_text = path.read_text(encoding="utf-8")

@@ -1,8 +1,10 @@
 """Unit tests for sub-agent definitions (mill-reviewer and mill-implementer).
 
 Covers:
-  - mill-reviewer: tools list is exactly {Read, Grep, Glob, Write} -- the reviewer may write, but only its own report;
-      it still cannot edit an existing file, run a command, or commit, so {Edit, Bash, NotebookEdit} remain forbidden.
+  - mill-reviewer: tools list is exactly {Read, Grep, Glob, Write} -- the reviewer may write, but
+      only its own report;
+      it still cannot edit an existing file, run a command, or commit, so {Edit, Bash, NotebookEdit}
+          remain forbidden.
   - mill-implementer: tools list includes {Read, Edit, Write, Bash, Grep, Glob, Skill}
   - Both agents: name matches filename stem
   - Both agents: non-empty description
@@ -41,13 +43,17 @@ def _check_tier_agent_definition(
 ) -> None:
     """Assert a per-tier agent-definition file is a faithful tier variant of its base.
 
-    Per the overview's "new agent-definition files are byte-identical to their base except name and effort" Shared Decision, a tier file (e.g.
-    mill-reviewer-high.md) must carry the same description and tools as its base file (mill-reviewer.md), differing only in its `name` (matching the tier filename stem) and an added `effort` frontmatter key.
+    Per the overview's "new agent-definition files are byte-identical to their base except name and
+    effort" Shared Decision, a tier file (e.g.
+    mill-reviewer-high.md) must carry the same description and tools as its base file
+    (mill-reviewer.md), differing only in its `name` (matching the tier filename stem) and an added
+    `effort` frontmatter key.
 
     Args:
         agent_file: path to the tier-suffixed agent-definition file under test.
         base_file: path to the untiered base agent-definition file it was derived from.
-        expected_effort: the tier string the file's `effort` frontmatter key must equal (e.g. "medium", "high", "max").
+        expected_effort: the tier string the file's `effort` frontmatter key must equal (e.g.
+        "medium", "high", "max").
     """
     assert agent_file.exists(), f"Agent file not found: {agent_file}"
 
@@ -183,7 +189,8 @@ def test_implementer_xhigh_agent_definition() -> None:
 def test_reviewer_agent_definition() -> None:
     """mill-reviewer may write only its own report: tools = {Read, Grep, Glob, Write}.
 
-    It still cannot edit an existing file, run a command, or commit, so {Edit, Bash, NotebookEdit} remain forbidden.
+    It still cannot edit an existing file, run a command, or commit, so {Edit, Bash, NotebookEdit}
+    remain forbidden.
     """
     agent_file = HUB / "plugins" / "mill" / "agents" / "mill-reviewer.md"
     assert agent_file.exists(), f"Agent file not found: {agent_file}"
@@ -267,8 +274,11 @@ def test_implementer_agent_definition() -> None:
 def test_plugin_json_registers_all_agent_files() -> None:
     """plugin.json's explicit `agents` array must list every agent-definition file on disk.
 
-    Per Claude Code's plugin manifest reference, an explicit `agents` array *replaces* directory-based auto-discovery -- a file present under `agents/` but missing from this array is never registered as a dispatchable subagent_type.
-    This test guards against the exact class of gap Card 4 fixes: a future agent file added to the directory without a matching plugin.json entry,
+    Per Claude Code's plugin manifest reference, an explicit `agents` array *replaces*
+    directory-based auto-discovery -- a file present under `agents/` but missing from this array is
+    never registered as a dispatchable subagent_type.
+    This test guards against the exact class of gap Card 4 fixes: a future agent file added to the
+    directory without a matching plugin.json entry,
     or a stale entry left behind after a file is removed.
     """
     manifest_path = HUB / "plugins" / "mill" / ".claude-plugin" / "plugin.json"

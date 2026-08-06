@@ -2,19 +2,24 @@
 Integration test for mill-merge + mill-merge-in.
 
 Verifies mill-merge lands squash + archive tag + Home.md [done] flip;
-worktree, branch, portal, and wiki active-dir teardown are mill-cleanup's responsibility (separate test).
+worktree, branch, portal, and wiki active-dir teardown are mill-cleanup's responsibility (separate
+test).
 
 The skills themselves are prose;
 the test exercises the backing helpers and the exact git sequence the skills prescribe.
-That way we catch regressions in `_wiki`, `_sidebar`, `_tasks_md`, the new `_parent_branch`, and `_plan_dag.iter_batch_verifies` whenever any of them change shape.
+That way we catch regressions in `_wiki`, `_sidebar`, `_tasks_md`, the new `_parent_branch`, and
+`_plan_dag.iter_batch_verifies` whenever any of them change shape.
 
 Layout mirrors `test-spawn.py`:
 
-    <container>/wiki.git bare "remote" for the wiki <container>/wiki working clone of the bare <container>/hub hub repo (the parent) <container>/worktrees/<slug> child worktree under the task branch (hub-form default)
+    <container>/wiki.git bare "remote" for the wiki <container>/wiki working clone of the bare
+    <container>/hub hub repo (the parent) <container>/worktrees/<slug> child worktree under the task
+    branch (hub-form default)
 
 Flow under test (mirrors mill-merge SKILL.md step numbering):
 
-    0. Seed: task-branch worktree with a commit, Home.md [active], a done status.md, plan/00-overview.md with one batch (verify: null so we skip the verify step in the test).
+    0. Seed: task-branch worktree with a commit, Home.md [active], a done status.md,
+    plan/00-overview.md with one batch (verify: null so we skip the verify step in the test).
     1. Acquire merge lock on the parent's .scratch/.
     2. mill-merge-in no-op check (parent has no new commits).
     3. Direct squash-merge child -> parent.
@@ -28,10 +33,14 @@ Worktree, branch, and wiki active-dir remain intact — mill-cleanup's job.
 Exits 0 on PASS, 1 on any failure;
 scratch is preserved on failure for inspection.
 
-Two further scenarios run after the flat-hub flow above, both against nested-hub-layout fixtures (``hub_root != git_root``, see the plan's "nested-hub-layout terminology" Shared Decision):
+Two further scenarios run after the flat-hub flow above, both against nested-hub-layout fixtures
+(``hub_root != git_root``, see the plan's "nested-hub-layout terminology" Shared Decision):
 
-    - The `_setup_nested_hub_scenario` case (#497 bug 2) verifies the parent's own `_mill/status.md` survives a squash-merge untouched.
-    - The `_setup_nested_verify_plan` case (#604) verifies `_plan_dag.iter_batch_verifies` resolves a batch's ``verify: {cwd: hub, command: ...}`` mapping to `hub_root`, and that replaying the command at that resolved cwd — not a fixed "worktree root" — is what makes it succeed.
+    - The `_setup_nested_hub_scenario` case (#497 bug 2) verifies the parent's own `_mill/status.md`
+    survives a squash-merge untouched.
+    - The `_setup_nested_verify_plan` case (#604) verifies `_plan_dag.iter_batch_verifies` resolves
+    a batch's ``verify: {cwd: hub, command: ...}`` mapping to `hub_root`, and that replaying the
+    command at that resolved cwd — not a fixed "worktree root" — is what makes it succeed.
 """
 from __future__ import annotations
 
@@ -78,7 +87,8 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
 
     Returns ``(hub, wiki, worktree, slug)``.
     The worktree is on branch ``test/<slug>`` and has one commit ahead of the hub's ``main``.
-    Wiki carries ``Home.md`` with an ``[active]`` entry, a plan dir, and a ``status.md`` at ``phase: done`` so the merge flow can run against it.
+    Wiki carries ``Home.md`` with an ``[active]`` entry, a plan dir, and a ``status.md`` at ``phase:
+    done`` so the merge flow can run against it.
     """
     container.mkdir(parents=True, exist_ok=True)
     slug = "demo-merge"
@@ -258,7 +268,8 @@ def _setup_nested_hub_scenario(
     - Child branch with its own task state and a production file, then cleaned up.
     - Returns (repo, hub, wiki, parent_branch, child_branch, other_task_slug) for assertions.
 
-    The test verifies that mill-merge's restore step (reset + checkout) preserves the parent's own _mill/status.md when squashing the child's cleanup commit.
+    The test verifies that mill-merge's restore step (reset + checkout) preserves the parent's own
+    _mill/status.md when squashing the child's cleanup commit.
     """
     container.mkdir(parents=True, exist_ok=True)
     parent_slug = "other-task"
@@ -417,11 +428,18 @@ def _setup_nested_verify_plan(container: Path) -> tuple[Path, Path, Path]:
     """
     Build a minimal nested-hub plan directory for the merge-in Verify-cwd case.
 
-    Creates a git repo at ``<container>/nested-verify-repo`` (the ``git_root``) with a hub subdirectory at ``src/hub`` (the ``hub_root``, a plain directory rather than its own git repo -- a nested-hub-layout is a hub living in a subdirectory of a single git repo, per the "nested-hub-layout terminology" Shared Decision).
+    Creates a git repo at ``<container>/nested-verify-repo`` (the ``git_root``) with a hub
+    subdirectory at ``src/hub`` (the ``hub_root``, a plain directory rather than its own git repo --
+    a nested-hub-layout is a hub living in a subdirectory of a single git repo, per the
+    "nested-hub-layout terminology" Shared Decision).
     The hub directory carries a marker file that exists only there, not at ``git_root``.
 
-    The plan directory (nested under the hub, mirroring where a real task's ``_mill/plan/`` lives) declares one batch whose ``verify:`` is the mapping form ``{cwd: hub, command: ...}``.
-    The command checks for the hub-only marker file relative to its own cwd, so it only exits zero when actually run from ``hub_root`` -- proving that a merge-in replay honors the resolved cwd instead of always running at a fixed "worktree root" (the #604 bug being regression-tested here).
+    The plan directory (nested under the hub, mirroring where a real task's ``_mill/plan/`` lives)
+    declares one batch whose ``verify:`` is the mapping form ``{cwd: hub, command: ...}``.
+    The command checks for the hub-only marker file relative to its own cwd, so it only exits zero
+    when actually run from ``hub_root`` -- proving that a merge-in replay honors the resolved cwd
+    instead of always running at a fixed "worktree root" (the #604 bug being regression-tested
+    here).
 
     Returns ``(git_root, hub_root, plan_dir)``.
     """

@@ -300,14 +300,20 @@ class WikiServer(DaemonBase):
     def _handle_health(self, payload: dict) -> dict:
         """Handle health check operation.
 
-        Two callers share this one dispatch: `_client.py`'s `_ensure_daemon()` reuse-probe (fired before every op, tagged `liveness_only=True`, 1.0s client-side timeout) and `health_check()`'s real, user-facing check (empty payload).
+        Two callers share this one dispatch: `_client.py`'s `_ensure_daemon()` reuse-probe (fired
+        before every op, tagged `liveness_only=True`, 1.0s client-side timeout) and
+        `health_check()`'s real, user-facing check (empty payload).
         Only the latter runs git-validity/staleness logic:
 
         1. liveness_only probes short-circuit immediately -- they must never block on git,
-            or the reuse-probe would spuriously time out and trigger a redundant daemon respawn on every dispatched op.
-        2. WIKI_DAEMON_SKIP_GIT test mode also short-circuits, since most fixtures never `git init` the wiki dir.
-        3. Otherwise verify wiki_path is a valid git repo (hard failure if not), then debounce a fetch+ff-merge via `_last_pull`/TTL.
-            A failed pull is a hard failure only if git reports it could not fast-forward (a diverged local wiki needs manual resolution);
+            or the reuse-probe would spuriously time out and trigger a redundant daemon respawn on
+                every dispatched op.
+        2. WIKI_DAEMON_SKIP_GIT test mode also short-circuits, since most fixtures never `git init`
+            the wiki dir.
+        3. Otherwise verify wiki_path is a valid git repo (hard failure if not), then debounce a
+            fetch+ff-merge via `_last_pull`/TTL.
+            A failed pull is a hard failure only if git reports it could not fast-forward (a
+                diverged local wiki needs manual resolution);
             any other pull failure (e.g.
             network timeout) is a soft warning that still reports healthy.
         """

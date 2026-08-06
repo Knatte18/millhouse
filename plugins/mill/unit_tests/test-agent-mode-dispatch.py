@@ -1,9 +1,12 @@
 """Unit parity test for agent-mode prepare/finalize round-trip.
 
-Tests that the prepare -> finalize round-trip (with captured agent output) produces byte-for-byte identical JSON envelopes and artifacts as the full (subprocess) path, for both implementer-class (millpy-implement.py) and reviewer-class (millpy-review-discussion.py) CLIs.
+Tests that the prepare -> finalize round-trip (with captured agent output) produces byte-for-byte
+identical JSON envelopes and artifacts as the full (subprocess) path, for both implementer-class
+(millpy-implement.py) and reviewer-class (millpy-review-discussion.py) CLIs.
 
 No real LLM calls or Agent tool.
-Uses fixtures to feed canned sub-agent output to the finalize stage and verifies the resulting JSON envelope matches what the full mode would produce.
+Uses fixtures to feed canned sub-agent output to the finalize stage and verifies the resulting JSON
+envelope matches what the full mode would produce.
 """
 from __future__ import annotations
 

@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/_plan_dag.py.
 
-The fixtures below are intentionally throwaway dummy data — they do NOT reflect what mill-plan will actually name batches in real plans. _plan_dag has no knowledge of specific batch names;
+The fixtures below are intentionally throwaway dummy data — they do NOT reflect what mill-plan will
+actually name batches in real plans. _plan_dag has no knowledge of specific batch names;
 it parses whatever the overview declares.
 """
 from __future__ import annotations
@@ -423,7 +424,8 @@ def _write_batch(
     verify: str,
     deletes: str | None = None,
 ) -> None:
-    """Write a batch markdown file with a fenced-yaml ``verify:`` frontmatter and an optional ``- **Deletes:**`` bullet (inline, backtick-quoted).
+    """Write a batch markdown file with a fenced-yaml ``verify:`` frontmatter and an optional ``-
+    **Deletes:**`` bullet (inline, backtick-quoted).
 """
     lines = [f"# Batch: {name}", "", "```yaml", f"batch: {name}", verify, "```", ""]
     if deletes is not None:

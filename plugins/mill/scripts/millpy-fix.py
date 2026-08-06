@@ -5,7 +5,10 @@ Supports both per-batch and holistic scopes.
 Always cold-start (resume=False).
 
 Flags:
-    --scope {batch,holistic} (required) fix scope: "batch" for per-batch, "holistic" for cross-batch --batch-name NAME (required iff --scope batch) batch name from the plan overview's Batch Index --review-file PATH (required) absolute or relative path to the code review output file --round N fix-cycle round number (int, default 1)
+    --scope {batch,holistic} (required) fix scope: "batch" for per-batch, "holistic" for cross-batch
+    --batch-name NAME (required iff --scope batch) batch name from the plan overview's Batch Index
+    --review-file PATH (required) absolute or relative path to the code review output file --round N
+    fix-cycle round number (int, default 1)
 
 Exit codes:
     0 — fixer ran;
@@ -77,10 +80,15 @@ def _resolve_holistic_verify(
     batch's cwd over another's.
 
     Args:
-        batch_verifies: `(batch_name, command, cwd)` triples in DAG order, as returned by `_plan_dag.iter_batch_verifies`.
+        batch_verifies: `(batch_name, command, cwd)` triples in DAG order, as returned by
+        `_plan_dag.iter_batch_verifies`.
 
     Returns:
-        `(joined_command, cwd_override)`. `joined_command` is every batch's command, each individually wrapped in its own subshell (`(command)`) so a `cd` or other cwd/env-mutating construct in one batch's command can never leak into the next, joined with `" && "` in the same order as `batch_verifies`. `cwd_override` is the single distinct `cwd` shared by every batch that specified one, or `None` when every batch's cwd was `None` (i.e.
+        `(joined_command, cwd_override)`. `joined_command` is every batch's command, each
+        individually wrapped in its own subshell (`(command)`) so a `cd` or other cwd/env-mutating
+        construct in one batch's command can never leak into the next, joined with `" && "` in the
+        same order as `batch_verifies`. `cwd_override` is the single distinct `cwd` shared by every
+        batch that specified one, or `None` when every batch's cwd was `None` (i.e.
         every contributing batch used the plain-string `verify:` form).
 
     Raises:
@@ -118,25 +126,43 @@ def _report_skipped_verifies(
     """
     Print a stderr line for every batch `iter_batch_verifies` silently dropped.
 
-    `iter_batch_verifies` (see `_plan_dag.py`) already returns the correctly filtered "what still matters" list,
-    but a filtered-out batch and a batch that ran-and-passed would otherwise look identical to whoever reads the holistic fixer's output -- both are simply absent from the joined verify command.
-    This is the "visible, counted skips" Shared Decision's attribution mechanism: independently recompute the raw, unfiltered batch-with-verify set, diff it against what `iter_batch_verifies` actually returned, and attribute each missing batch's reason.
+    `iter_batch_verifies` (see `_plan_dag.py`) already returns the correctly filtered "what still
+    matters" list,
+    but a filtered-out batch and a batch that ran-and-passed would otherwise look identical to
+    whoever reads the holistic fixer's output -- both are simply absent from the joined verify
+    command.
+    This is the "visible, counted skips" Shared Decision's attribution mechanism: independently
+    recompute the raw, unfiltered batch-with-verify set, diff it against what `iter_batch_verifies`
+    actually returned, and attribute each missing batch's reason.
 
     Steps:
-    1. Re-derive the raw set of batch names that declare a runnable `verify:` command, with zero filtering -- the same `extract_batch_index` + `topo_order` + `_read_batch_frontmatter` + `parse_verify_field` chain `iter_batch_verifies` uses internally, just without its cross-batch and approval-state filters.
-    2. Diff that raw set against the names present in `batch_verifies` (the actual, already-filtered return value of the `iter_batch_verifies` call this helper follows) to find every batch that got dropped.
-    3. Attribute each dropped batch's reason via a single `_status.read_batches` lookup (reused across all missing names, not repeated per name): a batch whose own state isn't `"approved"` was skipped because it hasn't been approved yet;
-        an approved batch that is still missing was skipped because a later batch's declared removal suppressed it.
-    4. Print `[millpy-fix] skipped <batch_name>: <reason>` to stderr for each, in the same order as the raw (unfiltered) set.
+    1. Re-derive the raw set of batch names that declare a runnable `verify:` command, with zero
+        filtering -- the same `extract_batch_index` + `topo_order` + `_read_batch_frontmatter` +
+        `parse_verify_field` chain `iter_batch_verifies` uses internally, just without its
+        cross-batch and approval-state filters.
+    2. Diff that raw set against the names present in `batch_verifies` (the actual, already-filtered
+        return value of the `iter_batch_verifies` call this helper follows) to find every batch that
+        got dropped.
+    3. Attribute each dropped batch's reason via a single `_status.read_batches` lookup (reused
+        across all missing names, not repeated per name): a batch whose own state isn't `"approved"`
+        was skipped because it hasn't been approved yet;
+        an approved batch that is still missing was skipped because a later batch's declared removal
+            suppressed it.
+    4. Print `[millpy-fix] skipped <batch_name>: <reason>` to stderr for each, in the same order as
+        the raw (unfiltered) set.
 
-    Never raises: a missing/malformed overview or a malformed `## Batches` block in `status_path` degrades to "nothing to report" rather than crashing the fixer dispatch over a reporting nicety.
+    Never raises: a missing/malformed overview or a malformed `## Batches` block in `status_path`
+    degrades to "nothing to report" rather than crashing the fixer dispatch over a reporting nicety.
 
     Args:
         plan_base: Directory containing `00-overview.md` and the batch files it references.
-        project_root: The mill project root, passed through to `parse_verify_field` for `cwd: hub` resolution.
-        git_root: The git repository toplevel, passed through to `parse_verify_field` for `cwd: git_root` resolution.
+        project_root: The mill project root, passed through to `parse_verify_field` for `cwd: hub`
+        resolution.
+        git_root: The git repository toplevel, passed through to `parse_verify_field` for `cwd:
+        git_root` resolution.
         status_path: Path to the task's `status.md`, used to resolve each batch's approval state.
-        batch_verifies: The actual, already-filtered `(name, command, cwd)` triples returned by the `iter_batch_verifies` call this helper follows.
+        batch_verifies: The actual, already-filtered `(name, command, cwd)` triples returned by the
+        `iter_batch_verifies` call this helper follows.
     """
     overview_path = plan_base / "00-overview.md"
     if not overview_path.exists():

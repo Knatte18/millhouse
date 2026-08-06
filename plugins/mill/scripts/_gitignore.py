@@ -1,7 +1,8 @@
 """
 Idempotent .gitignore marker-block helper for mill-setup Phase 4.5b.
 
-Writes and maintains a ``# === mill-managed ... # === end mill-managed ===`` block at the end of the repo's ``.gitignore``.
+Writes and maintains a ``# === mill-managed ... # === end mill-managed ===`` block at the end of the
+repo's ``.gitignore``.
 The block covers standard mill paths declared in ``GLOB_ENTRIES``.
 
 Outside-marker content is NEVER modified.
@@ -62,13 +63,15 @@ def render_block(glob_entries: list[str]) -> str:
 def _upsert_single(gitignore_path: Path, block_text: str) -> bool:
     """Write or rewrite a marker block in a single .gitignore file.
 
-    Locates the existing ``START`` / ``END`` markers (if any), removes the old block and its blank-line separator, and appends the new block.
+    Locates the existing ``START`` / ``END`` markers (if any), removes the old block and its
+    blank-line separator, and appends the new block.
     If no prior block exists the block is appended with a blank-line separator.
 
     Returns True if the file was written (content changed), False if already byte-equal.
 
     Raises:
-        ValueError: ``START`` is present but ``END`` is absent — the file is in a corrupt/partial state that cannot be repaired automatically.
+        ValueError: ``START`` is present but ``END`` is absent — the file is in a corrupt/partial
+        state that cannot be repaired automatically.
     """
     if gitignore_path.exists():
         existing = gitignore_path.read_text(encoding="utf-8")

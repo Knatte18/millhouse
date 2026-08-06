@@ -1,12 +1,14 @@
 """mill-review-plan — CLI entry point for plan review.
 
-Resolves project roots, loads config, finds the active task slug, calls the plan review backend, and prints JSON to stdout.
+Resolves project roots, loads config, finds the active task slug, calls the plan review backend, and
+prints JSON to stdout.
 
 Flags:
     --slug <slug> Override active-slug detection (run from hub/main).
     --holistic-only Skip per-batch reviews;
         run only the holistic plan review.
-    --max-rounds <N> Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds (overrides both scopes) for this invocation.
+    --max-rounds <N> Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
+        (overrides both scopes) for this invocation.
         Default: use config values.
     --no-holistic Skip the holistic plan review;
         run per-batch reviews only.

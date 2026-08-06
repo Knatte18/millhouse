@@ -4,7 +4,8 @@ Uses _reviewer_test_stub as the reviewer backend.
 All tests run in-process with no real LLM.
 Covers the per-scope (holistic) round counter for discussion reviews (#21 regression pin).
 
-Discussion review is exempt from the NEED_CONTEXT resume-fallback path (per discussion.md decision), so no retry tests are included.
+Discussion review is exempt from the NEED_CONTEXT resume-fallback path (per discussion.md decision),
+so no retry tests are included.
 """
 
 from __future__ import annotations
@@ -1038,12 +1039,15 @@ def main() -> int:
 def test_brief_path_nested_layout() -> int:
     """Verify that the prepare stage routes the brief under hub_dir, not git_root.
 
-    Creates a nested layout where hub_dir is a subdirectory of git_root, then loads millpy-review-discussion via importlib and calls main().
+    Creates a nested layout where hub_dir is a subdirectory of git_root, then loads
+    millpy-review-discussion via importlib and calls main().
     Inspects the recorded resolve_task_path calls to confirm the first argument is hub_dir.
 
-    A reversion of the Card 3 fix (changing hub_dir back to git_root) causes the assertion to fail because resolve_task_path is called with git_root instead.
+    A reversion of the Card 3 fix (changing hub_dir back to git_root) causes the assertion to fail
+    because resolve_task_path is called with git_root instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout
+    this file).
     """
     import importlib.util
     import tempfile
@@ -1181,15 +1185,20 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
     """hub_dir rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
 
     Modeled on test_brief_path_nested_layout,
-    but instead of hub_dir vs. git_root, this test distinguishes resolve_hub_path's (decoy) return value from resolve_active_hub's (corrected active task worktree) return value -- the two values the Card 15 rebind is meant to keep distinct.
+    but instead of hub_dir vs. git_root, this test distinguishes resolve_hub_path's (decoy) return
+    value from resolve_active_hub's (corrected active task worktree) return value -- the two values
+    the Card 15 rebind is meant to keep distinct.
     resolve_hub_path returns a decoy directory standing in for the pre-rebind escape (e.g.
     the main worktree resolve_hub_path() falls back to);
     resolve_active_hub returns a separate, real task-worktree directory.
-    briefs_dir must resolve under the resolve_active_hub value, proving hub_dir/project_root was rebound after slug resolution and not left at resolve_hub_path's original value.
+    briefs_dir must resolve under the resolve_active_hub value, proving hub_dir/project_root was
+    rebound after slug resolution and not left at resolve_hub_path's original value.
 
-    A reversion of the Card 15 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
+    A reversion of the Card 15 fix (never calling resolve_active_hub) causes the assertion to fail
+    because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout
+    this file).
     """
     import importlib.util
     import tempfile

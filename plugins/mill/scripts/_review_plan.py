@@ -4,9 +4,11 @@ Review backend for plan artefacts.
 Per-batch reviews run in parallel via ThreadPoolExecutor (bulk mode).
 An optional holistic review follows (also bulk).
 Results are aggregated worst-case;
-all-ERROR runs return ERROR (no raise) so the caller receives valid JSON even when every sub-review fails (#84, #228).
+all-ERROR runs return ERROR (no raise) so the caller receives valid JSON even when every sub-review
+fails (#84, #228).
 
-Agent mode drives one scope per cycle (this hub disables plan batch review via `roles.plan-review.batch.reviewer: null`, so holistic is the only enabled scope in practice).
+Agent mode drives one scope per cycle (this hub disables plan batch review via
+`roles.plan-review.batch.reviewer: null`, so holistic is the only enabled scope in practice).
 
 Public API:
     prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root) -> dict
@@ -69,7 +71,9 @@ def _scan_approved_batches(reviews_dir: Path) -> dict[str, dict]:
     """Scan reviews_dir for plan-batch reviews;
 return {stem: carryforward_entry} for approved batches.
 
-    For each unique batch stem found via RE_BATCH (with type=='plan'), find the file with the highest round number, parse its verdict, and if APPROVE, build a carryforward dict to splice into reviews[].
+    For each unique batch stem found via RE_BATCH (with type=='plan'), find the file with the
+    highest round number, parse its verdict, and if APPROVE, build a carryforward dict to splice
+    into reviews[].
     RE_SIMPLE is checked first per file to avoid mis-attributing a plan- holistic review to a batch.
     """
     if not reviews_dir.exists():
@@ -329,11 +333,17 @@ def prepare(
 
     Args:
         scope: Batch name (e.g., "01-setup") or None for holistic.
-        agent_mode: When True, both the batch-scope and holistic-scope build_tool_rule calls in this function return the agent-mode cell (adds the single Write carve-out for the .out.md report).
+        agent_mode: When True, both the batch-scope and holistic-scope build_tool_rule calls in this
+            function return the agent-mode cell (adds the single Write carve-out for the .out.md
+            report).
             Defaults to False.
-            This does NOT propagate to ``_review_one_batch``'s or ``run()``'s own build_tool_rule calls -- those belong to the `--stage full` path, which is a separate, non-prepare code path for plan review.
-        reviewer_override: When not None, overrides the config-resolved plan-review holistic reviewer for this call only -- nothing is written back to config.
-            Bypasses the `reviewer: null` disablement and skips the large-prompt auto-switch entirely.
+            This does NOT propagate to ``_review_one_batch``'s or ``run()``'s own build_tool_rule
+                calls -- those belong to the `--stage full` path, which is a separate, non-prepare
+                code path for plan review.
+        reviewer_override: When not None, overrides the config-resolved plan-review holistic
+            reviewer for this call only -- nothing is written back to config.
+            Bypasses the `reviewer: null` disablement and skips the large-prompt auto-switch
+                entirely.
             No-op when `scope is not None` (batch scope is unaffected).
 
     Returns:
@@ -578,10 +588,13 @@ return a review entry dict.
         scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
-        actual_model: The model that actually produced this review, used to correct an unreliable self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through to ``finalize_scope`` on the success path only.
+        actual_model: The model that actually produced this review, used to correct an unreliable
+        self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
+        to ``finalize_scope`` on the success path only.
 
     Returns:
-        Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file", "session_id"}.
+        Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file",
+        "session_id"}.
     """
     scope_label = scope or "holistic"
 
@@ -637,17 +650,22 @@ def run(
         collect batch files.
     3. Load reviewers;
         verify bulk mode.
-    4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer is null).
+    4. Parallel per-batch reviews (skipped if batch_files is empty, holistic_only, or batch reviewer
+        is null).
         Mid-round resume fires holistic only when per-batch files exist but holistic is missing.
-    5. Holistic review (skipped if cfg["roles"]["plan-review"]["holistic"]["reviewer"] is None or no_holistic).
+    5. Holistic review (skipped if cfg["roles"]["plan-review"]["holistic"]["reviewer"] is None or
+        no_holistic).
     6. Aggregate and return ReviewResult (all-ERROR → ERROR; no raise).
 
     Args:
-        reviewer_override: When not None, overrides the config-resolved plan-review holistic reviewer for this call only -- nothing is written back to config.
+        reviewer_override: When not None, overrides the config-resolved plan-review holistic
+            reviewer for this call only -- nothing is written back to config.
             Bypasses the `holistic_name is None` disablement in step 3,
-            but not the separate `cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0` gate, which is checked independently and still applies.
+            but not the separate `cfg["roles"]["plan-review"]["holistic"]["rounds"] == 0` gate,
+                which is checked independently and still applies.
             Skips the large-prompt auto-switch entirely.
-            The per-batch reviewer resolution (the immediately-preceding half of step 3) is completely untouched by this parameter.
+            The per-batch reviewer resolution (the immediately-preceding half of step 3) is
+                completely untouched by this parameter.
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")

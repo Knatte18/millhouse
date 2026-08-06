@@ -49,7 +49,8 @@ from wiki._parse import parse_home_md  # noqa: E402
 def init_minimal_git_repo(path: Path, *, branch: str = "main") -> "pygit2.Repository":
     """Create a git repo at ``path`` with an empty initial commit on ``branch``.
 
-    Uses pygit2 directly (no subprocess) — ~60 ms vs ~600 ms for the equivalent subprocess git init + config + add + commit chain on Windows.
+    Uses pygit2 directly (no subprocess) — ~60 ms vs ~600 ms for the equivalent subprocess git init
+    + config + add + commit chain on Windows.
     Drop-in replacement for the four-or-five-call subprocess pattern that pre-dates this helper.
 
     Args:
@@ -103,7 +104,8 @@ def wait_for_daemon_exit(wiki_path: Path, *, timeout: float = 5.0) -> None:
 def init_wiki_repo(wiki_path: Path) -> None:
     """Initialize a git repo with bare origin.
 
-    Under WIKI_DAEMON_SKIP_GIT (test mode default), the wiki server never invokes git, so the init/remote/commit/push dance is dead weight (~1 s per test on Windows).
+    Under WIKI_DAEMON_SKIP_GIT (test mode default), the wiki server never invokes git, so the
+    init/remote/commit/push dance is dead weight (~1 s per test on Windows).
     Just create the directory and return.
 
     Args:
@@ -192,8 +194,10 @@ def _make_task_worktree(
         branch_prefix: Optional branch prefix prepended to slug.
         phase: Phase marker written in Home.md.
             Pass "none" to write the slug line without any phase marker (task.phase will be None).
-        layout: Path layout mode: "prefix" (default, worktree at tmp/worktree) or "container" (worktree at tmp/wts/slug).
-        seed_task: If True, initialize wiki as a real git repo with bare origin and upsert the task to tasks.json via the wiki client.
+        layout: Path layout mode: "prefix" (default, worktree at tmp/worktree) or "container"
+            (worktree at tmp/wts/slug).
+        seed_task: If True, initialize wiki as a real git repo with bare origin and upsert the task
+            to tasks.json via the wiki client.
 
     Returns:
         (worktree_path, wiki_path) — absolute Paths.
@@ -241,8 +245,10 @@ def seed_wiki_config(wiki_root: Path, *, include_roles: bool = False) -> None:
     """Write a minimal wiki config.yaml that _review_common.load_config requires.
 
     Creates wiki_root/config.yaml with the paths: and spawn: blocks.
-    Review-flow test fixtures that use a container-form layout need this file in the wiki directory so load_config does not raise ReviewError(Missing config).
-    Pass include_roles=True to also write a roles: block with stub test_stub reviewer entries for discussion-review, plan-review, and code-review.
+    Review-flow test fixtures that use a container-form layout need this file in the wiki directory
+    so load_config does not raise ReviewError(Missing config).
+    Pass include_roles=True to also write a roles: block with stub test_stub reviewer entries for
+    discussion-review, plan-review, and code-review.
     """
     content = (
         "paths:\n"
@@ -298,7 +304,12 @@ def safe_temp_dir():
 def write_local_overlay(mill_dir: Path, **entries) -> None:
     """Write reviewer registry entries to the hub's local overlay file.
 
-    `_reviewers.load()` merges the plugin template (always present and non-empty in this source tree) with `.millhouse/agents.local.yaml` -- the wiki `agents.yaml` fallback is only consulted when both the template and the local overlay are empty, which never happens here. `_test_registry.write_to` now targets this same `.millhouse/agents.local.yaml` file (via the shared `_write_registry_file` helper) rather than the wiki.
-    Tests that need a specific named reviewer spec to actually resolve via `reviewer_override` must seed it here, mirroring the local-overlay convention already established in test-reviewers.py.
+    `_reviewers.load()` merges the plugin template (always present and non-empty in this source
+    tree) with `.millhouse/agents.local.yaml` -- the wiki `agents.yaml` fallback is only consulted
+    when both the template and the local overlay are empty, which never happens here.
+    `_test_registry.write_to` now targets this same `.millhouse/agents.local.yaml` file (via the
+    shared `_write_registry_file` helper) rather than the wiki.
+    Tests that need a specific named reviewer spec to actually resolve via `reviewer_override` must
+    seed it here, mirroring the local-overlay convention already established in test-reviewers.py.
     """
     _test_registry._write_registry_file(mill_dir, entries)

@@ -2,12 +2,18 @@
 
 Batch: drift-guard-and-regression-locks
 
-Card 1: Drift-guard scan Every mill-SKILL.md helper reference (pattern `_<module>.<fn>(`) resolves to a real shipped function in plugins/mill/scripts.
+Card 1: Drift-guard scan Every mill-SKILL.md helper reference (pattern `_<module>.<fn>(`) resolves
+to a real shipped function in plugins/mill/scripts.
 
-Card 2: Regression locks #495: millpy-review-plan.py resolves project_root via _paths.resolve_hub_path() #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews' #504/#505: drift guard asserts _cleanliness.revert_out_of_scope_drift resolves
+Card 2: Regression locks #495: millpy-review-plan.py resolves project_root via
+_paths.resolve_hub_path() #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
+#504/#505: drift guard asserts _cleanliness.revert_out_of_scope_drift resolves
 
-Card 3: Extract-unit checks and mill-start body/brief lock Directly asserts _extract_helper_references behaviour: the negative case (gate_cmd.lower() produces no matches) and the positive case (_paths.resolve_git_root() produces one match).
-    Also locks mill-start/SKILL.md against losing the task['body'] and task['brief'] field-name guidance.
+Card 3: Extract-unit checks and mill-start body/brief lock Directly asserts
+    _extract_helper_references behaviour: the negative case (gate_cmd.lower() produces no matches)
+    and the positive case (_paths.resolve_git_root() produces one match).
+    Also locks mill-start/SKILL.md against losing the task['body'] and task['brief'] field-name
+        guidance.
 """
 from __future__ import annotations
 
@@ -35,7 +41,9 @@ def _collect_shipped_helpers() -> dict[str, set[str]]:
     Scan plugins/mill/scripts recursively for module-level functions.
 
     Returns a mapping: module_stem -> set of function names.
-    The module stem is the bare filename without .py and without leading underscore (e.g., "client", "paths"), which matches how the regex extracts _<module> references from SKILLs (the underscore is matched but not captured in the regex).
+    The module stem is the bare filename without .py and without leading underscore (e.g., "client",
+    "paths"), which matches how the regex extracts _<module> references from SKILLs (the underscore
+    is matched but not captured in the regex).
     """
     helpers: dict[str, set[str]] = {}
 
@@ -73,8 +81,11 @@ def _extract_helper_references(skill_md_text: str) -> list[tuple[str, str]]:
     Extract all _<module>.<fn>( references from a SKILL.md text.
 
     Returns list of (module_stem, function_name) tuples.
-    The regex matches an underscore-prefixed module identifier, a dot, a function identifier, and an opening parenthesis.
-    The negative lookbehind `(?<![A-Za-z0-9_])` requires the leading `_` to be preceded by a non-identifier character, so identifier tails such as `_cmd` in `gate_cmd.lower()` are not mis-extracted as `_cmd` module references.
+    The regex matches an underscore-prefixed module identifier, a dot, a function identifier, and an
+    opening parenthesis.
+    The negative lookbehind `(?<![A-Za-z0-9_])` requires the leading `_` to be preceded by a
+    non-identifier character, so identifier tails such as `_cmd` in `gate_cmd.lower()` are not
+    mis-extracted as `_cmd` module references.
     The underscore is matched but not captured;
     the captured module stem does not include it.
     """
@@ -132,9 +143,12 @@ def _run_regression_locks() -> list[str]:
     """
     Assert the already-fixed #495/#496 source state against regression.
 
-    #495: millpy-review-plan.py uses _paths.resolve_hub_path() for project_root #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
+    #495: millpy-review-plan.py uses _paths.resolve_hub_path() for project_root #496: mill-go
+    SKILL.md resolves reviews_dir = hub / '_mill/reviews'
 
-    Note: #504/#505 (SKILL.md helper reference mismatches) are already covered by Card 1's drift-guard scan, which asserts _cleanliness.revert_out_of_scope_drift (referenced by mill-go SKILL.md) resolves to a shipped function.
+    Note: #504/#505 (SKILL.md helper reference mismatches) are already covered by Card 1's
+    drift-guard scan, which asserts _cleanliness.revert_out_of_scope_drift (referenced by mill-go
+    SKILL.md) resolves to a shipped function.
 
     Returns list of failure messages (empty list = all passed).
     """
@@ -201,9 +215,11 @@ def _run_extract_unit_checks() -> list[str]:
     """
     Assert _extract_helper_references behaviour directly for the negative and positive cases.
 
-    Negative case: an identifier tail like gate_cmd.lower() must produce no matches, confirming the lookbehind suppresses false positives from within-identifier underscores.
+    Negative case: an identifier tail like gate_cmd.lower() must produce no matches, confirming the
+    lookbehind suppresses false positives from within-identifier underscores.
 
-    Positive case: a genuine module-qualified call like _paths.resolve_git_root() must produce exactly one match, confirming real helper references are still extracted.
+    Positive case: a genuine module-qualified call like _paths.resolve_git_root() must produce
+    exactly one match, confirming real helper references are still extracted.
 
     Returns a list of FAIL: messages;
     an empty list means both cases passed.
@@ -232,7 +248,8 @@ def _run_extract_unit_checks() -> list[str]:
 
 def main() -> int:
     """
-    Run all three check groups: drift guard (Card 1), regression locks (Card 2), and extract-unit checks (Card 3).
+    Run all three check groups: drift guard (Card 1), regression locks (Card 2), and extract-unit
+    checks (Card 3).
 
     Returns 0 on all passes, 1 on any failure.
     """

@@ -1,7 +1,8 @@
 """Unit tests for plugins/mill/scripts/_setup.py.
 
 Uses safe_temp_dir() (junction-aware temp dir) and real disk operations for all happy-path cases.
-A single selective mock covers the cross-volume hardlink error path which cannot be triggered without multiple filesystem volumes.
+A single selective mock covers the cross-volume hardlink error path which cannot be triggered
+without multiple filesystem volumes.
 
 Covers:
   - Token-scope filter: no <SLUG> in tokens -> .portals entry skipped;
@@ -11,7 +12,8 @@ Covers:
   - Hardlink inode-mismatch -> backup-and-recreate
   - Both empty config blocks -> empty result lists
   - Cross-volume hardlink -> ValueError with clear source/target in message
-  - Portal-flow integration: - .wiki junction resolves to fixture wiki path - .portals junction resolves to wiki/active/<slug>/ dir - tasks.md hardlink shares an inode with wiki/Home.md
+  - Portal-flow integration: - .wiki junction resolves to fixture wiki path - .portals junction
+      resolves to wiki/active/<slug>/ dir - tasks.md hardlink shares an inode with wiki/Home.md
   - Graceful absence: missing hardlinks block -> empty hardlinks list
   - Graceful absence: hardlinks: null -> empty hardlinks list
 """
@@ -46,7 +48,8 @@ def _write_hub_config(hub_root: Path, cfg: dict) -> None:
 def _make_minimal_wiki(wiki_path: Path, hub_root: Path, cfg: dict) -> None:
     """Create wiki_path with Home.md and write cfg as hub_root/mill-config.yaml.
 
-    The junctions/hardlinks blocks live at the hub (mill-config.yaml), not the wiki — _junction.read_junctions/read_hardlinks read from <hub_root>/mill-config.yaml.
+    The junctions/hardlinks blocks live at the hub (mill-config.yaml), not the wiki —
+    _junction.read_junctions/read_hardlinks read from <hub_root>/mill-config.yaml.
     """
     wiki_path.mkdir(parents=True, exist_ok=True)
     (wiki_path / "Home.md").write_text("# Home\n", encoding="utf-8")
@@ -322,7 +325,8 @@ def test_junction_refuses_to_replace_real_directory() -> None:
     """create_hub_links raises ValueError when a real directory sits at link_path.
 
     Pre-creates target_root/.wiki as a REAL directory with a sentinel file.
-    create_hub_links must propagate _junction.remove's ValueError rather than silently deleting the directory.
+    create_hub_links must propagate _junction.remove's ValueError rather than silently deleting the
+    directory.
     """
     with safe_temp_dir() as tmp:
         container = tmp / "container"
@@ -371,7 +375,8 @@ def test_junction_refuses_to_replace_real_directory() -> None:
 def test_hardlink_inode_skip_idempotent() -> None:
     """Second call with same target/link is a no-op (returns empty hardlinks).
 
-    Uses _HARDLINK_ONLY_CFG whose junction entry requires <SLUG> (so it is filtered when SLUG absent).
+    Uses _HARDLINK_ONLY_CFG whose junction entry requires <SLUG> (so it is filtered when SLUG
+    absent).
     Only the hardlink is created on the first call.
     The second call finds matching inodes and skips.
     """
@@ -562,11 +567,14 @@ def test_portal_flow_integration() -> None:
     """Full fixture with wiki/active structure asserts all links are correct.
 
     Fixture:
-      container/ wts/ my-task/ <- target_root (new worktree) portals/ my-task/ <- junction -> wiki/active/my-task/ wiki/ active/ my-task/ <- wiki state dir (portal target)
+      container/ wts/ my-task/ <- target_root (new worktree) portals/ my-task/ <- junction ->
+          wiki/active/my-task/ wiki/ active/ my-task/ <- wiki state dir (portal target)
           Home.md config.yaml
 
     Asserts:
-      (a) .wiki junction inside target_root exists and resolves to wiki path (b) .portals junction inside target_root exists and resolves to wiki/active/my-task/ (c) tasks.md hardlink shares an inode with wiki/Home.md
+      (a) .wiki junction inside target_root exists and resolves to wiki path (b) .portals junction
+      inside target_root exists and resolves to wiki/active/my-task/ (c) tasks.md hardlink shares an
+      inode with wiki/Home.md
     """
     import _junction as junction_mod  # real junction helper
 

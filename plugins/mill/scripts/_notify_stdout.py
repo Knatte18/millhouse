@@ -2,7 +2,8 @@
 Default notify backend — print one structured line to stderr.
 
 This is the baseline every mill-v2 install ships with.
-It prints a single line per event so the terminal output stays skimmable while a long-running mill-go session churns through batches.
+It prints a single line per event so the terminal output stays skimmable while a long-running
+mill-go session churns through batches.
 Richer backends (toast, Slack, email) replace this module via the ``notify.backend:`` config key.
 
 Format (single line, UTF-8 on stderr):

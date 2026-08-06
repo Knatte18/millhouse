@@ -1,6 +1,7 @@
 """Unit tests for the no-op commit path in wiki._sync.commit_push.
 
-Tests that commit_push correctly detects when no changes are staged (even when files are rewritten with identical content) and skips the commit and push without raising an error.
+Tests that commit_push correctly detects when no changes are staged (even when files are rewritten
+with identical content) and skips the commit and push without raising an error.
 """
 from __future__ import annotations
 

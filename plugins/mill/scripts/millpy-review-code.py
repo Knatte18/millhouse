@@ -1,15 +1,18 @@
 """mill-review-code — CLI entry point for code review.
 
-Resolves project roots, loads config, finds the active task slug, calls the code review backend, and prints JSON to stdout.
+Resolves project roots, loads config, finds the active task slug, calls the code review backend, and
+prints JSON to stdout.
 
 Flags:
     --slug <slug> Override active-slug detection (run from hub/main).
     --batch <name> run a per-batch review against the named batch in the plan's Batch Index.
         Omit for a holistic review covering every batch in one reviewer call.
     --extra-file <path> (repeatable) additional source file to include in the reviewer's bulk.
-        Used by mill-go on a ``NEED_CONTEXT`` retry: the prior round listed the files it could not find;
+        Used by mill-go on a ``NEED_CONTEXT`` retry: the prior round listed the files it could not
+            find;
         the orchestrator passes them explicitly here.
-    --max-rounds <N> Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds (overrides the active scope) for this invocation.
+    --max-rounds <N> Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds
+        (overrides the active scope) for this invocation.
         Default: use config values.
 
 Exit codes:

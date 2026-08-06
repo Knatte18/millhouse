@@ -1,7 +1,9 @@
 """Integration test for agent-mode implementer commit-on-task-branch guarantee.
 
-Tests that when _implementer_common functions (emit_prepare, finalize_from_output) are called from a task worktree, the commits land on the task branch (not on the hub/main).
-This is the mechanical proxy for the discussion gotcha: "the implementer's git commits land on the task branch in the correct worktree."
+Tests that when _implementer_common functions (emit_prepare, finalize_from_output) are called from a
+task worktree, the commits land on the task branch (not on the hub/main).
+This is the mechanical proxy for the discussion gotcha: "the implementer's git commits land on the
+task branch in the correct worktree."
 
 Uses real git repos in `.scratch/` (no LLM, no Agent tool).
 Tests the _forward_output logic directly with a canned success JSON.

@@ -2,21 +2,29 @@
 mill-fold — append a fold entry to a task in the wiki's Home.md.
 
 Resolves the wiki clone via ``_paths.resolve_wiki_path``.
-Note: ``.millhouse/wiki`` is a junction for IDE/terminal convenience only — scripts never use it as a code path.
-Acquires the shared ``.mill-lock`` around the read-append-sidebar-commit sequence, then optionally closes the GitHub issue after the wiki commit succeeds and the lock is released.
+Note: ``.millhouse/wiki`` is a junction for IDE/terminal convenience only — scripts never use it as
+a code path.
+Acquires the shared ``.mill-lock`` around the read-append-sidebar-commit sequence, then optionally
+closes the GitHub issue after the wiki commit succeeds and the lock is released.
 
-Operation order (``fold-operation-order`` shared decision): lock → parse → unclaimed-only-guard → fetch_one (GH path only) → body-append → sidebar regen → commit/push → release → optional GH close-with-comment
+Operation order (``fold-operation-order`` shared decision): lock → parse → unclaimed-only-guard →
+fetch_one (GH path only) → body-append → sidebar regen → commit/push → release → optional GH
+close-with-comment
 
-Unclaimed-only fold guard (``unclaimed-only-allowlist`` shared decision): Fold targets must be unclaimed: status is None AND not deferred.
+Unclaimed-only fold guard (``unclaimed-only-allowlist`` shared decision): Fold targets must be
+    unclaimed: status is None AND not deferred.
     Any claimed, terminal, blocked, or deferred task refuses the fold.
-    The allowlist auto-refuses any future status value — safe in the event of silent GitHub issue loss on refused folds.
+    The allowlist auto-refuses any future status value — safe in the event of silent GitHub issue
+        loss on refused folds.
 
-GitHub issue close-comment string (``close-comment-strings`` shared decision): "Folded into wiki task: <slug>"
+GitHub issue close-comment string (``close-comment-strings`` shared decision): "Folded into wiki
+task: <slug>"
 
 Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``.
 
 Usage:
-    python plugins/mill/scripts/millpy-fold.py <target_slug> --issue <N> python plugins/mill/scripts/millpy-fold.py <target_slug> --scope <text>
+    python plugins/mill/scripts/millpy-fold.py <target_slug> --issue <N> python
+    plugins/mill/scripts/millpy-fold.py <target_slug> --scope <text>
 
 Exit codes:
     0 — fold appended and pushed (GH close may have soft-failed; see stderr)

@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/millpy-vscode.py.
 
-All discover_active_worktrees calls are mocked with return_value which accepts the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
+All discover_active_worktrees calls are mocked with return_value which accepts the new
+(worktrees_dir, home_tasks, branch_prefix) signature unchanged.
 """
 from __future__ import annotations
 

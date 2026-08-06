@@ -2,12 +2,18 @@
 Path resolution for codeguide hooks.
 
 Resolve chain -------------
-1. **Inline walk** — from cwd up to (and including) git-toplevel, look for ``_codeguide/<filename>``.
-2. **.codeguide-root override** — if inline fails, read the first line of ``<git-toplevel>/.codeguide-root`` and use it as the sibling anchor (absolute path, or relative to toplevel).
-3. **Sibling default** — otherwise compute the anchor via ``_sibling.resolve_path("codeguide", git_toplevel)``.
-4. **Sibling walk** — mirror the inline walk under the anchor: for each level from cwd up to toplevel, check ``<anchor>/<rel>/_codeguide/<filename>``.
+1. **Inline walk** — from cwd up to (and including) git-toplevel, look for
+``_codeguide/<filename>``.
+2. **.codeguide-root override** — if inline fails, read the first line of
+``<git-toplevel>/.codeguide-root`` and use it as the sibling anchor (absolute path, or relative to
+toplevel).
+3. **Sibling default** — otherwise compute the anchor via ``_sibling.resolve_path("codeguide",
+git_toplevel)``.
+4. **Sibling walk** — mirror the inline walk under the anchor: for each level from cwd up to
+toplevel, check ``<anchor>/<rel>/_codeguide/<filename>``.
 
-Routing files (Overview.md, modules/) resolve from cwd — each folder with a _codeguide/ is a self-contained routing node.
+Routing files (Overview.md, modules/) resolve from cwd — each folder with a _codeguide/ is a
+self-contained routing node.
 Metadata files (config.yaml, local-rules.md, DocumentationGuide.md) resolve via the chain above.
 """
 
@@ -111,7 +117,8 @@ def resolve(cwd: str | None = None, filename: str = METADATA_ANCHOR) -> dict:
     Returns a dict with keys:
         mode: "inline" | "sibling" | None
         cg_root: Path | None — the _codeguide/ directory that contains <filename>
-        sibling_anchor: Path | None — the sibling-repo root (only meaningful when mode == "sibling") found: bool
+        sibling_anchor: Path | None — the sibling-repo root (only meaningful when mode == "sibling")
+        found: bool
     """
     cwd_path = pathlib.Path(cwd or os.getcwd()).resolve()
     toplevel = _find_git_toplevel(cwd_path)

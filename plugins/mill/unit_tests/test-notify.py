@@ -1,6 +1,7 @@
 """Unit tests for _notify.py + _notify_stdout.py.
 
-Verifies that ``notify()`` dispatches through the default stdout backend without raising and that the backend prints its expected single-line format to stderr.
+Verifies that ``notify()`` dispatches through the default stdout backend without raising and that
+the backend prints its expected single-line format to stderr.
 """
 from __future__ import annotations
 

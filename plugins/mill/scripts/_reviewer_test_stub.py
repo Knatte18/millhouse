@@ -3,7 +3,8 @@
 The stub does not call any LLM.
 Tests seed a module-level queue with `(text, session_id)` tuples via `seed(...)`;
 each call to `run(...)` pops the next tuple and returns it.
-The optional `prompt_observer` callback receives every prompt the backend sends, letting tests assert on prompt shape (manifest presence, re-attached section, etc).
+The optional `prompt_observer` callback receives every prompt the backend sends, letting tests
+assert on prompt shape (manifest presence, re-attached section, etc).
 
 Public API:
     seed() — load response queue and clear captured-prompts log
@@ -35,7 +36,8 @@ Call before invoking the backend.
 
     Each response is `(verdict_text, session_id)`.
     The stub returns them in order.
-    Subsequent `run` calls past the queue length raise RuntimeError so a test mistake (under-seeded queue) is loud.
+    Subsequent `run` calls past the queue length raise RuntimeError so a test mistake (under-seeded
+    queue) is loud.
     Also clears the captured-prompts log so each test starts fresh.
     """
     with _lock:
