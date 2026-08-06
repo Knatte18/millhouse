@@ -1,6 +1,7 @@
 # Codeguide Ignore
 
-Directories that are not source code. Codeguide skips these entirely — no scanning, no docs, no mentions in Overview.md.
+Directories that are not source code.
+Codeguide skips these entirely — no scanning, no docs, no mentions in Overview.md.
 
 Patterns follow .gitignore conventions: `pi_data/` matches at any depth, `/pi_data/` matches only at the root level.
 

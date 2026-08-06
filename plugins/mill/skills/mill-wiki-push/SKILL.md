@@ -7,9 +7,12 @@ description: commit and push manual wiki edits, resolving rebase conflicts on th
 
 > Wiki access: never `cd .wiki/`. Use the documented helpers -- see CLAUDE.md `## Wiki access`.
 
-Commits every local change in the wiki repo (config.yaml, proposal-*.md, Home.md, etc.) with an auto-generated message and pushes. If the push is rejected and the rebase produces a conflict, this skill resolves the conflict and continues.
+Commits every local change in the wiki repo (config.yaml, proposal-*.md, Home.md, etc.) with an auto-generated message and pushes.
+If the push is rejected and the rebase produces a conflict, this skill resolves the conflict and continues.
 
-The underlying script (`millpy-wikipush.py`) can also be run manually from `.millhouse/millpy-wikipush.cmd` on Windows (that wrapper is generated only by mill-setup's Windows-only Phase 4.7 step); on POSIX (Linux/macOS) there is no wrapper -- run `millpy-wikipush.py` directly, using the same inline `PYTHONPATH=`/`$MILL_PYTHON` form shown in the `## Run it` block below. Run manually, it aborts cleanly on conflict ("no harm done") and instructs the operator to invoke this skill -- that's why the skill passes `--leave-conflicts`: the wiki is left mid-rebase so the LLM can resolve and continue.
+The underlying script (`millpy-wikipush.py`) can also be run manually from `.millhouse/millpy-wikipush.cmd` on Windows (that wrapper is generated only by mill-setup's Windows-only Phase 4.7 step);
+on POSIX (Linux/macOS) there is no wrapper -- run `millpy-wikipush.py` directly, using the same inline `PYTHONPATH=`/`$MILL_PYTHON` form shown in the `## Run it` block below.
+Run manually, it aborts cleanly on conflict ("no harm done") and instructs the operator to invoke this skill -- that's why the skill passes `--leave-conflicts`: the wiki is left mid-rebase so the LLM can resolve and continue.
 
 ## Run it
 
@@ -17,15 +20,19 @@ The underlying script (`millpy-wikipush.py`) can also be run manually from `.mil
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-wikipush.py" --leave-conflicts
 ```
 
-Capture exit code and stdout/stderr. Branch on exit code:
+Capture exit code and stdout/stderr.
+Branch on exit code:
 
 - **0** — print the script's stdout (one line: `pushed: ...` or `no changes`) and stop.
-- **1** — non-conflict failure (lock busy, push error, etc.). Print the script's stderr and stop.
-- **2** — rebase conflict. Continue to the resolution steps below.
+- **1** — non-conflict failure (lock busy, push error, etc.).
+  Print the script's stderr and stop.
+- **2** — rebase conflict.
+  Continue to the resolution steps below.
 
 ## Resolve conflict (exit 2)
 
-The wiki repo is in mid-rebase state. Your local commit is on top, and one or more files have conflict markers.
+The wiki repo is in mid-rebase state.
+Your local commit is on top, and one or more files have conflict markers.
 
 1. **List conflict files:**
 
@@ -43,9 +50,13 @@ The wiki repo is in mid-rebase state. Your local commit is on top, and one or mo
    ```
 
 2. **For each conflict file, decide based on context:**
-   - `_Sidebar.md` — auto-generated. Take *theirs* (the upstream version) — it will be regenerated correctly anyway.
-   - `Home.md` — usually structural (e.g. another skill marked a task done while operator edited the description). Merge both sides — keep upstream's structural change AND operator's content edit. Don't drop either side.
-   - `config.yaml` / `proposal-*.md` — operator's intentional edit. Prefer *ours* unless upstream made a meaningful change to the same lines (rare).
+   - `_Sidebar.md` — auto-generated.
+     Take *theirs* (the upstream version) — it will be regenerated correctly anyway.
+   - `Home.md` — usually structural (e.g. another skill marked a task done while operator edited the description).
+     Merge both sides — keep upstream's structural change AND operator's content edit.
+     Don't drop either side.
+   - `config.yaml` / `proposal-*.md` — operator's intentional edit.
+     Prefer *ours* unless upstream made a meaningful change to the same lines (rare).
    - When genuinely uncertain, keep both versions in the file with a brief comment marking the disagreement, then surface it to the operator in the final report.
 
 3. **Stage and continue:**
@@ -63,4 +74,5 @@ The wiki repo is in mid-rebase state. Your local commit is on top, and one or mo
    git -C <wiki-path> push
    ```
 
-5. **Report to the operator:** which files had conflicts, how each was resolved (theirs / ours / merged), and that the push succeeded.
+5. **Report to the operator:** which files had conflicts, how each was resolved (theirs / ours / merged),
+   and that the push succeeded.

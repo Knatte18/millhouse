@@ -8,14 +8,19 @@ argument-hint: "[--from-url <url>] [--branch <name>]"
 
 > Wiki access: never `cd .wiki/`. Use the documented helpers — see CLAUDE.md `## Wiki access`.
 
-Bootstrap the mill infrastructure from nothing. Produces a working `.millhouse/` + wiki + container layout in the current working clone.
+Bootstrap the mill infrastructure from nothing.
+Produces a working `.millhouse/` + wiki + container layout in the current working clone.
 
 ## Usage
 
-- `/mill-setup` — default GitHub-wiki path (derives `<origin>.wiki.git` from the primary clone's origin URL and clones the remote default branch). Behaviour unchanged from pre-flags state.
-- `/mill-setup --from-url https://github.com/Org/shared.git --branch wiki/millhouse` — clones the named branch from a separate repo (one-repo-many-branches pattern). If the branch does not yet exist on remote, mill-setup initialises a local orphan branch and the first commit (Phase 3.1) pushes it.
+- `/mill-setup` — default GitHub-wiki path (derives `<origin>.wiki.git` from the primary clone's origin URL and clones the remote default branch).
+  Behaviour unchanged from pre-flags state.
+- `/mill-setup --from-url https://github.com/Org/shared.git --branch wiki/millhouse` — clones the named branch from a separate repo (one-repo-many-branches pattern).
+  If the branch does not yet exist on remote, mill-setup initialises a local orphan branch and the first commit (Phase 3.1) pushes it.
 - `/mill-setup --from-url https://github.com/Org/shared.git` — clones from a separate repo at its remote HEAD branch (no `-b` passed to `git clone`).
-- `/mill-setup --branch wiki/millhouse` — applies a branch override to the default `<origin>.wiki.git` URL. Edge case but supported; branch is persisted to `config.local.yaml` for re-runs.
+- `/mill-setup --branch wiki/millhouse` — applies a branch override to the default `<origin>.wiki.git` URL.
+  Edge case but supported;
+  branch is persisted to `config.local.yaml` for re-runs.
 
 ## When to invoke
 
@@ -52,11 +57,16 @@ Prefix-form (any other structure, e.g. `<container>/<repo>/`):
   <repo>.wiki/      <- wiki clone
 ```
 
-The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just use `<wiki-dir>` thereafter. Container-form is detected when `cwd.parent.name == "wts"`; prefix-form is everything else. Use absolute paths when calling Python helpers (resolve via `Path(...).resolve()`).
+The form is decided by `_sibling.py wiki <HUB_PATH>` in Phase 3 — callers just use `<wiki-dir>` thereafter.
+Container-form is detected when `cwd.parent.name == "wts"`;
+prefix-form is everything else.
+Use absolute paths when calling Python helpers (resolve via `Path(...).resolve()`).
 
 ## How to invoke the helpers
 
-mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable (Phase 4.7, Windows only — see that phase). That variable does not exist in the current process (or in any child process spawned during this session) on Windows until Phase 4.7 completes and a new shell is opened, and has no equivalent on POSIX at all. The mill convention is to invoke the venv Python binary directly with an explicit `PYTHONPATH=` shell prefix on every call — this works whether the global env var is set or not, and on every platform:
+mill-setup is the bootstrapper that **creates** the global `PYTHONPATH` Windows user environment variable (Phase 4.7, Windows only — see that phase).
+That variable does not exist in the current process (or in any child process spawned during this session) on Windows until Phase 4.7 completes and a new shell is opened, and has no equivalent on POSIX at all.
+The mill convention is to invoke the venv Python binary directly with an explicit `PYTHONPATH=` shell prefix on every call — this works whether the global env var is set or not, and on every platform:
 
 ```bash
 # WRONG — invokes from source tree
@@ -66,7 +76,9 @@ PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "..."
 ```
 
-This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`; all other mill skills use `"$MILL_PYTHON"`). The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
+This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`;
+all other mill skills use `"$MILL_PYTHON"`).
+The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
 
 **Compute `<VENV_PYTHON>` once, before Phase 1**, and reuse the same literal path for every command in every later phase (same treatment as `<container>`, `<hub-path>`, `<wiki-dir>` — a token substituted by whoever is executing the skill, not a persisted shell variable):
 
@@ -80,14 +92,21 @@ Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitigno
 
 ## Phases
 
-Run in order. Stop on the first hard error and report it. Every phase is idempotent — re-checks current state before acting.
+Run in order.
+Stop on the first hard error and report it.
+Every phase is idempotent — re-checks current state before acting.
 
 ### Phase 0 — Parse arguments
 
-Read `$ARGUMENTS`. Token-walk left-to-right:
+Read `$ARGUMENTS`.
+Token-walk left-to-right:
 
-- `--from-url <url>` — the next token is the wiki URL. Store as `<cli-from-url>`. May appear at most once.
-- `--branch <name>` — the next token is the branch name. Store as `<cli-branch>`. May appear at most once.
+- `--from-url <url>` — the next token is the wiki URL.
+  Store as `<cli-from-url>`.
+  May appear at most once.
+- `--branch <name>` — the next token is the branch name.
+  Store as `<cli-branch>`.
+  May appear at most once.
 - Any other token: halt with usage hint:
 
   > Unknown argument: `<token>` in `$ARGUMENTS`
@@ -110,16 +129,24 @@ Optionally pre-load `.millhouse/config.local.yaml` now (if it exists) and read `
 
    > uv is not installed. Install via PowerShell: `irm https://astral.sh/uv/install.ps1 | iex` (Windows) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (POSIX) — then re-run /mill-setup.
 
-1. `git remote get-url origin` → `<origin-url>` (still computed; needed for the derived fallback and for Phase 7's `<repo-name>` resolution).
+1. `git remote get-url origin` → `<origin-url>` (still computed;
+   needed for the derived fallback and for Phase 7's `<repo-name>` resolution).
 2. Compute effective URL and branch via precedence:
-   - **Effective URL (`<wiki-url>`):** `<cli-from-url>` if set; else `wiki.repo_url:` from `.millhouse/config.local.yaml` if present; else strip trailing `.git` from `<origin-url>` and append `.wiki.git` (e.g. `https://github.com/org/repo.git` → `https://github.com/org/repo.wiki.git`).
-   - **Effective branch (`<wiki-branch>`):** `<cli-branch>` if set; else `wiki.branch:` from config if present; else `None` (use remote HEAD).
-   - **Source flag (`<effective-from-url-source>`):** `'cli'` when `<cli-from-url>` or `<cli-branch>` was supplied on the CLI; `'config'` when the effective URL came from `.millhouse/config.local.yaml`; `'derived'` when the `<origin>.wiki.git` fallback was used.
+   - **Effective URL (`<wiki-url>`):** `<cli-from-url>` if set;
+     else `wiki.repo_url:` from `.millhouse/config.local.yaml` if present;
+     else strip trailing `.git` from `<origin-url>` and append `.wiki.git` (e.g. `https://github.com/org/repo.git` → `https://github.com/org/repo.wiki.git`).
+   - **Effective branch (`<wiki-branch>`):** `<cli-branch>` if set;
+     else `wiki.branch:` from config if present;
+     else `None` (use remote HEAD).
+   - **Source flag (`<effective-from-url-source>`):** `'cli'` when `<cli-from-url>` or `<cli-branch>` was supplied on the CLI;
+     `'config'` when the effective URL came from `.millhouse/config.local.yaml`;
+     `'derived'` when the `<origin>.wiki.git` fallback was used.
 3. Store `<wiki-url>`, `<wiki-branch>`, `<effective-from-url-source>`, and `<container>` (the parent of `wts/`, or the parent of `cwd` in prefix-form).
 
 ### Phase 2 — Verify wiki is reachable and non-empty
 
-Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with a conditional message based on `<effective-from-url-source>`:
+Run `git ls-remote <wiki-url>`.
+If it fails (exit non-zero), halt with a conditional message based on `<effective-from-url-source>`:
 
 - When `<effective-from-url-source> == 'derived'` (no CLI flag, no config override — the default GitHub-wiki path):
 
@@ -133,13 +160,15 @@ Run `git ls-remote <wiki-url>`. If it fails (exit non-zero), halt with a conditi
 
 ### Phase 3 — Clone or fast-forward the wiki at `<wiki-dir>`
 
-First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` in container-form, otherwise `<container>/<repo>.wiki/`. Use the printed path as `<wiki-dir>` for the remainder of mill-setup:
+First compute `<wiki-dir>` using the sibling-path helper — this yields `<container>/wiki/` in container-form, otherwise `<container>/<repo>.wiki/`.
+Use the printed path as `<wiki-dir>` for the remainder of mill-setup:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" "${CLAUDE_PLUGIN_ROOT}/scripts/_sibling.py" wiki "<hub-path>"
 ```
 
-`<hub-path>` is derived via `git rev-parse --show-toplevel`. Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
+`<hub-path>` is derived via `git rev-parse --show-toplevel`.
+Users can override via `.millhouse/config.local.yaml`'s `wiki_path:` key.
 
 After `<wiki-dir>` is computed, call `_setup.clone_or_init`:
 
@@ -158,13 +187,15 @@ print(json.dumps(result))
 
 When rendering the command, substitute `<wiki-url>` and `<wiki-dir>` with their computed values. For `<wiki-branch>`: when it is set (e.g. `wiki/millhouse`), the ternary evaluates to the string; when `<wiki-branch>` is unset, write `branch=None` directly instead. Log the returned JSON (`"action"`: `"cloned"` | `"pulled"` | `"initialized"`; `"branch_existed_on_remote"`: `true` | `false` | `null`).
 
-If the helper raises `WikiSetupError` (dest is not a git repo, URL mismatch, branch mismatch, clone or init failure): halt and surface the exception message verbatim. The message names the offending paths so the user can fix manually.
+If the helper raises `WikiSetupError` (dest is not a git repo, URL mismatch, branch mismatch, clone or init failure): halt and surface the exception message verbatim.
+The message names the offending paths so the user can fix manually.
 
 If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only` failed due to network failure, credentials, or non-fast-forward / local divergence): halt and instruct the user to inspect and fix the wiki dir manually.
 
 ### Phase 3.1 — Seed mill-config.yaml at hub directory from template
 
-1. If `<cwd>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<cwd>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time). Then stage via `git add`:
+1. If `<cwd>/mill-config.yaml` does not exist: copy `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml` → `<cwd>/mill-config.yaml` verbatim (no substitution — tokens are resolved at runtime by scripts, not at seed time).
+   Then stage via `git add`:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import shutil, _subprocess_util; shutil.copyfile(Path(r'${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml').resolve(), Path(r'<cwd>/mill-config.yaml').resolve()); _subprocess_util.run(['git', '-C', r'<cwd>', 'add', 'mill-config.yaml']); print('mill-config.yaml staged at <cwd>/mill-config.yaml -- commit it on the main branch to land the migration')"
@@ -209,11 +240,15 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 
    Log which blocks were added (from the `print('upserted blocks:', ...)` output) so the operator can see the diff.
 
-**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` at runtime. Substituting at seed time would bake in machine-specific paths. If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`). This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
+**Why verbatim copy:** the token placeholders (`<WIKI_PATH>` etc.) are resolved by `_junction.resolve_target` at runtime.
+Substituting at seed time would bake in machine-specific paths.
+If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`).
+This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
 
 ### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
 
-Runs only when `<cli-from-url>` or `<cli-branch>` was explicitly supplied on the CLI in this run. When both came from config or derived defaults, this phase is a no-op.
+Runs only when `<cli-from-url>` or `<cli-branch>` was explicitly supplied on the CLI in this run.
+When both came from config or derived defaults, this phase is a no-op.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -228,17 +263,23 @@ print('config.local.yaml updated' if changed else 'config.local.yaml already cor
 "
 ```
 
-When rendering the command: fill `<repo-url-or-None>` with `r'<value>'` when `--from-url` was given, `None` when only `--branch` was given. Fill `<branch-or-None>` with `r'<value>'` when `--branch` was given, `None` when only `--from-url` was given. Passing `None` for an omitted argument preserves whatever value the file already has (partial-update semantics).
+When rendering the command: fill `<repo-url-or-None>` with `r'<value>'` when `--from-url` was given, `None` when only `--branch` was given.
+Fill `<branch-or-None>` with `r'<value>'` when `--branch` was given, `None` when only `--from-url` was given.
+Passing `None` for an omitted argument preserves whatever value the file already has (partial-update semantics).
 
-Note: `.millhouse/` does not exist on a fresh install at the time this phase fires (it is created in Phase 4 by `create_hub_links`). No separate `mkdir` is needed — `_config.set_local_wiki_overrides` calls `cfg_path.parent.mkdir(parents=True, exist_ok=True)` before writing.
+Note: `.millhouse/` does not exist on a fresh install at the time this phase fires (it is created in Phase 4 by `create_hub_links`).
+No separate `mkdir` is needed — `_config.set_local_wiki_overrides` calls `cfg_path.parent.mkdir(parents=True, exist_ok=True)` before writing.
 
-Note: comments in `.millhouse/config.local.yaml` are lost when this phase rewrites the file. The file is gitignored and per-machine, so the trade-off is acceptable.
+Note: comments in `.millhouse/config.local.yaml` are lost when this phase rewrites the file.
+The file is gitignored and per-machine, so the trade-off is acceptable.
 
 Idempotency: re-running mill-setup with the same flags (or no flags after a prior persisted run) leaves the file untouched — the helper returns `False` when the on-disk content already matches the desired content.
 
 ### Phase 3.7 — Create container scaffolding
 
-Create the `<container>/portals/` directory (if missing). Task portals are added per-task by `mill-spawn`/`mill-claim`; main worktree gets NO portal entry — adding one creates a deletion-cycle through `<container>/portals/<repo>` back to the hub when any task worktree is removed.
+Create the `<container>/portals/` directory (if missing).
+Task portals are added per-task by `mill-spawn`/`mill-claim`;
+main worktree gets NO portal entry — adding one creates a deletion-cycle through `<container>/portals/<repo>` back to the hub when any task worktree is removed.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -250,11 +291,13 @@ print(f'ensured portals dir: {portals}')
 "
 ```
 
-**Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists. The portal junction check prevents double-creation.
+**Idempotency:** `portals.mkdir(exist_ok=True)` is a no-op if the directory already exists.
+The portal junction check prevents double-creation.
 
 ### Phase 4 — Create hub links (junctions + hardlinks)
 
-Call `_setup.create_hub_links` with the hub token set (no `<SLUG>` — that is mill-spawn's concern). The helper reads both the `junctions:` and `hardlinks:` blocks from `<wiki-dir>/config.yaml`, applies the token-scope filter (silently skipping entries whose templates reference `<SLUG>`), creates all hub-scope junctions, and creates all hardlinks idempotently:
+Call `_setup.create_hub_links` with the hub token set (no `<SLUG>` — that is mill-spawn's concern).
+The helper reads both the `junctions:` and `hardlinks:` blocks from `<wiki-dir>/config.yaml`, applies the token-scope filter (silently skipping entries whose templates reference `<SLUG>`), creates all hub-scope junctions, and creates all hardlinks idempotently:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -276,12 +319,16 @@ print(json.dumps({k: [str(p) for p in v] for k, v in result.items()}, indent=2))
 ```
 
 Token reference:
-- `<cwd>` — the hub directory. mill-setup is invoked from the hub; `cwd` is the hub by construction. In subdirectory-hub mode, this differs from `git rev-parse --show-toplevel` (the repo root). Use `cwd`, not `git rev-parse --show-toplevel`, for `target_root`.
+- `<cwd>` — the hub directory. mill-setup is invoked from the hub;
+  `cwd` is the hub by construction.
+  In subdirectory-hub mode, this differs from `git rev-parse --show-toplevel` (the repo root).
+  Use `cwd`, not `git rev-parse --show-toplevel`, for `target_root`.
 - `<container>` — parent of `wts/` (container-form) or parent of hub (prefix-form)
 - `<wiki-dir>` — wiki clone path from Phase 3
 - `<repo>` — repository directory name (e.g. `millhouse`)
 
-**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (per-task `.active` and `.wiki` entries). Those are created by mill-spawn.
+**Do NOT add `<SLUG>`** — the token-scope filter skips junction entries that need `<SLUG>` (per-task `.active` and `.wiki` entries).
+Those are created by mill-spawn.
 
 Log the created junctions and hardlinks from the returned dict so the user can verify.
 
@@ -307,9 +354,13 @@ Log the result.
 
 ### Phase 4.7 — CMD shortcut wrappers (Windows only)
 
-**Windows only — skip entirely on POSIX.** Both sub-steps below are terminal-convenience only: `.cmd` files have no meaning outside `cmd.exe`, and `_winenv.py` uses `winreg`, which does not exist on POSIX. Neither is required for mill itself to function — every mill skill already receives `PYTHONPATH=` inline per invocation (see "How to invoke the helpers"), never via a persistent global env var. On POSIX, log `Phase 4.7 skipped (Windows-only convenience wrappers, not needed on POSIX)` and move to Phase 4.8.
+**Windows only — skip entirely on POSIX.**
+Both sub-steps below are terminal-convenience only: `.cmd` files have no meaning outside `cmd.exe`, and `_winenv.py` uses `winreg`, which does not exist on POSIX.
+Neither is required for mill itself to function — every mill skill already receives `PYTHONPATH=` inline per invocation (see "How to invoke the helpers"), never via a persistent global env var.
+On POSIX, log `Phase 4.7 skipped (Windows-only convenience wrappers, not needed on POSIX)` and move to Phase 4.8.
 
-On Windows, creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script. Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
+On Windows, creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script.
+Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -341,14 +392,18 @@ print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) a
 
 Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
-**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the `.cmd` wrappers to the new version. If upgrading from a pre-CMD hub (one where `.millhouse/` still contains `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd` wrappers in a single pass, and Phase 8 will verify their absence.
+**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the `.cmd` wrappers to the new version.
+If upgrading from a pre-CMD hub (one where `.millhouse/` still contains `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd` wrappers in a single pass, and Phase 8 will verify their absence.
 
 
 ### Phase 4.8 — Write `MILL_PYTHON` to `~/.claude/settings.json`
 
-Sets the `MILL_PYTHON` environment variable in the global Claude Code settings so every other mill skill can reference `"$MILL_PYTHON"` instead of the full venv path. This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` in its own commands because the variable is not yet active in the current CC session (CC reads `settings.json` at startup). All other mill skills use `"$MILL_PYTHON"`.
+Sets the `MILL_PYTHON` environment variable in the global Claude Code settings so every other mill skill can reference `"$MILL_PYTHON"` instead of the full venv path.
+This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` in its own commands because the variable is not yet active in the current CC session (CC reads `settings.json` at startup).
+All other mill skills use `"$MILL_PYTHON"`.
 
-This phase also merges the mill subagent's tool surface (`_claude_settings.MILL_SUBAGENT_TOOLS`) into `permissions.allow` in the same file, so a background `mill-implementer`/`mill-reviewer` dispatch doesn't stall on an interactive tool-permission prompt that nothing can answer (#631). Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
+This phase also merges the mill subagent's tool surface (`_claude_settings.MILL_SUBAGENT_TOOLS`) into `permissions.allow` in the same file, so a background `mill-implementer`/`mill-reviewer` dispatch doesn't stall on an interactive tool-permission prompt that nothing can answer (#631).
+Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -374,12 +429,14 @@ print(f'Permission allowlist merged: {_claude_settings.MILL_SUBAGENT_TOOLS}')
 "
 ```
 
-Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line and the permission-allowlist merge outcome. After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
+Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line and the permission-allowlist merge outcome.
+After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
 
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
 
-The `hub_relative_path` key tells mill-terminal and mill-vscode where the effective hub directory is within the worktree. Write it before seeding `config.local.yaml` (Phase 5) so it appears in the seeded file if the file doesn't exist yet, and update it if the file already exists.
+The `hub_relative_path` key tells mill-terminal and mill-vscode where the effective hub directory is within the worktree.
+Write it before seeding `config.local.yaml` (Phase 5) so it appears in the seeded file if the file doesn't exist yet, and update it if the file already exists.
 
 Compute the value:
 
@@ -399,7 +456,9 @@ print(rel)
 - When `cwd == git_toplevel` (typical mill setup where the hub is the repo root): value is `"."`.
 - When `cwd` is a subdirectory of `git_toplevel` (downstream consumer pattern): value is the relative subpath (e.g. `"src/csharp/Models"`).
 
-Write the value into `.millhouse/config.local.yaml`. If the file already exists and already contains `hub_relative_path:`, update it in-place; if missing or absent from the file, append/insert it before the first non-comment key:
+Write the value into `.millhouse/config.local.yaml`.
+If the file already exists and already contains `hub_relative_path:`, update it in-place;
+if missing or absent from the file, append/insert it before the first non-comment key:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -428,9 +487,8 @@ else:
 
 ### Phase 6a — Trigger daemon startup and initial render
 
-Call `_client.list_tasks_brief(wiki_path)` to start the wiki daemon and trigger
-initial rendering of `Home.md` and `_Sidebar.md` from `tasks.json`. The daemon
-creates `tasks.json` if absent and auto-renders both derived files on first access.
+Call `_client.list_tasks_brief(wiki_path)` to start the wiki daemon and trigger initial rendering of `Home.md` and `_Sidebar.md` from `tasks.json`.
+The daemon creates `tasks.json` if absent and auto-renders both derived files on first access.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -459,7 +517,8 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib impo
 
 ### Phase 8 — Verify + report
 
-Check every invariant; halt with a specific error if any fails:
+Check every invariant;
+halt with a specific error if any fails:
 
 - `<WIKI_PATH>` is a git repo (the cloned wiki)
 - `<cwd>/mill-config.yaml` exists
@@ -469,9 +528,12 @@ Check every invariant; halt with a specific error if any fails:
 - Every hub junction (entries without `<SLUG>` from `mill-config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
-- **Windows only:** every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists). Skip this check entirely on POSIX — Phase 4.7 never runs there.
-- **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`). Skip this check entirely on POSIX.
-- `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree); verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os; from pathlib import Path; venv=Path(os.environ['CLAUDE_PLUGIN_ROOT'])/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
+- **Windows only:** every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists).
+  Skip this check entirely on POSIX — Phase 4.7 never runs there.
+- **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`).
+  Skip this check entirely on POSIX.
+- `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree);
+  verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os; from pathlib import Path; venv=Path(os.environ['CLAUDE_PLUGIN_ROOT'])/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
@@ -518,20 +580,27 @@ Next: /mill-add <slug> --title "..." [--summary "..."] [--proposal-body "..."] t
 
 ## Idempotency
 
-Every phase checks current state before acting. Re-running after a partial or complete setup is always safe:
+Every phase checks current state before acting.
+Re-running after a partial or complete setup is always safe:
 
 - Wiki already cloned → pulls latest.
-- `mill-config.yaml` present → block-level upsert run; commit only if missing blocks were added (Phase 3.1).
+- `mill-config.yaml` present → block-level upsert run;
+  commit only if missing blocks were added (Phase 3.1).
 - `portals/` dir present → created by Phase 4 via `_setup.create_hub_links` (idempotent via `exist_ok=True` on the junction target).
 - `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
 - `hub_relative_path` already set → updated to current value (Phase 4.9).
 - `config.local.yaml` present → skipped (Phase 5).
-- Phase 3.2's persisted `wiki.repo_url` / `wiki.branch` block is rewritten only when the on-disk values differ from the effective CLI values. Re-runs with matching flags (or no flags after a prior persisted run) make no change.
-- `Home.md` non-empty (and v2-shape or user-custom) → skipped; only GitHub-default content is overwritten.
-- `_Sidebar.md` regenerated unconditionally; commit only if bytes changed.
+- Phase 3.2's persisted `wiki.repo_url` / `wiki.branch` block is rewritten only when the on-disk values differ from the effective CLI values.
+  Re-runs with matching flags (or no flags after a prior persisted run) make no change.
+- `Home.md` non-empty (and v2-shape or user-custom) → skipped;
+  only GitHub-default content is overwritten.
+- `_Sidebar.md` regenerated unconditionally;
+  commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
-- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only; Phase 4.7 is a no-op on POSIX).
-- Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value; writes only if they differ.
+- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only;
+  Phase 4.7 is a no-op on POSIX).
+- Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value;
+  writes only if they differ.
 
 A second `/mill-setup` run on a fully-set-up clone makes no changes and prints the same summary block.

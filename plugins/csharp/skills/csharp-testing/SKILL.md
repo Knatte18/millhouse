@@ -5,7 +5,8 @@ description: Testing conventions for C#/.NET projects. Use when writing tests.
 
 # Testing Skill
 
-Swappable testing conventions for C#/.NET projects. Replace or extend this file to match your test framework.
+Swappable testing conventions for C#/.NET projects.
+Replace or extend this file to match your test framework.
 
 ---
 
@@ -47,7 +48,8 @@ Detect the test framework from the test project's `*.csproj` file:
 - **NUnit:** `<PackageReference Include="NUnit" .../>` — uses `[Test]`, `[TestCase]`, `Assert.*`.
 - **MSTest:** `<PackageReference Include="MSTest.TestFramework" .../>` — uses `[TestMethod]`, `[DataRow]`, `Assert.*`.
 
-Follow the conventions of whichever framework the project uses. Do not mix frameworks within a test project.
+Follow the conventions of whichever framework the project uses.
+Do not mix frameworks within a test project.
 
 ### Conventions to specify per project
 

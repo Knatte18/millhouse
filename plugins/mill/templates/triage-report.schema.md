@@ -1,6 +1,7 @@
 # Triage Report Schema
 
-This file documents the canonical shape of the triage-report contract: the envelope every source adapter produces and the source-agnostic `mill-triage-to-tasks` skill consumes. Each adapter — `_gh_issues.to_contract()` for GitHub issues, `_sandbox_report.read()` for a local sandbox-report.json file — fills in the same fields, set once per adapter, so the analysis half never needs to know or branch on which source produced the envelope.
+This file documents the canonical shape of the triage-report contract: the envelope every source adapter produces and the source-agnostic `mill-triage-to-tasks` skill consumes.
+Each adapter — `_gh_issues.to_contract()` for GitHub issues, `_sandbox_report.read()` for a local sandbox-report.json file — fills in the same fields, set once per adapter, so the analysis half never needs to know or branch on which source produced the envelope.
 
 ## File format
 
@@ -45,14 +46,19 @@ This file documents the canonical shape of the triage-report contract: the envel
 
 ## Per-Sources-bullet rendering
 
-For every item in `items`, write a Sources bullet of the form `- Sources: <ref_prefix><ref> — <title>`. Immediately following that bullet:
+For every item in `items`, write a Sources bullet of the form `- Sources: <ref_prefix><ref> — <title>`.
+Immediately following that bullet:
 
 - When the envelope's `detail_hint` is non-null, write the hint line with `{ref}` substituted from that same item's own `ref` — never from any other item's `ref`, even when multiple items land on the same task.
 - When `embed_body` is true, write that item's `body` text immediately after the bullet (and after the hint line, when one was written).
 
-This rendering applies identically regardless of where the bullet lands: a brand-new grouped task with one or more source items, or an existing task that an item is appended to via fold-in. A fold-in item gets the same `- Sources: ...` bullet, the same per-item `detail_hint` substitution, and the same `embed_body` handling as it would inside a new task — fold-in is not a special case.
+This rendering applies identically regardless of where the bullet lands: a brand-new grouped task with one or more source items,
+or an existing task that an item is appended to via fold-in.
+A fold-in item gets the same `- Sources: ...` bullet, the same per-item `detail_hint` substitution,
+and the same `embed_body` handling as it would inside a new task — fold-in is not a special case.
 
 ## Produced by / Consumed by
 
 - **Produced by:** `_gh_issues.to_contract()` (`plugins/mill/scripts/_gh_issues.py`) and `_sandbox_report.read()` (`plugins/mill/scripts/_sandbox_report.py`).
-- **Consumed by:** `mill-triage-to-tasks` (`plugins/mill/skills/mill-triage-to-tasks/SKILL.md` — forward reference; this skill is written in a later batch of the same task that introduced this schema).
+- **Consumed by:** `mill-triage-to-tasks` (`plugins/mill/skills/mill-triage-to-tasks/SKILL.md` — forward reference;
+  this skill is written in a later batch of the same task that introduced this schema).

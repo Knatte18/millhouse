@@ -12,11 +12,13 @@ Lists active worktrees that do **not** already have a VS Code window open in the
 
 When every worktree is already open (filter empties the list), falls through to spawn-and-open — same as the zero-active-worktrees path.
 
-Open-window detection is best-effort (Windows via `Get-CimInstance Win32_Process`, Linux via `ps`). On macOS or when the probe fails, all active worktrees are shown unfiltered.
+Open-window detection is best-effort (Windows via `Get-CimInstance Win32_Process`, Linux via `ps`).
+On macOS or when the probe fails, all active worktrees are shown unfiltered.
 
 ## Flags
 
-- `--new` — spawn a new task and open it without showing the existing-worktrees list. Mutually exclusive with `--slug`.
+- `--new` — spawn a new task and open it without showing the existing-worktrees list.
+  Mutually exclusive with `--slug`.
 - `--slug <slug>` — open the worktree for slug `<slug>` without showing the picker.
 - `--list` — print every active worktree without launching VS Code or applying the filter.
 

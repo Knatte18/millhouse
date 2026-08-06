@@ -18,7 +18,8 @@ Guidelines for code comments and XML documentation in C#/.NET.
 ## Interface implementations — use `<inheritdoc/>`, never duplicate
 
 - When a class implements an interface member, **never repeat** the interface's `/// <summary>` on the implementation.
-- **Always write `/// <inheritdoc/>`** on the implementation. This makes the inheritance explicit and signals to future readers (and to Claude) that the doc lives on the interface and no new docstring is needed here.
+- **Always write `/// <inheritdoc/>`** on the implementation.
+  This makes the inheritance explicit and signals to future readers (and to Claude) that the doc lives on the interface and no new docstring is needed here.
 - Only write a fresh `/// <summary>` on an implementation when it adds information beyond the interface contract, or when the member has no interface counterpart.
 
 ## Inline comments
@@ -30,7 +31,8 @@ Guidelines for code comments and XML documentation in C#/.NET.
 
 Do not hard-wrap a multi-line `/// <summary>` or inline comment at a fixed column.
 Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
+Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
+or a semicolon, where what follows has its own subject and verb.
 A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
 
 When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
@@ -62,6 +64,9 @@ public string ProcessOrder(Order order) {
 
 ## Prohibited patterns
 
-- **Never** comment out code. Delete it. Version control handles history.
+- **Never** comment out code.
+  Delete it.
+  Version control handles history.
 - **No edit-history comments** ("added in v2", "removed old logic", "changed from X to Y").
-- **No end-of-line comments.** Place comments on their own line above the code.
+- **No end-of-line comments.**
+  Place comments on their own line above the code.

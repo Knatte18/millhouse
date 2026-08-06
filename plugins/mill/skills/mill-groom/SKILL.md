@@ -5,12 +5,12 @@ description: Interactive Home.md backlog cleanup. Shorten, fold, drop, or extrac
 
 # mill-groom
 
-One-shot interactive cleanup of the `Home.md` backlog. Over time the backlog
-accrues duplicate tasks, long-winded entries, done-but-not-cleaned residue, and
-vague wishes that never got a slug. `mill-groom` lets you work through the list
-with Claude and emit a cleaner Home.md in a single commit.
+One-shot interactive cleanup of the `Home.md` backlog.
+Over time the backlog accrues duplicate tasks, long-winded entries, done-but-not-cleaned residue, and vague wishes that never got a slug. `mill-groom` lets you work through the list with Claude and emit a cleaner Home.md in a single commit.
 
-Claude proposes; you decide; nothing is written until you type `approve`.
+Claude proposes;
+you decide;
+nothing is written until you type `approve`.
 
 ## Entry checks
 
@@ -20,7 +20,8 @@ Claude proposes; you decide; nothing is written until you type `approve`.
    import _paths; print(_paths.resolve_wiki_path(_paths.resolve_git_root()))
    "
    ```
-   Store the returned path as `<WIKI_PATH>`. If the call raises or exits non-zero, stop:
+   Store the returned path as `<WIKI_PATH>`.
+   If the call raises or exits non-zero, stop:
    > wiki path could not be resolved. Run `/mill-setup` first.
 
 ## Step 1 — Read config
@@ -67,11 +68,14 @@ Note: V3 task dicts have `"status"` (not `"phase"`), `"slug"`, `"title"`, `"brie
 | `"done"` | Yes | drop only |
 | (protected) | Yes (listed, read-only) | none |
 
-To read the body of a task, use `_client.list_tasks_full(wiki)` — each dict includes a `"body"` field. A task is protected if its body contains `<!-- protected -->`.
+To read the body of a task, use `_client.list_tasks_full(wiki)` — each dict includes a `"body"` field.
+A task is protected if its body contains `<!-- protected -->`.
 
 ## Step 3 — List all tasks
 
-Render every `Home.md` entry as a numbered list in file order. Show number, slug, and title. Append the appropriate suffix:
+Render every `Home.md` entry as a numbered list in file order.
+Show number, slug, and title.
+Append the appropriate suffix:
 
 - `(active — read-only)` for `[active]` entries
 - `(done — drop only)` for `[done]` entries
@@ -108,9 +112,13 @@ When the user enters a number, look up the task at that position.
   ```
   1) Drop
   ```
-  Confirm with the user. Record the drop decision. Return to Step 3.
+  Confirm with the user.
+  Record the drop decision.
+  Return to Step 3.
 
-- **Otherwise (unmarked)** → apply the heuristic below to determine which action to recommend, then build the menu: if the recommended action is not `Keep as-is`, **swap** it into position 1; the remaining options keep their relative order from the canonical sequence (Keep / Shorten / Fold / Drop / Extract). The `(Recommended)` suffix appears after the label of option 1.
+- **Otherwise (unmarked)** → apply the heuristic below to determine which action to recommend, then build the menu: if the recommended action is not `Keep as-is`, **swap** it into position 1;
+  the remaining options keep their relative order from the canonical sequence (Keep / Shorten / Fold / Drop / Extract).
+  The `(Recommended)` suffix appears after the label of option 1.
 
   Heuristic (at most one recommendation per task):
   - Body exceeds `groom.brevity-threshold-lines` lines OR `groom.brevity-threshold-chars` chars → recommend "Extract to proposal"
@@ -123,11 +131,22 @@ When the user enters a number, look up the task at that position.
   - No recommendation → `1) Keep as-is / 2) Shorten / 3) Fold / 4) Drop / 5) Extract`
 
   **On user selection:**
-  - `Keep`: record decision. Return to Step 3.
-  - `Shorten`: prompt for the new body inline. Record decision. Return to Step 3.
-  - `Fold`: prompt for target slug. Validate against existing slugs from the parse output — re-prompt if the slug is not found. Record decision. Return to Step 3.
-  - `Drop`: prompt for a one-line reason (recorded in the commit message). Record decision. Return to Step 3.
-  - `Extract`: flag if `proposal-<slug>.md` already exists in `<WIKI_PATH>` — warn the user now; Step 6 enforces the final guard. Record decision. Return to Step 3.
+  - `Keep`: record decision.
+    Return to Step 3.
+  - `Shorten`: prompt for the new body inline.
+    Record decision.
+    Return to Step 3.
+  - `Fold`: prompt for target slug.
+    Validate against existing slugs from the parse output — re-prompt if the slug is not found.
+    Record decision.
+    Return to Step 3.
+  - `Drop`: prompt for a one-line reason (recorded in the commit message).
+    Record decision.
+    Return to Step 3.
+  - `Extract`: flag if `proposal-<slug>.md` already exists in `<WIKI_PATH>` — warn the user now;
+    Step 6 enforces the final guard.
+    Record decision.
+    Return to Step 3.
 
 When the user types `done`, fall through to Step 5.
 
@@ -135,8 +154,7 @@ Do NOT modify Home.md during this step.
 
 ## Step 5 — Write proposal
 
-After the user has worked through entries by number and typed `done`, write the consolidated proposal to
-`.scratch/groom-proposal.md`:
+After the user has worked through entries by number and typed `done`, write the consolidated proposal to `.scratch/groom-proposal.md`:
 
 ```markdown
 # mill-groom proposal
@@ -169,25 +187,26 @@ Changes proposed: <shortened> shortened, <folded> folded, <dropped> dropped, <ex
 <first 3 lines of proposed proposal-big-task.md>
 ```
 
-Print a one-line summary to chat and the path. User replies `approve` or `reject`.
+Print a one-line summary to chat and the path.
+User replies `approve` or `reject`.
 
 On `reject`: ask what to change, revise decisions, rewrite the proposal, and ask again.
 
 ## Step 6 — Apply (on approve)
 
-1. For each **extract** decision: check whether `<WIKI_PATH>/proposal-<slug>.md`
-   already exists. If it does, **stop** and ask the user:
+1. For each **extract** decision: check whether `<WIKI_PATH>/proposal-<slug>.md` already exists.
+   If it does, **stop** and ask the user:
    > `proposal-<slug>.md` already exists in the wiki. Overwrite, skip, or rename?
    Wait for instruction before proceeding.
 2. Build the updated task data in memory:
    - **Shorten**: replace the entry body with the approved shorter text.
-   - **Fold**: remove the entry; leave the target entry unchanged unless the
-     user asked to append a note.
+   - **Fold**: remove the entry;
+     leave the target entry unchanged unless the user asked to append a note.
    - **Drop**: remove the entry.
-   - **Extract**: replace the entry body with a 1-line link:
-     `See [proposal-<slug>.md](proposal-<slug>.md).`; write the full body to
-     `<WIKI_PATH>/proposal-<slug>.md`.
-4. For each task whose fields changed, call `_client.upsert_task(wiki, slug, brief=..., body=...)`. The daemon commits and pushes to the wiki remote automatically on each mutation.
+   - **Extract**: replace the entry body with a 1-line link: `See [proposal-<slug>.md](proposal-<slug>.md).`;
+     write the full body to `<WIKI_PATH>/proposal-<slug>.md`.
+4. For each task whose fields changed, call `_client.upsert_task(wiki, slug, brief=..., body=...)`.
+   The daemon commits and pushes to the wiki remote automatically on each mutation.
 
 5. Delete `.scratch/groom-proposal.md`.
 
@@ -204,17 +223,23 @@ Groom complete.
 
 ## Rules
 
-- **Never silently rewrite Home.md.** The proposal/approval gate is non-negotiable.
-- **Protected tasks are never modified.** Any entry whose body contains
-  `<!-- protected -->` is listed as read-only; no actions are offered.
-- **`[active]` tasks are never modified.** Listed for context; all actions blocked.
+- **Never silently rewrite Home.md.**
+  The proposal/approval gate is non-negotiable.
+- **Protected tasks are never modified.**
+  Any entry whose body contains `<!-- protected -->` is listed as read-only;
+  no actions are offered.
+- **`[active]` tasks are never modified.**
+  Listed for context;
+  all actions blocked.
 - **`[done]` tasks get only the `drop` action** — never shorten, fold, or extract.
-- **Daemon auto-commits per mutation** — each `_client.upsert_task` call triggers a daemon commit + push; no explicit write_commit_push step is needed.
+- **Daemon auto-commits per mutation** — each `_client.upsert_task` call triggers a daemon commit + push;
+  no explicit write_commit_push step is needed.
 - **All-or-nothing approval** — the user approves or rejects the full proposal.
   Adjust individual decisions before approving if needed.
 
 ## Out of scope
 
-- No GitHub issue integration. Use `/mill-ghissues-to-tasks` for that.
+- No GitHub issue integration.
+  Use `/mill-ghissues-to-tasks` for that.
 - No multi-machine coordination.
 - No cross-wiki grooming.

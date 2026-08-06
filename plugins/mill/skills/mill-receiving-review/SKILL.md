@@ -5,15 +5,19 @@ description: Decision tree for evaluating reviewer findings. MUST be invoked BEF
 
 # Receiving-Review Protocol
 
-**MANDATORY:** This skill must be loaded BEFORE you evaluate or act on any reviewer findings — during both plan review and code review. If you have already evaluated or acted on the findings, this skill is useless; you have already formed rationalizations.
+**MANDATORY:** This skill must be loaded BEFORE you evaluate or act on any reviewer findings — during both plan review and code review.
+If you have already evaluated or acted on the findings, this skill is useless;
+you have already formed rationalizations.
 
 ---
 
 ## Core Rule
 
-Default: **fix everything.** The only valid escape is proven harm.
+Default: **fix everything.**
+The only valid escape is proven harm.
 
-Fixing a finding costs seconds. Leaving it costs compounding debt — every unfixed finding is a pattern the next task copies.
+Fixing a finding costs seconds.
+Leaving it costs compounding debt — every unfixed finding is a pattern the next task copies.
 
 ---
 
@@ -46,7 +50,9 @@ These rationalizations are **never** valid reasons to skip a fix:
 - "Won't change during this project"
 - "Cosmetic / style preference"
 - "Future task will handle this"
-- **NITs are not optional.** A finding marked `[NIT]` is fixed under the default rule. The only escape is the same Decision Tree (factually wrong / breaks existing functionality / conflicts with documented design / destabilizes other work).
+- **NITs are not optional.**
+  A finding marked `[NIT]` is fixed under the default rule.
+  The only escape is the same Decision Tree (factually wrong / breaks existing functionality / conflicts with documented design / destabilizes other work).
 
 ---
 
@@ -58,13 +64,17 @@ Pushback is valid **only** when:
 2. **Fix breaks something** — identify what breaks
 3. **Conflicts with design doc** — cite the document and passage
 4. **Destabilizes other work** — cite what is affected and why
-5. **Physically unsatisfiable** — the change demanded contradicts an in-repo convention or cannot pass its own test (e.g., in-process test of a detached-spawn / os.Executable() path). Cite the in-repo analog or explain why the test itself is flawed. Report `stuck_type: logic` with the contradiction described; do not silently apply a change you know will fail.
+5. **Physically unsatisfiable** — the change demanded contradicts an in-repo convention or cannot pass its own test (e.g., in-process test of a detached-spawn / os.Executable() path).
+   Cite the in-repo analog or explain why the test itself is flawed.
+   Report `stuck_type: logic` with the contradiction described;
+   do not silently apply a change you know will fail.
 
 ---
 
 ## Applying This Protocol
 
-After loading this skill, process each reviewer finding through the decision tree above. For each finding, state:
+After loading this skill, process each reviewer finding through the decision tree above.
+For each finding, state:
 
 1. The finding
 2. Your VERIFY assessment (accurate / inaccurate / uncertain)

@@ -5,7 +5,8 @@ description: Docstring and inline comment rules for Python. Use when writing Pyt
 
 # Comments and Documentation Skill
 
-Guidelines for docstrings and comments in Python. The goal is **readable code** — a developer should be able to understand the module's logic by reading the docstrings and comments without tracing through the implementation.
+Guidelines for docstrings and comments in Python.
+The goal is **readable code** — a developer should be able to understand the module's logic by reading the docstrings and comments without tracing through the implementation.
 
 ---
 
@@ -39,7 +40,8 @@ def foo():
 ```
 
 - Single-line docstrings (rare — only for trivial helpers) keep everything on one line: `"""Return True if x is positive."""`
-- **Never write a one-liner that restates the function name.** `def load_data` does not need `"""Load data."""`. Either write a substantive docstring or omit it.
+- **Never write a one-liner that restates the function name.** `def load_data` does not need `"""Load data."""`.
+  Either write a substantive docstring or omit it.
 - For any non-trivial function, the docstring must be **multi-line** and explain:
   1. **What** the function does at the domain level — not "processes data" but "stitches together a CBI price index from two sources".
   2. **How** it works — the algorithm or logic in numbered steps or narrative prose.
@@ -99,11 +101,15 @@ class LORSIPartitionClass:
 
 ## Inline comments — narrate the reasoning
 
-Inline comments are **mandatory** at each logical step in non-trivial functions. They narrate the domain reasoning so a reader can follow the logic without deciphering the code.
+Inline comments are **mandatory** at each logical step in non-trivial functions.
+They narrate the domain reasoning so a reader can follow the logic without deciphering the code.
 
-- **Comment every logical step** — not every line, but every block that does something conceptually distinct. A function with 5 logical steps should have ~5 comments.
+- **Comment every logical step** — not every line,
+  but every block that does something conceptually distinct.
+  A function with 5 logical steps should have ~5 comments.
 - Explain **why this step is needed** and **what domain rule it implements**, not what the code mechanically does.
-- Write in natural language: "Extract the date where the CBI data will start. This is simply the first date in the SSB data."
+- Write in natural language: "Extract the date where the CBI data will start.
+  This is simply the first date in the SSB data."
 - Place comments on their own line above the code, not at the end of a line.
 
 ### Good vs bad examples
@@ -133,7 +139,8 @@ df = df[df['price_inc_debt'] != 0]
 
 Do not hard-wrap docstring or comment prose at a fixed column.
 Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole paragraph.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"), or a semicolon, where what follows has its own subject and verb.
+Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
+or a semicolon, where what follows has its own subject and verb.
 A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
 
 When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
@@ -161,6 +168,8 @@ and later steps assume the join has already happened.
 
 ## Prohibited patterns
 
-- **Never** comment out code. Delete it. Version control handles history.
+- **Never** comment out code.
+  Delete it.
+  Version control handles history.
 - **No edit-history comments** ("added in v2", "removed old logic", "changed from X to Y").
 - **No mechanical comments** that restate what the code does: `x = x + 1  # increment x`.

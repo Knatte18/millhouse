@@ -18,11 +18,15 @@ ruff check .
 pytest
 ```
 
-**Convention: Writing formatters (when used) run on changed files only, never on the whole project. This is precautionary since python-build today ships only ruff check (read-only). Any future ruff format or ruff check --fix must be scoped to changed files. Whole-project build and test stay whole-project.**
+**Convention: Writing formatters (when used) run on changed files only, never on the whole project.
+This is precautionary since python-build today ships only ruff check (read-only).
+Any future ruff format or ruff check --fix must be scoped to changed files.
+Whole-project build and test stay whole-project.**
 
 ## Failure Handling
 
-- If **ruff fails**: fix the linting violations and retry. Do not add `noqa` suppression unless the rule is genuinely inapplicable.
+- If **ruff fails**: fix the linting violations and retry.
+  Do not add `noqa` suppression unless the rule is genuinely inapplicable.
 - If **tests fail**: analyze the failure, fix the code or test, and retry.
 - If a fix requires changes beyond the current task's scope: stop and report the issue to the user.
 - Do **not** skip or disable failing tests.
@@ -76,9 +80,13 @@ import utils_file_io as fio
 
 Before running tests, verify the project is testable:
 
-1. **Virtual environment:** Check for `venv/`, `.venv/`, or `env/` directories. If present, activate before running commands. Check `pyproject.toml` for `[tool.poetry]` (use `poetry run`) or `Pipfile` (use `pipenv run`).
-2. **Test configuration:** Check `pyproject.toml` for `[tool.pytest.ini_options]` — it may specify `testpaths`, `addopts`, or custom markers. Also check for `pytest.ini`, `setup.cfg` `[tool:pytest]`, or `tox.ini`.
-3. **Test directory:** Verify `tests/` (or the configured test path) exists and contains `test_*.py` files. If no test files exist, report "No tests found" rather than running pytest on an empty directory.
+1. **Virtual environment:** Check for `venv/`, `.venv/`, or `env/` directories.
+   If present, activate before running commands.
+   Check `pyproject.toml` for `[tool.poetry]` (use `poetry run`) or `Pipfile` (use `pipenv run`).
+2. **Test configuration:** Check `pyproject.toml` for `[tool.pytest.ini_options]` — it may specify `testpaths`, `addopts`, or custom markers.
+   Also check for `pytest.ini`, `setup.cfg` `[tool:pytest]`, or `tox.ini`.
+3. **Test directory:** Verify `tests/` (or the configured test path) exists and contains `test_*.py` files.
+   If no test files exist, report "No tests found" rather than running pytest on an empty directory.
 4. **Ruff configuration:** Check for `ruff.toml`, `.ruff.toml`, or `[tool.ruff]` in `pyproject.toml` for project-specific lint rules.
 
 ### Defaults
