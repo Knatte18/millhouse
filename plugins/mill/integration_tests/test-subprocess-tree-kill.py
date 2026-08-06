@@ -1,7 +1,9 @@
 """
 Integration test for _subprocess_util.run watchdog cross-process kill-tree.
 
-Spawns a Python parent that itself spawns a long-sleeping grandchild, runs both under _subprocess_util.run with a short timeout, then asserts that the watchdog's taskkill /T /F killed the grandchild as well as the parent.
+Spawns a Python parent that itself spawns a long-sleeping grandchild, runs both under
+_subprocess_util.run with a short timeout, then asserts that the watchdog's taskkill /T /F killed
+the grandchild as well as the parent.
 
 Windows-only.
     Run from hub root: python plugins/mill/integration_tests/test-subprocess-tree-kill.py

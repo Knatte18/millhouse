@@ -1,6 +1,7 @@
 """mill-review-discussion — CLI entry point for discussion review.
 
-Resolves project roots, loads config, finds the active task slug, calls the discussion review backend, and prints JSON to stdout.
+Resolves project roots, loads config, finds the active task slug, calls the discussion review
+backend, and prints JSON to stdout.
 
 Flags:
     --slug <slug> Override active-slug detection (run from hub/main).

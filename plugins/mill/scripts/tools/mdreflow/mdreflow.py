@@ -1,18 +1,17 @@
 """One-shot repo sweep for the mill:markdown skill's semantic-line-break rule.
 
-Reflows markdown prose/list-item paragraphs to one-sentence-per-line, with
-extra breaks at internal clause boundaries (semicolon, or comma+coordinating-
-conjunction+explicit-subject) per plugins/mill/skills/markdown/SKILL.md's
-"No fixed-column hard-wrapping" section. Line breaks only -- never rewords,
-reorders, or drops content. Never touches fenced code blocks (nested fences
-tracked by CommonMark backtick-run-length matching, not a naive toggle),
-inline code spans, links/autolinks, YAML frontmatter, headings, tables,
+Reflows markdown prose/list-item paragraphs to one-sentence-per-line, with extra breaks at internal
+clause boundaries (semicolon, or comma+coordinating- conjunction+explicit-subject) per
+plugins/mill/skills/markdown/SKILL.md's "No fixed-column hard-wrapping" section.
+Line breaks only -- never rewords, reorders, or drops content.
+Never touches fenced code blocks (nested fences tracked by CommonMark backtick-run-length matching,
+not a naive toggle), inline code spans, links/autolinks, YAML frontmatter, headings, tables,
 blockquotes, thematic breaks, or link-reference definitions.
 
-Safety invariant enforced on every file before writing: the transformed
-text, with all runs of whitespace collapsed to a single space, must be
-byte-identical to the original collapsed the same way. A file that fails
-this check is left untouched and reported, never partially written.
+Safety invariant enforced on every file before writing: the transformed text, with all runs of
+whitespace collapsed to a single space, must be byte-identical to the original collapsed the same
+way.
+A file that fails this check is left untouched and reported, never partially written.
 
 Usage:
     python mdreflow.py [--dry-run] [--diff] <path-or-glob> [...]
@@ -69,9 +68,8 @@ def _has_verb_before_preposition(s, pos, max_words=6):
     return False
 
 LIST_MARKER_RE = re.compile(r"^(?P<indent>[ \t]*)(?P<marker>[-*+]|\d{1,9}[.)])(?P<spaces>\s+)(?P<rest>.*)$")
-# Indentation unbounded for the same reason as the fence regexes above:
-# these constructs commonly nest inside list-item content columns deeper
-# than CommonMark's top-level 3-space rule.
+# Indentation unbounded for the same reason as the fence regexes above: these constructs commonly
+# nest inside list-item content columns deeper than CommonMark's top-level 3-space rule.
 HEADING_RE = re.compile(r"^\s*#{1,6}(\s|$)")
 BLOCKQUOTE_RE = re.compile(r"^\s*>")
 HR_RE = re.compile(r"^\s*([-*_])\1{2,}\s*$")
@@ -80,11 +78,10 @@ HTML_BLOCK_RE = re.compile(r"^\s*<[a-zA-Z!/]")
 
 
 def _fence_open_match(line):
-    # Indentation is unbounded (not CommonMark's top-level <=3-space rule):
-    # this repo nests fenced examples inside list items, where the fence's
-    # effective indent is relative to the item's content column, not to
-    # column 0. Treating any indent as fence-eligible avoids corrupting
-    # those indented fences into single-line prose paragraphs.
+    # Indentation is unbounded (not CommonMark's top-level <=3-space rule): this repo nests fenced
+    # examples inside list items, where the fence's effective indent is relative to the item's
+    # content column, not to column 0. Treating any indent as fence-eligible avoids corrupting those
+    # indented fences into single-line prose paragraphs.
     m = re.match(r"^\s*(`{3,}|~{3,})", line)
     if not m:
         return None

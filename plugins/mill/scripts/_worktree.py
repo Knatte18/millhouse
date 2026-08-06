@@ -5,10 +5,15 @@ mill-spawn creates a new worktree for every claimed task.
 Two pieces of work sit behind a tiny API here:
 
     1. ``create`` — run ``git worktree add -b <branch> <target>`` in the repo the caller is in.
-        This is the only place that calls the git CLI for worktree creation so the command's error surface is consistent (callers get ``WorktreeError`` on any non-zero exit).
+        This is the only place that calls the git CLI for worktree creation so the command's error
+            surface is consistent (callers get ``WorktreeError`` on any non-zero exit).
 
-    2. ``copy_millhouse`` — propagate per-clone ``.millhouse/`` state into the new worktree, minus directories that would alias wiki state (``wiki/``, ``active/``).
-        We explicitly do NOT copy junctions — the new worktree recreates its own junction set via ``_junction.create``. (Scratch state lives at ``<cwd>/.scratch/`` per ``CLAUDE.md ## Path invariants`` and is outside ``.millhouse/`` entirely, so it is never propagated by this helper.)
+    2. ``copy_millhouse`` — propagate per-clone ``.millhouse/`` state into the new worktree, minus
+        directories that would alias wiki state (``wiki/``, ``active/``).
+        We explicitly do NOT copy junctions — the new worktree recreates its own junction set via
+            ``_junction.create``. (Scratch state lives at ``<cwd>/.scratch/`` per ``CLAUDE.md ##
+            Path invariants`` and is outside ``.millhouse/`` entirely, so it is never propagated by
+            this helper.)
 
 Public API:
     WorktreeError — raised on any git failure.
@@ -54,11 +59,13 @@ def create(branch: str, target: Path, cwd: Path) -> None:
             the caller is responsible for any prefix logic.
         target: Absolute path where the worktree should live.
             Typically a sibling of the git toplevel (``<repo>.worktrees/<slug>``).
-        cwd: Directory from which to invoke ``git`` — must be inside the target repository so ``git worktree`` knows which repo to attach the new worktree to.
+        cwd: Directory from which to invoke ``git`` — must be inside the target repository so ``git
+            worktree`` knows which repo to attach the new worktree to.
 
     Raises:
         WorktreeError: ``git worktree add`` returned non-zero.
-            The exception message includes the captured stderr for the user to inspect (most common cause: target path already exists).
+            The exception message includes the captured stderr for the user to inspect (most common
+                cause: target path already exists).
     """
     result = _subprocess_util.run(
         ["git", "-C", str(cwd), "worktree", "add", "-b", branch, str(target)],
@@ -75,10 +82,17 @@ def move(old: Path, new: Path, cwd: Path) -> None:
     """
     Relocate a registered worktree from ``old`` to ``new``.
 
-    Runs ``git worktree move <old> <new>``, mirroring ``create``'s ``-C``-flag style but additionally passing ``cwd`` explicitly to ``_subprocess_util.run`` rather than relying on ``-C`` alone.
-    This matters because a caller of this function may invoke it from inside ``old`` itself (the very directory being relocated) — a bare ``-C`` flag tells git which repo to operate on but does not change the spawned subprocess's own OS-level working directory,
-    and Windows NTFS holds a directory open while a process's cwd points into it, a well-known cause of lock failures during a rename. ``cwd`` should therefore be a stable worktree in the same repo (e.g.
-    the hub), never ``old`` itself, since the caller's own OS-level cwd cannot be trusted to already be outside ``old``.
+    Runs ``git worktree move <old> <new>``, mirroring ``create``'s ``-C``-flag style but
+    additionally passing ``cwd`` explicitly to ``_subprocess_util.run`` rather than relying on
+    ``-C`` alone.
+    This matters because a caller of this function may invoke it from inside ``old`` itself (the
+    very directory being relocated) — a bare ``-C`` flag tells git which repo to operate on but does
+    not change the spawned subprocess's own OS-level working directory,
+    and Windows NTFS holds a directory open while a process's cwd points into it, a well-known cause
+    of lock failures during a rename. ``cwd`` should therefore be a stable worktree in the same repo
+    (e.g.
+    the hub), never ``old`` itself, since the caller's own OS-level cwd cannot be trusted to already
+    be outside ``old``.
 
     Args:
         old: Absolute path to the worktree's current location.
@@ -88,7 +102,8 @@ def move(old: Path, new: Path, cwd: Path) -> None:
             and must NOT be ``old``.
 
     Raises:
-        WorktreeLockedError: stderr matches the same lock-pattern set ``remove_safe`` checks (worktree in use).
+        WorktreeLockedError: stderr matches the same lock-pattern set ``remove_safe`` checks
+            (worktree in use).
         WorktreeError: ``git worktree move`` returned non-zero for any other reason.
             The exception message includes the captured stderr for the user to inspect.
     """
@@ -114,16 +129,20 @@ def copy_millhouse(src: Path, dst: Path, exclude: set[str]) -> None:
     Copy contents of ``src`` (a ``.millhouse/`` directory) into ``dst``.
 
     Entries whose basename is in ``exclude`` are skipped.
-    Existing files in ``dst`` are overwritten — mill-spawn owns the new worktree's ``.millhouse/`` until it hands it back.
+    Existing files in ``dst`` are overwritten — mill-spawn owns the new worktree's ``.millhouse/``
+    until it hands it back.
 
-    The caller passes the exclude set explicitly so different callers (mill-spawn vs. future mill-revise-home / tests) can drop different subsets without this module needing policy decisions.
+    The caller passes the exclude set explicitly so different callers (mill-spawn vs. future
+    mill-revise-home / tests) can drop different subsets without this module needing policy
+    decisions.
 
     Args:
         src: Source ``.millhouse/`` directory in the parent worktree.
         dst: Destination ``.millhouse/`` directory in the new worktree.
             Created if missing.
         exclude: Names (NOT paths) to skip.
-            Typical mill-spawn call: ``{"wiki", "active"}`` (junction aliases that must not be copied).
+            Typical mill-spawn call: ``{"wiki", "active"}`` (junction aliases that must not be
+                copied).
     """
     dst.mkdir(parents=True, exist_ok=True)
     if not src.exists():
@@ -171,11 +190,14 @@ def remove(path: Path, cwd: Path, force: bool = True) -> None:
     Remove a registered worktree at ``path``.
 
     Runs ``git worktree remove [--force] <path>`` with ``cwd`` set to the repo root.
-    With ``force=True`` (default) git removes the worktree even if it has untracked or modified files.
+    With ``force=True`` (default) git removes the worktree even if it has untracked or modified
+    files.
 
     Note: this function does NOT strip junctions.
-    Prefer ``remove_safe`` for callers that need long-path fallback or operate on worktrees with junctions inside (which is every mill task worktree).
-    This raw form exists for callers that have already handled junction-stripping or operate on junction-free worktrees.
+    Prefer ``remove_safe`` for callers that need long-path fallback or operate on worktrees with
+    junctions inside (which is every mill task worktree).
+    This raw form exists for callers that have already handled junction-stripping or operate on
+    junction-free worktrees.
 
     Args:
         path: Absolute path to the worktree directory to remove.
@@ -207,14 +229,18 @@ def remove_safe(
     Junction-safe worktree teardown with long-path fallback.
 
     Sequence:
-        1. Strip every junction declared in ``junctions_cfg`` inside ``path`` via ``_junction.strip_all_in_worktree``.
-            Mandatory: any subsequent recursive removal would otherwise follow `.millhouse/wiki`, `.others`, and `.active` and wipe the wiki, the portals dir, or sibling worktrees.
+        1. Strip every junction declared in ``junctions_cfg`` inside ``path`` via
+            ``_junction.strip_all_in_worktree``.
+            Mandatory: any subsequent recursive removal would otherwise follow `.millhouse/wiki`,
+                `.others`, and `.active` and wipe the wiki, the portals dir, or sibling worktrees.
         2. Kill stale processes holding handles into the worktree (e.g.
             bash poll-loops) via ``kill_stale_holders``.
             Best-effort, all errors swallowed.
         3. Try ``git worktree remove --force``.
             Junction-safe by design.
-        4. If git fails with a long-path error (Windows, common when ``.scratch/`` has deep claude session JSONs), fall back to ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions are already gone — then ``git worktree prune`` to clear git's internal registry.
+        4. If git fails with a long-path error (Windows, common when ``.scratch/`` has deep claude
+            session JSONs), fall back to ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions
+            are already gone — then ``git worktree prune`` to clear git's internal registry.
         5. Any other git failure is re-raised;
             callers handle "in use" messages etc.
 
@@ -223,11 +249,14 @@ def remove_safe(
     Args:
         path: Absolute path to the worktree directory to remove.
         cwd: Repo root from which to invoke ``git``.
-        junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``, as returned by ``_junction.read_junctions``.
-        force: Forwarded to ``git worktree remove`` and to the fallback's ``_safe_rmtree.safe_rmtree(ignore_errors=...)`` decision.
+        junctions_cfg: The ``junctions:`` block from ``mill-config.yaml``, as returned by
+        ``_junction.read_junctions``.
+        force: Forwarded to ``git worktree remove`` and to the fallback's
+        ``_safe_rmtree.safe_rmtree(ignore_errors=...)`` decision.
 
     Raises:
-        WorktreeError: git worktree remove failed for a reason other than long-path or "not a working tree" (e.g., "is in use"), and the fallback was not attempted.
+        WorktreeError: git worktree remove failed for a reason other than long-path or "not a
+        working tree" (e.g., "is in use"), and the fallback was not attempted.
     """
     import _junction
 
@@ -293,8 +322,10 @@ def _is_windows_junction(path: Path) -> bool:
     """
     True if ``path`` is a directory junction on Windows.
 
-    ``Path.is_symlink`` returns False for junctions (they are reparse points, not symlinks), so we probe the reparse attribute directly.
-    On POSIX this always returns False — junctions do not exist there and ``is_symlink`` already catches the symlink case.
+    ``Path.is_symlink`` returns False for junctions (they are reparse points, not symlinks), so we
+    probe the reparse attribute directly.
+    On POSIX this always returns False — junctions do not exist there and ``is_symlink`` already
+    catches the symlink case.
     """
     if sys.platform != "win32":
         return False
@@ -309,9 +340,11 @@ def processes_holding_path(worktree: Path, process_records: list[dict]) -> list[
     """
     Return pids whose command line references the given worktree path.
 
-    Pure matcher: takes an injected list of process records (each with 'pid' and 'command_line' keys) and returns pids whose command line contains the normalized worktree path.
+    Pure matcher: takes an injected list of process records (each with 'pid' and 'command_line'
+    keys) and returns pids whose command line contains the normalized worktree path.
 
-    Records with command_line=None or empty are silently skipped (elevated processes queried from non-elevated shell may have None command line).
+    Records with command_line=None or empty are silently skipped (elevated processes queried from
+    non-elevated shell may have None command line).
     Guards against TypeError before substring check.
 
     Args:
@@ -346,17 +379,21 @@ def kill_stale_holders(
     """
     Kill processes holding handles into the worktree.
 
-    Best-effort, failure-swallowing helper that enumerates processes, filters for those referencing the worktree path, and terminates them (taskkill /PID <pid> /F on Windows, no-op on non-Windows).
+    Best-effort, failure-swallowing helper that enumerates processes, filters for those referencing
+    the worktree path, and terminates them (taskkill /PID <pid> /F on Windows, no-op on
+    non-Windows).
 
     The enumerator is injected for testability.
-    The default real enumerator uses PowerShell Get-CimInstance on Windows to obtain command-line text.
+    The default real enumerator uses PowerShell Get-CimInstance on Windows to obtain command-line
+    text.
 
     All errors are swallowed: failures to enumerate or kill never raise.
     ASCII-only messages.
 
     Args:
         worktree: Absolute path to the worktree directory.
-        enumerate_processes: Optional callable that returns list of dicts with 'pid' and 'command_line' keys.
+        enumerate_processes: Optional callable that returns list of dicts with 'pid' and
+        'command_line' keys.
         Default uses PowerShell on Windows and returns empty list on non-Windows.
     """
     if enumerate_processes is None:

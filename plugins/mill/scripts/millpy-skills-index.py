@@ -1,7 +1,8 @@
 """
 mill-skills-index — scan plugins/*/skills/**/SKILL.md and regenerate SKILLS.md.
 
-Reads YAML frontmatter (`name`, `description`) from every SKILL.md under `<hub>/plugins/*/skills/`, builds a single `SKILLS.md` at hub root with one row per skill, sorted alphabetically per plugin.
+Reads YAML frontmatter (`name`, `description`) from every SKILL.md under `<hub>/plugins/*/skills/`,
+builds a single `SKILLS.md` at hub root with one row per skill, sorted alphabetically per plugin.
 
 Usage (from hub root):
     python plugins/mill/scripts/mill-skills-index.py
@@ -25,10 +26,12 @@ class FrontmatterParseError(Exception):
     """Raised when a SKILL.md's frontmatter block exists but fails to parse as YAML.
 
     Distinguishes a genuine YAML syntax error (e.g.
-    an unquoted `description:` value containing a bare `: ` substring) from the unrelated case of a SKILL.md that has no `---`-delimited frontmatter block at all.
+    an unquoted `description:` value containing a bare `: ` substring) from the unrelated case of a
+    SKILL.md that has no `---`-delimited frontmatter block at all.
     Both cases
     still drop the skill from the generated index — a scanner cannot safely
-    guess the author's intent from malformed YAML — but callers can use this exception to report the two cases with different, actionable messages.
+    guess the author's intent from malformed YAML — but callers can use this exception to report the
+    two cases with different, actionable messages.
 
     Attributes:
         path: The SKILL.md file whose frontmatter failed to parse.
@@ -56,10 +59,12 @@ def _extract_frontmatter(text: str, path: Path) -> dict | None:
 or None if no block is present.
 
     Frontmatter is the block delimited by `---` lines at the very top of the file.
-    This matches the SKILL.md convention — it is the one place `---` frontmatter is allowed by the markdown skill.
+    This matches the SKILL.md convention — it is the one place `---` frontmatter is allowed by the
+    markdown skill.
 
     Raises:
-        FrontmatterParseError: if a `---`-delimited block is present but its contents are not valid YAML.
+        FrontmatterParseError: if a `---`-delimited block is present but its contents are not valid
+            YAML.
             This is distinct from returning None, which means no such block exists at all.
     """
     lines = text.splitlines()

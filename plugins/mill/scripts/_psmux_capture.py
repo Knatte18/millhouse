@@ -1,7 +1,8 @@
 """Pure-function output parser for psmux capture-pane text.
 
 This module is the output parser for the claude-subscription wrapper (millpy-claude-sub.py).
-It extracts Claude's response from a psmux capture-pane snapshot by finding the response between a bullet-prefixed first line and the idle prompt character (❯).
+It extracts Claude's response from a psmux capture-pane snapshot by finding the response between a
+bullet-prefixed first line and the idle prompt character (❯).
 """
 from __future__ import annotations
 
@@ -15,9 +16,12 @@ class MarkerNotFoundError(Exception):
 def extract_response(snapshot: str) -> str:
     """Extract response from a psmux capture-pane snapshot.
 
-    Finds the response text between a bullet-prefixed first line (● ) and the last line before the idle prompt (❯), excluding the completion marker (✻ Verb for Ns) and separator line (────) that appear after the response.
+    Finds the response text between a bullet-prefixed first line (● ) and the last line before the
+    idle prompt (❯), excluding the completion marker (✻ Verb for Ns) and separator line (────) that
+    appear after the response.
 
-    Walks backwards from the idle prompt, skipping empty lines, lines starting with the completion marker (✻), and separator lines (all ─ characters).
+    Walks backwards from the idle prompt, skipping empty lines, lines starting with the completion
+    marker (✻), and separator lines (all ─ characters).
     The first non-skipped line is the end of response content.
     Then searches backwards from that point to find the bullet prefix (● ).
 
@@ -25,7 +29,8 @@ def extract_response(snapshot: str) -> str:
         snapshot: Full psmux capture-pane snapshot.
 
     Returns:
-        Text from the bullet-prefixed first line through the last line of actual response content (before separator/completion marker).
+        Text from the bullet-prefixed first line through the last line of actual response content
+        (before separator/completion marker).
 
     Raises:
         MarkerNotFoundError: If idle char, content boundary, or bullet prefix is missing.

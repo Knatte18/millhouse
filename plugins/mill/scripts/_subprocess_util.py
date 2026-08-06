@@ -1,15 +1,19 @@
 """
 Single subprocess.run wrapper used by every mill script.
 
-Centralising subprocess invocation here gives us three things that were painful to maintain case-by-case in v1:
+Centralising subprocess invocation here gives us three things that were painful to maintain
+case-by-case in v1:
 
 1. UTF-8 is enforced everywhere.
     The child environment gets PYTHONIOENCODING=utf-8 injected,
     and stdout/stderr are decoded with encoding="utf-8", errors="replace".
-    This eliminates the class of bugs where a Windows console's cp1252 default mangled git or claude-cli output.
-2. Every spawn and exit is echoed to stderr as a one-line breadcrumb (``[subprocess] spawn argv=... timeout=...`` / ``exit code=... duration=...s``).
+    This eliminates the class of bugs where a Windows console's cp1252 default mangled git or
+        claude-cli output.
+2. Every spawn and exit is echoed to stderr as a one-line breadcrumb (``[subprocess] spawn argv=...
+    timeout=...`` / ``exit code=... duration=...s``).
     Smoke tests can grep this stream to assert what was (or wasn't) spawned.
-3. Timeouts propagate as ``subprocess.TimeoutExpired`` after emitting a matching exit breadcrumb, so callers don't have to log their own.
+3. Timeouts propagate as ``subprocess.TimeoutExpired`` after emitting a matching exit breadcrumb, so
+    callers don't have to log their own.
 
 Public API:
     run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None, stdout=None, stderr=None)
@@ -47,17 +51,23 @@ def scrub_env(env: dict[str, str] | None = None) -> dict[str, str]:
     """
     Return a copy of an environment dict with the child-session markers removed.
 
-    Interactive launchers (VS Code / claude-cli spawns) bypass ``run()`` and call ``subprocess.run()`` directly so they keep their own console.
-    Those call sites still need the parent's Claude Code session markers stripped from the child environment — otherwise a Claude session opened in the spawned window inherits ``CLAUDE_CODE_CHILD_SESSION`` and silently disables transcript saving.
+    Interactive launchers (VS Code / claude-cli spawns) bypass ``run()`` and call
+    ``subprocess.run()`` directly so they keep their own console.
+    Those call sites still need the parent's Claude Code session markers stripped from the child
+    environment — otherwise a Claude session opened in the spawned window inherits
+    ``CLAUDE_CODE_CHILD_SESSION`` and silently disables transcript saving.
     This helper gives them that seam without routing through ``run()``.
 
     Args:
         env: Source environment dict to filter.
         When ``None`` (the default), reads from the live ``os.environ`` of this process.
-        Callers only pass an explicit dict in tests, to filter a fake environment instead of the real one.
+        Callers only pass an explicit dict in tests, to filter a fake environment instead of the
+        real one.
 
     Returns:
-        A new dict — the input (or ``os.environ``) is never mutated — with every key in ``_SCRUBBED_ENV_KEYS`` removed and all other keys (including persistent config like ``CLAUDE_CODE_USE_BEDROCK``) preserved unchanged.
+        A new dict — the input (or ``os.environ``) is never mutated — with every key in
+        ``_SCRUBBED_ENV_KEYS`` removed and all other keys (including persistent config like
+        ``CLAUDE_CODE_USE_BEDROCK``) preserved unchanged.
     """
     source = env if env is not None else os.environ
     return {k: v for k, v in source.items() if k not in _SCRUBBED_ENV_KEYS}
@@ -77,7 +87,9 @@ def run(
     """
     Run a subprocess with UTF-8 text I/O and spawn/exit breadcrumbs on stderr.
 
-    The child environment is a shallow copy of either the caller-supplied ``env`` or ``os.environ``, with ``PYTHONIOENCODING=utf-8`` always injected so child Python processes don't fall back to cp1252 on Windows.
+    The child environment is a shallow copy of either the caller-supplied ``env`` or ``os.environ``,
+    with ``PYTHONIOENCODING=utf-8`` always injected so child Python processes don't fall back to
+    cp1252 on Windows.
     Stdout and stderr are captured as decoded text (``encoding="utf-8"``, ``errors="replace"``).
 
     Args:
@@ -86,7 +98,8 @@ def run(
         input: Optional string fed to the child's stdin.
         check: When True, raises CalledProcessError on non-zero exit.
             Default False — callers inspect ``result.returncode`` explicitly.
-        timeout: Seconds before the child process tree is killed and ``subprocess.TimeoutExpired`` is raised.
+        timeout: Seconds before the child process tree is killed and ``subprocess.TimeoutExpired``
+            is raised.
             A matching exit breadcrumb is emitted before the exception propagates.
         env: Full replacement environment.
             When None, inherits from ``os.environ``.
@@ -97,17 +110,24 @@ def run(
             Same semantics as ``stdout``.
 
     Returns:
-        The completed ``subprocess.CompletedProcess[str]`` — stdout, stderr, and returncode populated as strings.
+        The completed ``subprocess.CompletedProcess[str]`` — stdout, stderr, and returncode
+        populated as strings.
 
     Note:
-        When stdout/stderr are overridden to non-PIPE values, the returned CompletedProcess.stdout/.stderr are empty strings — capture is impossible without PIPE.
+        When stdout/stderr are overridden to non-PIPE values, the returned
+        CompletedProcess.stdout/.stderr are empty strings — capture is impossible without PIPE.
 
     Windows watchdog:
-        When ``timeout`` is not None on Windows, a watchdog loop enforces the deadline instead of relying on ``proc.communicate(timeout=)``.
-        Background daemon threads drain ``proc.stdout`` / ``proc.stderr`` via ``readline()`` into in-memory buffers;
+        When ``timeout`` is not None on Windows, a watchdog loop enforces the deadline instead of
+        relying on ``proc.communicate(timeout=)``.
+        Background daemon threads drain ``proc.stdout`` / ``proc.stderr`` via ``readline()`` into
+        in-memory buffers;
         a third daemon thread writes ``input`` to ``proc.stdin`` when supplied.
-        The main thread polls ``proc.poll()`` every 100 ms. On normal exit the threads are joined and output assembled from the buffers.
-        On deadline breach ``taskkill /T /F /PID`` kills the full process tree (including grandchildren), threads are joined with a 1 s grace, and ``subprocess.TimeoutExpired`` is raised with whatever was collected.
+        The main thread polls ``proc.poll()`` every 100 ms. On normal exit the threads are joined
+        and output assembled from the buffers.
+        On deadline breach ``taskkill /T /F /PID`` kills the full process tree (including
+        grandchildren), threads are joined with a 1 s grace, and ``subprocess.TimeoutExpired`` is
+        raised with whatever was collected.
         POSIX uses the existing ``communicate(timeout=)`` + ``os.killpg`` path unchanged.
     """
     child_env = env.copy() if env is not None else os.environ.copy()
@@ -205,7 +225,8 @@ def git_commit(
 ) -> subprocess.CompletedProcess[str]:
     """
     Issue a git commit with explicit author name/email, immune to worktree-local config drift.
-    Constructs argv with -c flags to override user.name and user.email for this invocation only, leaving the worktree's .git/config unchanged.
+    Constructs argv with -c flags to override user.name and user.email for this invocation only,
+    leaving the worktree's .git/config unchanged.
     Returns subprocess.CompletedProcess;
     caller inspects returncode for success/failure.
     """
@@ -224,7 +245,8 @@ def _run_windows_watchdog(
     start: float,
 ) -> tuple[str, str]:
     """
-    Enforce ``timeout`` on Windows by polling ``proc.poll()`` and killing the full tree with ``taskkill /T /F`` when the deadline trips.
+    Enforce ``timeout`` on Windows by polling ``proc.poll()`` and killing the full tree with
+    ``taskkill /T /F`` when the deadline trips.
 
     Returns ``(stdout_out, stderr_out)`` strings on normal completion.
     Raises ``subprocess.TimeoutExpired`` on deadline breach.
@@ -315,11 +337,17 @@ def popen_detached(
 Returns the Popen handle.
 
     Windows: pid shift.
-    On Windows the returned ``Popen.pid`` is the intermediate ``cmd.exe`` shim PID, which exits immediately after dispatching ``start /B``.
-    The authoritative worker PID is recorded by the worker itself in the ``[mill-bg] WORKER PID=<pid> START <iso8601>`` log sentinel (written in batch 2).
-    No current caller of ``popen_detached`` consumes the returned pid for process management — all callers poll the log file for the EXIT sentinel instead.
+    On Windows the returned ``Popen.pid`` is the intermediate ``cmd.exe`` shim PID, which exits
+    immediately after dispatching ``start /B``.
+    The authoritative worker PID is recorded by the worker itself in the ``[mill-bg] WORKER
+    PID=<pid> START <iso8601>`` log sentinel (written in batch 2).
+    No current caller of ``popen_detached`` consumes the returned pid for process management — all
+    callers poll the log file for the EXIT sentinel instead.
 
-        The two-stage ``cmd /c start "" /B /MIN`` launch escapes the parent's Win32 Job Object so the worker survives launcher exit under VS Code / CC Bash (fix for #271). ``CREATE_BREAKAWAY_FROM_JOB`` is retained as a belt-and-braces fallback for environments where the intermediate ``cmd`` is itself in a non-breakaway job.
+        The two-stage ``cmd /c start "" /B /MIN`` launch escapes the parent's Win32 Job Object so
+        the worker survives launcher exit under VS Code / CC Bash (fix for #271).
+        ``CREATE_BREAKAWAY_FROM_JOB`` is retained as a belt-and-braces fallback for environments
+        where the intermediate ``cmd`` is itself in a non-breakaway job.
     """
     child_env = (env or os.environ).copy()
     child_env["PYTHONIOENCODING"] = "utf-8"

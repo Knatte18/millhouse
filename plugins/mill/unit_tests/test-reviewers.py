@@ -1,4 +1,5 @@
-"""Unit tests for _reviewers.py (load, resolve, resolve_role, validate_role_refs) plus _reviewer_single.run dispatch (was test-reviewer-single.py, merged 2026-05-28).
+"""Unit tests for _reviewers.py (load, resolve, resolve_role, validate_role_refs) plus
+_reviewer_single.run dispatch (was test-reviewer-single.py, merged 2026-05-28).
 """
 from __future__ import annotations
 
@@ -34,7 +35,8 @@ def _load_with_overlay(yaml_text: str) -> dict:
     """Load reviewers from a fresh hub with yaml_text as its local overlay.
 
     Used by the extends/cluster test block.
-    Patches the plugin template path to a nonexistent location so the local overlay is the only source.
+    Patches the plugin template path to a nonexistent location so the local overlay is the only
+    source.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -54,7 +56,8 @@ def _load_real_template_registry() -> dict:
     """
     Load the real mill-agents.yaml plugin template via _reviewers.load().
 
-    Patches resolve_plugin_template_path to point at the worktree's actual template file and suppress wiki fallback so only the template is loaded.
+    Patches resolve_plugin_template_path to point at the worktree's actual template file and
+    suppress wiki fallback so only the template is loaded.
     Used by tests that exercise entries present in the shipped catalogue.
     """
     with tempfile.TemporaryDirectory() as tmp:
@@ -856,7 +859,8 @@ def test_agents_catalogue_naming_convention() -> None:
     Every entry obeys: a key that does NOT end in _bulk has tooluse present and True;
     a key ending in _bulk has tooluse present and False;
     and no key ends in _tool.
-    tooluse is reviewer-only and the convention applies uniformly, so entries used as implementer/merge models (e.g.
+    tooluse is reviewer-only and the convention applies uniformly, so entries used as
+    implementer/merge models (e.g.
     haiku) assert tooluse: True by design — this is not an oversight.
     """
     import yaml
@@ -909,9 +913,11 @@ def test_agents_catalogue_naming_convention() -> None:
 
 
 def test_bare_aliases_resolve_with_correct_spec() -> None:
-    """Bare sonnet/opus aliases resolve with provider=claude, effort=medium, correct models, correct tooluse.
+    """Bare sonnet/opus aliases resolve with provider=claude, effort=medium, correct models, correct
+    tooluse.
 
-    Loads the real plugin template so the assertions exercise the actual catalogue entries added for issue #565.
+    Loads the real plugin template so the assertions exercise the actual catalogue entries added for
+    issue #565.
     Checks all four bare aliases: sonnet, sonnet_bulk, opus, opus_bulk.
     """
     registry = _load_real_template_registry()
@@ -948,9 +954,11 @@ def test_bare_aliases_resolve_with_correct_spec() -> None:
 
 
 def test_validate_role_refs_accepts_bare_aliases() -> None:
-    """validate_role_refs passes for the #565 repro config: roles.implementer.model=sonnet, roles.fixer.model=opus.
+    """validate_role_refs passes for the #565 repro config: roles.implementer.model=sonnet,
+    roles.fixer.model=opus.
 
-    Confirms that bare aliases are resolvable from validate_role_refs, which is the exact code path that raised 'Unknown reviewer: sonnet' before the fix.
+    Confirms that bare aliases are resolvable from validate_role_refs, which is the exact code path
+    that raised 'Unknown reviewer: sonnet' before the fix.
     """
     registry = _load_real_template_registry()
     cfg = {
@@ -965,7 +973,8 @@ def test_validate_role_refs_accepts_bare_aliases() -> None:
 
 
 def test_resolve_unknown_name_lists_available() -> None:
-    """resolve() raises ReviewerError whose message contains both 'Unknown reviewer' and 'Available:'.
+    """resolve() raises ReviewerError whose message contains both 'Unknown reviewer' and
+    'Available:'.
 
     Verifies the enriched error message added by the fix.
     The 'Unknown reviewer:' prefix is preserved so callers matching on that prefix continue to work.

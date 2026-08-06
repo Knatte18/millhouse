@@ -18,8 +18,10 @@ from pathlib import Path
 def _is_only_start_batch_commit(project_root: Path, start_sha: str) -> bool:
     """Return True when the only commit since start_sha is the batch-start housekeeping commit.
 
-    Detects Bug #557: prepare makes a "mill-go: start batch" commit, so HEAD != start_sha even when the implementer wrote zero code commits.
-    A single-card retry has start_sha == the start-batch commit, so its real code commit message will NOT start with the prefix.
+    Detects Bug #557: prepare makes a "mill-go: start batch" commit, so HEAD != start_sha even when
+    the implementer wrote zero code commits.
+    A single-card retry has start_sha == the start-batch commit, so its real code commit message
+    will NOT start with the prefix.
     Returns False on any subprocess failure so the guard is always safe to skip on error.
     """
     result = _subprocess_util.run(
@@ -37,9 +39,12 @@ def _content_commit_count(project_root: Path, start_sha: str | None) -> int | No
     """
     Count content commits since start_sha, excluding the batch-start housekeeping commit.
 
-    The prepare stage always makes a "mill-go: start batch <name>" commit before the implementer runs.
-    Because start_sha is captured BEFORE that commit, a raw `git rev-list --count start_sha..HEAD` over-counts by one whenever the housekeeping commit is present.
-    This helper subtracts it so that callers see the true number of content commits the implementer made.
+    The prepare stage always makes a "mill-go: start batch <name>" commit before the implementer
+    runs.
+    Because start_sha is captured BEFORE that commit, a raw `git rev-list --count start_sha..HEAD`
+    over-counts by one whenever the housekeeping commit is present.
+    This helper subtracts it so that callers see the true number of content commits the implementer
+    made.
 
     Algorithm:
       1. Return None when start_sha is None (gate disabled).
@@ -47,7 +52,8 @@ def _content_commit_count(project_root: Path, start_sha: str | None) -> int | No
           Return None on non-zero exit or non-numeric output.
       3. Run `git log --pretty=%s start_sha..HEAD` to get per-commit subjects.
           Git log returns newest-first, so the last non-empty subject is the oldest commit.
-      4. Subtract the count of all in-range commit subjects that start with "mill-go: start batch" from the raw count (floored at 0).
+      4. Subtract the count of all in-range commit subjects that start with "mill-go: start batch"
+          from the raw count (floored at 0).
           A resumed batch may contain more than one such housekeeping commit;
           all are excluded.
       5. Return the adjusted count.
@@ -103,19 +109,25 @@ def _cards_done_all_commit_none(cards_done, commit_none_card_ids: set[int] | Non
     """
     Return True when every self-reported done card is a ``Commit: none`` card.
 
-    This is the code-derived no-content-commit-gate carve-out check (issue #664): a batch whose reported cards_done are all verification-only ``Commit: none`` cards is expected to make zero content commits, so the zero-commit gates must not demote it to stuck/logic.
-    commit_none_card_ids itself is always computed by the caller from the batch plan file on disk, never trusted from the implementer's own self-report (see the plan's "code-derived, never self-reported" Shared Decision).
+    This is the code-derived no-content-commit-gate carve-out check (issue #664): a batch whose
+    reported cards_done are all verification-only ``Commit: none`` cards is expected to make zero
+    content commits, so the zero-commit gates must not demote it to stuck/logic.
+    commit_none_card_ids itself is always computed by the caller from the batch plan file on disk,
+    never trusted from the implementer's own self-report (see the plan's "code-derived, never
+    self-reported" Shared Decision).
 
     Args:
         cards_done: The implementer's self-reported cards_done value straight
         from parsed JSON -- may be None, a list of ints, a list of numeric
         strings, or malformed; coerced the same way _cards_incomplete_reason
         coerces it.
-        commit_none_card_ids: The set of card numbers whose Commit: field is the literal none, computed from the batch file on disk.
+        commit_none_card_ids: The set of card numbers whose Commit: field is the literal none,
+            computed from the batch file on disk.
             None or empty means no carve-out applies.
 
     Returns:
-        True only when cards_done is present, coercible, non-empty, and every coerced card number is a member of commit_none_card_ids.
+        True only when cards_done is present, coercible, non-empty, and every coerced card number is
+        a member of commit_none_card_ids.
     """
     if not commit_none_card_ids:
         return False
@@ -144,14 +156,21 @@ def _reclassify_verify_failure(
     Reclassify a verify-failure stuck dict based on how many content commits exist.
 
     Called only when the verify gate already fired (verify_stuck is non-None).
-    A verify failure that happens mid-batch -- before the implementer finished all cards -- should be classified as incomplete (resume required) not verify (needs a fix).
-    A failure with zero content commits likely means the agent stopped before producing any work and should be classified as logic (not retryable without human intervention).
+    A verify failure that happens mid-batch -- before the implementer finished all cards -- should
+    be classified as incomplete (resume required) not verify (needs a fix).
+    A failure with zero content commits likely means the agent stopped before producing any work and
+    should be classified as logic (not retryable without human intervention).
 
     Classification rules (applied in order):
       - content is None OR card_ids is None OR card_ids is empty: return verify_stuck unchanged.
-      - content == 0 and cards_done is not entirely covered by commit_none_card_ids: reclassify as stuck_type=logic "no content commit" (orthogonal to cards_done otherwise -- zero commits means zero work regardless of any self-report, unless every reported card is a verification-only Commit: none card).
-      - Otherwise, delegate to _cards_incomplete_reason (the same helper _batch_completeness_stuck uses): a non-None reason reclassifies as stuck_type=incomplete with commits_made=content;
-          None means the batch is complete (either content >= len(card_ids), or cards_done confirms every declared card is done) and verify_stuck is returned unchanged.
+      - content == 0 and cards_done is not entirely covered by commit_none_card_ids: reclassify as
+          stuck_type=logic "no content commit" (orthogonal to cards_done otherwise -- zero commits
+          means zero work regardless of any self-report, unless every reported card is a
+          verification-only Commit: none card).
+      - Otherwise, delegate to _cards_incomplete_reason (the same helper _batch_completeness_stuck
+          uses): a non-None reason reclassifies as stuck_type=incomplete with commits_made=content;
+          None means the batch is complete (either content >= len(card_ids), or cards_done confirms
+              every declared card is done) and verify_stuck is returned unchanged.
 
     Args:
         verify_stuck: The stuck dict produced by _run_verify_gates (stuck_type="verify").
@@ -161,10 +180,13 @@ def _reclassify_verify_failure(
         card_ids: The set of Card numbers declared in the batch file;
             None or empty disables reclassification.
         session_id: Session identifier included in reclassified dicts.
-        cards_done: The implementer's self-reported list of card numbers this commit set addresses; forwarded to _cards_incomplete_reason.
+        cards_done: The implementer's self-reported list of card numbers this commit set addresses;
+            forwarded to _cards_incomplete_reason.
             None (the default) uses the absent-field fallback (raw commit-count check).
-        commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the caller from the batch plan file (never self-reported);
-            when the coerced cards_done is a non-empty subset of this set, the content==0 reclassification below is skipped.
+        commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the
+            caller from the batch plan file (never self-reported);
+            when the coerced cards_done is a non-empty subset of this set, the content==0
+                reclassification below is skipped.
 
     Returns:
         Either verify_stuck unchanged,
@@ -211,19 +233,30 @@ def _cards_incomplete_reason(
     content: int,
 ) -> str | None:
     """
-    Decide whether a batch is incomplete, sharing the identical rule between _batch_completeness_stuck and _reclassify_verify_failure.
+    Decide whether a batch is incomplete, sharing the identical rule between
+    _batch_completeness_stuck and _reclassify_verify_failure.
 
     Two independent bases of evidence are considered, in order:
-      1. Absent or malformed cards_done: fall back to the pre-#660 heuristic -- compare the raw content-commit count against len(card_ids).
-          This is the fail-open path for implementer sessions that never populate cards_done (old sessions, non-compliant models) -- behaves identically to the count-only gate this function replaces.
-      2. Present and validly coercible cards_done: compare the declared card_ids against the implementer's self-reported set via set difference.
-          This is what lets a batch that legitimately combined multiple cards into one commit (fewer commits than cards, per the brief's "one combined commit" allowance) still be recognized as complete -- the raw count check alone cannot distinguish that from a genuinely stopped-early batch.
+      1. Absent or malformed cards_done: fall back to the pre-#660 heuristic -- compare the raw
+          content-commit count against len(card_ids).
+          This is the fail-open path for implementer sessions that never populate cards_done (old
+              sessions, non-compliant models) -- behaves identically to the count-only gate this
+              function replaces.
+      2. Present and validly coercible cards_done: compare the declared card_ids against the
+          implementer's self-reported set via set difference.
+          This is what lets a batch that legitimately combined multiple cards into one commit (fewer
+              commits than cards, per the brief's "one combined commit" allowance) still be
+              recognized as complete -- the raw count check alone cannot distinguish that from a
+              genuinely stopped-early batch.
 
     Args:
-        card_ids: The set of Card numbers declared in the batch file (read verbatim from "### Card N:" headings, not assumed contiguous).
-        cards_done: The implementer's self-reported cards_done value straight from parsed JSON -- may be None, a list of ints, a list of numeric strings, or malformed (any type at all);
+        card_ids: The set of Card numbers declared in the batch file (read verbatim from "### Card
+        N:" headings, not assumed contiguous).
+        cards_done: The implementer's self-reported cards_done value straight from parsed JSON --
+        may be None, a list of ints, a list of numeric strings, or malformed (any type at all);
         this function is responsible for validating and coercing it.
-        content: The content-commit count since start_sha (excluding the batch-start housekeeping commit).
+        content: The content-commit count since start_sha (excluding the batch-start housekeeping
+        commit).
 
     Returns:
         The "batch incomplete: ..."
@@ -275,13 +308,22 @@ def _batch_completeness_stuck(
     Check whether the implementer's commits/self-report satisfy the declared card_ids.
 
     Returns None (gate disabled/satisfied) in any of these cases, checked in order:
-      1. already_complete is True: the resume-idempotent-confirmation backstop -- an implementer re-dispatched via --resume-incomplete that independently re-verifies every card is already satisfied (and makes no new commit) reports this explicitly, bypassing every check below.
-      2. verify_cmd is not None and ignore_verify is False: a passing verify command is conclusive evidence of batch completeness on the explicit-success path, so the heuristic checks below are unnecessary.
-          Pass ignore_verify=True on the no-JSON inference paths to force the completeness check even when a verify command is present (the implementer never reported success, so a passing verify command does not make the batch complete).
-      3. start_sha is None, card_ids is None, or card_ids is empty: the gate has nothing to check against (e.g.
+      1. already_complete is True: the resume-idempotent-confirmation backstop -- an implementer
+          re-dispatched via --resume-incomplete that independently re-verifies every card is already
+          satisfied (and makes no new commit) reports this explicitly, bypassing every check below.
+      2. verify_cmd is not None and ignore_verify is False: a passing verify command is conclusive
+          evidence of batch completeness on the explicit-success path, so the heuristic checks below
+          are unnecessary.
+          Pass ignore_verify=True on the no-JSON inference paths to force the completeness check
+              even when a verify command is present (the implementer never reported success, so a
+              passing verify command does not make the batch complete).
+      3. start_sha is None, card_ids is None, or card_ids is empty: the gate has nothing to check
+          against (e.g.
           a docs-only batch with zero cards).
 
-    Otherwise counts content commits via _content_commit_count and delegates the incomplete-or-not decision to _cards_incomplete_reason (shared with _reclassify_verify_failure): an absent or malformed cards_done falls back to comparing the raw commit count against len(card_ids);
+    Otherwise counts content commits via _content_commit_count and delegates the incomplete-or-not
+    decision to _cards_incomplete_reason (shared with _reclassify_verify_failure): an absent or
+    malformed cards_done falls back to comparing the raw commit count against len(card_ids);
     a present, validly coercible cards_done instead compares card_ids against the self-reported set.
 
     Args:
@@ -291,13 +333,17 @@ def _batch_completeness_stuck(
         card_ids: The set of Card numbers declared in the batch file;
             None or empty disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
-        verify_cmd: When not None and ignore_verify is False, the gate is disabled (verify is conclusive on the explicit-success path).
+        verify_cmd: When not None and ignore_verify is False, the gate is disabled (verify is
+            conclusive on the explicit-success path).
         ignore_verify: When True, run the check even when verify_cmd is not None.
-            Used on the no-JSON inference paths where a partial batch is not made complete just because verify passes.
+            Used on the no-JSON inference paths where a partial batch is not made complete just
+                because verify passes.
             Default False.
         cards_done: The implementer's self-reported list of card numbers this commit set addresses.
-            None (the default) uses the absent-field fallback so old/non-compliant implementer sessions never regress.
-        already_complete: When True, short-circuits the gate to "complete" regardless of every other argument -- the resume backstop.
+            None (the default) uses the absent-field fallback so old/non-compliant implementer
+                sessions never regress.
+        already_complete: When True, short-circuits the gate to "complete" regardless of every other
+            argument -- the resume backstop.
 
     Returns:
         A stuck dict with stuck_type="incomplete" and commits_made when incomplete,
@@ -379,7 +425,9 @@ def _in_scope_dirty_stuck(
     Returns None when task_dir or parent_branch is None (gate disabled).
     Otherwise calls _cleanliness.compute_terminal_dirt;
     if the returned list is non-empty, returns a stuck dict.
-    Any exception from compute_terminal_dirt (including GitOpsError when project_root is not a real git repo) is caught and treated as a no-op -- the authoritative mill-go 2b cleanliness gate still runs afterward.
+    Any exception from compute_terminal_dirt (including GitOpsError when project_root is not a real
+    git repo) is caught and treated as a no-op -- the authoritative mill-go 2b cleanliness gate
+    still runs afterward.
 
     Args:
         project_root: Path to the worktree root.
@@ -420,7 +468,8 @@ def _has_windows_lock_error_signature(text: str) -> bool:
     """
     Check if text contains a Windows file-locking error signature (case-insensitive).
 
-    Detects file-locking error patterns: winerror 32, process cannot access, being used by another process.
+    Detects file-locking error patterns: winerror 32, process cannot access, being used by another
+    process.
 
     Args:
         text: A string to check (e.g., exception message).
@@ -442,7 +491,8 @@ def _has_windows_cleanup_race_signature(text: str) -> bool:
     """
     Check if text contains a Windows cleanup-race signature (case-insensitive).
 
-    Detects cleanup-race patterns from tempdir cleanup: unlinkat, access is denied, winerror 5, winerror 32.
+    Detects cleanup-race patterns from tempdir cleanup: unlinkat, access is denied, winerror 5,
+    winerror 32.
 
     Args:
         text: A string to check (e.g., exception message or command output).
@@ -463,12 +513,20 @@ def _has_windows_cleanup_race_signature(text: str) -> bool:
 
 def _is_benign_windows_cleanup(output: str) -> bool:
     """
-    Check if the combined output contains only a Windows cleanup-race signature with no test failures.
+    Check if the combined output contains only a Windows cleanup-race signature with no test
+    failures.
 
     Returns True only when both conditions hold:
-    1. The output contains a Windows cleanup-race signature (case-insensitive any of: unlinkat, access is denied, winerror 5, winerror 32)
+    1. The output contains a Windows cleanup-race signature (case-insensitive any of: unlinkat,
+        access is denied, winerror 5, winerror 32)
     2. The output contains NO test-failure markers.
-        Markers are matched case-insensitively against the lowercased output using line-anchored patterns to avoid false positives on benign package paths containing "fail" as a substring (e.g. "ok \\tpkg/failover\\t0.1s"): - "--- fail" (Go per-test failure prefix; safe as a substring because the leading "--- " makes it unambiguous) - re pattern (?m)^fail[\\t ] (Go package-summary line "FAIL\\tpkg" or "FAIL " at the start of a line -- a real TAB or space after fail) - "panic:" (Go runtime panic) - "build failed" (compiler/linker failure)
+        Markers are matched case-insensitively against the lowercased output using line-anchored
+            patterns to avoid false positives on benign package paths containing "fail" as a
+            substring (e.g. "ok \\tpkg/failover\\t0.1s"): - "--- fail" (Go per-test failure prefix;
+            safe as a substring because the leading "--- " makes it unambiguous) - re pattern
+            (?m)^fail[\\t ] (Go package-summary line "FAIL\\tpkg" or "FAIL " at the start of a line
+            -- a real TAB or space after fail) - "panic:" (Go runtime panic) - "build failed"
+            (compiler/linker failure)
 
     This is used to distinguish benign file-cleanup races from real test failures on Windows.
 
@@ -505,16 +563,20 @@ def _posix_shell_run_args(cmd: str) -> tuple:
     Build subprocess.run args to route POSIX shell commands through bash on Windows.
 
     On Windows (os.name == "nt"), when bash is available, returns args to invoke bash -c explicitly.
-    On other platforms or when bash is unavailable, returns the command string with shell=True so the native shell processes it.
+    On other platforms or when bash is unavailable, returns the command string with shell=True so
+    the native shell processes it.
 
-    POSIX verify commands often start with "PYTHONPATH= " (env-prefix syntax) that cmd.exe cannot parse.
+    POSIX verify commands often start with "PYTHONPATH= " (env-prefix syntax) that cmd.exe cannot
+    parse.
     Running through bash honours this syntax cross-platform.
 
     Args:
         cmd: The command string (e.g., "PYTHONPATH= pytest tests/ -q").
 
     Returns:
-        A tuple (run_args, run_kwargs) where run_args is either a list ([bash, "-c", cmd]) or a string (cmd), and run_kwargs is either {} or {"shell": True} to be unpacked into subprocess.run.
+        A tuple (run_args, run_kwargs) where run_args is either a list ([bash, "-c", cmd]) or a
+        string (cmd), and run_kwargs is either {} or {"shell": True} to be unpacked into
+        subprocess.run.
     """
     bash = shutil.which("bash") if os.name == "nt" else None
     if bash:
@@ -530,7 +592,8 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
       - git diff -w (ignore-all-space) is empty
       - no untracked files exist
 
-    If either git diff subprocess returns non-zero or raises, treat as "not formatter drift" (skip auto-commit, proceed normally).
+    If either git diff subprocess returns non-zero or raises, treat as "not formatter drift" (skip
+    auto-commit, proceed normally).
 
     Args:
         project_root: Path to the worktree root.
@@ -638,13 +701,18 @@ _FAILURE_MARKER_PREFIXES = (
 
 def _extract_failure_signatures(output: str) -> list[str]:
     """
-    Scan every line of a verify command's combined stdout+stderr for known failure-marker prefixes and return all matching lines, in order.
+    Scan every line of a verify command's combined stdout+stderr for known failure-marker prefixes
+    and return all matching lines, in order.
 
-    These raw (unnormalized) lines are the failure signature set used both for the human-facing truncation excerpt (capped to the caller's own [:20] slice) and, once passed through _normalize_failure_signature, for baseline/finalize signature-set comparison.
-    This helper itself is deliberately uncapped -- a failure past the 20th matching line must still be detectable as a signature.
+    These raw (unnormalized) lines are the failure signature set used both for the human-facing
+    truncation excerpt (capped to the caller's own [:20] slice) and, once passed through
+    _normalize_failure_signature, for baseline/finalize signature-set comparison.
+    This helper itself is deliberately uncapped -- a failure past the 20th matching line must still
+    be detectable as a signature.
 
     Returns:
-        A list of every line in output that starts with one of the fixed failure-marker prefixes, in the order they appear.
+        A list of every line in output that starts with one of the fixed failure-marker prefixes, in
+        the order they appear.
         Empty when output has no recognized failure lines (never raises).
     """
     return [
@@ -655,16 +723,23 @@ def _extract_failure_signatures(output: str) -> list[str]:
 
 def _normalize_failure_signature(line: str) -> str:
     """
-    Strip volatile per-run duration substrings from a failure-marker line so a genuinely pre-existing failure string-matches across separate verify runs.
+    Strip volatile per-run duration substrings from a failure-marker line so a genuinely
+    pre-existing failure string-matches across separate verify runs.
 
     Applies three regex substitutions in sequence, each matching anywhere in
     the line (not anchored to line-end), covering every duration shape this
-    codebase's verify commands are known to produce: 1. A parenthetical duration `(<digits>[.<digits>]s)` or `(...ms)` -- covers Go's `--- FAIL: TestFoo (0.00s)` and mill's own run-all.py per-test shape `--- FAIL some_test (1.2s) ---` (identical parenthetical shape, position-independent).
-        2. A trailing tab-separated duration field `\\t<digits>[.<digits>]s` -- covers Go's package-summary shape `FAIL\\tgithub.com/pkg\\t0.123s`.
-        3. An ` in <digits>[.<digits>]s` token -- covers mill's own run-all.py summary shape `FAIL -- 3 of 10 in 45.6s: [...]`.
+    codebase's verify commands are known to produce: 1. A parenthetical duration
+        `(<digits>[.<digits>]s)` or `(...ms)` -- covers Go's `--- FAIL: TestFoo (0.00s)` and mill's
+        own run-all.py per-test shape `--- FAIL some_test (1.2s) ---` (identical parenthetical
+        shape, position-independent).
+        2. A trailing tab-separated duration field `\\t<digits>[.<digits>]s` -- covers Go's
+            package-summary shape `FAIL\\tgithub.com/pkg\\t0.123s`.
+        3. An ` in <digits>[.<digits>]s` token -- covers mill's own run-all.py summary shape `FAIL
+            -- 3 of 10 in 45.6s: [...]`.
 
     A line with no embedded duration (e.g.
-    pytest's `FAILED tests/test_x.py::test_y`) passes through unchanged, since none of the three patterns match it.
+    pytest's `FAILED tests/test_x.py::test_y`) passes through unchanged, since none of the three
+    patterns match it.
 
     Returns:
         The line with all matching duration substrings removed.
@@ -683,31 +758,48 @@ def _run_verify_gate(
     cwd_override: Path | None = None,
 ) -> dict | None:
     """
-    Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is None.
+    Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is
+    None.
 
-    When verify_cmd is not None, runs the command via bash on Windows (so the POSIX env-prefix syntax is honoured) and via subprocess.run with shell=True elsewhere, capturing output as text.
+    When verify_cmd is not None, runs the command via bash on Windows (so the POSIX env-prefix
+    syntax is honoured) and via subprocess.run with shell=True elsewhere, capturing output as text.
     On non-zero return code, returns a stuck dict with stuck_type="verify".
-    When the combined stdout+stderr is over 2000 characters, reason is an omitted-content marker (byte count of the omitted prefix, plus up to 20 extracted earlier-failure summary lines when any are found) followed by the last 2000 characters;
+    When the combined stdout+stderr is over 2000 characters, reason is an omitted-content marker
+    (byte count of the omitted prefix, plus up to 20 extracted earlier-failure summary lines when
+    any are found) followed by the last 2000 characters;
     under 2000 characters, reason is the stripped output unchanged.
-    The non-zero-exit stuck dict also carries a "signatures" field: every raw (unnormalized) failure-marker line extracted from the FULL, untruncated output via _extract_failure_signatures, uncapped -- this is the set _run_verify_gates uses for baseline/finalize subset-diff comparison.
-    The separate exception-path stuck dict below never gains this field, since it has no subprocess output to extract from.
+    The non-zero-exit stuck dict also carries a "signatures" field: every raw (unnormalized)
+    failure-marker line extracted from the FULL, untruncated output via _extract_failure_signatures,
+    uncapped -- this is the set _run_verify_gates uses for baseline/finalize subset-diff comparison.
+    The separate exception-path stuck dict below never gains this field, since it has no subprocess
+    output to extract from.
     On success (rc 0) or when verify_cmd is None, returns None.
 
-    On Windows (sys.platform == "win32"), applies an additional gate: if the output contains a benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the non-zero exit as success and returns None.
+    On Windows (sys.platform == "win32"), applies an additional gate: if the output contains a
+    benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the
+    non-zero exit as success and returns None.
 
-    After the verify subprocess completes (regardless of exit code), if the platform is win32 and the command contains "dotnet", runs `dotnet build-server shutdown` to release VBCSCompiler/MSBuild locks that prevent re-runs.
-    This call is wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons the verify verdict -- it is best-effort, non-fatal cleanup.
+    After the verify subprocess completes (regardless of exit code), if the platform is win32 and
+    the command contains "dotnet", runs `dotnet build-server shutdown` to release
+    VBCSCompiler/MSBuild locks that prevent re-runs.
+    This call is wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons
+    the verify verdict -- it is best-effort, non-fatal cleanup.
 
     Args:
         project_root: Path to the worktree root.
         verify_cmd: Verify command to run (e.g., "pytest tests/ -q"), or None.
         git_root: Optional git root directory used as cwd for the verify subprocess.
             When None, falls back to project_root.
-        cwd_override: Explicit verify cwd resolved by parse_verify_field from a `{cwd: hub|git_root, command: ...}` mapping.
-            When set, it always wins over both git_root and project_root -- it reflects an author's explicit choice, whereas git_root/project_root are positional fallbacks for the plain-string verify format.
+        cwd_override: Explicit verify cwd resolved by parse_verify_field from a `{cwd: hub|git_root,
+            command: ...}` mapping.
+            When set, it always wins over both git_root and project_root -- it reflects an author's
+                explicit choice, whereas git_root/project_root are positional fallbacks for the
+                plain-string verify format.
 
     Returns:
-        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>, "signatures": <raw failure lines>} on non-zero return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>, "signatures":
+        <raw failure lines>} on non-zero return (unless win32 benign cleanup), or None on success or
+        when verify_cmd is None.
         The separate exception-path stuck dict (missing binary, etc.) has no "signatures" key.
     """
     if verify_cmd is None:
@@ -801,20 +893,31 @@ def _run_verify_gates(
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
 
-    Sequences two calls to _run_verify_gate so that every success-emit path in _forward_output passes through both gates with a single call.
+    Sequences two calls to _run_verify_gate so that every success-emit path in _forward_output
+    passes through both gates with a single call.
     The batch gate runs first;
     only when it returns None (pass or skipped) does the module-wide gate run.
-    This ensures a batch failure is never masked by a module-wide pass and that the module-wide gate cannot be accidentally skipped on any code path that replaces a bare _run_verify_gate call with this helper.
+    This ensures a batch failure is never masked by a module-wide pass and that the module-wide gate
+    cannot be accidentally skipped on any code path that replaces a bare _run_verify_gate call with
+    this helper.
 
-    When module_wide_verify_cmd is None, behavior is identical to calling _run_verify_gate(project_root, verify_cmd) alone -- fully backward-compatible.
+    When module_wide_verify_cmd is None, behavior is identical to calling
+    _run_verify_gate(project_root, verify_cmd) alone -- fully backward-compatible.
 
-    When the module-wide gate fails its stuck dict reason is prefixed with "[module-wide verify]" so the operator can distinguish it from a batch-level verify failure in the stuck report.
+    When the module-wide gate fails its stuck dict reason is prefixed with "[module-wide verify]" so
+    the operator can distinguish it from a batch-level verify failure in the stuck report.
 
-    module_verify_baseline is a cached, task-scoped read-only signal for whether the parent branch's own module-wide verify command was already failing before this task started ("pre-existing-failures") or was clean ("clean").
-    This function never computes or persists that value -- it only reads whatever the caller hands it and short-circuits the module-wide gate accordingly:
-      - "pre-existing-failures": skip the module-wide gate entirely (do not run module_wide_verify_cmd at all) and treat it as passed, same as when module_wide_verify_cmd is None.
+    module_verify_baseline is a cached, task-scoped read-only signal for whether the parent branch's
+    own module-wide verify command was already failing before this task started
+    ("pre-existing-failures") or was clean ("clean").
+    This function never computes or persists that value -- it only reads whatever the caller hands
+    it and short-circuits the module-wide gate accordingly:
+      - "pre-existing-failures": skip the module-wide gate entirely (do not run
+          module_wide_verify_cmd at all) and treat it as passed, same as when module_wide_verify_cmd
+          is None.
       - "clean" or None (not yet computed): run the module-wide gate exactly as it always has.
-          None is the fail-safe-toward-strict default -- until a baseline has actually been computed, the gate behaves as if the baseline were "clean".
+          None is the fail-safe-toward-strict default -- until a baseline has actually been
+              computed, the gate behaves as if the baseline were "clean".
 
     Args:
         project_root: Path to the worktree root.
@@ -825,13 +928,16 @@ def _run_verify_gates(
         git_root: Optional git root directory used as cwd for verify subprocesses.
             Threaded to both _run_verify_gate calls.
             When None, falls back to project_root.
-        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for the module-wide gate.
-            When "pre-existing-failures", the module-wide gate is skipped entirely regardless of module_wide_verify_cmd.
+        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for
+            the module-wide gate.
+            When "pre-existing-failures", the module-wide gate is skipped entirely regardless of
+                module_wide_verify_cmd.
             Defaults to None (run strictly, as before).
         cwd_override: Explicit verify cwd for the batch-level gate, resolved by parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
-        module_wide_cwd_override: Explicit verify cwd for the module-wide gate, resolved by parse_verify_field.
+        module_wide_cwd_override: Explicit verify cwd for the module-wide gate, resolved by
+            parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
         batch_verify_baseline: Cached, task-scoped stored signature set (RAW,
@@ -918,10 +1024,14 @@ def _parse_go_build_tag_diff(diff_text: str) -> dict[str, dict[str, list[str]]]:
     """
     Parse `git diff --unified=0 ... -- '*.go'` output into per-file //go:build deltas.
 
-    Returns a dict mapping each changed .go file's path (as reported by the diff's "diff --git a/<path> b/<path>" header, using the post-change b/ path) to {"added": [...], "removed": [...]}, where each list holds the raw "//go:build ..."
-    line content (with the leading +/- diff marker stripped) for every modern-syntax build-constraint line touched in that file's hunks.
+    Returns a dict mapping each changed .go file's path (as reported by the diff's "diff --git
+    a/<path> b/<path>" header, using the post-change b/ path) to {"added": [...], "removed": [...]},
+    where each list holds the raw "//go:build ..."
+    line content (with the leading +/- diff marker stripped) for every modern-syntax
+    build-constraint line touched in that file's hunks.
     Legacy "// +build" lines are ignored -- out of scope for this gate.
-    Diff lines that are not build-constraint lines are ignored (unified=0 only shows changed lines, so anything else touched by the same hunk is simply not tracked here).
+    Diff lines that are not build-constraint lines are ignored (unified=0 only shows changed lines,
+    so anything else touched by the same hunk is simply not tracked here).
 
     Args:
         diff_text: stdout of `git diff --unified=0 <range> -- '*.go'`.
@@ -953,7 +1063,8 @@ def _go_build_tag_dir(file_path: str) -> str:
     """
     Return the POSIX-style parent directory of a diff-reported .go file path.
 
-    Go's one-package-per-directory convention means a changed file's "affected package" is simply its immediate containing directory -- no import-graph resolution needed.
+    Go's one-package-per-directory convention means a changed file's "affected package" is simply
+    its immediate containing directory -- no import-graph resolution needed.
     Returns "."
     for a file at the repo root.
     """
@@ -970,10 +1081,15 @@ def _nested_go_module_root_and_pattern(project_root: Path, dir_str: str) -> tupl
     """
     Resolve the `go build` cwd/pattern for a go-build-tag-retiering compile check.
 
-    Walks up from the affected directory looking for the nearest enclosing `go.mod`, stopping at `project_root`.
-    When a `go.mod` is found strictly under `project_root`, the compile check must run with that nested module as cwd -- `go build` resolves module boundaries relative to cwd, so pointing it at `project_root` for a nested module fails with "directory prefix ...
-    does not contain main module" even though the nested module compiles fine on its own (fixes #751).
-    When no nested `go.mod` is found, this returns today's exact `(project_root, _go_build_pattern(dir_str))` behavior unchanged -- the single-module-repo fallback.
+    Walks up from the affected directory looking for the nearest enclosing `go.mod`, stopping at
+    `project_root`.
+    When a `go.mod` is found strictly under `project_root`, the compile check must run with that
+    nested module as cwd -- `go build` resolves module boundaries relative to cwd, so pointing it at
+    `project_root` for a nested module fails with "directory prefix ...
+    does not contain main module" even though the nested module compiles fine on its own (fixes
+    #751).
+    When no nested `go.mod` is found, this returns today's exact `(project_root,
+    _go_build_pattern(dir_str))` behavior unchanged -- the single-module-repo fallback.
 
     Args:
         project_root: Path to the worktree root (also the outermost fallback).
@@ -1000,14 +1116,18 @@ def _is_qualifying_custom_tag(tag: str) -> bool:
     """
     Return True when a removed //go:build constraint is safe to translate to `-tags`.
 
-    Qualifies only when the constraint is a single bare identifier -- no boolean operators (&&, ||, !)
+    Qualifies only when the constraint is a single bare identifier -- no boolean operators (&&, ||,
+    !)
     or parentheses,
     and no internal whitespace -- and is not a recognized GOOS/GOARCH value.
     A compound/negated constraint risks compiling under the wrong tag set if naively translated;
-    an unrecognized-but-actually- GOOS value degrades safely to "run it as a custom tag" (a false-custom-tag build with an invalid -tags value fails closed as stuck/verify, the safe direction).
+    an unrecognized-but-actually- GOOS value degrades safely to "run it as a custom tag" (a
+    false-custom-tag build with an invalid -tags value fails closed as stuck/verify, the safe
+    direction).
 
     Args:
-        tag: The removed //go:build line's content, with the "//go:build " prefix already stripped and the remainder trimmed.
+        tag: The removed //go:build line's content, with the "//go:build " prefix already stripped
+        and the remainder trimmed.
 
     Returns:
         True when the tag is a single, non-GOOS/GOARCH bare identifier.
@@ -1045,33 +1165,52 @@ def _go_build_tag_retiering_stuck(
     session_id: str | None,
 ) -> dict | None:
     """
-    Detect and compile-check Tier-1 (default-build) membership transitions caused by added or removed `//go:build` constraints in this batch's .go file changes.
+    Detect and compile-check Tier-1 (default-build) membership transitions caused by added or
+    removed `//go:build` constraints in this batch's .go file changes.
 
-    Fixes #642: a batch that adds or removes a `//go:build` constraint on a .go file can silently move that file into or out of the default (untagged) build without any existing gate noticing -- the batch's own verify command was written before the transition and has no reason to re-check the opposite build membership.
-    This gate diffs `*.go` files since start_sha, classifies each changed file's `//go:build` line delta as an added-tag transition (file exits the default build), a removed-tag transition (file enters the default build), or a value-only edit (no membership change -- skipped), and runs the matching `go build` compile check for each affected package directory.
+    Fixes #642: a batch that adds or removes a `//go:build` constraint on a .go file can silently
+    move that file into or out of the default (untagged) build without any existing gate noticing --
+    the batch's own verify command was written before the transition and has no reason to re-check
+    the opposite build membership.
+    This gate diffs `*.go` files since start_sha, classifies each changed file's `//go:build` line
+    delta as an added-tag transition (file exits the default build), a removed-tag transition (file
+    enters the default build), or a value-only edit (no membership change -- skipped), and runs the
+    matching `go build` compile check for each affected package directory.
 
     Algorithm:
       1. start_sha is None: nothing to diff against -- return None.
       2. `git diff --unified=0 start_sha..HEAD -- '*.go'`;
           a failed subprocess or empty output -- return None.
       3. No '.go' files touched at all (no build-constraint lines parsed) -- return None.
-          This makes the gate a safe no-op for non-Go batches/repos with no language-detection config needed.
-      4. Parse the diff for `+//go:build ` / `-//go:build ` lines per file (modern syntax only; legacy `// +build` is out of scope).
-          A `//go:build` line both added and removed in the same file at different values is a value-only edit, not a transition -- skipped, not treated as an added+removed pair.
+          This makes the gate a safe no-op for non-Go batches/repos with no language-detection
+              config needed.
+      4. Parse the diff for `+//go:build ` / `-//go:build ` lines per file (modern syntax only;
+          legacy `// +build` is out of scope).
+          A `//go:build` line both added and removed in the same file at different values is a
+              value-only edit, not a transition -- skipped, not treated as an added+removed pair.
       5. Exactly one added and zero removed -> added-tag transition.
           Exactly one removed and zero added -> removed-tag transition.
           Anything else (including the value-only case) is not a transition -- skipped.
       6. Affected package = the transitioned file's immediate directory.
           Multiple transitioned files in the same directory dedupe to a single compile check.
       7. Added-tag directories: `go build ./<dir>/...`.
-      8. Removed-tag directories: the removed constraint qualifies for a compile check only when it is a single bare identifier that is not a recognized GOOS/GOARCH value (see _is_qualifying_custom_tag); qualifying directories run `go build -tags <tag> ./<dir>/...`.
-          Non-qualifying (compound/negated/ GOOS/GOARCH) constraints are logged (ASCII-only, stderr) and skipped.
-      9. Before either compile check runs, if the affected directory no longer exists on disk, the transition was actually a whole-directory deletion (not a same-directory detagging edit) -- log a skip line (ASCII-only, stderr) and skip the compile check for that directory.
-      10. Any compile check exiting non-zero -- return a stuck_type="verify" dict naming the directory, transition direction, and captured output tail.
+      8. Removed-tag directories: the removed constraint qualifies for a compile check only when it
+          is a single bare identifier that is not a recognized GOOS/GOARCH value (see
+          _is_qualifying_custom_tag); qualifying directories run `go build -tags <tag> ./<dir>/...`.
+          Non-qualifying (compound/negated/ GOOS/GOARCH) constraints are logged (ASCII-only, stderr)
+              and skipped.
+      9. Before either compile check runs, if the affected directory no longer exists on disk, the
+          transition was actually a whole-directory deletion (not a same-directory detagging edit)
+          -- log a skip line (ASCII-only, stderr) and skip the compile check for that directory.
+      10. Any compile check exiting non-zero -- return a stuck_type="verify" dict naming the
+          directory, transition direction, and captured output tail.
       11. All compile checks pass (or none were needed) -- return None.
 
-    Never raises to its caller: any subprocess/parsing failure is caught and degrades to None (nothing to report), per this plan's "never raise from a new gate/check function" Shared Decision.
-    A deliberate compile-check failure (step 9) is a normal return, not an exception, so it is unaffected by that guard.
+    Never raises to its caller: any subprocess/parsing failure is caught and degrades to None
+    (nothing to report), per this plan's "never raise from a new gate/check function" Shared
+    Decision.
+    A deliberate compile-check failure (step 9) is a normal return, not an exception, so it is
+    unaffected by that guard.
 
     Args:
         project_root: Path to the worktree root used as cwd for git/go subprocesses.
@@ -1196,14 +1335,18 @@ def emit_prepare(
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
-    Writes the brief to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md (scope is sanitized for Windows filename safety) and prints one JSON line with the brief path and metadata.
+    Writes the brief to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md (scope is sanitized for
+    Windows filename safety) and prints one JSON line with the brief path and metadata.
     Returns 0.
 
     Args:
-        start_sha: Git SHA recorded at batch start; included in the envelope as "start_sha" when not None, omitted otherwise.
-        nits_only: When True, the envelope includes `"nits_only": true`, signalling that any finalize call re-invoking this scope/round must re-pass `--nits-only`.
+        start_sha: Git SHA recorded at batch start; included in the envelope as "start_sha" when not
+            None, omitted otherwise.
+        nits_only: When True, the envelope includes `"nits_only": true`, signalling that any
+            finalize call re-invoking this scope/round must re-pass `--nits-only`.
             Omitted from the envelope (not emitted as `false`) when this stays at its default.
-        effort: Effort tier resolved from the reviewer/implementer registry spec (e.g. "high"); included in the envelope as "effort" when not None, omitted otherwise.
+        effort: Effort tier resolved from the reviewer/implementer registry spec (e.g. "high");
+            included in the envelope as "effort" when not None, omitted otherwise.
     """
     brief_path = _agent_dispatch.write_brief(
         briefs_dir, role, scope, round_n, prompt_text
@@ -1241,7 +1384,8 @@ def emit_prepare_no_dispatch(
     """Emit prepare JSON with dispatch_needed:false for verify-fix pass case.
 
     When verify passes in prepare, there is nothing to dispatch.
-    This emits a special prepare envelope with dispatch_needed:false and an embedded success envelope.
+    This emits a special prepare envelope with dispatch_needed:false and an embedded success
+    envelope.
     Returns 0.
     """
     result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
@@ -1292,7 +1436,8 @@ def finalize_from_output(
 ) -> int:
     """Read sub-agent output and finalize.
 
-    Reads the agent's final text from agent_output_path (utf-8) and delegates to _forward_output with the captured output.
+    Reads the agent's final text from agent_output_path (utf-8) and delegates to _forward_output
+    with the captured output.
     Returns the code from _forward_output.
 
     Args:
@@ -1304,14 +1449,18 @@ def finalize_from_output(
         session_id: Session identifier threaded into the output envelope.
         verify_cmd: Batch-level verify command to run before emitting success.
         module_wide_verify_cmd: Module-wide verify command run after the batch gate passes.
-        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for the module-wide gate, forwarded to _run_verify_gates.
+        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for
+            the module-wide gate, forwarded to _run_verify_gates.
             When "pre-existing-failures", the module-wide gate is skipped entirely.
             Defaults to None (run the module-wide gate strictly, as before this parameter existed).
         card_ids: The set of Card numbers declared in the batch file;
             enables the completeness gate.
-            cards_done and already_complete (read from the parsed success envelope, not accepted as parameters here) are compared against this set inside _forward_output.
-        commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the caller from the batch plan file (never self-reported);
-            when the coerced cards_done is a non-empty subset of this set, the content==0 reclassification below is skipped.
+            cards_done and already_complete (read from the parsed success envelope, not accepted as
+                parameters here) are compared against this set inside _forward_output.
+        commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the
+            caller from the batch plan file (never self-reported);
+            when the coerced cards_done is a non-empty subset of this set, the content==0
+                reclassification below is skipped.
         task_dir: Worktree-relative path to the task directory (_mill/).
         parent_branch: Name of the parent branch for in-scope dirty-tree detection.
         nits_only: When True, writes a nits-fixed marker on success.
@@ -1319,7 +1468,9 @@ def finalize_from_output(
         nits_scope: Scope label for the nits-fixed marker; required when nits_only is True.
         git_root: Optional git root directory used as cwd for verify subprocesses.
             When None, falls back to project_root.
-            Pass the actual git root in nested layouts so the verify command runs from the repo root rather than the hub sub-directory, preventing spurious MSB1009 / path-not-found errors.
+            Pass the actual git root in nested layouts so the verify command runs from the repo root
+                rather than the hub sub-directory, preventing spurious MSB1009 / path-not-found
+                errors.
         cwd_override: Explicit batch-level verify cwd resolved by parse_verify_field
         from a `{cwd: hub|git_root, command: ...}` mapping.
             Takes precedence over
@@ -1429,30 +1580,57 @@ def _forward_output(
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
-    Returns 0 in both success and fallback cases -- the JSON on stdout is how the caller reads state.
+    Returns 0 in both success and fallback cases -- the JSON on stdout is how the caller reads
+    state.
     When no valid JSON is found, emits a stuck/logic sentinel.
-    When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied, falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't pass it.
+    When the inferred-success fallback fires, the emitted JSON uses ``session_id`` if supplied,
+    falling back to the literal ``"unknown"`` for backwards compatibility with callers that don't
+    pass it.
     When verify_cmd is not None, runs it before emitting any success;
     if the command fails, demotes the success to stuck/verify with the command's output in reason.
-    When module_wide_verify_cmd is not None, it is run as a second gate after verify_cmd passes (or is skipped);
-    a module-wide failure also demotes to stuck/verify with a "[module-wide verify]" prefix in the reason.
+    When module_wide_verify_cmd is not None, it is run as a second gate after verify_cmd passes (or
+    is skipped);
+    a module-wide failure also demotes to stuck/verify with a "[module-wide verify]" prefix in the
+    reason.
     When module_wide_verify_cmd is None, behavior is unchanged (single gate, backward-compatible).
-    module_verify_baseline is forwarded to _run_verify_gates unchanged: a cached "clean" | "pre-existing-failures" | None baseline for the module-wide gate.
-    When "pre-existing-failures", the module-wide gate is skipped entirely regardless of module_wide_verify_cmd. "clean" and the default None both run the module-wide gate exactly as before this parameter existed.
-    When card_ids is provided, the completeness gate checks that the declared card_ids are all accounted for -- either by raw content-commit count (when the parsed success envelope's cards_done field is absent or malformed) or by comparing card_ids against a self-reported cards_done set (when present and valid).
-    already_complete: true in the parsed envelope short-circuits the gate entirely on a --resume-incomplete re-verification.
-    Both cards_done and already_complete are read from the parsed success envelope inside this function, not accepted as separate parameters, since they are only ever meaningful alongside a self-reported status: success.
-    commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the caller from the batch plan file (never self-reported);
-    when the coerced cards_done is a non-empty subset of this set, the content==0 reclassification below is skipped.
+    module_verify_baseline is forwarded to _run_verify_gates unchanged: a cached "clean" |
+    "pre-existing-failures" | None baseline for the module-wide gate.
+    When "pre-existing-failures", the module-wide gate is skipped entirely regardless of
+    module_wide_verify_cmd. "clean" and the default None both run the module-wide gate exactly as
+    before this parameter existed.
+    When card_ids is provided, the completeness gate checks that the declared card_ids are all
+    accounted for -- either by raw content-commit count (when the parsed success envelope's
+    cards_done field is absent or malformed) or by comparing card_ids against a self-reported
+    cards_done set (when present and valid).
+    already_complete: true in the parsed envelope short-circuits the gate entirely on a
+    --resume-incomplete re-verification.
+    Both cards_done and already_complete are read from the parsed success envelope inside this
+    function, not accepted as separate parameters, since they are only ever meaningful alongside a
+    self-reported status: success.
+    commit_none_card_ids: card numbers whose Commit: field is the literal none, computed by the
+    caller from the batch plan file (never self-reported);
+    when the coerced cards_done is a non-empty subset of this set, the content==0 reclassification
+    below is skipped.
     When task_dir and parent_branch are provided, the dirty-tree gate checks in-scope cleanliness.
-    When nits_only is True and status_path and nits_scope are not None, on the parsed-success emit path (where a fixer's own reported status == "success" is about to be printed), adds "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
-    When nits_only is True, the no-content-commit gate (HEAD == start_sha / only-batch-start-commit) is also skipped, since a --nits-only pass that correctly pushes back on every finding is expected to produce zero commits.
-    When git_root is not None, it is used as the cwd for verify subprocesses instead of project_root.
-    This corrects verify behavior in nested layouts where the plan's verify command must run from the git root rather than the hub sub-directory.
-    cwd_override and module_wide_cwd_override are explicit verify cwds resolved by parse_verify_field from a `{cwd: hub|git_root, command: ...}` mapping;
-    each always takes precedence over git_root/project_root for its respective gate (batch-level and module-wide, respectively).
-    Both default to None, which preserves the git_root/project_root fallback behavior for today's plain-string verify format.
-    batch_verify_baseline is forwarded unchanged to every _run_verify_gates call site below: a cached, task-scoped stored signature set for this batch's own verify command, enabling the subset-diff waiver rule documented on _run_verify_gates.
+    When nits_only is True and status_path and nits_scope are not None, on the parsed-success emit
+    path (where a fixer's own reported status == "success" is about to be printed), adds
+    "nits_applied": True to the dict and writes a nits-fixed-<scope> marker to the status file.
+    When nits_only is True, the no-content-commit gate (HEAD == start_sha / only-batch-start-commit)
+    is also skipped, since a --nits-only pass that correctly pushes back on every finding is
+    expected to produce zero commits.
+    When git_root is not None, it is used as the cwd for verify subprocesses instead of
+    project_root.
+    This corrects verify behavior in nested layouts where the plan's verify command must run from
+    the git root rather than the hub sub-directory.
+    cwd_override and module_wide_cwd_override are explicit verify cwds resolved by
+    parse_verify_field from a `{cwd: hub|git_root, command: ...}` mapping;
+    each always takes precedence over git_root/project_root for its respective gate (batch-level and
+    module-wide, respectively).
+    Both default to None, which preserves the git_root/project_root fallback behavior for today's
+    plain-string verify format.
+    batch_verify_baseline is forwarded unchanged to every _run_verify_gates call site below: a
+    cached, task-scoped stored signature set for this batch's own verify command, enabling the
+    subset-diff waiver rule documented on _run_verify_gates.
     Defaults to None (run strictly, as before this parameter existed).
     """
     parsed = _extract_status_json(output)

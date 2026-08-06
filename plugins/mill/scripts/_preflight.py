@@ -1,7 +1,8 @@
 """
 Detect missing cache helper modules and provide actionable error messages.
 
-When the plugin cache is stale, imported helpers may be missing from the installed cache (e.g. _archive_tag.py).
+When the plugin cache is stale, imported helpers may be missing from the installed cache (e.g.
+_archive_tag.py).
 This module turns cryptic ModuleNotFoundErrors into actionable "refresh your cache" messages.
 
 Public API:

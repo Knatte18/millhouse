@@ -2,23 +2,30 @@
 Review backend for code artefacts.
 
 The LLM reviewer does NOT look at git diff.
-It reads the approved plan and the source files the plan says were touched, then asks: "does the implementation on disk realise what the plan promised?"
+It reads the approved plan and the source files the plan says were touched, then asks: "does the
+implementation on disk realise what the plan promised?"
 The orchestrator (mill-go) invokes this once per batch after the implementer commits that batch,
 and optionally one holistic review at end-of-task.
 
 The backend itself uses git deterministically in two places:
-- ``bulk_files_with_diff`` (in ``prepare``) scopes large source files to their diff against ``start_sha`` so the reviewer sees a focused diff rather than the full file content.
-- The mechanical rename check (in ``finalize``) runs ``git diff --name-status --find-renames`` to detect whether planned ``Moves:`` pairs landed as git-detected renames;
+- ``bulk_files_with_diff`` (in ``prepare``) scopes large source files to their diff against
+    ``start_sha`` so the reviewer sees a focused diff rather than the full file content.
+- The mechanical rename check (in ``finalize``) runs ``git diff --name-status --find-renames`` to
+    detect whether planned ``Moves:`` pairs landed as git-detected renames;
     advisory NIT findings are spliced into the review text for any pair that did not.
 
 Two modes, selected by ``scope``:
 
 - ``scope="<name>"`` -- per-batch review.
-    Bulks ``00-overview.md`` + the single ``NN-<batch>.md`` + every file under that batch's ``Context:`` / ``Edits:`` / ``Creates:`` lines plus Move targets (the relocated files exist post-implementation).
+    Bulks ``00-overview.md`` + the single ``NN-<batch>.md`` + every file under that batch's
+        ``Context:`` / ``Edits:`` / ``Creates:`` lines plus Move targets (the relocated files exist
+        post-implementation).
 - ``scope="holistic"`` -- holistic review.
     Bulks ``00-overview.md`` + every batch file + the union of all referenced files.
 
-Both modes accept ``extra_files`` -- source files the orchestrator has decided to include in the bulk this round, typically because a previous round returned ``verdict: NEED_CONTEXT`` pointing at them.
+Both modes accept ``extra_files`` -- source files the orchestrator has decided to include in the
+bulk this round, typically because a previous round returned ``verdict: NEED_CONTEXT`` pointing at
+them.
 
 Public API:
     prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root, extra_files=None) -> dict
@@ -93,7 +100,8 @@ def _collect_batch_files(
 ) -> list[Path]:
     """Return the batch files this review covers.
 
-    ``batch_name=None`` → every ``NN-<name>.md`` in ``plan_dir`` except ``00-overview.md``. ``batch_name="<name>"`` → the single batch file the overview's Batch Index maps ``<name>`` to.
+    ``batch_name=None`` → every ``NN-<name>.md`` in ``plan_dir`` except ``00-overview.md``.
+    ``batch_name="<name>"`` → the single batch file the overview's Batch Index maps ``<name>`` to.
     """
     if batch_name is None:
         files = sorted(
@@ -139,8 +147,10 @@ def _build_artefact_section(
 
     In tool-use mode we pass paths and tell the reviewer to Read them itself;
     in bulk mode we splice the file contents inline.
-    Both modes list the same files — only the delivery mechanism differs. ``ancestors_on_disk`` holds cross-batch creates that already exist on disk;
-    they are appended to the bulk so the reviewer can verify cross-batch contracts. ``deletes_union`` appends an ``## Intentionally deleted`` section when non-empty.
+    Both modes list the same files — only the delivery mechanism differs. ``ancestors_on_disk``
+    holds cross-batch creates that already exist on disk;
+    they are appended to the bulk so the reviewer can verify cross-batch contracts.
+    ``deletes_union`` appends an ``## Intentionally deleted`` section when non-empty.
     """
     all_bulked = [overview_path, *batch_files, *source_files, *ancestors_on_disk]
     manifest = build_manifest_section(all_bulked)
@@ -198,8 +208,10 @@ def prepare(
         extra_files: Additional source files to include in the bulk.
         max_rounds: Override the configured round cap for this scope.
         prior_notes: Path to a file containing prior-round non-blocking findings digest.
-        agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write carve-out for the .out.md report).
-            Defaults to False so run()'s `--stage full` fallback keeps receiving today's non-agent rule unchanged.
+        agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write
+            carve-out for the .out.md report).
+            Defaults to False so run()'s `--stage full` fallback keeps receiving today's non-agent
+                rule unchanged.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -386,9 +398,14 @@ def _splice_rename_nit_findings(
     """
     Attempt to splice mechanical rename NIT findings into raw_text.
 
-    Resolves the batch's start_sha from status.md (same logic as ``prepare``), finds the batch file, reads its ``Moves:`` declarations, runs ``git diff --name-status --find-renames=<thr>% <start_sha>..HEAD``, and for any planned move pair that did not land as a git-detected rename, inserts an advisory NIT finding block into the ``## Findings`` section of raw_text before ``finalize_scope`` parses it.
+    Resolves the batch's start_sha from status.md (same logic as ``prepare``), finds the batch file,
+    reads its ``Moves:`` declarations, runs ``git diff --name-status --find-renames=<thr>%
+    <start_sha>..HEAD``, and for any planned move pair that did not land as a git-detected rename,
+    inserts an advisory NIT finding block into the ``## Findings`` section of raw_text before
+    ``finalize_scope`` parses it.
 
-    Returns raw_text unchanged when any precondition fails (no start_sha, empty Moves, git error) because the rename check is advisory only.
+    Returns raw_text unchanged when any precondition fails (no start_sha, empty Moves, git error)
+    because the rename check is advisory only.
 
     Args:
         raw_text: Extracted review text (after MILL_REVIEW_BEGIN stripping).
@@ -459,9 +476,11 @@ def _insert_nit_blocks_before_verdict(raw_text: str, nit_blocks: list[str]) -> s
     """
     Insert NIT finding blocks into raw_text's ## Findings section.
 
-    Locates the ``## Verdict`` heading and inserts the NIT blocks immediately before it so they appear inside the findings section.
+    Locates the ``## Verdict`` heading and inserts the NIT blocks immediately before it so they
+    appear inside the findings section.
     If ``## Verdict`` is absent, the NITs are appended at the end.
-    When no ``## Findings`` section exists either, a bare ``## Findings`` heading is prepended before the NITs so the review retains valid structure.
+    When no ``## Findings`` section exists either, a bare ``## Findings`` heading is prepended
+    before the NITs so the review retains valid structure.
 
     Args:
         raw_text: Extracted review text.
@@ -511,7 +530,8 @@ def finalize(
 ) -> ReviewResult:
     """Finalize a code review by parsing verdict and writing the review file.
 
-    For per-batch scope (``scope`` is not None), attempts to splice advisory mechanical rename NIT findings into ``raw_text`` before verdict parsing.
+    For per-batch scope (``scope`` is not None), attempts to splice advisory mechanical rename NIT
+    findings into ``raw_text`` before verdict parsing.
     The NIT check uses ``git diff --name-status --find-renames`` against the batch's ``start_sha``;
     it is skipped silently on any failure (no start_sha, git error, no Moves declared).
     NITs never change the verdict or blocking_count.
@@ -521,7 +541,9 @@ def finalize(
         scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
-        actual_model: The model that actually produced this review, used to correct an unreliable self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through to ``finalize_scope`` on the success path only.
+        actual_model: The model that actually produced this review, used to correct an unreliable
+        self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
+        to ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -590,7 +612,9 @@ def run(
 ) -> ReviewResult:
     """Review the code produced for a task.
 
-    ``batch_name`` selects per-batch vs. holistic mode. ``extra_files`` are additional source files to bulk this round. ``prior_notes`` is a path to a file containing prior-round non-blocking findings digest.
+    ``batch_name`` selects per-batch vs. holistic mode. ``extra_files`` are additional source files
+    to bulk this round. ``prior_notes`` is a path to a file containing prior-round non-blocking
+    findings digest.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled

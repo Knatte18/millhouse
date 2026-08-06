@@ -1,7 +1,9 @@
 """
 mill-terminal — open Claude Code in an active worktree.
 
-Scans the worktrees container directory for subdirectories whose current git branch matches an active task in Home.md, presents a numbered picker, then launches Claude Code in the selected worktree via ``subprocess.run``.
+Scans the worktrees container directory for subdirectories whose current git branch matches an
+active task in Home.md, presents a numbered picker, then launches Claude Code in the selected
+worktree via ``subprocess.run``.
 
 Usage:
     python mill-terminal.py
@@ -35,7 +37,9 @@ def _load_spawn_main():
 def main(argv: list[str] | None = None) -> int:
     """Launch Claude Code in an active child worktree selected by the user.
 
-    Resolves the worktrees directory from config, discovers all active worktrees via ``_spawn_core.discover_active_worktrees``, presents a numbered picker (or auto-selects when only one is found), then spawns Claude with ``--name <slug>`` in the chosen worktree path.
+    Resolves the worktrees directory from config, discovers all active worktrees via
+    ``_spawn_core.discover_active_worktrees``, presents a numbered picker (or auto-selects when only
+    one is found), then spawns Claude with ``--name <slug>`` in the chosen worktree path.
 
     Args:
         argv: Argument vector (unused — no CLI flags for this entrypoint).

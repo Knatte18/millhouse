@@ -5,17 +5,21 @@ Resolves the wiki clone via ``_paths.resolve_wiki_path``.
 Note: ``.millhouse/wiki``
 is a junction for IDE/terminal convenience only — scripts never use it as a code path.
 Acquires the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
-appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]] (proposal-<slug>)` with a companion ``proposal-<slug>.md`` when
-``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all wiki changes in ONE commit.
+appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]] (proposal-<slug>)`
+with a companion ``proposal-<slug>.md`` when
+``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all wiki changes in ONE
+commit.
 Finally releases the lock and exits.
 
 Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``, unique within Home.md.
 Duplicate slugs are rejected before any write.
 
-Proposals live at wiki root as ``proposal-<slug>.md`` (flat namespace, per ``ref-formats.md`` — GitHub Wiki does not render subdirectory pages reliably).
+Proposals live at wiki root as ``proposal-<slug>.md`` (flat namespace, per ``ref-formats.md`` —
+GitHub Wiki does not render subdirectory pages reliably).
 
 Usage:
-    python plugins/mill/scripts/mill-add.py <slug> \\ --title "Human-readable title" \\ [--summary "one-paragraph summary for Home.md"] \\ [--proposal-body "long-form background"]
+    python plugins/mill/scripts/mill-add.py <slug> \\ --title "Human-readable title" \\ [--summary
+    "one-paragraph summary for Home.md"] \\ [--proposal-body "long-form background"]
 
 Exit codes:
     0 — task added and pushed

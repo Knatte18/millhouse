@@ -179,15 +179,23 @@ def _seed_approve(n: int) -> None:
 def _make_nested_code_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     """Build a nested-hub-layout code-review fixture under tmp_path.
 
-    Unlike _make_fixture, the git root and the mill hub_root are different directories: hub_root lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits in a subdirectory of the git toplevel rather than at its root (M2+sub layout).
+    Unlike _make_fixture, the git root and the mill hub_root are different directories: hub_root
+    lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits in a
+    subdirectory of the git toplevel rather than at its root (M2+sub layout).
 
     A single batch "alpha" reads src/a.py;
     the plan is written directly under hub_root/_mill/plan/ (the CLI's default plan_dir).
 
     Returns (mill_dir, wiki_root, hub_root, git_root).
-    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root() still resolves to git_root.
+    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up
+    from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root()
+    still resolves to git_root.
 
-    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml -- see _make_nested_plan_fixture in test-review-plan-flow.py for the full rationale (resolve_wiki_path is called with both hub_root and git_root, and only the sibling default agrees across both call sites).
+    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via
+    _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml -- see
+    _make_nested_plan_fixture in test-review-plan-flow.py for the full rationale (resolve_wiki_path
+    is called with both hub_root and git_root, and only the sibling default agrees across both call
+    sites).
     """
     git_root = tmp_path / "container" / "wts" / SLUG
     git_root.mkdir(parents=True)
@@ -1601,15 +1609,25 @@ def main() -> int:
 def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
     """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's decoy.
 
-    millpy-review-code.py's main() imports every module it needs (_agent_dispatch, _paths, _reviewers, _review_cli, _review_common, _review_code) inline, so this test loads the CLI script via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each of those names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout does.
+    millpy-review-code.py's main() imports every module it needs (_agent_dispatch, _paths,
+    _reviewers, _review_cli, _review_common, _review_code) inline, so this test loads the CLI script
+    via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each of those
+    names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's
+    test_brief_path_nested_layout does.
 
-    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path() fallback;
-    resolve_active_hub -- called after slug resolution, per the Card 13 rebind -- returns a distinct directory standing in for the corrected active task worktree.
-    briefs_dir (surfaced via --stage prepare's brief_path in the printed envelope, and via the recorded resolve_task_path/write_brief call args) must resolve under the resolve_active_hub value, proving project_root was rebound and not left at resolve_hub_path's original value.
+    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path()
+    fallback;
+    resolve_active_hub -- called after slug resolution, per the Card 13 rebind -- returns a distinct
+    directory standing in for the corrected active task worktree.
+    briefs_dir (surfaced via --stage prepare's brief_path in the printed envelope, and via the
+    recorded resolve_task_path/write_brief call args) must resolve under the resolve_active_hub
+    value, proving project_root was rebound and not left at resolve_hub_path's original value.
 
-    A reversion of the Card 13 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
+    A reversion of the Card 13 fix (never calling resolve_active_hub) causes the assertion to fail
+    because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout
+    this file).
     """
     import importlib.util
     import tempfile
@@ -1754,11 +1772,18 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
 def test_context_only_gitignored_ref_soft_fails_prepare() -> int:
     """Context:-only refs confirmed git-ignored soft-fail prepare() instead of hard-failing (#733).
 
-    Scenario (a): alpha's Context: field gains a missing ref (.scratch/probe.md) covered by an appended .gitignore rule.
+    Scenario (a): alpha's Context: field gains a missing ref (.scratch/probe.md) covered by an
+    appended .gitignore rule.
     prepare() must not raise ReviewError,
-    and the soft-skipped ref must not surface as its own bulked "--- FILE: ... ---" section in the rendered prompt_text (mirrors the moved-away-source assertion in test23 above -- a missing file is never bulked in regardless of soft-fail vs hard-fail, so the real assertion of interest is that prepare() completes at all).
+    and the soft-skipped ref must not surface as its own bulked "--- FILE: ... ---" section in the
+    rendered prompt_text (mirrors the moved-away-source assertion in test23 above -- a missing file
+    is never bulked in regardless of soft-fail vs hard-fail, so the real assertion of interest is
+    that prepare() completes at all).
 
-    Scenario (b) is a regression guard, run in the same fixture shape: a DIFFERENT missing ref NOT covered by the .gitignore must still hard-fail prepare() with ReviewError -- soft-fail only fires on a confirmed git-ignore hit, exactly as resolve_ref_paths's own unit coverage in test-review-common.py.
+    Scenario (b) is a regression guard, run in the same fixture shape: a DIFFERENT missing ref NOT
+    covered by the .gitignore must still hard-fail prepare() with ReviewError -- soft-fail only
+    fires on a confirmed git-ignore hit, exactly as resolve_ref_paths's own unit coverage in
+    test-review-common.py.
 
     Returns 0 on success, 1 on failure (errors-accumulator convention used throughout this file).
     """

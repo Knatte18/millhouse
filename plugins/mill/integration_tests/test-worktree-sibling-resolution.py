@@ -1,7 +1,10 @@
 """
 Integration test: cross-resolver worktree-context regression guard.
 
-Creates real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and asserts that ``_paths.resolve_wiki_path``, ``_paths.resolve_worktrees_dir``, and codeguide's ``resolve._sibling_anchor_default`` return identical paths whether called from the main worktree's cwd or from a child worktree's cwd.
+Creates real ``git init`` + ``git worktree add`` fixtures under ``tempfile`` and asserts that
+``_paths.resolve_wiki_path``, ``_paths.resolve_worktrees_dir``, and codeguide's
+``resolve._sibling_anchor_default`` return identical paths whether called from the main worktree's
+cwd or from a child worktree's cwd.
 
 Run for both hub-form (repo dir named ``"hub"``) and prefix-form (arbitrary repo name) layouts.
 
@@ -86,7 +89,8 @@ def _assert_resolvers_match(
 ) -> None:
     """Run six resolver assertions: three from hub root, three from worktree root.
 
-    Imports ``_paths`` and ``resolve`` (codeguide) lazily so ``sys.path`` is guaranteed to be fully set before any import occurs.
+    Imports ``_paths`` and ``resolve`` (codeguide) lazily so ``sys.path`` is guaranteed to be fully
+    set before any import occurs.
     """
     import _paths
     import resolve as codeguide_resolve

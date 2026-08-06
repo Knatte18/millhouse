@@ -32,7 +32,10 @@ def _seed_repo(repo_root: Path) -> None:
     """
     Initialize a real git repo at repo_root with a committed _mill/ tree.
 
-    Creates status.md, discussion.md, briefs/x.md, reviews/y.md under repo_root/_mill (per _SEED_FILES), configures a throwaway user.email/ user.name so the commit succeeds without relying on global git config, then commits the whole tree with `git add -A && git commit -m "seed"`.
+    Creates status.md, discussion.md, briefs/x.md, reviews/y.md under repo_root/_mill (per
+    _SEED_FILES), configures a throwaway user.email/ user.name so the commit succeeds without
+    relying on global git config, then commits the whole tree with `git add -A && git commit -m
+    "seed"`.
     """
     _run_git(["init"], repo_root)
     _run_git(["config", "user.email", "treeguard-test@example.com"], repo_root)

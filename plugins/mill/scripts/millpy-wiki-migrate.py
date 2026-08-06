@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """One-shot V3 wiki migration script: seed tasks.json from Home.md and proposals.
 
-This script is the canonical one-shot migration tool that bootstraps a free-form wiki (Home.md + proposal files) into the new V3 TinyDB-backed state.
+This script is the canonical one-shot migration tool that bootstraps a free-form wiki (Home.md +
+proposal files) into the new V3 TinyDB-backed state.
 It uses the public wiki.upsert_tasks_batch API delivered by batch 1;
 there is no daemon bypass.
 
 Preconditions:
-  - The wiki path must be resolvable via _paths.resolve_wiki_path (sibling discovery or explicit config.local.yaml override).
+  - The wiki path must be resolvable via _paths.resolve_wiki_path (sibling discovery or explicit
+  config.local.yaml override).
   - Home.md must exist in the wiki.
 
 Behaviour (commit mode):
@@ -37,11 +39,14 @@ import _paths
 def _ensure_utf8_stdout() -> None:
     """Reconfigure stdout to UTF-8 so non-ASCII wiki content cannot crash the console.
 
-    `_print_task_brief` below prints raw, externally-authored `title`/`brief` strings pulled straight from Home.md and proposal files.
+    `_print_task_brief` below prints raw, externally-authored `title`/`brief` strings pulled
+    straight from Home.md and proposal files.
     Those strings can legitimately contain non-ASCII characters (e.g.
     an em-dash or an arrow),
-    and Python's default stdout encoding on a Windows console is cp1252, which raises `UnicodeEncodeError` on such characters -- the same bug class as #588.
-    Calling this before any printing guarantees the console accepts the full text instead of crashing partway through a migration dry-run.
+    and Python's default stdout encoding on a Windows console is cp1252, which raises
+    `UnicodeEncodeError` on such characters -- the same bug class as #588.
+    Calling this before any printing guarantees the console accepts the full text instead of
+    crashing partway through a migration dry-run.
     """
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 

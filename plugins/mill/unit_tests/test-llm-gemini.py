@@ -1,7 +1,9 @@
 """Unit tests for plugins/mill/scripts/_llm_gemini.py.
 
-These tests exercise the pure-Python surface: argv construction, stream-JSON parsing, exception hierarchy, signature shape, and the session-reuse short-circuit.
-They do NOT invoke the live ``gemini`` CLI — those tests live in ``integration_tests/smoke-llm-gemini.py``.
+These tests exercise the pure-Python surface: argv construction, stream-JSON parsing, exception
+hierarchy, signature shape, and the session-reuse short-circuit.
+They do NOT invoke the live ``gemini`` CLI — those tests live in
+``integration_tests/smoke-llm-gemini.py``.
 """
 from __future__ import annotations
 

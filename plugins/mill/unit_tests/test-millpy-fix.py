@@ -273,7 +273,10 @@ class TestMillpyFix(unittest.TestCase):
     def test_load_config_uses_hub_root_when_hub_in_subdirectory(self):
         """#728 repro: hub lives in a subdirectory of the outer git repo.
 
-        Both the initial load_config call (arg1 = project_root, from resolve_hub_path()) and the post-resolve_active_hub reload must be invoked with the resolved hub root, never the outer git-repo root -- otherwise the hub's own mill-config.yaml is silently missed in favor of a template/primary-clone fallback found by walking from git_root.
+        Both the initial load_config call (arg1 = project_root, from resolve_hub_path()) and the
+        post-resolve_active_hub reload must be invoked with the resolved hub root, never the outer
+        git-repo root -- otherwise the hub's own mill-config.yaml is silently missed in favor of a
+        template/primary-clone fallback found by walking from git_root.
         """
         hub_dir = self.tmp_path / "sub" / "hub"
         hub_dir.mkdir(parents=True, exist_ok=True)
@@ -332,7 +335,9 @@ class TestMillpyFix(unittest.TestCase):
 
     def test_cfg_reload_after_resolve_active_hub_used_for_downstream_values(self):
         """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely differ.
-    Downstream values that read cfg -- self_fix_rounds baked into the rendered brief, the fixer model name passed to _reviewers.resolve, and the fixer timeout passed to _implementer_claude.run -- must come from the reloaded config, not the stale bootstrap one.
+    Downstream values that read cfg -- self_fix_rounds baked into the rendered brief, the fixer
+        model name passed to _reviewers.resolve, and the fixer timeout passed to
+        _implementer_claude.run -- must come from the reloaded config, not the stale bootstrap one.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -520,7 +525,8 @@ class TestMillpyFix(unittest.TestCase):
     def test_is_windows_lock_error_helper(self):
         """Unit test for _is_windows_lock_error helper with various inputs.
 
-        Tests both the structured __cause__ winerror=32 check and the textual match for Windows file-locking signatures (distinct from cleanup-race signatures).
+        Tests both the structured __cause__ winerror=32 check and the textual match for Windows
+        file-locking signatures (distinct from cleanup-race signatures).
         """
         # Test message patterns that match lock-error signatures (not cleanup-race)
         self.assertTrue(
@@ -702,12 +708,17 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["scope"], "test-batch")
 
     def test_project_root_rebind_uses_resolve_active_hub_not_original_hub_path(self):
-        """project_root rebinds to resolve_active_hub's value, not the file's original (escaped) resolution.
+        """project_root rebinds to resolve_active_hub's value, not the file's original (escaped)
+        resolution.
 
-        This file resolves project_root via a real, unmocked resolve_hub_path() call (setUp mocks only resolve_git_root -- see the per-file description in Card 12) that succeeds because cwd is chdir'd to self.tmp_path, which has its own .millhouse/config.local.yaml.
-        Overriding resolve_active_hub to a decoy directory distinct from self.tmp_path simulates the "escaped to main worktree" scenario: the original resolution still points at self.tmp_path,
+        This file resolves project_root via a real, unmocked resolve_hub_path() call (setUp mocks
+        only resolve_git_root -- see the per-file description in Card 12) that succeeds because cwd
+        is chdir'd to self.tmp_path, which has its own .millhouse/config.local.yaml.
+        Overriding resolve_active_hub to a decoy directory distinct from self.tmp_path simulates the
+        "escaped to main worktree" scenario: the original resolution still points at self.tmp_path,
         but the corrected resolve_active_hub call (added by the rebind fix) returns the right place.
-        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must resolve under the decoy, proving project_root was rebound.
+        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must resolve under
+        the decoy, proving project_root was rebound.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -776,7 +787,8 @@ class TestMillpyFix(unittest.TestCase):
     def test_stage_prepare_batch_scope_includes_effort_from_fixer_spec(self):
         """--stage prepare envelope carries the resolved fixer spec's effort tier (#628, #633).
 
-        Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style spec that resolves effort:"high", mirroring the millpy-implement.py Card 5 test.
+        Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style spec that
+        resolves effort:"high", mirroring the millpy-implement.py Card 5 test.
         """
         self.mock_reviewers_resolve.return_value = {
             "type": "single",
@@ -920,7 +932,9 @@ class TestMillpyFix(unittest.TestCase):
         self.assertNotIn("[fixer-tier]", stderr_buf.getvalue())
 
     def test_holistic_finalize_status_path_filters_pending_batch_and_logs_skip(self):
-        """Card 5: status_path is threaded into the holistic-finalize iter_batch_verifies call, dropping a pending batch's verify from the joined command and logging `[millpy-fix] skipped batch1: batch not approved` to stderr.
+        """Card 5: status_path is threaded into the holistic-finalize iter_batch_verifies call,
+        dropping a pending batch's verify from the joined command and logging `[millpy-fix]
+        skipped batch1: batch not approved` to stderr.
 """
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
@@ -986,8 +1000,10 @@ class TestMillpyFix(unittest.TestCase):
         )
 
     def test_holistic_finalize_status_path_logs_target_removed_skip(self):
-        """Card 5: an approved batch whose verify command references a path a later approved batch's Deletes: removes is filtered by iter_batch_verifies (reason 2/3b),
-    and this helper attributes it to 'target removed by later batch' -- not 'batch not approved' -- since batch1 itself IS approved."""
+        """Card 5: an approved batch whose verify command references a path a later approved batch's
+        Deletes: removes is filtered by iter_batch_verifies (reason 2/3b),
+    and this helper attributes it to 'target removed by later batch' -- not 'batch not approved' --
+        since batch1 itself IS approved."""
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
             "# Plan: Test Task\n\n"
@@ -1058,7 +1074,8 @@ class TestMillpyFix(unittest.TestCase):
         )
 
     def test_holistic_full_stage_status_path_filters_pending_batch_and_logs_skip(self):
-        """Card 5: non-finalize holistic (--stage full) path also threads status_path into iter_batch_verifies, filtering out a pending batch and logging the skip to stderr.
+        """Card 5: non-finalize holistic (--stage full) path also threads status_path into
+        iter_batch_verifies, filtering out a pending batch and logging the skip to stderr.
 """
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
@@ -1335,7 +1352,8 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
     def test_nits_only_flag_appends_marker_and_flag(self):
         """
-        Test that --nits-only flag causes nits_applied: true to be added to the envelope and a nits-fixed-<scope> marker to be appended to the status timeline.
+        Test that --nits-only flag causes nits_applied: true to be added to the envelope and a
+        nits-fixed-<scope> marker to be appended to the status timeline.
         """
         status_path = self.tmp_path / "_mill" / "status.md"
 
@@ -1394,8 +1412,10 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
     def test_nits_only_all_pushback_zero_commit_is_success_not_stuck(self):
         """
-        #582 regression: a --nits-only pass that legitimately pushes back on every NIT finding makes zero content commits (HEAD never moves from start_sha).
-        This must be reported as success with the nits-fixed marker written, not demoted to stuck/logic by the no-content-commit gate.
+        #582 regression: a --nits-only pass that legitimately pushes back on every NIT finding makes
+        zero content commits (HEAD never moves from start_sha).
+        This must be reported as success with the nits-fixed marker written, not demoted to
+        stuck/logic by the no-content-commit gate.
         """
         status_path = self.tmp_path / "_mill" / "status.md"
 

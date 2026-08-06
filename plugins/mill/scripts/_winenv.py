@@ -2,9 +2,12 @@
 Windows registry utilities for environment variable operations.
 
 Windows-only: both functions raise RuntimeError on any other platform.
-mill-setup Phase 4.7 (the only caller) is gated to skip this module on POSIX, where every mill script receives PYTHONPATH inline per invocation instead of relying on a persistent user-level environment variable.
+mill-setup Phase 4.7 (the only caller) is gated to skip this module on POSIX, where every mill
+script receives PYTHONPATH inline per invocation instead of relying on a persistent user-level
+environment variable.
 
-Exports ------- set_user_env_var(name: str, value: str) -> bool Set a user-level Windows environment variable via winreg.
+Exports ------- set_user_env_var(name: str, value: str) -> bool Set a user-level Windows environment
+variable via winreg.
 Returns True if the value was written, False if it was already correct (idempotent skip).
 
 get_user_env_var(name: str) -> str | None
@@ -34,7 +37,8 @@ def set_user_env_var(name: str, value: str) -> bool:
 
     Opens HKEY_CURRENT_USER\Environment, checks if the value already equals the target;
     if so, returns False (idempotent skip).
-    Otherwise writes the new value with winreg.REG_SZ type and broadcasts a WM_SETTINGCHANGE message, returning True.
+    Otherwise writes the new value with winreg.REG_SZ type and broadcasts a WM_SETTINGCHANGE
+    message, returning True.
 
     Always closes the registry key via try/finally, even on error.
 

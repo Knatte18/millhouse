@@ -88,9 +88,11 @@ def _make_wiki(tmp: str, home_text: str) -> Path:
 
     Creates:
       - ``<tmp>/wiki-bare/`` — bare repo acting as the "origin" remote.
-      - ``<tmp>/wiki/`` — working clone with Home.md and _Sidebar.md committed and pushed to the bare remote.
+      - ``<tmp>/wiki/`` — working clone with Home.md and _Sidebar.md committed and pushed to the
+      bare remote.
 
-    The working clone is returned. ``wiki._sync.commit_push`` can push to the bare remote without a network connection.
+    The working clone is returned. ``wiki._sync.commit_push`` can push to the bare remote without a
+    network connection.
     """
     # Bare "remote"
     bare = Path(tmp) / "wiki-bare"
@@ -1044,10 +1046,12 @@ def test_pick_task_single_numbered_path_extended_title() -> None:
 def test_multi_select_one_of_two_does_not_claim_second() -> None:
     """Selection -> claim contract: user picks exactly one of two unmarked tasks.
 
-    When the numbered prompt receives "1" from stdin with two candidates, the picker returns mode="single" -- the single-item shortcut fires in pick_task_single_or_multi.
+    When the numbered prompt receives "1" from stdin with two candidates, the picker returns
+    mode="single" -- the single-item shortcut fires in pick_task_single_or_multi.
     The second task must never be passed to set_phase/merge_tasks.
 
-    This encodes the regression scenario from #543: a slug the user did NOT select must remain status=None and must never appear in any merge_tasks remove_slugs or set_phase call.
+    This encodes the regression scenario from #543: a slug the user did NOT select must remain
+    status=None and must never appear in any merge_tasks remove_slugs or set_phase call.
     """
     import io
     from unittest.mock import MagicMock, patch

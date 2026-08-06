@@ -2,7 +2,8 @@
 UTC timestamp helpers shared across mill scripts and skills.
 
 Claude Code cannot be trusted to produce accurate timestamps — it often guesses at dates.
-Any mill artefact that records "when" (status transitions, fixer-report filenames, plan frontmatter ``started:`` field) goes through this module so the value comes from the OS clock, not the LLM.
+Any mill artefact that records "when" (status transitions, fixer-report filenames, plan frontmatter
+``started:`` field) goes through this module so the value comes from the OS clock, not the LLM.
 
 We use ``datetime.now(timezone.utc)`` directly rather than shelling out to ``date -u``;
 Python already knows the wall clock and there is no reason to pay subprocess overhead.
@@ -26,8 +27,10 @@ from datetime import datetime, timezone
 def now_utc_compact() -> str:
     """Return current UTC time as ``YYYYMMDD-HHMMSS``.
 
-    Designed for filenames and fields that need to sort chronologically without special parsing: ``20260422-143205-plan-fix-r1.md``.
-    Second-resolution is fine — two invocations in the same second are not expected in the mill workflow,
+    Designed for filenames and fields that need to sort chronologically without special parsing:
+    ``20260422-143205-plan-fix-r1.md``.
+    Second-resolution is fine — two invocations in the same second are not expected in the mill
+    workflow,
     and the downstream filename writer is responsible for collision handling if it ever happens.
     """
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -36,6 +39,8 @@ def now_utc_compact() -> str:
 def now_utc_iso() -> str:
     """Return current UTC time as ``YYYY-MM-DDTHH:MM:SSZ``.
 
-    Used for the timeline rows in status.md and other human-facing surfaces. ``Z`` suffix rather than ``+00:00`` because the status.md template and every status.md already written uses that form — keep the corpus consistent.
+    Used for the timeline rows in status.md and other human-facing surfaces. ``Z`` suffix rather
+    than ``+00:00`` because the status.md template and every status.md already written uses that
+    form — keep the corpus consistent.
     """
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

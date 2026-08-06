@@ -2,13 +2,19 @@ r"""
 Convert a .ipynb notebook to a compact text digest.
 
 The digest contains markdown-cell text and code-cell source with execution outputs stripped.
-This helper uses pure stdlib (json, sys, pathlib, argparse) and parses nbformat JSON directly without importing nbformat or jupyter.
+This helper uses pure stdlib (json, sys, pathlib, argparse) and parses nbformat JSON directly
+without importing nbformat or jupyter.
 
-Truncation: code cells over MAX_CODE_CELL_LINES are truncated to CODE_CELL_HEAD_LINES + marker + CODE_CELL_TAIL_LINES.
+Truncation: code cells over MAX_CODE_CELL_LINES are truncated to CODE_CELL_HEAD_LINES + marker +
+CODE_CELL_TAIL_LINES.
 
-Public API ---------- CLI: ``python nb_digest.py <path>`` stdout — the notebook digest (UTF-8) stderr — error messages (ASCII only) exit — 0 on success, 2 on error (malformed/missing file/invalid notebook)
+Public API ---------- CLI: ``python nb_digest.py <path>`` stdout — the notebook digest (UTF-8)
+stderr — error messages (ASCII only) exit — 0 on success, 2 on error (malformed/missing file/invalid
+notebook)
 
-Function: ``build_digest(nb: dict, source_name: str) -> str`` ``nb`` — notebook dict (nbformat shape) ``source_name`` — filename or identifier for the header Returns — the digest string (markdown with fenced code blocks)
+Function: ``build_digest(nb: dict, source_name: str) -> str`` ``nb`` — notebook dict (nbformat
+shape) ``source_name`` — filename or identifier for the header Returns — the digest string (markdown
+with fenced code blocks)
 """
 
 import argparse
@@ -36,7 +42,8 @@ def cell_source_text(cell: dict) -> str:
 def notebook_language(nb: dict) -> str:
     """Return the notebook's kernel language.
 
-    Checks kernelspec.language, falls back to language_info.name, defaults to "text" if neither is present.
+    Checks kernelspec.language, falls back to language_info.name, defaults to "text" if neither is
+    present.
     """
     try:
         metadata = nb.get("metadata", {})

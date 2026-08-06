@@ -5,7 +5,8 @@ Covers:
   - model_to_tier: maps model families, raises on unknown
   - write_brief: writes files, creates parents, overwrites, returns path
   - output_path_for: the ".md" -> ".out.md" mapping
-  - write_brief output_contract footer, default-off byte-identity, and unconditional stale-".out.md" truncation
+  - write_brief output_contract footer, default-off byte-identity, and unconditional stale-".out.md"
+  truncation
 """
 from __future__ import annotations
 

@@ -2,19 +2,27 @@
 Resolve the parent branch of the active task.
 
 mill-merge and mill-merge-in both need to know which branch to merge to / from.
-The source of truth is the ``parent:`` field in ``<WIKI_PATH>/active/<slug>/status.md``'s top fenced-yaml block, written by mill-spawn at the moment the task branch was created.
-If that field is missing we fall through to an interactive prompt — config-level overrides were considered and dropped (config.yaml is meant to be stable per repo; parent-branch is per-task).
+The source of truth is the ``parent:`` field in ``<WIKI_PATH>/active/<slug>/status.md``'s top
+fenced-yaml block, written by mill-spawn at the moment the task branch was created.
+If that field is missing we fall through to an interactive prompt — config-level overrides were
+considered and dropped (config.yaml is meant to be stable per repo; parent-branch is per-task).
 
 Public API:
-    ParentBranchError — raised when no parent can be resolved non-interactively resolve(status_path, *, interactive=True, expected_slug=None) -> str Return the parent branch name.
-    Raises ParentBranchError when status.md is missing the ``parent:`` row and ``interactive`` is False (auto-merge path in mill-go).
+    ParentBranchError — raised when no parent can be resolved non-interactively resolve(status_path,
+    *, interactive=True, expected_slug=None) -> str Return the parent branch name.
+    Raises ParentBranchError when status.md is missing the ``parent:`` row and ``interactive`` is
+    False (auto-merge path in mill-go).
     When ``expected_slug`` is given and status.md's ``slug:`` row does not match it, the
-    ``parent:`` row is treated as absent — protects against reading a stacked-branch worktree's stale status.md by identity.
-    resolve_for_codeguide(status_path, *, expected_slug=None) -> str | None Non-interactive wrapper around resolve() that swallows ParentBranchError and returns None instead of raising, for callers (e.g.
+    ``parent:`` row is treated as absent — protects against reading a stacked-branch worktree's
+    stale status.md by identity.
+    resolve_for_codeguide(status_path, *, expected_slug=None) -> str | None Non-interactive wrapper
+    around resolve() that swallows ParentBranchError and returns None instead of raising, for
+    callers (e.g.
     git-commit) that must never block on a missing parent.
 
 The status.md yaml-block parser lives in ``_status`` but is internal;
-here we reuse the same ```yaml fence convention and hand-parse the single row we care about. Keeps this module free of yaml dependency.
+here we reuse the same ```yaml fence convention and hand-parse the single row we care about. Keeps
+this module free of yaml dependency.
 """
 from __future__ import annotations
 
@@ -40,8 +48,11 @@ def _read_parent_from_status(
 
     Args:
         expected_slug: when not None, also scans the same block for a ``slug:`` row.
-            If that row is present and its stripped value differs from ``expected_slug``, the function returns None -- identical to the "no parent: row" case -- even though a ``parent:`` row was found.
-            This guards against resolving the parent branch from a different task's status.md (stacked worktrees can share a checked-out file layout).
+            If that row is present and its stripped value differs from ``expected_slug``, the
+                function returns None -- identical to the "no parent: row" case -- even though a
+                ``parent:`` row was found.
+            This guards against resolving the parent branch from a different task's status.md
+                (stacked worktrees can share a checked-out file layout).
             A ``slug:`` row that is absent,
             or an ``expected_slug`` of None, never triggers this check.
     """
@@ -79,11 +90,14 @@ def resolve(
         The prompt reads a single line from stdin;
         the caller is responsible for only asking this in a tty-attached context.
 
-    When ``interactive=False`` and no parent is in status.md, raises ``ParentBranchError`` so the auto-merge path in mill-go can halt gracefully and surface the shortfall to the user instead of blocking on stdin.
+    When ``interactive=False`` and no parent is in status.md, raises ``ParentBranchError`` so the
+    auto-merge path in mill-go can halt gracefully and surface the shortfall to the user instead of
+    blocking on stdin.
 
     Args:
         expected_slug: forwarded to ``_read_parent_from_status``.
-        A mismatched ``slug:`` row makes the lookup behave exactly as if ``parent:`` were absent -- falling through to the prompt (or ``ParentBranchError`` when non-interactive) below.
+        A mismatched ``slug:`` row makes the lookup behave exactly as if ``parent:`` were absent --
+        falling through to the prompt (or ``ParentBranchError`` when non-interactive) below.
     """
     parent = _read_parent_from_status(status_path, expected_slug=expected_slug)
     if parent:
@@ -113,9 +127,12 @@ def resolve_for_codeguide(
 ) -> str | None:
     """Return the task's parent branch for codeguide-update, or None.
 
-    A non-interactive, exception-swallowing wrapper around ``resolve()`` for callers (e.g. ``git-commit``) that must degrade silently rather than block a commit over a missing or unreadable parent branch.
+    A non-interactive, exception-swallowing wrapper around ``resolve()`` for callers (e.g.
+    ``git-commit``) that must degrade silently rather than block a commit over a missing or
+    unreadable parent branch.
     Calls ``resolve(status_path, interactive=False, expected_slug=expected_slug)``;
-    on ``ParentBranchError`` (missing ``parent:`` row, unreadable status.md, or a mismatched ``slug:`` row) returns ``None`` instead of raising or prompting.
+    on ``ParentBranchError`` (missing ``parent:`` row, unreadable status.md, or a mismatched
+    ``slug:`` row) returns ``None`` instead of raising or prompting.
     """
     try:
         return resolve(status_path, interactive=False, expected_slug=expected_slug)

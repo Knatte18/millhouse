@@ -3,7 +3,8 @@
 Tests exercise the keepalive and reuse logic added in batch 2:
 - Flag plumbing (--psmux-session, --keep-alive)
 - Reuse short-circuit when named session exists and is idle
-- Cleanup ownership rules (success kill gated by --keep-alive, error kill gated by session_owned_by_us)
+- Cleanup ownership rules (success kill gated by --keep-alive, error kill gated by
+session_owned_by_us)
 - Config plumbing for reuse_idle_timeout_s
 """
 from __future__ import annotations

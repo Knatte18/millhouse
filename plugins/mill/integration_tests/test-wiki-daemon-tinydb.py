@@ -1,6 +1,7 @@
 """Integration test for wiki daemon with TinyDB persistence.
 
-Tests the full client-daemon-git stack: real subprocess, real TinyDB, real Home.md parsing/rendering.
+Tests the full client-daemon-git stack: real subprocess, real TinyDB, real Home.md
+parsing/rendering.
 Covers read/write, task.json persistence, and daemon restart recovery.
 
 Uses .scratch/test-wiki-daemon-tinydb/ as fixture directory.

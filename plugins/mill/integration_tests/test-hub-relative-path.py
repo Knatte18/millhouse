@@ -1,12 +1,16 @@
 """
 Integration test for hub_relative_path sub-project layout support.
 
-Builds an isolated hub+wiki pair with a sub-project layout under ``.scratch/`` and exercises the path-resolution surface fixed in batches 1-3 against this structure.
+Builds an isolated hub+wiki pair with a sub-project layout under ``.scratch/`` and exercises the
+path-resolution surface fixed in batches 1-3 against this structure.
 The test:
 
-1. Constructs a minimal sub-project fixture where the hub is a subfolder of the git repo root (e.g. ``<repo>/projects/sub/`` is the hub).
-2. Runs ``millpy-spawn --dry-run`` from the hub subfolder to verify the path resolution works end-to-end.
-3. Makes direct calls to ``_paths.resolve_active_hub`` and ``_review_common.resolve_ref_paths`` to assert the git_root fallback and hub_relative_path offset are applied correctly.
+1. Constructs a minimal sub-project fixture where the hub is a subfolder of the git repo root (e.g.
+``<repo>/projects/sub/`` is the hub).
+2. Runs ``millpy-spawn --dry-run`` from the hub subfolder to verify the path resolution works
+end-to-end.
+3. Makes direct calls to ``_paths.resolve_active_hub`` and ``_review_common.resolve_ref_paths`` to
+assert the git_root fallback and hub_relative_path offset are applied correctly.
 
 No LLM is invoked;
 no claude / sonnet subprocess fires.

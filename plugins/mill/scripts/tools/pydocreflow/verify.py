@@ -4,7 +4,9 @@ Mechanical verifier for pydocreflow.py's output on a pair of (old, new) source f
 Checks:
 
 1. `new` still parses as valid Python (ast.parse doesn't raise).
-2. The concatenated text of every docstring plus every standalone comment, with all whitespace collapsed to single spaces, is identical between `old` and `new` -- proving the reflow only moved words onto different lines, never added, dropped, or changed one.
+2. The concatenated text of every docstring plus every standalone comment, with all whitespace
+collapsed to single spaces, is identical between `old` and `new` -- proving the reflow only moved
+words onto different lines, never added, dropped, or changed one.
 
 Usage:
     python verify.py <old_file> <new_file>

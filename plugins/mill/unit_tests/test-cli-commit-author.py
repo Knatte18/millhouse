@@ -1,6 +1,7 @@
 """Unit tests for _subprocess_util.git_commit helper.
 
-Tests that CLI state commits can pin author name/email explicitly, independent of worktree-local git config drift.
+Tests that CLI state commits can pin author name/email explicitly, independent of worktree-local git
+config drift.
 """
 from __future__ import annotations
 

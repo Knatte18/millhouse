@@ -1,8 +1,10 @@
 """
 Integration test for millpy-cleanup.py.
 
-Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios (done, abandoned, live, orphan-worktree, orphan-active, malformed-status).
-Asserts --dry-run plan output, then asserts the default (apply) run produces the correct artefact removals and one wiki commit.
+Seeds a full hub+wiki fixture under .scratch/ with six slug scenarios (done, abandoned, live,
+orphan-worktree, orphan-active, malformed-status).
+Asserts --dry-run plan output, then asserts the default (apply) run produces the correct artefact
+removals and one wiki commit.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-cleanup.py

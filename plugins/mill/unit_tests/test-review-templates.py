@@ -1,11 +1,16 @@
 """Unit tests for the five review prompt templates under plugins/mill/templates/.
 
 Covers:
-  - Each template still renders via _review_common.render_prompt with the exact token set its backend supplies -- the guard against an accidentally introduced <UPPERCASE> token, which _render.render() raises KeyError for at render time (production), a failure test-render.py cannot see because it only renders tempfile fixtures.
+  - Each template still renders via _review_common.render_prompt with the exact token set its
+      backend supplies -- the guard against an accidentally introduced <UPPERCASE> token, which
+      _render.render() raises KeyError for at render time (production), a failure test-render.py
+      cannot see because it only renders tempfile fixtures.
   - The tool-prohibition header and the sole-output sentence deleted by card 15,
       and (for review-discussion.md only) the tool-use mode claim deleted by card 16, stay deleted.
-  - The MILL_REVIEW_BEGIN/MILL_REVIEW_END wrapper and the REPORT-not-fix instruction kept by card 15 stay present.
-  - No template names the report destination via an <OUTPUT_FILE> token (Shared Decision "no <OUTPUT_FILE> token anywhere").
+  - The MILL_REVIEW_BEGIN/MILL_REVIEW_END wrapper and the REPORT-not-fix instruction kept by card 15
+      stay present.
+  - No template names the report destination via an <OUTPUT_FILE> token (Shared Decision "no
+      <OUTPUT_FILE> token anywhere").
 """
 
 from __future__ import annotations
@@ -62,7 +67,9 @@ def test_all_templates_render() -> None:
     """Each of the five templates renders with the token set its backend supplies.
 
     A missing token (e.g.
-    an accidentally introduced <UPPERCASE> placeholder) would raise KeyError inside render_prompt -- this is the only test that exercises the real files in plugins/mill/templates/ rather than a tempfile fixture.
+    an accidentally introduced <UPPERCASE> placeholder) would raise KeyError inside render_prompt --
+    this is the only test that exercises the real files in plugins/mill/templates/ rather than a
+    tempfile fixture.
     """
     for name in TEMPLATE_NAMES:
         tokens = TEMPLATE_TOKENS[name]
@@ -108,7 +115,8 @@ def test_kept_prose_stays_kept() -> None:
 
 
 def test_plan_criteria_bullets_present() -> None:
-    """The two new plan-review criteria bullets (All Files Touched scope, platform-behavior-claim verification) are present verbatim in both plan-review templates' raw source.
+    """The two new plan-review criteria bullets (All Files Touched scope, platform-behavior-claim
+    verification) are present verbatim in both plan-review templates' raw source.
 """
     for name in ["review-plan-holistic", "review-plan-batch"]:
         source = _read_template_source(name)

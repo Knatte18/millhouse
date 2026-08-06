@@ -1,12 +1,22 @@
 """Unit tests asserting the prepare-envelope invariant introduced by cards 9-11.
 
-The invariant under test: ``output_path`` is present on every brief-emitting success envelope from the three review CLIs' ``--stage prepare`` branch,
-and absent from every envelope that writes no brief (the plan-validator failure envelope and any ``print_error_envelope`` output).
+The invariant under test: ``output_path`` is present on every brief-emitting success envelope from
+the three review CLIs' ``--stage prepare`` branch,
+and absent from every envelope that writes no brief (the plan-validator failure envelope and any
+``print_error_envelope`` output).
 
-Mocking discipline: ``_agent_dispatch`` must be the real module here -- if it were replaced by a ``MagicMock`` (as ``test-review-finalize.py``'s existing style does), ``write_brief`` and ``output_path_for`` would return ``MagicMock``s, ``str(output_path_for(...))`` would be junk, and the ``.md`` -> ``.out.md`` equality assertion (the entire point of this file) could not hold. ``_review_cli`` and ``_review_common`` are likewise real (with ``load_config``/``resolve_path`` patched as attributes on the real ``_review_common`` module, per the ``--slug`` rule below);
-only ``_paths``, ``_reviewers``, and the review backend itself (``_review_discussion`` / ``_review_plan`` / ``_review_code``) are mocked -- the backend's ``prepare`` returns a static dict, so the real ``write_brief`` and ``output_path_for`` stay in the path.
+Mocking discipline: ``_agent_dispatch`` must be the real module here -- if it were replaced by a
+``MagicMock`` (as ``test-review-finalize.py``'s existing style does), ``write_brief`` and
+``output_path_for`` would return ``MagicMock``s, ``str(output_path_for(...))`` would be junk, and
+the ``.md`` -> ``.out.md`` equality assertion (the entire point of this file) could not hold.
+``_review_cli`` and ``_review_common`` are likewise real (with ``load_config``/``resolve_path``
+patched as attributes on the real ``_review_common`` module, per the ``--slug`` rule below);
+only ``_paths``, ``_reviewers``, and the review backend itself (``_review_discussion`` /
+``_review_plan`` / ``_review_code``) are mocked -- the backend's ``prepare`` returns a static dict,
+so the real ``write_brief`` and ``output_path_for`` stay in the path.
 
-Each CLI is passed ``--slug <slug>`` explicitly so ``find_active_slug`` is never called, keeping this test free of real git/branch detection.
+Each CLI is passed ``--slug <slug>`` explicitly so ``find_active_slug`` is never called, keeping
+this test free of real git/branch detection.
 """
 from __future__ import annotations
 
@@ -66,9 +76,13 @@ def _mock_paths_and_reviewers(project_root: Path, briefs_dir: Path):
 def _success_prepare_result(scope: str, effort: str | None = None) -> dict:
     """A static backend.prepare() return value for the success-envelope cases.
 
-    model is a real model id (matching the claude-opus-* family) so the real _agent_dispatch.model_to_tier resolves it to "opus" instead of raising.
+    model is a real model id (matching the claude-opus-* family) so the real
+    _agent_dispatch.model_to_tier resolves it to "opus" instead of raising.
 
-    effort mirrors card 7-9's addition to the real backends' prepare() return dicts: present (non-None) when the configured reviewer spec has an effort tier, absent (key omitted, matching a spec with no effort key) otherwise -- both shapes must round-trip correctly through the CLI's conditional envelope inclusion (card 10).
+    effort mirrors card 7-9's addition to the real backends' prepare() return dicts: present
+    (non-None) when the configured reviewer spec has an effort tier, absent (key omitted, matching a
+    spec with no effort key) otherwise -- both shapes must round-trip correctly through the CLI's
+    conditional envelope inclusion (card 10).
     """
     result = {
         "prompt_text": "irrelevant prompt body for envelope-shape testing",
@@ -92,9 +106,12 @@ def _run_prepare_stage(
 ) -> tuple[int, str]:
     """Run a review CLI's `--stage prepare` with the backend mocked.
 
-    Patches load_config/resolve_path directly on the real, already-imported _review_common module (the CLI does `from _review_common import ...` inside main(), so attributes set before the call are the ones main() picks up).
+    Patches load_config/resolve_path directly on the real, already-imported _review_common module
+    (the CLI does `from _review_common import ...` inside main(), so attributes set before the call
+    are the ones main() picks up).
     Mocks _paths, _reviewers, and the named backend module in sys.modules;
-    extra_modules allows the plan-validator carve-out test to additionally mock _plan_validate. _agent_dispatch and _review_cli are left genuinely real.
+    extra_modules allows the plan-validator carve-out test to additionally mock _plan_validate.
+    _agent_dispatch and _review_cli are left genuinely real.
 
     Returns (return_code, captured_stdout).
     """
@@ -203,9 +220,12 @@ def test_code_prepare_envelope_has_output_path() -> bool:
 
 
 def _assert_effort_envelope(review_type: str, effort: str | None) -> bool:
-    """Card 10: effort is forwarded into the prepare envelope only when the resolved spec's effort tier (as surfaced by the backend's prepare() return dict, per cards 7-9) is non-null.
+    """Card 10: effort is forwarded into the prepare envelope only when the resolved spec's effort
+    tier (as surfaced by the backend's prepare() return dict, per cards 7-9) is non-null.
 
-    When effort is None, the envelope must omit the "effort" key entirely (not include it with a null value) -- matching the conditional-inclusion convention _implementer_common.emit_prepare already establishes for start_sha/effort on the implement/fix CLIs.
+    When effort is None, the envelope must omit the "effort" key entirely (not include it with a
+    null value) -- matching the conditional-inclusion convention _implementer_common.emit_prepare
+    already establishes for start_sha/effort on the implement/fix CLIs.
     """
     backend_prepare = unittest.mock.MagicMock(
         return_value=_success_prepare_result("holistic", effort=effort)
@@ -258,7 +278,8 @@ def test_code_prepare_envelope_omits_effort_when_absent() -> bool:
 
 
 def _assert_error_envelope_has_no_output_path(review_type: str) -> bool:
-    """Converse carve-out: print_error_envelope's --stage prepare output carries no output_path -- it fires before any brief is rendered.
+    """Converse carve-out: print_error_envelope's --stage prepare output carries no output_path --
+    it fires before any brief is rendered.
 """
     backend_prepare = unittest.mock.MagicMock(
         side_effect=_review_common.ReviewError("synthetic prepare failure for test")
@@ -291,7 +312,9 @@ def test_code_error_envelope_has_no_output_path() -> bool:
 
 
 def test_plan_validator_failure_envelope_has_no_output_path() -> bool:
-    """Converse carve-out: the plan-validator failure envelope ({"errors": [...], "summary": ...}, exit 1) fires before any brief exists, so it must carry no output_path -- adding one universally would be unsatisfiable for this path.
+    """Converse carve-out: the plan-validator failure envelope ({"errors": [...], "summary": ...},
+    exit 1) fires before any brief exists, so it must carry no output_path -- adding one
+    universally would be unsatisfiable for this path.
     """
     mock_plan_validate = unittest.mock.MagicMock()
     mock_plan_validate.run = unittest.mock.MagicMock(

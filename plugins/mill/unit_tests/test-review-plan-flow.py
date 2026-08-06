@@ -177,16 +177,25 @@ def _make_nested_plan_fixture(
 ) -> tuple[Path, Path, Path, Path]:
     """Build a nested-hub-layout plan-review fixture under tmp_path.
 
-    Unlike _make_plan_fixture, the git root and the mill hub_root are different directories: hub_root lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits in a subdirectory of the git toplevel rather than at its root.
+    Unlike _make_plan_fixture, the git root and the mill hub_root are different directories:
+    hub_root lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits
+    in a subdirectory of the git toplevel rather than at its root.
 
     batch_specs = [(name, file, reads, creates)]. The plan is written
     directly under hub_root/_mill/plan/ (the CLI's default plan_dir),
     so no --stage prepare copy step is needed.
 
     Returns (mill_dir, wiki_root, hub_root, git_root).
-    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root() still resolves to git_root.
+    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up
+    from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root()
+    still resolves to git_root.
 
-    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml: resolve_wiki_path is called both with hub_root (CLI's own lookup) and with git_root (inside _paths.resolve_active_worktree's marker check), and only git_root's own .millhouse/ (absent here) or the sibling default is consulted for the latter -- a hub_root-only override would make the two calls disagree on the wiki location.
+    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via
+    _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml:
+    resolve_wiki_path is called both with hub_root (CLI's own lookup) and with git_root (inside
+    _paths.resolve_active_worktree's marker check), and only git_root's own .millhouse/ (absent
+    here) or the sibling default is consulted for the latter -- a hub_root-only override would make
+    the two calls disagree on the wiki location.
     """
     git_root = tmp_path / "container" / "wts" / SLUG
     git_root.mkdir(parents=True)
@@ -2223,15 +2232,26 @@ def main() -> int:
 def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
     """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's decoy.
 
-    millpy-review-plan.py's main() imports every module it needs (_agent_dispatch, _parent_branch, _paths, _reviewers, _review_cli, _review_common, _review_plan) inline, so this test loads the CLI script via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each of those names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout and test-review-code-flow.py's counterpart do. --skip-validate is passed so the real (unmocked) _plan_validate module is never imported by the prepare branch.
+    millpy-review-plan.py's main() imports every module it needs (_agent_dispatch, _parent_branch,
+    _paths, _reviewers, _review_cli, _review_common, _review_plan) inline, so this test loads the
+    CLI script via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each
+    of those names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's
+    test_brief_path_nested_layout and test-review-code-flow.py's counterpart do. --skip-validate is
+    passed so the real (unmocked) _plan_validate module is never imported by the prepare branch.
 
-    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path() fallback;
-    resolve_active_hub -- called after slug resolution, per the Card 14 rebind -- returns a distinct directory standing in for the corrected active task worktree.
-    briefs_dir must resolve under the resolve_active_hub value (checked via the recorded resolve_task_path and write_brief call args), proving project_root was rebound and not left at resolve_hub_path's original value.
+    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path()
+    fallback;
+    resolve_active_hub -- called after slug resolution, per the Card 14 rebind -- returns a distinct
+    directory standing in for the corrected active task worktree.
+    briefs_dir must resolve under the resolve_active_hub value (checked via the recorded
+    resolve_task_path and write_brief call args), proving project_root was rebound and not left at
+    resolve_hub_path's original value.
 
-    A reversion of the Card 14 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
+    A reversion of the Card 14 fix (never calling resolve_active_hub) causes the assertion to fail
+    because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout
+    this file).
     """
     import importlib.util
     import tempfile

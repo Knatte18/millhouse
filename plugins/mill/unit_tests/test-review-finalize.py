@@ -97,14 +97,19 @@ def test_review_code_finalize_no_prepare() -> bool:
 
 def test_review_code_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-code finalize receives agent-output text byte-identical, entities and all -- it must NOT be HTML-unescaped.
+    Test that review-code finalize receives agent-output text byte-identical, entities and all -- it
+    must NOT be HTML-unescaped.
 
     Agent-mode output is a file the reviewer wrote itself via Write;
-    it is never HTML-escaped the way the implementer's <task-notification> payload is (that payload is unrelated and untouched -- see _implementer_common.py:892).
-    Unescaping this file's content would corrupt any finding that legitimately quotes "&lt;", "&gt;", or "&amp;" from a source snippet.
-    This verifies the read site hands raw_text to _review_code.finalize as its third positional argument unchanged.
+    it is never HTML-escaped the way the implementer's <task-notification> payload is (that payload
+    is unrelated and untouched -- see _implementer_common.py:892).
+    Unescaping this file's content would corrupt any finding that legitimately quotes "&lt;",
+    "&gt;", or "&amp;" from a source snippet.
+    This verifies the read site hands raw_text to _review_code.finalize as its third positional
+    argument unchanged.
 
-    The comparison is made as the function's return value -- not a bare assert inside a try/except that swallows AssertionError -- so a mismatch genuinely surfaces as a failing test.
+    The comparison is made as the function's return value -- not a bare assert inside a try/except
+    that swallows AssertionError -- so a mismatch genuinely surfaces as a failing test.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -220,8 +225,10 @@ def test_review_plan_finalize_round_required() -> bool:
     """
     Test that review-plan finalize auto-discovers the round when --round is absent.
 
-    Commit 8a5fefac switched plan finalize to auto-discover the round via discover_round() instead of requiring --round.
-    This test verifies the new contract: omitting --round succeeds (rc == 0) and prepare() is never called.
+    Commit 8a5fefac switched plan finalize to auto-discover the round via discover_round() instead
+    of requiring --round.
+    This test verifies the new contract: omitting --round succeeds (rc == 0) and prepare() is never
+    called.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -296,9 +303,13 @@ def test_review_plan_finalize_round_required() -> bool:
 
 def test_review_plan_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-plan finalize receives agent-output text byte-identical, entities and all -- it must NOT be HTML-unescaped.
+    Test that review-plan finalize receives agent-output text byte-identical, entities and all -- it
+    must NOT be HTML-unescaped.
 
-    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the comparison is made as the function's return value -- not a bare assert inside a try/except that swallows AssertionError -- so a mismatch genuinely surfaces as a failing test rather than being absorbed by a broad exception handler.
+    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the comparison is made as
+    the function's return value -- not a bare assert inside a try/except that swallows
+    AssertionError -- so a mismatch genuinely surfaces as a failing test rather than being absorbed
+    by a broad exception handler.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -513,9 +524,13 @@ def test_review_discussion_finalize_no_prepare() -> bool:
 
 def test_review_discussion_finalize_receives_raw_text_byte_identical() -> bool:
     """
-    Test that review-discussion finalize receives agent-output text byte-identical, entities and all -- it must NOT be HTML-unescaped.
+    Test that review-discussion finalize receives agent-output text byte-identical, entities and all
+    -- it must NOT be HTML-unescaped.
 
-    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the comparison is made as the function's return value -- not a bare assert inside a try/except that swallows AssertionError -- so a mismatch genuinely surfaces as a failing test rather than being absorbed by a broad exception handler.
+    Mirrors test_review_code_finalize_receives_raw_text_byte_identical: the comparison is made as
+    the function's return value -- not a bare assert inside a try/except that swallows
+    AssertionError -- so a mismatch genuinely surfaces as a failing test rather than being absorbed
+    by a broad exception handler.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -582,8 +597,10 @@ def test_review_discussion_finalize_round_required() -> bool:
     """
     Test that review-discussion finalize auto-discovers the round when --round is absent.
 
-    Commit 8a5fefac switched discussion finalize to auto-discover the round via discover_round() instead of requiring --round.
-    This test verifies the new contract: omitting --round succeeds (rc == 0) and prepare() is never called.
+    Commit 8a5fefac switched discussion finalize to auto-discover the round via discover_round()
+    instead of requiring --round.
+    This test verifies the new contract: omitting --round succeeds (rc == 0) and prepare() is never
+    called.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -673,7 +690,8 @@ def test_review_discussion_finalize_round_required() -> bool:
 def _mock_paths_and_reviewers(project_root: Path):
     """Return (mock_paths, mock_reviewers) modules for sys.modules patching.
 
-    project_root stands in for git_root / hub_dir / wiki_root -- none of these tests exercise multi-root wiki behaviour, so a single tempdir plays all three roles.
+    project_root stands in for git_root / hub_dir / wiki_root -- none of these tests exercise
+    multi-root wiki behaviour, so a single tempdir plays all three roles.
     """
     mock_paths = unittest.mock.MagicMock()
     mock_paths.resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
@@ -697,9 +715,15 @@ def _run_finalize_stage(
 ) -> tuple[int, str]:
     """Run a review CLI's `--stage finalize` against a real backend.
 
-    Patches ``load_config`` and ``resolve_path`` directly on the real, already-imported ``_review_common`` module (the CLI does ``from _review_common import ...`` inside ``main()``, so attributes set on the module before the call are the ones ``main()`` picks up), mocks only ``_paths`` and ``_reviewers`` in ``sys.modules``, and leaves ``_agent_dispatch``, ``_review_cli``, ``_review_common``, and the review backend module genuinely real.
+    Patches ``load_config`` and ``resolve_path`` directly on the real, already-imported
+    ``_review_common`` module (the CLI does ``from _review_common import ...`` inside ``main()``, so
+    attributes set on the module before the call are the ones ``main()`` picks up), mocks only
+    ``_paths`` and ``_reviewers`` in ``sys.modules``, and leaves ``_agent_dispatch``,
+    ``_review_cli``, ``_review_common``, and the review backend module genuinely real.
 
-    ``actual_model``, when given, is passed through as ``--actual-model`` so callers can exercise the audit-trail flag against a real backend and inspect the resulting review file's ``reviewer_model:`` line.
+    ``actual_model``, when given, is passed through as ``--actual-model`` so callers can exercise
+    the audit-trail flag against a real backend and inspect the resulting review file's
+    ``reviewer_model:`` line.
 
     Returns (return_code, captured_stdout).
     """
@@ -742,11 +766,15 @@ def _run_finalize_stage(
 
 def _finalize_with_agent_output_content(cli_relpath: str, unique_name: str, *, content: str, exists: bool) -> bool:
     """Run --stage finalize against an agent-output file that is missing, empty, or whitespace-only;
-    assert the printed envelope carries verdict: ERROR on a ZERO return code with no traceback escaping.
+    assert the printed envelope carries verdict: ERROR on a ZERO return code with no traceback
+        escaping.
 
-    The missing case fails on pre-guard code with an uncaught FileNotFoundError -- exactly the bug cards 9-11's guard fixes.
-    The ERROR envelope comes from the backend's own `except ReviewError` -> `ReviewResult(verdict="ERROR")` path on a zero exit;
-    print_error_envelope is never reached, so this must NOT be asserted via a raising mock or an exit-1 expectation.
+    The missing case fails on pre-guard code with an uncaught FileNotFoundError -- exactly the bug
+    cards 9-11's guard fixes.
+    The ERROR envelope comes from the backend's own `except ReviewError` ->
+    `ReviewResult(verdict="ERROR")` path on a zero exit;
+    print_error_envelope is never reached, so this must NOT be asserted via a raising mock or an
+    exit-1 expectation.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -770,12 +798,16 @@ def _finalize_with_agent_output_content(cli_relpath: str, unique_name: str, *, c
 def _stale_out_md_case(cli_relpath: str, unique_name: str, role: str) -> bool:
     """The stale-.out.md regression guard -- the single most important test in this batch.
 
-    Simulates a killed-then-retried reviewer: round 1 writes a brief and (in this synthetic setup) an agent actually produced a full, green ".out.md" report.
+    Simulates a killed-then-retried reviewer: round 1 writes a brief and (in this synthetic setup)
+    an agent actually produced a full, green ".out.md" report.
     The orchestrator then retries the SAME role/scope/ round -- e.g.
     after a transient dispatch failure -- which calls write_brief again.
-    write_brief's unconditional unlink must clear that stale ".out.md" before the retried attempt ever runs;
-    without it, a finalize call against the (never-rewritten, in this test) path would silently reuse the old APPROVE verdict, and reviewers have no git-state backstop to catch it.
-    Asserts the stale file did not survive AND that finalize -- via cards 9-11's missing-file guard -- reports ERROR rather than replaying the stale APPROVE.
+    write_brief's unconditional unlink must clear that stale ".out.md" before the retried attempt
+    ever runs;
+    without it, a finalize call against the (never-rewritten, in this test) path would silently
+    reuse the old APPROVE verdict, and reviewers have no git-state backstop to catch it.
+    Asserts the stale file did not survive AND that finalize -- via cards 9-11's missing-file guard
+    -- reports ERROR rather than replaying the stale APPROVE.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -828,9 +860,12 @@ _ACTUAL_MODEL_RAW_TEXT = (
 
 
 def _actual_model_case(cli_relpath: str, unique_name: str, *, actual_model: str | None, expected_line: str) -> bool:
-    """Run --stage finalize with (or without) --actual-model and assert the written review file's `reviewer_model:` line matches `expected_line`.
+    """Run --stage finalize with (or without) --actual-model and assert the written review file's
+    `reviewer_model:` line matches `expected_line`.
 
-    `_ACTUAL_MODEL_RAW_TEXT` always echoes `reviewer_model: sonnetmax` -- passing `actual_model` must overwrite that line regardless; omitting it (actual_model=None) must reproduce it unmodified.
+    `_ACTUAL_MODEL_RAW_TEXT` always echoes `reviewer_model: sonnetmax` -- passing `actual_model`
+    must overwrite that line regardless; omitting it (actual_model=None) must reproduce it
+    unmodified.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)

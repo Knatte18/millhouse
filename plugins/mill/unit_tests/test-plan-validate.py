@@ -13,11 +13,14 @@ Check coverage:
   check 6 — reads-not-backtick-path (incl.
       none-exempt)
   check 8 — all-files-touched-mismatch
-  context-completeness (#742) — card Requirements: references a resolvable file-path-shaped token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:
-  verify cwd mapping form — verify-not-isolated/verify-full-suite accept the {cwd, command} mapping and the overview-level verify:;
+  context-completeness (#742) — card Requirements: references a resolvable file-path-shaped token
+      absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:
+  verify cwd mapping form — verify-not-isolated/verify-full-suite accept the {cwd, command} mapping
+      and the overview-level verify:;
       verify-malformed-cwd;
       verify-mixed-cwd
-  verify-unrelated-test-file — --only token untouched by its own batch and byte-identical to a non-main parent branch (#638)
+  verify-unrelated-test-file — --only token untouched by its own batch and byte-identical to a
+      non-main parent branch (#638)
   meta — sorted output, missing overview
 """
 from __future__ import annotations
@@ -50,8 +53,10 @@ def _make_overview(
 
     Each batch dict: {name, file, number (optional), depends-on (optional, default [])}.
     all_files_touched: optional list of path strings for the section.
-    overview_verify: optional module-wide verify: command string written into the overview's own frontmatter block (first fenced-yaml block, above the Batch Index).
-        Omitted entirely when None, matching the plain real-world overview shape where module-wide verify: is optional.
+    overview_verify: optional module-wide verify: command string written into the overview's own
+        frontmatter block (first fenced-yaml block, above the Batch Index).
+        Omitted entirely when None, matching the plain real-world overview shape where module-wide
+            verify: is optional.
     """
     entries = []
     for b in batches:
@@ -107,12 +112,17 @@ def _make_batch_file(
 
     context/edits/creates/deletes: list of path strings (backtick-wrapped automatically),
         or None to default to "none".
-    moves: list of (src, dst) tuples for Moves: sub-bullets, or None/[] to write the "none" sentinel.
+    moves: list of (src, dst) tuples for Moves: sub-bullets, or None/[] to write the "none"
+        sentinel.
         Each tuple is formatted as `src` -> `dst`.
     missing_fields: set of field names to omit (for check 2 tests).
-    commit: optional literal text for the Commit: field's inline value (e.g. "none" for a verification-only card).
-        When None (the default), the Commit: line keeps its pre-existing hardcoded shape (`feat({name}): card {card_num}`) unchanged, so every existing call site that omits this argument is unaffected.
-    requirements: optional literal text for the Requirements: field's body, used verbatim instead of the hardcoded "See scope.\\n" text.
+    commit: optional literal text for the Commit: field's inline value (e.g. "none" for a
+        verification-only card).
+        When None (the default), the Commit: line keeps its pre-existing hardcoded shape
+            (`feat({name}): card {card_num}`) unchanged, so every existing call site that omits this
+            argument is unaffected.
+    requirements: optional literal text for the Requirements: field's body, used verbatim instead of
+        the hardcoded "See scope.\\n" text.
         When None (the default), every existing call site's output is byte-for-byte unchanged.
     """
     missing_fields = missing_fields or set()
@@ -197,7 +207,8 @@ def _make_verify_only_batch_text(
 ) -> str:
     """Return a one-card batch file text with a caller-controlled verify: command.
 
-    ``_make_batch_file`` hardcodes ``verify: null``, which cannot express the exact ``--only`` token list the verify-unrelated-test-file tests need to control precisely.
+    ``_make_batch_file`` hardcodes ``verify: null``, which cannot express the exact ``--only`` token
+    list the verify-unrelated-test-file tests need to control precisely.
     """
     edits_part = ", ".join(f"`{e}`" for e in edits) if edits else "none"
     return (
@@ -840,10 +851,13 @@ def test_check_reads_not_backtick_path_dirty() -> int:
 
 
 def test_check_reads_not_backtick_path_dirty_multiline_multi_backtick() -> int:
-    """Dirty: multi-line sub-bullet has a leading path plus a parenthetical with further backtick spans -> Check 6 independently flags the sub-bullet.
+    """Dirty: multi-line sub-bullet has a leading path plus a parenthetical with further backtick
+    spans -> Check 6 independently flags the sub-bullet.
 
-    This is the same repro shape as the #580 bug that motivated the parse_batch_refs leading-token fix in _review_common.py.
-    Check 6 catches it independently at plan-validate --stage prepare time (layered defense; Check 6 is unmodified by this plan)."""
+    This is the same repro shape as the #580 bug that motivated the parse_batch_refs leading-token
+    fix in _review_common.py.
+    Check 6 catches it independently at plan-validate --stage prepare time (layered defense; Check 6
+    is unmodified by this plan)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -951,10 +965,13 @@ def test_check_all_files_touched_mismatch_dirty() -> int:
 
 
 def test_check_all_files_touched_mismatch_deletes_only_excluded() -> int:
-    """Deletes-only path not in All Files Touched -> zero all-files-touched-mismatch errors (regression for #494).
+    """Deletes-only path not in All Files Touched -> zero all-files-touched-mismatch errors
+    (regression for #494).
 
-    This tests the git-mv rename shape: a card has Deletes: old/path and Creates: new/path, with only the created path in overview's All Files Touched.
-    The deleted path should NOT trigger an all-files-touched-mismatch error, because Deletes: tokens are excluded from the check per issue #494.
+    This tests the git-mv rename shape: a card has Deletes: old/path and Creates: new/path, with
+    only the created path in overview's All Files Touched.
+    The deleted path should NOT trigger an all-files-touched-mismatch error, because Deletes: tokens
+    are excluded from the check per issue #494.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2136,8 +2153,19 @@ def test_check_context_completeness_clean_double_slash_token() -> int:
 
 
 def test_check_context_completeness_dirty_odd_backtick_count_line_field() -> int:
-    """Odd backtick count on one Requirements: line mis-pairs `findall` -> the span between a stray, incompletely-closed backtick and the next backtick (never meant to delimit a path reference) is captured as a token instead.
-    Reproduces the actual false-positive mechanism from discussion.md's Gap 1 Problem section: the line intends two independent references, `src/a.py` (correct, and present in this card's own Edits:) and `src/b.py` (correct, but never captured at all because its own opening backtick gets consumed as the CLOSING backtick of the stray, unrelated one before it) -- but a stray backtick left after "config" (as if from an incompletely-closed inline-code span) makes `findall`'s greedy left-to-right pairing group the text between that stray backtick and `src/b.py`'s opening backtick -- which is exactly `src/other.py` -- as its own mis-paired token. `src/other.py` is path-shaped (ends in .py), exists on disk, and is absent from this card's own refs, so exactly one context-completeness error should be raised, and its line field must name this single malformed line verbatim (stripped), not any other."""
+    """Odd backtick count on one Requirements: line mis-pairs `findall` -> the span between a stray,
+    incompletely-closed backtick and the next backtick (never meant to delimit a path reference)
+    is captured as a token instead.
+    Reproduces the actual false-positive mechanism from discussion.md's Gap 1 Problem section: the
+        line intends two independent references, `src/a.py` (correct, and present in this card's own
+        Edits:) and `src/b.py` (correct, but never captured at all because its own opening backtick
+        gets consumed as the CLOSING backtick of the stray, unrelated one before it) -- but a stray
+        backtick left after "config" (as if from an incompletely-closed inline-code span) makes
+        `findall`'s greedy left-to-right pairing group the text between that stray backtick and
+        `src/b.py`'s opening backtick -- which is exactly `src/other.py` -- as its own mis-paired
+        token. `src/other.py` is path-shaped (ends in .py), exists on disk, and is absent from this
+        card's own refs, so exactly one context-completeness error should be raised, and its line
+        field must name this single malformed line verbatim (stripped), not any other."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -2443,7 +2471,9 @@ def test_check_requirements_quote_indent_drift_dirty_multiple_fences_one_card() 
 def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> int:
     """Target file on disk uses CRLF;
     the plan's fence body uses LF, with a drift bug on top.
-    Verifies that the check correctly detects the indent drift despite mismatched line-ending styles on disk, relying on Path.read_text()'s built-in universal-newlines translation which normalizes all line-ending styles to LF before comparison.
+    Verifies that the check correctly detects the indent drift despite mismatched line-ending styles
+        on disk, relying on Path.read_text()'s built-in universal-newlines translation which
+        normalizes all line-ending styles to LF before comparison.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -2487,8 +2517,11 @@ def test_check_requirements_quote_indent_drift_dirty_crlf_source_lf_fence() -> i
 
 def test_check_requirements_quote_indent_drift_dirty_fence_contains_nested_heading() -> int:
     """Fence body with flush-left look-alike lines tests in_fence boundary detection.
-    Fence contains a flush-left '- **Field:**'-shaped line that should NOT terminate field body extraction when in_fence is True.
-    The indented `### ` heading prevents _parse_cards from mis-splitting the card, while flush-left look-alike line and fence delimiters test that in_fence guard actually prevents boundary truncation.
+    Fence contains a flush-left '- **Field:**'-shaped line that should NOT terminate field body
+        extraction when in_fence is True.
+    The indented `### ` heading prevents _parse_cards from mis-splitting the card, while flush-left
+        look-alike line and fence delimiters test that in_fence guard actually prevents boundary
+        truncation.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -3124,8 +3157,10 @@ def test_reads_token_missing_both_unions_dirty() -> int:
 def test_all_files_touched_deletes_not_required() -> int:
     """Deletes: token NOT required in All Files Touched -> no error (per issue #494).
 
-    When a card has a Deletes: path, that path does NOT need to appear in the overview's All Files Touched section.
-    Deletes: tokens are excluded from the all-files-touched check per issue #494 (validator was incorrectly requiring them).
+    When a card has a Deletes: path, that path does NOT need to appear in the overview's All Files
+    Touched section.
+    Deletes: tokens are excluded from the all-files-touched check per issue #494 (validator was
+    incorrectly requiring them).
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -4247,10 +4282,13 @@ def test_check_verify_mixed_cwd_single_cwd_clean() -> int:
 # ---------------------------------------------------------------------------
 
 def test_git_root_threading_with_subfolder_cwd_clean() -> int:
-    """Clean: project_root is git_root/root subfolder, files at git_root/root/<path>, git_root threaded.
+    """Clean: project_root is git_root/root subfolder, files at git_root/root/<path>, git_root
+    threaded.
 
-    This test verifies the fix for #471 layout: when project_root is a subfolder (root:) of the git repo,
-    and git_root is threaded through the validator, resolve_existing_paths should find files at git_root/root/raw correctly instead of mis-resolving under a doubled path.
+    This test verifies the fix for #471 layout: when project_root is a subfolder (root:) of the git
+    repo,
+    and git_root is threaded through the validator, resolve_existing_paths should find files at
+    git_root/root/raw correctly instead of mis-resolving under a doubled path.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -4306,13 +4344,18 @@ def test_git_root_threading_with_subfolder_cwd_clean() -> int:
 def test_git_root_threading_without_git_root_default_none_documents_required() -> int:
     """Comment: demonstrates why git_root threading is necessary.
 
-    This test documents the potential issue: when project_root is the root subfolder itself (git_root/subproject) and root="subproject" is set, resolve_existing_paths without git_root will try: 1. project_root / "subproject" / raw -> DOUBLED, wrong path 2. project_root / raw -> correct, file is here
+    This test documents the potential issue: when project_root is the root subfolder itself
+    (git_root/subproject) and root="subproject" is set, resolve_existing_paths without git_root will
+    try: 1. project_root / "subproject" / raw -> DOUBLED, wrong path 2. project_root / raw ->
+    correct, file is here
 
     So the file IS found,
     but only by luck (via the fallback).
-    Threading git_root makes git_root/root/raw PRIMARY, which is safer and doesn't depend on correct project_root positioning in the worktree.
+    Threading git_root makes git_root/root/raw PRIMARY, which is safer and doesn't depend on correct
+    project_root positioning in the worktree.
 
-    This test skips root param to avoid the doubling issue and focus on the threading mechanism: it shows that when root="" (default empty), files resolve correctly either way.
+    This test skips root param to avoid the doubling issue and focus on the threading mechanism: it
+    shows that when root="" (default empty), files resolve correctly either way.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -4823,7 +4866,9 @@ def test_move_mechanic_missing_all_none_skipped() -> int:
 def test_non_existent_path_move_target_suppressed() -> int:
     """Clean: downstream card's Context: references a Move target -> no non-existent-path error.
 
-    When Batch A moves old.py -> new.py and Batch B has Context: new.py, the validator must NOT raise non-existent-path for new.py because it is in moves_targets (suppressed alongside creates_union per move-endpoint-accounting).
+    When Batch A moves old.py -> new.py and Batch B has Context: new.py, the validator must NOT
+    raise non-existent-path for new.py because it is in moves_targets (suppressed alongside
+    creates_union per move-endpoint-accounting).
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -4950,9 +4995,12 @@ def test_parallel_modifies_overlap_move_endpoint_fires() -> int:
 # ---------------------------------------------------------------------------
 
 def test_check_verify_unrelated_test_files_flagged_non_main_parent() -> int:
-    """(a) --only token untouched by the batch + byte-identical to a non-main parent branch -> flagged.
+    """(a) --only token untouched by the batch + byte-identical to a non-main parent branch ->
+    flagged.
 
-    Exercises the exact discrepancy round 4 of discussion review flagged: this task's own parent is 'hanf/linux-port-more', not 'main', so the fixture deliberately uses a non-'main' parent branch name.
+    Exercises the exact discrepancy round 4 of discussion review flagged: this task's own parent is
+    'hanf/linux-port-more', not 'main', so the fixture deliberately uses a non-'main' parent branch
+    name.
     """
     import _test_helpers  # noqa: E402 (local import; sys.path set up at module scope)
 
@@ -5124,12 +5172,28 @@ def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
 def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
     """Regression guard for #734: the Cards field-legend must not be parsed as refs.
 
-    Part 1 reproduces the pre-fix bug: ``plan-batch.md`` used to render its field-legend bullets (``- **Context:** every file the implementer reads...`` and the six sibling fields) as literal content directly under ``## Cards``, outside any HTML comment.
-    Every validator check that scans a batch file line-by-line for ``- **Context:**``/``- **Edits:**``/etc. headers (``_check_non_existent_path`` via ``_review_common.parse_batch_refs``, ``_check_ref_not_backtick_path``) matches those lines regardless of whether they are genuine card content or template prose, so the legend's bare (non-backtick) prose was misparsed as real path refs.
+    Part 1 reproduces the pre-fix bug: ``plan-batch.md`` used to render its field-legend bullets
+    (``- **Context:** every file the implementer reads...`` and the six sibling fields) as literal
+    content directly under ``## Cards``, outside any HTML comment.
+    Every validator check that scans a batch file line-by-line for ``- **Context:**``/``-
+    **Edits:**``/etc. headers (``_check_non_existent_path`` via ``_review_common.parse_batch_refs``,
+    ``_check_ref_not_backtick_path``) matches those lines regardless of whether they are genuine
+    card content or template prose, so the legend's bare (non-backtick) prose was misparsed as real
+    path refs.
 
     Part 2 validates the corrected post-fix shape.
-    The actual fix (``plan-batch.md`` Card 1) moves the field-legend into the template's single leading HTML comment, which ``_render.render()``'s ``_strip_leading_comment`` drops wholesale before a real per-task batch file is ever written -- a genuine post-fix batch file contains no trace of the legend at all, not a commented-out copy of it.
-    This fixture therefore validates a batch file whose ``## Cards`` section goes straight from the heading to the real ``### Card 1:`` block, matching actual rendered output. (A literal ``<!-- ... -->``-wrapped legend still present in the batch file text would not clear this test even post-fix: ``_check_non_existent_path`` sources its Context:/Edits:/ Creates: tokens from ``_review_common.parse_batch_refs``, which has no HTML-comment awareness and is owned by a different batch in this plan -- out of this batch's edit scope -- so a comment-wrapped-but-present legend would still trip ``non-existent-path`` regardless of anything changed inside this batch's own ``_plan_validate.py``.)
+    The actual fix (``plan-batch.md`` Card 1) moves the field-legend into the template's single
+    leading HTML comment, which ``_render.render()``'s ``_strip_leading_comment`` drops wholesale
+    before a real per-task batch file is ever written -- a genuine post-fix batch file contains no
+    trace of the legend at all, not a commented-out copy of it.
+    This fixture therefore validates a batch file whose ``## Cards`` section goes straight from the
+    heading to the real ``### Card 1:`` block, matching actual rendered output. (A literal ``<!-- ...
+    -->``-wrapped legend still present in the batch file text would not clear this test even
+    post-fix: ``_check_non_existent_path`` sources its Context:/Edits:/ Creates: tokens from
+    ``_review_common.parse_batch_refs``, which has no HTML-comment awareness and is owned by a
+    different batch in this plan -- out of this batch's edit scope -- so a
+    comment-wrapped-but-present legend would still trip ``non-existent-path`` regardless of anything
+    changed inside this batch's own ``_plan_validate.py``.)
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

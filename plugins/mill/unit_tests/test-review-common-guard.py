@@ -80,8 +80,11 @@ class TestWorktreeSnapshotGuard(unittest.TestCase):
 state is mutated.
 Expect: ReviewerOverstepError.
 
-        Uses an untracked working-tree write rather than a commit: per the documented fast-forward tolerance (see worktree_snapshot_guard's docstring), a HEAD advance that is a clean descendant of the prior HEAD with no new working-tree dirt is tolerated and does NOT raise.
-        An untracked file is unconditional working-tree dirt, so it always triggers the guard regardless of fast-forward status.
+        Uses an untracked working-tree write rather than a commit: per the documented fast-forward
+        tolerance (see worktree_snapshot_guard's docstring), a HEAD advance that is a clean
+        descendant of the prior HEAD with no new working-tree dirt is tolerated and does NOT raise.
+        An untracked file is unconditional working-tree dirt, so it always triggers the guard
+        regardless of fast-forward status.
         """
         with self.assertRaises(_review_common.ReviewerOverstepError):
             with _review_common.worktree_snapshot_guard(self.repo_path):
@@ -98,7 +101,8 @@ Expect: ReviewerOverstepError.
         """Body mutates state then raises.
 Expect: ReviewerOverstepError with chained RuntimeError.
 
-        Uses an untracked working-tree write (see test_clean_exit_state_mutated for why a bare commit no longer qualifies as a mutation under the documented fast-forward tolerance).
+        Uses an untracked working-tree write (see test_clean_exit_state_mutated for why a bare
+        commit no longer qualifies as a mutation under the documented fast-forward tolerance).
         """
         with self.assertRaises(_review_common.ReviewerOverstepError) as ctx:
             with _review_common.worktree_snapshot_guard(self.repo_path):

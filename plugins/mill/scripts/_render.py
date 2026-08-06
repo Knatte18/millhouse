@@ -1,15 +1,20 @@
 """
 Single template-substitution helper used by every mill artefact format.
 
-Per the v2 format-discipline rules (see ``specs/00-overview.md``), every artefact type — plan, status, review prompt, implementer brief, slug — lives as a ``.md`` template in ``plugins/mill/templates/`` with ``<PLACEHOLDER>`` tokens.
+Per the v2 format-discipline rules (see ``specs/00-overview.md``), every artefact type — plan,
+status, review prompt, implementer brief, slug — lives as a ``.md`` template in
+``plugins/mill/templates/`` with ``<PLACEHOLDER>`` tokens.
 There is deliberately one substitution function for every format;
 no format-specific rendering code is allowed anywhere else in the codebase.
 
-Token grammar is intentionally narrow: uppercase identifiers inside angle brackets, e.g. ``<SLUG>``, ``<COMMIT_MSG>``, ``<PLAN_BODY>``.
-The first character must be an uppercase letter so prose like "<a>" or HTML tags in templates are not accidentally matched.
+Token grammar is intentionally narrow: uppercase identifiers inside angle brackets, e.g. ``<SLUG>``,
+``<COMMIT_MSG>``, ``<PLAN_BODY>``.
+The first character must be an uppercase letter so prose like "<a>" or HTML tags in templates are
+not accidentally matched.
 Lowercase-starting or mixed-case tokens are left untouched.
 
-Unresolved placeholders are a hard error: rendering raises ``KeyError`` listing the missing token names.
+Unresolved placeholders are a hard error: rendering raises ``KeyError`` listing the missing token
+names.
 This catches typos in callers and prevents half-rendered documents from reaching the wiki.
 
 Public API:
@@ -31,7 +36,8 @@ _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
 def _strip_leading_comment(text: str) -> str:
     """Drop a leading ``<!-- ... -->`` block if one is present.
 
-    Only a comment that begins at the very start of the text (after optional leading whitespace) is stripped.
+    Only a comment that begins at the very start of the text (after optional leading whitespace) is
+    stripped.
     Comments mid-template are left untouched.
     Returns ``text`` unchanged when no leading comment is found.
     """
@@ -50,16 +56,21 @@ def render(template_path: Path, values: dict[str, str]) -> str:
     Render a template by substituting ``<TOKEN>`` placeholders from ``values``.
 
     The template file is read as UTF-8.
-    A leading ``<!-- ... -->`` comment at the very start of the file is stripped automatically before token substitution — tokens inside the leading comment are never checked against ``values``.
+    A leading ``<!-- ... -->`` comment at the very start of the file is stripped automatically
+    before token substitution — tokens inside the leading comment are never checked against
+    ``values``.
     Mid-template comments are preserved verbatim.
 
     Each ``<TOKEN>`` match in the remaining body is looked up in ``values``;
-    on a miss, the token name is recorded and the original ``<TOKEN>`` text is left in place so the error message can report every missing token in one pass (rather than failing on the first and forcing the caller to iterate).
+    on a miss, the token name is recorded and the original ``<TOKEN>`` text is left in place so the
+    error message can report every missing token in one pass (rather than failing on the first and
+    forcing the caller to iterate).
 
     Args:
         template_path: Path to the ``.md`` template file.
         values: Mapping of token name → replacement string.
-            Token names are the bare identifier without angle brackets (e.g. ``SLUG`` not ``<SLUG>``).
+            Token names are the bare identifier without angle brackets (e.g. ``SLUG`` not
+                ``<SLUG>``).
 
     Returns:
         The rendered string, with every ``<TOKEN>`` replaced.

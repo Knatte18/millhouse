@@ -1,13 +1,19 @@
 """
 VS Code workspace-settings rendering helper.
 
-Both `mill-setup` (the bootstrap skill, M1.2) and `mill-spawn` (the worktree creation script, M3.1) need to write a `.vscode/settings.json` that controls the title-bar colour and window title for the workspace.
+Both `mill-setup` (the bootstrap skill, M1.2) and `mill-spawn` (the worktree creation script, M3.1)
+need to write a `.vscode/settings.json` that controls the title-bar colour and window title for the
+workspace.
 The hub gets a canonical green;
-each worktree gets a deterministic non-green colour from a fixed palette (logic for that lives in `mill-spawn` itself).
+each worktree gets a deterministic non-green colour from a fixed palette (logic for that lives in
+`mill-spawn` itself).
 
 Both callers share the *rendering and writing* of the JSON.
-They do **not** share the *decision* of when to write — that is judgment-heavy for the skill (existing user content, GitHub-default vs custom) and trivial for the worktree script (fresh directory, always write).
-This module handles only the shared mechanical part: substitute placeholders into the canonical template, optionally write to a target path.
+They do **not** share the *decision* of when to write — that is judgment-heavy for the skill
+(existing user content, GitHub-default vs custom) and trivial for the worktree script (fresh
+directory, always write).
+This module handles only the shared mechanical part: substitute placeholders into the canonical
+template, optionally write to a target path.
 
 Public API:
     render_settings(color_hex, *, window_title=None, short_name=None, slug=None)
@@ -53,7 +59,8 @@ def render_settings(
     Render the vscode-settings.json template with the given values.
 
     Derives the ``window.title`` value from ``window_title`` (wins when present),
-    or from ``short_name`` optionally combined with ``slug`` (``"short_name: slug"`` for the worktree form; ``"short_name"`` for the hub form).
+    or from ``short_name`` optionally combined with ``slug`` (``"short_name: slug"`` for the
+    worktree form; ``"short_name"`` for the hub form).
     Raises ``ValueError`` when neither is supplied.
 
     Args:
@@ -88,7 +95,8 @@ def write_settings(
     Render the template and write it to ``target``, overwriting any existing file.
 
     Creates the parent directory chain if missing.
-    Title is derived from ``window_title`` or ``short_name`` + optional ``slug`` (see ``render_settings``).
+    Title is derived from ``window_title`` or ``short_name`` + optional ``slug`` (see
+    ``render_settings``).
     Does not back up an existing target.
 
     Args:

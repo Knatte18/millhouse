@@ -1,6 +1,7 @@
 """In-process git operations using pygit2 instead of subprocess calls.
 
-Provides access to git repository state (HEAD, current branch, status, worktrees) without spawning git subprocesses.
+Provides access to git repository state (HEAD, current branch, status, worktrees) without spawning
+git subprocesses.
 All failures raise GitOpsError;
 callers in different modules re-raise as their layer's exception type.
 """
@@ -170,11 +171,14 @@ def _flags_to_xy(flags: int) -> tuple[str, str]:
 def status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]:
     """Get the git status in porcelain v1 format.
 
-    Returns status as a list of strings in the format "XY path" where X is the index status and Y is the worktree status.
+    Returns status as a list of strings in the format "XY path" where X is the index status and Y is
+    the worktree status.
     Sorted output.
 
-    Note: For index-renamed files, repo.status() returns only the new path (bit 8 set, no "oldpath -> newpath" format).
-    Callers that do line-set arithmetic (e.g. _cleanliness.compute_new_dirt, _review_common._filter_porcelain) are unaffected because they compare sets of opaque strings;
+    Note: For index-renamed files, repo.status() returns only the new path (bit 8 set, no "oldpath
+    -> newpath" format).
+    Callers that do line-set arithmetic (e.g. _cleanliness.compute_new_dirt,
+    _review_common._filter_porcelain) are unaffected because they compare sets of opaque strings;
     within-session comparisons are self-consistent.
 
     Args:
@@ -239,7 +243,8 @@ def is_ancestor(path: Path, ancestor_sha: str, descendant_sha: str) -> bool:
 def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
     """List all git worktrees for the repository.
 
-    Returns a list of dicts with "path" (absolute, forward-slash format) and "branch" (name or None if detached) keys.
+    Returns a list of dicts with "path" (absolute, forward-slash format) and "branch" (name or None
+    if detached) keys.
     Main worktree is listed first, followed by linked worktrees in iteration order.
 
     Args:

@@ -33,7 +33,11 @@ def _clean_gate_side_effect(argv, **kwargs):
     """Realistic ``_subprocess_util.run`` side_effect covering every call this module makes.
 
     ``git rev-parse HEAD`` returns a fake sha (the pre-existing constant every test relied on).
-    Both marker-gate checks the Card 6 helper issues -- ``git diff --name-only --diff-filter=U ...`` and ``git diff --cached --check ...`` -- get their own realistic clean response (empty stdout, returncode 0) instead of reusing the rev-parse sha by coincidence, so a conflicts-mode success test genuinely exercises a passing gate rather than happening to pass because the sha string contains neither "conflict marker" nor any of the test's input filenames.
+    Both marker-gate checks the Card 6 helper issues -- ``git diff --name-only --diff-filter=U ...``
+    and ``git diff --cached --check ...`` -- get their own realistic clean response (empty stdout,
+    returncode 0) instead of reusing the rev-parse sha by coincidence, so a conflicts-mode success
+    test genuinely exercises a passing gate rather than happening to pass because the sha string
+    contains neither "conflict marker" nor any of the test's input filenames.
     """
     if "rev-parse" in argv:
         return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
@@ -357,7 +361,9 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_9_missing_mode(self):
         """--mode absent (and --recompute-baseline not set) -> exit 1, no SystemExit.
 
-        --mode is not an argparse-required flag (--recompute-baseline is a valid alternative), so main() validates this manually with a print + return 1 rather than raising SystemExit -- unlike an argparse-required argument.
+        --mode is not an argparse-required flag (--recompute-baseline is a valid alternative), so
+        main() validates this manually with a print + return 1 rather than raising SystemExit --
+        unlike an argparse-required argument.
         """
         stderr_buf = io.StringIO()
         with unittest.mock.patch("sys.stderr", stderr_buf):
@@ -393,11 +399,16 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["effort"], "high")
 
     def test_project_root_rebind_uses_resolve_active_hub_not_raw_cwd(self):
-        """project_root rebinds to resolve_active_hub's value, not the raw Path.cwd() this file used before.
+        """project_root rebinds to resolve_active_hub's value, not the raw Path.cwd() this file used
+        before.
 
         This file's pre-fix project_root binding was a raw Path.cwd() -- no .millhouse walk at all.
-        Overriding resolve_active_hub to a decoy directory distinct from self.tmp_path (the value Path.cwd() would still resolve to, since setUp chdir's there) simulates the corrected active task worktree.
-        briefs_dir (surfaced via --stage prepare conflicts mode's brief_path in the envelope) must resolve under the decoy, proving project_root was rebound via the captured slug and resolve_active_hub, not left at cwd.
+        Overriding resolve_active_hub to a decoy directory distinct from self.tmp_path (the value
+        Path.cwd() would still resolve to, since setUp chdir's there) simulates the corrected active
+        task worktree.
+        briefs_dir (surfaced via --stage prepare conflicts mode's brief_path in the envelope) must
+        resolve under the decoy, proving project_root was rebound via the captured slug and
+        resolve_active_hub, not left at cwd.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         (corrected_root / "_mill" / "briefs").mkdir(parents=True, exist_ok=True)
@@ -513,7 +524,8 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_16_conflicts_discarded_field_preserved(self):
         """conflicts mode: success verdict with discarded field is forwarded intact.
 
-        Pins the contract that _forward_output prints the full parsed dict verbatim, so an optional discarded list emitted by the conflict sub-agent is not stripped.
+        Pins the contract that _forward_output prints the full parsed dict verbatim, so an optional
+        discarded list emitted by the conflict sub-agent is not stripped.
         """
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._render, "render",
@@ -545,7 +557,8 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_17_conflicts_success_no_discarded_is_clean(self):
         """conflicts mode: success verdict without discarded field emits clean success.
 
-        Pins the contract that a conflict sub-agent that discarded nothing emits {"status":"success"} (no discarded key),
+        Pins the contract that a conflict sub-agent that discarded nothing emits
+        {"status":"success"} (no discarded key),
         and _forward_output passes it through unchanged.
         """
         with unittest.mock.patch.object(
@@ -611,10 +624,14 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_19_finalize_conflicts_accepts_parity_flags(self):
         """
-        conflicts finalize: --session-id/--start-sha/--round accepted without error, delegates to finalize_from_output with session_id=None.
+        conflicts finalize: --session-id/--start-sha/--round accepted without error, delegates to
+        finalize_from_output with session_id=None.
 
-        Regression test for #569: millpy-merge-in-subagent.py --stage finalize previously rejected --session-id (and the other envelope fields) that its own --stage prepare envelope emits via emit_prepare.
-        The fix adds all three as accepted-but-ignored arguments so mill-go's generic "thread applicable prepare-envelope fields into finalize" logic is safe for this script.
+        Regression test for #569: millpy-merge-in-subagent.py --stage finalize previously rejected
+        --session-id (and the other envelope fields) that its own --stage prepare envelope emits via
+        emit_prepare.
+        The fix adds all three as accepted-but-ignored arguments so mill-go's generic "thread
+        applicable prepare-envelope fields into finalize" logic is safe for this script.
 
         Asserts:
         - rc == 0 (argparse would raise SystemExit(2) on unrecognized arguments)
@@ -665,9 +682,12 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIsNone(call_kwargs.get("session_id"))
 
     def test_2x_stage_full_conflicts_reaches_gate(self):
-        """--stage full: a positive marker-gate finding overrides the sub-agent's own success (#713).
+        """--stage full: a positive marker-gate finding overrides the sub-agent's own success
+        (#713).
 
-        Proves Card 7 actually wires the gate in, not just that the helper (Card 9) works standalone -- the sub-agent self-reports success, but the mocked diff-filter=U check finds a.py still unmerged.
+        Proves Card 7 actually wires the gate in, not just that the helper (Card 9) works standalone
+        -- the sub-agent self-reports success, but the mocked diff-filter=U check finds a.py still
+        unmerged.
         """
         def _unmerged_side_effect(argv, **kwargs):
             if "--diff-filter=U" in argv:
@@ -696,9 +716,11 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIn("a.py", data["reason"])
 
     def test_2x_stage_finalize_conflicts_reaches_gate(self):
-        """--stage finalize: a positive marker-gate finding overrides the sub-agent's own success (#713).
+        """--stage finalize: a positive marker-gate finding overrides the sub-agent's own success
+        (#713).
 
-        Proves Card 8 actually wires the gate in ahead of finalize_from_output -- the agent-output file self-reports success,
+        Proves Card 8 actually wires the gate in ahead of finalize_from_output -- the agent-output
+        file self-reports success,
         but the mocked --cached --check finds a residual marker in f.py.
         """
         def _marker_side_effect(argv, **kwargs):
@@ -780,9 +802,12 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         mock_gate.assert_not_called()
 
     def test_2x_finalize_conflicts_missing_agent_output_file(self):
-        """--stage finalize conflicts mode: missing --agent-output file -> exit 1, actionable message.
+        """--stage finalize conflicts mode: missing --agent-output file -> exit 1, actionable
+        message.
 
-        Regression coverage for Card 8's own is_file() guard -- proves it fires before _extract_status_json / _verify_conflict_markers ever run on a missing file, rather than crashing with a raw traceback.
+        Regression coverage for Card 8's own is_file() guard -- proves it fires before
+        _extract_status_json / _verify_conflict_markers ever run on a missing file, rather than
+        crashing with a raw traceback.
         """
         missing_path = self.tmp_path / "does-not-exist.txt"
         stderr_buf = io.StringIO()
@@ -800,7 +825,8 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_2x_finalize_conflicts_missing_files_flag(self):
         """--stage finalize conflicts mode: --files omitted -> exit 1, actionable message.
 
-        Regression coverage for Card 8's own falsy-`--files` guard -- proves the finalize early-exit branch never reaches _run_conflicts's own --files check at line 337.
+        Regression coverage for Card 8's own falsy-`--files` guard -- proves the finalize early-exit
+        branch never reaches _run_conflicts's own --files check at line 337.
         """
         agent_output_path = self.tmp_path / "agent-output.txt"
         agent_output_path.write_text(
@@ -836,8 +862,11 @@ def _git(args, cwd, check=True):
 class TestVerifyConflictMarkersGate(unittest.TestCase):
     """Exercises _verify_conflict_markers directly against real git repositories (#713).
 
-    Unlike TestMillpyMergeInSubagent, most of these tests do NOT mock _subprocess_util.run -- the helper's own two git invocations are exactly what needs proving against a real conflicted/resolved repo.
-    Only the "fatal:" scenario mocks _subprocess_util.run, since forcing a real git lock-contention failure is impractical to fixture reliably.
+    Unlike TestMillpyMergeInSubagent, most of these tests do NOT mock _subprocess_util.run -- the
+    helper's own two git invocations are exactly what needs proving against a real
+    conflicted/resolved repo.
+    Only the "fatal:" scenario mocks _subprocess_util.run, since forcing a real git lock-contention
+    failure is impractical to fixture reliably.
     """
 
     def setUp(self):
@@ -858,7 +887,9 @@ class TestVerifyConflictMarkersGate(unittest.TestCase):
     def _make_content_conflict(self, *filenames):
         """Seed a real content conflict across all ``filenames`` in one merge, left unresolved.
 
-        All files conflict simultaneously via a single merge commit -- required for the multi-file scenario, where two different files must remain unresolved/staged independently in the same working tree at the same time.
+        All files conflict simultaneously via a single merge commit -- required for the multi-file
+        scenario, where two different files must remain unresolved/staged independently in the same
+        working tree at the same time.
         """
         branch = "side-" + "-".join(filenames).replace(".", "_")
         for filename in filenames:

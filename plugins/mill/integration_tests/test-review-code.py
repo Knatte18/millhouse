@@ -1,7 +1,9 @@
 """
 Integration test for millpy-review-code.py
 
-The .millhouse/ layout, wiki junction, and slug file are placed inside $tmp/project/ (not directly in $tmp/) because the code backend uses cwd=project_root for its git commands (git merge-base, git diff).
+The .millhouse/ layout, wiki junction, and slug file are placed inside $tmp/project/ (not directly
+in $tmp/) because the code backend uses cwd=project_root for its git commands (git merge-base, git
+diff).
 
 Setup:
   1. Init git repo in $tmp/project/ with main branch.

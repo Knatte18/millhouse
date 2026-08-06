@@ -2,7 +2,8 @@
 
 Covers: base branch tracking task_dir/status.md;
 base branch without _mill/;
-Step 3's delete-then-restore mechanic removing orphaned child-only files under task_dir that a bare checkout would leave behind (#653).
+Step 3's delete-then-restore mechanic removing orphaned child-only files under task_dir that a bare
+checkout would leave behind (#653).
 
 Uses a real tempfile bare repo + working clone (fast, deterministic, no mocks).
 """

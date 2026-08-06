@@ -2,7 +2,10 @@
 
 Tests exercise the pure rename-finding logic with crafted diff strings;
 no real git invocation is made.
-    Covers: - A planned pair shown as R100 or R030 yields no finding. - A planned pair shown as separate A+D lines yields one NIT. - Multiple planned moves with mixed outcomes. - Empty moves list returns empty list. - Malformed or blank diff text yields no crash. - CRLF-terminated diff string parses identically to LF case.
+    Covers: - A planned pair shown as R100 or R030 yields no finding. - A planned pair shown as
+        separate A+D lines yields one NIT. - Multiple planned moves with mixed outcomes. - Empty
+        moves list returns empty list. - Malformed or blank diff text yields no crash. -
+        CRLF-terminated diff string parses identically to LF case.
 """
 from __future__ import annotations
 

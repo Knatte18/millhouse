@@ -1,14 +1,20 @@
 """
 Central safe-rmtree helper for mill.
 
-Exposes safe_rmtree(path, *, allowed_root, ignore_errors=False) as the single audited entry point for recursive directory deletion in mill scripts and tests.
+Exposes safe_rmtree(path, *, allowed_root, ignore_errors=False) as the single audited entry point
+for recursive directory deletion in mill scripts and tests.
 
-Guards against the wiki-wipe incident (GitHub issue #100): shutil.rmtree on a worktree that still contains NTFS directory junctions follows those junctions into shared state (wiki, portals, hub root).
-This helper walks the tree first, stripping every junction and symlink via _junction.remove, then calls shutil.rmtree on the cleaned tree.
+Guards against the wiki-wipe incident (GitHub issue #100): shutil.rmtree on a worktree that still
+contains NTFS directory junctions follows those junctions into shared state (wiki, portals, hub
+root).
+This helper walks the tree first, stripping every junction and symlink via _junction.remove, then
+calls shutil.rmtree on the cleaned tree.
 
-Hard refusals (SystemExit) protect the four shared-state paths derived from the millhouse container layout: the container root, container/wiki, container/portals, and container/wts/<main-repo-name>.
+Hard refusals (SystemExit) protect the four shared-state paths derived from the millhouse container
+layout: the container root, container/wiki, container/portals, and container/wts/<main-repo-name>.
 
-Relationship to _junction.strip_all_in_worktree: that function is config-driven named-junction CRUD (used by mill-cleanup for the predictable .wiki/.active set).
+Relationship to _junction.strip_all_in_worktree: that function is config-driven named-junction CRUD
+(used by mill-cleanup for the predictable .wiki/.active set).
 This helper is FS-level walk-and-detect, independent of junctions_cfg.
 Complementary, not duplicate.
 """
@@ -27,9 +33,11 @@ import _paths
 def _onexc_chmod_retry(func, path, exc):
     """shutil.rmtree onexc handler: strip read-only and retry (Python 3.12+).
 
-    Windows git pack files (.git/objects/pack/*.pack, .git/objects/*/*) are written read-only by git.
+    Windows git pack files (.git/objects/pack/*.pack, .git/objects/*/*) are written read-only by
+    git.
     shutil.rmtree's default behavior is to raise PermissionError on these.
-    Clearing the read-only bit via os.chmod(path, stat.S_IWRITE) and retrying the unlink/rmdir lets the walk complete.
+    Clearing the read-only bit via os.chmod(path, stat.S_IWRITE) and retrying the unlink/rmdir lets
+    the walk complete.
     """
     if not os.path.exists(path):
         return
@@ -96,9 +104,13 @@ def safe_rmtree(path: Path, *, allowed_root: Path, ignore_errors: bool = False) 
             When False (default), errors propagate to the caller.
 
     Refusal cases (all raise SystemExit):
-        - path is a symlink: "[safe-rmtree] path is itself a symlink -- use _junction.remove instead: <path>"
-        - path is a junction: "[safe-rmtree] path is itself a junction -- use _junction.remove instead: <path>"
-        - resolved path matches or is an ancestor of a blacklisted shared-state path (container root, wiki, portals, main-repo worktree): "[safe-rmtree] refuses to delete shared-state path: <path>"
+        - path is a symlink: "[safe-rmtree] path is itself a symlink -- use _junction.remove
+        instead: <path>"
+        - path is a junction: "[safe-rmtree] path is itself a junction -- use _junction.remove
+        instead: <path>"
+        - resolved path matches or is an ancestor of a blacklisted shared-state path (container
+        root, wiki, portals, main-repo worktree): "[safe-rmtree] refuses to delete shared-state
+        path: <path>"
         - resolved path is outside allowed_root: "[safe-rmtree] path outside allowed_root: <path>"
 
     Strip-then-rmtree sequence:
@@ -110,7 +122,8 @@ def safe_rmtree(path: Path, *, allowed_root: Path, ignore_errors: bool = False) 
 
     Platform differences:
         _is_reparse_point is a no-op on POSIX (always returns False).
-        entry.is_symlink() runs cross-platform -- POSIX symlinks inside a tree are stripped before shutil.rmtree, keeping cross-platform behaviour symmetric.
+        entry.is_symlink() runs cross-platform -- POSIX symlinks inside a tree are stripped before
+        shutil.rmtree, keeping cross-platform behaviour symmetric.
     """
     print(f"[safe-rmtree] starting: path={path} allowed_root={allowed_root}", file=sys.stderr)
 

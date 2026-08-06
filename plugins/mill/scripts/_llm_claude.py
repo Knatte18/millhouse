@@ -3,7 +3,8 @@ LLM-provider wrapper for Claude CLI (`claude -p` subprocess).
 
 This is the lowest layer in the 4-layer review architecture:
 
-    Reviewer -> _llm_claude.run_bulk() / run_tool_use() / run_implementer() -> subprocess: claude -p --output-format stream-json ...
+    Reviewer -> _llm_claude.run_bulk() / run_tool_use() / run_implementer() -> subprocess: claude -p
+    --output-format stream-json ...
 
 Public API:
     LLMError — raised on timeout, auth failure, or non-zero exit
@@ -16,14 +17,16 @@ Public API:
     For mill-go's per-batch worker.
     cleanup_session() — clean up a psmux session by name after a logical session ends.
 
-All three accept optional `session_id` and `resume` parameters so callers can reuse a warm Claude session across turns (implement → review → fix) without re-loading context each time.
+All three accept optional `session_id` and `resume` parameters so callers can reuse a warm Claude
+session across turns (implement → review → fix) without re-loading context each time.
 Callers that don't care about session reuse simply ignore the returned session_id.
 
 The prompt is sent on stdin;
 stream-json output is parsed to extract the final assistant text and the session_id.
 Stderr receives one-line progress messages on entry and exit.
 
-When allowed_tools does not include mutating tools (Edit, Write, Bash, NotebookEdit), _build_argv automatically appends --disallowedTools to deny those tools at the CLI layer.
+When allowed_tools does not include mutating tools (Edit, Write, Bash, NotebookEdit), _build_argv
+automatically appends --disallowedTools to deny those tools at the CLI layer.
 """
 from __future__ import annotations
 
@@ -43,8 +46,12 @@ from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
 def _claude_argv_prefix() -> list[str]:
     """Return the argv prefix used to invoke the claude CLI.
 
-    On Windows, ``%LOCALAPPDATA%\\Microsoft\\WindowsApps`` (where the npm shim ``claude.cmd`` lives) is stripped from the PATH that Python inherits in non-interactive subprocess environments such as debugpy or CC's Bash tool (see discussion.md § "PATH truncation in debugpy/subprocess environments").
-    Delegating through ``cmd /c`` ensures cmd.exe uses its own full interactive PATH, which always includes WindowsApps.
+    On Windows, ``%LOCALAPPDATA%\\Microsoft\\WindowsApps`` (where the npm shim ``claude.cmd`` lives)
+    is stripped from the PATH that Python inherits in non-interactive subprocess environments such
+    as debugpy or CC's Bash tool (see discussion.md § "PATH truncation in debugpy/subprocess
+    environments").
+    Delegating through ``cmd /c`` ensures cmd.exe uses its own full interactive PATH, which always
+    includes WindowsApps.
 
     On POSIX, subprocess inherits the full PATH normally, so the bare name suffices.
 
@@ -91,7 +98,8 @@ def _has_mutating_tool(allowed_tools: str) -> bool:
 def _get_via_psmux_flag() -> bool:
     """Check if psmux-based routing is enabled in the mill config.
 
-    Returns False on any error (missing config, parse error, or cwd outside a git worktree), so the default direct path is silently used.
+    Returns False on any error (missing config, parse error, or cwd outside a git worktree), so the
+    default direct path is silently used.
     If dispatch is set to "agent", treats it as False (agent mode bypasses this code).
     """
     try:
@@ -191,7 +199,9 @@ def _scan_rate_limit(stdout: str) -> bool:
 
     Iterates stream-json lines defensively (skips un-parseable lines).
     Returns True when any of:
-      (a) top-level type == "rate_limit_event" (b) type == "result" AND is_error == True AND (subtype contains "rate" case-insensitively, OR the lowercased JSON body contains "rate_limit")
+      (a) top-level type == "rate_limit_event" (b) type == "result" AND is_error == True AND
+          (subtype contains "rate" case-insensitively, OR the lowercased JSON body contains
+          "rate_limit")
     Returns False for empty stdout, all-good results, or generic errors.
     Does not raise.
     """
@@ -219,7 +229,8 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
     """Parse claude's stream-json output.
 
     Returns (final_text, session_id).
-    session_id is extracted from any event that carries a top-level `session_id` field (the init "system" event always does; the final "result" event typically does too).
+    session_id is extracted from any event that carries a top-level `session_id` field (the init
+    "system" event always does; the final "result" event typically does too).
     The last one seen wins.
 
     Stream-json emits one JSON object per line.
@@ -288,10 +299,12 @@ def _invoke(
     """Core invocation: spawn claude, parse output, return (text, session_id).
 
     Raises LLMError on failure.
-    When resume=True and the subprocess exits non-zero, raises LLMSessionError instead so callers can distinguish a dead-session fallback path from a generic failure.
+    When resume=True and the subprocess exits non-zero, raises LLMSessionError instead so callers
+    can distinguish a dead-session fallback path from a generic failure.
 
     When the subprocess exits non-zero within 2 seconds with empty stdout,
-    and resume=False and no rate-limit was detected, the call is retried once with the same argv (see issue #153 — cmd /c claude shim flakes immediately after a prior session interrupt).
+    and resume=False and no rate-limit was detected, the call is retried once with the same argv
+    (see issue #153 — cmd /c claude shim flakes immediately after a prior session interrupt).
     The retry's outcome propagates as the final result.
     """
     if _get_via_psmux_flag():
@@ -402,7 +415,8 @@ def run_bulk(
 ) -> tuple[str, str]:
     """Invoke claude with no tool access (bulk mode).
 
-    Spawns: claude -p --allowedTools "" --output-format stream-json --model <model> [--effort <effort>] [--session-id <id> | --resume <id>]
+    Spawns: claude -p --allowedTools "" --output-format stream-json --model <model> [--effort
+    <effort>] [--session-id <id> | --resume <id>]
 
     Stdin receives prompt_text.
     Stream-json is parsed;
@@ -434,9 +448,11 @@ def run_tool_use(
 ) -> tuple[str, str]:
     """Invoke claude with read-only tool access (tool-use mode).
 
-    Spawns: claude -p --allowedTools Read,Grep,Glob --output-format stream-json --model <model> [--effort <effort>] [--session-id <id> | --resume <id>]
+    Spawns: claude -p --allowedTools Read,Grep,Glob --output-format stream-json --model <model>
+    [--effort <effort>] [--session-id <id> | --resume <id>]
 
-    Write/Edit/Bash are intentionally excluded: the backend always writes the review file after the reviewer returns (Decision 24 in discussion.md).
+    Write/Edit/Bash are intentionally excluded: the backend always writes the review file after the
+    reviewer returns (Decision 24 in discussion.md).
     Glob is included to aid file discovery.
     Longer default timeout (900s) for sessions that explore the codebase.
 
@@ -467,13 +483,17 @@ def run_implementer(
 ) -> tuple[str, str]:
     """Invoke claude as mill-go's per-batch implementer.
 
-    Spawns: claude -p --allowedTools Read,Edit,Write,Bash,Grep,Glob,Skill --output-format stream-json --model <model> [--effort <effort>] [--session-id <id> | --resume <id>]
+    Spawns: claude -p --allowedTools Read,Edit,Write,Bash,Grep,Glob,Skill --output-format
+    stream-json --model <model> [--effort <effort>] [--session-id <id> | --resume <id>]
 
-    Tool-set covers file I/O, shell commands, codebase navigation, and skill invocation. ``Skill`` is included so the implementer can invoke ``@git-commit`` (per implementer-brief.md) and any other skills the brief instructs.
+    Tool-set covers file I/O, shell commands, codebase navigation, and skill invocation. ``Skill``
+    is included so the implementer can invoke ``@git-commit`` (per implementer-brief.md) and any
+    other skills the brief instructs.
     WebFetch/WebSearch are deliberately absent;
     TodoWrite can be added later if session-local progress tracking is desired.
 
-    `cwd` is passed to the subprocess (typically the worktree root) so Bash calls run in the right directory.
+    `cwd` is passed to the subprocess (typically the worktree root) so Bash calls run in the right
+    directory.
 
     Default timeout is 1800s (30 min) — batches can take a while when verify commands run tests.
     Callers reading wiki config should prefer `llm.implementer_timeout` over the code default.
@@ -497,7 +517,8 @@ def run_implementer(
 def cleanup_session(session_id: str | None) -> None:
     """Clean up a psmux session when a logical session ends.
 
-    Derives the psmux session name from session_id using the same mill-{id[:12]} rule used by _invoke().
+    Derives the psmux session name from session_id using the same mill-{id[:12]} rule used by
+    _invoke().
     Idempotent: swallows PsmuxError so callers do not need their own try-wrap.
     No-op when session_id is None or empty.
 

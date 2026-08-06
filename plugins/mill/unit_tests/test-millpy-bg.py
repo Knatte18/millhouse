@@ -43,10 +43,15 @@ _worker_main = _worker_mod._worker_main
 
 
 class _FakeOSName:
-    """Stand-in for the ``os`` module with ``name == "nt"``, forwarding everything else to the real ``os`` module.
+    """Stand-in for the ``os`` module with ``name == "nt"``, forwarding everything else to the real
+    ``os`` module.
 
-    Used instead of patching the real ``os.name`` attribute: on Python 3.12+, ``pathlib.Path()`` re-checks ``os.name`` at instantiation time, so mutating the real attribute makes *any* ``Path(...)`` call anywhere in the process -- including inside pathlib itself -- try to construct a real ``WindowsPath``, which raises ``UnsupportedOperation`` on non-Windows hosts.
-    Rebinding the ``os`` name inside ``_subprocess_util``'s own namespace avoids touching the shared module.
+    Used instead of patching the real ``os.name`` attribute: on Python 3.12+, ``pathlib.Path()``
+    re-checks ``os.name`` at instantiation time, so mutating the real attribute makes *any*
+    ``Path(...)`` call anywhere in the process -- including inside pathlib itself -- try to
+    construct a real ``WindowsPath``, which raises ``UnsupportedOperation`` on non-Windows hosts.
+    Rebinding the ``os`` name inside ``_subprocess_util``'s own namespace avoids touching the shared
+    module.
     """
 
     name = "nt"

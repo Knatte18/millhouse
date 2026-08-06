@@ -5,7 +5,8 @@ Builds an isolated hub+wiki pair under ``.scratch/`` and runs ``millpy-spawn.py`
 Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
-    - A new worktree directory exists at ``<container>/worktrees/<slug>`` (hub-form default, via _sibling.resolve_path).
+    - A new worktree directory exists at ``<container>/worktrees/<slug>`` (hub-form default, via
+    _sibling.resolve_path).
     - The task's branch exists with the expected name.
     - ``wiki/active/<slug>/status.md`` exists with the expected title.
     - ``<worktree>/.vscode/settings.json`` has a non-green colour.

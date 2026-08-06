@@ -57,7 +57,8 @@ def _git_init(repo: Path) -> None:
 def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
     """Build hub+wiki fixture.
 
-    The worktree is placed on branch ``impl/<slug>`` and Home.md is seeded with ``[slug] [active]`` so ``_marker.slug_from_branch`` succeeds without a marker file.
+    The worktree is placed on branch ``impl/<slug>`` and Home.md is seeded with ``[slug] [active]``
+    so ``_marker.slug_from_branch`` succeeds without a marker file.
     Returns ``(hub, wiki_clone, worktree, slug)``.
     """
     container.mkdir(parents=True, exist_ok=True)

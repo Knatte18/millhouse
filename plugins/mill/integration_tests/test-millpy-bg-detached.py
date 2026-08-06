@@ -1,9 +1,14 @@
 """
 Integration test: detached millpy-bg worker survives a job-bound parent.
 
-Manufactures the job-bound parent condition via ctypes (CreateJobObjectW + SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) + AssignProcessToJobObject(job, GetCurrentProcess())), spawns millpy-bg.py from inside that job, and asserts both the WORKER START sentinel and the EXIT sentinel land in the log file within budget.
+Manufactures the job-bound parent condition via ctypes (CreateJobObjectW +
+SetInformationJobObject(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) + AssignProcessToJobObject(job,
+GetCurrentProcess())), spawns millpy-bg.py from inside that job, and asserts both the WORKER START
+sentinel and the EXIT sentinel land in the log file within budget.
 
-This exercises the end-to-end behaviour of batch 1's two-stage cmd /c start /B launch: the worker must escape the parent job object and write both sentinels even when the parent process is kill-on-close enrolled.
+This exercises the end-to-end behaviour of batch 1's two-stage cmd /c start /B launch: the worker
+must escape the parent job object and write both sentinels even when the parent process is
+kill-on-close enrolled.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-millpy-bg-detached.py

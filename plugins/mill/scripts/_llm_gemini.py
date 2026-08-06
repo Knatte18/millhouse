@@ -5,7 +5,8 @@ This is the lowest layer in the 4-layer review architecture:
 
     Reviewer -> _llm_gemini.run_bulk() / run_tool_use() -> subprocess: gemini -p -o stream-json ...
 
-Mirrors `_llm_claude.py`'s public surface minus `run_implementer`, which is out of scope for the Gemini provider (see discussion.md § "Scope (Out)").
+Mirrors `_llm_claude.py`'s public surface minus `run_implementer`, which is out of scope for the
+Gemini provider (see discussion.md § "Scope (Out)").
 
 Public API:
     LLMError — raised on timeout, auth failure, or non-zero exit
@@ -30,8 +31,12 @@ from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
 def _gemini_argv_prefix() -> list[str]:
     """Return the argv prefix used to invoke the gemini CLI.
 
-    On Windows, npm shims such as ``gemini.cmd`` live in ``%LOCALAPPDATA%\\Microsoft\\WindowsApps`` and at ``C:\\Code\\tools\\bin\\gemini.CMD``.
-    These directories are frequently absent from the truncated PATH that Python inherits in non-interactive subprocess environments such as debugpy or CC's Bash tool (see ``_claude_argv_prefix``'s docstring for the canonical explanation of the PATH-truncation rationale — the same logic applies here).
+    On Windows, npm shims such as ``gemini.cmd`` live in ``%LOCALAPPDATA%\\Microsoft\\WindowsApps``
+    and at ``C:\\Code\\tools\\bin\\gemini.CMD``.
+    These directories are frequently absent from the truncated PATH that Python inherits in
+    non-interactive subprocess environments such as debugpy or CC's Bash tool (see
+    ``_claude_argv_prefix``'s docstring for the canonical explanation of the PATH-truncation
+    rationale — the same logic applies here).
     Delegating through ``cmd /c`` ensures cmd.exe uses its own full interactive PATH.
 
     On POSIX, subprocess inherits the full PATH normally, so the bare name suffices.
@@ -54,11 +59,15 @@ def _build_argv(model: str, *, tooluse: bool) -> list[str]:
 
     Args:
         model: The Gemini model name (e.g. ``"gemini-2.5-flash"``).
-        tooluse: When True, the agent runs with default extensions (file inspection allowed; writes denied by the policy layer).
-            When False, ``-e ""`` is appended to disable extensions so gemini runs in read-only bulk mode.
+        tooluse: When True, the agent runs with default extensions (file inspection allowed; writes
+            denied by the policy layer).
+            When False, ``-e ""`` is appended to disable extensions so gemini runs in read-only bulk
+                mode.
 
-    No ``--effort``, ``--session-id``, or ``--resume`` flags are emitted here. ``effort`` is ignored (gemini-cli exposes no thinking-budget flag in headless mode);
-    session reuse is short-circuited before this function is reached (``session-reuse-not-supported``).
+    No ``--effort``, ``--session-id``, or ``--resume`` flags are emitted here. ``effort`` is ignored
+    (gemini-cli exposes no thinking-budget flag in headless mode);
+    session reuse is short-circuited before this function is reached
+    (``session-reuse-not-supported``).
     """
     argv = [
         *_gemini_argv_prefix(),
@@ -75,8 +84,10 @@ def _build_argv(model: str, *, tooluse: bool) -> list[str]:
 def _scan_gemini_rate_limit(stdout: str, stderr: str) -> bool:
     """Return True if stdout or stderr contains a rate-limit/quota signal.
 
-    Combines stdout and stderr, lowercases once, then returns True when any of the following substrings is present:
-      ``resource_exhausted``, ``rate_limit``, ``rate limit``, ``quota``, ``429``, ``too many requests``.
+    Combines stdout and stderr, lowercases once, then returns True when any of the following
+    substrings is present:
+      ``resource_exhausted``, ``rate_limit``, ``rate limit``, ``quota``, ``429``, ``too many
+      requests``.
 
     Operates on raw text — does NOT iterate stream-JSON lines — so it tolerates schema drift.
     Empty inputs return False.
@@ -97,8 +108,10 @@ def _scan_gemini_rate_limit(stdout: str, stderr: str) -> bool:
 def _parse_gemini_stream_json(stdout: str) -> tuple[str, str | None]:
     """Parse gemini's stream-json output.
 
-    Returns ``(final_text, session_id)``. ``session_id`` is extracted from any top-level ``session_id`` field (last-wins).
-    Final text is built by concatenating all ``"message"`` events with ``role == "assistant"`` (current CLI format, which streams delta chunks);
+    Returns ``(final_text, session_id)``. ``session_id`` is extracted from any top-level
+    ``session_id`` field (last-wins).
+    Final text is built by concatenating all ``"message"`` events with ``role == "assistant"``
+    (current CLI format, which streams delta chunks);
     or from the last ``"result"`` event with a ``result`` text field (legacy format);
     or from the last ``"assistant"`` event with a nested ``message.content`` list (legacy format).
 
@@ -182,9 +195,11 @@ def _invoke(
 ) -> tuple[str, str]:
     """Core invocation: spawn gemini, parse output, return (text, session_id).
 
-    Raises LLMSessionError immediately when ``resume=True`` — gemini-cli does not support session resumption.
+    Raises LLMSessionError immediately when ``resume=True`` — gemini-cli does not support session
+    resumption.
     Raises LLMError on timeout or non-zero exit.
-    Raises LLMRateLimitError when the exit is non-zero AND rate-limit signals are detected in the output.
+    Raises LLMRateLimitError when the exit is non-zero AND rate-limit signals are detected in the
+    output.
     """
     if resume:
         raise LLMSessionError("gemini session reuse not supported")
@@ -243,7 +258,8 @@ def run_bulk(
     Stream-json is parsed;
     the final assistant text and session_id are returned as a tuple.
 
-    ``effort`` is accepted for API parity with ``_llm_claude.run_bulk`` but is silently ignored — gemini-cli exposes no thinking-budget flag in headless mode.
+    ``effort`` is accepted for API parity with ``_llm_claude.run_bulk`` but is silently ignored —
+    gemini-cli exposes no thinking-budget flag in headless mode.
 
     ``session_id`` is accepted but ignored on fresh calls;
     gemini-cli does not support session-id injection.
@@ -277,9 +293,11 @@ def run_tool_use(
     Spawns: gemini -p -o stream-json -m <model> --approval-mode plan
 
     File inspection is allowed;
-    writes are denied by the policy layer (``--approval-mode plan`` requires human approval for any file writes).
+    writes are denied by the policy layer (``--approval-mode plan`` requires human approval for any
+    file writes).
 
-    ``effort`` is accepted for API parity with ``_llm_claude.run_tool_use`` but is silently ignored — gemini-cli exposes no thinking-budget flag in headless mode.
+    ``effort`` is accepted for API parity with ``_llm_claude.run_tool_use`` but is silently ignored
+    — gemini-cli exposes no thinking-budget flag in headless mode.
 
     ``session_id`` is accepted but ignored on fresh calls;
     gemini-cli does not support session-id injection.

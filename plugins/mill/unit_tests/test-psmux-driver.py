@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/_psmux.py.
 
-These tests use unittest.mock.patch against _subprocess_util.run to verify that each psmux helper constructs the correct argv and timeout.
+These tests use unittest.mock.patch against _subprocess_util.run to verify that each psmux helper
+constructs the correct argv and timeout.
 No real psmux binary is invoked.
 """
 from __future__ import annotations

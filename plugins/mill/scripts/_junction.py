@@ -1,8 +1,10 @@
 """
 Cross-platform directory-junction helpers.
 
-Mill places junctions inside ``.millhouse/`` to stitch each working clone to a single shared wiki clone (``.millhouse/wiki``) and to the currently active task directory (``.millhouse/.active``).
-We need one abstraction that works on both Windows (the primary dev platform) and POSIX (CI, macOS contributors).
+Mill places junctions inside ``.millhouse/`` to stitch each working clone to a single shared wiki
+clone (``.millhouse/wiki``) and to the currently active task directory (``.millhouse/.active``).
+We need one abstraction that works on both Windows (the primary dev platform) and POSIX (CI, macOS
+contributors).
 
 Platform mapping:
     * Windows → directory junction, created with ``mklink /J``.
@@ -67,9 +69,12 @@ def read_junctions(hub_root: Path) -> dict[str, str]:
     """Read the ``junctions:`` block from ``<hub_root>/mill-config.yaml``.
 
     Returns an ordered dict mapping junction-path to unresolved target template.
-    Tokens in the target are NOT substituted here — callers pass the raw template through ``resolve_target`` with the token map appropriate to their scope (mill-setup lacks ``<SLUG>``, mill-spawn has it).
+    Tokens in the target are NOT substituted here — callers pass the raw template through
+    ``resolve_target`` with the token map appropriate to their scope (mill-setup lacks ``<SLUG>``,
+    mill-spawn has it).
 
-    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the junctions block, returns the ``_JUNCTION_DEFAULTS`` fallback.
+    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the junctions block, returns the
+    ``_JUNCTION_DEFAULTS`` fallback.
     """
     mill_cfg_path = hub_root / "mill-config.yaml"
     if mill_cfg_path.exists():
@@ -86,9 +91,11 @@ def read_hardlinks(hub_root: Path) -> dict[str, str]:
     """Read the ``hardlinks:`` block from ``<hub_root>/mill-config.yaml``.
 
     Returns an ordered dict mapping link-path to unresolved target template.
-    Tokens in the target are NOT substituted here — callers pass the raw template through ``resolve_target`` with the appropriate token map.
+    Tokens in the target are NOT substituted here — callers pass the raw template through
+    ``resolve_target`` with the appropriate token map.
 
-    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the hardlinks block, returns an empty dict.
+    If ``<hub_root>/mill-config.yaml`` does not exist or lacks the hardlinks block, returns an empty
+    dict.
     An explicit null (hardlinks: null) also yields an empty dict.
     """
     mill_cfg_path = hub_root / "mill-config.yaml"
@@ -111,7 +118,8 @@ def resolve_target(template: str, tokens: dict[str, str]) -> str:
     Matching is case-sensitive.
 
     Raises ``ValueError`` if the template references a token that is not in ``tokens``.
-    This is a hard error: mill-setup should surface it so the user can correct the config, rather than silently creating a junction with a literal ``<UNKNOWN>`` segment in its path.
+    This is a hard error: mill-setup should surface it so the user can correct the config, rather
+    than silently creating a junction with a literal ``<UNKNOWN>`` segment in its path.
     """
     missing: list[str] = []
 
@@ -140,7 +148,8 @@ def has_slug_token(template: str) -> bool:
 def _is_junction_or_symlink(link_path: Path) -> bool:
     """Return True iff *link_path* is a junction or symlink (never raises).
 
-    Uses ``lexists`` so a broken junction/symlink whose target was deleted is still recognised as present rather than silently falling through to the "is a regular directory" branch.
+    Uses ``lexists`` so a broken junction/symlink whose target was deleted is still recognised as
+    present rather than silently falling through to the "is a regular directory" branch.
     """
     if not os.path.lexists(str(link_path)):
         return False
@@ -163,8 +172,10 @@ def create(target: Path, link_path: Path) -> None:
     """
     Create a directory junction (Windows) or symlink (POSIX) at ``link_path``.
 
-    The parent of ``link_path`` is created if missing, so callers don't have to pre-mkdir ``.millhouse/`` before adding a junction inside it.
-    Both arguments should be absolute paths — relative paths work but make the resulting junction harder to reason about on Windows.
+    The parent of ``link_path`` is created if missing, so callers don't have to pre-mkdir
+    ``.millhouse/`` before adding a junction inside it.
+    Both arguments should be absolute paths — relative paths work but make the resulting junction
+    harder to reason about on Windows.
 
     Args:
         target: Existing directory the junction will point at.
@@ -173,7 +184,8 @@ def create(target: Path, link_path: Path) -> None:
 
     Raises:
         ValueError: If ``link_path`` already exists as any kind of file-system object.
-            The caller is expected to remove stale links explicitly (via ``remove``) before creating a new one.
+            The caller is expected to remove stale links explicitly (via ``remove``) before creating
+                a new one.
         OSError: If ``mklink /J`` returns non-zero on Windows.
     """
     # Refuse to clobber an existing path. ``is_symlink`` is checked separately because a broken symlink makes ``exists()`` return False.
@@ -211,7 +223,9 @@ def remove(link_path: Path) -> None:
     This lets mill-cleanup run safely regardless of whether a junction was actually created.
 
     The function never recurses into the target.
-    A regular file or non-empty directory at ``link_path`` raises ``ValueError`` rather than being silently deleted — this guardrail exists because an earlier version of mill once wiped a real ``.millhouse/wiki/`` directory that had been promoted to a full clone instead of a junction.
+    A regular file or non-empty directory at ``link_path`` raises ``ValueError`` rather than being
+    silently deleted — this guardrail exists because an earlier version of mill once wiped a real
+    ``.millhouse/wiki/`` directory that had been promoted to a full clone instead of a junction.
 
     Args:
         link_path: Path of the junction or symlink to remove.
@@ -241,7 +255,9 @@ def points_to(link_path: Path, target: Path) -> bool:
     """Return True iff *link_path* is a junction/symlink that resolves to *target*.
 
     Returns False if *link_path* is not a junction or symlink,
-    or if either ``Path.resolve()`` call raises ``OSError`` — this covers broken Windows junctions whose target directory was deleted after the junction was created (``Path.resolve()`` raises ``OSError`` on such paths rather than returning the dangling target path).
+    or if either ``Path.resolve()`` call raises ``OSError`` — this covers broken Windows junctions
+    whose target directory was deleted after the junction was created (``Path.resolve()`` raises
+    ``OSError`` on such paths rather than returning the dangling target path).
     """
     if not _is_junction_or_symlink(link_path):
         return False
@@ -255,10 +271,16 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
     """
     Walks the worktree tree recursively, stopping at any junction or symlink.
 
-    This is the mandatory safety prelude to any recursive removal of a worktree on Windows. ``rmdir /s`` (cmd.exe) and ``shutil.rmtree`` (Python) follow NTFS directory junctions by default — running either against a worktree without first stripping junctions risks deleting the wiki, the portals dir, or sibling worktrees.
-    This function recursively descends into real directories and stops at junctions/symlinks, stripping every junction found regardless of depth, including those placed under a hub-relative subdir (e.g., ``src/csharp/NORCE.Models/.wiki``).
+    This is the mandatory safety prelude to any recursive removal of a worktree on Windows. ``rmdir
+    /s`` (cmd.exe) and ``shutil.rmtree`` (Python) follow NTFS directory junctions by default —
+    running either against a worktree without first stripping junctions risks deleting the wiki, the
+    portals dir, or sibling worktrees.
+    This function recursively descends into real directories and stops at junctions/symlinks,
+    stripping every junction found regardless of depth, including those placed under a hub-relative
+    subdir (e.g., ``src/csharp/NORCE.Models/.wiki``).
 
-    Rather than iterating a declared list of junctions from ``mill-config.yaml``, this function scans the worktree tree for any symlink or junction, including undeclared ones.
+    Rather than iterating a declared list of junctions from ``mill-config.yaml``, this function
+    scans the worktree tree for any symlink or junction, including undeclared ones.
     This catches junctions regardless of whether they appear in ``junctions_cfg``.
 
     Idempotent: missing paths and non-junction entries are silently skipped.

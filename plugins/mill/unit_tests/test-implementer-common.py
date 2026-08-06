@@ -48,11 +48,15 @@ def _capture_stdout(fn):
 def _go_gate_mock(build_returncode=0, build_stdout="", build_stderr=""):
     """Build a _subprocess_util.run side_effect that mocks 'go' invocations only.
 
-    Every non-'go' argv (git, etc.) delegates to the real _subprocess_util.run so the git diff/status plumbing _go_build_tag_retiering_stuck depends on still works against the tempfile git fixture -- no real Go toolchain is invoked.
+    Every non-'go' argv (git, etc.) delegates to the real _subprocess_util.run so the git
+    diff/status plumbing _go_build_tag_retiering_stuck depends on still works against the tempfile
+    git fixture -- no real Go toolchain is invoked.
 
-    Returns (side_effect, calls, cwd_calls): side_effect is passed to unittest.mock.patch.object(_subprocess_util, "run", side_effect=...);
+    Returns (side_effect, calls, cwd_calls): side_effect is passed to
+    unittest.mock.patch.object(_subprocess_util, "run", side_effect=...);
     calls accumulates every mocked 'go' argv for assertions;
-    cwd_calls accumulates each mocked call's cwd kwarg in lockstep, for asserting nested-go-module scoping.
+    cwd_calls accumulates each mocked call's cwd kwarg in lockstep, for asserting nested-go-module
+    scoping.
     """
     real_run = _subprocess_util.run
     calls: list[list[str]] = []

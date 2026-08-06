@@ -136,7 +136,8 @@ class TestNitGate(unittest.TestCase):
 
     def test_gate_ignores_scope_with_zero_nits_in_final_review(self):
         """
-        Test (c): gate ignores a scope whose final (APPROVE) review has zero nits, even if an earlier round had nits.
+        Test (c): gate ignores a scope whose final (APPROVE) review has zero nits, even if an
+        earlier round had nits.
         """
         # Create two code reviews for batch2: round 1 with nits, round 2 without nits
         _create_review_file(

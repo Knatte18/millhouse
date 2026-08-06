@@ -1,7 +1,11 @@
 """
 Integration test for millpy-review-discussion.py
 
-Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/ junction pointing at a fixture wiki containing a sample discussion.md, then invokes millpy-review-discussion.py and asserts: - Exit 0 - Valid JSON with type/round/verdict/reviews fields - verdict in {APPROVE, GAPS_FOUND} (discussion uses v1 GAPS_FOUND vocab) - reviews has 1 entry, scope == "holistic" - review file exists on disk - review file has YAML frontmatter with matching verdict:
+Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/ junction pointing at a
+fixture wiki containing a sample discussion.md, then invokes millpy-review-discussion.py and
+asserts: - Exit 0 - Valid JSON with type/round/verdict/reviews fields - verdict in {APPROVE,
+GAPS_FOUND} (discussion uses v1 GAPS_FOUND vocab) - reviews has 1 entry, scope == "holistic" -
+review file exists on disk - review file has YAML frontmatter with matching verdict:
 
 Also tests the "No active task" error path.
 

@@ -1,10 +1,14 @@
 """
 Unit test for `plugins/mill/scripts/_done_gate.py`.
 
-Regresses #650: `pipeline.done_gate` had no pre-implementation baseline pre-flight, so a self-capturing regression/snapshot test suite used as the done_gate silently captured its "baseline" from the task's own just-finished implementation at Handoff.
-This test covers `_done_gate.run_preflight`'s result shapes directly and confirms its never-raise contract, mocking `subprocess.run` throughout -- no real shell command is ever executed.
+Regresses #650: `pipeline.done_gate` had no pre-implementation baseline pre-flight, so a
+self-capturing regression/snapshot test suite used as the done_gate silently captured its "baseline"
+from the task's own just-finished implementation at Handoff.
+This test covers `_done_gate.run_preflight`'s result shapes directly and confirms its never-raise
+contract, mocking `subprocess.run` throughout -- no real shell command is ever executed.
 
-Follows `test-verify-baseline.py`'s style: a single `main() -> int` function with inline numbered cases, `PASS`/`FAIL` prints, an accumulated error count, and `sys.exit(main())` at the bottom.
+Follows `test-verify-baseline.py`'s style: a single `main() -> int` function with inline numbered
+cases, `PASS`/`FAIL` prints, an accumulated error count, and `sys.exit(main())` at the bottom.
 """
 from __future__ import annotations
 

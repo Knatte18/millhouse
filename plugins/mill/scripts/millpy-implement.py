@@ -1,12 +1,15 @@
 """millpy-implement.py — per-batch implementer dispatch CLI.
 
 Dispatches a per-batch implementer Sonnet session.
-Encapsulates the full 10-step dispatch sequence (status update, commit, push, render, spawn) in a single call.
+Encapsulates the full 10-step dispatch sequence (status update, commit, push, render, spawn) in a
+single call.
 
 Flags:
     batch_name (positional, required) batch name from the plan overview's Batch Index
-    --resume-incomplete when set, the prepare/full stage reads the existing start_sha and implementer_session from status.md rather than re-capturing HEAD and generating a new UUID.
-        Skips capture_snapshot and the housekeeping commit so the original batch-start baseline is preserved for finalize's completeness recount.
+    --resume-incomplete when set, the prepare/full stage reads the existing start_sha and
+        implementer_session from status.md rather than re-capturing HEAD and generating a new UUID.
+        Skips capture_snapshot and the housekeeping commit so the original batch-start baseline is
+            preserved for finalize's completeness recount.
 
 Exit codes:
     0 — implementer ran;
@@ -75,10 +78,12 @@ def _relative_cwd_fragment(cwd_override: Path | None, project_root: Path, git_ro
     """
     Collapse a `parse_verify_field`-resolved verify cwd into a hub-relative fragment.
 
-    `cwd_override` can only ever be `project_root` (hub), `git_root`, or `None` (plain-string `verify:` or absent) per `parse_verify_field`'s contract.
+    `cwd_override` can only ever be `project_root` (hub), `git_root`, or `None` (plain-string
+    `verify:` or absent) per `parse_verify_field`'s contract.
     A `git_root`-resolved cwd already matches the transient checkout's own root,
     and `None` has no opinion, so both collapse to `None` -- "run at the checkout root directly."
-    Only the `project_root` (hub) case needs an actual relative fragment, since the checkout mirrors `git_root`, not `project_root`.
+    Only the `project_root` (hub) case needs an actual relative fragment, since the checkout mirrors
+    `git_root`, not `project_root`.
 
     Returns:
         `project_root.relative_to(git_root)` when `cwd_override == project_root`;
@@ -93,13 +98,17 @@ def _module_wide_skip_or_cached_payload(
     """
     Return the module-wide JSON payload for the two "nothing to compute" states.
 
-    Covers exactly the two cases where the module-wide sub-step needs no computation this invocation: no module-wide verify is configured at all,
+    Covers exactly the two cases where the module-wide sub-step needs no computation this
+    invocation: no module-wide verify is configured at all,
     or a baseline is already cached from a prior invocation.
-    Shared between the standalone Case-A path (`_run_module_wide_standalone`) and Case B's "module-wide is unaffected by the shared checkout" print, since both need to report the exact same not-computing payload shape.
+    Shared between the standalone Case-A path (`_run_module_wide_standalone`) and Case B's
+    "module-wide is unaffected by the shared checkout" print, since both need to report the exact
+    same not-computing payload shape.
 
     Returns:
         The ready-to-print payload dict,
-        or `None` when the module-wide sub-step DOES need computation this invocation (caller must compute).
+        or `None` when the module-wide sub-step DOES need computation this invocation (caller must
+        compute).
     """
     if module_wide_verify_cmd is None:
         return {
@@ -124,9 +133,13 @@ def _run_module_wide_standalone(
     """
     Run the module-wide baseline sub-step standalone, via its own `compute_baseline` checkout.
 
-    Used only in Case A (no per-batch command needs computing this invocation), where there is nothing to share a checkout with -- this is the existing module-wide logic, byte-for-byte, just tagged with a `"substage": "module_wide"` key on the printed JSON line.
+    Used only in Case A (no per-batch command needs computing this invocation), where there is
+    nothing to share a checkout with -- this is the existing module-wide logic, byte-for-byte, just
+    tagged with a `"substage": "module_wide"` key on the printed JSON line.
 
-    Never raises -- every failure path prints a JSON line describing the outcome without persisting a baseline verdict, matching the "leave the field unset -> next `_run_verify_gates` call runs the gate strictly" fail-safe policy.
+    Never raises -- every failure path prints a JSON line describing the outcome without persisting
+    a baseline verdict, matching the "leave the field unset -> next `_run_verify_gates` call runs
+    the gate strictly" fail-safe policy.
     """
     payload = _module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)
     if payload is not None:
@@ -163,18 +176,28 @@ def _enumerate_batch_verify_triples(
     plan_base: Path, project_root: Path, git_root: Path
 ) -> list[tuple[str, str, Path | None]]:
     """
-    Return `(batch_name, verify_cmd, cwd)` triples read directly off each batch file's own frontmatter.
+    Return `(batch_name, verify_cmd, cwd)` triples read directly off each batch file's own
+    frontmatter.
 
-    Deliberately NOT `_plan_dag.iter_batch_verifies` -- that function suppresses a batch's verify command when a strictly-later batch's `Deletes:`/`Moves:` bullets reference a path it names, which is correct for DAG-wide verify replay but wrong here: a batch's own `--stage finalize` always runs its OWN verify command regardless of what a later batch will eventually delete, so its baseline must always be computed too.
-    See `_mill/discussion.md`'s `gap2-enumerate-batches-directly-not-via-iter-batch-verifies` Decision.
+    Deliberately NOT `_plan_dag.iter_batch_verifies` -- that function suppresses a batch's verify
+    command when a strictly-later batch's `Deletes:`/`Moves:` bullets reference a path it names,
+    which is correct for DAG-wide verify replay but wrong here: a batch's own `--stage finalize`
+    always runs its OWN verify command regardless of what a later batch will eventually delete, so
+    its baseline must always be computed too.
+    See `_mill/discussion.md`'s `gap2-enumerate-batches-directly-not-via-iter-batch-verifies`
+    Decision.
 
     Args:
         plan_base: Directory containing `00-overview.md` and every batch file.
-        project_root: Absolute path to the task worktree root, passed through to `parse_verify_field` for `cwd: hub` resolution.
-        git_root: Absolute path to the repo root, passed through to `parse_verify_field` for `cwd: git_root` resolution.
+        project_root: Absolute path to the task worktree root, passed through to
+        `parse_verify_field` for `cwd: hub` resolution.
+        git_root: Absolute path to the repo root, passed through to `parse_verify_field` for `cwd:
+        git_root` resolution.
 
     Returns:
-        One `(name, command, cwd)` triple per batch file whose own `verify:` frontmatter field resolves to a non-`None` command. `00-overview.md` is always excluded. `cwd` is `None` for the plain-string form or the caller's existing default;
+        One `(name, command, cwd)` triple per batch file whose own `verify:` frontmatter field
+        resolves to a non-`None` command. `00-overview.md` is always excluded. `cwd` is `None` for
+        the plain-string form or the caller's existing default;
         the resolved `Path` for the mapping form.
     """
     triples: list[tuple[str, str, Path | None]] = []
@@ -201,14 +224,23 @@ def _run_baseline_stage(
     """
     Compute (idempotent, no-op-if-already-cached) both baseline sub-steps and persist them.
 
-    Restructured into two INDEPENDENT sub-steps that both run on every invocation, in either order: (1) the module-wide `module_verify_baseline` scalar (unchanged existing mechanism), and (2) a new per-batch `verify_baseline_failures` list per batch, computed eagerly for every batch before batch 1 ever dispatches.
-    Per-batch computation is gated ONLY by that batch's own idempotency check (does it already have a stored baseline?) -- never by whether a module-wide verify is configured,
+    Restructured into two INDEPENDENT sub-steps that both run on every invocation, in either order:
+    (1) the module-wide `module_verify_baseline` scalar (unchanged existing mechanism), and (2) a
+    new per-batch `verify_baseline_failures` list per batch, computed eagerly for every batch before
+    batch 1 ever dispatches.
+    Per-batch computation is gated ONLY by that batch's own idempotency check (does it already have
+    a stored baseline?) -- never by whether a module-wide verify is configured,
     or by the module-wide baseline's own cache state.
-    See `_mill/discussion.md`'s `gap2-baseline-stage-independent-of-module-wide-early-returns` Decision.
+    See `_mill/discussion.md`'s `gap2-baseline-stage-independent-of-module-wide-early-returns`
+    Decision.
 
     Implementation, in order:
-        1. Enumerate every batch's own verify command directly off its frontmatter (`_enumerate_batch_verify_triples`), then split into `batches_needing_computation` (no stored baseline yet) and `cached_batches` (already computed by a prior invocation).
-        2. Case A -- nothing per-batch needs computing: run the module-wide sub-step exactly as it always has, standalone (its own `compute_baseline` checkout, if it needs one) -- there is nothing to share a checkout with.
+        1. Enumerate every batch's own verify command directly off its frontmatter
+            (`_enumerate_batch_verify_triples`), then split into `batches_needing_computation` (no
+            stored baseline yet) and `cached_batches` (already computed by a prior invocation).
+        2. Case A -- nothing per-batch needs computing: run the module-wide sub-step exactly as it
+            always has, standalone (its own `compute_baseline` checkout, if it needs one) -- there
+            is nothing to share a checkout with.
             Print both JSON lines and return.
         3. Case B -- at least one batch needs computing: resolve the parent
         branch once, then perform ONE shared checkout (`compute_baseline`
@@ -230,7 +262,10 @@ def _run_baseline_stage(
         `_worktree.remove_safe` in a `finally` block regardless of
         outcome.
 
-    Never raises -- every failure path prints a JSON line describing the outcome and returns 0. A per-batch computation failure leaves that batch's `verify_baseline_failures` UNSET, which is the same fail-safe direction as the module-wide mechanism's `None` default: the next `_run_verify_gates` call for that batch runs the gate strictly.
+    Never raises -- every failure path prints a JSON line describing the outcome and returns 0. A
+    per-batch computation failure leaves that batch's `verify_baseline_failures` UNSET, which is the
+    same fail-safe direction as the module-wide mechanism's `None` default: the next
+    `_run_verify_gates` call for that batch runs the gate strictly.
 
     Args:
         project_root: Absolute path to the task worktree root.
@@ -238,8 +273,11 @@ def _run_baseline_stage(
         status_path: Absolute path to the task's status.md file.
         module_wide_verify_cmd: The overview's module-wide verify command,
             or None when no module-wide verify is configured for this task.
-        module_wide_cwd_override: The overview's module-wide verify cwd resolved by parse_verify_field -- one of project_root (hub_root), git_root, or None (plain-string verify: or absent).
-        plan_base: Directory containing `00-overview.md` and every batch file, used to enumerate per-batch verify commands directly off disk.
+        module_wide_cwd_override: The overview's module-wide verify cwd resolved by
+            parse_verify_field -- one of project_root (hub_root), git_root, or None (plain-string
+            verify: or absent).
+        plan_base: Directory containing `00-overview.md` and every batch file, used to enumerate
+            per-batch verify commands directly off disk.
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;

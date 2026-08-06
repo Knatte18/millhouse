@@ -1,6 +1,7 @@
 """mill-validate-plan — standalone CLI for the static plan pre-validator.
 
-Resolves project roots, loads config, finds the active task slug, runs _plan_validate.run(), and prints a JSON envelope to stdout.
+Resolves project roots, loads config, finds the active task slug, runs _plan_validate.run(), and
+prints a JSON envelope to stdout.
 
 Flags: --skip-check <CHECK> Skip a named validator check (repeatable).
 Silently ignores unknown names.

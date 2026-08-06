@@ -16,11 +16,16 @@ _DELETED_STATUS_CODES = frozenset({" D", "D "})
 def _rebase_onto_hub(raw_path: str, hub_prefix: str) -> str | None:
     """Rebase a git-root-relative porcelain path onto the hub root.
 
-    _pygit2_util.status_porcelain always returns paths relative to the git repository toplevel, never to whatever path was passed to it -- see _cleanliness.compute_scope_violations's docstring for this exact behavior.
+    _pygit2_util.status_porcelain always returns paths relative to the git repository toplevel,
+    never to whatever path was passed to it -- see _cleanliness.compute_scope_violations's docstring
+    for this exact behavior.
     When hub_prefix is empty (flat layout, or git_root=None), raw_path passes through unchanged.
-    Otherwise raw_path is dropped (returns None) unless it equals hub_prefix or starts with hub_prefix + "/", in which case the hub-relative remainder is returned.
+    Otherwise raw_path is dropped (returns None) unless it equals hub_prefix or starts with
+    hub_prefix + "/", in which case the hub-relative remainder is returned.
 
-    This mirrors _cleanliness.revert_out_of_scope_drift's private _rebase_onto_hub closure (_cleanliness.py:374-384) -- reimplemented here as a module-local helper since that closure is private to _cleanliness.py.
+    This mirrors _cleanliness.revert_out_of_scope_drift's private _rebase_onto_hub closure
+    (_cleanliness.py:374-384) -- reimplemented here as a module-local helper since that closure is
+    private to _cleanliness.py.
     """
     if not hub_prefix:
         return raw_path
@@ -33,25 +38,33 @@ def check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: 
     """
     Detect deleted tracked files under tracked_root and restore them from HEAD.
 
-    Queries whole-repo porcelain status via _pygit2_util.status_porcelain, rebases each git-root-relative path onto the hub (a no-op when git_root is None, i.e.
+    Queries whole-repo porcelain status via _pygit2_util.status_porcelain, rebases each
+    git-root-relative path onto the hub (a no-op when git_root is None, i.e.
     a flat layout),
     and filters to lines whose hub-relative path is under tracked_root.
-    Among those, only the two deletion status codes (" D" worktree-deleted, "D " staged-deleted) are treated as candidates for restore -- untracked ("??")
-    and modified (" M"/"M "/"MM") lines are left completely alone, so a legitimate uncommitted edit is never swept into the restore.
+    Among those, only the two deletion status codes (" D" worktree-deleted, "D " staged-deleted) are
+    treated as candidates for restore -- untracked ("??")
+    and modified (" M"/"M "/"MM") lines are left completely alone, so a legitimate uncommitted edit
+    is never swept into the restore.
 
     When there is nothing to restore, no subprocess call is made at all.
     Otherwise a single `git checkout HEAD -- <paths>` call restores every candidate in one shot,
-    and the actual outcome is verified per path via on-disk existence checks rather than trusting the subprocess's overall return code -- git can partially succeed (some pathspecs restored, others not) while still reporting a non-zero exit.
-    A restore that recovers nothing at all is reported as triggered: False, since callers treat that field as "a restore genuinely happened".
+    and the actual outcome is verified per path via on-disk existence checks rather than trusting
+    the subprocess's overall return code -- git can partially succeed (some pathspecs restored,
+    others not) while still reporting a non-zero exit.
+    A restore that recovers nothing at all is reported as triggered: False, since callers treat that
+    field as "a restore genuinely happened".
 
     Args:
         worktree: The hub root to operate against (never read from cwd()).
         tracked_root: Hub-relative subtree to guard, e.g. "_mill".
         git_root: The git repository toplevel, when it differs from worktree (nested-hub layout).
-            None means either a flat layout or a caller that never resolved a git_root -- both behave identically (hub_prefix = "").
+            None means either a flat layout or a caller that never resolved a git_root -- both
+                behave identically (hub_prefix = "").
 
     Returns:
-        A dict with keys "triggered" (bool), "restored_paths" (list[str], hub-relative, sorted), and "timestamp" (str | None, ISO-8601 UTC, set only when triggered is True).
+        A dict with keys "triggered" (bool), "restored_paths" (list[str], hub-relative, sorted), and
+        "timestamp" (str | None, ISO-8601 UTC, set only when triggered is True).
     """
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
 

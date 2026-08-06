@@ -1,7 +1,9 @@
 """
 Unit tests for _junction.strip_all_in_worktree FS-scan behaviour.
 
-Covers the one-level filesystem scan that discovers and strips undeclared junctions (legacy .active, etc.) in addition to declared ones, added for #385, plus vanished-entry TOCTOU races in the recursive walk (GitHub issue #738).
+Covers the one-level filesystem scan that discovers and strips undeclared junctions (legacy .active,
+etc.) in addition to declared ones, added for #385, plus vanished-entry TOCTOU races in the
+recursive walk (GitHub issue #738).
 """
 from __future__ import annotations
 

@@ -1,7 +1,12 @@
 """
 Integration test for millpy-review-plan.py
 
-Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/ junction pointing at a fixture wiki containing a sample plan (00-overview.md + 01-core.md), then invokes millpy-review-plan.py and asserts: - Exit 0 - Valid JSON with type/round/verdict/reviews fields - verdict in {APPROVE, REQUEST_CHANGES} - reviews has 2 entries (1 batch + 1 holistic) - reviews contains entry with scope "01-core" and entry with scope "holistic" - each entry's file exists on disk - each review file has YAML frontmatter with matching verdict:
+Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/ junction pointing at a
+fixture wiki containing a sample plan (00-overview.md + 01-core.md), then invokes
+millpy-review-plan.py and asserts: - Exit 0 - Valid JSON with type/round/verdict/reviews fields -
+verdict in {APPROVE, REQUEST_CHANGES} - reviews has 2 entries (1 batch + 1 holistic) - reviews
+contains entry with scope "01-core" and entry with scope "holistic" - each entry's file exists on
+disk - each review file has YAML frontmatter with matching verdict:
 
 Also tests the "No active task" error path.
 

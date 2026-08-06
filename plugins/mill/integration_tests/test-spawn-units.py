@@ -2,7 +2,8 @@
 """
 Unit-level smoke tests for mill-spawn pure helpers.
 
-``pick_task`` and ``pick_worktree_color`` are the two functions with enough branching to warrant standalone checks — the rest of mill-spawn is covered by ``test-spawn.py``'s end-to-end run.
+``pick_task`` and ``pick_worktree_color`` are the two functions with enough branching to warrant
+standalone checks — the rest of mill-spawn is covered by ``test-spawn.py``'s end-to-end run.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-spawn-units.py

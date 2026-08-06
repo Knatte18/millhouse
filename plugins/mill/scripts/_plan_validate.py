@@ -2,7 +2,8 @@
 Static plan pre-validator.
 
 Checks plan files for structural issues BEFORE invoking the LLM reviewer.
-Used by millpy-validate-plan.py (standalone CLI) and by millpy-review-plan.py (auto-run gate before each review round).
+Used by millpy-validate-plan.py (standalone CLI) and by millpy-review-plan.py (auto-run gate before
+each review round).
 
 Public API:
     run(plan_dir, project_root, *, root=None, wiki_root=None, git_root=None, skip_checks=frozenset()) -> list[dict]
@@ -10,32 +11,52 @@ Public API:
     Each error dict has keys: {check, batch, card, path, message}.
 
 Checks performed (check keys):
-    non-existent-path — (#10 check 1) Context:/Edits:/Creates: refs that don't exist on disk and are not Creates:/Moves: targets
-    card-missing-field — (#10 check 2) Cards missing one of the required fields (Context, Edits, Creates, Deletes, Moves, Requirements, Commit)
+    non-existent-path — (#10 check 1) Context:/Edits:/Creates: refs that don't exist on disk and are
+        not Creates:/Moves: targets
+    card-missing-field — (#10 check 2) Cards missing one of the required fields (Context, Edits,
+        Creates, Deletes, Moves, Requirements, Commit)
     card-numbering — (#10 check 3) Non-sequential or cross-batch-duplicate card numbers
     depends-on-unknown — (#10 check 4) depends-on entries referencing unknown batch names
-    depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview Batch Index depends-on for the same batch
-    parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both modifying the same file (includes Move endpoints)
-    reads-not-backtick-path — (#10 check 6) Context:/Edits:/Creates: entries not in backtick-only format (exempts bare 'none')
-    all-files-touched-mismatch — (#10 check 8) Mismatch between overview's All Files Touched section and cards' Edits:/Creates:/Moves: targets
-    verify-not-isolated — per-batch or overview-level verify: command does not start with PYTHONPATH= reset prefix
-    verify-full-suite — per-batch or overview-level verify: invokes run-all.py without a -k/--only filter
-    verify-malformed-cwd — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd or missing command)
-    verify-mixed-cwd — batches in the plan resolve the {cwd, command} mapping form to more than one distinct cwd
-    verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and byte-identical to the parent branch
+    depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview Batch Index
+        depends-on for the same batch
+    parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both modifying the same file
+        (includes Move endpoints)
+    reads-not-backtick-path — (#10 check 6) Context:/Edits:/Creates: entries not in backtick-only
+        format (exempts bare 'none')
+    all-files-touched-mismatch — (#10 check 8) Mismatch between overview's All Files Touched section
+        and cards' Edits:/Creates:/Moves: targets
+    verify-not-isolated — per-batch or overview-level verify: command does not start with
+        PYTHONPATH= reset prefix
+    verify-full-suite — per-batch or overview-level verify: invokes run-all.py without a -k/--only
+        filter
+    verify-malformed-cwd — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd
+        or missing command)
+    verify-mixed-cwd — batches in the plan resolve the {cwd, command} mapping form to more than one
+        distinct cwd
+    verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and
+        byte-identical to the parent branch
     verify-excludes-edited-tagged-test — Go-specific (gated on go.mod presence);
-        flags a batch whose Edits:-only _test.go files include a //go:build ...integration...-tagged file when the batch's verify: command lacks a matching -tags ...integration...
+        flags a batch whose Edits:-only _test.go files include a //go:build ...integration...-tagged
+            file when the batch's verify: command lacks a matching -tags ...integration...
         flag
-    wiki-config-mutation — batch Edits:/Creates: contains mill-config.yaml (self-applying layout risk)
-    plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/ but plugin.json is not in that batch's Context: or Edits:
-    context-completeness — a card's Requirements: references a resolvable file-path-shaped backtick token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
-    requirements-quote-indent-drift — a card's Requirements: fenced block quoting exact source text that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent (list-continuation-indentation bug signature)
+    wiki-config-mutation — batch Edits:/Creates: contains mill-config.yaml (self-applying layout
+        risk)
+    plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
+        but plugin.json is not in that batch's Context: or Edits:
+    context-completeness — a card's Requirements: references a resolvable file-path-shaped backtick
+        token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
+    requirements-quote-indent-drift — a card's Requirements: fenced block quoting exact source text
+        that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent
+        (list-continuation-indentation bug signature)
     move-format — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
-    move-source-missing — Move source does not exist on disk and is not created/relocated by an earlier batch
-    move-target-collision — Move target already exists, is targeted by multiple batches, or collides with a Creates: in another batch
+    move-source-missing — Move source does not exist on disk and is not created/relocated by an
+        earlier batch
+    move-target-collision — Move target already exists, is targeted by multiple batches, or collides
+        with a Creates: in another batch
     move-mechanic-missing — batch has non-empty Moves: but is missing a '## Rename mechanic' section
-    commit-none-with-content — a card's Commit: is the literal 'none' sentinel but its Edits:/Creates:/Deletes:/Moves: has non-none content
+    commit-none-with-content — a card's Commit: is the literal 'none' sentinel but its
+        Edits:/Creates:/Deletes:/Moves: has non-none content
 """
 from __future__ import annotations
 
@@ -105,7 +126,8 @@ _REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Req
 def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     """Return list of (card_number, card_lines) pairs.
 
-    Each card block starts at a ``### Card N:`` line and ends just before the next ``### `` heading or at EOF.
+    Each card block starts at a ``### Card N:`` line and ends just before the next ``### `` heading
+    or at EOF.
     """
     lines = batch_text.splitlines()
     cards: list[tuple[int, list[str]]] = []
@@ -300,8 +322,10 @@ def _check_move_format(batch_files: list[Path]) -> list[dict]:
 
     Scans every ``- **Moves:**`` header in each batch file.
     An inline ``none`` (case-insensitive) is silently accepted.
-    For all other headers each sub-bullet is compared against ``_RE_MOVE_PAIR`` (`` `src` -> `dst` ``).
-    A sub-bullet that is missing the arrow, has only one backtick path, or carries prose yields an error dict with ``check="move-format"``.
+    For all other headers each sub-bullet is compared against ``_RE_MOVE_PAIR`` (`` `src` -> `dst`
+    ``).
+    A sub-bullet that is missing the arrow, has only one backtick path, or carries prose yields an
+    error dict with ``check="move-format"``.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -374,11 +398,14 @@ def _check_move_redundant(batch_files: list[Path]) -> list[dict]:
     """
     Flag Move endpoints that are also declared in Creates: or Deletes:.
 
-    For each batch file, collects every Move source and target via ``parse_moves``, then intersects with the batch's own ``Creates:`` and ``Deletes:`` tokens.
-    An identical path appearing in both a ``Moves:`` field and a ``Creates:``/``Deletes:`` field within the SAME batch is redundant -- the implementer should use one or the other, not both.
+    For each batch file, collects every Move source and target via ``parse_moves``, then intersects
+    with the batch's own ``Creates:`` and ``Deletes:`` tokens.
+    An identical path appearing in both a ``Moves:`` field and a ``Creates:``/``Deletes:`` field
+    within the SAME batch is redundant -- the implementer should use one or the other, not both.
 
     Only an exact-token match triggers the error.
-    A ``Moves:`` target that is a DIFFERENT path from any ``Creates:`` entry (the canonical rename-plus-extraction pattern) is explicitly allowed.
+    A ``Moves:`` target that is a DIFFERENT path from any ``Creates:`` entry (the canonical
+    rename-plus-extraction pattern) is explicitly allowed.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -439,8 +466,12 @@ def _check_move_source_missing(
     """
     Flag Moves: sources that do not exist and are not created or relocated earlier.
 
-    Modelled on the Deletes branch of ``_check_non_existent_path``: a Move source that is missing on disk is only an error when it cannot be explained by an earlier batch creating it (``creates_union``) or an earlier Move relocating a different file to that path (``moves_targets``).
-    Both suppression sets are plan-wide, so chained moves (batch A moves X to Y; batch B moves Y to Z) do not generate a false positive for batch B's source Y.
+    Modelled on the Deletes branch of ``_check_non_existent_path``: a Move source that is missing on
+    disk is only an error when it cannot be explained by an earlier batch creating it
+    (``creates_union``) or an earlier Move relocating a different file to that path
+    (``moves_targets``).
+    Both suppression sets are plan-wide, so chained moves (batch A moves X to Y; batch B moves Y to
+    Z) do not generate a false positive for batch B's source Y.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -592,9 +623,13 @@ def _check_move_mechanic_missing(batch_files: list[Path]) -> list[dict]:
     """
     Require a '## Rename mechanic' section in any batch that declares Moves:.
 
-    The ``plan-batch.md`` template includes this section to guide the implementer on the correct ``git mv`` + surgical-edit workflow.
-    When a batch declares at least one non-empty ``Moves:`` pair via ``parse_moves``, the batch file text must contain a heading line matching ``^##\\s+Rename mechanic\\b`` (the canonical section name).
-    Batches where every ``Moves:`` field carries the ``none`` sentinel produce an empty ``parse_moves`` result and are skipped.
+    The ``plan-batch.md`` template includes this section to guide the implementer on the correct
+    ``git mv`` + surgical-edit workflow.
+    When a batch declares at least one non-empty ``Moves:`` pair via ``parse_moves``, the batch file
+    text must contain a heading line matching ``^##\\s+Rename mechanic\\b`` (the canonical section
+    name).
+    Batches where every ``Moves:`` field carries the ``none`` sentinel produce an empty
+    ``parse_moves`` result and are skipped.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -647,12 +682,16 @@ def _check_non_existent_path(
 
     Suppression rules mirror the move-endpoint-accounting Shared Decision:
     - ``creates_union``: paths that will be created by some batch are not flagged.
-    - ``deletes_union``: paths that will be deleted are not flagged for general refs (the file may disappear before this batch runs).
-    - ``moves_targets``: paths that are Moves: destinations are not flagged because they will be created by the rename step (a downstream card editing a Move target must not raise non-existent-path).
+    - ``deletes_union``: paths that will be deleted are not flagged for general refs (the file may
+    disappear before this batch runs).
+    - ``moves_targets``: paths that are Moves: destinations are not flagged because they will be
+    created by the rename step (a downstream card editing a Move target must not raise
+    non-existent-path).
 
     Move-source existence is NOT checked here;
     that is solely ``_check_move_source_missing``'s responsibility (card 6).
-    This function continues to operate only on the general Context/Edits/Creates and Deletes tokens that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
+    This function continues to operate only on the general Context/Edits/Creates and Deletes tokens
+    that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
 
     Error dict shape: ``{check, batch, card, path, message}``.
     """
@@ -729,14 +768,17 @@ def _check_card_missing_field(batch_files: list[Path]) -> list[dict]:
 def _card_field_is_none(card_text: str, field: str) -> bool:
     """Return True if ``field:`` in a single card's text has zero content.
 
-    ``field`` is one of ``"Edits"``, ``"Creates"``, ``"Deletes"`` (matched via ``_RE_REFS_HEADER``) or ``"Moves"`` (matched via ``_RE_MOVES_HEADER``, since its sub-bullets use the two-path ``src`` -> ``dst`` grammar rather than the other fields' bare-path grammar).
+    ``field`` is one of ``"Edits"``, ``"Creates"``, ``"Deletes"`` (matched via ``_RE_REFS_HEADER``)
+    or ``"Moves"`` (matched via ``_RE_MOVES_HEADER``, since its sub-bullets use the two-path ``src``
+    -> ``dst`` grammar rather than the other fields' bare-path grammar).
     Mirrors ``_parse_edits_only``'s single-line-vs-multi-line sub-bullet logic,
     but scoped to one already-extracted card's text rather than a whole batch file.
 
     A field counts as "all none" when its inline value is the literal ``none`` (case-insensitive).
     Any other inline value,
     or any sub-bullet at all under an empty inline value, counts as content.
-    A card with no matching header line at all also counts as "all none" here -- a missing field is ``_check_card_missing_field``'s concern, not this helper's.
+    A card with no matching header line at all also counts as "all none" here -- a missing field is
+    ``_check_card_missing_field``'s concern, not this helper's.
     """
     lines = card_text.splitlines()
     i = 0
@@ -768,11 +810,16 @@ def _check_commit_none_with_content(batch_files: list[Path]) -> list[dict]:
     """
     Reject `Commit: none` cards that still declare real Edits/Creates/Deletes/Moves.
 
-    `Commit: none` marks a verification-only card (issue #664) whose sole job is confirming earlier work (e.g.
+    `Commit: none` marks a verification-only card (issue #664) whose sole job is confirming earlier
+    work (e.g.
     a grep confirming an earlier card's edits landed) -- it must produce zero diff of its own.
-    For each batch file, ``_plan_dag.parse_commit_none_card_ids`` finds the cards declaring `Commit: none`;
-    for each such card, this check re-parses the card's own text via ``_parse_cards`` and inspects its Edits:/Creates:/Deletes:/Moves: fields, scoped to just that card via ``_card_field_is_none``.
-    Any field with non-none content yields one error per offending field, matching ``_check_card_missing_field``'s one-error-per-offense convention.
+    For each batch file, ``_plan_dag.parse_commit_none_card_ids`` finds the cards declaring `Commit:
+    none`;
+    for each such card, this check re-parses the card's own text via ``_parse_cards`` and inspects
+    its Edits:/Creates:/Deletes:/Moves: fields, scoped to just that card via
+    ``_card_field_is_none``.
+    Any field with non-none content yields one error per offending field, matching
+    ``_check_card_missing_field``'s one-error-per-offense convention.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -1264,10 +1311,14 @@ def _check_plugin_manifest_context_missing(batch_files: list[Path]) -> list[dict
     """
     Require the plugin manifest in Context:/Edits: for batches touching agents/.
 
-    A bulk-mode plan reviewer cannot fetch files on its own -- it only sees what the backend bulks into its prompt from each batch's Context: and Edits: fields.
-    When a batch's Creates:/Edits:/Deletes: touches a file under ``plugins/mill/agents/`` (registering, editing, or removing an agent definition), the reviewer needs ``plugin.json`` in context to verify the corresponding platform claim (e.g.
+    A bulk-mode plan reviewer cannot fetch files on its own -- it only sees what the backend bulks
+    into its prompt from each batch's Context: and Edits: fields.
+    When a batch's Creates:/Edits:/Deletes: touches a file under ``plugins/mill/agents/``
+    (registering, editing, or removing an agent definition), the reviewer needs ``plugin.json`` in
+    context to verify the corresponding platform claim (e.g.
     that the agent is correctly wired into the manifest's ``agents`` array).
-    This check flags a batch that touches ``plugins/mill/agents/`` but omits the manifest from both ``Context:`` and ``Edits:``.
+    This check flags a batch that touches ``plugins/mill/agents/`` but omits the manifest from both
+    ``Context:`` and ``Edits:``.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -1322,8 +1373,11 @@ _PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml"
 def _extract_requirements_text(card_text: str) -> str | None:
     """Return the body text of a card's ``Requirements:`` field, or ``None``.
 
-    Locates the ``- **Requirements:**`` header line and collects that line's trailing text plus every subsequent line up to (but not including) the next ``- **<Field>:**`` header or the end of ``card_text``.
-    Returns ``None`` when no ``Requirements:`` header line is found at all -- a missing field is ``card-missing-field``'s concern, not this check's.
+    Locates the ``- **Requirements:**`` header line and collects that line's trailing text plus
+    every subsequent line up to (but not including) the next ``- **<Field>:**`` header or the end of
+    ``card_text``.
+    Returns ``None`` when no ``Requirements:`` header line is found at all -- a missing field is
+    ``card-missing-field``'s concern, not this check's.
     """
     lines = card_text.splitlines()
     header_re = re.compile(r"^-\s*\*\*Requirements:\*\*")
@@ -1343,7 +1397,10 @@ def _extract_requirements_text(card_text: str) -> str | None:
 def _card_own_reference_set(card_text: str) -> set[str]:
     """Return the union of backtick tokens this card declares as its own.
 
-    Combines every backtick-wrapped token found under this card's Context:/Edits:/Creates:/Deletes: headers (single-line or multi-line sub-bullet form) with the source-only half of its Moves: pairs (the destination half is deliberately excluded -- a Requirements: reference to a not-yet-existing Move target is not "already declared").
+    Combines every backtick-wrapped token found under this card's Context:/Edits:/Creates:/Deletes:
+    headers (single-line or multi-line sub-bullet form) with the source-only half of its Moves:
+    pairs (the destination half is deliberately excluded -- a Requirements: reference to a
+    not-yet-existing Move target is not "already declared").
     """
     tokens: set[str] = set()
     lines = card_text.splitlines()
@@ -1403,16 +1460,25 @@ def _check_context_completeness(
     """
     Flag a card's Requirements: prose citing a file absent from its own refs.
 
-    A ``Requirements:`` field frequently prose-references a file the implementer must read or reason about;
-    when that file is a genuine dependency it belongs in the card's own ``Context:``/``Edits:`` (or ``Creates:``/``Deletes:``/``Moves:``) so a bulk-mode reviewer actually sees it.
-    This check heuristically detects the gap: for each card, every backtick-quoted, path-shaped token in ``Requirements:`` that independently resolves to a real file (on disk, or a plan-wide ``Creates:``/``Deletes:``/Moves-target reference) must also appear in that same card's own Context:/Edits:/Creates:/Deletes:/Moves:-source set.
+    A ``Requirements:`` field frequently prose-references a file the implementer must read or reason
+    about;
+    when that file is a genuine dependency it belongs in the card's own ``Context:``/``Edits:`` (or
+    ``Creates:``/``Deletes:``/``Moves:``) so a bulk-mode reviewer actually sees it.
+    This check heuristically detects the gap: for each card, every backtick-quoted, path-shaped
+    token in ``Requirements:`` that independently resolves to a real file (on disk, or a plan-wide
+    ``Creates:``/``Deletes:``/Moves-target reference) must also appear in that same card's own
+    Context:/Edits:/Creates:/Deletes:/Moves:-source set.
     Two exemptions prevent false positives:
 
-    1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a file the card must NOT act on, not an unlisted dependency.
-    2. Non-path-shaped or unresolvable tokens (JSON keys, function names, sentinel strings) are never flagged -- only genuine file references that this validator can independently confirm exist.
+    1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a file the card must NOT
+    act on, not an unlisted dependency.
+    2. Non-path-shaped or unresolvable tokens (JSON keys, function names, sentinel strings) are
+    never flagged -- only genuine file references that this validator can independently confirm
+    exist.
 
     Note: markdown's double-backtick-escape convention (`` `path` ``) is not detected by this regex;
-    future citations needing that format should be aware they won't be checked by context-completeness.
+    future citations needing that format should be aware they won't be checked by
+    context-completeness.
 
     Error dict shape: ``{check, batch, card, path, message, line}``.
 
@@ -1502,9 +1568,13 @@ def _check_context_completeness(
 def _strip_n_leading_spaces(text: str, n: int) -> str:
     """Strip up to ``n`` leading space characters from every line of ``text``.
 
-    For each line (split via ``.splitlines()``), remove exactly ``n`` leading space characters when the line has at least that many;
-    otherwise strip only however many leading spaces the line actually has (no error on short/blank lines).
-    This is a FIXED per-line strip, not ``textwrap.dedent``'s common-minimum-strip -- per ``_mill/discussion.md``'s ``trigger-heuristic-near-miss`` Decision, ``textwrap.dedent`` silently misses drift when the true source excerpt has nonzero baseline indentation of its own.
+    For each line (split via ``.splitlines()``), remove exactly ``n`` leading space characters when
+    the line has at least that many;
+    otherwise strip only however many leading spaces the line actually has (no error on short/blank
+    lines).
+    This is a FIXED per-line strip, not ``textwrap.dedent``'s common-minimum-strip -- per
+    ``_mill/discussion.md``'s ``trigger-heuristic-near-miss`` Decision, ``textwrap.dedent`` silently
+    misses drift when the true source excerpt has nonzero baseline indentation of its own.
     """
     stripped_lines = []
     for line in text.splitlines():
@@ -1517,7 +1587,11 @@ def _strip_n_leading_spaces(text: str, n: int) -> str:
 def _card_edits_tokens(card_text: str) -> list[str]:
     """Return this card's own ``Edits:`` backtick tokens, in declaration order.
 
-    Walks ``card_text``'s lines matching ``_RE_REFS_HEADER`` where the field name is ``Edits``, extracting either the inline value's backtick tokens or the following ``_RE_REFS_SUB`` sub-bullets' tokens -- mirroring ``_card_own_reference_set``'s inline/sub-bullet walk, but scoped to the ``Edits`` field only and returned as an ordered list (not a set), since declaration order is load-bearing for requirements-quote-indent-drift's first-match tie-break.
+    Walks ``card_text``'s lines matching ``_RE_REFS_HEADER`` where the field name is ``Edits``,
+    extracting either the inline value's backtick tokens or the following ``_RE_REFS_SUB``
+    sub-bullets' tokens -- mirroring ``_card_own_reference_set``'s inline/sub-bullet walk, but
+    scoped to the ``Edits`` field only and returned as an ordered list (not a set), since
+    declaration order is load-bearing for requirements-quote-indent-drift's first-match tie-break.
     """
     tokens: list[str] = []
     lines = card_text.splitlines()
@@ -1548,11 +1622,20 @@ def _card_edits_tokens(card_text: str) -> list[str]:
 def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
     """Return the full, fence-aware body of a card's ``Requirements:`` field.
 
-    Locates the ``- **Requirements:**`` header line directly against ``card_lines`` (does NOT call ``_extract_requirements_text`` for this -- per ``_mill/discussion.md``'s ``fence-aware-boundary-detection`` Decision, that function returns a joined string, not an index).
+    Locates the ``- **Requirements:**`` header line directly against ``card_lines`` (does NOT call
+    ``_extract_requirements_text`` for this -- per ``_mill/discussion.md``'s
+    ``fence-aware-boundary-detection`` Decision, that function returns a joined string, not an
+    index).
     Returns ``None`` when no such header line exists.
 
-    The header line itself unconditionally seeds the result (it also matches the stop-condition regex used below, so re-testing it would make the scan a permanent no-op).
-    From the line after the header, walks forward over the ORIGINAL (untruncated) ``card_lines``, tracking a boolean ``in_fence`` that toggles on every line starting with ``` ``` ```. Collection stops at the first line matching a ``- **Field:**``-shaped header while ``in_fence`` is ``False``, or at the end of ``card_lines``. This re-scan exists so a fence quoting another SKILL.md's ``### Phase: X`` heading or ``- **Field:**``-shaped bullet is not mistaken for this field's own boundary, which would truncate the fence body.
+    The header line itself unconditionally seeds the result (it also matches the stop-condition
+    regex used below, so re-testing it would make the scan a permanent no-op).
+    From the line after the header, walks forward over the ORIGINAL (untruncated) ``card_lines``,
+    tracking a boolean ``in_fence`` that toggles on every line starting with ``` ``` ```. Collection
+    stops at the first line matching a ``- **Field:**``-shaped header while ``in_fence`` is
+    ``False``, or at the end of ``card_lines``. This re-scan exists so a fence quoting another
+    SKILL.md's ``### Phase: X`` heading or ``- **Field:**``-shaped bullet is not mistaken for this
+    field's own boundary, which would truncate the fence body.
     """
     header_re = re.compile(r"^-\s*\*\*Requirements:\*\*")
     any_field_header_re = re.compile(r"^-\s*\*\*[A-Za-z]+:\*\*")
@@ -1589,16 +1672,29 @@ def _check_requirements_quote_indent_drift(
     git_root: Path | None = None,
 ) -> list[dict]:
     """
-    Flag a card's Requirements: fence that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent.
+    Flag a card's Requirements: fence that only byte-matches its own Edits: file(s) after stripping
+    a fixed per-line indent.
 
-    This is the list-continuation-indentation bug's exact signature: a ``Requirements:`` fence meant to quote exact source text as Edit-tool ``old_string`` bait silently picks up a uniform per-line indent from the surrounding Markdown list-continuation nesting, so the quoted text no longer byte-matches the real source file even though it "looks right" to a human or LLM reviewer.
+    This is the list-continuation-indentation bug's exact signature: a ``Requirements:`` fence meant
+    to quote exact source text as Edit-tool ``old_string`` bait silently picks up a uniform per-line
+    indent from the surrounding Markdown list-continuation nesting, so the quoted text no longer
+    byte-matches the real source file even though it "looks right" to a human or LLM reviewer.
 
-    For each card with a non-empty Edits: field and a Requirements: field containing at least one fenced code block: for each fence, if the raw (unstripped) fence content is already a literal substring of some resolved Edits: file's content, the fence is clean -- no error.
-    If not, search ascending strip amounts N = 1..40 (a fixed per-line leading-space strip, NOT textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces) for the first N whose stripped fence content IS a literal substring of some resolved Edits: file (walked in the card's own Edits: declaration order, first match wins on ties).
+    For each card with a non-empty Edits: field and a Requirements: field containing at least one
+    fenced code block: for each fence, if the raw (unstripped) fence content is already a literal
+    substring of some resolved Edits: file's content, the fence is clean -- no error.
+    If not, search ascending strip amounts N = 1..40 (a fixed per-line leading-space strip, NOT
+    textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces) for the first N whose
+    stripped fence content IS a literal substring of some resolved Edits: file (walked in the card's
+    own Edits: declaration order, first match wins on ties).
     The first match wins and stops the search;
-    a fence matching no N in range is an illustrative snippet showing new/desired-state code, not a drifted quote, and is silently skipped -- never flagged.
+    a fence matching no N in range is an illustrative snippet showing new/desired-state code, not a
+    drifted quote, and is silently skipped -- never flagged.
 
-    Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are compared against (never Context:, Creates:, or other cards' files) -- those files already exist on disk by definition, so no creates_union/deletes_union/moves_targets threading is needed here (contrast _check_context_completeness).
+    Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are
+    compared against (never Context:, Creates:, or other cards' files) -- those files already exist
+    on disk by definition, so no creates_union/deletes_union/moves_targets threading is needed here
+    (contrast _check_context_completeness).
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -1764,18 +1860,27 @@ def _check_verify_not_isolated(
     """
     Flag verify: commands that skip the PYTHONPATH= isolation reset.
 
-    Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:`` (previously batch-file-only, missing the overview-level command entirely). ``verify:`` may be authored as a plain string or as a ``{cwd, command}`` mapping;
-    both forms are normalized via ``_plan_dag.parse_verify_field`` (both roots passed as ``project_root`` because only the extracted command string is needed here, not the resolved cwd).
-    A malformed mapping raises ``ValueError`` from the normalizer -- this function silently skips that batch/overview because ``_check_verify_malformed_cwd`` is the sole reporter for that finding; duplicating it here would double-report the same authoring bug.
+    Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``
+    (previously batch-file-only, missing the overview-level command entirely). ``verify:`` may be
+    authored as a plain string or as a ``{cwd, command}`` mapping;
+    both forms are normalized via ``_plan_dag.parse_verify_field`` (both roots passed as
+    ``project_root`` because only the extracted command string is needed here, not the resolved
+    cwd).
+    A malformed mapping raises ``ValueError`` from the normalizer -- this function silently skips
+    that batch/overview because ``_check_verify_malformed_cwd`` is the sole reporter for that
+    finding; duplicating it here would double-report the same authoring bug.
 
     Error dict shape: ``{check, batch, card, path, message}``.
-    Overview-level findings use ``batch=None``, matching the convention already used by ``_check_all_files_touched_mismatch`` for overview-scoped errors.
+    Overview-level findings use ``batch=None``, matching the convention already used by
+    ``_check_all_files_touched_mismatch`` for overview-scoped errors.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project;
-            also doubles as the hub_root argument to ``parse_verify_field`` since only the command string is needed, not the resolved cwd.
-        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is checked alongside the per-batch loop.
+            also doubles as the hub_root argument to ``parse_verify_field`` since only the command
+                string is needed, not the resolved cwd.
+        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is
+            checked alongside the per-batch loop.
 
     Returns:
         List of error dicts, one per non-compliant verify command.
@@ -1846,8 +1951,10 @@ def _go_file_is_integration_tagged(path: Path) -> bool:
     """
     Return True if a Go source file's leading //go:build constraint mentions "integration".
 
-    Scans from the top of the file, skipping blank lines and `//`-comment lines (a license/copyright header may precede the build-constraint line);
-    the first line that is neither blank nor a `//`-comment ends the scan (e.g. `package foo` or a `/*` block comment opener).
+    Scans from the top of the file, skipping blank lines and `//`-comment lines (a license/copyright
+    header may precede the build-constraint line);
+    the first line that is neither blank nor a `//`-comment ends the scan (e.g. `package foo` or a
+    `/*` block comment opener).
     Bounded to the first `_GO_BUILD_TAG_SCAN_LINES` lines.
 
     Args:
@@ -1873,14 +1980,17 @@ def _verify_command_has_integration_tag(command: str) -> bool:
     """
     Return True if a verify: command's -tags flag value includes "integration".
 
-    Matches `-tags integration`, `-tags=integration`, and a quoted or bare comma-separated value like `-tags "integration,other"` or `-tags integration,other`.
-    A value like `integrationtest` does not count -- the match requires "integration" as an exact comma/whitespace-split token, not a substring.
+    Matches `-tags integration`, `-tags=integration`, and a quoted or bare comma-separated value
+    like `-tags "integration,other"` or `-tags integration,other`.
+    A value like `integrationtest` does not count -- the match requires "integration" as an exact
+    comma/whitespace-split token, not a substring.
 
     Args:
         command: The verify: command string (already normalized via `_plan_dag.parse_verify_field`).
 
     Returns:
-        True if any `-tags` flag in the command carries "integration" as one of its comma/whitespace-split values.
+        True if any `-tags` flag in the command carries "integration" as one of its
+        comma/whitespace-split values.
     """
     for m in _RE_VERIFY_TAGS_FLAG.finditer(command):
         value = m.group(1).strip("\"'")
@@ -1901,13 +2011,22 @@ def _check_verify_excludes_edited_tagged_test(
     """
     Flag a batch whose verify: command silently skips an edited integration-tagged Go test.
 
-    Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open for every non-Go project -- mirrors `_check_verify_not_isolated`'s `is_python_project` gate.
+    Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open for every non-Go project
+    -- mirrors `_check_verify_not_isolated`'s `is_python_project` gate.
 
-    For each batch, collects `Edits:`-only tokens ending in `_test.go` (via `_parse_edits_only`, filtered to that suffix). `Creates:` tokens are deliberately excluded from this collection: a `Creates:` target does not exist on disk at plan-validation time (this codebase's established convention), so `resolve_existing_paths` would never confirm it as integration-tagged anyway -- an accepted, documented limitation, not a bug (see the Card 6 `(h)` regression scenario).
+    For each batch, collects `Edits:`-only tokens ending in `_test.go` (via `_parse_edits_only`,
+    filtered to that suffix). `Creates:` tokens are deliberately excluded from this collection: a
+    `Creates:` target does not exist on disk at plan-validation time (this codebase's established
+    convention), so `resolve_existing_paths` would never confirm it as integration-tagged anyway --
+    an accepted, documented limitation, not a bug (see the Card 6 `(h)` regression scenario).
 
     Each resolved edited test file is scanned via `_go_file_is_integration_tagged`.
-    When a batch has at least one edited integration-tagged test, its `verify:` command (normalized via `_plan_dag.parse_verify_field`; a malformed `{cwd, command}` mapping raises `ValueError` -- caught and skipped here since `_check_verify_malformed_cwd` is the sole reporter for that) must carry a `-tags` flag whose value includes "integration" (`_verify_command_has_integration_tag`);
-    otherwise this check reports the batch with one finding naming the first (sorted) tagged token found.
+    When a batch has at least one edited integration-tagged test, its `verify:` command (normalized
+    via `_plan_dag.parse_verify_field`; a malformed `{cwd, command}` mapping raises `ValueError` --
+    caught and skipped here since `_check_verify_malformed_cwd` is the sole reporter for that) must
+    carry a `-tags` flag whose value includes "integration" (`_verify_command_has_integration_tag`);
+    otherwise this check reports the batch with one finding naming the first (sorted) tagged token
+    found.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -1915,12 +2034,16 @@ def _check_verify_excludes_edited_tagged_test(
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project (worktree root);
             also the `go.mod` presence-check root.
-        root: Optional root subfolder for source refs, threaded to `resolve_existing_paths` exactly like sibling checks (`_check_non_existent_path`, `_check_move_source_missing`, `_check_batch_oversized`) so a nested-layout Go project still resolves `_test.go` tokens correctly.
+        root: Optional root subfolder for source refs, threaded to `resolve_existing_paths` exactly
+            like sibling checks (`_check_non_existent_path`, `_check_move_source_missing`,
+            `_check_batch_oversized`) so a nested-layout Go project still resolves `_test.go` tokens
+            correctly.
         wiki_root: Optional wiki root path, threaded to `resolve_existing_paths`.
         git_root: Optional repo root, threaded to `resolve_existing_paths`.
 
     Returns:
-        List of error dicts, one per batch with an edited integration-tagged test file whose verify: command lacks a matching -tags flag.
+        List of error dicts, one per batch with an edited integration-tagged test file whose verify:
+        command lacks a matching -tags flag.
     """
     if not (project_root / "go.mod").exists():
         return []
@@ -1983,7 +2106,9 @@ def _check_verify_full_suite(
     """
     Flag verify: commands that invoke run-all.py without a scoping filter.
 
-    Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``, mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping silence (see that function's docstring for the shared rationale).
+    Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``,
+    mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping
+    silence (see that function's docstring for the shared rationale).
 
     Error dict shape: ``{check, batch, card, path, message}``.
     Overview-level findings use ``batch=None``.
@@ -1991,8 +2116,10 @@ def _check_verify_full_suite(
     Args:
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project;
-            also doubles as the hub_root argument to ``parse_verify_field`` since only the command string is needed, not the resolved cwd.
-        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is checked alongside the per-batch loop.
+            also doubles as the hub_root argument to ``parse_verify_field`` since only the command
+                string is needed, not the resolved cwd.
+        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is
+            checked alongside the per-batch loop.
 
     Returns:
         List of error dicts, one per unscoped run-all.py invocation.
@@ -2048,18 +2175,26 @@ def _check_verify_malformed_cwd(
     """
     Flag verify: fields that fail to parse via _plan_dag.parse_verify_field.
 
-    The verify cwd field schema (Shared Decision, plan 00-overview.md) allows ``verify:`` to be a plain string or a ``{cwd: hub|git_root, command: ...}`` mapping. ``parse_verify_field`` raises ``ValueError`` when the mapping is missing ``command``, names an unrecognized ``cwd``, or ``verify`` is some other type entirely -- a plan-authoring bug that must surface as a normal finding rather than an uncaught exception crashing the validator.
+    The verify cwd field schema (Shared Decision, plan 00-overview.md) allows ``verify:`` to be a
+    plain string or a ``{cwd: hub|git_root, command: ...}`` mapping. ``parse_verify_field`` raises
+    ``ValueError`` when the mapping is missing ``command``, names an unrecognized ``cwd``, or
+    ``verify`` is some other type entirely -- a plan-authoring bug that must surface as a normal
+    finding rather than an uncaught exception crashing the validator.
 
-    This is the **sole** reporter for malformed-mapping findings: ``_check_verify_not_isolated`` and ``_check_verify_full_suite`` catch the same ``ValueError`` and silently skip the batch/overview, so one malformed mapping produces exactly one finding here, never a duplicate.
+    This is the **sole** reporter for malformed-mapping findings: ``_check_verify_not_isolated`` and
+    ``_check_verify_full_suite`` catch the same ``ValueError`` and silently skip the batch/overview,
+    so one malformed mapping produces exactly one finding here, never a duplicate.
 
     Error dict shape: ``{check, batch, card, path, message}``.
     Overview-level findings use ``batch=None`` and ``path`` set to the overview path.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
-        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is checked alongside the per-batch loop.
+        overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is
+            checked alongside the per-batch loop.
         project_root: Root of the project;
-            also doubles as the hub_root argument to ``parse_verify_field`` since only whether parsing raises matters here, not the resolved cwd.
+            also doubles as the hub_root argument to ``parse_verify_field`` since only whether
+                parsing raises matters here, not the resolved cwd.
 
     Returns:
         List of error dicts, one per malformed verify: field.
@@ -2104,19 +2239,30 @@ def _check_verify_mixed_cwd(
     """
     Flag a plan whose batches resolve the verify cwd mapping to more than one root.
 
-    Mirrors ``_plan_dag.iter_batch_verifies``'s DAG-order traversal: every batch whose ``verify:`` is authored as a ``{cwd, command}`` mapping resolves to either ``project_root`` (hub) or ``git_root``.
-    Mixing the two across batches in the same plan is the exact runtime conflict that a holistic-scope verify replay must reject -- a merge-in or fixer stage that concatenates commands from batches pinned to different roots would run at least one of them in the wrong directory.
-    Catching the conflict here, at plan-review time, means a bad plan never reaches that runtime check at all.
+    Mirrors ``_plan_dag.iter_batch_verifies``'s DAG-order traversal: every batch whose ``verify:``
+    is authored as a ``{cwd, command}`` mapping resolves to either ``project_root`` (hub) or
+    ``git_root``.
+    Mixing the two across batches in the same plan is the exact runtime conflict that a
+    holistic-scope verify replay must reject -- a merge-in or fixer stage that concatenates commands
+    from batches pinned to different roots would run at least one of them in the wrong directory.
+    Catching the conflict here, at plan-review time, means a bad plan never reaches that runtime
+    check at all.
 
-    Batches whose ``verify:`` is the plain-string form (cwd ``None``, "use the caller's default") do not participate in the conflict -- only batches with an explicit, resolved cwd can disagree with each other.
+    Batches whose ``verify:`` is the plain-string form (cwd ``None``, "use the caller's default") do
+    not participate in the conflict -- only batches with an explicit, resolved cwd can disagree with
+    each other.
 
-    Error dict shape: ``{check, batch, card, path, message}``, one finding per conflicting batch so every offender is individually visible in sorted output.
+    Error dict shape: ``{check, batch, card, path, message}``, one finding per conflicting batch so
+    every offender is individually visible in sorted output.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
-        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG used to enumerate batches in dependency order).
-        project_root: The mill project root (hub_root), passed through to ``parse_verify_field`` for ``cwd: hub`` resolution.
-        git_root: The git repository toplevel, passed through to ``parse_verify_field`` for ``cwd: git_root`` resolution.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG used to
+        enumerate batches in dependency order).
+        project_root: The mill project root (hub_root), passed through to ``parse_verify_field`` for
+        ``cwd: hub`` resolution.
+        git_root: The git repository toplevel, passed through to ``parse_verify_field`` for ``cwd:
+        git_root`` resolution.
 
     Returns:
         List of error dicts, one per batch participating in a mixed-cwd conflict.
@@ -2193,19 +2339,31 @@ def _check_verify_unrelated_test_files(
     """
     Flag verify: --only test-file tokens unrelated to their own batch.
 
-    Fixes #638: a batch's ``verify:`` ``--only`` test-file list can accidentally include a test file that has nothing to do with that batch's own cards.
-    When such a stray token is also byte-identical to the task's resolved parent branch, running it replays a pre-existing (possibly already-failing) test unrelated to the batch, which can falsely block a fully-correct batch with ``stuck_type: verify``.
+    Fixes #638: a batch's ``verify:`` ``--only`` test-file list can accidentally include a test file
+    that has nothing to do with that batch's own cards.
+    When such a stray token is also byte-identical to the task's resolved parent branch, running it
+    replays a pre-existing (possibly already-failing) test unrelated to the batch, which can falsely
+    block a fully-correct batch with ``stuck_type: verify``.
 
-    Applies to every batch file's frontmatter, mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping silence (see that function's docstring for the shared rationale -- ``_check_verify_malformed_cwd`` is the sole reporter for a malformed ``verify:`` mapping).
+    Applies to every batch file's frontmatter, mirroring ``_check_verify_not_isolated``'s
+    string-vs-mapping handling and malformed-mapping silence (see that function's docstring for the
+    shared rationale -- ``_check_verify_malformed_cwd`` is the sole reporter for a malformed
+    ``verify:`` mapping).
 
-    Fail-safe per the "never raise from a new gate/check function" Shared Decision: ``parent_branch=None`` short-circuits to ``[]`` immediately for every batch (no parent resolved, nothing to diff against -- never guess or fall back to a literal branch name like ``"main"``), and any subprocess or resolution failure for an individual token is treated as "cannot confirm identical, don't flag" rather than a crash.
+    Fail-safe per the "never raise from a new gate/check function" Shared Decision:
+    ``parent_branch=None`` short-circuits to ``[]`` immediately for every batch (no parent resolved,
+    nothing to diff against -- never guess or fall back to a literal branch name like ``"main"``),
+    and any subprocess or resolution failure for an individual token is treated as "cannot confirm
+    identical, don't flag" rather than a crash.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project;
-            also doubles as the hub_root argument to ``parse_verify_field`` since only the command string is needed here, not the resolved cwd (mirrors ``_check_verify_not_isolated``'s own call shape).
+            also doubles as the hub_root argument to ``parse_verify_field`` since only the command
+                string is needed here, not the resolved cwd (mirrors
+                ``_check_verify_not_isolated``'s own call shape).
         git_root: Repository toplevel used to resolve candidate tokens on
         disk (via ``resolve_existing_paths``) and as the ``-C`` root
         for the ``git diff`` subprocess call.
@@ -2213,7 +2371,8 @@ def _check_verify_unrelated_test_files(
             or ``None`` when unresolved.
 
     Returns:
-        List of error dicts, one per stray ``--only`` token confirmed byte-identical to the parent branch.
+        List of error dicts, one per stray ``--only`` token confirmed byte-identical to the parent
+        branch.
     """
     if parent_branch is None:
         return []
@@ -2426,7 +2585,11 @@ def run(
 
     Returns a sorted list of error dicts with keys: {check, batch, card, path, message}.
 
-    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd, verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized, commit-none-with-content, and five Move-specific checks (move-format, move-redundant, move-source-missing, move-target-collision, move-mechanic-missing).
+    Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation,
+    plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd,
+    verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
+    commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
+    move-source-missing, move-target-collision, move-mechanic-missing).
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -2434,13 +2597,17 @@ def run(
         root: Optional root subfolder for source refs (e.g. "subproject1");
             when set, refs resolve to git_root/root/raw first, then project_root/root/raw.
         wiki_root: Optional wiki root path;
-            when provided, refs starting with "wiki/" are resolved against wiki_root instead of project_root.
+            when provided, refs starting with "wiki/" are resolved against wiki_root instead of
+                project_root.
         git_root: Optional repo root;
-            when provided, refs resolve to git_root/root/raw before falling back to project_root-based candidates (addresses #471 layout).
+            when provided, refs resolve to git_root/root/raw before falling back to
+                project_root-based candidates (addresses #471 layout).
         skip_checks: Set of check names to skip (e.g. {"wiki-config-mutation"}).
         max_cards_per_batch: Maximum cards per batch before batch-oversized is raised.
         max_batch_context_tokens: Maximum context token estimate before batch-oversized is raised.
-        parent_branch: The task's resolved parent branch name, threaded to verify-unrelated-test-file. ``None`` (the default) makes that check a no-op -- callers that cannot resolve a parent branch (e.g.
+        parent_branch: The task's resolved parent branch name, threaded to
+            verify-unrelated-test-file. ``None`` (the default) makes that check a no-op -- callers
+            that cannot resolve a parent branch (e.g.
             the standalone millpy-validate-plan.py CLI) simply skip it.
     """
     overview_path = plan_dir / "00-overview.md"

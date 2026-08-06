@@ -1,5 +1,6 @@
 """
-mill-cleanup — sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and Home.md markers based on status.md phase.
+mill-cleanup — sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and Home.md markers
+based on status.md phase.
 
 Runs from the hub.
 Default applies removals;
@@ -85,13 +86,20 @@ _LIVE_PHASE_PATTERNS = tuple(re.compile(p) for p in (
 
 def _is_live_phase(phase: str) -> bool:
     """
-    Classify whether a status.md ``phase`` value is a live, mid-pipeline phase that build_plan should silently skip (as opposed to a terminal phase like "done"/"abandoned"/"pr-pending", which are handled by their own earlier branches, or a genuinely unrecognized value that should be reported).
+    Classify whether a status.md ``phase`` value is a live, mid-pipeline phase that build_plan
+    should silently skip (as opposed to a terminal phase like "done"/"abandoned"/"pr-pending", which
+    are handled by their own earlier branches, or a genuinely unrecognized value that should be
+    reported).
 
     A hand-edited status.md can yield a non-str phase (e.g.
-    unquoted ``phase: 42`` parses as an int via yaml.safe_load), so this guards on isinstance first rather than letting re.match raise TypeError and abort the whole build_plan sweep over one malformed slug.
+    unquoted ``phase: 42`` parses as an int via yaml.safe_load), so this guards on isinstance first
+    rather than letting re.match raise TypeError and abort the whole build_plan sweep over one
+    malformed slug.
 
     Returns:
-        True when phase is a str and either exactly matches one of the base pipeline phases in _LIVE_PHASES or matches one of the round-suffixed / batch-embedded patterns in _LIVE_PHASE_PATTERNS.
+        True when phase is a str and either exactly matches one of the base pipeline phases in
+        _LIVE_PHASES or matches one of the round-suffixed / batch-embedded patterns in
+        _LIVE_PHASE_PATTERNS.
     """
     if not isinstance(phase, str):
         return False
@@ -123,14 +131,17 @@ def build_plan(
 
     No git or wiki writes (read-only git queries are permitted);
     reads status.md files via _read_phase (file I/O).
-    Each path in ``active_worktrees`` is a worktree root discovered via ``_spawn_core.discover_active_worktrees``.
+    Each path in ``active_worktrees`` is a worktree root discovered via
+    ``_spawn_core.discover_active_worktrees``.
 
     Args:
-        active_worktrees: List of worktree root paths, each on a task branch detected via ``_spawn_core.discover_active_worktrees``.
+        active_worktrees: List of worktree root paths, each on a task branch detected via
+            ``_spawn_core.discover_active_worktrees``.
         home_tasks: Tasks parsed from wiki ``Home.md``.
         wiki_path: Path to the wiki clone root.
         hub_root: Absolute path to the hub git checkout.
-        container_path: When provided, scans ``<container_path>/wts/`` for worktree directories that have no active marker (orphan worktrees) and adds them to ``to_report``.
+        container_path: When provided, scans ``<container_path>/wts/`` for worktree directories that
+            have no active marker (orphan worktrees) and adds them to ``to_report``.
             Pass the result of ``_paths.resolve_container_path(hub_root)`` from the caller.
             When ``None``, orphan worktree detection is skipped.
     """
@@ -361,9 +372,12 @@ def _resolve_inplace_mode(
 ) -> tuple[str, str]:
     """Determine whether a sweep record should use in-place or worktree cleanup.
 
-    Derives the hub's current slug via ``_marker.slug_from_branch`` and delegates to ``_inplace.is_inplace``.
-    When the stale-worktree edge applies (branch matches AND a worktree dir exists), prompts the user and returns their choice.
-    The resolved task branch is returned alongside the mode so callers can pass it directly to ``_apply_inplace_record`` without a second branch lookup.
+    Derives the hub's current slug via ``_marker.slug_from_branch`` and delegates to
+    ``_inplace.is_inplace``.
+    When the stale-worktree edge applies (branch matches AND a worktree dir exists), prompts the
+    user and returns their choice.
+    The resolved task branch is returned alongside the mode so callers can pass it directly to
+    ``_apply_inplace_record`` without a second branch lookup.
 
     Args:
         record: The SlugRecord being evaluated.
@@ -375,7 +389,8 @@ def _resolve_inplace_mode(
         - ``"inplace"`` — skip worktree remove, delete branch only.
         - ``"worktree"`` — standard worktree remove flow.
         - ``"abort"`` — user aborted;
-        caller should skip this record. ``task_branch`` is the current branch name when ``mode == "inplace"``, and ``""`` otherwise.
+        caller should skip this record. ``task_branch`` is the current branch name when ``mode ==
+        "inplace"``, and ``""`` otherwise.
     """
     try:
         slug_for_record = _marker.slug_from_branch(hub_root, wiki_path, cfg)
@@ -413,8 +428,11 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
     Delete the remote origin branch for a task, tolerating an already-absent ref.
 
     Attempts `git push origin --delete <branch>` from `hub_root`.
-    A non-zero exit whose stderr contains "remote ref does not exist" is treated as success (idempotent teardown -- the branch may never have been pushed, or was already deleted by an earlier abandon/cleanup run).
-    Any other non-zero exit is printed to stderr as a non-fatal warning so the rest of the teardown proceeds.
+    A non-zero exit whose stderr contains "remote ref does not exist" is treated as success
+    (idempotent teardown -- the branch may never have been pushed, or was already deleted by an
+    earlier abandon/cleanup run).
+    Any other non-zero exit is printed to stderr as a non-fatal warning so the rest of the teardown
+    proceeds.
 
     Args:
         hub_root: Absolute path to the hub git checkout used as the git -C target.
@@ -449,13 +467,16 @@ def _apply_inplace_record(
 ) -> None:
     """Apply cleanup for a single in-place (no separate worktree) record.
 
-    Reads the parent branch from ``status.md``, checks out the parent branch so we are not deleting the currently-checked-out branch, deletes the task branch (``-d`` for done, ``-D`` for abandoned), and removes the ``.active`` junction at ``hub_root / ".active"``.
+    Reads the parent branch from ``status.md``, checks out the parent branch so we are not deleting
+    the currently-checked-out branch, deletes the task branch (``-d`` for done, ``-D`` for
+    abandoned), and removes the ``.active`` junction at ``hub_root / ".active"``.
     This function does NOT remove the wiki active dir — ``apply_plan`` handles that uniformly.
 
     Args:
         record: The SlugRecord for the in-place task being cleaned.
         hub_root: Absolute path to the hub git checkout.
-        task_branch: The task branch name resolved by ``_resolve_inplace_mode`` via the current branch.
+        task_branch: The task branch name resolved by ``_resolve_inplace_mode`` via the current
+            branch.
             Avoids a second git branch query.
     """
     # Read parent branch from status.md so we can check out safely.
@@ -536,7 +557,8 @@ def _apply_worktree_record(
 ) -> None:
     """Apply cleanup for a single record that has a separate git worktree.
 
-    Removes per-slug junctions inside the worktree, removes the worktree itself, and deletes the branch.
+    Removes per-slug junctions inside the worktree, removes the worktree itself, and deletes the
+    branch.
 
     Args:
         record: The SlugRecord for the task being cleaned.

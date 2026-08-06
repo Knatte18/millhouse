@@ -1,6 +1,7 @@
 """millpy-builder-lock.py — builder lock CLI (acquire / release / read).
 
-Wraps the _builder_lock.py API behind a thin command-line interface so mill-go can call it via `uv run` without inline Python.
+Wraps the _builder_lock.py API behind a thin command-line interface so mill-go can call it via `uv
+run` without inline Python.
 
 Subcommands:
     acquire <slug> — acquire the builder lock for <slug>;

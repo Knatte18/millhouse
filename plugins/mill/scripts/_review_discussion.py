@@ -2,7 +2,8 @@
 Review backend for discussion artefacts.
 
 Single holistic review call.
-The reviewer's tooluse flag (from the registry spec) decides whether the discussion file is inlined into the prompt or the reviewer is pointed at its path and reads it via Read/Grep/Glob.
+The reviewer's tooluse flag (from the registry spec) decides whether the discussion file is inlined
+into the prompt or the reviewer is pointed at its path and reads it via Read/Grep/Glob.
 The backend writes the review file;
 the LLM does not use Write.
 
@@ -55,12 +56,17 @@ def prepare(
     """Prepare a holistic discussion review by rendering the prompt.
 
     Args:
-        agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write carve-out for the .out.md report).
-            Defaults to False so run()'s `--stage full` fallback keeps receiving today's non-agent rule unchanged.
-        reviewer_override: When not None, overrides the config-resolved discussion-review holistic reviewer for this call only -- nothing is written back to config.
-            Bypasses the `reviewer: null` disablement (but not the separate `rounds: 0` check above),
+        agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write
+            carve-out for the .out.md report).
+            Defaults to False so run()'s `--stage full` fallback keeps receiving today's non-agent
+                rule unchanged.
+        reviewer_override: When not None, overrides the config-resolved discussion-review holistic
+            reviewer for this call only -- nothing is written back to config.
+            Bypasses the `reviewer: null` disablement (but not the separate `rounds: 0` check
+                above),
             and skips the large-prompt auto-switch entirely.
-            Resolved with `reject_non_claude=agent_mode`: rejects a non-Claude model when called from the Agent-mode `--stage prepare` entrypoint (agent_mode=True),
+            Resolved with `reject_non_claude=agent_mode`: rejects a non-Claude model when called
+                from the Agent-mode `--stage prepare` entrypoint (agent_mode=True),
             but accepts one when called from run()'s internal, non-agent-mode invocation.
 
     Returns:
@@ -159,10 +165,13 @@ def finalize(
     """Finalize a discussion review by parsing verdict and writing the review file.
 
     Args:
-        raw_text: Raw review output from the reviewer (should be extracted via extract_review_content).
+        raw_text: Raw review output from the reviewer (should be extracted via
+        extract_review_content).
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
-        actual_model: The model that actually produced this review, used to correct an unreliable self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through to ``finalize_scope`` on the success path only.
+        actual_model: The model that actually produced this review, used to correct an unreliable
+        self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
+        to ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -228,7 +237,8 @@ def run(
     3. finalize() to parse verdict and return ReviewResult.
 
     Args:
-        reviewer_override: When not None, overrides the config-resolved discussion-review holistic reviewer for this call only -- nothing is written back to config.
+        reviewer_override: When not None, overrides the config-resolved discussion-review holistic
+        reviewer for this call only -- nothing is written back to config.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled

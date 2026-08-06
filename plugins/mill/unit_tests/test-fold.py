@@ -118,7 +118,8 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
 def _patch_resolve_paths(wiki_path: Path) -> tuple:
     """Swap millpy_fold's resolve_git_root and resolve_wiki_path to return wiki_path.
 
-    Returns (orig_resolve_git_root, orig_resolve_wiki_path) so the caller can restore them in a finally block.
+    Returns (orig_resolve_git_root, orig_resolve_wiki_path) so the caller can restore them in a
+    finally block.
     """
     orig_rg = millpy_fold.resolve_git_root
     orig_rwp = millpy_fold.resolve_wiki_path

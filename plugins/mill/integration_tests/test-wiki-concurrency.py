@@ -1,7 +1,10 @@
 """Integration test: concurrent wiki lock serialisation.
 
-Regression gate for the 2026-04-28 bug where two overlapping mill-* invocations both ran `git pull --ff-only` against the same wiki clone, producing "Cannot fast-forward to multiple branches" and leaving one operation without a lock.
-This test verifies that `_wiki.sync_pull` in two concurrent subprocesses serialises correctly via the advisory lockfile — the second call waits for the first's lock, then succeeds.
+Regression gate for the 2026-04-28 bug where two overlapping mill-* invocations both ran `git pull
+--ff-only` against the same wiki clone, producing "Cannot fast-forward to multiple branches" and
+leaving one operation without a lock.
+This test verifies that `_wiki.sync_pull` in two concurrent subprocesses serialises correctly via
+the advisory lockfile — the second call waits for the first's lock, then succeeds.
 
 NOT part of run-all.py (requires a real git binary and real I/O).
 Run manually:

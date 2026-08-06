@@ -1,7 +1,9 @@
 """Unit tests for plugins/mill/scripts/_llm_claude.py.
 
-These tests exercise the pure-Python surface: argv construction, stream-JSON parsing, exception hierarchy, signature shape.
-They do NOT invoke the live ``claude`` CLI — those tests live in ``integration_tests/smoke-llm-claude.py``.
+These tests exercise the pure-Python surface: argv construction, stream-JSON parsing, exception
+hierarchy, signature shape.
+They do NOT invoke the live ``claude`` CLI — those tests live in
+``integration_tests/smoke-llm-claude.py``.
 """
 from __future__ import annotations
 

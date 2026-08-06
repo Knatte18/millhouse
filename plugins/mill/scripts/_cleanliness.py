@@ -16,7 +16,8 @@ def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
 
     Called once per batch from the initial-dispatch path of millpy-implement.py.
     Runs git status --porcelain --untracked-files=no and writes stdout verbatim.
-    The on-disk file is committed on the task branch by mill-go's batch-start commit so it survives crash/resume.
+    The on-disk file is committed on the task branch by mill-go's batch-start commit so it survives
+    crash/resume.
     """
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,19 +57,28 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
 def compute_scope_violations(hub_root: Path, git_root: Path | None) -> list[str]:
     """Return untracked files outside _mill/ that appeared at batch end, hub-relative.
 
-    _pygit2_util.status_porcelain always returns paths relative to the git repository toplevel, regardless of which path is passed to it.
-    In a nested hub layout (hub_root is a subdirectory of git_root), those git-root-relative paths must be rebased onto hub_root before the "_mill/"-prefix and junction checks -- which assume hub-relative paths -- can be applied correctly.
+    _pygit2_util.status_porcelain always returns paths relative to the git repository toplevel,
+    regardless of which path is passed to it.
+    In a nested hub layout (hub_root is a subdirectory of git_root), those git-root-relative paths
+    must be rebased onto hub_root before the "_mill/"-prefix and junction checks -- which assume
+    hub-relative paths -- can be applied correctly.
 
-    When git_root is None, this call site is a flat-layout caller that never resolved a git_root (e.g.
+    When git_root is None, this call site is a flat-layout caller that never resolved a git_root
+    (e.g.
     one that flows through _forward_output's git_root: Path | None = None default);
     treat that identically to git_root == hub_root (flat layout), i.e.
     hub_prefix = "".
 
-    Otherwise hub_prefix = hub_root.relative_to(git_root).as_posix() (empty string when hub_root == git_root, i.e.
+    Otherwise hub_prefix = hub_root.relative_to(git_root).as_posix() (empty string when hub_root ==
+    git_root, i.e.
     flat layout).
-    For each untracked ("?? ") status line: if hub_prefix is non-empty and the git-root-relative path does not equal hub_prefix and does not start with hub_prefix + "/", the path belongs to a different subtree entirely and is dropped -- it is not a violation, just out of this hub's view.
-    Otherwise the hub_prefix is stripped to produce the hub-relative remainder (unchanged from path when hub_prefix is empty).
-    The existing _mill/-prefix and junction-directory checks are then applied to that hub-relative remainder.
+    For each untracked ("?? ") status line: if hub_prefix is non-empty and the git-root-relative
+    path does not equal hub_prefix and does not start with hub_prefix + "/", the path belongs to a
+    different subtree entirely and is dropped -- it is not a violation, just out of this hub's view.
+    Otherwise the hub_prefix is stripped to produce the hub-relative remainder (unchanged from path
+    when hub_prefix is empty).
+    The existing _mill/-prefix and junction-directory checks are then applied to that hub-relative
+    remainder.
 
     Returns bare hub-relative path strings (no '?? ' prefix), sorted.
     Empty list means no violations.
@@ -103,7 +113,8 @@ def compute_scope_violations(hub_root: Path, git_root: Path | None) -> list[str]
 def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str]:
     """Return file paths changed by the task vs the parent branch.
 
-    Runs `git diff --name-only <parent_branch>...HEAD` and returns the parsed output as a list of relative paths.
+    Runs `git diff --name-only <parent_branch>...HEAD` and returns the parsed output as a list of
+    relative paths.
     """
     result = _subprocess_util.run(
         ["git", "diff", "--name-only", f"{parent_branch}...HEAD"],
@@ -146,8 +157,10 @@ def _filter_to_task_scope(porcelain_lines: list[str], task_dir: Path, owned_path
 def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) -> list[str]:
     """Return in-scope dirty files at task completion.
 
-    Task scope = the task_dir subtree union paths changed by the task's own commits vs the parent branch.
-    Runs git status --porcelain --untracked-files=no and filters the result to only include files within the task's owned scope.
+    Task scope = the task_dir subtree union paths changed by the task's own commits vs the parent
+    branch.
+    Runs git status --porcelain --untracked-files=no and filters the result to only include files
+    within the task's owned scope.
 
     Args:
         worktree: Path to the task worktree.
@@ -178,12 +191,15 @@ def _is_go_main_artifact(worktree: Path, path: str) -> bool:
     """
     Return True if the extensionless file at path is a Go package-main build artifact.
 
-    Queries tracked Go files via git ls-files and checks whether any of them (a) live in a directory whose basename equals the violation's basename and (b) declare package main (a stripped line that starts with "package main").
+    Queries tracked Go files via git ls-files and checks whether any of them (a) live in a directory
+    whose basename equals the violation's basename and (b) declare package main (a stripped line
+    that starts with "package main").
     Only candidate files that can be read are checked;
     unreadable files are silently skipped.
 
     This is the corroborating heuristic for extensionless binary names.
-    A bare name like "sandbox" is only auto-cleaned when a tracked Go file exists at a path like tools/sandbox/main.go that declares package main.
+    A bare name like "sandbox" is only auto-cleaned when a tracked Go file exists at a path like
+    tools/sandbox/main.go that declares package main.
     This prevents over-matching non-Go files such as shell scripts or data files with no extension.
 
     Args:
@@ -191,7 +207,8 @@ def _is_go_main_artifact(worktree: Path, path: str) -> bool:
         path: Worktree-relative path of the violation (e.g. "sandbox").
 
     Returns:
-        True if at least one tracked Go file qualifies as a package-main source for this binary name;
+        True if at least one tracked Go file qualifies as a package-main source for this binary
+        name;
         False otherwise.
     """
     # The binary name to match against parent directory names in the Go source tree
@@ -229,24 +246,31 @@ def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[li
     """
     Auto-clean ephemeral build artifacts from scope violations.
 
-    Calls compute_scope_violations(hub_root, git_root) to get untracked out-of-scope files (already rebased to hub-relative paths -- see that function's docstring for the nested-hub-layout rebasing rule), partitions them by a conservative allowlist, removes allowlisted files from disk (swallowing already-gone errors), and returns the removed and blocking paths.
+    Calls compute_scope_violations(hub_root, git_root) to get untracked out-of-scope files (already
+    rebased to hub-relative paths -- see that function's docstring for the nested-hub-layout
+    rebasing rule), partitions them by a conservative allowlist, removes allowlisted files from disk
+    (swallowing already-gone errors), and returns the removed and blocking paths.
 
     Allowlist rules applied in order:
     1. Basename ends with '.exe': blanket Go compiled binary or test executable (e.g.
         sandbox.exe, foo.test.exe).
         The .exe suffix rule subsumes the historical .test.exe entry.
     2. Basename has no extension (no '.'
-        in basename): allowlisted only when _is_go_main_artifact confirms a matching package-main source directory (e.g.
+        in basename): allowlisted only when _is_go_main_artifact confirms a matching package-main
+            source directory (e.g.
         extensionless 'sandbox' corroborated by tools/sandbox/main.go declaring package main).
     3. Basename matches the fixed allowlist: 'coverage.out',
         or suffix in {.test, .test.exe, .prof, .cover}.
 
-    For allowlisted files: os.remove is called, FileNotFoundError is swallowed and the path is still reported as removed, OSError is reported as blocking instead.
+    For allowlisted files: os.remove is called, FileNotFoundError is swallowed and the path is still
+    reported as removed, OSError is reported as blocking instead.
     Non-allowlisted violations are reported as blocking without touching disk.
 
     Args:
-        hub_root: Path to the mill hub root (the project root resolved via _paths.resolve_hub_path()).
-            Hub-relative violation paths returned by compute_scope_violations are joined onto this root for disk removal.
+        hub_root: Path to the mill hub root (the project root resolved via
+            _paths.resolve_hub_path()).
+            Hub-relative violation paths returned by compute_scope_violations are joined onto this
+                root for disk removal.
         git_root: Path to the git repository toplevel resolved via _paths.resolve_git_root().
             Equal to hub_root in a flat layout.
 
@@ -305,12 +329,16 @@ def revert_out_of_scope_drift(
     """
     Revert out-of-scope formatter drift and return status.
 
-    Out-of-scope = a tracked modification (status code ` M`, `M `, `MM`) whose path is NOT under task_dir AND NOT in the task's parent-diff owned set.
+    Out-of-scope = a tracked modification (status code ` M`, `M `, `MM`) whose path is NOT under
+    task_dir AND NOT in the task's parent-diff owned set.
     Such drift is reverted via `git checkout HEAD -- <path>`.
     Untracked files (`??`) and added files (`A `) are NOT reverted.
 
-    In a nested-hub layout (worktree is a subdirectory of git_root), both the porcelain status lines and the parent-diff owned paths are git-root-relative, while task_dir is hub-relative -- see compute_scope_violations's docstring in this same file for the rebasing rationale.
-    Both inputs are rebased onto worktree (the hub root) before the in-scope/out-of-scope partition and the `git checkout` subprocess call are performed.
+    In a nested-hub layout (worktree is a subdirectory of git_root), both the porcelain status lines
+    and the parent-diff owned paths are git-root-relative, while task_dir is hub-relative -- see
+    compute_scope_violations's docstring in this same file for the rebasing rationale.
+    Both inputs are rebased onto worktree (the hub root) before the in-scope/out-of-scope partition
+    and the `git checkout` subprocess call are performed.
 
     Args:
         worktree: Path to the task worktree (the mill hub root).
@@ -318,13 +346,15 @@ def revert_out_of_scope_drift(
             If absolute, relativized to worktree.
         parent_branch: Name of the parent branch (e.g., "main").
         git_root: Path to the git repository toplevel resolved via _paths.resolve_git_root().
-            None means a flat-layout caller that never resolved a git_root, treated identically to git_root == worktree (i.e.
+            None means a flat-layout caller that never resolved a git_root, treated identically to
+                git_root == worktree (i.e.
             hub_prefix = "").
 
     Returns:
         A tuple of (reverted_paths, remaining_in_scope_lines) where:
         - reverted_paths: sorted list of hub-relative file paths that were reverted.
-        - remaining_in_scope_lines: sorted list of in-scope porcelain lines (with hub-relative paths) still dirty after revert.
+        - remaining_in_scope_lines: sorted list of in-scope porcelain lines (with hub-relative
+        paths) still dirty after revert.
     """
     # Get current dirt (git-root-relative, regardless of the cwd passed to git)
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
@@ -345,7 +375,8 @@ def revert_out_of_scope_drift(
         """Rebase a git-root-relative path onto the hub root.
 
         Returns the hub-relative remainder,
-        or None if the path belongs to a different subtree of the git root entirely (outside this hub's view).
+        or None if the path belongs to a different subtree of the git root entirely (outside this
+        hub's view).
         """
         if not hub_prefix:
             return path
