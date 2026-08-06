@@ -1,8 +1,8 @@
 """In-process git operations using pygit2 instead of subprocess calls.
 
-Provides access to git repository state (HEAD, current branch, status, worktrees)
-without spawning git subprocesses. All failures raise GitOpsError; callers in
-different modules re-raise as their layer's exception type.
+Provides access to git repository state (HEAD, current branch, status, worktrees) without spawning git subprocesses.
+All failures raise GitOpsError;
+callers in different modules re-raise as their layer's exception type.
 """
 from __future__ import annotations
 
@@ -100,13 +100,15 @@ def head_sha(path: Path) -> str:
 
 
 def current_branch(path: Path) -> str | None:
-    """Get the current branch name, or None if HEAD is detached.
+    """Get the current branch name,
+or None if HEAD is detached.
 
     Args:
         path: Path inside the repository.
 
     Returns:
-        The branch name, or None if detached.
+        The branch name,
+        or None if detached.
 
     Raises:
         GitOpsError: If unable to read the current branch.
@@ -168,18 +170,17 @@ def _flags_to_xy(flags: int) -> tuple[str, str]:
 def status_porcelain(path: Path, *, include_untracked: bool = True) -> list[str]:
     """Get the git status in porcelain v1 format.
 
-    Returns status as a list of strings in the format "XY path" where X is the
-    index status and Y is the worktree status. Sorted output.
+    Returns status as a list of strings in the format "XY path" where X is the index status and Y is the worktree status.
+    Sorted output.
 
-    Note: For index-renamed files, repo.status() returns only the new path
-    (bit 8 set, no "oldpath -> newpath" format). Callers that do line-set
-    arithmetic (e.g. _cleanliness.compute_new_dirt, _review_common._filter_porcelain)
-    are unaffected because they compare sets of opaque strings; within-session
-    comparisons are self-consistent.
+    Note: For index-renamed files, repo.status() returns only the new path (bit 8 set, no "oldpath -> newpath" format).
+    Callers that do line-set arithmetic (e.g. _cleanliness.compute_new_dirt, _review_common._filter_porcelain) are unaffected because they compare sets of opaque strings;
+    within-session comparisons are self-consistent.
 
     Args:
         path: Path inside the repository.
-        include_untracked: When False, skip untracked files (?? entries).
+        include_untracked: When False, skip untracked files (??
+        entries).
 
     Returns:
         Sorted list of status lines in porcelain v1 format.
@@ -216,7 +217,8 @@ def is_ancestor(path: Path, ancestor_sha: str, descendant_sha: str) -> bool:
         descendant_sha: The potential descendant commit SHA.
 
     Returns:
-        True if descendant_sha is a descendant of ancestor_sha, or if they are equal.
+        True if descendant_sha is a descendant of ancestor_sha,
+        or if they are equal.
         False if ancestor_sha is not an ancestor of descendant_sha.
 
     Raises:
@@ -237,9 +239,8 @@ def is_ancestor(path: Path, ancestor_sha: str, descendant_sha: str) -> bool:
 def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
     """List all git worktrees for the repository.
 
-    Returns a list of dicts with "path" (absolute, forward-slash format) and
-    "branch" (name or None if detached) keys. Main worktree is listed first,
-    followed by linked worktrees in iteration order.
+    Returns a list of dicts with "path" (absolute, forward-slash format) and "branch" (name or None if detached) keys.
+    Main worktree is listed first, followed by linked worktrees in iteration order.
 
     Args:
         cwd: Any path inside the repository.
@@ -309,16 +310,16 @@ def list_worktrees(cwd: Path) -> list[dict[str, str | None]]:
 def strip_branch_prefix(branch: str, cfg: dict) -> str | None:
     """Extract task slug from a branch by removing the configured prefix.
 
-    If branch starts with the configured prefix, returns branch with prefix
-    removed. Otherwise returns None.
+    If branch starts with the configured prefix, returns branch with prefix removed.
+    Otherwise returns None.
 
     Args:
         branch: The branch name.
         cfg: Configuration dict (uses cfg["spawn"]["branch_prefix"]).
 
     Returns:
-        The branch name with prefix removed, or None if the branch doesn't
-        start with the prefix.
+        The branch name with prefix removed,
+        or None if the branch doesn't start with the prefix.
     """
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")
     return branch.removeprefix(prefix) if branch.startswith(prefix) else None

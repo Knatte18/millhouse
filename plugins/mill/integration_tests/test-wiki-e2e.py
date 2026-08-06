@@ -1,15 +1,15 @@
 """Integration test: wiki client-daemon end-to-end with structured ops.
 
-Exercise the full client-daemon-git stack with structured task operations:
-real TCP socket, real git, real subprocess spawn. Covers task CRUD, concurrent
-phase updates, idle-exit/respawn, and health check.
+Exercise the full client-daemon-git stack with structured task operations: real TCP socket, real git, real subprocess spawn.
+Covers task CRUD, concurrent phase updates, idle-exit/respawn, and health check.
 
-NOT part of run-all.py (requires a real git binary and real I/O). Run manually:
+NOT part of run-all.py (requires a real git binary and real I/O).
+Run manually:
 
     PYTHONPATH=plugins/mill/scripts python plugins/mill/integration_tests/test-wiki-e2e.py
 
-Exit 0 on PASS, 1 on FAIL. Scratch lives under <repo>/.scratch/ and is
-preserved on failure for inspection.
+Exit 0 on PASS, 1 on FAIL.
+Scratch lives under <repo>/.scratch/ and is preserved on failure for inspection.
 """
 from __future__ import annotations
 

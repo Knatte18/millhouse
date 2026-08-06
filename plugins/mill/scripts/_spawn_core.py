@@ -1,61 +1,68 @@
 """
 Shared spawn-flow helpers used by both ``mill-spawn`` and ``mill-claim``.
 
-``mill-spawn`` creates a worktree and then delegates the task-picking,
-wiki-claiming, and status-writing steps to the helpers here.
-``mill-claim`` picks and claims a task in an existing worktree without
-creating a new one; it calls the same helpers to keep parity.
+``mill-spawn`` creates a worktree and then delegates the task-picking, wiki-claiming, and status-writing steps to the helpers here. ``mill-claim`` picks and claims a task in an existing worktree without creating a new one;
+it calls the same helpers to keep parity.
 
 Public API:
     WORKTREE_COLOR_NAME_TO_HEX
-        Dict mapping palette color names to CSS hex strings. Green is reserved
-        for the hub (main worktree); all other colors are for child worktrees.
-    WORKTREE_COLOR_PALETTE
-        List of hex strings derived from ``WORKTREE_COLOR_NAME_TO_HEX.values()``.
+    Dict mapping palette color names to CSS hex strings.
+        Green is reserved
+    for the hub (main worktree);
+        all other colors are for child worktrees.
+    WORKTREE_COLOR_PALETTE List of hex strings derived from ``WORKTREE_COLOR_NAME_TO_HEX.values()``.
         Single source of truth for the palette order used by ``pick_worktree_color``.
     pick_worktree_color(worktrees_dir) -> str
-        Pick the first non-green palette color not already in use by a sibling
-        worktree. Scans ``<worktrees_dir>/*/.vscode/settings.json``.
-    BacklogEmpty        — raised by ``pick_task_single`` when no task is pickable.
+    Pick the first non-green palette color not already in use by a sibling
+    worktree.
+        Scans ``<worktrees_dir>/*/.vscode/settings.json``.
+    BacklogEmpty — raised by ``pick_task_single`` when no task is pickable.
     pick_task_single(tasks, slug=None) -> Task
-        Single-task picker: ``--slug`` short-circuit, or numbered interactive
-        prompt over unmarked tasks. Raises ``BacklogEmpty`` when nothing is
-        available; raises ``ValueError`` when the requested slug is invalid.
+    Single-task picker: ``--slug`` short-circuit,
+        or numbered interactive
+    prompt over unmarked tasks.
+        Raises ``BacklogEmpty`` when nothing is
+    available;
+        raises ``ValueError`` when the requested slug is invalid.
     pick_task_single_or_multi(tasks, slug=None) -> tuple[str, Task | list[Task] | None, list[Task]]
-        Extends ``pick_task_single`` with multi-select support from the numbered
-        prompt. ``mode`` is ``"single"``, ``"multi"``, or ``"empty"``; ``picked``
-        is one Task, a list of Task, or None; ``candidates`` is always ``[]``.
-        ``--slug`` short-circuit is always single-only.
+    Extends ``pick_task_single`` with multi-select support from the numbered
+    prompt. ``mode`` is ``"single"``, ``"multi"``, or ``"empty"``;
+        ``picked``
+    is one Task, a list of Task, or None;
+        ``candidates`` is always ``[]``.
+    ``--slug`` short-circuit is always single-only.
     claim_in_wiki(wiki_path, slug) -> None
-        Lock-acquire, mark Home.md ``[active]``, regen sidebar, commit+push,
-        lock-release.
-    multi_select_groom_then_claim(wiki_path, source_slugs, merged_title,
-                                  merged_slug, merged_body, has_proposal=False,
-                                  proposal_body=None) -> Task
-        Single wiki transaction: remove source entries, append merged entry,
-        claim it, regenerate sidebar, optionally write proposal file,
-        commit+push under the wiki lock. Returns the merged Task.
+    Lock-acquire, mark Home.md ``[active]``, regen sidebar, commit+push,
+    lock-release.
+    multi_select_groom_then_claim(wiki_path, source_slugs, merged_title, merged_slug, merged_body, has_proposal=False, proposal_body=None) -> Task Single wiki transaction: remove source entries, append merged entry, claim it, regenerate sidebar, optionally write proposal file, commit+push under the wiki lock.
+    Returns the merged Task.
     prompt_merged_entry(source_tasks) -> tuple[str, str, str, bool, str | None]
-        Interactive stdin prompt that collects merged title, slug, body,
-        and proposal flag from the user. Re-prompts 3x on invalid input;
-        raises ValueError when attempts exhausted. Returns
-        (merged_title, merged_slug, body_for_home, has_proposal, proposal_body).
+    Interactive stdin prompt that collects merged title, slug, body,
+    and proposal flag from the user.
+        Re-prompts 3x on invalid input;
+    raises ValueError when attempts exhausted.
+        Returns
+    (merged_title, merged_slug, body_for_home, has_proposal, proposal_body).
     capture_parent_branch(git_root) -> str
-        Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
-        Raises ``RuntimeError`` on non-zero exit.
+    Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
+    Raises ``RuntimeError`` on non-zero exit.
     write_initial_status(worktree_path, slug, title, ts, parent_branch, branch, *, cfg) -> Path
-        Render + write ``_mill/status.md`` at worktree root; stage + commit on
-        task branch; return the absolute path of the written file.
+    Render + write ``_mill/status.md`` at worktree root;
+        stage + commit on
+    task branch;
+        return the absolute path of the written file.
     recreate_active_junction(hub_root) -> None
-        Delete-then-create the ``.active`` junction so it points at
-        ``hub_root / "_mill"``. Used by both ``mill-claim`` and ``mill-spawn``.
+    Delete-then-create the ``.active`` junction so it points at
+    ``hub_root / "_mill"``.
+        Used by both ``mill-claim`` and ``mill-spawn``.
     write_hub_active_indicator(hub_root, slug) -> None
-        Write an empty <hub_root>/_mill/<slug>.active indicator file so hub-side
-        tools can detect the active task without branch inspection.
+    Write an empty <hub_root>/_mill/<slug>.active indicator file so hub-side
+    tools can detect the active task without branch inspection.
     discover_active_worktrees(worktrees_dir, home_tasks, branch_prefix) -> list[tuple[Path, str, str]]
-        Scan ``worktrees_dir`` for directories whose current branch slug
-        (after stripping ``branch_prefix``) matches an entry in
-        ``home_tasks``. Returns ``(path, slug, task_title)`` triples.
+    Scan ``worktrees_dir`` for directories whose current branch slug
+    (after stripping ``branch_prefix``) matches an entry in
+    ``home_tasks``.
+        Returns ``(path, slug, task_title)`` triples.
 """
 from __future__ import annotations
 
@@ -78,9 +85,10 @@ _SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 # Worktree color palette
 # ---------------------------------------------------------------------------
 
-# Color-name → hex mapping. Green is reserved for the hub (main worktree);
-# all non-green entries are candidates for child worktrees. The dict order
-# determines the rotation used by ``pick_worktree_color``.
+# Color-name → hex mapping.
+# Green is reserved for the hub (main worktree);
+# all non-green entries are candidates for child worktrees.
+# The dict order determines the rotation used by ``pick_worktree_color``.
 WORKTREE_COLOR_NAME_TO_HEX: dict[str, str] = {
     "green": "#2d7d46",
     "purple": "#7d2d6b",
@@ -92,8 +100,8 @@ WORKTREE_COLOR_NAME_TO_HEX: dict[str, str] = {
     "orange": "#7d462d",
 }
 
-# Single ordered list built from the dict's values so the two stay
-# synchronised. Consumers that only need the hex values import this.
+# Single ordered list built from the dict's values so the two stay synchronised.
+# Consumers that only need the hex values import this.
 WORKTREE_COLOR_PALETTE: list[str] = list(WORKTREE_COLOR_NAME_TO_HEX.values())
 
 _MAIN_WORKTREE_COLOR = WORKTREE_COLOR_NAME_TO_HEX["green"]
@@ -114,15 +122,13 @@ def pick_worktree_color(worktrees_dir: Path) -> str:
     """
     Pick the first non-green palette color not used by any sibling worktree.
 
-    Scans ``<worktrees_dir>/*/.vscode/settings.json`` for existing
-    ``titleBar.activeBackground`` values. Returns the first non-green
-    palette color missing from that set. If every non-green color is in
-    use, wraps to the first non-green (never green — that is reserved for
-    the hub).
+    Scans ``<worktrees_dir>/*/.vscode/settings.json`` for existing ``titleBar.activeBackground`` values.
+    Returns the first non-green palette color missing from that set.
+    If every non-green color is in use, wraps to the first non-green (never green — that is reserved for the hub).
 
     Args:
-        worktrees_dir: Directory holding per-task worktrees. Missing dir
-            returns the first non-green color straight away.
+        worktrees_dir: Directory holding per-task worktrees.
+            Missing dir returns the first non-green color straight away.
 
     Returns:
         A hex color like ``"#7d2d6b"``.
@@ -156,24 +162,19 @@ def discover_active_worktrees(
     """
     Discover task worktrees under ``worktrees_dir`` whose branch matches Home.md.
 
-    Uses ``git worktree list --porcelain`` (single git call) instead of walking
-    ``worktrees_dir`` and running ``git branch --show-current`` per entry —
-    orphan directories on disk (leftover from failed mill-merge teardowns) are
-    not in the worktree registry, so they don't appear at all and don't waste
-    git subprocess calls.
+    Uses ``git worktree list --porcelain`` (single git call) instead of walking ``worktrees_dir`` and running ``git branch --show-current`` per entry — orphan directories on disk (leftover from failed mill-merge teardowns) are not in the worktree registry, so they don't appear at all and don't waste git subprocess calls.
 
-    Skips worktrees whose path is not under ``worktrees_dir``, whose branch
-    does not start with ``branch_prefix`` (when non-empty), or whose slug is
-    not present in ``home_tasks``.
+    Skips worktrees whose path is not under ``worktrees_dir``, whose branch does not start with ``branch_prefix`` (when non-empty), or whose slug is not present in ``home_tasks``.
 
     Args:
         worktrees_dir: Container directory holding per-task worktrees.
         home_tasks: Tasks parsed from wiki Home.md (any phase accepted).
         branch_prefix: Branch prefix to strip when deriving slug from branch.
             Empty string means slug equals branch directly.
-        cwd: Optional path to run ``git worktree list`` from. When None,
-            uses the current process cwd. Callers running from outside the
-            repo (e.g. tests with a tempdir fixture) must pass this.
+        cwd: Optional path to run ``git worktree list`` from.
+            When None, uses the current process cwd.
+            Callers running from outside the repo (e.g.
+            tests with a tempdir fixture) must pass this.
 
     Returns:
         List of ``(path, slug, task_title)`` triples, one per matched worktree.
@@ -190,8 +191,7 @@ def discover_active_worktrees(
     if proc.returncode != 0:
         return results
 
-    # Parse porcelain output: blocks separated by blank lines, each block has
-    # `worktree <path>` and optional `branch refs/heads/<name>` / `detached`.
+    # Parse porcelain output: blocks separated by blank lines, each block has `worktree <path>` and optional `branch refs/heads/<name>` / `detached`.
     current_path: Path | None = None
     current_branch: str | None = None
     for line in proc.stdout.split("\n") + [""]:
@@ -259,29 +259,27 @@ def pick_task_single(
     """
     Pick exactly one task from ``tasks`` for claiming.
 
-    When ``slug`` is provided the task must exist and have status ``None``
-    (i.e. not already active, done, or abandoned). Any other
-    slug value raises ``ValueError``.
+    When ``slug`` is provided the task must exist and have status ``None`` (i.e.
+    not already active, done, or abandoned).
+    Any other slug value raises ``ValueError``.
 
     When ``slug`` is ``None`` the standard interactive flow runs:
 
-    1. If at least one unmarked task (status is None) exists, present
-       the numbered picker and return the chosen task. A failed picker
-       (EOF or out-of-range input) propagates as ``ValueError``.
+    1. If at least one unmarked task (status is None) exists, present the numbered picker and return the chosen task.
+        A failed picker (EOF or out-of-range input) propagates as ``ValueError``.
     2. If nothing is pickable, raise ``BacklogEmpty``.
 
     Args:
         tasks: All tasks parsed from Home.md (including active/done/abandoned).
-        slug: Optional ``--slug`` override. When given, bypasses the
-            interactive picker entirely.
+        slug: Optional ``--slug`` override.
+            When given, bypasses the interactive picker entirely.
 
     Returns:
         The selected task dict.
 
     Raises:
         BacklogEmpty: No pickable task exists (slug=None path only).
-        ValueError: The requested slug is unknown, already claimed/done/abandoned,
-            or the numbered picker returned no selection.
+        ValueError: The requested slug is unknown, already claimed/done/abandoned, or the numbered picker returned no selection.
     """
     if slug is not None:
         matched = next(
@@ -315,9 +313,10 @@ def _prompt_numbered_multi(
     """
     Read one or more 1-indexed comma-separated choices from stdin.
 
-    Accepts ``"1"``, ``"1, 3"``, ``"1,3,4"``. De-duplicates repeated indices
-    silently, preserving selection order. Re-prompts on non-numeric or
-    out-of-range input; up to 3 total attempts before raising ``ValueError``.
+    Accepts ``"1"``, ``"1, 3"``, ``"1,3,4"``.
+    De-duplicates repeated indices silently, preserving selection order.
+    Re-prompts on non-numeric or out-of-range input;
+    up to 3 total attempts before raising ``ValueError``.
 
     Args:
         candidates: Ordered list of pickable tasks shown to the user.
@@ -326,7 +325,8 @@ def _prompt_numbered_multi(
         A non-empty list of the selected task dicts (de-duplicated).
 
     Raises:
-        ValueError: All 3 attempts were invalid, or EOF on stdin.
+        ValueError: All 3 attempts were invalid,
+        or EOF on stdin.
     """
     print(
         "Pick task(s) — enter one number or comma-separated numbers:",
@@ -385,27 +385,26 @@ def pick_task_single_or_multi(
     """
     Pick one or more tasks from ``tasks`` for claiming, with multi-select support.
 
-    Extends ``pick_task_single`` by allowing the numbered interactive prompt to
-    return multiple tasks when the user enters comma-separated indices. The
-    ``--slug`` short-circuit always resolves to a single task (single-only);
+    Extends ``pick_task_single`` by allowing the numbered interactive prompt to return multiple tasks when the user enters comma-separated indices.
+    The ``--slug`` short-circuit always resolves to a single task (single-only);
     multi only fires from the numbered prompt.
 
     Return shape:
-        - ``("single", task, [])`` — one task picked (slug bypass
-          or numbered prompt with a single index).
+        - ``("single", task, [])`` — one task picked (slug bypass or numbered prompt with a single index).
         - ``("multi", [task_a, ...], [])`` — two or more tasks from the prompt.
         - ``("empty", None, [])`` — no pickable (unmarked) tasks exist.
 
     Args:
         tasks: All tasks parsed from Home.md.
-        slug: Optional ``--slug`` override; always single-only bypass.
+        slug: Optional ``--slug`` override;
+        always single-only bypass.
 
     Returns:
-        3-tuple ``(mode, picked, candidates)`` where ``candidates`` is always
-        an empty list (reserved for future use).
+        3-tuple ``(mode, picked, candidates)`` where ``candidates`` is always an empty list (reserved for future use).
 
     Raises:
-        ValueError: Invalid slug, or no valid selection after 3 prompt attempts.
+        ValueError: Invalid slug,
+        or no valid selection after 3 prompt attempts.
     """
     # --slug short-circuit: bypass picker entirely, always single.
     if slug is not None:
@@ -453,11 +452,12 @@ def multi_select_groom_then_claim(
         wiki_path: Directory containing the wiki clone.
         source_slugs: Slugs of the tasks to remove and absorb.
         merged_title: Human-readable title for the merged entry.
-        merged_slug: Slug for the merged entry. Must be new (not already in Home.md).
+        merged_slug: Slug for the merged entry.
+            Must be new (not already in Home.md).
         merged_body: Body text for the merged entry in Home.md (maps to brief in V3).
         has_proposal: When True, include body in upsert dict for proposal file.
-        proposal_body: Content for ``proposal-<merged_slug>.md``. Only
-            included when ``has_proposal=True`` and not None.
+        proposal_body: Content for ``proposal-<merged_slug>.md``.
+            Only included when ``has_proposal=True`` and not None.
 
     Returns:
         The newly created and claimed task dict (status ``"active"``).
@@ -489,23 +489,22 @@ def prompt_merged_entry(
     Collect a merged entry definition from the user via stdin.
 
     Prints the source tasks to stderr for context, then prompts for:
-    1. ``Merged title:`` — free-text, non-empty; re-prompts up to 3 times.
-    2. ``Merged slug:`` — must match ``[a-z][a-z0-9-]*``; re-prompts 3 times.
+    1. ``Merged title:`` — free-text, non-empty;
+    re-prompts up to 3 times.
+    2. ``Merged slug:`` — must match ``[a-z][a-z0-9-]*``;
+    re-prompts 3 times.
     3. ``Extract to proposal? (y/N):`` — ``y`` sets ``has_proposal=True``.
     4. Body lines read until a line containing only ``END``.
 
-    When ``has_proposal=True``:
-        ``body_for_home`` is set to the wiki link reference form and
-        ``proposal_body`` holds the typed body text.
-    When ``has_proposal=False``:
-        ``body_for_home`` is the typed body and ``proposal_body`` is None.
+    When ``has_proposal=True``: ``body_for_home`` is set to the wiki link reference form and ``proposal_body`` holds the typed body text.
+    When ``has_proposal=False``: ``body_for_home`` is the typed body and ``proposal_body`` is None.
 
     Args:
-        source_tasks: Tasks being merged; titles are printed as context.
+        source_tasks: Tasks being merged;
+        titles are printed as context.
 
     Returns:
-        5-tuple ``(merged_title, merged_slug, body_for_home, has_proposal,
-        proposal_body)``.
+        5-tuple ``(merged_title, merged_slug, body_for_home, has_proposal, proposal_body)``.
 
     Raises:
         ValueError: Merged title or slug could not be collected after 3 attempts.
@@ -594,10 +593,8 @@ def capture_parent_branch(git_root: Path) -> str:
     """
     Return the current HEAD branch name for the hub at ``git_root``.
 
-    Runs ``git rev-parse --abbrev-ref HEAD`` against ``git_root``. This
-    is called before a worktree is created so the result reflects the
-    hub's branch, which mill-merge / mill-cleanup need to know where to
-    merge back to.
+    Runs ``git rev-parse --abbrev-ref HEAD`` against ``git_root``.
+    This is called before a worktree is created so the result reflects the hub's branch, which mill-merge / mill-cleanup need to know where to merge back to.
 
     Args:
         git_root: Absolute path to the hub git checkout.
@@ -606,8 +603,8 @@ def capture_parent_branch(git_root: Path) -> str:
         The branch name as a plain string (e.g. ``"main"``).
 
     Raises:
-        RuntimeError: ``git rev-parse`` returned non-zero. The caller
-            (``mill-spawn.main``) translates this into ``SystemExit``.
+        RuntimeError: ``git rev-parse`` returned non-zero.
+            The caller (``mill-spawn.main``) translates this into ``SystemExit``.
     """
     result = _subprocess_util.run(
         ["git", "-C", str(git_root), "rev-parse", "--abbrev-ref", "HEAD"],
@@ -630,33 +627,27 @@ def write_initial_status(
     cfg: dict,
 ) -> Path:
     """
-    Render + write ``_mill/status.md`` at worktree root; create ``_mill/`` directory if absent.
+    Render + write ``_mill/status.md`` at worktree root;
+    create ``_mill/`` directory if absent.
 
-    Uses ``_status.render_initial`` to produce the file body, writes the
-    file to ``worktree_path / "status.md"``, stages and commits on the task
-    branch, and returns the absolute path.
+    Uses ``_status.render_initial`` to produce the file body, writes the file to ``worktree_path / "status.md"``, stages and commits on the task branch, and returns the absolute path.
 
     Args:
-        worktree_path: Root directory of the task worktree (the git checkout
-            directory, not ``.millhouse/``). ``status.md`` is written here
-            and tracked by git on the task branch.
+        worktree_path: Root directory of the task worktree (the git checkout directory, not ``.millhouse/``). ``status.md`` is written here and tracked by git on the task branch.
         slug: Task slug; embedded in the commit message and in status.md.
-        title: Human-readable task title used both as the ``task:`` value
-            and as the description placeholder.
+        title: Human-readable task title used both as the ``task:`` value and as the description placeholder.
         ts: ISO-8601 UTC timestamp for the timeline entry.
-        parent_branch: Hub branch name recorded so mill-merge knows where
-            to merge back to.
-        branch: The task branch the worktree is on; recorded so the status
-            file is self-describing without inferring from per-developer
-            cfg.branch_prefix.
-        cfg: Loaded mill config dict; supplies cfg["paths"]["status_md"] to _paths.status_path.
+        parent_branch: Hub branch name recorded so mill-merge knows where to merge back to.
+        branch: The task branch the worktree is on; recorded so the status file is self-describing without inferring from per-developer cfg.branch_prefix.
+        cfg: Loaded mill config dict;
+            supplies cfg["paths"]["status_md"] to _paths.status_path.
 
     Returns:
         Absolute path to the written ``status.md``.
 
     Raises:
-        RuntimeError: ``git add`` or ``git commit`` returned non-zero. The
-            error message includes the subprocess ``stderr``.
+        RuntimeError: ``git add`` or ``git commit`` returned non-zero.
+            The error message includes the subprocess ``stderr``.
     """
     status_text = _status.render_initial(
         task_title=title,
@@ -699,25 +690,21 @@ def recreate_active_junction(
     """
     Delete-then-create the ``.active`` junction at ``hub_root / ".active"``.
 
-    Points the junction at ``hub_root / "_mill"`` -- the on-branch working
-    directory for the current task. Called by ``mill-claim`` after claiming a
-    task in an existing worktree where the junction may already exist pointing
-    at a previous task, and by ``mill-spawn`` after ``_setup.create_hub_links``.
+    Points the junction at ``hub_root / "_mill"`` -- the on-branch working directory for the current task.
+    Called by ``mill-claim`` after claiming a task in an existing worktree where the junction may already exist pointing at a previous task,
+    and by ``mill-spawn`` after ``_setup.create_hub_links``.
 
-    The target ``_mill/`` directory is created (parents included) if it does
-    not yet exist, so ``_junction.create`` does not fail on a missing target.
+    The target ``_mill/`` directory is created (parents included) if it does not yet exist, so ``_junction.create`` does not fail on a missing target.
 
     Args:
-        hub_root: Absolute path to the hub git checkout. The junction is
-            placed at ``hub_root / ".active"`` and points at
-            ``hub_root / "_mill/"``.
+        hub_root: Absolute path to the hub git checkout.
+            The junction is placed at ``hub_root / ".active"`` and points at ``hub_root / "_mill/"``.
     """
     target = hub_root / "_mill"
     target.mkdir(parents=True, exist_ok=True)
     link_path = hub_root / ".active"
-    # Always remove first; _junction.remove is idempotent and uses os.path.lexists
-    # internally, so it correctly detects existing junctions with missing targets
-    # (where Path.exists() and Path.is_symlink() both return False on Windows).
+    # Always remove first;
+    # _junction.remove is idempotent and uses os.path.lexists internally, so it correctly detects existing junctions with missing targets (where Path.exists() and Path.is_symlink() both return False on Windows).
     _junction.remove(link_path)
     _junction.create(target, link_path)
 
@@ -727,7 +714,8 @@ def write_hub_active_indicator(hub_root: Path, slug: str) -> None:
 
     Args:
         hub_root: Absolute path to the hub git checkout.
-        slug: Task slug; determines the indicator file name.
+        slug: Task slug;
+        determines the indicator file name.
     """
     (hub_root / "_mill").mkdir(parents=True, exist_ok=True)
     (hub_root / "_mill" / f"{slug}.active").touch()

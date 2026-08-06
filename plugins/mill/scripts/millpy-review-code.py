@@ -1,24 +1,22 @@
 """mill-review-code — CLI entry point for code review.
 
-Resolves project roots, loads config, finds the active task slug, calls
-the code review backend, and prints JSON to stdout.
+Resolves project roots, loads config, finds the active task slug, calls the code review backend, and prints JSON to stdout.
 
 Flags:
-    --slug <slug>      Override active-slug detection (run from hub/main).
-    --batch <name>     run a per-batch review against the named batch in
-                       the plan's Batch Index. Omit for a holistic review
-                       covering every batch in one reviewer call.
-    --extra-file <path> (repeatable) additional source file to include in
-                       the reviewer's bulk. Used by mill-go on a
-                       ``NEED_CONTEXT`` retry: the prior round listed the
-                       files it could not find; the orchestrator passes
-                       them explicitly here.
-    --max-rounds <N>   Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds
-                       (overrides the active scope) for this invocation. Default: use config values.
+    --slug <slug> Override active-slug detection (run from hub/main).
+    --batch <name> run a per-batch review against the named batch in the plan's Batch Index.
+        Omit for a holistic review covering every batch in one reviewer call.
+    --extra-file <path> (repeatable) additional source file to include in the reviewer's bulk.
+        Used by mill-go on a ``NEED_CONTEXT`` retry: the prior round listed the files it could not find;
+        the orchestrator passes them explicitly here.
+    --max-rounds <N> Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds (overrides the active scope) for this invocation.
+        Default: use config values.
 
 Exit codes:
-    0 — review complete; JSON result on stdout
-    1 — error (missing slug, bad config, backend failure); message on stderr
+    0 — review complete;
+    JSON result on stdout
+    1 — error (missing slug, bad config, backend failure);
+    message on stderr
 """
 from __future__ import annotations
 
@@ -199,12 +197,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             agent_output_path = Path(args.agent_output)
-            # Agent-mode output is a file the reviewer wrote itself via Write,
-            # never HTML-escaped -- unlike the implementer's <task-notification>
-            # payload, so no unescape happens here. Missing file (e.g. the
-            # reviewer never wrote it) collapses to empty text rather than
-            # raising FileNotFoundError; the backend's own finalize turns that
-            # into a verdict: ERROR result on a zero exit code.
+            # Agent-mode output is a file the reviewer wrote itself via Write, never HTML-escaped -- unlike the implementer's <task-notification> payload, so no unescape happens here.
+            # Missing file (e.g.
+            # the reviewer never wrote it) collapses to empty text rather than raising FileNotFoundError;
+            # the backend's own finalize turns that into a verdict: ERROR result on a zero exit code.
             raw_text = (
                 agent_output_path.read_text(encoding="utf-8")
                 if agent_output_path.exists()

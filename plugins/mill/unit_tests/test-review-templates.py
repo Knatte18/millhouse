@@ -1,18 +1,11 @@
 """Unit tests for the five review prompt templates under plugins/mill/templates/.
 
 Covers:
-  - Each template still renders via _review_common.render_prompt with the exact
-    token set its backend supplies -- the guard against an accidentally
-    introduced <UPPERCASE> token, which _render.render() raises KeyError for
-    at render time (production), a failure test-render.py cannot see because
-    it only renders tempfile fixtures.
-  - The tool-prohibition header and the sole-output sentence deleted by card
-    15, and (for review-discussion.md only) the tool-use mode claim deleted
-    by card 16, stay deleted.
-  - The MILL_REVIEW_BEGIN/MILL_REVIEW_END wrapper and the REPORT-not-fix
-    instruction kept by card 15 stay present.
-  - No template names the report destination via an <OUTPUT_FILE> token
-    (Shared Decision "no <OUTPUT_FILE> token anywhere").
+  - Each template still renders via _review_common.render_prompt with the exact token set its backend supplies -- the guard against an accidentally introduced <UPPERCASE> token, which _render.render() raises KeyError for at render time (production), a failure test-render.py cannot see because it only renders tempfile fixtures.
+  - The tool-prohibition header and the sole-output sentence deleted by card 15,
+      and (for review-discussion.md only) the tool-use mode claim deleted by card 16, stay deleted.
+  - The MILL_REVIEW_BEGIN/MILL_REVIEW_END wrapper and the REPORT-not-fix instruction kept by card 15 stay present.
+  - No template names the report destination via an <OUTPUT_FILE> token (Shared Decision "no <OUTPUT_FILE> token anywhere").
 """
 
 from __future__ import annotations
@@ -35,8 +28,7 @@ TEMPLATE_NAMES = [
     "review-plan-holistic",
 ]
 
-# Tokens every one of the five templates needs, mirroring the render_prompt()
-# call sites in _review_discussion.py, _review_code.py, and _review_plan.py.
+# Tokens every one of the five templates needs, mirroring the render_prompt() call sites in _review_discussion.py, _review_code.py, and _review_plan.py.
 _COMMON_TOKENS = {
     "task_title": "Sample Task",
     "tool_rule": "<TOOL_RULE fixture text>",
@@ -46,8 +38,8 @@ _COMMON_TOKENS = {
     "reviewer_model": "claude-sonnet-4-6",
 }
 
-# Per-template additions: review-code-* also needs prior_nonblocking; the
-# batch variants additionally need batch_name (the holistic variants do not).
+# Per-template additions: review-code-* also needs prior_nonblocking;
+# the batch variants additionally need batch_name (the holistic variants do not).
 TEMPLATE_TOKENS = {
     "review-discussion": dict(_COMMON_TOKENS),
     "review-code-batch": {
@@ -69,10 +61,8 @@ def _read_template_source(name: str) -> str:
 def test_all_templates_render() -> None:
     """Each of the five templates renders with the token set its backend supplies.
 
-    A missing token (e.g. an accidentally introduced <UPPERCASE> placeholder)
-    would raise KeyError inside render_prompt -- this is the only test that
-    exercises the real files in plugins/mill/templates/ rather than a
-    tempfile fixture.
+    A missing token (e.g.
+    an accidentally introduced <UPPERCASE> placeholder) would raise KeyError inside render_prompt -- this is the only test that exercises the real files in plugins/mill/templates/ rather than a tempfile fixture.
     """
     for name in TEMPLATE_NAMES:
         tokens = TEMPLATE_TOKENS[name]
@@ -96,9 +86,8 @@ def test_deleted_prose_stays_deleted() -> None:
                 f"{name} still contains deleted phrase {phrase!r}"
             )
 
-    # review-discussion.md's source-grounding rule also lost its false
-    # tool-use mode claim (card 16); the other four templates' source-grounding
-    # paragraphs never made this claim, so there is no counterpart to check.
+    # review-discussion.md's source-grounding rule also lost its false tool-use mode claim (card 16);
+    # the other four templates' source-grounding paragraphs never made this claim, so there is no counterpart to check.
     discussion_source = _read_template_source("review-discussion")
     assert "You are in tool-use mode" not in discussion_source, (
         "review-discussion.md still contains the deleted tool-use mode claim"
@@ -119,9 +108,8 @@ def test_kept_prose_stays_kept() -> None:
 
 
 def test_plan_criteria_bullets_present() -> None:
-    """The two new plan-review criteria bullets (All Files Touched scope,
-    platform-behavior-claim verification) are present verbatim in both
-    plan-review templates' raw source."""
+    """The two new plan-review criteria bullets (All Files Touched scope, platform-behavior-claim verification) are present verbatim in both plan-review templates' raw source.
+"""
     for name in ["review-plan-holistic", "review-plan-batch"]:
         source = _read_template_source(name)
         assert (

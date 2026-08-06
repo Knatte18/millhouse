@@ -1,15 +1,13 @@
 """
 Detect approved scopes with unfixed nits.
 
-This module provides a gate to prevent tasks from completing when approved
-scopes have pending nits. It reads the status timeline to find all approved
-scopes, checks whether their final code-review files contain NIT headings,
-and verifies that nits-fixed markers are present in the timeline.
+This module provides a gate to prevent tasks from completing when approved scopes have pending nits.
+It reads the status timeline to find all approved scopes, checks whether their final code-review files contain NIT headings, and verifies that nits-fixed markers are present in the timeline.
 
 Public API:
     compute_unfixed_nits(worktree, reviews_dir, status_path) -> list[str]
-        Returns a list of approved scope names that have nits in their final
-        review file but lack a nits-fixed-<scope> marker in the timeline.
+    Returns a list of approved scope names that have nits in their final
+    review file but lack a nits-fixed-<scope> marker in the timeline.
 """
 from __future__ import annotations
 
@@ -28,23 +26,17 @@ def compute_unfixed_nits(
     """
     Compute the list of approved scopes with unfixed nits.
 
-    Reads the status timeline to find all approved scopes (per-batch scopes
-    from `approved-<batch>` rows and `holistic` from `holistic-approved` rows).
-    For each approved scope, locates the latest-timestamp code-review file
-    matching RE_BATCH (per-batch) or RE_SIMPLE (holistic) patterns, counts
-    `### [NIT]` headings via parse_blocking_count, and includes the scope
-    in the result when nit_count > 0 AND no nits-fixed-<scope> row exists
-    in the timeline.
+    Reads the status timeline to find all approved scopes (per-batch scopes from `approved-<batch>` rows and `holistic` from `holistic-approved` rows).
+    For each approved scope, locates the latest-timestamp code-review file matching RE_BATCH (per-batch) or RE_SIMPLE (holistic) patterns, counts `### [NIT]` headings via parse_blocking_count, and includes the scope in the result when nit_count > 0 AND no nits-fixed-<scope> row exists in the timeline.
 
     Args:
         worktree: Path to the worktree root (unused; accepted for API consistency).
-        reviews_dir: Path to the directory containing review files
-            (typically _mill/reviews/).
+        reviews_dir: Path to the directory containing review files (typically _mill/reviews/).
         status_path: Path to the status.md file.
 
     Returns:
-        A list of scope names (strings) that have unfixed nits. Returns an
-        empty list when every nitted scope has a marker.
+        A list of scope names (strings) that have unfixed nits.
+        Returns an empty list when every nitted scope has a marker.
     """
     # Read the status file to extract the timeline
     try:
@@ -109,17 +101,18 @@ def _find_final_code_review(reviews_dir: Path, scope: str) -> str | None:
     """
     Find the latest code-review file for the given scope.
 
-    For per-batch scopes, searches for files matching RE_BATCH with
-    type=code and batch=<scope>. For holistic scope, searches for files
-    matching RE_SIMPLE with type=code. Returns the file contents of the
-    latest-timestamp match, or None if no match is found.
+    For per-batch scopes, searches for files matching RE_BATCH with type=code and batch=<scope>.
+    For holistic scope, searches for files matching RE_SIMPLE with type=code.
+    Returns the file contents of the latest-timestamp match,
+    or None if no match is found.
 
     Args:
         reviews_dir: Path to the reviews directory.
         scope: Scope name ("holistic" or batch name).
 
     Returns:
-        The text contents of the final review file, or None if not found.
+        The text contents of the final review file,
+        or None if not found.
     """
     if not reviews_dir.exists():
         return None

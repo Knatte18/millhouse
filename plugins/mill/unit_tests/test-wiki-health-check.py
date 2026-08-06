@@ -1,14 +1,10 @@
-"""Unit tests for wiki daemon health-check: git-validity, cross-machine staleness,
-debounced pull, hard/soft failure classification, and the liveness-only exemption.
+"""Unit tests for wiki daemon health-check: git-validity, cross-machine staleness, debounced pull, hard/soft failure classification, and the liveness-only exemption.
 
-Covers `_handle_health()` (wiki/_server.py) and `health_check()`/`_ensure_daemon()`'s
-reuse-probe (wiki/_client.py). Uses real tempfile git repos (bare origin + clone)
-for the git-validity and staleness cases, and mocks for the debounce/soft-warning
-call-count assertions.
+Covers `_handle_health()` (wiki/_server.py) and `health_check()`/`_ensure_daemon()`'s reuse-probe (wiki/_client.py).
+Uses real tempfile git repos (bare origin + clone) for the git-validity and staleness cases,
+and mocks for the debounce/soft-warning call-count assertions.
 
-This file overrides `_test_helpers.py`'s WIKI_DAEMON_SKIP_GIT=1 default -- most
-of this suite is specifically about real git behavior (verify_git_repo, pull),
-so it needs the daemon to actually invoke git.
+This file overrides `_test_helpers.py`'s WIKI_DAEMON_SKIP_GIT=1 default -- most of this suite is specifically about real git behavior (verify_git_repo, pull), so it needs the daemon to actually invoke git.
 """
 from __future__ import annotations
 
@@ -21,9 +17,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# Real git behavior is the point of this test file -- override the suite-wide
-# WIKI_DAEMON_SKIP_GIT=1 default before _test_helpers (and wiki._client) import,
-# mirroring the documented override pattern (see test-spawn-core.py).
+# Real git behavior is the point of this test file -- override the suite-wide WIKI_DAEMON_SKIP_GIT=1 default before _test_helpers (and wiki._client) import, mirroring the documented override pattern (see test-spawn-core.py).
 os.environ["WIKI_DAEMON_SKIP_GIT"] = ""
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -43,16 +37,15 @@ def _run_git(args: list[str], cwd: Path) -> None:
 def _init_origin_and_clone(tmp: Path, name: str) -> tuple[Path, Path]:
     """Create a bare "origin" repo seeded with one commit, plus a real clone of it.
 
-    Returns (origin_path, local_clone_path). The clone is a full working
-    checkout with user.email/user.name configured, ready for git pull.
+    Returns (origin_path, local_clone_path).
+    The clone is a full working checkout with user.email/user.name configured, ready for git pull.
     """
     origin = tmp / f"{name}-origin.git"
     local = tmp / f"{name}-local"
 
     _run_git(["git", "init", "--bare", "-b", "main", str(origin)], tmp)
 
-    # Seed the bare origin with an initial commit via a throwaway clone --
-    # a bare repo has no working tree to commit into directly.
+    # Seed the bare origin with an initial commit via a throwaway clone -- a bare repo has no working tree to commit into directly.
     seed = tmp / f"{name}-seed"
     _run_git(["git", "clone", str(origin), str(seed)], tmp)
     _run_git(["git", "-C", str(seed), "config", "user.email", "test@test.com"], tmp)
@@ -118,11 +111,7 @@ def main() -> int:
     try:
         with safe_temp_dir() as tmp:
             origin, local = _init_origin_and_clone(tmp, "ff")
-            # Register before advancing origin: use_inprocess()'s own
-            # _ensure_gitignore() commits+pushes a .gitignore -- doing that
-            # while local and origin are still in sync keeps it a clean
-            # fast-forward push instead of a rebase that would silently
-            # resync local ahead of the staleness we're about to create.
+            # Register before advancing origin: use_inprocess()'s own _ensure_gitignore() commits+pushes a .gitignore -- doing that while local and origin are still in sync keeps it a clean fast-forward push instead of a rebase that would silently resync local ahead of the staleness we're about to create.
             wiki.use_inprocess(local)
             _advance_origin(origin, tmp, "ff", "new.md", "new content\n")
             result = wiki.health_check(local)
@@ -148,10 +137,7 @@ def main() -> int:
             _origin, local = _init_origin_and_clone(tmp, "debounce")
             wiki.use_inprocess(local)
 
-            # Patched onto wiki._server.pull specifically: _server.py does
-            # "from wiki._sync import pull", binding a local name in its own
-            # module namespace, so only patching that already-bound reference
-            # actually intercepts the call inside _handle_health.
+            # Patched onto wiki._server.pull specifically: _server.py does "from wiki._sync import pull", binding a local name in its own module namespace, so only patching that already-bound reference actually intercepts the call inside _handle_health.
             with patch("wiki._server.pull", return_value=False) as mock_pull:
                 first = wiki.health_check(local)
                 second = wiki.health_check(local)
@@ -168,10 +154,7 @@ def main() -> int:
     try:
         with safe_temp_dir() as tmp:
             origin, local = _init_origin_and_clone(tmp, "diverged")
-            # Same registration-before-divergence ordering as (b): register
-            # while still in sync so use_inprocess()'s own gitignore commit
-            # doesn't get auto-resolved via commit_push's rebase retry, which
-            # would silently erase the divergence we're about to set up.
+            # Same registration-before-divergence ordering as (b): register while still in sync so use_inprocess()'s own gitignore commit doesn't get auto-resolved via commit_push's rebase retry, which would silently erase the divergence we're about to set up.
             wiki.use_inprocess(local)
             _advance_origin(origin, tmp, "diverged", "origin-only.md", "origin content\n")
             (local / "local-only.md").write_text("local content\n", encoding="utf-8")
@@ -203,8 +186,7 @@ def main() -> int:
                 "git command timed out after 30s: git -C <path> pull --ff-only -- "
                 "the remote may be unreachable or waiting on credentials"
             )
-            # Same patch target as (c): the already-bound "pull" name inside
-            # wiki._server, not wiki._sync.pull.
+            # Same patch target as (c): the already-bound "pull" name inside wiki._server, not wiki._sync.pull.
             with patch("wiki._server.pull", side_effect=timeout_error):
                 result = wiki.health_check(local)
 

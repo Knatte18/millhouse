@@ -1,7 +1,6 @@
 """Unit tests for wiki protocol with structured operations.
 
-Covers: new ops dispatch, OP_READ/OP_WRITE rejection, PROTOCOL_VERSION=2,
-auth handling, and version mismatch.
+Covers: new ops dispatch, OP_READ/OP_WRITE rejection, PROTOCOL_VERSION=2, auth handling, and version mismatch.
 """
 from __future__ import annotations
 

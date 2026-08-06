@@ -37,8 +37,7 @@ def main() -> int:
     except AssertionError as exc:
         failures.append(f"FAIL (c) normal-completion: {exc}")
 
-    # (a) timeout fires + (b) breadcrumb format
-    # Deep tree-kill verification is deferred to integration_tests/
+    # (a) timeout fires + (b) breadcrumb format Deep tree-kill verification is deferred to integration_tests/
     try:
         buf = io.StringIO()
         deadline = time.monotonic() + 2.0 + _GRACE_SECONDS + _SMALL_DELTA
@@ -174,9 +173,9 @@ def main() -> int:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        # On Windows the returned proc is the cmd.exe shim which exits
-        # immediately; the actual Python worker runs asynchronously. Poll the
-        # output file for up to 10 s to let the worker finish before reading.
+        # On Windows the returned proc is the cmd.exe shim which exits immediately;
+        # the actual Python worker runs asynchronously.
+        # Poll the output file for up to 10 s to let the worker finish before reading.
         proc.wait(timeout=5)
         file_deadline = time.monotonic() + 10.0
         while time.monotonic() < file_deadline:
@@ -331,9 +330,7 @@ def main() -> int:
     except AssertionError as exc:
         failures.append(f"FAIL (o) failure-emit: {exc}")
 
-    # (p) scrub_env strips only the 3 allowlisted keys, leaves same-prefix
-    # persistent config (CLAUDE_CODE_USE_BEDROCK) and ordinary keys untouched,
-    # and does not mutate the input dict
+    # (p) scrub_env strips only the 3 allowlisted keys, leaves same-prefix persistent config (CLAUDE_CODE_USE_BEDROCK) and ordinary keys untouched, and does not mutate the input dict
     try:
         fake_env = {
             "CLAUDE_CODE_CHILD_SESSION": "abc123",

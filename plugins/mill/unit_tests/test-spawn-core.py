@@ -6,9 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# This test verifies commit-log contents (e.g. "wiki: merged-task"), so it
-# cannot use the default _test_helpers WIKI_DAEMON_SKIP_GIT mode. Set
-# WIKI_DAEMON_SKIP_PUSH=1 instead: commits still happen, just no network push.
+# This test verifies commit-log contents (e.g. "wiki: merged-task"), so it cannot use the default _test_helpers WIKI_DAEMON_SKIP_GIT mode.
+# Set WIKI_DAEMON_SKIP_PUSH=1 instead: commits still happen, just no network push.
 os.environ["WIKI_DAEMON_SKIP_GIT"] = ""
 os.environ.setdefault("WIKI_DAEMON_SKIP_PUSH", "1")
 
@@ -89,11 +88,9 @@ def _make_wiki(tmp: str, home_text: str) -> Path:
 
     Creates:
       - ``<tmp>/wiki-bare/`` — bare repo acting as the "origin" remote.
-      - ``<tmp>/wiki/`` — working clone with Home.md and _Sidebar.md
-        committed and pushed to the bare remote.
+      - ``<tmp>/wiki/`` — working clone with Home.md and _Sidebar.md committed and pushed to the bare remote.
 
-    The working clone is returned. ``wiki._sync.commit_push`` can push
-    to the bare remote without a network connection.
+    The working clone is returned. ``wiki._sync.commit_push`` can push to the bare remote without a network connection.
     """
     # Bare "remote"
     bare = Path(tmp) / "wiki-bare"
@@ -392,8 +389,7 @@ def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
     """Forcing git add to fail (via index lock) must raise RuntimeError with stderr."""
     with safe_temp_dir() as tmp:
         repo = _make_git_repo(tmp, branch="main")
-        # Create an index lock file — git add will fail with
-        # "Unable to create '...index.lock': File exists."
+        # Create an index lock file — git add will fail with "Unable to create '...index.lock': File exists."
         (repo / ".git" / "index.lock").write_text("", encoding="utf-8")
         try:
             write_initial_status(
@@ -481,7 +477,8 @@ def test_write_initial_status_push_failure_raises_runtime_error() -> None:
 
 def test_recreate_active_junction_creates_link() -> None:
     """New signature: recreate_active_junction(hub_root).
-    Target is hub_root / "_mill"; link is hub_root / ".active"."""
+    Target is hub_root / "_mill";
+    link is hub_root / ".active"."""
     with safe_temp_dir() as tmp:
         hub_root = Path(tmp) / "worktree"
         hub_root.mkdir(parents=True)
@@ -1047,14 +1044,10 @@ def test_pick_task_single_numbered_path_extended_title() -> None:
 def test_multi_select_one_of_two_does_not_claim_second() -> None:
     """Selection -> claim contract: user picks exactly one of two unmarked tasks.
 
-    When the numbered prompt receives "1" from stdin with two candidates, the
-    picker returns mode="single" -- the single-item shortcut fires in
-    pick_task_single_or_multi.  The second task must never be passed to
-    set_phase/merge_tasks.
+    When the numbered prompt receives "1" from stdin with two candidates, the picker returns mode="single" -- the single-item shortcut fires in pick_task_single_or_multi.
+    The second task must never be passed to set_phase/merge_tasks.
 
-    This encodes the regression scenario from #543: a slug the user did NOT
-    select must remain status=None and must never appear in any merge_tasks
-    remove_slugs or set_phase call.
+    This encodes the regression scenario from #543: a slug the user did NOT select must remain status=None and must never appear in any merge_tasks remove_slugs or set_phase call.
     """
     import io
     from unittest.mock import MagicMock, patch
@@ -1097,13 +1090,13 @@ def test_multi_select_one_of_two_does_not_claim_second() -> None:
             f"task-two status should be None (un-picked), got {remaining['status']!r}"
         )
 
-    # Simulate the millpy-spawn.py multi-branch guard: only mode=="multi" enters
-    # the multi_select_groom_then_claim path.  For a single selection, the caller
-    # MUST NOT call merge_tasks at all -- verify by mocking wiki.merge_tasks.
+    # Simulate the millpy-spawn.py multi-branch guard: only mode=="multi" enters the multi_select_groom_then_claim path.
+    # For a single selection, the caller MUST NOT call merge_tasks at all -- verify by mocking wiki.merge_tasks.
     merge_mock = MagicMock()
     with patch("wiki._client.merge_tasks", merge_mock):
         # Re-run the same selection path but via the high-level multi_select path.
-        # Only multi mode reaches merge_tasks.  Single mode does NOT.
+        # Only multi mode reaches merge_tasks.
+        # Single mode does NOT.
         sys.stdin = io.StringIO("1\n")
         try:
             mode2, picked2, _ = pick_task_single_or_multi(tasks)
@@ -1111,8 +1104,7 @@ def test_multi_select_one_of_two_does_not_claim_second() -> None:
             sys.stdin = original_stdin
 
         # In single mode the caller invokes claim_in_wiki(slug) -- NOT merge_tasks.
-        # Confirm mode is still single so the caller would use claim_in_wiki, not
-        # multi_select_groom_then_claim.
+        # Confirm mode is still single so the caller would use claim_in_wiki, not multi_select_groom_then_claim.
         if mode2 != "single":
             raise AssertionError(
                 f"second call should also return single, got {mode2!r}"

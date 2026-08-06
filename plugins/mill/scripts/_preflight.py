@@ -1,19 +1,18 @@
 """
 Detect missing cache helper modules and provide actionable error messages.
 
-When the plugin cache is stale, imported helpers may be missing from the
-installed cache (e.g. _archive_tag.py). This module turns cryptic
-ModuleNotFoundErrors into actionable "refresh your cache" messages.
+When the plugin cache is stale, imported helpers may be missing from the installed cache (e.g. _archive_tag.py).
+This module turns cryptic ModuleNotFoundErrors into actionable "refresh your cache" messages.
 
 Public API:
     missing_helpers(required: list[str], scripts_dir: Path) -> list[str]
-        Return the names from ``required`` for which ``<scripts_dir>/<name>.py``
-        does not exist.
+    Return the names from ``required`` for which ``<scripts_dir>/<name>.py``
+    does not exist.
 
     check_helpers(required: list[str]) -> int
-        Resolve the active scripts dir from ``CLAUDE_PLUGIN_ROOT`` and check for
-        missing helpers. Print an ASCII actionable message to stderr if any are
-        missing and return non-zero; otherwise return 0.
+    Resolve the active scripts dir from ``CLAUDE_PLUGIN_ROOT`` and check for
+    missing helpers. Print an ASCII actionable message to stderr if any are
+    missing and return non-zero; otherwise return 0.
 """
 from __future__ import annotations
 
@@ -30,8 +29,8 @@ def missing_helpers(required: list[str], scripts_dir: Path) -> list[str]:
         scripts_dir: Absolute path to the scripts directory to check.
 
     Returns:
-        List of names from ``required`` for which the corresponding .py file
-        is missing. Empty list when all present.
+        List of names from ``required`` for which the corresponding .py file is missing.
+        Empty list when all present.
     """
     missing = []
     for name in required:
@@ -43,10 +42,10 @@ def missing_helpers(required: list[str], scripts_dir: Path) -> list[str]:
 def check_helpers(required: list[str]) -> int:
     """Check for missing helper modules and return non-zero + print message if missing.
 
-    Resolves the active scripts dir from ``CLAUDE_PLUGIN_ROOT`` environment
-    variable. When unset, falls back to this file's own directory (where
-    _preflight.py itself exists). Prints an ASCII actionable error message
-    to stderr if any required helper is missing, and returns non-zero.
+    Resolves the active scripts dir from ``CLAUDE_PLUGIN_ROOT`` environment variable.
+    When unset, falls back to this file's own directory (where _preflight.py itself exists).
+    Prints an ASCII actionable error message to stderr if any required helper is missing,
+    and returns non-zero.
     Returns 0 when all helpers are present.
 
     Args:

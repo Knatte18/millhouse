@@ -1,7 +1,6 @@
 """Unit tests for plugins/mill/scripts/millpy-terminal.py.
 
-All discover_active_worktrees calls are mocked with return_value which accepts
-the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
+All discover_active_worktrees calls are mocked with return_value which accepts the new (worktrees_dir, home_tasks, branch_prefix) signature unchanged.
 """
 from __future__ import annotations
 
@@ -50,8 +49,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test: two worktrees present, user picks first -> subprocess called
-    # with first worktree's path.
+    # Test: two worktrees present, user picks first -> subprocess called with first worktree's path.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -194,8 +192,7 @@ def main() -> int:
             print("PASS: spawn empty backlog -> exit 0, no claude")
 
     # ------------------------------------------------------------------
-    # Test: hub_relative_path set in per-worktree config -> subprocess
-    # launched with <worktree>/src/csharp/X as cwd.
+    # Test: hub_relative_path set in per-worktree config -> subprocess launched with <worktree>/src/csharp/X as cwd.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
@@ -283,8 +280,7 @@ def main() -> int:
             print("PASS: hub_relative_path=. -> subprocess launched at worktree root")
 
     # ------------------------------------------------------------------
-    # Regression: hub config has hub_relative_path: "hub-sub", selected
-    # worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
+    # Regression: hub config has hub_relative_path: "hub-sub", selected worktree's config has hub_relative_path: "wt-sub" -> wt-sub wins.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)

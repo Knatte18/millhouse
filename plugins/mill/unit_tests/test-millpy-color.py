@@ -12,8 +12,7 @@ from unittest.mock import patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-# Load the hyphenated module name via importlib (millpy-color.py cannot be
-# imported with a bare `import` because the filename contains a hyphen).
+# Load the hyphenated module name via importlib (millpy-color.py cannot be imported with a bare `import` because the filename contains a hyphen).
 _SCRIPT = HUB / "plugins" / "mill" / "scripts" / "millpy-color.py"
 _spec = importlib.util.spec_from_file_location("mill_color", _SCRIPT)
 mill_color = importlib.util.module_from_spec(_spec)
@@ -60,8 +59,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test: main(["purple"]) calls write_settings with correct hex and
-    # preserves the existing window.title from settings.json.
+    # Test: main(["purple"]) calls write_settings with correct hex and preserves the existing window.title from settings.json.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         repo = Path(tmpdir)
@@ -140,8 +138,7 @@ def main() -> int:
             print("PASS: main([]) raises SystemExit with non-zero code")
 
     # ------------------------------------------------------------------
-    # Test: settings file and mill_dir use hub_path (cwd), not git_root,
-    # when they differ.
+    # Test: settings file and mill_dir use hub_path (cwd), not git_root, when they differ.
     # ------------------------------------------------------------------
     with tempfile.TemporaryDirectory() as tmpdir:
         git_root = Path(tmpdir)

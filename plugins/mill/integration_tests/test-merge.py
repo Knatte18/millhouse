@@ -2,27 +2,19 @@
 Integration test for mill-merge + mill-merge-in.
 
 Verifies mill-merge lands squash + archive tag + Home.md [done] flip;
-worktree, branch, portal, and wiki active-dir teardown are mill-cleanup's
-responsibility (separate test).
+worktree, branch, portal, and wiki active-dir teardown are mill-cleanup's responsibility (separate test).
 
-The skills themselves are prose; the test exercises the backing helpers
-and the exact git sequence the skills prescribe. That way we catch
-regressions in `_wiki`, `_sidebar`, `_tasks_md`, the new
-`_parent_branch`, and `_plan_dag.iter_batch_verifies` whenever any of
-them change shape.
+The skills themselves are prose;
+the test exercises the backing helpers and the exact git sequence the skills prescribe.
+That way we catch regressions in `_wiki`, `_sidebar`, `_tasks_md`, the new `_parent_branch`, and `_plan_dag.iter_batch_verifies` whenever any of them change shape.
 
 Layout mirrors `test-spawn.py`:
 
-    <container>/wiki.git          bare "remote" for the wiki
-    <container>/wiki              working clone of the bare
-    <container>/hub               hub repo (the parent)
-    <container>/worktrees/<slug>       child worktree under the task branch (hub-form default)
+    <container>/wiki.git bare "remote" for the wiki <container>/wiki working clone of the bare <container>/hub hub repo (the parent) <container>/worktrees/<slug> child worktree under the task branch (hub-form default)
 
 Flow under test (mirrors mill-merge SKILL.md step numbering):
 
-    0. Seed: task-branch worktree with a commit, Home.md [active], a
-       done status.md, plan/00-overview.md with one batch (verify: null
-       so we skip the verify step in the test).
+    0. Seed: task-branch worktree with a commit, Home.md [active], a done status.md, plan/00-overview.md with one batch (verify: null so we skip the verify step in the test).
     1. Acquire merge lock on the parent's .scratch/.
     2. mill-merge-in no-op check (parent has no new commits).
     3. Direct squash-merge child -> parent.
@@ -31,21 +23,15 @@ Flow under test (mirrors mill-merge SKILL.md step numbering):
     6. Regenerate sidebar (Step 8).
     7. Release merge lock (Step 8).
 
-Asserts each side effect. Worktree, branch, and wiki active-dir remain
-intact — mill-cleanup's job. Exits 0 on PASS, 1 on any failure; scratch
-is preserved on failure for inspection.
+Asserts each side effect.
+Worktree, branch, and wiki active-dir remain intact — mill-cleanup's job.
+Exits 0 on PASS, 1 on any failure;
+scratch is preserved on failure for inspection.
 
-Two further scenarios run after the flat-hub flow above, both against
-nested-hub-layout fixtures (``hub_root != git_root``, see the plan's
-"nested-hub-layout terminology" Shared Decision):
+Two further scenarios run after the flat-hub flow above, both against nested-hub-layout fixtures (``hub_root != git_root``, see the plan's "nested-hub-layout terminology" Shared Decision):
 
-    - The `_setup_nested_hub_scenario` case (#497 bug 2) verifies the
-      parent's own `_mill/status.md` survives a squash-merge untouched.
-    - The `_setup_nested_verify_plan` case (#604) verifies
-      `_plan_dag.iter_batch_verifies` resolves a batch's
-      ``verify: {cwd: hub, command: ...}`` mapping to `hub_root`, and
-      that replaying the command at that resolved cwd — not a fixed
-      "worktree root" — is what makes it succeed.
+    - The `_setup_nested_hub_scenario` case (#497 bug 2) verifies the parent's own `_mill/status.md` survives a squash-merge untouched.
+    - The `_setup_nested_verify_plan` case (#604) verifies `_plan_dag.iter_batch_verifies` resolves a batch's ``verify: {cwd: hub, command: ...}`` mapping to `hub_root`, and that replaying the command at that resolved cwd — not a fixed "worktree root" — is what makes it succeed.
 """
 from __future__ import annotations
 
@@ -90,11 +76,9 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     """
     Build hub + wiki + worktree trio with a seeded done task.
 
-    Returns ``(hub, wiki, worktree, slug)``. The worktree is on branch
-    ``test/<slug>`` and has one commit ahead of the hub's ``main``.
-    Wiki carries ``Home.md`` with an ``[active]`` entry, a plan dir,
-    and a ``status.md`` at ``phase: done`` so the merge flow can run
-    against it.
+    Returns ``(hub, wiki, worktree, slug)``.
+    The worktree is on branch ``test/<slug>`` and has one commit ahead of the hub's ``main``.
+    Wiki carries ``Home.md`` with an ``[active]`` entry, a plan dir, and a ``status.md`` at ``phase: done`` so the merge flow can run against it.
     """
     container.mkdir(parents=True, exist_ok=True)
     slug = "demo-merge"
@@ -208,10 +192,8 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
     _run(["git", "-C", str(hub), "add", "README.md"], cwd=container)
     _run(["git", "-C", str(hub), "commit", "-m", "init"], cwd=container)
 
-    # Bare origin remote for the hub, mirroring the wiki's bare + push pattern
-    # above. Without this, the hub repo has no origin at all, and the
-    # mill-merge-in no-op check's `git fetch origin` can never exercise the
-    # fetch-succeeds branch of its MERGE_REF resolution.
+    # Bare origin remote for the hub, mirroring the wiki's bare + push pattern above.
+    # Without this, the hub repo has no origin at all, and the mill-merge-in no-op check's `git fetch origin` can never exercise the fetch-succeeds branch of its MERGE_REF resolution.
     hub_origin = container / "hub-origin.git"
     _run(["git", "init", "--bare", str(hub_origin), "-b", "main"], cwd=container)
     _run(["git", "-C", str(hub), "remote", "add", "origin", str(hub_origin)], cwd=container)
@@ -276,8 +258,7 @@ def _setup_nested_hub_scenario(
     - Child branch with its own task state and a production file, then cleaned up.
     - Returns (repo, hub, wiki, parent_branch, child_branch, other_task_slug) for assertions.
 
-    The test verifies that mill-merge's restore step (reset + checkout) preserves
-    the parent's own _mill/status.md when squashing the child's cleanup commit.
+    The test verifies that mill-merge's restore step (reset + checkout) preserves the parent's own _mill/status.md when squashing the child's cleanup commit.
     """
     container.mkdir(parents=True, exist_ok=True)
     parent_slug = "other-task"
@@ -436,22 +417,11 @@ def _setup_nested_verify_plan(container: Path) -> tuple[Path, Path, Path]:
     """
     Build a minimal nested-hub plan directory for the merge-in Verify-cwd case.
 
-    Creates a git repo at ``<container>/nested-verify-repo`` (the
-    ``git_root``) with a hub subdirectory at ``src/hub`` (the
-    ``hub_root``, a plain directory rather than its own git repo --
-    a nested-hub-layout is a hub living in a subdirectory of a single
-    git repo, per the "nested-hub-layout terminology" Shared Decision).
-    The hub directory carries a marker file that exists only there, not
-    at ``git_root``.
+    Creates a git repo at ``<container>/nested-verify-repo`` (the ``git_root``) with a hub subdirectory at ``src/hub`` (the ``hub_root``, a plain directory rather than its own git repo -- a nested-hub-layout is a hub living in a subdirectory of a single git repo, per the "nested-hub-layout terminology" Shared Decision).
+    The hub directory carries a marker file that exists only there, not at ``git_root``.
 
-    The plan directory (nested under the hub, mirroring where a real
-    task's ``_mill/plan/`` lives) declares one batch whose ``verify:``
-    is the mapping form ``{cwd: hub, command: ...}``. The command
-    checks for the hub-only marker file relative to its own cwd, so it
-    only exits zero when actually run from ``hub_root`` -- proving that
-    a merge-in replay honors the resolved cwd instead of always running
-    at a fixed "worktree root" (the #604 bug being regression-tested
-    here).
+    The plan directory (nested under the hub, mirroring where a real task's ``_mill/plan/`` lives) declares one batch whose ``verify:`` is the mapping form ``{cwd: hub, command: ...}``.
+    The command checks for the hub-only marker file relative to its own cwd, so it only exits zero when actually run from ``hub_root`` -- proving that a merge-in replay honors the resolved cwd instead of always running at a fixed "worktree root" (the #604 bug being regression-tested here).
 
     Returns ``(git_root, hub_root, plan_dir)``.
     """
@@ -464,9 +434,7 @@ def _setup_nested_verify_plan(container: Path) -> tuple[Path, Path, Path]:
     _run(["git", "-C", str(git_root), "config", "user.email", "test@example.com"], cwd=container)
     _run(["git", "-C", str(git_root), "config", "user.name", "Test"], cwd=container)
 
-    # Hub-only marker: present at hub_root but absent at git_root, so
-    # the verify command below distinguishes the two roots by its exit
-    # code alone.
+    # Hub-only marker: present at hub_root but absent at git_root, so the verify command below distinguishes the two roots by its exit code alone.
     (hub_root / "hub-marker.txt").write_text("hub\n", encoding="utf-8")
     _run(["git", "-C", str(git_root), "add", "src/hub/hub-marker.txt"], cwd=container)
     _run(["git", "-C", str(git_root), "commit", "-m", "seed nested hub"], cwd=container)
@@ -536,11 +504,9 @@ def main() -> int:
         print(f"PASS: _parent_branch.resolve -> {parent!r}")
 
         # --- batch verify iteration (all null in seed -> empty list) ---
-        # Flat-layout fixture: hub_root == git_root == hub, matching the
-        # invariant established by the "nested-hub-layout terminology"
-        # Shared Decision. The all-null case is unaffected by the
-        # tuple-shape change (still an empty list either way), but the
-        # call must type-check against the batch-3 signature.
+        # Flat-layout fixture: hub_root == git_root == hub, matching the invariant established by the "nested-hub-layout terminology" Shared Decision.
+        # The all-null case is unaffected by the tuple-shape change (still an empty list either way),
+        # but the call must type-check against the batch-3 signature.
         verifies = _plan_dag.iter_batch_verifies(wiki_path / "active" / slug / "plan", hub, hub)
         _assert(verifies == [], f"expected no verifies, got {verifies}")
         print("PASS: iter_batch_verifies returns [] when every batch has verify: null")
@@ -557,9 +523,7 @@ def main() -> int:
         _assert(lock_path.exists(), "merge.lock not written")
 
         # --- mill-merge-in no-op check: fetch + resolve MERGE_REF, then diff HEAD..MERGE_REF ---
-        # Replicates SKILL.md's step 1 sequence exactly: fetch origin, prefer
-        # origin/<parent-branch> when it exists and local <parent-branch> is
-        # not ahead of it, else fall back to the local <parent-branch>.
+        # Replicates SKILL.md's step 1 sequence exactly: fetch origin, prefer origin/<parent-branch> when it exists and local <parent-branch> is not ahead of it, else fall back to the local <parent-branch>.
         _run(["git", "-C", str(worktree), "fetch", "origin", parent], cwd=container, check=False)
         rev_parse = _run(
             ["git", "-C", str(worktree), "rev-parse", "--verify", "--quiet",
@@ -575,10 +539,7 @@ def main() -> int:
             merge_ref = f"origin/{parent}" if ancestor_check.returncode == 0 else parent
         else:
             merge_ref = parent
-        # The hub's origin remote is freshly pushed and local main has not
-        # advanced since (see _setup_trio), so this must resolve to
-        # origin/main -- proving the test exercises the fetch-succeeds
-        # branch of MERGE_REF resolution, not just the local-ref fallback.
+        # The hub's origin remote is freshly pushed and local main has not advanced since (see _setup_trio), so this must resolve to origin/main -- proving the test exercises the fetch-succeeds branch of MERGE_REF resolution, not just the local-ref fallback.
         _assert(merge_ref == "origin/main",
                 f"expected MERGE_REF to resolve to origin/main, got {merge_ref!r}")
         result = _run(
@@ -591,15 +552,10 @@ def main() -> int:
               f"parent has no new commits)")
 
         # --- seed hub's own _mill/status.md on main (true worktree-mode #648 fixture) ---
-        # hub and worktree here are genuinely separate directories -- the true
-        # worktree-mode layout #648 was reported against, unlike
-        # _setup_nested_hub_scenario's same-directory branch-switching. hub has
-        # no _mill/ at all on main yet, and a bare `git checkout -- <pathspec>`
-        # fails with "pathspec ... did not match any file(s) known to git" when
-        # the target ref has nothing there -- independent of the worktree-mode
-        # bug this scenario targets -- so we seed a trivial, distinguishable
-        # status.md here, committed on main BEFORE the squash, so the restore
-        # commands below have something real to act on and to protect.
+        # hub and worktree here are genuinely separate directories -- the true worktree-mode layout #648 was reported against, unlike _setup_nested_hub_scenario's same-directory branch-switching.
+        # hub has no _mill/ at all on main yet,
+        # and a bare `git checkout -- <pathspec>` fails with "pathspec ...
+        # did not match any file(s) known to git" when the target ref has nothing there -- independent of the worktree-mode bug this scenario targets -- so we seed a trivial, distinguishable status.md here, committed on main BEFORE the squash, so the restore commands below have something real to act on and to protect.
         hub_mill_dir = hub / "_mill"
         hub_mill_dir.mkdir()
         hub_status_content = "phase: done\ntask: Unrelated hub task\n"
@@ -611,14 +567,8 @@ def main() -> int:
         )
 
         # --- dirty-parent-worktree preflight (#705) ---
-        # Proves the underlying `git status --porcelain --untracked-files=no`
-        # check mill-merge/SKILL.md's Step 5 now documents actually flags
-        # both halt scenarios from the operator-facing message (independent
-        # uncommitted edit, and a mid-Step-5-retry partially-applied squash)
-        # and ignores untracked-only noise. None of the three cases needs a
-        # wiki, worktree, or junctions -- a plain two-branch git repo is
-        # enough -- so each gets its own lightweight fixture directly at a
-        # fresh container path, instead of a `_setup_trio()` spin-up.
+        # Proves the underlying `git status --porcelain --untracked-files=no` check mill-merge/SKILL.md's Step 5 now documents actually flags both halt scenarios from the operator-facing message (independent uncommitted edit, and a mid-Step-5-retry partially-applied squash) and ignores untracked-only noise.
+        # None of the three cases needs a wiki, worktree, or junctions -- a plain two-branch git repo is enough -- so each gets its own lightweight fixture directly at a fresh container path, instead of a `_setup_trio()` spin-up.
 
         # Scenario (a): independent uncommitted edit in the parent worktree.
         container_dirty = SCRATCH / f"merge-test-dirty-{uuid.uuid4().hex[:8]}"
@@ -668,8 +618,8 @@ def main() -> int:
         _run(["git", "-C", str(container_retry), "add", "feature.txt"], cwd=SCRATCH)
         _run(["git", "-C", str(container_retry), "commit", "-m", "feature"], cwd=SCRATCH)
         _run(["git", "-C", str(container_retry), "checkout", "main"], cwd=SCRATCH)
-        # Simulates a Step 5 that failed between `merge --squash` and `commit`:
-        # the squash content is staged, but the commit that would land it never ran.
+        # Simulates a Step 5 that failed between `merge --squash` and `commit`: the squash content is staged,
+        # but the commit that would land it never ran.
         _run(["git", "-C", str(container_retry), "merge", "--squash", "feature-branch"], cwd=SCRATCH)
 
         retry_status = _run(
@@ -712,12 +662,8 @@ def main() -> int:
         _run(["git", "-C", str(hub), "merge", "--squash", child_branch], cwd=container)
 
         # --- Repro #648 first: OLD absolute, child-worktree-anchored pathspec ---
-        # An out-of-repo absolute pathspec is rejected by git before any
-        # pathspec-match check runs, so this reproduces the failure regardless
-        # of the seeded content above -- proving the fixture actually
-        # reproduces #648's failure before proving the fix resolves it. Both
-        # commands fail without touching hub's index/working tree, so no
-        # cleanup of hub's state is needed before the fix sub-step.
+        # An out-of-repo absolute pathspec is rejected by git before any pathspec-match check runs, so this reproduces the failure regardless of the seeded content above -- proving the fixture actually reproduces #648's failure before proving the fix resolves it.
+        # Both commands fail without touching hub's index/working tree, so no cleanup of hub's state is needed before the fix sub-step.
         repro_reset = _run(
             ["git", "-C", str(hub), "reset", "-q", "HEAD", "--", str(worktree / "_mill")],
             cwd=container, check=False,
@@ -757,9 +703,8 @@ def main() -> int:
         _run(["git", "-C", str(hub), "commit", "-m", "Demo merge"], cwd=container)
 
         # --- hub's own _mill/status.md survives the squash byte-identical ---
-        # Mirrors _setup_nested_hub_scenario's existing "parent's own
-        # status.md survives the squash" assertion, but this time in the true
-        # separate-worktree layout that assertion never actually covered.
+        # Mirrors _setup_nested_hub_scenario's existing "parent's own status.md survives the squash" assertion,
+        # but this time in the true separate-worktree layout that assertion never actually covered.
         hub_status_after = (hub / "_mill" / "status.md").read_text(encoding="utf-8")
         _assert(
             hub_status_after == hub_status_content,
@@ -827,12 +772,8 @@ def main() -> int:
         print("PASS -- mill-merge end-to-end (flat-hub scenario)")
 
         # === Step 5 guard: parent tracks nothing at task_dir (#736) ===
-        # Fresh, self-contained fixture -- deliberately does NOT reuse
-        # hub/worktree/container from _setup_trio, whose hub already has a
-        # seeded _mill/status.md on main by this point (the true
-        # worktree-mode #648 scenario above dodges this exact bug on
-        # purpose). This scenario needs the opposite starting state: main
-        # tracks no _mill/ anywhere in its tree.
+        # Fresh, self-contained fixture -- deliberately does NOT reuse hub/worktree/container from _setup_trio, whose hub already has a seeded _mill/status.md on main by this point (the true worktree-mode #648 scenario above dodges this exact bug on purpose).
+        # This scenario needs the opposite starting state: main tracks no _mill/ anywhere in its tree.
         container_step5_guard = SCRATCH / f"merge-test-step5-guard-{uuid.uuid4().hex[:8]}"
         _run(["git", "init", str(container_step5_guard), "-b", "main"], cwd=SCRATCH)
         _run(["git", "-C", str(container_step5_guard), "config", "user.email", "test@example.com"], cwd=SCRATCH)
@@ -841,10 +782,7 @@ def main() -> int:
         _run(["git", "-C", str(container_step5_guard), "add", "README.md"], cwd=SCRATCH)
         _run(["git", "-C", str(container_step5_guard), "commit", "-m", "init"], cwd=SCRATCH)
 
-        # Task branch carries both the intended production file and a
-        # _mill/status.md, committed together -- so main ends up with no
-        # _mill/ anywhere in its tree once we check back out to it: the
-        # exact #736 case ("parent tracks nothing at task_dir").
+        # Task branch carries both the intended production file and a _mill/status.md, committed together -- so main ends up with no _mill/ anywhere in its tree once we check back out to it: the exact #736 case ("parent tracks nothing at task_dir").
         _run(["git", "-C", str(container_step5_guard), "checkout", "-b", "task/guard-test"], cwd=SCRATCH)
         task_mill_dir = container_step5_guard / "_mill"
         task_mill_dir.mkdir()
@@ -858,12 +796,8 @@ def main() -> int:
         _run(["git", "-C", str(container_step5_guard), "merge", "--squash", "task/guard-test"], cwd=SCRATCH)
 
         # --- Repro #736 first: a bare, unguarded restore-checkout fails ---
-        # Mirrors the real Step 5 command ordering (reset, then checkout) and
-        # the existing #648 repro sub-step's own two-command structure.
-        # Both _mill/status.md and feature.txt are staged as new files right
-        # after the squash (from the index, where _mill IS present) -- the
-        # reset below is what makes the index match HEAD's absence at
-        # _mill/, reproducing the #736 pathspec-match failure on checkout.
+        # Mirrors the real Step 5 command ordering (reset, then checkout) and the existing #648 repro sub-step's own two-command structure.
+        # Both _mill/status.md and feature.txt are staged as new files right after the squash (from the index, where _mill IS present) -- the reset below is what makes the index match HEAD's absence at _mill/, reproducing the #736 pathspec-match failure on checkout.
         repro_reset = _run(
             ["git", "-C", str(container_step5_guard), "reset", "-q", "HEAD", "--", "_mill"],
             cwd=SCRATCH, check=False,
@@ -895,8 +829,7 @@ def main() -> int:
         _assert(fix_reset.returncode == 0,
                 f"expected reset to be a true no-op (already unstaged by the repro step "
                 f"above), got rc={fix_reset.returncode}")
-        # The `||` guard is shell syntax, so this one call needs shell=True --
-        # unlike every other _run() call in this file, which passes an argv list.
+        # The `||` guard is shell syntax, so this one call needs shell=True -- unlike every other _run() call in this file, which passes an argv list.
         fix_checkout = subprocess.run(
             "git checkout -- _mill 2>/dev/null || true",
             shell=True, cwd=str(container_step5_guard), capture_output=True, text=True,
@@ -929,11 +862,7 @@ def main() -> int:
         )
 
         # === Phase-gate slug-mismatch fallback sub-scenario (#656/#659/#662) ===
-        # Simulates the post-Step-3-corruption state mill-finalize's restore
-        # path produces (this task's Batch 2 fix): a status.md belonging to a
-        # DIFFERENT, foreign task left behind at the worktree's _mill/ path --
-        # mirroring _setup_nested_hub_scenario's existing "other-task" foreign
-        # status.md pattern.
+        # Simulates the post-Step-3-corruption state mill-finalize's restore path produces (this task's Batch 2 fix): a status.md belonging to a DIFFERENT, foreign task left behind at the worktree's _mill/ path -- mirroring _setup_nested_hub_scenario's existing "other-task" foreign status.md pattern.
         foreign_mill_dir = worktree / "_mill"
         foreign_mill_dir.mkdir(exist_ok=True)
         (foreign_mill_dir / "status.md").write_text(
@@ -953,14 +882,8 @@ def main() -> int:
             encoding="utf-8",
         )
 
-        # Mirror mill-merge's corrected Entry Step 5 phase-gate logic directly
-        # as plain test code (this logic is orchestration prose in SKILL.md,
-        # not an importable function, so the test replicates the same
-        # two-call sequence Batch 3 Card 7 documents). Read the raw `slug:`
-        # field -- NOT `_status.read_slug`, which falls back to the parent
-        # directory name (always literally "_mill" here) when the field is
-        # absent, so it can never distinguish "absent" from "present and
-        # different" the way this check needs to.
+        # Mirror mill-merge's corrected Entry Step 5 phase-gate logic directly as plain test code (this logic is orchestration prose in SKILL.md, not an importable function, so the test replicates the same two-call sequence Batch 3 Card 7 documents).
+        # Read the raw `slug:` field -- NOT `_status.read_slug`, which falls back to the parent directory name (always literally "_mill" here) when the field is absent, so it can never distinguish "absent" from "present and different" the way this check needs to.
         raw_slug = _status.read_full(foreign_mill_dir / "status.md")["yaml"].get("slug")
         _assert(raw_slug is not None, "expected foreign status.md to carry a slug: field")
         _assert(
@@ -969,11 +892,7 @@ def main() -> int:
         )
         print("PASS: raw slug: field detected as present and mismatched")
 
-        # On mismatch, the phase gate falls through to the wiki-lookup path
-        # instead of trusting the corrupted file's phase:/parent: fields --
-        # proving the documented wiki-fallback path resolves demo-merge's
-        # real state (flipped to "done" earlier in this scenario), not the
-        # foreign task's phase: discussing.
+        # On mismatch, the phase gate falls through to the wiki-lookup path instead of trusting the corrupted file's phase:/parent: fields -- proving the documented wiki-fallback path resolves demo-merge's real state (flipped to "done" earlier in this scenario), not the foreign task's phase: discussing.
         task = wiki.get_task(wiki_path, slug)
         _assert(
             task is not None and task.get("status") == "done",
@@ -1098,9 +1017,7 @@ def main() -> int:
         )
         print("PASS: iter_batch_verifies resolves {cwd: hub, command: ...} to hub_root")
 
-        # --- mirror mill-merge-in's Step 4 cwd resolution rule: hub_root
-        #     for cwd == hub_root, git_root for cwd == git_root, hub_root
-        #     for cwd is None (the string-form default) ---
+        # --- mirror mill-merge-in's Step 4 cwd resolution rule: hub_root for cwd == hub_root, git_root for cwd == git_root, hub_root for cwd is None (the string-form default) ---
         if verify_cwd == verify_git_root:
             resolved_cwd = verify_git_root
         else:
@@ -1117,9 +1034,7 @@ def main() -> int:
         )
         print("PASS: replayed verify command succeeds when run at resolved hub_root")
 
-        # --- the same command fails at git_root, confirming this fixture
-        #     actually distinguishes hub_root from git_root -- and that a
-        #     regression back to a fixed "worktree root" would be caught ---
+        # --- the same command fails at git_root, confirming this fixture actually distinguishes hub_root from git_root -- and that a regression back to a fixed "worktree root" would be caught ---
         wrong_cwd_result = subprocess.run(
             verify_cmd, shell=True, cwd=str(verify_git_root), capture_output=True, text=True,
         )

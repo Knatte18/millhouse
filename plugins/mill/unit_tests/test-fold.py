@@ -58,11 +58,9 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
     (wiki_path / "Home.md").write_text(home_md_content, encoding="utf-8")
     (wiki_path / "_Sidebar.md").write_text("", encoding="utf-8")
 
-    # Under WIKI_DAEMON_SKIP_GIT (default in this test file) the server never
-    # invokes git, so the git init/remote/commit/push dance below is dead
-    # weight — ~1 s per test on Windows just from subprocess spawn. Skip it.
-    # When SKIP_GIT is off, set up a real repo + bare origin so commit_push
-    # has somewhere to push to.
+    # Under WIKI_DAEMON_SKIP_GIT (default in this test file) the server never invokes git, so the git init/remote/commit/push dance below is dead weight — ~1 s per test on Windows just from subprocess spawn.
+    # Skip it.
+    # When SKIP_GIT is off, set up a real repo + bare origin so commit_push has somewhere to push to.
     if os.environ.get("WIKI_DAEMON_SKIP_GIT") != "1":
         bare_path = wiki_path / "bare.git"
         git_env = os.environ.copy()
@@ -89,18 +87,16 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
             check=True, capture_output=True, env=git_env,
         )
 
-    # Register an in-process server for this wiki_path so subsequent client ops
-    # don't pay the daemon subprocess spawn cost. Each test gets a fresh path
-    # so registrations don't collide.
+    # Register an in-process server for this wiki_path so subsequent client ops don't pay the daemon subprocess spawn cost.
+    # Each test gets a fresh path so registrations don't collide.
     wiki.use_inprocess(wiki_path)
 
     if tasks:
         for task in tasks:
             wiki.upsert_task(wiki_path, **task)
 
-    # Cleanup: unregister the in-process server (releases any file handles
-    # before tempdir removal), then remove the tempdir. ignore_errors fallback
-    # is kept in case a stale daemon from an earlier run holds locks.
+    # Cleanup: unregister the in-process server (releases any file handles before tempdir removal), then remove the tempdir.
+    # ignore_errors fallback is kept in case a stale daemon from an earlier run holds locks.
     original_cleanup = td.cleanup
     def safe_cleanup():
         try:
@@ -122,8 +118,7 @@ def _setup_tempfile_wiki(home_md_content: str, tasks: list[dict] = None) -> temp
 def _patch_resolve_paths(wiki_path: Path) -> tuple:
     """Swap millpy_fold's resolve_git_root and resolve_wiki_path to return wiki_path.
 
-    Returns (orig_resolve_git_root, orig_resolve_wiki_path) so the caller can
-    restore them in a finally block.
+    Returns (orig_resolve_git_root, orig_resolve_wiki_path) so the caller can restore them in a finally block.
     """
     orig_rg = millpy_fold.resolve_git_root
     orig_rwp = millpy_fold.resolve_wiki_path
@@ -135,7 +130,8 @@ def _patch_resolve_paths(wiki_path: Path) -> tuple:
 def _make_fake_fetch_one(state: str = "OPEN", title: str = "fake issue", number: int = 42):
     """Return a callable that simulates _gh_issues.fetch_one.
 
-    Returns a dict for OPEN issues; raises GhError for other states.
+    Returns a dict for OPEN issues;
+    raises GhError for other states.
     """
     def fake_fetch_one(n, **kwargs):
         if state == "OPEN":

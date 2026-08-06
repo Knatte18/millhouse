@@ -1,11 +1,7 @@
 """
 Unit tests for plugins/mill/scripts/_safe_rmtree.py.
 
-Covers: blacklist refusal, containment refusal, junction/symlink-strip before
-rmtree (regression guard for the wiki-wipe incident), path-is-junction/symlink
-refusal, missing-path no-op, ignore_errors semantics, non-container
-allowed_root handling, and vanished-entry TOCTOU races in
-_walk_strip_reparse_points (GitHub issue #738).
+Covers: blacklist refusal, containment refusal, junction/symlink-strip before rmtree (regression guard for the wiki-wipe incident), path-is-junction/symlink refusal, missing-path no-op, ignore_errors semantics, non-container allowed_root handling, and vanished-entry TOCTOU races in _walk_strip_reparse_points (GitHub issue #738).
 """
 from __future__ import annotations
 

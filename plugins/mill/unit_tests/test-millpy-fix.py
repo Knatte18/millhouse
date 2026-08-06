@@ -151,9 +151,8 @@ class TestMillpyFix(unittest.TestCase):
             return_value="test-branch",
         )
         def _subprocess_routing(argv, *a, **kw):
-            # `git rev-list --count` must yield a parseable int (commits_made
-            # counting added in main's reliability fix); other git calls return
-            # a SHA-like stub as before.
+            # `git rev-list --count` must yield a parseable int (commits_made counting added in main's reliability fix);
+            # other git calls return a SHA-like stub as before.
             if len(argv) > 1 and argv[1] == "rev-list":
                 return subprocess.CompletedProcess(
                     args=argv, returncode=0, stdout="0\n", stderr=""
@@ -214,8 +213,9 @@ class TestMillpyFix(unittest.TestCase):
             # Track git rev-parse calls to return different values (start_sha vs final HEAD)
             if argv[0:2] == ["git", "rev-parse"]:
                 call_count[0] += 1
-                # First call (start_sha): return the abc1234... full SHA
-                # Second call (final HEAD check): return the def5678... full SHA to simulate a commit was made
+                # First call (start_sha): return the abc1234...
+                # full SHA Second call (final HEAD check): return the def5678...
+                # full SHA to simulate a commit was made
                 if call_count[0] == 1:
                     return subprocess.CompletedProcess(
                         args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
@@ -273,19 +273,13 @@ class TestMillpyFix(unittest.TestCase):
     def test_load_config_uses_hub_root_when_hub_in_subdirectory(self):
         """#728 repro: hub lives in a subdirectory of the outer git repo.
 
-        Both the initial load_config call (arg1 = project_root, from
-        resolve_hub_path()) and the post-resolve_active_hub reload must be
-        invoked with the resolved hub root, never the outer git-repo root --
-        otherwise the hub's own mill-config.yaml is silently missed in favor
-        of a template/primary-clone fallback found by walking from git_root.
+        Both the initial load_config call (arg1 = project_root, from resolve_hub_path()) and the post-resolve_active_hub reload must be invoked with the resolved hub root, never the outer git-repo root -- otherwise the hub's own mill-config.yaml is silently missed in favor of a template/primary-clone fallback found by walking from git_root.
         """
         hub_dir = self.tmp_path / "sub" / "hub"
         hub_dir.mkdir(parents=True, exist_ok=True)
         review_file = _make_fixture(hub_dir)
-        # resolve_hub_path (bootstrap project_root) and resolve_active_hub
-        # (corrected project_root) both point at the subdirectory hub.
-        # resolve_git_root keeps returning self.tmp_path (the outer root),
-        # which must never be passed as load_config's hub_root argument.
+        # resolve_hub_path (bootstrap project_root) and resolve_active_hub (corrected project_root) both point at the subdirectory hub.
+        # resolve_git_root keeps returning self.tmp_path (the outer root), which must never be passed as load_config's hub_root argument.
         self.mock_resolve_hub_path = unittest.mock.patch.object(
             millpy_fix._paths, "resolve_hub_path", return_value=hub_dir
         )
@@ -307,8 +301,7 @@ class TestMillpyFix(unittest.TestCase):
                     "llm": {"implementer_timeout": 1800},
                 }
             else:
-                # Stand-in for the template/primary-clone fallback the pre-fix
-                # code would silently pick up when passed the outer git-repo root.
+                # Stand-in for the template/primary-clone fallback the pre-fix code would silently pick up when passed the outer git-repo root.
                 cfg = {
                     "spawn": {"branch_prefix": "template-fallback-prefix"},
                     "llm": {"implementer_timeout": 1800},
@@ -338,11 +331,8 @@ class TestMillpyFix(unittest.TestCase):
             self.assertEqual(cfg["spawn"]["branch_prefix"], "hub-own-prefix")
 
     def test_cfg_reload_after_resolve_active_hub_used_for_downstream_values(self):
-        """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely
-        differ. Downstream values that read cfg -- self_fix_rounds baked into the
-        rendered brief, the fixer model name passed to _reviewers.resolve, and
-        the fixer timeout passed to _implementer_claude.run -- must come from
-        the reloaded config, not the stale bootstrap one.
+        """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely differ.
+    Downstream values that read cfg -- self_fix_rounds baked into the rendered brief, the fixer model name passed to _reviewers.resolve, and the fixer timeout passed to _implementer_claude.run -- must come from the reloaded config, not the stale bootstrap one.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -389,18 +379,14 @@ class TestMillpyFix(unittest.TestCase):
             ])
 
         self.assertEqual(rc, 0)
-        # self_fix_rounds baked into the brief must come from the reloaded
-        # config (9), never the bootstrap config's value (2).
+        # self_fix_rounds baked into the brief must come from the reloaded config (9), never the bootstrap config's value (2).
         self.assertIn("9", captured["prompt_text"])
-        # fixer model_name passed to _reviewers.resolve must come from the
-        # reloaded config too.
+        # fixer model_name passed to _reviewers.resolve must come from the reloaded config too.
         self.mock_reviewers_resolve.assert_called_with(
             self.mock_reviewers_load.return_value, "reloaded-model"
         )
-        # fixer timeout passed to _implementer_claude.run must come from the
-        # reloaded config's llm.implementer_timeout (999), not the bootstrap
-        # config's (111). fixer_spec has no "timeout" key here so the
-        # cfg fallback is exercised.
+        # fixer timeout passed to _implementer_claude.run must come from the reloaded config's llm.implementer_timeout (999), not the bootstrap config's (111).
+        # fixer_spec has no "timeout" key here so the cfg fallback is exercised.
         self.assertEqual(captured["timeout"], 999)
 
     def test_batch_missing_batch_name(self):
@@ -433,8 +419,9 @@ class TestMillpyFix(unittest.TestCase):
             # Track git rev-parse calls to return different values (start_sha vs final HEAD)
             if argv[0:2] == ["git", "rev-parse"]:
                 call_count[0] += 1
-                # First call (start_sha): return the abc1234... full SHA
-                # Second call (final HEAD check): return the def5678... full SHA to simulate a commit was made
+                # First call (start_sha): return the abc1234...
+                # full SHA Second call (final HEAD check): return the def5678...
+                # full SHA to simulate a commit was made
                 if call_count[0] == 1:
                     return subprocess.CompletedProcess(
                         args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
@@ -533,8 +520,7 @@ class TestMillpyFix(unittest.TestCase):
     def test_is_windows_lock_error_helper(self):
         """Unit test for _is_windows_lock_error helper with various inputs.
 
-        Tests both the structured __cause__ winerror=32 check and the textual
-        match for Windows file-locking signatures (distinct from cleanup-race signatures).
+        Tests both the structured __cause__ winerror=32 check and the textual match for Windows file-locking signatures (distinct from cleanup-race signatures).
         """
         # Test message patterns that match lock-error signatures (not cleanup-race)
         self.assertTrue(
@@ -718,15 +704,10 @@ class TestMillpyFix(unittest.TestCase):
     def test_project_root_rebind_uses_resolve_active_hub_not_original_hub_path(self):
         """project_root rebinds to resolve_active_hub's value, not the file's original (escaped) resolution.
 
-        This file resolves project_root via a real, unmocked resolve_hub_path() call
-        (setUp mocks only resolve_git_root -- see the per-file description in Card 12)
-        that succeeds because cwd is chdir'd to self.tmp_path, which has its own
-        .millhouse/config.local.yaml. Overriding resolve_active_hub to a decoy directory
-        distinct from self.tmp_path simulates the "escaped to main worktree" scenario:
-        the original resolution still points at self.tmp_path, but the corrected
-        resolve_active_hub call (added by the rebind fix) returns the right place.
-        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must
-        resolve under the decoy, proving project_root was rebound.
+        This file resolves project_root via a real, unmocked resolve_hub_path() call (setUp mocks only resolve_git_root -- see the per-file description in Card 12) that succeeds because cwd is chdir'd to self.tmp_path, which has its own .millhouse/config.local.yaml.
+        Overriding resolve_active_hub to a decoy directory distinct from self.tmp_path simulates the "escaped to main worktree" scenario: the original resolution still points at self.tmp_path,
+        but the corrected resolve_active_hub call (added by the rebind fix) returns the right place.
+        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must resolve under the decoy, proving project_root was rebound.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -795,8 +776,7 @@ class TestMillpyFix(unittest.TestCase):
     def test_stage_prepare_batch_scope_includes_effort_from_fixer_spec(self):
         """--stage prepare envelope carries the resolved fixer spec's effort tier (#628, #633).
 
-        Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style
-        spec that resolves effort:"high", mirroring the millpy-implement.py Card 5 test.
+        Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style spec that resolves effort:"high", mirroring the millpy-implement.py Card 5 test.
         """
         self.mock_reviewers_resolve.return_value = {
             "type": "single",
@@ -940,9 +920,8 @@ class TestMillpyFix(unittest.TestCase):
         self.assertNotIn("[fixer-tier]", stderr_buf.getvalue())
 
     def test_holistic_finalize_status_path_filters_pending_batch_and_logs_skip(self):
-        """Card 5: status_path is threaded into the holistic-finalize iter_batch_verifies
-        call, dropping a pending batch's verify from the joined command and logging
-        `[millpy-fix] skipped batch1: batch not approved` to stderr."""
+        """Card 5: status_path is threaded into the holistic-finalize iter_batch_verifies call, dropping a pending batch's verify from the joined command and logging `[millpy-fix] skipped batch1: batch not approved` to stderr.
+"""
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
             "# Plan: Test Task\n\n"
@@ -1007,10 +986,8 @@ class TestMillpyFix(unittest.TestCase):
         )
 
     def test_holistic_finalize_status_path_logs_target_removed_skip(self):
-        """Card 5: an approved batch whose verify command references a path a later
-        approved batch's Deletes: removes is filtered by iter_batch_verifies (reason
-        2/3b), and this helper attributes it to 'target removed by later batch' --
-        not 'batch not approved' -- since batch1 itself IS approved."""
+        """Card 5: an approved batch whose verify command references a path a later approved batch's Deletes: removes is filtered by iter_batch_verifies (reason 2/3b),
+    and this helper attributes it to 'target removed by later batch' -- not 'batch not approved' -- since batch1 itself IS approved."""
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
             "# Plan: Test Task\n\n"
@@ -1081,8 +1058,8 @@ class TestMillpyFix(unittest.TestCase):
         )
 
     def test_holistic_full_stage_status_path_filters_pending_batch_and_logs_skip(self):
-        """Card 5: non-finalize holistic (--stage full) path also threads status_path into
-        iter_batch_verifies, filtering out a pending batch and logging the skip to stderr."""
+        """Card 5: non-finalize holistic (--stage full) path also threads status_path into iter_batch_verifies, filtering out a pending batch and logging the skip to stderr.
+"""
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
             "# Plan: Test Task\n\n"
@@ -1260,9 +1237,8 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             return_value="test-branch",
         )
         def _subprocess_routing(argv, *a, **kw):
-            # `git rev-list --count` must yield a parseable int (commits_made
-            # counting added in main's reliability fix); other git calls return
-            # a SHA-like stub as before.
+            # `git rev-list --count` must yield a parseable int (commits_made counting added in main's reliability fix);
+            # other git calls return a SHA-like stub as before.
             if len(argv) > 1 and argv[1] == "rev-list":
                 return subprocess.CompletedProcess(
                     args=argv, returncode=0, stdout="0\n", stderr=""
@@ -1359,8 +1335,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
     def test_nits_only_flag_appends_marker_and_flag(self):
         """
-        Test that --nits-only flag causes nits_applied: true to be added to the envelope
-        and a nits-fixed-<scope> marker to be appended to the status timeline.
+        Test that --nits-only flag causes nits_applied: true to be added to the envelope and a nits-fixed-<scope> marker to be appended to the status timeline.
         """
         status_path = self.tmp_path / "_mill" / "status.md"
 
@@ -1419,15 +1394,12 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
 
     def test_nits_only_all_pushback_zero_commit_is_success_not_stuck(self):
         """
-        #582 regression: a --nits-only pass that legitimately pushes back on every
-        NIT finding makes zero content commits (HEAD never moves from start_sha).
-        This must be reported as success with the nits-fixed marker written, not
-        demoted to stuck/logic by the no-content-commit gate.
+        #582 regression: a --nits-only pass that legitimately pushes back on every NIT finding makes zero content commits (HEAD never moves from start_sha).
+        This must be reported as success with the nits-fixed marker written, not demoted to stuck/logic by the no-content-commit gate.
         """
         status_path = self.tmp_path / "_mill" / "status.md"
 
-        # Every git rev-parse HEAD call returns the SAME sha -- HEAD never moves,
-        # simulating the all-pushback, zero-commit case.
+        # Every git rev-parse HEAD call returns the SAME sha -- HEAD never moves, simulating the all-pushback, zero-commit case.
         def mock_subprocess_run(argv, **kwargs):
             if argv[0:2] == ["git", "rev-parse"]:
                 return subprocess.CompletedProcess(
@@ -1500,10 +1472,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 1\n```\n", encoding="utf-8")
         (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
 
-        # status_path now gates iter_batch_verifies on approval state -- both
-        # batches must be "approved" for their verify commands to survive the
-        # filter and reach the holistic join, matching the pre-status_path
-        # unfiltered behavior this test exercises.
+        # status_path now gates iter_batch_verifies on approval state -- both batches must be "approved" for their verify commands to survive the filter and reach the holistic join, matching the pre-status_path unfiltered behavior this test exercises.
         status_path = self.tmp_path / "_mill" / "status.md"
         millpy_fix._status.init_batches(status_path, ["batch1", "batch2"])
         millpy_fix._status.set_batch_field(status_path, "batch1", "state", "approved")
@@ -1571,9 +1540,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                     return subprocess.CompletedProcess(
                         args=argv, returncode=0, stdout="", stderr=""
                     )
-            # For all other subprocess calls, including verify commands, use real subprocess
-            # This allows the real _run_verify_gate to execute shell commands properly
-            # Make sure to capture output
+            # For all other subprocess calls, including verify commands, use real subprocess This allows the real _run_verify_gate to execute shell commands properly Make sure to capture output
             return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
@@ -1623,10 +1590,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
         (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
 
-        # status_path now gates iter_batch_verifies on approval state -- both
-        # batches must be "approved" for their verify commands to survive the
-        # filter and reach the holistic join, matching the pre-status_path
-        # unfiltered behavior this test exercises.
+        # status_path now gates iter_batch_verifies on approval state -- both batches must be "approved" for their verify commands to survive the filter and reach the holistic join, matching the pre-status_path unfiltered behavior this test exercises.
         status_path = self.tmp_path / "_mill" / "status.md"
         millpy_fix._status.init_batches(status_path, ["batch1", "batch2"])
         millpy_fix._status.set_batch_field(status_path, "batch1", "state", "approved")
@@ -1694,9 +1658,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                     return subprocess.CompletedProcess(
                         args=argv, returncode=0, stdout="", stderr=""
                     )
-            # For all other subprocess calls, including verify commands, use real subprocess
-            # This allows the real _run_verify_gate to execute shell commands properly
-            # Make sure to capture output
+            # For all other subprocess calls, including verify commands, use real subprocess This allows the real _run_verify_gate to execute shell commands properly Make sure to capture output
             return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
@@ -1807,9 +1769,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                     return subprocess.CompletedProcess(
                         args=argv, returncode=0, stdout="", stderr=""
                     )
-            # For all other subprocess calls, including verify commands, use real subprocess
-            # This allows the real _run_verify_gate to execute shell commands properly
-            # Make sure to capture output
+            # For all other subprocess calls, including verify commands, use real subprocess This allows the real _run_verify_gate to execute shell commands properly Make sure to capture output
             return subprocess.run(argv, capture_output=True, text=True, **kwargs)
 
         with unittest.mock.patch.object(
@@ -1857,9 +1817,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
             ),
-            # The rebind (Card 10) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 10) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1921,10 +1879,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             encoding="utf-8",
         )
 
-        # status_path now gates iter_batch_verifies on approval state -- both
-        # batches must be "approved" for their verify commands to survive the
-        # filter and reach the holistic join, matching the pre-status_path
-        # unfiltered behavior this test exercises.
+        # status_path now gates iter_batch_verifies on approval state -- both batches must be "approved" for their verify commands to survive the filter and reach the holistic join, matching the pre-status_path unfiltered behavior this test exercises.
         nested_status_path = nested_hub / "_mill" / "status.md"
         millpy_fix._status.init_batches(nested_status_path, ["batch1", "batch2"])
         millpy_fix._status.set_batch_field(nested_status_path, "batch1", "state", "approved")
@@ -1940,9 +1895,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
             ),
-            # The rebind (Card 10) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 10) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1994,8 +1947,8 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             "```\n"
         )
         (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
-        # batch1 pins its verify to the (nested) hub; batch2 pins its verify to the
-        # git root -- a single joined shell command cannot honor both cwds at once.
+        # batch1 pins its verify to the (nested) hub;
+        # batch2 pins its verify to the git root -- a single joined shell command cannot honor both cwds at once.
         (plan_dir / "01-batch1.md").write_text(
             "```yaml\nverify:\n  cwd: hub\n  command: exit 0\n```\n\n# Batch: batch1\n",
             encoding="utf-8",
@@ -2005,10 +1958,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             encoding="utf-8",
         )
 
-        # status_path now gates iter_batch_verifies on approval state -- both
-        # batches must be "approved" for their verify commands to survive the
-        # filter and reach the holistic join, matching the pre-status_path
-        # unfiltered behavior this test exercises.
+        # status_path now gates iter_batch_verifies on approval state -- both batches must be "approved" for their verify commands to survive the filter and reach the holistic join, matching the pre-status_path unfiltered behavior this test exercises.
         nested_status_path = nested_hub / "_mill" / "status.md"
         millpy_fix._status.init_batches(nested_status_path, ["batch1", "batch2"])
         millpy_fix._status.set_batch_field(nested_status_path, "batch1", "state", "approved")
@@ -2018,9 +1968,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
             ),
-            # The rebind (Card 10) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 10) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
             ),

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """One-shot V3 wiki migration script: seed tasks.json from Home.md and proposals.
 
-This script is the canonical one-shot migration tool that bootstraps a free-form
-wiki (Home.md + proposal files) into the new V3 TinyDB-backed state. It uses the
-public wiki.upsert_tasks_batch API delivered by batch 1; there is no daemon bypass.
+This script is the canonical one-shot migration tool that bootstraps a free-form wiki (Home.md + proposal files) into the new V3 TinyDB-backed state.
+It uses the public wiki.upsert_tasks_batch API delivered by batch 1;
+there is no daemon bypass.
 
 Preconditions:
-  - The wiki path must be resolvable via _paths.resolve_wiki_path (sibling discovery
-    or explicit config.local.yaml override).
+  - The wiki path must be resolvable via _paths.resolve_wiki_path (sibling discovery or explicit config.local.yaml override).
   - Home.md must exist in the wiki.
 
 Behaviour (commit mode):
@@ -18,9 +17,9 @@ Behaviour (commit mode):
   5. Upsert all tasks via wiki._client.upsert_tasks_batch (daemon-side commit).
   6. Print summary.
 
-Idempotency: Running twice on an already-migrated wiki produces no new daemon
-commits. The backup file is overwritten; the skip path in step 2 prevents a
-redundant backup commit when Home.md has not drifted.
+Idempotency: Running twice on an already-migrated wiki produces no new daemon commits.
+The backup file is overwritten;
+the skip path in step 2 prevents a redundant backup commit when Home.md has not drifted.
 
 All print() output is ASCII only (no em-dashes, no Unicode arrows).
 """
@@ -38,13 +37,11 @@ import _paths
 def _ensure_utf8_stdout() -> None:
     """Reconfigure stdout to UTF-8 so non-ASCII wiki content cannot crash the console.
 
-    `_print_task_brief` below prints raw, externally-authored `title`/`brief`
-    strings pulled straight from Home.md and proposal files. Those strings can
-    legitimately contain non-ASCII characters (e.g. an em-dash or an arrow), and
-    Python's default stdout encoding on a Windows console is cp1252, which raises
-    `UnicodeEncodeError` on such characters -- the same bug class as #588. Calling
-    this before any printing guarantees the console accepts the full text instead
-    of crashing partway through a migration dry-run.
+    `_print_task_brief` below prints raw, externally-authored `title`/`brief` strings pulled straight from Home.md and proposal files.
+    Those strings can legitimately contain non-ASCII characters (e.g.
+    an em-dash or an arrow),
+    and Python's default stdout encoding on a Windows console is cp1252, which raises `UnicodeEncodeError` on such characters -- the same bug class as #588.
+    Calling this before any printing guarantees the console accepts the full text instead of crashing partway through a migration dry-run.
     """
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -106,8 +103,7 @@ def main() -> None:
         print(f"ERROR: Failed to read {home_md}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Parse Home.md using the batch 1 extended parser
-    # (pure string-in / list-out; does not initialize _client)
+    # Parse Home.md using the batch 1 extended parser (pure string-in / list-out; does not initialize _client)
     from wiki import _parse
     tasks = _parse.parse_home_md(home_text)
 
@@ -137,13 +133,10 @@ def main() -> None:
 
     # Direct-git backup commit (with skip on idempotent re-run).
     # Justification: The daemon is not yet running for the freshly-V3 wiki.
-    # Bootstrapping the backup commit through git -C is a single isolated
-    # exception to the "daemon owns wiki writes" rule. After initial migration,
-    # all subsequent wiki mutations flow through the daemon.
-    #
+    # Bootstrapping the backup commit through git -C is a single isolated exception to the "daemon owns wiki writes" rule.
+    # After initial migration, all subsequent wiki mutations flow through the daemon.
     # Idempotency: only create the backup if it doesn't already exist in git.
-    # This ensures that running the script multiple times produces exactly one
-    # backup commit per wiki, capturing the original pre-V3 Home.md.
+    # This ensures that running the script multiple times produces exactly one backup commit per wiki, capturing the original pre-V3 Home.md.
     try:
         import subprocess
 

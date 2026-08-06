@@ -5,8 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-# Add the scripts directory to sys.path so _pr_state (and its dependency
-# _subprocess_util) can be imported without a package install.
+# Add the scripts directory to sys.path so _pr_state (and its dependency _subprocess_util) can be imported without a package install.
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 

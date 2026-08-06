@@ -2,28 +2,27 @@
 """
 mill-claim — claim a task from the wiki Home.md in the current worktree.
 
-Unlike mill-spawn, which creates a new worktree directory, mill-claim
-operates on the git checkout you are already in. After claiming, you
-stay in the same directory on a new branch for the task.
+Unlike mill-spawn, which creates a new worktree directory, mill-claim operates on the git checkout you are already in.
+After claiming, you stay in the same directory on a new branch for the task.
 
 Flow:
     1. Resolve the wiki clone via ``_paths.resolve_wiki_path``.
-    2. Fast-forward pull the wiki so we pick against current state.
-    3. Parse ``Home.md``; pick a task via ``pick_task_single_or_multi``
-       (``--slug`` short-circuit, numbered prompt for unmarked tasks).
-    4. Mark the chosen task ``[active]`` under the wiki lock.
-    5. Capture the current branch name as the parent for status.md.
-    6. If the working tree is dirty, prompt: stash, carry, or abort.
-    7. Check out a new branch via ``git checkout -b <branch_name>``.
-    8. If stash was chosen, pop the stash onto the new branch.
-    9. Recreate the ``.active`` junction pointing at this task's ``_mill/`` dir.
+        2. Fast-forward pull the wiki so we pick against current state.
+        3. Parse ``Home.md``;
+        pick a task via ``pick_task_single_or_multi`` (``--slug`` short-circuit, numbered prompt for unmarked tasks).
+        4. Mark the chosen task ``[active]`` under the wiki lock.
+        5. Capture the current branch name as the parent for status.md.
+        6. If the working tree is dirty, prompt: stash, carry, or abort.
+        7. Check out a new branch via ``git checkout -b <branch_name>``.
+        8. If stash was chosen, pop the stash onto the new branch.
+        9. Recreate the ``.active`` junction pointing at this task's ``_mill/`` dir.
    10. Write the initial ``_mill/status.md``.
    11. Print Branch / Status / "in-place".
 
 Usage:
-    python plugins/mill/scripts/mill-claim.py
-        [--slug <slug>]   # skip the picker; claim this specific slug
-        [--dry-run]       # print decisions; make no changes
+    python plugins/mill/scripts/mill-claim.py [--slug <slug>] # skip the picker;
+        claim this specific slug [--dry-run] # print decisions;
+        make no changes
 
 Exit codes:
     0 — task claimed (or empty backlog)
@@ -47,9 +46,7 @@ from _config import load_config as _load_config
 from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
 
 
-# --------------------------------------------------------------------------- #
-# Private helpers                                                              #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Private helpers # --------------------------------------------------------------------------- #
 
 
 def _is_dirty(git_root: Path) -> bool:
@@ -64,8 +61,8 @@ def _prompt_dirty_tree() -> int:
     """
     Prompt the user for how to handle a dirty working tree.
 
-    Presents three numbered options and reads stdin until the user enters
-    a valid choice. Re-prompts on invalid input up to 3 total attempts.
+    Presents three numbered options and reads stdin until the user enters a valid choice.
+    Re-prompts on invalid input up to 3 total attempts.
     On option 3 (Abort) or exhausted retries, raises ``SystemExit(1)``.
 
     Returns:
@@ -106,9 +103,7 @@ _HUB_COLOR_PATTERN = '"titleBar.activeBackground": "#2d7d46"'
 def _update_hub_vscode_title(git_root: Path, cfg: dict, slug: str) -> None:
     """Flip the hub's VS Code title to '<short>: <slug>' when cwd is the hub.
 
-    Skips silently when the settings file is absent, unreadable, or does not
-    have the hub green background (indicating cwd is a differently-coloured
-    worktree, not the hub).
+    Skips silently when the settings file is absent, unreadable, or does not have the hub green background (indicating cwd is a differently-coloured worktree, not the hub).
     """
     settings_path = resolve_hub_path() / ".vscode" / "settings.json"
     if not settings_path.exists():
@@ -128,9 +123,7 @@ def _update_hub_vscode_title(git_root: Path, cfg: dict, slug: str) -> None:
     )
 
 
-# --------------------------------------------------------------------------- #
-# Main                                                                        #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Main # --------------------------------------------------------------------------- #
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -201,8 +194,8 @@ def main(argv: list[str] | None = None) -> int:
         print("[DryRun] Mode:    in-place")
         return 0
 
-    # Claim under the wiki lock. Multi mode already claimed inside
-    # multi_select_groom_then_claim, so skip to avoid a double-claim.
+    # Claim under the wiki lock.
+    # Multi mode already claimed inside multi_select_groom_then_claim, so skip to avoid a double-claim.
     if mode != "multi":
         _spawn_core.claim_in_wiki(wiki_path, slug)
 
@@ -254,9 +247,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             raise SystemExit(1)
 
-    # Create the per-task portal entry pointing at hub/_mill/, and the .active
-    # junction pointing at the same _mill/ working dir. All portal/junction
-    # targets terminate at _mill/, never at the worktree root.
+    # Create the per-task portal entry pointing at hub/_mill/, and the .active junction pointing at the same _mill/ working dir.
+    # All portal/junction targets terminate at _mill/, never at the worktree root.
     container_path = resolve_container_path(git_root)
     (container_path / "portals").mkdir(parents=True, exist_ok=True)
 

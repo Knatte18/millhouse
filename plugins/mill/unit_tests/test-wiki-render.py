@@ -1,8 +1,6 @@
 """Unit tests for wiki._render render function.
 
-Covers: compute_layers algorithm, extended_title, render_order, empty task list,
-task grouping/ordering, status markers, proposal file generation, brief text,
-Depends-on lines, and sidebar rendering.
+Covers: compute_layers algorithm, extended_title, render_order, empty task list, task grouping/ordering, status markers, proposal file generation, brief text, Depends-on lines, and sidebar rendering.
 """
 from __future__ import annotations
 

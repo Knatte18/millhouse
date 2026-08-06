@@ -93,8 +93,7 @@ def parse_home_md(content: str) -> list[dict]:
             # Collapse all paragraphs to one space-joined string
             brief = " ".join(brief_paragraphs)
 
-            # Strip numeric prefix and group code from title
-            # e.g., "30 (D) -- Foo" -> "Foo" or "30 -- Foo" -> "Foo"
+            # Strip numeric prefix and group code from title e.g., "30 (D) -- Foo" -> "Foo" or "30 -- Foo" -> "Foo"
             title = title_raw
             title = re.sub(r"^\d+\s+", "", title)  # Remove numeric prefix
             title = re.sub(r"^\([A-Z]\)\s+", "", title)  # Remove group code

@@ -1,35 +1,25 @@
 """
 Registry loader, name resolver, and role-aware lookup for named reviewer definitions.
 
-Provides the bridge between plugin template mill-agents.yaml (the base registry),
-.millhouse/agents.local.yaml (per-hub overrides), and legacy wiki/agents.yaml or
-wiki/reviewers.yaml (for in-flight branches before migration).
+Provides the bridge between plugin template mill-agents.yaml (the base registry), .millhouse/agents.local.yaml (per-hub overrides), and legacy wiki/agents.yaml or wiki/reviewers.yaml (for in-flight branches before migration).
 
 Public API:
-    ReviewerError  — raised on every validation/resolution failure.
-    load(hub_dir: Path) -> dict[str, dict]
-        Load and validate plugin template + local overlay + legacy wiki fallback.
-        Returns name → raw spec dict.
-    resolve(registry: dict, name: str) -> dict
-        Resolve a reviewer name to a fully-flattened spec dict.
-        Special case: "test_stub" returns a synthetic spec without consulting the registry.
-    resolve_reviewer_override(registry: dict, name: str, *, reject_non_claude: bool) -> dict
-        Resolve a `--reviewer` per-round override name, rejecting cluster types,
-        specs with no model (e.g. test_stub), and (when reject_non_claude) any
-        model whose family is not recognized by _agent_dispatch.model_to_tier.
-    resolve_role(cfg: dict, registry: dict, role: str, scope: str) -> dict | None
-        Read cfg.roles.<role>.<scope>.reviewer and resolve via registry.
-        Returns None if reviewer is null or rounds is 0.
-    validate_role_refs(cfg: dict, registry: dict) -> None
-        Walk cfg.roles.<role>.<scope>.reviewer for every (role, scope) pair;
-        confirm each non-null name resolves. Raises ReviewerError listing all failures.
-    tier_rank(spec: dict) -> tuple[int, int] | None
-        Rank a resolved single/claude spec as (family_rank, effort_rank) for comparison.
-        Returns None for cluster types, non-Claude providers, or unrecognized model families.
-    fixer_weaker_than_reviewer_warning(fixer_spec, reviewer_spec, *, fixer_name, reviewer_name, scope) -> str | None
-        Return a stderr-ready warning string when the reviewer's tier outranks the
-        fixer's tier; returns None when either side is not comparable or the fixer
-        is at least as strong as the reviewer.
+    ReviewerError — raised on every validation/resolution failure.
+    load(hub_dir: Path) -> dict[str, dict] Load and validate plugin template + local overlay + legacy wiki fallback.
+    Returns name → raw spec dict.
+    resolve(registry: dict, name: str) -> dict Resolve a reviewer name to a fully-flattened spec dict.
+    Special case: "test_stub" returns a synthetic spec without consulting the registry.
+    resolve_reviewer_override(registry: dict, name: str, *, reject_non_claude: bool) -> dict Resolve a `--reviewer` per-round override name, rejecting cluster types, specs with no model (e.g.
+    test_stub),
+    and (when reject_non_claude) any model whose family is not recognized by _agent_dispatch.model_to_tier.
+    resolve_role(cfg: dict, registry: dict, role: str, scope: str) -> dict | None Read cfg.roles.<role>.<scope>.reviewer and resolve via registry.
+    Returns None if reviewer is null or rounds is 0. validate_role_refs(cfg: dict, registry: dict) -> None Walk cfg.roles.<role>.<scope>.reviewer for every (role, scope) pair;
+    confirm each non-null name resolves.
+    Raises ReviewerError listing all failures.
+    tier_rank(spec: dict) -> tuple[int, int] | None Rank a resolved single/claude spec as (family_rank, effort_rank) for comparison.
+    Returns None for cluster types, non-Claude providers, or unrecognized model families.
+    fixer_weaker_than_reviewer_warning(fixer_spec, reviewer_spec, *, fixer_name, reviewer_name, scope) -> str | None Return a stderr-ready warning string when the reviewer's tier outranks the fixer's tier;
+    returns None when either side is not comparable or the fixer is at least as strong as the reviewer.
 """
 from __future__ import annotations
 
@@ -134,12 +124,7 @@ def load(hub_dir: Path) -> dict[str, dict]:
 
     Returns name → raw spec dict after merging all available layers and validating.
 
-    Validates: all names match [a-z0-9_-]+, no duplicate names in each source file,
-    every entry has a known type, required fields per type, cluster use: references
-    resolve to type=single only, no cycles in the use: graph, and entries with
-    `extends: <name>` are resolved top-down at load time (single-string form only;
-    cluster entries may neither extend nor be extended; cycle detection raises
-    with the chain).
+    Validates: all names match [a-z0-9_-]+, no duplicate names in each source file, every entry has a known type, required fields per type, cluster use: references resolve to type=single only, no cycles in the use: graph, and entries with `extends: <name>` are resolved top-down at load time (single-string form only; cluster entries may neither extend nor be extended; cycle detection raises with the chain).
 
     Raises ReviewerError listing every problem in a single message.
     """
@@ -373,13 +358,10 @@ def _detect_cycles(
 def resolve(registry: dict, name: str) -> dict:
     """Resolve a reviewer name to a fully-flattened spec.
 
-    Special case: name == "test_stub" returns
-    {"type": "single", "provider": "test_stub", "tooluse": False}
-    without consulting the registry.
+    Special case: name == "test_stub" returns {"type": "single", "provider": "test_stub", "tooluse": False} without consulting the registry.
 
     For type=single: returns a copy of the entry with tooluse defaulted to False.
-    For type=cluster: returns a deep copy with workers.use and handler.use replaced
-    by their fully-resolved single-spec dicts (bounded at depth 1 by load validation).
+    For type=cluster: returns a deep copy with workers.use and handler.use replaced by their fully-resolved single-spec dicts (bounded at depth 1 by load validation).
 
     Raises ReviewerError on missing name or unknown type.
     """
@@ -414,58 +396,42 @@ def resolve(registry: dict, name: str) -> dict:
 def resolve_reviewer_override(registry: dict, name: str, *, reject_non_claude: bool) -> dict:
     """Resolve a `--reviewer` per-round override name to a dispatchable spec.
 
-    A `--reviewer` override is a deliberate, one-off operator choice made on
-    the command line to break a stalled review loop, so it is held to a
-    narrower contract than the general-purpose `resolve()`: only single,
-    model-bearing reviewers may be named, and (for the Agent-mode dispatch
-    path, which is Claude-only by construction) only Claude models.
+    A `--reviewer` override is a deliberate, one-off operator choice made on the command line to break a stalled review loop, so it is held to a narrower contract than the general-purpose `resolve()`: only single, model-bearing reviewers may be named, and (for the Agent-mode dispatch path, which is Claude-only by construction) only Claude models.
 
     Args:
         registry: The loaded reviewer registry, as returned by `load()`.
         name: The reviewer name passed via `--reviewer`.
-        reject_non_claude: When True, also require the resolved model to
-            belong to a recognized Claude model family (checked via
-            `_agent_dispatch.model_to_tier`). Agent-mode dispatch call sites
-            pass True; direct-dispatch call sites pass False, since that
-            path already dispatches non-Claude reviewers via ordinary
-            config today and must keep doing so.
+        reject_non_claude: When True, also require the resolved model to belong to a recognized Claude model family (checked via `_agent_dispatch.model_to_tier`).
+        Agent-mode dispatch call sites pass True;
+        direct-dispatch call sites pass False, since that path already dispatches non-Claude reviewers via ordinary config today and must keep doing so.
 
     Returns:
         The fully-flattened spec dict for `name`, unchanged from `resolve()`.
 
     Raises:
-        ReviewerError: If `name` is unknown (propagated from `resolve()`),
-            names a cluster reviewer, names a reviewer with no `model` key
-            (e.g. the `test_stub` synthetic spec), or (when
-            `reject_non_claude` is True) names a reviewer whose model family
-            `_agent_dispatch.model_to_tier` does not recognize.
+        ReviewerError: If `name` is unknown (propagated from `resolve()`), names a cluster reviewer, names a reviewer with no `model` key (e.g.
+            the `test_stub` synthetic spec),
+            or (when `reject_non_claude` is True) names a reviewer whose model family `_agent_dispatch.model_to_tier` does not recognize.
     """
     spec = resolve(registry, name)
 
-    # Cluster reviewers dispatch through a fan-out/fan-in handler with no
-    # single model to attribute a round to; only single reviewers can stand
-    # in as a per-round override.
+    # Cluster reviewers dispatch through a fan-out/fan-in handler with no single model to attribute a round to;
+    # only single reviewers can stand in as a per-round override.
     if spec.get("type") == "cluster":
         raise ReviewerError(
             f"--reviewer {name!r} is cluster type; only single reviewers are supported for a per-round override"
         )
 
-    # The test_stub synthetic spec (and any malformed single spec) carries no
-    # "model" key at all. Check this before touching model_to_tier below --
-    # calling it on a missing model would raise AttributeError, not the
-    # ReviewerError this function promises.
+    # The test_stub synthetic spec (and any malformed single spec) carries no "model" key at all.
+    # Check this before touching model_to_tier below -- calling it on a missing model would raise AttributeError, not the ReviewerError this function promises.
     if spec.get("model") is None:
         raise ReviewerError(
             f"--reviewer {name!r} has no model (e.g. test_stub); not supported for a per-round override"
         )
 
     if reject_non_claude:
-        # Agent-mode dispatch only ever runs Claude subagents, so an
-        # override naming a non-Claude (or unrecognized-family) model can
-        # never actually be dispatched through that path. Local import
-        # mirrors tier_rank()'s existing precedent for this same cross-module
-        # call, avoiding a module-level import-cycle risk against
-        # _agent_dispatch's own module-level import of _review_common.
+        # Agent-mode dispatch only ever runs Claude subagents, so an override naming a non-Claude (or unrecognized-family) model can never actually be dispatched through that path.
+        # Local import mirrors tier_rank()'s existing precedent for this same cross-module call, avoiding a module-level import-cycle risk against _agent_dispatch's own module-level import of _review_common.
         import _agent_dispatch
 
         try:
@@ -482,10 +448,10 @@ def resolve_role(
     role: str,
     scope: str,
 ) -> dict | None:
-    """Read cfg.roles.<role>.<scope>.reviewer; resolve via registry.
+    """Read cfg.roles.<role>.<scope>.reviewer;
+resolve via registry.
 
-    Returns None if reviewer is null or rounds is 0.
-    Raises ReviewerError if the role or scope key is absent from cfg.
+    Returns None if reviewer is null or rounds is 0. Raises ReviewerError if the role or scope key is absent from cfg.
     """
     if role not in cfg.get("roles", {}) or scope not in cfg["roles"][role]:
         raise ReviewerError(f"Missing roles.{role}.{scope} in config")
@@ -555,16 +521,13 @@ def validate_role_refs(cfg: dict, registry: dict) -> None:
 def tier_rank(spec: dict) -> tuple[int, int] | None:
     """Rank a resolved single/claude spec as (family_rank, effort_rank).
 
-    Only type="single" + provider="claude" specs are comparable: cluster
-    types and non-Claude providers (e.g. the gemini-provider entries in
-    mill-agents.yaml) have no defined ordering. Family rank comes from
-    _agent_dispatch.model_to_tier (haiku < sonnet == fable < opus); effort rank comes
-    from spec["effort"], defaulting to 0 ("low") when the key is absent --
-    the shipped haiku/haiku_bulk entries carry no effort: field at all.
+    Only type="single" + provider="claude" specs are comparable: cluster types and non-Claude providers (e.g.
+    the gemini-provider entries in mill-agents.yaml) have no defined ordering.
+    Family rank comes from _agent_dispatch.model_to_tier (haiku < sonnet == fable < opus);
+    effort rank comes from spec["effort"], defaulting to 0 ("low") when the key is absent -- the shipped haiku/haiku_bulk entries carry no effort: field at all.
 
     Returns:
-        (family_rank, effort_rank) tuple, or None if the spec is not
-        comparable (wrong type/provider) or its model family is unrecognized.
+        (family_rank, effort_rank) tuple, or None if the spec is not comparable (wrong type/provider) or its model family is unrecognized.
     """
     import _agent_dispatch
 
@@ -587,10 +550,8 @@ def fixer_weaker_than_reviewer_warning(
 ) -> str | None:
     """Return an advisory warning when the fixer is weaker than the reviewer it fixes for.
 
-    roles.fixer.model is a config key fully independent from
-    roles.code-review.<scope>.reviewer, so an operator escalating the
-    reviewer mid-task can silently leave the fixer on a weaker model. This
-    compares the two resolved tiers and flags the asymmetry.
+    roles.fixer.model is a config key fully independent from roles.code-review.<scope>.reviewer, so an operator escalating the reviewer mid-task can silently leave the fixer on a weaker model.
+    This compares the two resolved tiers and flags the asymmetry.
 
     Args:
         fixer_spec: Resolved spec for roles.fixer.model.
@@ -600,9 +561,8 @@ def fixer_weaker_than_reviewer_warning(
         scope: The code-review scope being fixed (e.g. "batch").
 
     Returns:
-        A one-line warning string when the reviewer strictly outranks the
-        fixer, or None when either side is not comparable or the fixer is
-        at least as strong as the reviewer.
+        A one-line warning string when the reviewer strictly outranks the fixer,
+        or None when either side is not comparable or the fixer is at least as strong as the reviewer.
     """
     fixer_tier = tier_rank(fixer_spec)
     reviewer_tier = tier_rank(reviewer_spec)

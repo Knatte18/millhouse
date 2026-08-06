@@ -1,12 +1,9 @@
 """
-Drop-in replacement for `claude -p` that routes through interactive `claude` via psmux
-for subscription billing instead of API credits. Accepts prompt on stdin, returns Claude's
-response on stdout, emits one-line JSON metadata `{session_id, duration_s, mode}` on stderr.
+Drop-in replacement for `claude -p` that routes through interactive `claude` via psmux for subscription billing instead of API credits.
+Accepts prompt on stdin, returns Claude's response on stdout, emits one-line JSON metadata `{session_id, duration_s, mode}` on stderr.
 
-Four modes with hardcoded tool sets per Shared Decision in discussion.md: `bulk`
-(--tools ""), `tool-use` (--allowedTools "Read,Grep,Glob"), `implementer`
-(--allowedTools "Read,Edit,Write,Bash,Grep,Glob,Skill"). See _psmux.py (driver)
-and _psmux_capture.py (parser) for the psmux automation and response extraction.
+Four modes with hardcoded tool sets per Shared Decision in discussion.md: `bulk` (--tools ""), `tool-use` (--allowedTools "Read,Grep,Glob"), `implementer` (--allowedTools "Read,Edit,Write,Bash,Grep,Glob,Skill").
+See _psmux.py (driver) and _psmux_capture.py (parser) for the psmux automation and response extraction.
 """
 from __future__ import annotations
 
@@ -43,8 +40,9 @@ MODE_TOOL_FLAGS: dict[str, list[str]] = {
 
 
 def _ps_join(args: list[str]) -> str:
-    """Build a PowerShell-compatible command string. Differs from shlex.join for empty strings:
-    shlex emits '' (POSIX) but cmd.exe drops empty-string args when expanding %*; use "" instead."""
+    """Build a PowerShell-compatible command string.
+    Differs from shlex.join for empty strings: shlex emits '' (POSIX) but cmd.exe drops empty-string args when expanding %*;
+    use "" instead."""
     result = []
     for arg in args:
         if arg == "":
@@ -140,11 +138,10 @@ def _wait_for_idle_stable(session_name: str, timeout_s: float) -> bool:
 
     Phase 1: Poll up to PROCESSING_WAIT_TIMEOUT_S for "interrupt" in the status bar.
     Phase 2: Poll up to timeout_s for "shortcuts" marker appearing in two consecutive polls.
-    Falls through Phase 1 on timeout; returns False from Phase 2 on timeout.
+    Falls through Phase 1 on timeout;
+    returns False from Phase 2 on timeout.
 
-    Note: "interrupt" (substring) is used instead of "esc to interrupt" or "esctointerrupt"
-    because psmux capture on Windows emits non-ASCII spaces between words, making the
-    multi-word forms unreliable. "interrupt" is unique to the processing status bar.
+    Note: "interrupt" (substring) is used instead of "esc to interrupt" or "esctointerrupt" because psmux capture on Windows emits non-ASCII spaces between words, making the multi-word forms unreliable. "interrupt" is unique to the processing status bar.
     """
     # Phase 1: Wait for processing marker
     phase1_start = time.monotonic()
@@ -317,12 +314,10 @@ def main() -> int:
                 claude_cmd_parts += ["--effort", args.effort]
             claude_cmd_str = _ps_join(claude_cmd_parts)
 
-            # Step 9: Launch claude via a PS script that pipes the prompt from the prompt
-            # file via stdin. This avoids expanding the prompt on the command line (Windows
-            # has a ~32767-char limit). The script reads the prompt file and pipes it to
-            # claude, preserving multi-line prompt fidelity. psmux paste-buffer does not
-            # work with Claude's TUI on Windows (content is silently dropped), so this
-            # script-based approach is used instead.
+            # Step 9: Launch claude via a PS script that pipes the prompt from the prompt file via stdin.
+            # This avoids expanding the prompt on the command line (Windows has a ~32767-char limit).
+            # The script reads the prompt file and pipes it to claude, preserving multi-line prompt fidelity.
+            # psmux paste-buffer does not work with Claude's TUI on Windows (content is silently dropped), so this script-based approach is used instead.
             script_content = (
                 f"Get-Content -Raw '{str(prompt_path)}' | & {claude_cmd_str}\n"
             )
@@ -334,8 +329,8 @@ def main() -> int:
             # Clear any ghost text suggestion from the input area
             _psmux.send_keys(session_name, "Escape", enter=False)
             time.sleep(0.3)
-            # Submit prompt via send_keys. Note: multi-line prompts are NOT supported
-            # via the reuse path (each \n is treated as Enter by Claude's TUI).
+            # Submit prompt via send_keys.
+            # Note: multi-line prompts are NOT supported via the reuse path (each \n is treated as Enter by Claude's TUI).
             # psmux paste-buffer does not work with Claude's TUI on Windows.
             _psmux.send_keys(session_name, prompt_body, literal=True)
             time.sleep(0.3)

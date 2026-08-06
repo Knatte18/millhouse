@@ -4,26 +4,15 @@ millpy-bg.py — project-local process backgrounder.
 Launcher mode (default):
     millpy-bg.py --slug <slug> -- <cmd> [args...]
 
-    Resolves the git root of the current directory, creates
-    .scratch/bg-<YYYYMMDD-HHMMSS>-<slug>.log, spawns a detached
-    worker process that runs <cmd> with stdout/stderr written to
-    that log file, and prints:
-        pid=<N> log=<path>
+    Resolves the git root of the current directory, creates .scratch/bg-<YYYYMMDD-HHMMSS>-<slug>.log, spawns a detached worker process that runs <cmd> with stdout/stderr written to that log file, and prints: pid=<N> log=<path>
 
-    (On Windows the pid is the cmd-shim launcher PID, which exits
-    almost immediately after dispatching the worker; the authoritative
-    worker PID is logged inside the file as [mill-bg] WORKER PID=...)
+    (On Windows the pid is the cmd-shim launcher PID, which exits almost immediately after dispatching the worker; the authoritative worker PID is logged inside the file as [mill-bg] WORKER PID=...)
 
-Worker mode (internal — spawned by launcher):
-    millpy-bg.py --_worker --log <abs-path> -- <cmd> [args...]
+Worker mode (internal — spawned by launcher): millpy-bg.py --_worker --log <abs-path> -- <cmd> [args...]
 
-    Runs <cmd> with stdout+stderr redirected to <abs-path> and
-    attempts to append "[mill-bg] EXIT <code>" when the process exits.
-    The EXIT write is best-effort: it covers clean exit and in-process
-    exception paths but does NOT survive a hard process kill (e.g., psmux
-    session teardown / TerminateProcess on Windows). The kill-resilient
-    backstop is the trailing-JSON completion sentinel consumed by
-    _bg.check_bg_status.
+    Runs <cmd> with stdout+stderr redirected to <abs-path> and attempts to append "[mill-bg] EXIT <code>" when the process exits.
+    The EXIT write is best-effort: it covers clean exit and in-process exception paths but does NOT survive a hard process kill (e.g., psmux session teardown / TerminateProcess on Windows).
+    The kill-resilient backstop is the trailing-JSON completion sentinel consumed by _bg.check_bg_status.
     Not intended to be called directly.
 """
 import sys
@@ -196,9 +185,9 @@ def _launcher_main(args: list[str]) -> int:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    # NOTE: on Windows (after the two-stage cmd /c start /B launch) proc.pid is
-    # the cmd-shim PID, which exits almost immediately. The authoritative worker
-    # PID is inside the log file as [mill-bg] WORKER PID=... sentinel.
+    # NOTE: on Windows (after the two-stage cmd /c start /B launch) proc.pid is the cmd-shim PID, which exits almost immediately.
+    # The authoritative worker PID is inside the log file as [mill-bg] WORKER PID=...
+    # sentinel.
     print(f"pid={proc.pid} log={log_path}")
     return 0
 

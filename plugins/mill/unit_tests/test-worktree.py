@@ -408,9 +408,7 @@ def main() -> int:
                 worktree = Path(tmp) / "wt"
                 worktree.mkdir()
 
-                # Capture the argv passed to the default enumerator's subprocess call so we
-                # can assert on the exact PowerShell command shape, regressing #602 (the
-                # -AsArray flag is PowerShell-7-only and fails on the default PS 5.1 alias).
+                # Capture the argv passed to the default enumerator's subprocess call so we can assert on the exact PowerShell command shape, regressing #602 (the -AsArray flag is PowerShell-7-only and fails on the default PS 5.1 alias).
                 captured_argv = []
 
                 def _fake_run_capture_argv(argv, **kwargs):
@@ -427,9 +425,8 @@ def main() -> int:
                 )
                 print("PASS: kill_stale_holders — default enumerator omits PS7-only -AsArray flag")
 
-                # Re-invoke with the default enumerator returning a single JSON object (not a
-                # list), the exact shape PS 5.1's ConvertTo-Json produces for one process. The
-                # existing `data = [data] if data else []` normalization must still wrap it.
+                # Re-invoke with the default enumerator returning a single JSON object (not a list), the exact shape PS 5.1's ConvertTo-Json produces for one process.
+                # The existing `data = [data] if data else []` normalization must still wrap it.
                 single_dict_json = json.dumps({"ProcessId": 999, "CommandLine": f"poll {worktree}/file"})
                 kill_calls = []
 
@@ -474,9 +471,7 @@ def main() -> int:
             print("PASS move — relocates a registered worktree and updates git worktree list")
 
         # --- move: target path already occupied by a regular file raises WorktreeError ---
-        # (git worktree move behaves like `mv`: an existing *directory* target nests the
-        # worktree inside it rather than failing, so the genuine collision case is a
-        # pre-existing regular file at the target path.)
+        # (git worktree move behaves like `mv`: an existing *directory* target nests the worktree inside it rather than failing, so the genuine collision case is a pre-existing regular file at the target path.)
         with tempfile.TemporaryDirectory() as tmp:
             hub = Path(tmp) / "hub"
             hub.mkdir()

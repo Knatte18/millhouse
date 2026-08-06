@@ -915,8 +915,7 @@ def main() -> int:
                     # Verify wrapper was executed
                     assert ret == 0, f"S15: expected 0, got {ret}"
 
-                    # Check that the wrapper script content uses stdin pipe
-                    # (send_keys is called to submit the script, not to send the prompt directly)
+                    # Check that the wrapper script content uses stdin pipe (send_keys is called to submit the script, not to send the prompt directly)
                     # The script should be sent to psmux only once during launch
                     script_sends = [call for call in m_send_keys.call_args_list
                                    if len(call[0]) > 1 and "wrapper-" in str(call[0][1])]

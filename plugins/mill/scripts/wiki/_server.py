@@ -36,9 +36,8 @@ from wiki._store import Store
 from wiki._sync import pull, atomic_write, commit_push, verify_git_repo
 
 
-# Minimum interval between health-check-triggered staleness pulls. Debounces
-# repeated OP_HEALTH dispatches (each health_check() call) so a busy caller
-# doesn't pay a network round-trip on every single check.
+# Minimum interval between health-check-triggered staleness pulls.
+# Debounces repeated OP_HEALTH dispatches (each health_check() call) so a busy caller doesn't pay a network round-trip on every single check.
 _HEALTH_CHECK_PULL_TTL = 60.0
 
 
@@ -301,22 +300,16 @@ class WikiServer(DaemonBase):
     def _handle_health(self, payload: dict) -> dict:
         """Handle health check operation.
 
-        Two callers share this one dispatch: `_client.py`'s `_ensure_daemon()`
-        reuse-probe (fired before every op, tagged `liveness_only=True`, 1.0s
-        client-side timeout) and `health_check()`'s real, user-facing check
-        (empty payload). Only the latter runs git-validity/staleness logic:
+        Two callers share this one dispatch: `_client.py`'s `_ensure_daemon()` reuse-probe (fired before every op, tagged `liveness_only=True`, 1.0s client-side timeout) and `health_check()`'s real, user-facing check (empty payload).
+        Only the latter runs git-validity/staleness logic:
 
-        1. liveness_only probes short-circuit immediately -- they must never
-           block on git, or the reuse-probe would spuriously time out and
-           trigger a redundant daemon respawn on every dispatched op.
-        2. WIKI_DAEMON_SKIP_GIT test mode also short-circuits, since most
-           fixtures never `git init` the wiki dir.
-        3. Otherwise verify wiki_path is a valid git repo (hard failure if
-           not), then debounce a fetch+ff-merge via `_last_pull`/TTL. A failed
-           pull is a hard failure only if git reports it could not
-           fast-forward (a diverged local wiki needs manual resolution); any
-           other pull failure (e.g. network timeout) is a soft warning that
-           still reports healthy.
+        1. liveness_only probes short-circuit immediately -- they must never block on git,
+            or the reuse-probe would spuriously time out and trigger a redundant daemon respawn on every dispatched op.
+        2. WIKI_DAEMON_SKIP_GIT test mode also short-circuits, since most fixtures never `git init` the wiki dir.
+        3. Otherwise verify wiki_path is a valid git repo (hard failure if not), then debounce a fetch+ff-merge via `_last_pull`/TTL.
+            A failed pull is a hard failure only if git reports it could not fast-forward (a diverged local wiki needs manual resolution);
+            any other pull failure (e.g.
+            network timeout) is a soft warning that still reports healthy.
         """
         if payload.get("liveness_only"):
             return {FIELD_OK: True}
@@ -335,9 +328,7 @@ class WikiServer(DaemonBase):
             }
 
         if time.monotonic() - self._last_pull >= _HEALTH_CHECK_PULL_TTL:
-            # Release the TinyDB file handle before the pull's working-tree
-            # checkout, same handle-held-blocks-checkout hazard as
-            # _render_and_commit_all's own pull call.
+            # Release the TinyDB file handle before the pull's working-tree checkout, same handle-held-blocks-checkout hazard as _render_and_commit_all's own pull call.
             self._store.close()
             try:
                 pull(self._wiki_path)
@@ -349,8 +340,8 @@ class WikiServer(DaemonBase):
                         FIELD_ERROR_TYPE: ERR_PUSH_FAILED,
                         FIELD_ERROR: str(e),
                     }
-                # Soft warning: network hiccup or unreachable remote. Do not
-                # update self._last_pull so the next check retries the pull.
+                # Soft warning: network hiccup or unreachable remote.
+                # Do not update self._last_pull so the next check retries the pull.
             finally:
                 self._store.reload()
 
@@ -469,19 +460,20 @@ class WikiServer(DaemonBase):
 
         Two test-only env vars trim the git workload:
         - ``WIKI_DAEMON_SKIP_GIT=1`` — skip pull, commit, and push entirely.
-          Renders + writes files only. Use when no test asserts on git state.
+            Renders + writes files only.
+            Use when no test asserts on git state.
         - ``WIKI_DAEMON_SKIP_PUSH=1`` — pull + commit run, push is skipped.
-          Use when a test asserts on commit log content.
+            Use when a test asserts on commit log content.
 
-        SKIP_GIT takes precedence. Production callers leave both unset.
+        SKIP_GIT takes precedence.
+        Production callers leave both unset.
         """
         skip_git = os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1"
         skip_push = os.environ.get("WIKI_DAEMON_SKIP_PUSH") == "1"
 
-        # Pull before render. TinyDB's JSONStorage holds tasks.json open for the
-        # life of the Store, which blocks "git pull"'s working-tree checkout on
-        # Windows (unable to unlink old 'tasks.json'). Release the handle before
-        # the subprocess runs and reopen immediately after, win or lose.
+        # Pull before render.
+        # TinyDB's JSONStorage holds tasks.json open for the life of the Store, which blocks "git pull"'s working-tree checkout on Windows (unable to unlink old 'tasks.json').
+        # Release the handle before the subprocess runs and reopen immediately after, win or lose.
         if not skip_git and not skip_push:
             self._store.close()
             try:
@@ -514,10 +506,8 @@ class WikiServer(DaemonBase):
         commit_paths = list(dict.fromkeys(commit_paths))
         message = f"wiki: {slug_for_msg}"
 
-        # commit_push may internally retry via "git pull --rebase" on a rejected
-        # push, which rewrites tasks.json's working-tree copy -- same handle-held
-        # deadlock as the pull above. Release before the call, reopen after
-        # (success or failure) to pick up any cross-host changes from rebase.
+        # commit_push may internally retry via "git pull --rebase" on a rejected push, which rewrites tasks.json's working-tree copy -- same handle-held deadlock as the pull above.
+        # Release before the call, reopen after (success or failure) to pick up any cross-host changes from rebase.
         self._store.close()
         try:
             commit_push(self._wiki_path, commit_paths, message)
@@ -558,8 +548,8 @@ class WikiServer(DaemonBase):
         if os.environ.get("WIKI_DAEMON_SKIP_GIT") == "1":
             return
 
-        # Try to commit (non-fatal on failure). commit_push internally honors
-        # WIKI_DAEMON_SKIP_PUSH and stops after the local commit when set.
+        # Try to commit (non-fatal on failure).
+        # commit_push internally honors WIKI_DAEMON_SKIP_PUSH and stops after the local commit when set.
         try:
             commit_push(self._wiki_path, [".gitignore"], "chore(wiki): gitignore daemon artifacts")
         except Exception as e:

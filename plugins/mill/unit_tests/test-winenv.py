@@ -1,8 +1,7 @@
 """Unit tests for plugins/mill/scripts/_winenv.py.
 
-Tests cover set_user_env_var write/skip behavior, broadcast best-effort,
-and get_user_env_var read behavior. All winreg functions are mocked
-unconditionally so no real registry operations occur.
+Tests cover set_user_env_var write/skip behavior, broadcast best-effort, and get_user_env_var read behavior.
+All winreg functions are mocked unconditionally so no real registry operations occur.
 """
 from __future__ import annotations
 

@@ -1,9 +1,8 @@
-"""Shared CLI helpers for the review subsystem. Today exposes two helpers:
-print_error(exc) — formats a ReviewError with an uppercase ERROR: prefix and
-an optional one-line hint when the message is from resolve_ref_paths. Used by
-millpy-review-discussion.py, millpy-review-plan.py, millpy-review-code.py.
-print_error_envelope(review_type, msg) — emits an ERROR-shaped JSON envelope
-on stdout and a human-readable error message on stderr."""
+"""Shared CLI helpers for the review subsystem.
+Today exposes two helpers:
+print_error(exc) — formats a ReviewError with an uppercase ERROR: prefix and an optional one-line hint when the message is from resolve_ref_paths.
+Used by millpy-review-discussion.py, millpy-review-plan.py, millpy-review-code.py.
+print_error_envelope(review_type, msg) — emits an ERROR-shaped JSON envelope on stdout and a human-readable error message on stderr."""
 import json
 import sys
 

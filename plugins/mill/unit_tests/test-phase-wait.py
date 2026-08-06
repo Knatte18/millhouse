@@ -22,8 +22,8 @@ def main() -> int:
         )
         print("PASS: build_wait_command contains the ready-phase grep pipeline")
 
-        # Case 2: the blocked-phase grep is CRLF-piped too, and no bare
-        # (un-piped-through-tr) grep of status_path exists anywhere.
+        # Case 2: the blocked-phase grep is CRLF-piped too,
+        # and no bare (un-piped-through-tr) grep of status_path exists anywhere.
         assert (
             "tr -d '\\r' < \"/tmp/status.md\" | grep -q \"^phase: blocked$\"" in cmd
         )
@@ -117,13 +117,10 @@ def main() -> int:
             "mid-loop phase value against a narrower trigger set"
         )
 
-        # Case 13: CRLF end-to-end execution — regression for the Windows
-        # grep-anchor bug caught in plan review round 1.
+        # Case 13: CRLF end-to-end execution — regression for the Windows grep-anchor bug caught in plan review round 1.
         with tempfile.TemporaryDirectory() as tmp:
             status_path = Path(tmp) / "status.md"
-            # Raw bytes, bypassing Python's own newline translation, so the
-            # on-disk file is byte-for-byte CRLF-terminated regardless of
-            # the host platform running this test.
+            # Raw bytes, bypassing Python's own newline translation, so the on-disk file is byte-for-byte CRLF-terminated regardless of the host platform running this test.
             with open(status_path, "wb") as fh:
                 fh.write(b"phase: planned\r\n")
 
@@ -153,9 +150,7 @@ def main() -> int:
                     "end-to-end"
                 )
 
-        # Case 14: matches_wait_trigger — the six widened Entry-gate
-        # phase values mill-go/SKILL.md's "Mid-execution phase-gate
-        # widening" subsection routes on.
+        # Case 14: matches_wait_trigger — the six widened Entry-gate phase values mill-go/SKILL.md's "Mid-execution phase-gate widening" subsection routes on.
         widened_exact = {
             "implementing",
             "reviewing",
@@ -184,8 +179,7 @@ def main() -> int:
 
         assert not matches_wait_trigger("blocked", widened_exact, widened_regexes)
         assert not matches_wait_trigger("done", widened_exact, widened_regexes)
-        # Near-miss: no trailing "-{name}", must not full-match
-        # "^approved-.*$".
+        # Near-miss: no trailing "-{name}", must not full-match "^approved-.*$".
         assert not matches_wait_trigger("approved", widened_exact, widened_regexes)
         print(
             "PASS: matches_wait_trigger rejects non-matching phases and the "

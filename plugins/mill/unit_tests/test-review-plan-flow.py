@@ -1,11 +1,12 @@
 """Unit-test flow harness for _review_plan.run.
 
-Uses _reviewer_test_stub as the reviewer backend. All tests run in-process
+Uses _reviewer_test_stub as the reviewer backend.
+    All tests run in-process
 with no real LLM, no network calls. Covers:
-  - Per-scope round counter (#21/#62/#63)
-  - creates_union suppression in parallel per-batch section (#60)
-  - Hard-fail surfaces as ERROR per-batch entry / ReviewError in holistic (#41)
-  - NEED_CONTEXT resume fallback in per-batch and holistic (#5/#7)
+- Per-scope round counter (#21/#62/#63)
+- creates_union suppression in parallel per-batch section (#60)
+- Hard-fail surfaces as ERROR per-batch entry / ReviewError in holistic (#41)
+- NEED_CONTEXT resume fallback in per-batch and holistic (#5/#7)
 """
 from __future__ import annotations
 
@@ -176,28 +177,16 @@ def _make_nested_plan_fixture(
 ) -> tuple[Path, Path, Path, Path]:
     """Build a nested-hub-layout plan-review fixture under tmp_path.
 
-    Unlike _make_plan_fixture, the git root and the mill hub_root are
-    different directories: hub_root lives one level under git_root
-    (git_root/hub), mirroring a repo where .millhouse/ sits in a
-    subdirectory of the git toplevel rather than at its root.
+    Unlike _make_plan_fixture, the git root and the mill hub_root are different directories: hub_root lives one level under git_root (git_root/hub), mirroring a repo where .millhouse/ sits in a subdirectory of the git toplevel rather than at its root.
 
     batch_specs = [(name, file, reads, creates)]. The plan is written
     directly under hub_root/_mill/plan/ (the CLI's default plan_dir),
     so no --stage prepare copy step is needed.
 
-    Returns (mill_dir, wiki_root, hub_root, git_root). Callers must
-    os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path()
-    walks up from hub_root and finds .millhouse/config.local.yaml there,
-    while _paths.resolve_git_root() still resolves to git_root.
+    Returns (mill_dir, wiki_root, hub_root, git_root).
+    Callers must os.chdir(hub_root) before invoking the CLI so _paths.resolve_hub_path() walks up from hub_root and finds .millhouse/config.local.yaml there, while _paths.resolve_git_root() still resolves to git_root.
 
-    wiki_root deliberately uses the container-form sibling default
-    (<container>/wiki, resolved via _sibling.resolve_path) rather than a
-    paths.wiki override in hub_root's config.local.yaml: resolve_wiki_path
-    is called both with hub_root (CLI's own lookup) and with git_root
-    (inside _paths.resolve_active_worktree's marker check), and only
-    git_root's own .millhouse/ (absent here) or the sibling default is
-    consulted for the latter -- a hub_root-only override would make the
-    two calls disagree on the wiki location.
+    wiki_root deliberately uses the container-form sibling default (<container>/wiki, resolved via _sibling.resolve_path) rather than a paths.wiki override in hub_root's config.local.yaml: resolve_wiki_path is called both with hub_root (CLI's own lookup) and with git_root (inside _paths.resolve_active_worktree's marker check), and only git_root's own .millhouse/ (absent here) or the sibling default is consulted for the latter -- a hub_root-only override would make the two calls disagree on the wiki location.
     """
     git_root = tmp_path / "container" / "wts" / SLUG
     git_root.mkdir(parents=True)
@@ -217,9 +206,7 @@ def _make_nested_plan_fixture(
     )
     wiki.upsert_task(wiki_root, SLUG, title="Test Task", status="active")
     (mill_dir / "config.local.yaml").write_text(
-        # hub_relative_path declares hub_root's own offset from git_root --
-        # the real mill-claim convention for M2+sub (nested-hub) layouts,
-        # consumed by _paths.resolve_active_hub to rebase onto hub_root.
+        # hub_relative_path declares hub_root's own offset from git_root -- the real mill-claim convention for M2+sub (nested-hub) layouts, consumed by _paths.resolve_active_hub to rebase onto hub_root.
         "hub_relative_path: hub\n"
         "spawn:\n  branch_prefix: 'hanf/'\n", encoding="utf-8"
     )
@@ -251,8 +238,7 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test 1 — per-scope round counter on re-invocation
-    # 3 per-batch + 1 holistic = 4 responses per run.
+    # Test 1 — per-scope round counter on re-invocation 3 per-batch + 1 holistic = 4 responses per run.
     # After re-invocation all scopes advance to r2 independently.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -286,7 +272,8 @@ def main() -> int:
             print("PASS test1a: first run — all scopes r1")
 
             # Second run — per-batch batches all APPROVE -> carryforward (r1 files);
-            # only holistic fires fresh (r2). Skip-approved scan active.
+            # only holistic fires fresh (r2).
+            # Skip-approved scan active.
             _seed_approve(1)  # only holistic needs a response
             r2 = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r2.verdict == "APPROVE"
@@ -318,10 +305,10 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 2 — partial re-invocation (only alpha-r1 file pre-exists)
-    # alpha must be r2; beta/gamma must be r1; holistic must be r2.
-    # A holistic-r1 file is also pre-created so detect_resume_round
-    # returns None (completed round, not interrupted mid-round).
+    # Test 2 — partial re-invocation (only alpha-r1 file pre-exists) alpha must be r2;
+    # beta/gamma must be r1;
+    # holistic must be r2.
+    # A holistic-r1 file is also pre-created so detect_resume_round returns None (completed round, not interrupted mid-round).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -333,8 +320,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Pre-create alpha-r1 (malformed) and holistic-r1 to simulate a
-            # completed round where alpha's result was written but was garbled.
+            # Pre-create alpha-r1 (malformed) and holistic-r1 to simulate a completed round where alpha's result was written but was garbled.
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True)
             (reviews_dir / "20260418-000000-plan-review-01-alpha-r1.md").write_text(
@@ -375,8 +361,9 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 3 — creates_union suppression in per-batch parallel section (#60)
-    # beta Reads a file alpha Creates; file not on disk. No ReviewError expected.
+    # Test 3 — creates_union suppression in per-batch parallel section (#60) beta Reads a file alpha Creates;
+    # file not on disk.
+    # No ReviewError expected.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -408,8 +395,9 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 4 — hard-fail surfaces as ERROR per-batch entry, not full-run failure
-    # alpha (clean) succeeds; beta (bad ref) -> ERROR entry; holistic disabled.
+    # Test 4 — hard-fail surfaces as ERROR per-batch entry, not full-run failure alpha (clean) succeeds;
+    # beta (bad ref) -> ERROR entry;
+    # holistic disabled.
     # Aggregate must be REQUEST_CHANGES (not ReviewError), since not all ERROR.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -457,8 +445,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 5 — hard-fail in holistic block surfaces as ReviewError
-    # alpha + gamma succeed; beta has bad ref -> ERROR entry (no reviewer call).
+    # Test 5 — hard-fail in holistic block surfaces as ReviewError alpha + gamma succeed;
+    # beta has bad ref -> ERROR entry (no reviewer call).
     # Holistic resolver encounters beta's bad ref -> ReviewError propagates.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -472,7 +460,8 @@ def main() -> int:
         )
         orig_dir = os.getcwd()
         os.chdir(project_root)
-        # alpha + gamma consume one each; holistic resolver fails before reviewer runs.
+        # alpha + gamma consume one each;
+        # holistic resolver fails before reviewer runs.
         # The third seeded response is never consumed.
         _seed_approve(3)
         try:
@@ -502,7 +491,8 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 6 — NEED_CONTEXT resume fallback in per-batch (#5/#7)
-    # Single batch (alpha) + holistic. Alpha retries once -> APPROVE.
+    # Single batch (alpha) + holistic.
+    # Alpha retries once -> APPROVE.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -547,7 +537,8 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 7 — NEED_CONTEXT resume fallback in holistic block (#5/#7)
-    # Single batch (alpha) succeeds; holistic NEED_CONTEXT -> retry APPROVE.
+    # Single batch (alpha) succeeds;
+    # holistic NEED_CONTEXT -> retry APPROVE.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -601,13 +592,9 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 7b — holistic NEED_CONTEXT no-resolve branch
-    # Sibling to Test 7 (this file's tests are not renumbered when a new one
-    # is inserted between existing numbers -- see Test 9's own "bug C fix
-    # #184" comment for precedent). Single batch (alpha) succeeds; holistic
-    # returns NEED_CONTEXT referencing a path that resolve_existing_paths
-    # cannot resolve on disk, so the no-retry / no-resolve branch fires and
-    # the holistic entry is finalized directly from the first response.
+    # Test 7b — holistic NEED_CONTEXT no-resolve branch Sibling to Test 7 (this file's tests are not renumbered when a new one is inserted between existing numbers -- see Test 9's own "bug C fix #184" comment for precedent).
+    # Single batch (alpha) succeeds;
+    # holistic returns NEED_CONTEXT referencing a path that resolve_existing_paths cannot resolve on disk, so the no-retry / no-resolve branch fires and the holistic entry is finalized directly from the first response.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -617,9 +604,7 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # `nonexistent/missing.py` is never created on disk and is not a
-            # Creates:/Deletes: token in any batch file, so
-            # resolve_existing_paths returns an empty list and no retry fires.
+            # `nonexistent/missing.py` is never created on disk and is not a Creates:/Deletes: token in any batch file, so resolve_existing_paths returns an empty list and no retry fires.
             NEED_CONTEXT_UNRESOLVABLE_WITH_NIT_TEXT = (
                 "# Review: test\n\n### [NIT] pending cleanup\n\n- b\n\n"
                 "```yaml\nverdict: NEED_CONTEXT\n```\n\n"
@@ -658,8 +643,9 @@ def main() -> int:
     REQUEST_CHANGES_TEXT = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
 
     # ------------------------------------------------------------------
-    # Test 8 — skip-approved happy path
-    # Three batches; 01-a and 03-c are approved in r1; 02-b is not.
+    # Test 8 — skip-approved happy path Three batches;
+    # 01-a and 03-c are approved in r1;
+    # 02-b is not.
     # Stub should fire exactly twice: once for 02-b, once for holistic.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -674,8 +660,7 @@ def main() -> int:
         try:
             reviews_dir = project_root / "reviews"
             reviews_dir.mkdir(parents=True, exist_ok=True)
-            # 01-a approved in r1, with a real [NIT] finding to prove the
-            # carryforward path computes a genuine nit_count, not just 0.
+            # 01-a approved in r1, with a real [NIT] finding to prove the carryforward path computes a genuine nit_count, not just 0.
             APPROVE_WITH_NIT_TEXT = (
                 "# Review: test\n\n### [NIT] cosmetic\n\n- b\n\n"
                 "```yaml\nverdict: APPROVE\n```\n"
@@ -687,11 +672,7 @@ def main() -> int:
             (reviews_dir / "20260429-000002-plan-review-02-b-r1.md").write_text(
                 REQUEST_CHANGES_TEXT, encoding="utf-8"
             )
-            # 03-c approved in r1, with an off-vocabulary [MAJOR] heading
-            # alongside verdict: APPROVE -- _scan_approved_batches carries this
-            # forward because parse_verdict still reads APPROVE, exercising
-            # the round-3 finding that verdict is never cross-validated
-            # against the review's actual finding counts.
+            # 03-c approved in r1, with an off-vocabulary [MAJOR] heading alongside verdict: APPROVE -- _scan_approved_batches carries this forward because parse_verdict still reads APPROVE, exercising the round-3 finding that verdict is never cross-validated against the review's actual finding counts.
             APPROVE_WITH_UNRECOGNIZED_SEVERITY_TEXT = (
                 "# Review: test\n\n### [MAJOR] mislabeled issue\n\n- b\n\n"
                 "```yaml\nverdict: APPROVE\n```\n"
@@ -736,16 +717,13 @@ def main() -> int:
             assert rv_b["session_id"] == "sid-fresh-b", f"02-b should be fresh, got {rv_b['session_id']!r}"
             assert rv_hol["session_id"] == "sid-fresh-hol", f"holistic should be fresh, got {rv_hol['session_id']!r}"
 
-            # Carryforward counts: 01-a's real [NIT] heading and 03-c's
-            # off-vocabulary [MAJOR] heading (folds into blocking_count).
+            # Carryforward counts: 01-a's real [NIT] heading and 03-c's off-vocabulary [MAJOR] heading (folds into blocking_count).
             assert rv_a["blocking_count"] == 0, f"expected 01-a blocking_count=0, got {rv_a['blocking_count']}"
             assert rv_a["nit_count"] == 1, f"expected 01-a nit_count=1, got {rv_a['nit_count']}"
             assert rv_c["blocking_count"] == 1, f"expected 03-c blocking_count=1, got {rv_c['blocking_count']}"
             assert rv_c["nit_count"] == 0, f"expected 03-c nit_count=0, got {rv_c['nit_count']}"
 
-            # Aggregate: the fresh 02-b/holistic dispatches return zero-finding
-            # APPROVE_TEXT/REQUEST_CHANGES_TEXT, so only the two carryforward
-            # entries above contribute to the run-level aggregate.
+            # Aggregate: the fresh 02-b/holistic dispatches return zero-finding APPROVE_TEXT/REQUEST_CHANGES_TEXT, so only the two carryforward entries above contribute to the run-level aggregate.
             assert r.blocking_count == 1, f"expected aggregate blocking_count=1, got {r.blocking_count}"
             assert r.nit_count == 1, f"expected aggregate nit_count=1, got {r.nit_count}"
 
@@ -760,8 +738,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 9 — all batches approved + holistic re-runs
-    # All three batches approved in r1 -> stub fires exactly once (holistic).
+    # Test 9 — all batches approved + holistic re-runs All three batches approved in r1 -> stub fires exactly once (holistic).
     # reviews has 1 entry (holistic only, resume path, bug C fix #184).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -804,8 +781,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 10 — malformed prior review file
-    # 01-a r1 file has unparseable content -> treated as not-approved.
+    # Test 10 — malformed prior review file 01-a r1 file has unparseable content -> treated as not-approved.
     # Stub fires for 01-a, 02-b, 03-c, and holistic (4 calls).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -936,9 +912,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 14 — aggregate blocking_count
-    # batch a: 2 BLOCKINGs, batch b: 1 BLOCKING, holistic: 0 BLOCKINGs
-    # aggregate = 3
+    # Test 14 — aggregate blocking_count batch a: 2 BLOCKINGs, batch b: 1 BLOCKING, holistic: 0 BLOCKINGs aggregate = 3
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -980,11 +954,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 14b — holistic-normal site's own blocking_count/nit_count
-    # Sibling to Test 14 (inserted without renumbering later tests, same
-    # precedent as Test 7b). Test 14's holistic leg stays APPROVE_TEXT, so
-    # this is the only test that exercises the "holistic normal" finalize_scope
-    # call site's own counts directly rather than only the run-level aggregate.
+    # Test 14b — holistic-normal site's own blocking_count/nit_count Sibling to Test 14 (inserted without renumbering later tests, same precedent as Test 7b).
+    # Test 14's holistic leg stays APPROVE_TEXT, so this is the only test that exercises the "holistic normal" finalize_scope call site's own counts directly rather than only the run-level aggregate.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1018,8 +989,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 15 — max_rounds kwarg override for plan review
-    # Pre-populate 3 per-batch review files and 3 holistic files.
+    # Test 15 — max_rounds kwarg override for plan review Pre-populate 3 per-batch review files and 3 holistic files.
     # Without kwarg (cfg max=3): raises ReviewError (round 4 would exceed max).
     # With max_rounds=5: holistic r4 succeeds (per-batch all approved -> carryforward).
     # ------------------------------------------------------------------
@@ -1076,8 +1046,7 @@ def main() -> int:
     # ------------------------------------------------------------------
     # Test 16 — all-ERROR run returns ReviewResult, not ReviewError (#84)
     # Monkey-patch stub.run to raise LLMError for every call.
-    # After Card 17, the total-fail check is removed, so plan_run falls
-    # through to aggregate_verdict and returns REQUEST_CHANGES.
+    # After Card 17, the total-fail check is removed, so plan_run falls through to aggregate_verdict and returns REQUEST_CHANGES.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1114,8 +1083,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 17 — mid-round resume: holistic missing, per-batch on disk (#87)
-    # Pre-populate two per-batch r1 files (no holistic); stub fires once
-    # (holistic only); reviews has 1 entry (holistic only, bug C fix #184).
+    # Pre-populate two per-batch r1 files (no holistic);
+    # stub fires once (holistic only);
+    # reviews has 1 entry (holistic only, bug C fix #184).
     # ------------------------------------------------------------------
     REQUEST_CHANGES_TEXT2 = "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n"
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1162,8 +1132,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 18 — deletes surface: batch declares Deletes token
-    # The per-batch prompt must contain ## Intentionally deleted + the token.
+    # Test 18 — deletes surface: batch declares Deletes token The per-batch prompt must contain ## Intentionally deleted + the token.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1200,8 +1169,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 19 — timeout plumbing: bulk_timeout -> per-batch, holistic_timeout -> holistic
-    # Single-batch fixture so captured_prompts() ordering is deterministic.
+    # Test 19 — timeout plumbing: bulk_timeout -> per-batch, holistic_timeout -> holistic Single-batch fixture so captured_prompts() ordering is deterministic.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1236,8 +1204,8 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 20 — holistic parse_verdict failure -> ERROR entry (#185)
-    # One-batch plan; holistic returns raw prose without yaml block ->
-    # parse_verdict raises ReviewError -> ERROR entry, no raise.
+    # One-batch plan;
+    # holistic returns raw prose without yaml block -> parse_verdict raises ReviewError -> ERROR entry, no raise.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1333,8 +1301,10 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 21 — holistic parse_verdict failure (holistic-only) returns ERROR envelope (#315)
-    # No per-batch reviews; holistic-only mode. Unparseable output -> ERROR entry
-    # with file path. Aggregate verdict is ERROR (all reviews are ERROR).
+    # No per-batch reviews;
+    # holistic-only mode.
+    # Unparseable output -> ERROR entry with file path.
+    # Aggregate verdict is ERROR (all reviews are ERROR).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1371,13 +1341,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 22 — rounds=0 holistic via kwarg, batch reviewer null -> both
-    # scopes are now correctly disabled, so ReviewError fires (post-Card-4:
-    # the disablement gate reads holistic_max_rounds, so a max_rounds=0
-    # override makes holistic_spec None the same as an explicit
-    # reviewer=None would -- it no longer coincidentally slips through
-    # the round-cap stub-return at holistic dispatch time, so with the
-    # batch reviewer also null there is genuinely nothing to review)
+    # Test 22 — rounds=0 holistic via kwarg, batch reviewer null -> both scopes are now correctly disabled, so ReviewError fires (post-Card-4: the disablement gate reads holistic_max_rounds, so a max_rounds=0 override makes holistic_spec None the same as an explicit reviewer=None would -- it no longer coincidentally slips through the round-cap stub-return at holistic dispatch time, so with the batch reviewer also null there is genuinely nothing to review)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("core", "01-core.md", ["src/a.py"], [])]
@@ -1453,11 +1417,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 24 — prepare-stage validator gate with errors (non-existent-path ref)
-    # Error plan has a Context: ref to nonexistent file; validator should reject
-    # it with exit 1, JSON errors envelope, and no brief file written.
-    # Tests the CLI entry point main(["--stage", "prepare", "--holistic-only"]),
-    # NOT the validator function directly (see test-plan-validate.py for
-    # negative case: omitting git_root from validator).
+    # Error plan has a Context: ref to nonexistent file;
+    # validator should reject it with exit 1, JSON errors envelope, and no brief file written.
+    # Tests the CLI entry point main(["--stage", "prepare", "--holistic-only"]), NOT the validator function directly (see test-plan-validate.py for negative case: omitting git_root from validator).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -1524,9 +1486,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 25 — prepare-stage validator gate with clean plan
-    # Clean plan should pass validation, write brief file, and return
-    # prepare envelope with stage: "prepare" and brief_path.
+    # Test 25 — prepare-stage validator gate with clean plan Clean plan should pass validation, write brief file, and return prepare envelope with stage: "prepare" and brief_path.
     # Tests the CLI entry point main(["--stage", "prepare", "--holistic-only"]).
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1598,9 +1558,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------
     # Test 26 — Move sources included in plan review bulk (Card 18)
-    # A batch declares a Moves: entry; the source file exists on disk.
-    # Both the per-batch prompt and the holistic prompt must contain the
-    # source file's path/content so the reviewer can inspect the relocation.
+    # A batch declares a Moves: entry;
+    # the source file exists on disk.
+    # Both the per-batch prompt and the holistic prompt must contain the source file's path/content so the reviewer can inspect the relocation.
     # ------------------------------------------------------------------
     def _make_batch_file_with_moves(
         name: str,
@@ -1687,16 +1647,12 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 27 — Move targets suppressed in plan-review path checks (Card 18 /
-    # move-endpoint-accounting Shared Decision).
-    # alpha declares Moves: old/module.py -> new/module.py; beta's Context
-    # references the move target new/module.py, which does NOT exist on disk
-    # at plan-review time (it is created as part of the rename). Without
-    # move-target suppression, resolve_ref_paths raises ReviewError -> beta
-    # ERROR entry in the per-batch section and ReviewError in the holistic
-    # resolver, so the run aggregates away from APPROVE. The fix merges move
-    # targets into the creates suppression set, so plan review must APPROVE
-    # both scopes. Mirrors test3 (creates_union) for the move-endpoint case.
+    # Test 27 — Move targets suppressed in plan-review path checks (Card 18 / move-endpoint-accounting Shared Decision).
+    # alpha declares Moves: old/module.py -> new/module.py;
+    # beta's Context references the move target new/module.py, which does NOT exist on disk at plan-review time (it is created as part of the rename).
+    # Without move-target suppression, resolve_ref_paths raises ReviewError -> beta ERROR entry in the per-batch section and ReviewError in the holistic resolver, so the run aggregates away from APPROVE.
+    # The fix merges move targets into the creates suppression set, so plan review must APPROVE both scopes.
+    # Mirrors test3 (creates_union) for the move-endpoint case.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [
@@ -1746,10 +1702,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 28 — nested-hub-layout: prepare-stage brief_path resolves under
-    # the nested hub_root's _mill/briefs/, not under git_root's (#601).
-    # Regression test for the bug fixed by Card 6: millpy-review-plan.py
-    # used to write briefs under git_root instead of hub_root/project_root.
+    # Test 28 — nested-hub-layout: prepare-stage brief_path resolves under the nested hub_root's _mill/briefs/, not under git_root's (#601).
+    # Regression test for the bug fixed by Card 6: millpy-review-plan.py used to write briefs under git_root instead of hub_root/project_root.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1803,19 +1757,13 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # project_root rebind: briefs_dir resolves under resolve_active_hub,
-    # not resolve_hub_path's decoy (#675)
+    # project_root rebind: briefs_dir resolves under resolve_active_hub, not resolve_hub_path's decoy (#675)
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
     # ------------------------------------------------------------------
-    # Test 29 — fail-loud unrecognized severity in synchronous per-batch
-    # dispatch (line 284 call site). A per-batch reviewer response with
-    # ONLY a "### [MAJOR]" heading (no "### [BLOCKING]" heading at all)
-    # must still surface as blocking_count == 1, proving the synchronous
-    # subprocess dispatch path -- the path most divergent from batch 1's
-    # finalize_scope() fix -- is fail-loud rather than silently dropping
-    # the unrecognized severity from both counters.
+    # Test 29 — fail-loud unrecognized severity in synchronous per-batch dispatch (line 284 call site).
+    # A per-batch reviewer response with ONLY a "### [MAJOR]" heading (no "### [BLOCKING]" heading at all) must still surface as blocking_count == 1, proving the synchronous subprocess dispatch path -- the path most divergent from batch 1's finalize_scope() fix -- is fail-loud rather than silently dropping the unrecognized severity from both counters.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1847,10 +1795,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 30 — #720 holistic-path [MEDIUM]-only regression
-    # A holistic response with ONLY a "### [MEDIUM]" heading (no recognized
-    # [BLOCKING]/[NIT] heading at all) must fold into blocking_count on the
-    # holistic dispatch path, not just the per-batch path Test 29 covers.
+    # Test 30 — #720 holistic-path [MEDIUM]-only regression A holistic response with ONLY a "### [MEDIUM]" heading (no recognized [BLOCKING]/[NIT] heading at all) must fold into blocking_count on the holistic dispatch path, not just the per-batch path Test 29 covers.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -1878,8 +1823,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 31a — prepare() holistic reviewer_override drives resolution,
-    # not config's holistic reviewer (Card 16, check 1)
+    # Test 31a — prepare() holistic reviewer_override drives resolution, not config's holistic reviewer (Card 16, check 1)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("01-setup", "01-setup.md", [], [])]
@@ -1919,8 +1863,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 31b — prepare() holistic reviewer_override: unknown name raises
-    # ReviewError mentioning "Unknown reviewer" (Card 16, check 2)
+    # Test 31b — prepare() holistic reviewer_override: unknown name raises ReviewError mentioning "Unknown reviewer" (Card 16, check 2)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("01-setup", "01-setup.md", [], [])]
@@ -1948,8 +1891,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 31c — prepare() holistic reviewer_override: cluster override
-    # raises ReviewError mentioning "cluster" (Card 16, check 3)
+    # Test 31c — prepare() holistic reviewer_override: cluster override raises ReviewError mentioning "cluster" (Card 16, check 3)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("01-setup", "01-setup.md", [], [])]
@@ -1990,8 +1932,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 31d — prepare() holistic reviewer_override skips the
-    # large-prompt auto-switch entirely (Card 16, check 4)
+    # Test 31d — prepare() holistic reviewer_override skips the large-prompt auto-switch entirely (Card 16, check 4)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("01-setup", "01-setup.md", [], [])]
@@ -2040,9 +1981,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 31e — prepare() reviewer_override is a documented no-op when
-    # scope is not None (batch scope), per the holistic-only Decision
-    # (Card 16, check 5)
+    # Test 31e — prepare() reviewer_override is a documented no-op when scope is not None (batch scope), per the holistic-only Decision (Card 16, check 5)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("01-setup", "01-setup.md", [], [])]
@@ -2081,8 +2020,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 32a — run() holistic_only=True reviewer_override dispatches the
-    # named override, not config's holistic reviewer (Card 17, check 1)
+    # Test 32a — run() holistic_only=True reviewer_override dispatches the named override, not config's holistic reviewer (Card 17, check 1)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -2119,8 +2057,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 32b — run() holistic_only=True reviewer_override: unknown name
-    # raises ReviewError mentioning "Unknown reviewer" (Card 17, check 2)
+    # Test 32b — run() holistic_only=True reviewer_override: unknown name raises ReviewError mentioning "Unknown reviewer" (Card 17, check 2)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -2148,9 +2085,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 32c — run() holistic_only=True reviewer_override dispatches a
-    # non-Claude (Gemini) reviewer, since direct-dispatch call sites pass
-    # reject_non_claude=False (Card 17, check 3)
+    # Test 32c — run() holistic_only=True reviewer_override dispatches a non-Claude (Gemini) reviewer, since direct-dispatch call sites pass reject_non_claude=False (Card 17, check 3)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -2191,10 +2126,8 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 32d — run() holistic_only=True reviewer_override skips the
-    # large-prompt auto-switch entirely; effort is forwarded to the
-    # test_stub provider branch (Card 17, check 4; depends on batch
-    # reviewer-override-helper's Card 2 fix)
+    # Test 32d — run() holistic_only=True reviewer_override skips the large-prompt auto-switch entirely;
+    # effort is forwarded to the test_stub provider branch (Card 17, check 4; depends on batch reviewer-override-helper's Card 2 fix)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -2246,9 +2179,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 33 — --max-rounds override forces holistic dispatch despite
-    # holistic.rounds:0 (issue #740 regression: the elif gate used to read
-    # the raw config value instead of the max_rounds-aware override)
+    # Test 33 — --max-rounds override forces holistic dispatch despite holistic.rounds:0 (issue #740 regression: the elif gate used to read the raw config value instead of the max_rounds-aware override)
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
@@ -2292,28 +2223,15 @@ def main() -> int:
 def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
     """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's decoy.
 
-    millpy-review-plan.py's main() imports every module it needs (_agent_dispatch,
-    _parent_branch, _paths, _reviewers, _review_cli, _review_common, _review_plan)
-    inline, so this test loads the CLI script via importlib.util.spec_from_file_location
-    and injects MagicMock stand-ins for each of those names into sys.modules before
-    exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout
-    and test-review-code-flow.py's counterpart do. --skip-validate is passed so the
-    real (unmocked) _plan_validate module is never imported by the prepare branch.
+    millpy-review-plan.py's main() imports every module it needs (_agent_dispatch, _parent_branch, _paths, _reviewers, _review_cli, _review_common, _review_plan) inline, so this test loads the CLI script via importlib.util.spec_from_file_location and injects MagicMock stand-ins for each of those names into sys.modules before exec_module, exactly as test-review-discussion-flow.py's test_brief_path_nested_layout and test-review-code-flow.py's counterpart do. --skip-validate is passed so the real (unmocked) _plan_validate module is never imported by the prepare branch.
 
-    resolve_hub_path returns a decoy directory standing in for a stale/escaped
-    resolve_hub_path() fallback; resolve_active_hub -- called after slug
-    resolution, per the Card 14 rebind -- returns a distinct directory standing
-    in for the corrected active task worktree. briefs_dir must resolve under the
-    resolve_active_hub value (checked via the recorded resolve_task_path and
-    write_brief call args), proving project_root was rebound and not left at
-    resolve_hub_path's original value.
+    resolve_hub_path returns a decoy directory standing in for a stale/escaped resolve_hub_path() fallback;
+    resolve_active_hub -- called after slug resolution, per the Card 14 rebind -- returns a distinct directory standing in for the corrected active task worktree.
+    briefs_dir must resolve under the resolve_active_hub value (checked via the recorded resolve_task_path and write_brief call args), proving project_root was rebound and not left at resolve_hub_path's original value.
 
-    A reversion of the Card 14 fix (never calling resolve_active_hub) causes the
-    assertion to fail because resolve_task_path is called with the decoy
-    directory instead.
+    A reversion of the Card 14 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator
-    convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
     """
     import importlib.util
     import tempfile
@@ -2381,16 +2299,13 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
 
-            # --skip-validate bypasses the real (unmocked) _plan_validate import
-            # this test does not inject; --stage prepare enters the branch
-            # where the rebind's project_root value drives briefs_dir.
+            # --skip-validate bypasses the real (unmocked) _plan_validate import this test does not inject;
+            # --stage prepare enters the branch where the rebind's project_root value drives briefs_dir.
             with patch("sys.argv", ["prog", "--stage", "prepare", "--skip-validate"]):
                 try:
                     mod.main()
                 except (TypeError, SystemExit, Exception):
-                    # The resolve_active_hub/resolve_task_path calls are
-                    # already recorded before any crash on a bare MagicMock
-                    # field reaching json.dumps(envelope).
+                    # The resolve_active_hub/resolve_task_path calls are already recorded before any crash on a bare MagicMock field reaching json.dumps(envelope).
                     pass
 
         if not mock_paths.resolve_active_hub.called:

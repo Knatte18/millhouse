@@ -16,8 +16,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 ADD_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-add.py"
 
-# Multi-line markdown payload exercising heredoc-loss characters:
-# backticks, code fences, headings, quotes, and blank lines.
+# Multi-line markdown payload exercising heredoc-loss characters: backticks, code fences, headings, quotes, and blank lines.
 _BODY_FIXTURE = (
     "# Proposal Heading\n"
     "\n"

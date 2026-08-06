@@ -250,8 +250,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations files under junctions ({type(exc).__name__}): {exc}")
 
-    # CV-7. compute_scope_violations: nested hub layout rebases git-root-relative paths onto
-    # hub_root before applying the _mill/-prefix and junction-directory exclusions.
+    # CV-7.
+    # compute_scope_violations: nested hub layout rebases git-root-relative paths onto hub_root before applying the _mill/-prefix and junction-directory exclusions.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             git_root = Path(tmp)
@@ -271,8 +271,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations nested layout exclusions ({type(exc).__name__}): {exc}")
 
-    # CV-8. compute_scope_violations: untracked file outside the hub subtree is dropped
-    # entirely -- it belongs to a different part of the git repo, not a scope violation.
+    # CV-8.
+    # compute_scope_violations: untracked file outside the hub subtree is dropped entirely -- it belongs to a different part of the git repo, not a scope violation.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             git_root = Path(tmp)
@@ -292,9 +292,9 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: compute_scope_violations outside-hub-subtree drop ({type(exc).__name__}): {exc}")
 
-    # CV-9. compute_scope_violations: git_root=None mirrors the flat-layout (tmp_path, tmp_path)
-    # result rather than raising a TypeError, for callers that never resolved a git_root
-    # (e.g. test-millpy-implement.py's no-git_root call pattern).
+    # CV-9.
+    # compute_scope_violations: git_root=None mirrors the flat-layout (tmp_path, tmp_path) result rather than raising a TypeError, for callers that never resolved a git_root (e.g.
+    # test-millpy-implement.py's no-git_root call pattern).
     try:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -601,8 +601,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift owned-set ({type(exc).__name__}): {exc}")
 
-    # ROOD-5. revert_out_of_scope_drift: nested-hub layout rebases git-root-relative porcelain
-    # paths onto hub_root before reverting -- the double-prefix regression from #640.
+    # ROOD-5.
+    # revert_out_of_scope_drift: nested-hub layout rebases git-root-relative porcelain paths onto hub_root before reverting -- the double-prefix regression from #640.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             git_root = Path(tmp)
@@ -631,9 +631,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift nested-hub porcelain ({type(exc).__name__}): {exc}")
 
-    # ROOD-6. revert_out_of_scope_drift: nested-hub layout rebases owned_paths (parent-diff set)
-    # before the in-scope check -- regression guard so a genuine task-owned file outside
-    # task_dir is not misclassified as out-of-scope drift and silently reverted.
+    # ROOD-6.
+    # revert_out_of_scope_drift: nested-hub layout rebases owned_paths (parent-diff set) before the in-scope check -- regression guard so a genuine task-owned file outside task_dir is not misclassified as out-of-scope drift and silently reverted.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             git_root = Path(tmp)
@@ -882,8 +881,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: clean_ephemeral_scope_violations bare-name no package main ({type(exc).__name__}): {exc}")
 
-    # CESV-9. Regression: coverage.out still removed and non-allowlisted data.json still blocking
-    # Confirms the Go artifact additions did not disturb the original fixed allowlist entries.
+    # CESV-9.
+    # Regression: coverage.out still removed and non-allowlisted data.json still blocking Confirms the Go artifact additions did not disturb the original fixed allowlist entries.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -911,10 +910,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: Regression coverage.out/data.json ({type(exc).__name__}): {exc}")
 
-    # CESV-10. clean_ephemeral_scope_violations: nested hub layout -- violation is detected via
-    # the real compute_scope_violations rebasing (status_porcelain mocked at the git-root-relative
-    # level, not compute_scope_violations itself) and removed at the hub_root-relative path, not
-    # some git_root-relative miscomputed path.
+    # CESV-10.
+    # clean_ephemeral_scope_violations: nested hub layout -- violation is detected via the real compute_scope_violations rebasing (status_porcelain mocked at the git-root-relative level, not compute_scope_violations itself) and removed at the hub_root-relative path, not some git_root-relative miscomputed path.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             git_root = Path(tmp)
@@ -945,10 +942,8 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: clean_ephemeral_scope_violations nested layout ({type(exc).__name__}): {exc}")
 
-    # CRLF-1. capture_snapshot writes LF-only bytes (no \r\n) on disk
-    # This is the regression test for the Windows text-mode CRLF translation bug:
-    # without newline="" in write_text, Python rewrites \n as \r\n on Windows,
-    # causing the snapshot itself to appear as a dirty file in git status.
+    # CRLF-1.
+    # capture_snapshot writes LF-only bytes (no \r\n) on disk This is the regression test for the Windows text-mode CRLF translation bug: without newline="" in write_text, Python rewrites \n as \r\n on Windows, causing the snapshot itself to appear as a dirty file in git status.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "_mill" / ".cleanliness-snapshot-crlf.txt"
@@ -973,16 +968,13 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: CRLF-1 capture_snapshot LF-only ({type(exc).__name__}): {exc}")
 
-    # CRLF-2. CR-only delta between snapshot and live porcelain -> empty compute_new_dirt
-    # This is the regression test for the false-positive dirt: when the snapshot was
-    # written with CRLF (before the fix) and the live git status returns LF, the set
-    # comparison would see " M file.txt\r" != " M file.txt" and report false new dirt.
+    # CRLF-2.
+    # CR-only delta between snapshot and live porcelain -> empty compute_new_dirt This is the regression test for the false-positive dirt: when the snapshot was written with CRLF (before the fix) and the live git status returns LF, the set comparison would see " M file.txt\r" != " M file.txt" and report false new dirt.
     # After the fix, \r is stripped from both sides before comparison.
     try:
         with tempfile.TemporaryDirectory() as tmp:
             snapshot_path = Path(tmp) / "snapshot-crlf.txt"
-            # Write the snapshot with CRLF line endings (simulating the pre-fix behaviour
-            # or a snapshot read back through text mode on Windows).
+            # Write the snapshot with CRLF line endings (simulating the pre-fix behaviour or a snapshot read back through text mode on Windows).
             snapshot_path.write_bytes(b" M file.txt\r\n M other.txt\r\n")
             # Live porcelain returns the same lines but with LF (normal git output).
             with unittest.mock.patch(

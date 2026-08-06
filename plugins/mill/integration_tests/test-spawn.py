@@ -1,25 +1,24 @@
 """
 Integration test for mill-spawn.
 
-Builds an isolated hub+wiki pair under ``.scratch/`` and runs
-``millpy-spawn.py`` against it. Asserts the end-to-end artefacts:
+Builds an isolated hub+wiki pair under ``.scratch/`` and runs ``millpy-spawn.py`` against it.
+Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
-    - A new worktree directory exists at ``<container>/worktrees/<slug>``
-      (hub-form default, via _sibling.resolve_path).
+    - A new worktree directory exists at ``<container>/worktrees/<slug>`` (hub-form default, via _sibling.resolve_path).
     - The task's branch exists with the expected name.
     - ``wiki/active/<slug>/status.md`` exists with the expected title.
     - ``<worktree>/.vscode/settings.json`` has a non-green colour.
     - ``<worktree>/.millhouse/wiki`` is a working junction to the wiki clone.
 
-Local-dev only. Requires a working ``git`` in PATH. No network — the wiki
-uses a local bare repo as origin so push/pull stays on the filesystem.
+Local-dev only.
+Requires a working ``git`` in PATH.
+No network — the wiki uses a local bare repo as origin so push/pull stays on the filesystem.
 
 Run from hub root:
     python plugins/mill/integration_tests/test-spawn.py
 
-Exits 0 on PASS, 1 on any assertion failure (scratch dir preserved for
-post-mortem).
+Exits 0 on PASS, 1 on any assertion failure (scratch dir preserved for post-mortem).
 """
 from __future__ import annotations
 
@@ -59,10 +58,10 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     Construct a minimal hub + wiki pair under ``container``.
 
     Layout mirrors real use:
-        <container>/wiki.git                  — bare "remote"
-        <container>/wiki                      — working clone of the bare
-        <container>/hub                       — working hub repo
-        <container>/hub/.millhouse/wiki       — junction to wiki clone
+        <container>/wiki.git — bare "remote"
+        <container>/wiki — working clone of the bare
+        <container>/hub — working hub repo
+        <container>/hub/.millhouse/wiki — junction to wiki clone
 
     Returns ``(hub, wiki, worktrees_dir)``.
     """
@@ -72,8 +71,8 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     hub = container / "hub"
     worktrees_dir = container / "worktrees"
 
-    # Bare wiki + clone. The bare acts as origin so mill-spawn's
-    # sync_pull/write_commit_push paths exercise real push/pull.
+    # Bare wiki + clone.
+    # The bare acts as origin so mill-spawn's sync_pull/write_commit_push paths exercise real push/pull.
     _run(["git", "init", "--bare", str(bare), "-b", "main"], cwd=container)
     _run(["git", "clone", str(bare), str(wiki)], cwd=container)
     _run(["git", "-C", str(wiki), "config", "user.email", "test@example.com"], cwd=container)
@@ -104,8 +103,8 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     _run(["git", "-C", str(wiki), "commit", "-m", "seed"], cwd=container)
     _run(["git", "-C", str(wiki), "push", "origin", "main"], cwd=container)
 
-    # Hub repo — any non-empty git history is fine; mill-spawn only needs
-    # the toplevel to be resolvable.
+    # Hub repo — any non-empty git history is fine;
+    # mill-spawn only needs the toplevel to be resolvable.
     hub.mkdir()
     _run(["git", "init", str(hub), "-b", "main"], cwd=container)
     _run(["git", "-C", str(hub), "config", "user.email", "test@example.com"], cwd=container)
@@ -134,8 +133,8 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
 def _cleanup_worktree_sibling(wt: Path) -> None:
     """Best-effort removal of a worktree dir (junctions + read-only files)."""
     if wt.exists():
-        # On Windows some junction/readonly files resist shutil. Use git's
-        # worktree remove when available, then fall back to shutil.
+        # On Windows some junction/readonly files resist shutil.
+        # Use git's worktree remove when available, then fall back to shutil.
         _safe_rmtree.safe_rmtree(wt, allowed_root=wt, ignore_errors=True)
 
 
@@ -251,8 +250,7 @@ def main() -> int:
                 file=sys.stderr,
             )
         else:
-            # Remove worktree registration BEFORE deleting the dir so git's
-            # worktree bookkeeping stays consistent on repeated runs.
+            # Remove worktree registration BEFORE deleting the dir so git's worktree bookkeeping stays consistent on repeated runs.
             try:
                 _run(
                     ["git", "worktree", "remove", "--force", str(container / "worktrees" / "demo-task")],

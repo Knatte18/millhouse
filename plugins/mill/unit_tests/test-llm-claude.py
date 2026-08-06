@@ -1,9 +1,7 @@
 """Unit tests for plugins/mill/scripts/_llm_claude.py.
 
-These tests exercise the pure-Python surface: argv construction,
-stream-JSON parsing, exception hierarchy, signature shape. They do NOT
-invoke the live ``claude`` CLI — those tests live in
-``integration_tests/smoke-llm-claude.py``.
+These tests exercise the pure-Python surface: argv construction, stream-JSON parsing, exception hierarchy, signature shape.
+They do NOT invoke the live ``claude`` CLI — those tests live in ``integration_tests/smoke-llm-claude.py``.
 """
 from __future__ import annotations
 
@@ -293,8 +291,7 @@ def main() -> int:
         f"run_implementer must NOT carry --disallowedTools; got {captured_argv}"
     print(f"PASS: run_implementer uses --allowedTools {tools_value} + no --disallowedTools")
 
-    # run_bulk: empty allowed_tools -> --allowedTools '' explicitly, yes --disallowedTools
-    # (regression guard for issue #335: empty allow-list must be emitted explicitly)
+    # run_bulk: empty allowed_tools -> --allowedTools '' explicitly, yes --disallowedTools (regression guard for issue #335: empty allow-list must be emitted explicitly)
     _FAKE_STDOUT_BULK = (
         '{"type":"system","session_id":"fake-sid-456"}\n'
         '{"type":"result","result":"bulk done","session_id":"fake-sid-456"}\n'
@@ -713,9 +710,7 @@ def main() -> int:
                     errors += 1
                     print(f"FAIL: K4 expected LLMError, got {type(e).__name__}: {e}", file=sys.stderr)
 
-    # K5: cleanup_session behavior
-    # Dispatch resolves to "psmux" for K5(i)-(iv) so control reaches the psmux
-    # cleanup logic under test, mirroring _get_via_psmux_flag Test 12(i) above.
+    # K5: cleanup_session behavior Dispatch resolves to "psmux" for K5(i)-(iv) so control reaches the psmux cleanup logic under test, mirroring _get_via_psmux_flag Test 12(i) above.
     # K5(i): session exists and is killed
     with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
         with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
@@ -936,8 +931,7 @@ def main() -> int:
         errors += 1
         print(f"FAIL: _get_via_psmux_flag() returned {_get_via_psmux_result}, expected False", file=sys.stderr)
 
-    # Test 12: _get_via_psmux_flag uses dispatch enum
-    # Sub-case (i): dispatch: psmux -> returns True
+    # Test 12: _get_via_psmux_flag uses dispatch enum Sub-case (i): dispatch: psmux -> returns True
     with mock.patch.object(_config_mod, "load_config", return_value={"llm": {"claude": {"dispatch": "psmux"}}}):
         with mock.patch.object(_paths, "resolve_git_root", return_value=Path(".")):
             result = _llm_claude_mod._get_via_psmux_flag()

@@ -1,12 +1,12 @@
 """Model-agnostic Claude implementer.
 
-Used by mill-go as the per-batch worker. Unlike reviewer modules, run()
-returns (text, session_id) so the builder can persist the id for resume.
+Used by mill-go as the per-batch worker.
+Unlike reviewer modules, run() returns (text, session_id) so the builder can persist the id for resume.
 
 Public API:
     run(prompt_text, *, model, effort, session_id, resume, cwd, timeout=1800)
-        Invoke claude as the per-batch implementer. model and effort are
-        caller-supplied. Returns (text, session_id).
+    Invoke claude as the per-batch implementer. model and effort are
+    caller-supplied. Returns (text, session_id).
 """
 from __future__ import annotations
 

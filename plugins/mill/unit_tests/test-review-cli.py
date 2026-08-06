@@ -1,7 +1,6 @@
 """Unit tests for plugins/mill/scripts/_review_cli.py.
 
-# TODO: CLI subprocess-level tests (running millpy-review-*.py against a tempfile
-# fixture and asserting ERROR: on stderr) are deferred to integration_tests/.
+# TODO: CLI subprocess-level tests (running millpy-review-*.py against a tempfile # fixture and asserting ERROR: on stderr) are deferred to integration_tests/.
 """
 from __future__ import annotations
 
@@ -337,16 +336,8 @@ def test_review_cli_emits_envelope_on_slug_failure() -> int:
 def test_discussion_prepare_brief_path_uses_hub_dir() -> int:
     """Test that discussion prepare stage writes briefs under hub_dir.
 
-    ``_paths.resolve_hub_path`` resolves the directory within the CURRENT
-    worktree where ``.millhouse/`` actually lives -- for nested sub-project
-    layouts (e.g. ``src/csharp/NORCE.Models``) this is a subdirectory of
-    git_root, not git_root itself (see _paths.resolve_hub_path docstring).
-    ``_mill/`` lives alongside ``.millhouse/``, so briefs must be written
-    under hub_dir; writing them at git_root would miss nested layouts
-    entirely. This fixture models that nested relationship (hub_root is a
-    subdirectory of task_root) so the assertions hold for both the
-    real-world contract and backward-compatible flat layouts where
-    hub_dir == git_root.
+    ``_paths.resolve_hub_path`` resolves the directory within the CURRENT worktree where ``.millhouse/`` actually lives -- for nested sub-project layouts (e.g. ``src/csharp/NORCE.Models``) this is a subdirectory of git_root, not git_root itself (see _paths.resolve_hub_path docstring). ``_mill/`` lives alongside ``.millhouse/``, so briefs must be written under hub_dir; writing them at git_root would miss nested layouts entirely.
+    This fixture models that nested relationship (hub_root is a subdirectory of task_root) so the assertions hold for both the real-world contract and backward-compatible flat layouts where hub_dir == git_root.
     """
     failures = 0
     import importlib.util as _ilu
@@ -400,11 +391,8 @@ def test_discussion_prepare_brief_path_uses_hub_dir() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            # The hub_dir rebind (Card 15) calls resolve_container_path/
-                            # resolve_active_hub for real after slug resolution; mock both
-                            # to keep hub_dir at hub_root -- the nested-layout value this
-                            # test asserts brief_path resolves under -- instead of hitting
-                            # real git against this fixture's plain (non-git) task_root.
+                            # The hub_dir rebind (Card 15) calls resolve_container_path/ resolve_active_hub for real after slug resolution;
+                            # mock both to keep hub_dir at hub_root -- the nested-layout value this test asserts brief_path resolves under -- instead of hitting real git against this fixture's plain (non-git) task_root.
                             with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
                                 with _mock.patch("_paths.resolve_active_hub", return_value=hub_root):
                                     with _mock.patch("_review_common.load_config", return_value=cfg_dict):
@@ -499,11 +487,8 @@ def test_plan_prepare_brief_path_uses_git_root() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            # The project_root rebind (Card 14) calls resolve_container_path/
-                            # resolve_active_hub for real after slug resolution; mock both to
-                            # keep project_root at task_root -- the corrected value this test
-                            # asserts brief_path resolves under -- instead of hitting real git
-                            # against this fixture's plain (non-git) task_root.
+                            # The project_root rebind (Card 14) calls resolve_container_path/ resolve_active_hub for real after slug resolution;
+                            # mock both to keep project_root at task_root -- the corrected value this test asserts brief_path resolves under -- instead of hitting real git against this fixture's plain (non-git) task_root.
                             with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
                                 with _mock.patch("_paths.resolve_active_hub", return_value=task_root):
                                     with _mock.patch("_review_common.load_config", return_value=cfg_dict):
@@ -511,10 +496,8 @@ def test_plan_prepare_brief_path_uses_git_root() -> int:
                                             with _mock.patch("_reviewers.validate_role_refs"):
                                                 with _mock.patch("_review_common.find_active_slug", return_value="my-slug"):
                                                     with _mock.patch("_review_plan.prepare", return_value=fake_prepare):
-                                                        # Pass --skip-validate to bypass the pre-review plan
-                                                        # validator; mocking _plan_validate.run does not work
-                                                        # because the CLI binds it via 'from ... import run'
-                                                        # inside the function scope before the mock can intercept.
+                                                        # Pass --skip-validate to bypass the pre-review plan validator; mocking _plan_validate.run does not work because the CLI binds it via 'from ...
+                                                        # import run' inside the function scope before the mock can intercept.
                                                         _rc = _mod.main(["--stage", "prepare", "--skip-validate"])
         finally:
             _os.chdir(_orig_cwd)
@@ -612,11 +595,8 @@ def test_code_prepare_brief_path_uses_git_root() -> int:
                 with _mock.patch("_paths.resolve_git_root", return_value=task_root):
                     with _mock.patch("_paths.resolve_hub_path", return_value=hub_root):
                         with _mock.patch("_paths.resolve_wiki_path", return_value=wiki_root):
-                            # The project_root rebind (Card 13) calls resolve_container_path/
-                            # resolve_active_hub for real after slug resolution; mock both to
-                            # keep project_root at task_root -- the corrected value this test
-                            # asserts brief_path resolves under -- instead of hitting real git
-                            # against this fixture's plain (non-git) task_root.
+                            # The project_root rebind (Card 13) calls resolve_container_path/ resolve_active_hub for real after slug resolution;
+                            # mock both to keep project_root at task_root -- the corrected value this test asserts brief_path resolves under -- instead of hitting real git against this fixture's plain (non-git) task_root.
                             with _mock.patch("_paths.resolve_container_path", return_value=tmp / "wts"):
                                 with _mock.patch("_paths.resolve_active_hub", return_value=task_root):
                                     with _mock.patch("_review_common.load_config", return_value=cfg_dict):
@@ -663,16 +643,10 @@ def test_code_prepare_brief_path_uses_git_root() -> int:
 
 
 def test_finalize_actual_model_flag_reflected_in_review_file() -> int:
-    """Test that `--stage finalize --actual-model <tier>` overrides the
-    written review file's `reviewer_model:` line for each of the three
-    review CLIs.
+    """Test that `--stage finalize --actual-model <tier>` overrides the written review file's `reviewer_model:` line for each of the three review CLIs.
 
-    Uses an in-process `main(argv)` call against the real `_review_common`
-    and review-backend modules (only `_paths`/`_reviewers` are mocked),
-    mirroring the CLI-level real-backend pattern in test-review-finalize.py.
-    The raw reviewer output always echoes `reviewer_model: sonnetmax`;
-    passing `--actual-model haiku` must overwrite that line in the file
-    actually written to disk.
+    Uses an in-process `main(argv)` call against the real `_review_common` and review-backend modules (only `_paths`/`_reviewers` are mocked), mirroring the CLI-level real-backend pattern in test-review-finalize.py.
+    The raw reviewer output always echoes `reviewer_model: sonnetmax`; passing `--actual-model haiku` must overwrite that line in the file actually written to disk.
     """
     failures = 0
     import importlib.util as _ilu
@@ -823,8 +797,8 @@ def main() -> int:
         print(f"FAIL (c) hint must be absent for internal occurrence: {captured!r}", file=sys.stderr)
         failures += 1
 
-    # (d) validate_role_refs failure via millpy-review-discussion CLI
-    # mill-config.yaml references "missing_reviewer"; reviewers.yaml omits it.
+    # (d) validate_role_refs failure via millpy-review-discussion CLI mill-config.yaml references "missing_reviewer";
+    # reviewers.yaml omits it.
     # main() should exit 1 and write the missing name to stderr.
     import importlib.util as _ilu
     _cli_path = HUB / "plugins" / "mill" / "scripts" / "millpy-review-discussion.py"

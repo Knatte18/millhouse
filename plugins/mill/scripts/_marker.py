@@ -1,17 +1,13 @@
 """
 Branch-derived slug and task data for the current mill worktree.
 
-Reads the git branch name and validates it against Home.md — no
-marker file required. Replaces the subset of _active.read_all that
-callers need to identify which task this worktree is working on.
+Reads the git branch name and validates it against Home.md — no marker file required.
+Replaces the subset of _active.read_all that callers need to identify which task this worktree is working on.
 
 Public API:
-    MarkerError
-        Raised on any slug-derivation failure.
-    slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str
-        Derive and validate the slug from the current branch name.
-    task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict
-        Return {"slug": str, "branch": str, "task_title": str}.
+    MarkerError Raised on any slug-derivation failure.
+    slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str Derive and validate the slug from the current branch name.
+    task_data(git_root: Path, wiki_path: Path, cfg: dict) -> dict Return {"slug": str, "branch": str, "task_title": str}.
 """
 from __future__ import annotations
 
@@ -29,12 +25,8 @@ class MarkerError(RuntimeError):
 def _list_tasks_brief_with_retry(wiki_path: Path) -> list[dict]:
     """Fetch the Home.md task list, retrying once after a cold-daemon wake.
 
-    A machine sleep/resume cycle can leave the wiki daemon's socket stale,
-    so the first `list_tasks_brief` call after resume raises
-    `wiki.WikiStartupError` even though the daemon would start up fine on a
-    fresh attempt. Force a wake via `health_check` and retry exactly once
-    before giving up, since retrying indefinitely would mask a genuinely
-    broken daemon.
+    A machine sleep/resume cycle can leave the wiki daemon's socket stale, so the first `list_tasks_brief` call after resume raises `wiki.WikiStartupError` even though the daemon would start up fine on a fresh attempt.
+    Force a wake via `health_check` and retry exactly once before giving up, since retrying indefinitely would mask a genuinely broken daemon.
 
     Args:
         wiki_path: Absolute path to the wiki clone root.
@@ -43,9 +35,8 @@ def _list_tasks_brief_with_retry(wiki_path: Path) -> list[dict]:
         List of task dicts, as returned by `wiki.list_tasks_brief`.
 
     Raises:
-        wiki.WikiStartupError: If the daemon is still unreachable after the
-            forced wake-up and retry. Propagated unwrapped -- callers must
-            not see this collapsed into `MarkerError`.
+        wiki.WikiStartupError: If the daemon is still unreachable after the forced wake-up and retry.
+            Propagated unwrapped -- callers must not see this collapsed into `MarkerError`.
     """
     try:
         return wiki.list_tasks_brief(wiki_path)

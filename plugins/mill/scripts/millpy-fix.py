@@ -1,19 +1,15 @@
 """millpy-fix.py — unified fixer dispatch CLI.
 
 Dispatches a cold-start fixer session to fix findings from a code review.
-Supports both per-batch and holistic scopes. Always cold-start (resume=False).
+Supports both per-batch and holistic scopes.
+Always cold-start (resume=False).
 
 Flags:
-    --scope {batch,holistic}  (required) fix scope: "batch" for per-batch,
-                              "holistic" for cross-batch
-    --batch-name NAME         (required iff --scope batch) batch name from
-                              the plan overview's Batch Index
-    --review-file PATH        (required) absolute or relative path to the
-                              code review output file
-    --round N                 fix-cycle round number (int, default 1)
+    --scope {batch,holistic} (required) fix scope: "batch" for per-batch, "holistic" for cross-batch --batch-name NAME (required iff --scope batch) batch name from the plan overview's Batch Index --review-file PATH (required) absolute or relative path to the code review output file --round N fix-cycle round number (int, default 1)
 
 Exit codes:
-    0 — fixer ran; JSON report on stdout (success or stuck)
+    0 — fixer ran;
+        JSON report on stdout (success or stuck)
     1 — pre-launch error (bad config, missing slug, missing file, etc.);
         message on stderr, no JSON on stdout
 """
@@ -81,27 +77,17 @@ def _resolve_holistic_verify(
     batch's cwd over another's.
 
     Args:
-        batch_verifies: `(batch_name, command, cwd)` triples in DAG order, as
-            returned by `_plan_dag.iter_batch_verifies`.
+        batch_verifies: `(batch_name, command, cwd)` triples in DAG order, as returned by `_plan_dag.iter_batch_verifies`.
 
     Returns:
-        `(joined_command, cwd_override)`. `joined_command` is every batch's
-        command, each individually wrapped in its own subshell (`(command)`)
-        so a `cd` or other cwd/env-mutating construct in one batch's command
-        can never leak into the next, joined with `" && "` in the same order
-        as `batch_verifies`. `cwd_override` is the single distinct `cwd`
-        shared by every batch that
-        specified one, or `None` when every batch's cwd was `None` (i.e. every
-        contributing batch used the plain-string `verify:` form).
+        `(joined_command, cwd_override)`. `joined_command` is every batch's command, each individually wrapped in its own subshell (`(command)`) so a `cd` or other cwd/env-mutating construct in one batch's command can never leak into the next, joined with `" && "` in the same order as `batch_verifies`. `cwd_override` is the single distinct `cwd` shared by every batch that specified one, or `None` when every batch's cwd was `None` (i.e.
+        every contributing batch used the plain-string `verify:` form).
 
     Raises:
-        ValueError: More than one distinct non-None `cwd` value is present
-            across `batch_verifies`. The message names each conflicting batch
-            and the cwd it resolved to.
+        ValueError: More than one distinct non-None `cwd` value is present across `batch_verifies`.
+            The message names each conflicting batch and the cwd it resolved to.
     """
-    # Track each distinct non-None cwd in first-seen order, paired with the
-    # batch name that specified it, so a conflict error can name the
-    # disagreeing batches rather than just the cwd values.
+    # Track each distinct non-None cwd in first-seen order, paired with the batch name that specified it, so a conflict error can name the disagreeing batches rather than just the cwd values.
     cwd_to_batch_name: dict[Path, str] = {}
     for batch_name, _command, cwd in batch_verifies:
         if cwd is not None and cwd not in cwd_to_batch_name:
@@ -117,8 +103,7 @@ def _resolve_holistic_verify(
         )
 
     joined_command = " && ".join(f"({command})" for _, command, _ in batch_verifies)
-    # A single distinct cwd if any batch specified one, otherwise None (every
-    # batch used the plain-string verify form with no cwd opinion).
+    # A single distinct cwd if any batch specified one, otherwise None (every batch used the plain-string verify form with no cwd opinion).
     cwd_override = next(iter(cwd_to_batch_name), None)
     return joined_command, cwd_override
 
@@ -133,48 +118,25 @@ def _report_skipped_verifies(
     """
     Print a stderr line for every batch `iter_batch_verifies` silently dropped.
 
-    `iter_batch_verifies` (see `_plan_dag.py`) already returns the correctly
-    filtered "what still matters" list, but a filtered-out batch and a batch
-    that ran-and-passed would otherwise look identical to whoever reads the
-    holistic fixer's output -- both are simply absent from the joined verify
-    command. This is the "visible, counted skips" Shared Decision's
-    attribution mechanism: independently recompute the raw, unfiltered
-    batch-with-verify set, diff it against what `iter_batch_verifies` actually
-    returned, and attribute each missing batch's reason.
+    `iter_batch_verifies` (see `_plan_dag.py`) already returns the correctly filtered "what still matters" list,
+    but a filtered-out batch and a batch that ran-and-passed would otherwise look identical to whoever reads the holistic fixer's output -- both are simply absent from the joined verify command.
+    This is the "visible, counted skips" Shared Decision's attribution mechanism: independently recompute the raw, unfiltered batch-with-verify set, diff it against what `iter_batch_verifies` actually returned, and attribute each missing batch's reason.
 
     Steps:
-    1. Re-derive the raw set of batch names that declare a runnable `verify:`
-       command, with zero filtering -- the same `extract_batch_index` +
-       `topo_order` + `_read_batch_frontmatter` + `parse_verify_field` chain
-       `iter_batch_verifies` uses internally, just without its cross-batch and
-       approval-state filters.
-    2. Diff that raw set against the names present in `batch_verifies` (the
-       actual, already-filtered return value of the `iter_batch_verifies` call
-       this helper follows) to find every batch that got dropped.
-    3. Attribute each dropped batch's reason via a single `_status.read_batches`
-       lookup (reused across all missing names, not repeated per name): a
-       batch whose own state isn't `"approved"` was skipped because it hasn't
-       been approved yet; an approved batch that is still missing was skipped
-       because a later batch's declared removal suppressed it.
-    4. Print `[millpy-fix] skipped <batch_name>: <reason>` to stderr for each,
-       in the same order as the raw (unfiltered) set.
+    1. Re-derive the raw set of batch names that declare a runnable `verify:` command, with zero filtering -- the same `extract_batch_index` + `topo_order` + `_read_batch_frontmatter` + `parse_verify_field` chain `iter_batch_verifies` uses internally, just without its cross-batch and approval-state filters.
+    2. Diff that raw set against the names present in `batch_verifies` (the actual, already-filtered return value of the `iter_batch_verifies` call this helper follows) to find every batch that got dropped.
+    3. Attribute each dropped batch's reason via a single `_status.read_batches` lookup (reused across all missing names, not repeated per name): a batch whose own state isn't `"approved"` was skipped because it hasn't been approved yet;
+        an approved batch that is still missing was skipped because a later batch's declared removal suppressed it.
+    4. Print `[millpy-fix] skipped <batch_name>: <reason>` to stderr for each, in the same order as the raw (unfiltered) set.
 
-    Never raises: a missing/malformed overview or a malformed `## Batches`
-    block in `status_path` degrades to "nothing to report" rather than
-    crashing the fixer dispatch over a reporting nicety.
+    Never raises: a missing/malformed overview or a malformed `## Batches` block in `status_path` degrades to "nothing to report" rather than crashing the fixer dispatch over a reporting nicety.
 
     Args:
-        plan_base: Directory containing `00-overview.md` and the batch files
-            it references.
-        project_root: The mill project root, passed through to
-            `parse_verify_field` for `cwd: hub` resolution.
-        git_root: The git repository toplevel, passed through to
-            `parse_verify_field` for `cwd: git_root` resolution.
-        status_path: Path to the task's `status.md`, used to resolve each
-            batch's approval state.
-        batch_verifies: The actual, already-filtered `(name, command, cwd)`
-            triples returned by the `iter_batch_verifies` call this helper
-            follows.
+        plan_base: Directory containing `00-overview.md` and the batch files it references.
+        project_root: The mill project root, passed through to `parse_verify_field` for `cwd: hub` resolution.
+        git_root: The git repository toplevel, passed through to `parse_verify_field` for `cwd: git_root` resolution.
+        status_path: Path to the task's `status.md`, used to resolve each batch's approval state.
+        batch_verifies: The actual, already-filtered `(name, command, cwd)` triples returned by the `iter_batch_verifies` call this helper follows.
     """
     overview_path = plan_base / "00-overview.md"
     if not overview_path.exists():
@@ -211,8 +173,7 @@ def _report_skipped_verifies(
     try:
         states = {b.get("name"): b.get("state") for b in _status.read_batches(status_path)}
     except ValueError:
-        # Malformed `## Batches` block -- skip attribution/logging entirely
-        # rather than crash the fixer dispatch over a reporting nicety.
+        # Malformed `## Batches` block -- skip attribution/logging entirely rather than crash the fixer dispatch over a reporting nicety.
         return
 
     for name in missing:
@@ -330,10 +291,9 @@ def main(argv=None) -> int:
         container_path, slug, cfg=cfg, git_root=git_root, skip_slug_validation=True
     )
     mill_dir = project_root / ".millhouse"
-    # Reload against the resolve_active_hub()-corrected root -- the bootstrap
-    # cfg above may have come from a different (e.g. primary-clone template)
-    # config than the task hub's own mill-config.yaml. All downstream reads
-    # of cfg must observe this corrected value, per cfg-reload-after-active-hub.
+    # Reload against the resolve_active_hub()-corrected root -- the bootstrap cfg above may have come from a different (e.g.
+    # primary-clone template) config than the task hub's own mill-config.yaml.
+    # All downstream reads of cfg must observe this corrected value, per cfg-reload-after-active-hub.
     cfg = _review_common.load_config(project_root, mill_dir)
 
     try:
@@ -357,12 +317,9 @@ def main(argv=None) -> int:
         return 1
     fixer_model = fixer_spec["model"]
 
-    # Advisory-only: warn (stderr, non-blocking) when roles.fixer.model resolves
-    # weaker than the code-review reviewer configured for this invocation's
-    # scope. The two config keys are fully independent, so an operator
-    # escalating the reviewer mid-task can silently leave the fixer on a
-    # weaker model. An unresolvable reviewer name is validate_role_refs's
-    # concern elsewhere, not this warning's -- swallow and move on.
+    # Advisory-only: warn (stderr, non-blocking) when roles.fixer.model resolves weaker than the code-review reviewer configured for this invocation's scope.
+    # The two config keys are fully independent, so an operator escalating the reviewer mid-task can silently leave the fixer on a weaker model.
+    # An unresolvable reviewer name is validate_role_refs's concern elsewhere, not this warning's -- swallow and move on.
     reviewer_name = (
         cfg.get("roles", {}).get("code-review", {}).get(args.scope, {}).get("reviewer")
     )
@@ -424,12 +381,8 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
-        # Resolve verify command for batch/holistic fixes. cwd_override is
-        # pre-initialized to None here (before branching on args.scope) because
-        # the batch-scope read below is nested inside `if batch_entry is not
-        # None:` and the holistic-scope read inside `if batch_verifies:` --
-        # either guard can be false, leaving the pre-initialized None value,
-        # exactly matching pre-#604 behavior.
+        # Resolve verify command for batch/holistic fixes.
+        # cwd_override is pre-initialized to None here (before branching on args.scope) because the batch-scope read below is nested inside `if batch_entry is not None:` and the holistic-scope read inside `if batch_verifies:` -- either guard can be false, leaving the pre-initialized None value, exactly matching pre-#604 behavior.
         verify_cmd = None
         cwd_override = None
         if args.scope == "batch":
@@ -467,14 +420,9 @@ def main(argv=None) -> int:
             cwd_override=cwd_override,
         )
 
-    # Compute the fixer-brief carve-out clause once, from the already-parsed
-    # --nits-only flag. This is the single source of truth both brief templates
-    # render into their two zero-new-commit sentences, so the brief's wording can
-    # never drift from _implementer_common.py's actual nits_only runtime guard
-    # (which already allows a legitimate --nits-only no-op pass to report success
-    # with zero new commits). The value carries its own leading punctuation and
-    # terminal period so neither template branch needs to hardcode punctuation
-    # after the token.
+    # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
+    # This is the single source of truth both brief templates render into their two zero-new-commit sentences, so the brief's wording can never drift from _implementer_common.py's actual nits_only runtime guard (which already allows a legitimate --nits-only no-op pass to report success with zero new commits).
+    # The value carries its own leading punctuation and terminal period so neither template branch needs to hardcode punctuation after the token.
     nits_only_carveout = (
         ", unless every finding was a legitimate --nits-only no-op requiring no code change."
         if args.nits_only
@@ -565,8 +513,7 @@ def main(argv=None) -> int:
         )
 
     else:  # args.scope == "holistic"
-        # Holistic fixer dispatch
-        # Derive concatenated verify_cmd from all batch verify commands in DAG order
+        # Holistic fixer dispatch Derive concatenated verify_cmd from all batch verify commands in DAG order
         batch_verifies = _plan_dag.iter_batch_verifies(
             plan_base, project_root, git_root, status_path=status_path
         )

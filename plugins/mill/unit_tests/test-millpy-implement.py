@@ -132,11 +132,7 @@ class TestMillpyImplement(unittest.TestCase):
             return_value={
                 "paths": {"status_md": "_mill/status.md"},
                 "roles": {"implementer": {"self_fix_rounds": 2, "model": "sonnethigh"}},
-                # dispatch is pinned to "subprocess" (not the _agent_dispatch.resolve_dispatch_mode
-                # default of "agent") so every pre-existing bare/full-stage test in this file --
-                # none of which has an opinion on dispatch mode -- keeps exercising the non-agent
-                # path unaffected by the fail-fast guard added in Card 1. Agent-mode-specific tests
-                # override this per-test.
+                # dispatch is pinned to "subprocess" (not the _agent_dispatch.resolve_dispatch_mode default of "agent") so every pre-existing bare/full-stage test in this file -- none of which has an opinion on dispatch mode -- keeps exercising the non-agent path unaffected by the fail-fast guard added in Card 1. Agent-mode-specific tests override this per-test.
                 "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
             },
         )
@@ -197,9 +193,7 @@ class TestMillpyImplement(unittest.TestCase):
         """Initial dispatch: pending batch -> success JSON, batch state running."""
         status_path = self.tmp_path / "task" / "status.md"
 
-        # Route rev-parse HEAD to differ between the start_sha capture (first call)
-        # and the post-implementation HEAD, so the no-content-commit guard in
-        # _forward_output sees HEAD != start_sha and accepts the success report.
+        # Route rev-parse HEAD to differ between the start_sha capture (first call) and the post-implementation HEAD, so the no-content-commit guard in _forward_output sees HEAD != start_sha and accepts the success report.
         rev_parse_calls = []
 
         def routing_fn(argv, **kw):
@@ -365,9 +359,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2}},
-            # dispatch pinned to "subprocess" (see setUp's own default) so this
-            # model-default-fallback test -- which has no opinion on dispatch mode --
-            # is not tripped up by the agent-mode full-stage fail-fast guard.
+            # dispatch pinned to "subprocess" (see setUp's own default) so this model-default-fallback test -- which has no opinion on dispatch mode -- is not tripped up by the agent-mode full-stage fail-fast guard.
             "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
         }
         with unittest.mock.patch.object(
@@ -390,9 +382,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            # dispatch pinned to "subprocess" (see setUp's own default) so this
-            # brief-size-guard test -- which has no opinion on dispatch mode -- is
-            # not tripped up by the agent-mode full-stage fail-fast guard.
+            # dispatch pinned to "subprocess" (see setUp's own default) so this brief-size-guard test -- which has no opinion on dispatch mode -- is not tripped up by the agent-mode full-stage fail-fast guard.
             "llm": {
                 "claude": {"dispatch": "subprocess"},
                 "implementer_timeout": 1800,
@@ -415,9 +405,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.mock_load_config.return_value = {
             "paths": {"status_md": "_mill/status.md"},
             "roles": {"implementer": {"self_fix_rounds": 2, "model": "haiku"}},
-            # dispatch pinned to "subprocess" (see setUp's own default) so this
-            # brief-size-guard test -- which has no opinion on dispatch mode -- is
-            # not tripped up by the agent-mode full-stage fail-fast guard.
+            # dispatch pinned to "subprocess" (see setUp's own default) so this brief-size-guard test -- which has no opinion on dispatch mode -- is not tripped up by the agent-mode full-stage fail-fast guard.
             "llm": {
                 "claude": {"dispatch": "subprocess"},
                 "implementer_timeout": 1800,
@@ -460,13 +448,9 @@ class TestMillpyImplement(unittest.TestCase):
     def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path(self):
         """project_root rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
 
-        Simulates resolve_hub_path()'s main-worktree-fallback escape: resolve_hub_path
-        still returns self.tmp_path (the stale/escaped value), but resolve_active_hub --
-        called after slug resolution, per the rebind fix -- returns a distinct decoy
-        directory standing in for the corrected active task worktree. briefs_dir (surfaced
-        via --stage prepare's brief_path in the envelope) must resolve under the decoy,
-        proving project_root was rebound to resolve_active_hub's return value and not left
-        at resolve_hub_path's original, escaped one.
+        Simulates resolve_hub_path()'s main-worktree-fallback escape: resolve_hub_path still returns self.tmp_path (the stale/escaped value),
+        but resolve_active_hub -- called after slug resolution, per the rebind fix -- returns a distinct decoy directory standing in for the corrected active task worktree.
+        briefs_dir (surfaced via --stage prepare's brief_path in the envelope) must resolve under the decoy, proving project_root was rebound to resolve_active_hub's return value and not left at resolve_hub_path's original, escaped one.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -489,18 +473,14 @@ class TestMillpyImplement(unittest.TestCase):
     def test_load_config_uses_hub_root_when_hub_in_subdirectory(self):
         """#728 repro: hub lives in a subdirectory of the outer git repo.
 
-        load_config must be invoked with the resolved hub root (project_root /
-        resolve_active_hub's corrected root), never the outer git-repo root --
-        otherwise the hub's own mill-config.yaml is silently missed in favor of
-        a template/primary-clone fallback found by walking from git_root.
+        load_config must be invoked with the resolved hub root (project_root / resolve_active_hub's corrected root), never the outer git-repo root -- otherwise the hub's own mill-config.yaml is silently missed in favor of a template/primary-clone fallback found by walking from git_root.
         """
         hub_dir = self.tmp_path / "sub" / "hub"
         hub_dir.mkdir(parents=True, exist_ok=True)
         _make_fixture(hub_dir)
         self.mock_resolve_hub_path.return_value = hub_dir
         self.mock_resolve_active_hub.return_value = hub_dir
-        # self.mock_resolve_git_root keeps returning self.tmp_path (the outer root),
-        # which must never be passed as load_config's hub_root argument.
+        # self.mock_resolve_git_root keeps returning self.tmp_path (the outer root), which must never be passed as load_config's hub_root argument.
 
         observed_cfgs = []
 
@@ -513,8 +493,7 @@ class TestMillpyImplement(unittest.TestCase):
                     "llm": {"claude": {"dispatch": "subprocess"}, "implementer_timeout": 1800},
                 }
             else:
-                # Stand-in for the template/primary-clone fallback the pre-fix code
-                # would silently pick up when passed the outer git-repo root.
+                # Stand-in for the template/primary-clone fallback the pre-fix code would silently pick up when passed the outer git-repo root.
                 cfg = {
                     "spawn": {"branch_prefix": "template-fallback-prefix"},
                     "llm": {"claude": {"dispatch": "subprocess"}},
@@ -536,10 +515,9 @@ class TestMillpyImplement(unittest.TestCase):
             self.assertEqual(cfg["spawn"]["branch_prefix"], "hub-own-prefix")
 
     def test_cfg_reload_after_resolve_active_hub_used_for_downstream_values(self):
-        """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely
-        differ. Downstream values that read cfg -- self_fix_rounds baked into the
-        rendered brief, and the model name passed to _reviewers.resolve -- must
-        come from the reloaded config, not the stale bootstrap one.
+        """Bootstrap cfg and the resolve_active_hub-corrected reload can genuinely differ.
+    Downstream values that read cfg -- self_fix_rounds baked into the rendered brief,
+    and the model name passed to _reviewers.resolve -- must come from the reloaded config, not the stale bootstrap one.
         """
         corrected_root = self.tmp_path / "corrected-worktree"
         corrected_root.mkdir(parents=True, exist_ok=True)
@@ -574,11 +552,9 @@ class TestMillpyImplement(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         mock_run.assert_not_called()
-        # self_fix_rounds baked into the brief must come from the reloaded config
-        # (9), never the bootstrap config's value (2).
+        # self_fix_rounds baked into the brief must come from the reloaded config (9), never the bootstrap config's value (2).
         self.assertEqual(rendered_tokens.get("SELF_FIX_ROUNDS"), "9")
-        # model_name passed to _reviewers.resolve must come from the reloaded
-        # config too.
+        # model_name passed to _reviewers.resolve must come from the reloaded config too.
         self.mock_reviewers_resolve.assert_called_with(
             self.mock_reviewers_load.return_value, "reloaded-model"
         )
@@ -591,8 +567,8 @@ class TestMillpyImplement(unittest.TestCase):
             encoding="utf-8"
         )
 
-        # _forward_output re-derives commit_sha via `git rev-parse HEAD` and validates
-        # it (_is_valid_commit_sha); the setUp default ("abc1234") is too short/non-hex.
+        # _forward_output re-derives commit_sha via `git rev-parse HEAD` and validates it (_is_valid_commit_sha);
+        # the setUp default ("abc1234") is too short/non-hex.
         self.mock_subprocess_run.return_value = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="a" * 40 + "\n", stderr=""
         )
@@ -685,9 +661,8 @@ class TestMillpyImplement(unittest.TestCase):
     def test_skip_start_commit_on_refire(self):
         """Re-fire with empty staged diff: staged-emptiness check skips the start-batch commit.
 
-        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits 0
-        (nothing staged), git_commit must not be called.  This happens when prepare already
-        ran once and all state is committed -- the snapshot and status.md are unchanged.
+        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits 0 (nothing staged), git_commit must not be called.
+        This happens when prepare already ran once and all state is committed -- the snapshot and status.md are unchanged.
         """
 
         def routing_fn(argv, **kw):
@@ -721,8 +696,7 @@ class TestMillpyImplement(unittest.TestCase):
     def test_no_skip_start_commit_on_fresh_fire(self):
         """Fresh fire with non-empty staged diff: staged-emptiness check commits and pushes.
 
-        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits
-        non-zero (changes staged), git_commit must be called exactly once, followed by push.
+        Guards the atomic-commit mechanics (#563): when git diff --cached --quiet exits non-zero (changes staged), git_commit must be called exactly once, followed by push.
         """
         def routing_fn(argv, **kw):
             if argv[1] == "diff":
@@ -756,8 +730,7 @@ class TestMillpyImplement(unittest.TestCase):
     def test_16_stage_finalize_accepts_round_flag(self):
         """--stage finalize accepts --round flag with no argparse error, ignores CLI value.
 
-        Mirrors test_15_stage_finalize_accepts_session_and_start_sha_flags for #568:
-        the --round flag is accepted for CLI-shape parity with millpy-fix.py but is ignored;
+        Mirrors test_15_stage_finalize_accepts_session_and_start_sha_flags for #568: the --round flag is accepted for CLI-shape parity with millpy-fix.py but is ignored;
         the finalize branch reads start_sha and implementer_session from status.md.
         """
         status_path = self.tmp_path / "task" / "status.md"
@@ -795,9 +768,8 @@ class TestMillpyImplement(unittest.TestCase):
     def test_prepare_retry_dirty_staged_commits(self):
         """Re-fire with non-empty staged diff (regenerated session): git_commit IS called.
 
-        Covers the atomicity fix (#563): on a retry, the fresh implementer_session UUID
-        written to status.md dirtied the file; git diff --cached --quiet exits non-zero,
-        so git_commit must fire and the commit message must use the expected start-batch format.
+        Covers the atomicity fix (#563): on a retry, the fresh implementer_session UUID written to status.md dirtied the file;
+        git diff --cached --quiet exits non-zero, so git_commit must fire and the commit message must use the expected start-batch format.
         """
         batch_name = "test-batch"
 
@@ -829,8 +801,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(rc, 0)
         # git_commit must be called -- the atomic retry must commit the session write.
         mock_git_commit.assert_called_once()
-        # The commit message must match the start-batch format so the finalize commit
-        # detection in _implementer_common still recognises it.
+        # The commit message must match the start-batch format so the finalize commit detection in _implementer_common still recognises it.
         commit_msg = mock_git_commit.call_args[0][1]
         self.assertEqual(commit_msg, f"mill-go: start batch {batch_name}")
 
@@ -1067,9 +1038,7 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
-            # The rebind (Card 9) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 9) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1130,9 +1099,7 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
-            # The rebind (Card 9) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 9) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1187,9 +1154,7 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
-            # The rebind (Card 9) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 9) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1248,9 +1213,7 @@ class TestMillpyImplement(unittest.TestCase):
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_git_root", return_value=self.tmp_path
             ),
-            # The rebind (Card 9) supersedes resolve_hub_path's value with
-            # resolve_active_hub's for project_root -- override it here too so
-            # this nested-hub simulation still resolves project_root to nested_hub.
+            # The rebind (Card 9) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
             unittest.mock.patch.object(
                 millpy_implement._paths, "resolve_active_hub", return_value=nested_hub
             ),
@@ -1273,8 +1236,7 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_baseline_stage_plain_string_verify_passes_none_relative_fragment(self):
         """Flat layout: plain-string overview verify: makes _run_baseline_stage pass cwd_override_relative=None."""
-        # Uses the default fixture (verify: null in the batch, flat layout hub == git_root),
-        # but with a non-null plain-string overview verify.
+        # Uses the default fixture (verify: null in the batch, flat layout hub == git_root), but with a non-null plain-string overview verify.
         plan_dir = self.tmp_path / "task" / "plan"
         overview_with_verify = (
             "# Plan: Test Task\n\n"
@@ -1315,14 +1277,9 @@ class TestMillpyImplement(unittest.TestCase):
 
     def _write_two_batch_fixture(self, batch_a_verify_baseline=None, batch_b_verify_baseline=None):
         """
-        Write a plan/status fixture with two batches (batch-a, batch-b), each
-        declaring its own plain-string `verify:` frontmatter command, and an
-        overview with `verify: null` (no module-wide command configured).
+        Write a plan/status fixture with two batches (batch-a, batch-b), each declaring its own plain-string `verify:` frontmatter command, and an overview with `verify: null` (no module-wide command configured).
 
-        `batch_a_verify_baseline`/`batch_b_verify_baseline`, when not None,
-        seed that batch's `verify_baseline_failures` field in status.md's
-        `## Batches` section -- simulating a prior invocation that already
-        computed a baseline for that batch.
+        `batch_a_verify_baseline`/`batch_b_verify_baseline`, when not None, seed that batch's `verify_baseline_failures` field in status.md's `## Batches` section -- simulating a prior invocation that already computed a baseline for that batch.
         """
         plan_dir = self.tmp_path / "task" / "plan"
         (plan_dir / "01-batch-a.md").write_text(
@@ -1659,9 +1616,7 @@ class TestMillpyImplement(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         per_batch = json.loads(out.strip().splitlines()[1])
-        # Unlike `_plan_dag.iter_batch_verifies` (which would suppress batch-a's
-        # verify since batch-b's Deletes: names the same path), direct
-        # frontmatter enumeration still computes batch-a's baseline.
+        # Unlike `_plan_dag.iter_batch_verifies` (which would suppress batch-a's verify since batch-b's Deletes: names the same path), direct frontmatter enumeration still computes batch-a's baseline.
         self.assertIn("batch-a", per_batch["computed"])
         self.assertIn("batch-b", per_batch["computed"])
 
@@ -1670,8 +1625,7 @@ class TestMillpyImplement(unittest.TestCase):
         plugin_root = HUB / "plugins" / "mill"
         template_path = plugin_root / "templates" / "implementer-brief.md"
 
-        # Build a minimal token map that satisfies all required tokens in the brief,
-        # including START_SHA which was added in batch 2.
+        # Build a minimal token map that satisfies all required tokens in the brief, including START_SHA which was added in batch 2.
         tokens = {
             "TASK_TITLE": "Test Task",
             "SLUG": "test-slug",
@@ -1726,16 +1680,13 @@ class TestMillpyImplement(unittest.TestCase):
     def test_resume_incomplete_preserves_start_sha(self):
         """--resume-incomplete: prepare reads start_sha from status.md, skips set_batch_fields and capture_snapshot.
 
-        Verifies that the resume path does not re-capture HEAD or overwrite the original
-        start_sha/implementer_session in status.md. The original start_sha must survive
-        unchanged so that finalize can count content commits from the correct baseline.
-        Also verifies that capture_snapshot is NOT called, preserving the original
-        new-dirt baseline snapshot written during the first dispatch.
+        Verifies that the resume path does not re-capture HEAD or overwrite the original start_sha/implementer_session in status.md.
+        The original start_sha must survive unchanged so that finalize can count content commits from the correct baseline.
+        Also verifies that capture_snapshot is NOT called, preserving the original new-dirt baseline snapshot written during the first dispatch.
         """
         status_path = self.tmp_path / "task" / "status.md"
 
-        # Write the original start_sha and implementer_session into status.md so the
-        # resume path can read them.
+        # Write the original start_sha and implementer_session into status.md so the resume path can read them.
         original_start_sha = "original_start_sha_abc123"
         original_session = "original-session-uuid-1234"
         millpy_implement._status.set_batch_fields(
@@ -1762,8 +1713,7 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(rc, 0)
         # capture_snapshot must NOT be called on the resume path.
         self.mock_capture_snapshot.assert_not_called()
-        # set_batch_fields must NOT be called on the resume path (the original
-        # start_sha and implementer_session must remain untouched in status.md).
+        # set_batch_fields must NOT be called on the resume path (the original start_sha and implementer_session must remain untouched in status.md).
         mock_set_batch_fields.assert_not_called()
 
         # Confirm the original start_sha is still intact in status.md.
@@ -1773,12 +1723,11 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(batch_entry["implementer_session"], original_session)
 
     def test_resume_incomplete_start_sha_token_in_render_dict(self):
-        """--resume-incomplete: START_SHA token equals preserved sha; SESSION_ID equals retained session.
+        """--resume-incomplete: START_SHA token equals preserved sha;
+SESSION_ID equals retained session.
 
-        On a resume dispatch the rendered brief must receive the original start_sha as
-        START_SHA so the implementer can identify already-committed cards. The SESSION_ID
-        token must match the retained implementer_session from status.md (not a fresh UUID)
-        so the finalize-reported session_id is consistent with the brief.
+        On a resume dispatch the rendered brief must receive the original start_sha as START_SHA so the implementer can identify already-committed cards.
+        The SESSION_ID token must match the retained implementer_session from status.md (not a fresh UUID) so the finalize-reported session_id is consistent with the brief.
         On a normal (non-resume) dispatch START_SHA must be the empty string.
         """
         status_path = self.tmp_path / "task" / "status.md"
@@ -1835,9 +1784,9 @@ class TestMillpyImplement(unittest.TestCase):
     def test_resume_incomplete_finalize_success_when_complete(self):
         """Finalize after resume emits success when content commits >= card_count.
 
-        Sets up a batch file with one card heading so card_count=1. Mocks git to return
-        two commits since start_sha (one housekeeping + one content), so _content_commit_count
-        returns 1. The agent output reports success; finalize must emit success, not incomplete.
+        Sets up a batch file with one card heading so card_count=1.
+        Mocks git to return two commits since start_sha (one housekeeping + one content), so _content_commit_count returns 1. The agent output reports success;
+        finalize must emit success, not incomplete.
         """
         status_path = self.tmp_path / "task" / "status.md"
         plan_dir = self.tmp_path / "task" / "plan"
@@ -1912,10 +1861,7 @@ class TestMillpyImplement(unittest.TestCase):
     def test_card_ids_extraction_non_contiguous_headings(self):
         """card_ids extraction reads literal Card numbers, not a 1..N range (#660 repro).
 
-        Writes a batch file whose only headings are "### Card 7:" and "### Card 8:"
-        -- mirroring mill-plan's global-across-batches card numbering, where a later
-        batch's cards are not assumed to start at 1. main() must extract
-        card_ids={7, 8}, not {1, 2}, and thread it to _forward_output.
+        Writes a batch file whose only headings are "### Card 7:" and "### Card 8:" -- mirroring mill-plan's global-across-batches card numbering, where a later batch's cards are not assumed to start at 1. main() must extract card_ids={7, 8}, not {1, 2}, and thread it to _forward_output.
         """
         batch_file = self.tmp_path / "task" / "plan" / "01-test-batch.md"
         batch_file.write_text(
@@ -1949,16 +1895,13 @@ class TestMillpyImplement(unittest.TestCase):
 
         self.assertEqual(rc, 0)
         self.assertEqual(captured_kwargs.get("card_ids"), {7, 8})
-        # card_count itself is no longer a callee kwarg -- the stale keyword was
-        # dropped once finalize_from_output/_forward_output's signature was renamed.
+        # card_count itself is no longer a callee kwarg -- the stale keyword was dropped once finalize_from_output/_forward_output's signature was renamed.
         self.assertNotIn("card_count", captured_kwargs)
 
     def test_prepare_stage_envelope_includes_start_sha_matching_head(self):
         """--stage prepare on a fresh (pending) batch: envelope start_sha matches the captured HEAD.
 
-        Card 2 (#625, #635, #643): the prepare envelope must carry start_sha so the next
-        batch's effort-tier work (which threads start_sha through the same emit_prepare call)
-        has a real value to build on, and so a re-dispatched prepare has something to reuse.
+        Card 2 (#625, #635, #643): the prepare envelope must carry start_sha so the next batch's effort-tier work (which threads start_sha through the same emit_prepare call) has a real value to build on, and so a re-dispatched prepare has something to reuse.
         """
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
             rc, out = self._run_main(["test-batch", "--stage", "prepare"])
@@ -1966,17 +1909,13 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(rc, 0)
         data = json.loads(out.strip())
         self.assertEqual(data["stage"], "prepare")
-        # The patched _subprocess_util.run default (set in setUp) returns "abc1234\n" for
-        # every call, including the fresh-mint branch's `git rev-parse HEAD` capture.
+        # The patched _subprocess_util.run default (set in setUp) returns "abc1234\n" for every call, including the fresh-mint branch's `git rev-parse HEAD` capture.
         self.assertEqual(data["start_sha"], "abc1234")
 
     def test_prepare_stage_envelope_includes_effort_from_implementer_spec(self):
         """--stage prepare envelope carries the resolved implementer spec's effort tier.
 
-        #628/#633: the effort-tier-implementer batch threads impl_effort (already
-        resolved from the implementer registry spec, here "sonnethigh" -> effort
-        "high" per setUp's mock_reviewers_resolve) into the same emit_prepare call
-        Card 2's start_sha fix already extended.
+        #628/#633: the effort-tier-implementer batch threads impl_effort (already resolved from the implementer registry spec, here "sonnethigh" -> effort "high" per setUp's mock_reviewers_resolve) into the same emit_prepare call Card 2's start_sha fix already extended.
         """
         with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
             rc, out = self._run_main(["test-batch", "--stage", "prepare"])
@@ -1989,9 +1928,8 @@ class TestMillpyImplement(unittest.TestCase):
     def test_prepare_stage_reuses_session_on_rerun_of_running_batch(self):
         """Second --stage prepare call against a batch already 'running' with a session reuses it.
 
-        Card 2 (#625, #635, #643): a re-dispatched prepare (e.g. after a transient dispatch
-        failure) must not re-mint state.md fields nor re-run capture_snapshot/commit/push --
-        only the fresh-mint (first) prepare call does that state-mutating work.
+        Card 2 (#625, #635, #643): a re-dispatched prepare (e.g.
+        after a transient dispatch failure) must not re-mint state.md fields nor re-run capture_snapshot/commit/push -- only the fresh-mint (first) prepare call does that state-mutating work.
         """
         status_path = self.tmp_path / "task" / "status.md"
         original_start_sha = "reuse_start_sha_123"
@@ -2017,8 +1955,8 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(data["session_id"], original_session)
         self.assertEqual(data["start_sha"], original_start_sha)
 
-        # No state-mutating work: capture_snapshot and git_commit must record zero calls, and
-        # no "git push" subprocess call may appear among the (still-patched) generic runs.
+        # No state-mutating work: capture_snapshot and git_commit must record zero calls,
+        # and no "git push" subprocess call may appear among the (still-patched) generic runs.
         self.mock_capture_snapshot.assert_not_called()
         mock_git_commit.assert_not_called()
         push_calls = [
@@ -2035,13 +1973,11 @@ class TestMillpyImplement(unittest.TestCase):
 
     def test_prepare_stage_push_failure_nonfatal_but_commit_failure_still_fatal(self):
         """Card 3 (#626): a failed git push is non-fatal (warning + envelope still emitted);
-        a failed git commit remains fatal (return 1, no envelope).
+    a failed git commit remains fatal (return 1, no envelope).
         """
         status_path = self.tmp_path / "task" / "status.md"
 
-        # Sub-case 1: git push returns non-zero -> warning on stderr, envelope still printed.
-        # `git diff --cached --quiet` must return non-zero (staged) so the fresh-mint branch
-        # actually reaches the commit/push sequence, mirroring test_no_skip_start_commit_on_fresh_fire.
+        # Sub-case 1: git push returns non-zero -> warning on stderr, envelope still printed. `git diff --cached --quiet` must return non-zero (staged) so the fresh-mint branch actually reaches the commit/push sequence, mirroring test_no_skip_start_commit_on_fresh_fire.
         def push_fails_routing(argv, **kw):
             if argv[1] == "diff":
                 return subprocess.CompletedProcess(args=argv, returncode=1, stdout="", stderr="")
@@ -2068,13 +2004,10 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertIn("push failed", stderr_buf.getvalue())
         self.assertIn("warning", stderr_buf.getvalue().lower())
 
-        # Reset the batch back to "pending" so the next prepare call takes the fresh-mint
-        # branch again (rather than the running-batch reuse path exercised above).
+        # Reset the batch back to "pending" so the next prepare call takes the fresh-mint branch again (rather than the running-batch reuse path exercised above).
         millpy_implement._status.set_batch_field(status_path, "test-batch", "state", "pending")
 
-        # Sub-case 2: git commit fails -> still fatal, returns 1, never reaches emit_prepare.
-        # `git diff --cached --quiet` must again return non-zero (staged) so the fresh-mint
-        # branch reaches the commit step where the patched failure below fires.
+        # Sub-case 2: git commit fails -> still fatal, returns 1, never reaches emit_prepare. `git diff --cached --quiet` must again return non-zero (staged) so the fresh-mint branch reaches the commit step where the patched failure below fires.
         def commit_fails_routing(argv, **kw):
             if argv[1] == "diff":
                 return subprocess.CompletedProcess(args=argv, returncode=1, stdout="", stderr="")
@@ -2287,9 +2220,7 @@ class TestForwardOutput(unittest.TestCase):
 class TestVerifyBaselineCwdOverrideRelative(unittest.TestCase):
     """_verify_baseline.compute_baseline's cwd_override_relative re-anchoring (#604).
 
-    Exercises compute_baseline directly (not through millpy-implement.py's CLI),
-    mocking git and subprocess so only the dependency-junction targets and the
-    verify subprocess's cwd are observed.
+    Exercises compute_baseline directly (not through millpy-implement.py's CLI), mocking git and subprocess so only the dependency-junction targets and the verify subprocess's cwd are observed.
     """
 
     def setUp(self):

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Cleanly shut down the wiki daemon. The next wiki request will respawn it with the latest code.
+"""Cleanly shut down the wiki daemon.
+The next wiki request will respawn it with the latest code.
 
-Useful after redeploying wiki module code (no protocol-version bump) so the running daemon
-picks up the new behavior.
+Useful after redeploying wiki module code (no protocol-version bump) so the running daemon picks up the new behavior.
 """
 from __future__ import annotations
 

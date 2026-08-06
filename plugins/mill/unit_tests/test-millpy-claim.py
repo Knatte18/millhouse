@@ -3,8 +3,7 @@
 Verifies:
   - top-level import succeeds (smoke test)
   - main() dry-run with --slug exits 0 and prints expected lines
-  - main() happy path calls claim_in_wiki,
-    write_initial_status, and recreate_active_junction in order
+  - main() happy path calls claim_in_wiki, write_initial_status, and recreate_active_junction in order
   - dirty-tree path with option 3 (Abort) exits 1
   - dirty-tree path with option 1 (Stash) invokes git stash
   - multi-select path skips claim_in_wiki and uses merged task
@@ -53,8 +52,8 @@ def _load_claim_module(stub_map: dict) -> object:
     """
     Load millpy-claim.py with the given module stubs injected into sys.modules.
 
-    Returns the loaded module object. Caller must restore sys.modules after
-    use to avoid cross-test pollution.
+    Returns the loaded module object.
+    Caller must restore sys.modules after use to avoid cross-test pollution.
     """
     import importlib.util
 
@@ -399,8 +398,8 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
 
 
 def test_main_multi_path_skips_claim_in_wiki() -> None:
-    """Multi mode uses the merged task from multi_select_groom_then_claim and
-    skips the standard claim_in_wiki call."""
+    """Multi mode uses the merged task from multi_select_groom_then_claim and skips the standard claim_in_wiki call.
+"""
     task_a = _make_fake_task(slug="task-a", title="Task A")
     task_b = _make_fake_task(slug="task-b", title="Task B")
     merged_task = _make_fake_task(slug="merged-task", title="Merged Task")
@@ -470,8 +469,7 @@ def test_portal_entry_uses_resolve_container_path() -> None:
     subprocess_stub.run.return_value = _make_ok_run()
 
     stub_map = _make_stub_map(spawn_core_mock=sc, subprocess_mock=subprocess_stub)
-    # container_path (/fake/container) is different from git_root.parent (/fake)
-    # to distinguish a correct call from an accidental git_root.parent usage.
+    # container_path (/fake/container) is different from git_root.parent (/fake) to distinguish a correct call from an accidental git_root.parent usage.
     junction_mock = stub_map["_junction"]
     mod, saved = _load_claim_module(stub_map)
     try:
@@ -572,8 +570,8 @@ def test_portal_before_recreate_active_junction_order() -> None:
 
 
 def test_portal_idempotent_when_already_correct() -> None:
-    """Re-claiming the same slug when portal already points at the correct
-    worktree must not call _junction.create and must exit 0."""
+    """Re-claiming the same slug when portal already points at the correct worktree must not call _junction.create and must exit 0.
+"""
     task = _make_fake_task(slug="my-task", title="My Task")
 
     sc = MagicMock()

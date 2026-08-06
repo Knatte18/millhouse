@@ -1,8 +1,6 @@
 """Unit tests for _llm_claude._invoke env stripping.
 
-Tests that _invoke removes the seven named git-state env vars
-before spawning Claude sessions, preventing worktree-local config
-from polluting subprocess author identity.
+Tests that _invoke removes the seven named git-state env vars before spawning Claude sessions, preventing worktree-local config from polluting subprocess author identity.
 """
 from __future__ import annotations
 

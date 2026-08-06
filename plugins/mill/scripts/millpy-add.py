@@ -1,26 +1,21 @@
 """
 mill-add — append a task entry to the wiki's Home.md and regenerate the sidebar.
 
-Resolves the wiki clone via ``_paths.resolve_wiki_path``. Note: ``.millhouse/wiki``
-is a junction for IDE/terminal convenience only — scripts never use it as a
-code path. Acquires the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
-appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]]
-(proposal-<slug>)` with a companion ``proposal-<slug>.md`` when
-``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all
-wiki changes in ONE commit. Finally releases the lock and exits.
+Resolves the wiki clone via ``_paths.resolve_wiki_path``.
+Note: ``.millhouse/wiki``
+is a junction for IDE/terminal convenience only — scripts never use it as a code path.
+Acquires the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
+appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]] (proposal-<slug>)` with a companion ``proposal-<slug>.md`` when
+``--proposal-body`` is given — then regenerates `_Sidebar.md` and commits all wiki changes in ONE commit.
+Finally releases the lock and exits.
 
-Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``,
-unique within Home.md. Duplicate slugs are rejected before any write.
+Slug rules (``Home.schema.md``): kebab-case matching ``[a-z][a-z0-9-]*``, unique within Home.md.
+Duplicate slugs are rejected before any write.
 
-Proposals live at wiki root as ``proposal-<slug>.md`` (flat namespace, per
-``ref-formats.md`` — GitHub Wiki does not render subdirectory pages
-reliably).
+Proposals live at wiki root as ``proposal-<slug>.md`` (flat namespace, per ``ref-formats.md`` — GitHub Wiki does not render subdirectory pages reliably).
 
 Usage:
-    python plugins/mill/scripts/mill-add.py <slug> \\
-        --title "Human-readable title" \\
-        [--summary "one-paragraph summary for Home.md"] \\
-        [--proposal-body "long-form background"]
+    python plugins/mill/scripts/mill-add.py <slug> \\ --title "Human-readable title" \\ [--summary "one-paragraph summary for Home.md"] \\ [--proposal-body "long-form background"]
 
 Exit codes:
     0 — task added and pushed
@@ -110,9 +105,7 @@ def main(argv: list[str] | None = None) -> int:
 
     has_proposal = proposal_body is not None
     proposal_path = wiki_path / f"proposal-{args.slug}.md"
-    # Guard against clobbering an existing proposal file even when the slug is
-    # absent from Home.md (can happen after a bad abort): we'd overwrite the
-    # user's content otherwise.
+    # Guard against clobbering an existing proposal file even when the slug is absent from Home.md (can happen after a bad abort): we'd overwrite the user's content otherwise.
     if has_proposal and proposal_path.exists():
         raise SystemExit(
             f"Proposal file {proposal_path} already exists; refusing to overwrite."

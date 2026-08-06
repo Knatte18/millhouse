@@ -1,11 +1,9 @@
 """
 Psmux subprocess driver shim.
 
-This module wraps psmux commands used by millpy-claude-sub.py to automate
-an interactive Claude session. All subprocess calls go through _subprocess_util
-for consistent logging and timeout enforcement. Public API: eight functions
-(new_session, set_history_limit, send_keys, load_buffer, paste_buffer,
-capture_pane, kill_session, list_sessions) and the PsmuxError exception.
+This module wraps psmux commands used by millpy-claude-sub.py to automate an interactive Claude session.
+All subprocess calls go through _subprocess_util for consistent logging and timeout enforcement.
+Public API: eight functions (new_session, set_history_limit, send_keys, load_buffer, paste_buffer, capture_pane, kill_session, list_sessions) and the PsmuxError exception.
 """
 from __future__ import annotations
 

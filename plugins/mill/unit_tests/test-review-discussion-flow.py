@@ -1,11 +1,10 @@
 """Unit-test flow harness for _review_discussion.run.
 
-Uses _reviewer_test_stub as the reviewer backend. All tests run in-process
-with no real LLM. Covers the per-scope (holistic) round counter for
-discussion reviews (#21 regression pin).
+Uses _reviewer_test_stub as the reviewer backend.
+All tests run in-process with no real LLM.
+Covers the per-scope (holistic) round counter for discussion reviews (#21 regression pin).
 
-Discussion review is exempt from the NEED_CONTEXT resume-fallback path
-(per discussion.md decision), so no retry tests are included.
+Discussion review is exempt from the NEED_CONTEXT resume-fallback path (per discussion.md decision), so no retry tests are included.
 """
 
 from __future__ import annotations
@@ -37,7 +36,8 @@ APPROVE_TEXT = "# Review: test\n\n```yaml\nverdict: APPROVE\n```\n"
 def _make_fixture(tmp: Path) -> tuple[Path, Path, Path]:
     """Create a container/wts/<slug> worktree fixture.
 
-    Returns (mill_dir, project_root, wiki_root). project_root is the worktree path;
+    Returns (mill_dir, project_root, wiki_root).
+    project_root is the worktree path;
     callers must os.chdir(project_root) before invoking discussion_run.
     """
     worktree = tmp / "container" / "wts" / SLUG
@@ -1024,8 +1024,7 @@ def main() -> int:
     errors += test_brief_path_nested_layout()
 
     # ------------------------------------------------------------------
-    # project_root/hub_dir rebind: briefs_dir resolves under resolve_active_hub,
-    # not resolve_hub_path's decoy (#675)
+    # project_root/hub_dir rebind: briefs_dir resolves under resolve_active_hub, not resolve_hub_path's decoy (#675)
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
@@ -1039,15 +1038,12 @@ def main() -> int:
 def test_brief_path_nested_layout() -> int:
     """Verify that the prepare stage routes the brief under hub_dir, not git_root.
 
-    Creates a nested layout where hub_dir is a subdirectory of git_root, then
-    loads millpy-review-discussion via importlib and calls main(). Inspects the
-    recorded resolve_task_path calls to confirm the first argument is hub_dir.
+    Creates a nested layout where hub_dir is a subdirectory of git_root, then loads millpy-review-discussion via importlib and calls main().
+    Inspects the recorded resolve_task_path calls to confirm the first argument is hub_dir.
 
-    A reversion of the Card 3 fix (changing hub_dir back to git_root) causes the
-    assertion to fail because resolve_task_path is called with git_root instead.
+    A reversion of the Card 3 fix (changing hub_dir back to git_root) causes the assertion to fail because resolve_task_path is called with git_root instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator convention
-    used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
     """
     import importlib.util
     import tempfile
@@ -1081,11 +1077,7 @@ def test_brief_path_nested_layout() -> int:
         mock_paths.resolve_hub_path.return_value = hub_dir
         mock_paths.resolve_git_root.return_value = git_root
         mock_paths.resolve_wiki_path.return_value = git_root / "wiki"
-        # The project_root/hub_dir rebind (Card 15) calls resolve_container_path
-        # and resolve_active_hub after slug resolution, superseding hub_dir for
-        # every subsequent use -- mock them to the same hub_dir this test
-        # already exercises so the pre-existing assertions below (which compare
-        # against the local hub_dir variable) keep passing after the rebind.
+        # The project_root/hub_dir rebind (Card 15) calls resolve_container_path and resolve_active_hub after slug resolution, superseding hub_dir for every subsequent use -- mock them to the same hub_dir this test already exercises so the pre-existing assertions below (which compare against the local hub_dir variable) keep passing after the rebind.
         mock_paths.resolve_container_path.return_value = git_root.parent
         mock_paths.resolve_active_hub.return_value = hub_dir
         # side_effect records calls and returns a real Path so downstream code can str() it.
@@ -1126,8 +1118,7 @@ def test_brief_path_nested_layout() -> int:
             "_review_cli": mock_review_cli,
         }
 
-        # Insert mocks before loading the module so that the import-inside-main()
-        # pattern picks up the mocks from sys.modules rather than loading real modules.
+        # Insert mocks before loading the module so that the import-inside-main() pattern picks up the mocks from sys.modules rather than loading real modules.
         with patch.dict(sys.modules, injected_modules):
             spec = importlib.util.spec_from_file_location(
                 "millpy_review_discussion",
@@ -1141,9 +1132,9 @@ def test_brief_path_nested_layout() -> int:
                 try:
                     mod.main()
                 except (TypeError, SystemExit, Exception):
-                    # The prepare branch calls json.dumps(envelope); a bare MagicMock
-                    # return from write_brief causes TypeError at that point.  The
-                    # resolve_task_path call is already recorded before the crash.
+                    # The prepare branch calls json.dumps(envelope);
+                    # a bare MagicMock return from write_brief causes TypeError at that point.
+                    # The resolve_task_path call is already recorded before the crash.
                     pass
 
         # Inspect recorded calls: find the one whose path arg starts with "_mill/briefs/".
@@ -1189,22 +1180,16 @@ def test_brief_path_nested_layout() -> int:
 def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> int:
     """hub_dir rebinds to resolve_active_hub's value, not resolve_hub_path's escaped one.
 
-    Modeled on test_brief_path_nested_layout, but instead of hub_dir vs.
-    git_root, this test distinguishes resolve_hub_path's (decoy) return value
-    from resolve_active_hub's (corrected active task worktree) return value --
-    the two values the Card 15 rebind is meant to keep distinct. resolve_hub_path
-    returns a decoy directory standing in for the pre-rebind escape (e.g. the
-    main worktree resolve_hub_path() falls back to); resolve_active_hub returns
-    a separate, real task-worktree directory. briefs_dir must resolve under the
-    resolve_active_hub value, proving hub_dir/project_root was rebound after
-    slug resolution and not left at resolve_hub_path's original value.
+    Modeled on test_brief_path_nested_layout,
+    but instead of hub_dir vs. git_root, this test distinguishes resolve_hub_path's (decoy) return value from resolve_active_hub's (corrected active task worktree) return value -- the two values the Card 15 rebind is meant to keep distinct.
+    resolve_hub_path returns a decoy directory standing in for the pre-rebind escape (e.g.
+    the main worktree resolve_hub_path() falls back to);
+    resolve_active_hub returns a separate, real task-worktree directory.
+    briefs_dir must resolve under the resolve_active_hub value, proving hub_dir/project_root was rebound after slug resolution and not left at resolve_hub_path's original value.
 
-    A reversion of the Card 15 fix (never calling resolve_active_hub) causes
-    the assertion to fail because resolve_task_path is called with the decoy
-    directory instead.
+    A reversion of the Card 15 fix (never calling resolve_active_hub) causes the assertion to fail because resolve_task_path is called with the decoy directory instead.
 
-    Returns 0 on success, 1 on failure (matching the errors-accumulator
-    convention used throughout this file).
+    Returns 0 on success, 1 on failure (matching the errors-accumulator convention used throughout this file).
     """
     import importlib.util
     import tempfile
@@ -1287,9 +1272,8 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
                 try:
                     mod.main()
                 except (TypeError, SystemExit, Exception):
-                    # json.dumps(envelope) may raise TypeError on a bare
-                    # MagicMock field; the resolve_active_hub/resolve_task_path
-                    # calls are already recorded before any such crash.
+                    # json.dumps(envelope) may raise TypeError on a bare MagicMock field;
+                    # the resolve_active_hub/resolve_task_path calls are already recorded before any such crash.
                     pass
 
         # Confirm resolve_active_hub was actually invoked (the rebind's call).

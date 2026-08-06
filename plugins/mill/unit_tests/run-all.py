@@ -1,10 +1,9 @@
 """Discover and run every ``test-*.py`` in this directory.
 
-Exits 0 when all tests pass, 1 when any fails. Each test runs in its own
-subprocess, parallelised across CPU cores. Per-test stdout/stderr is
-buffered and printed atomically after the test finishes so output from
-concurrent runs does not interleave. Override the worker count with
-``--jobs N`` (default: ``os.cpu_count()``).
+Exits 0 when all tests pass, 1 when any fails.
+Each test runs in its own subprocess, parallelised across CPU cores.
+Per-test stdout/stderr is buffered and printed atomically after the test finishes so output from concurrent runs does not interleave.
+Override the worker count with ``--jobs N`` (default: ``os.cpu_count()``).
 """
 from __future__ import annotations
 
@@ -71,8 +70,7 @@ def main() -> int:
         tests = discovered
 
     # Force UTF-8 I/O so test output containing non-ASCII characters (e.g.
-    # the -> arrow in pick_task_single_or_multi output) doesn't crash on
-    # Windows consoles that default to cp1252.
+    # the -> arrow in pick_task_single_or_multi output) doesn't crash on Windows consoles that default to cp1252.
     child_env = os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 

@@ -1,9 +1,7 @@
 """Unit tests for the trailing-JSON contract for millpy-bg dispatched CLIs.
 
-The completion-detection fallback depends on an invariant: every millpy-bg-dispatched
-CLI MUST emit a parseable JSON line as its final stdout. These tests pin that invariant
-by asserting the JSON contract at both the consumer (_bg._has_valid_json_result) and
-emitter seams (_implementer_common._forward_output).
+The completion-detection fallback depends on an invariant: every millpy-bg-dispatched CLI MUST emit a parseable JSON line as its final stdout.
+These tests pin that invariant by asserting the JSON contract at both the consumer (_bg._has_valid_json_result) and emitter seams (_implementer_common._forward_output).
 """
 from __future__ import annotations
 

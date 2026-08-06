@@ -1,49 +1,51 @@
 """
-Shared helpers, regex constants, data classes, and exceptions used by
-every Layer 02 review backend.
+Shared helpers, regex constants, data classes, and exceptions used by every Layer 02 review backend.
 
-No dependencies on any other Layer 02 file. Import this from
-_review_discussion.py, _review_plan.py, _review_code.py, and the API
-scripts.
+No dependencies on any other Layer 02 file.
+Import this from _review_discussion.py, _review_plan.py, _review_code.py, and the API scripts.
 
 Public API:
-    ReviewError          — raised by the backend on config/slug/round errors
+    ReviewError — raised by the backend on config/slug/round errors
     ReviewerOverstepError — raised by worktree_snapshot_guard when a reviewer mutates HEAD or working tree
-    ReviewResult         — dataclass; serialised to the CLI's stdout JSON
-    RE_SIMPLE            — regex matching simple review filenames
-    RE_BATCH             — regex matching plan-batch review filenames
-    find_active_slug()   — branch-based slug detection; skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to the marker only if the daemon call fails
-    load_task_title()    — read status.md on disk first; fall back to _marker.task_data for task_title, then to slug on MarkerError
+    ReviewResult — dataclass; serialised to the CLI's stdout JSON
+    RE_SIMPLE — regex matching simple review filenames
+    RE_BATCH — regex matching plan-batch review filenames
+    find_active_slug() — branch-based slug detection;
+    skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to the marker only if the daemon call fails
+    load_task_title() — read status.md on disk first;
+    fall back to _marker.task_data for task_title, then to slug on MarkerError
     worktree_snapshot_guard() — context manager; snapshot guard wrapping each backend run()
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
-    resolve_path()       — locate a path inside the active hub (where task/ lives) from a config template
+    resolve_path() — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
     detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
-    bulk_files()         — concatenate file contents with FILE delimiters
+    bulk_files() — concatenate file contents with FILE delimiters
     bulk_files_with_diff() — like bulk_files but substitutes git diff output for small-diff files
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
     build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted tokens
     parse_missing_context() — extract path strings from a `## Missing context` section in review text
     build_reattached_section() — return a `## Re-attached files` block with inlined file contents for NEED_CONTEXT retry
     build_tool_rule()    — dispatch-aware <TOOL_RULE> block (bulk / tool-use x non-agent / agent-mode)
-    render_prompt()      — render a template from plugins/mill/templates/
-    parse_verdict()      — extract APPROVE/REQUEST_CHANGES from fenced yaml block
+    render_prompt() — render a template from plugins/mill/templates/
+    parse_verdict() — extract APPROVE/REQUEST_CHANGES from fenced yaml block
     parse_blocking_count() — count "### [<severity>]" headings in review output
     count_unrecognized_severity_findings() — count findings whose severity matches neither of the two recognized labels, scanning both headings and YAML fallback
-    write_review_file()  — write a review file with a canonical timestamp name
-    aggregate_verdict()  — worst-case verdict across a list of sub-verdicts
-    load_config()        — load mill-config.yaml + optional config.local.yaml
+    write_review_file() — write a review file with a canonical timestamp name
+    aggregate_verdict() — worst-case verdict across a list of sub-verdicts
+    load_config() — load mill-config.yaml + optional config.local.yaml
     parse_batch_refs()   — extract Context/Edits/Creates paths from a batch file (case-insensitive none filter)
     parse_moves()        — extract Moves: source/destination pairs from a batch file (tolerates malformed bullets)
     compute_creates_union() — union of all Creates: tokens across every batch in a plan_dir
     compute_deletes_union() — union of all Deletes: tokens across every batch in a plan_dir
     compute_moves_union() — union of all Moves: sources and targets across every batch in a plan_dir
-    resolve_ref_paths()  — resolve raw ref strings against project_root; hard-fails on missing paths not in creates_union or deletes_union
+    resolve_ref_paths() — resolve raw ref strings against project_root;
+    hard-fails on missing paths not in creates_union or deletes_union
     resolve_existing_paths() — resolve raw paths and return only those that already exist on disk (silent drop, no creates_union check)
     _load_root_from_overview() — read root: field from overview's fenced-yaml block
     _check_large_prompt()    — check if prompt exceeds large_prompt threshold; return (is_over_threshold, estimated_ktok)
     resolve_large_prompt_timeout() — return large_prompt.timeout when prompt is over threshold and key is set
-    maybe_switch_spec_for_large_prompt() — check prompt size; return (spec, reviewer_name), possibly overridden for large prompts
+    maybe_switch_spec_for_large_prompt() — check prompt size;
+    return (spec, reviewer_name), possibly overridden for large prompts
 """
 
 from __future__ import annotations
@@ -75,19 +77,13 @@ from _config import (
 # Module-level regex constants
 # ---------------------------------------------------------------------------
 
-# Matches simple (non-batch) review filenames:
-#   20260418-001200-discussion-review-r1.md
-#   20260418-143300-code-review-r2.md
-#   20260418-143300-plan-review-r1.md   (plan holistic)
+# Matches simple (non-batch) review filenames: 20260418-001200-discussion-review-r1.md 20260418-143300-code-review-r2.md 20260418-143300-plan-review-r1.md (plan holistic)
 RE_SIMPLE = re.compile(
     r"^\d{8}-\d{6}-(?P<type>discussion|code|plan)-review-r(?P<n>\d+)\.md$"
 )
 
-# Matches plan / code per-batch review filenames:
-#   20260418-143300-plan-review-01-setup-r1.md
-#   20260418-143300-code-review-foundation-r1.md
-# RE_SIMPLE is checked first; a file matching RE_SIMPLE is excluded from
-# RE_BATCH matching (prevents holistic files from being mis-identified).
+# Matches plan / code per-batch review filenames: 20260418-143300-plan-review-01-setup-r1.md 20260418-143300-code-review-foundation-r1.md RE_SIMPLE is checked first;
+# a file matching RE_SIMPLE is excluded from RE_BATCH matching (prevents holistic files from being mis-identified).
 RE_BATCH = re.compile(
     r"^\d{8}-\d{6}-(?P<type>plan|code)-review-(?P<batch>[a-z0-9-]+)-r(?P<n>\d+)\.md$"
 )
@@ -108,9 +104,9 @@ class ReviewError(Exception):
 class ReviewerOverstepError(ReviewError):
     """Raised when a reviewer mutated git state (HEAD or working tree) during a review pass.
 
-    Carries the before/after HEAD SHA and the unfiltered git status --porcelain
-    diff for operator inspection. The guard does not auto-rollback; the operator
-    resets manually after investigating.
+    Carries the before/after HEAD SHA and the unfiltered git status --porcelain diff for operator inspection.
+    The guard does not auto-rollback;
+    the operator resets manually after investigating.
     """
 
     def __init__(self, before_sha: str, after_sha: str, porcelain_diff: str) -> None:
@@ -130,45 +126,34 @@ def worktree_snapshot_guard(
     *,
     expected_paths: list[str] | None = None,
 ) -> Iterator[None]:
-    """Snapshot git state before/after the with-block; raise on unsanctioned changes.
+    """Snapshot git state before/after the with-block;
+raise on unsanctioned changes.
 
-    Captures ``git rev-parse HEAD`` and ``git status --porcelain`` on entry,
-    re-captures on exit, and raises ``ReviewerOverstepError`` if the reviewer
-    made unsanctioned mutations to HEAD or the working tree.
+    Captures ``git rev-parse HEAD`` and ``git status --porcelain`` on entry, re-captures on exit, and raises ``ReviewerOverstepError`` if the reviewer made unsanctioned mutations to HEAD or the working tree.
 
-    ``expected_paths`` is a list of substring patterns that filter the
-    porcelain diff before comparison. A porcelain line is filtered when its
-    path field (with backslashes normalised to forward slashes) contains
-    ANY entry in ``expected_paths`` as a substring.
+    ``expected_paths`` is a list of substring patterns that filter the porcelain diff before comparison.
+    A porcelain line is filtered when its path field (with backslashes normalised to forward slashes) contains ANY entry in ``expected_paths`` as a substring.
 
-    Fast-forward tolerance: a HEAD advance is permitted when ``after_sha`` is a
-    strict descendant of ``before_sha`` (i.e. the reviewer committed its own
-    output files in a forward direction). In that case the guard emits a
-    one-line warning to stderr containing the token ``fast-forward`` and both
-    short SHAs, then skips the ``ReviewerOverstepError`` raise -- provided no
-    NEW working-tree dirt appeared (entries in ``added`` after porcelain
-    filtering). A non-fast-forward HEAD change (orphan branch, reset to
-    unrelated commit, etc.) still raises unconditionally. If the ancestry check
-    itself raises ``GitOpsError``, the fast-forward flag is set to ``False`` so
-    the non-verifiable advance is treated conservatively as an overstep.
+    Fast-forward tolerance: a HEAD advance is permitted when ``after_sha`` is a strict descendant of ``before_sha`` (i.e.
+    the reviewer committed its own output files in a forward direction).
+    In that case the guard emits a one-line warning to stderr containing the token ``fast-forward`` and both short SHAs, then skips the ``ReviewerOverstepError`` raise -- provided no NEW working-tree dirt appeared (entries in ``added`` after porcelain filtering).
+    A non-fast-forward HEAD change (orphan branch, reset to unrelated commit, etc.) still raises unconditionally.
+    If the ancestry check itself raises ``GitOpsError``, the fast-forward flag is set to ``False`` so the non-verifiable advance is treated conservatively as an overstep.
 
     Raise rules (``ff`` = fast-forward detected):
-    - ``bool(added)``             -- new dirt appeared; always raises.
-    - ``head_changed and not ff`` -- non-fast-forward HEAD change; raises.
-    - ``bool(removed) and not ff``-- working-tree entries disappeared without a
-                                     fast-forward commit to account for them; raises.
+    - ``bool(added)`` -- new dirt appeared;
+        always raises.
+    - ``head_changed and not ff`` -- non-fast-forward HEAD change;
+        raises.
+    - ``bool(removed) and not ff``-- working-tree entries disappeared without a fast-forward commit to account for them;
+        raises.
 
-    If the wrapped block raises AND state was mutated, ``ReviewerOverstepError``
-    takes priority and chains the inner exception via ``__cause__``; if state
-    was unchanged the inner exception is re-raised unchanged.
+    If the wrapped block raises AND state was mutated, ``ReviewerOverstepError`` takes priority and chains the inner exception via ``__cause__``;
+    if state was unchanged the inner exception is re-raised unchanged.
 
-    If the post-snapshot capture itself raises (e.g. ``_capture_head_sha``
-    propagating a ``ReviewError`` from a broken git invocation), that error
-    propagates and the inner exception is NOT chained -- the capture failure
-    indicates the snapshot is untrustworthy, so the typed
-    ``ReviewerOverstepError`` cannot be raised safely. This is an intentional
-    trade-off; the inner exception, if any, is visible in the traceback frames
-    above the capture call.
+    If the post-snapshot capture itself raises (e.g. ``_capture_head_sha`` propagating a ``ReviewError`` from a broken git invocation), that error propagates and the inner exception is NOT chained -- the capture failure indicates the snapshot is untrustworthy, so the typed ``ReviewerOverstepError`` cannot be raised safely.
+    This is an intentional trade-off;
+    the inner exception, if any, is visible in the traceback frames above the capture call.
     """
     before_sha = _capture_head_sha(project_root)
     before_porcelain = _capture_porcelain(project_root)
@@ -186,9 +171,8 @@ def worktree_snapshot_guard(
     removed = set(before_filtered) - set(after_filtered)
     head_changed = before_sha != after_sha
 
-    # Determine whether the HEAD advance is a clean fast-forward (after_sha is a
-    # descendant of before_sha). If the ancestry helper raises GitOpsError the
-    # relationship cannot be verified, so treat it conservatively as non-fast-forward.
+    # Determine whether the HEAD advance is a clean fast-forward (after_sha is a descendant of before_sha).
+    # If the ancestry helper raises GitOpsError the relationship cannot be verified, so treat it conservatively as non-fast-forward.
     ff = False
     if head_changed:
         try:
@@ -239,7 +223,8 @@ def _filter_porcelain(lines: list[str], expected_paths: list[str] | None) -> lis
     """Drop porcelain lines whose path field matches any expected_paths substring.
 
     Each porcelain line has a 2-character status code, a space, then the path.
-    Renames have ' -> ' between old and new path; both are checked against expected_paths.
+    Renames have ' -> ' between old and new path;
+    both are checked against expected_paths.
     Path comparison normalises backslashes to forward slashes.
     """
     if not expected_paths:
@@ -304,10 +289,9 @@ class ReviewResult:
 
 
 def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
-    """Detect active slug via branch name; skip the daemon round-trip only
-    when a cheap branch check confirms a single _mill/*.active on-disk marker.
-    On daemon failure, an unconfirmed lone marker is still trusted, exactly
-    as before this fast path existed.
+    """Detect active slug via branch name;
+    skip the daemon round-trip only when a cheap branch check confirms a single _mill/*.active on-disk marker.
+    On daemon failure, an unconfirmed lone marker is still trusted, exactly as before this fast path existed.
 
     Raises ReviewError (wrapping MarkerError or glob-fallback errors).
     """
@@ -340,11 +324,11 @@ def find_active_slug(hub_root: Path, wiki_path: Path, cfg: dict) -> str:
 
 
 def load_task_title(git_root: Path, wiki_path: Path, cfg: dict, slug: str) -> str:
-    """Read task_title from status.md on disk; fall back to the wiki daemon.
+    """Read task_title from status.md on disk;
+fall back to the wiki daemon.
 
-    The first parameter is named git_root for historical reasons, but every
-    call site passes the hub-resolved project_root -- status.md is read
-    relative to whichever value is actually passed in.
+    The first parameter is named git_root for historical reasons,
+    but every call site passes the hub-resolved project_root -- status.md is read relative to whichever value is actually passed in.
     """
     try:
         status_path = _paths.require_status_path(git_root, cfg)
@@ -379,29 +363,18 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
     Computes the container, git_root, and cfg internally:
       - git_root via _paths.resolve_git_root()
       - container via _paths.resolve_container_path(git_root)
-      - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub
-        where mill scripts run; equals git_root for hub_relative_path == ".")
+      - hub_dir via _paths.resolve_hub_path() (Path.cwd().resolve() — the hub where mill scripts run; equals git_root for hub_relative_path == ".")
       - cfg via load_config(hub_dir, hub_dir / ".millhouse")
 
-    cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/,
-    because mill-claim writes hub_relative_path only at the hub (it does not
-    bootstrap a stub at git_root/.millhouse/ the way mill-spawn does).
+    cfg is sourced from the hub's own .millhouse/, not from git_root/.millhouse/, because mill-claim writes hub_relative_path only at the hub (it does not bootstrap a stub at git_root/.millhouse/ the way mill-spawn does).
 
     Returns active_hub / path_tmpl after substituting any "<SLUG>" token.
 
-    ``slug`` is always an already-resolved value here — every caller of
-    ``resolve_path`` (``_review_code.py``, ``_review_plan.py``,
-    ``_review_discussion.py``, and the ``millpy-review-*.py`` CLIs) obtains
-    ``slug`` from its own flow (``find_active_slug`` or a ``--slug``
-    override) before calling this function, so ``resolve_path`` never needs
-    ``resolve_active_hub``'s inner ``slug_from_branch`` re-validation.
-    ``skip_slug_validation=True`` is passed accordingly, avoiding a daemon
-    round-trip on every call — this function runs on both the ``prepare``
-    and ``finalize`` stage of every review round, at least twice per round.
+    ``slug`` is always an already-resolved value here — every caller of ``resolve_path`` (``_review_code.py``, ``_review_plan.py``, ``_review_discussion.py``, and the ``millpy-review-*.py`` CLIs) obtains ``slug`` from its own flow (``find_active_slug`` or a ``--slug`` override) before calling this function, so ``resolve_path`` never needs ``resolve_active_hub``'s inner ``slug_from_branch`` re-validation. ``skip_slug_validation=True`` is passed accordingly, avoiding a daemon
+    round-trip on every call — this function runs on both the ``prepare`` and ``finalize`` stage of every review round, at least twice per round.
 
     Raises:
-        _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch:
-            propagated from the inner resolve_active_hub call.
+        _paths.ActiveWorktreeNotFound | _paths.ActiveWorktreeSlugMismatch: propagated from the inner resolve_active_hub call.
     """
     git_root = _paths.resolve_git_root()
     container_path = _paths.resolve_container_path(git_root)
@@ -421,21 +394,16 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
     """Scan reviews_dir and return the next round number for (review_type, scope).
 
-    ``scope`` is either ``"holistic"`` (for discussion reviews and plan/code
-    holistic reviews) or a batch name string (for per-batch plan/code reviews).
+    ``scope`` is either ``"holistic"`` (for discussion reviews and plan/code holistic reviews) or a batch name string (for per-batch plan/code reviews).
 
     If ``reviews_dir`` does not exist, return 1.
 
     Scope semantics:
-    - ``scope == "holistic"``: count files where RE_SIMPLE matches AND
-      ``m.group("type") == review_type``. RE_BATCH matches are ignored entirely.
-    - ``scope == <batch_name>``: count files where RE_SIMPLE does NOT match AND
-      RE_BATCH matches AND ``m.group("type") == review_type`` AND
-      ``m.group("batch") == scope``.
+    - ``scope == "holistic"``: count files where RE_SIMPLE matches AND ``m.group("type") == review_type``.
+        RE_BATCH matches are ignored entirely.
+    - ``scope == <batch_name>``: count files where RE_SIMPLE does NOT match AND RE_BATCH matches AND ``m.group("type") == review_type`` AND ``m.group("batch") == scope``.
 
-    RE_SIMPLE is checked before RE_BATCH for every file, matching the existing
-    convention that prevents a plan-holistic file (e.g. …-plan-review-r1.md)
-    from being mis-identified as a batch review via RE_BATCH.
+    RE_SIMPLE is checked before RE_BATCH for every file, matching the existing convention that prevents a plan-holistic file (e.g. …-plan-review-r1.md) from being mis-identified as a batch review via RE_BATCH.
 
     Return ``max(found) + 1`` if any matching files exist, else 1.
     """
@@ -469,17 +437,12 @@ def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
 def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
     """Return the highest per-batch-only round for review_type, or None.
 
-    Returns the highest round number ``N`` such that at least one per-batch
-    review file exists for round ``N`` AND no holistic review file exists for
-    round ``N``. Returns ``None`` when no such round exists (either all rounds
-    have a holistic file, no per-batch files exist at all, or ``reviews_dir``
-    does not exist).
+    Returns the highest round number ``N`` such that at least one per-batch review file exists for round ``N`` AND no holistic review file exists for round ``N``.
+    Returns ``None`` when no such round exists (either all rounds have a holistic file, no per-batch files exist at all, or ``reviews_dir`` does not exist).
 
-    Uses RE_SIMPLE (checked first per convention) to identify holistic files
-    and RE_BATCH to identify per-batch files, both filtered by ``review_type``.
+    Uses RE_SIMPLE (checked first per convention) to identify holistic files and RE_BATCH to identify per-batch files, both filtered by ``review_type``.
 
-    Consumed by ``_review_plan.run`` to detect a partially-complete run where
-    per-batch reviews are done but the holistic pass has not yet fired.
+    Consumed by ``_review_plan.run`` to detect a partially-complete run where per-batch reviews are done but the holistic pass has not yet fired.
     """
     if not reviews_dir.exists():
         return None
@@ -507,16 +470,15 @@ def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
 
 
 # Regex constants for parse_batch_refs.
-# Header line: - **Context:** <inline>  (inline may be empty for multi-line bullet form).
+# Header line: - **Context:** <inline> (inline may be empty for multi-line bullet form).
 _RE_REFS_HEADER = re.compile(
     r"^-\s*\*\*(Context|Edits|Creates|Deletes):\*\*(?P<inline>.*)$"
 )
 # Sub-bullet under a multi-line header (leading whitespace + dash).
 _RE_REFS_SUB = re.compile(r"^\s+-\s*(.+)$")
 
-# Header line for the Moves: field.  Kept separate from _RE_REFS_HEADER because
-# a Moves sub-bullet has a two-backtick-path grammar (src -> dst) that the
-# reads-not-backtick-path validator rejects when mixed with single-path headers.
+# Header line for the Moves: field.
+# Kept separate from _RE_REFS_HEADER because a Moves sub-bullet has a two-backtick-path grammar (src -> dst) that the reads-not-backtick-path validator rejects when mixed with single-path headers.
 _RE_MOVES_HEADER = re.compile(r"^-\s*\*\*Moves:\*\*(?P<inline>.*)$")
 
 # Matches a well-formed move sub-bullet: exactly `src` -> `dst`.
@@ -531,11 +493,10 @@ def parse_batch_refs(
 ) -> list[str]:
     """Extract raw path strings from a batch file's Context/Edits/Creates/Deletes lines.
 
-    Handles the single-line form (- **Context:** `a`, `b`) and the multi-line
-    bullet form (- **Context:**\\n  - `a`\\n  - `b`). Filters tokens whose
-    lowercase form equals ``'none'`` (case-insensitive). Returns a
-    deduplicated list preserving first-seen order. Used by both plan review
-    and code review to build the source-file bulk.
+    Handles the single-line form (- **Context:** `a`, `b`) and the multi-line bullet form (- **Context:**\\n - `a`\\n - `b`).
+    Filters tokens whose lowercase form equals ``'none'`` (case-insensitive).
+    Returns a deduplicated list preserving first-seen order.
+    Used by both plan review and code review to build the source-file bulk.
 
     Args:
         batch_path: Path to the batch file.
@@ -543,8 +504,7 @@ def parse_batch_refs(
             Defaults to ("Context", "Edits", "Creates", "Deletes").
 
     Returns:
-        Deduplicated list of raw path strings from matched fields, preserving
-        first-seen order.
+        Deduplicated list of raw path strings from matched fields, preserving first-seen order.
     """
     text = batch_path.read_text(encoding="utf-8")
     seen: dict[str, None] = {}
@@ -586,27 +546,24 @@ def parse_moves(batch_path: Path) -> list[tuple[str, str]]:
     """
     Extract Moves: source/destination pairs from a single batch file.
 
-    Scans every ``- **Moves:**`` header in the file.  Two forms are supported:
+    Scans every ``- **Moves:**`` header in the file.
+    Two forms are supported:
 
-    * Inline ``none`` (case-insensitive): the header carries no moves; treated
-      as an empty contribution so the file does not raise.
-    * Multi-line sub-bullets (empty inline value or any non-"none" inline):
-      each sub-bullet is read with ``_RE_REFS_SUB`` and then matched against
-      ``_RE_MOVE_PAIR``.  A sub-bullet that does not match the pattern
-      (e.g. missing arrow, only one backtick path) is silently skipped so
-      that malformed bullets are reported by the ``move-format`` validator
-      check (batch 2) rather than raising here.
+    * Inline ``none`` (case-insensitive): the header carries no moves; treated as an empty contribution so the file does not raise.
+    * Multi-line sub-bullets (empty inline value or any non-"none" inline): each sub-bullet is read with ``_RE_REFS_SUB`` and then matched against ``_RE_MOVE_PAIR``.
+        A sub-bullet that does not match the pattern (e.g.
+        missing arrow, only one backtick path) is silently skipped so that malformed bullets are reported by the ``move-format`` validator check (batch 2) rather than raising here.
 
-    The returned list is deduplicated, preserving first-seen order.  The
-    function never raises; any I/O error propagates from ``read_text``.
+    The returned list is deduplicated, preserving first-seen order.
+    The function never raises;
+    any I/O error propagates from ``read_text``.
 
     Args:
         batch_path: Path to a batch markdown file (e.g. ``01-foo.md``).
 
     Returns:
-        Deduplicated list of ``(source, destination)`` string tuples in
-        first-seen order.  Empty list when the file declares no moves or
-        all Moves: headers carry the ``none`` sentinel.
+        Deduplicated list of ``(source, destination)`` string tuples in first-seen order.
+        Empty list when the file declares no moves or all Moves: headers carry the ``none`` sentinel.
     """
     text = batch_path.read_text(encoding="utf-8")
     # Use an insertion-ordered dict (Python 3.7+) as an ordered set of pairs.
@@ -619,16 +576,15 @@ def parse_moves(batch_path: Path) -> list[tuple[str, str]]:
         if m:
             inline = m.group("inline").strip()
 
-            # Explicit "none" sentinel: this card declares no moves; skip
-            # without scanning sub-bullets so the `none` token is not
-            # mistakenly treated as a file path.
+            # Explicit "none" sentinel: this card declares no moves;
+            # skip without scanning sub-bullets so the `none` token is not mistakenly treated as a file path.
             if inline.lower() == "none":
                 i += 1
                 continue
 
             # Non-"none" inline (or empty): scan the following sub-bullets.
-            # An unexpected non-empty inline value is simply ignored; the
-            # sub-bullets on the lines below are the authoritative source.
+            # An unexpected non-empty inline value is simply ignored;
+            # the sub-bullets on the lines below are the authoritative source.
             j = i + 1
             while j < len(lines):
                 sm = _RE_REFS_SUB.match(lines[j])
@@ -653,25 +609,19 @@ def parse_deletes(batch_path: Path) -> set[str]:
     """
     Extract Deletes: tokens from a single batch file.
 
-    Scans every ``- **Deletes:**`` header in the file. Two forms are
-    supported: the single-line inline form (``- **Deletes:** a, b``)
-    and the multi-line sub-bullet form (``- **Deletes:**`` followed by
-    ``  - a`` / ``  - b`` sub-bullets, each a backtick-quoted path).
-    Tokens whose lowercase form equals ``'none'`` (case-insensitive) are
-    filtered out, so a card that declares no deletions contributes nothing.
+    Scans every ``- **Deletes:**`` header in the file.
+    Two forms are supported: the single-line inline form (``- **Deletes:** a, b``) and the multi-line sub-bullet form (``- **Deletes:**`` followed by `` - a`` / `` - b`` sub-bullets, each a backtick-quoted path).
+    Tokens whose lowercase form equals ``'none'`` (case-insensitive) are filtered out, so a card that declares no deletions contributes nothing.
 
-    A malformed or absent ``Deletes:`` header simply contributes nothing to
-    the returned set; this function never raises except for I/O errors
-    propagated from ``read_text``.
+    A malformed or absent ``Deletes:`` header simply contributes nothing to the returned set;
+    this function never raises except for I/O errors propagated from ``read_text``.
 
     Args:
         batch_path: Path to a single batch markdown file (e.g. ``01-foo.md``).
 
     Returns:
-        Set of raw token strings (NOT resolved Paths) declared under every
-        ``Deletes:`` header in this file. Empty set when the file declares
-        no deletions or every ``Deletes:`` header carries the ``none``
-        sentinel.
+        Set of raw token strings (NOT resolved Paths) declared under every ``Deletes:`` header in this file.
+        Empty set when the file declares no deletions or every ``Deletes:`` header carries the ``none`` sentinel.
     """
     text = batch_path.read_text(encoding="utf-8")
     deletes: set[str] = set()
@@ -712,11 +662,9 @@ def parse_deletes(batch_path: Path) -> set[str]:
 def compute_creates_union(plan_dir: Path) -> set[str]:
     """Return the union of all Creates: tokens across every batch in plan_dir.
 
-    Iterates every ``??-*.md`` file under ``plan_dir`` except
-    ``00-overview.md``, extracts only the ``Creates:`` lines, and returns
-    a flat set of raw token strings (NOT resolved Paths). Filters tokens
-    whose lowercase form equals ``'none'`` (case-insensitive). Returns an
-    empty set if ``plan_dir`` doesn't exist or contains no batch files.
+    Iterates every ``??-*.md`` file under ``plan_dir`` except ``00-overview.md``, extracts only the ``Creates:`` lines, and returns a flat set of raw token strings (NOT resolved Paths).
+    Filters tokens whose lowercase form equals ``'none'`` (case-insensitive).
+    Returns an empty set if ``plan_dir`` doesn't exist or contains no batch files.
     """
     if not plan_dir.exists():
         return set()
@@ -760,11 +708,9 @@ def compute_creates_union(plan_dir: Path) -> set[str]:
 def compute_deletes_union(plan_dir: Path) -> set[str]:
     """Return the union of all Deletes: tokens across every batch in plan_dir.
 
-    Iterates every ``??-*.md`` file under ``plan_dir`` except
-    ``00-overview.md``, extracts only the ``Deletes:`` lines, and returns
-    a flat set of raw token strings (NOT resolved Paths). Filters tokens
-    whose lowercase form equals ``'none'`` (case-insensitive). Returns an
-    empty set if ``plan_dir`` doesn't exist or contains no batch files.
+    Iterates every ``??-*.md`` file under ``plan_dir`` except ``00-overview.md``, extracts only the ``Deletes:`` lines, and returns a flat set of raw token strings (NOT resolved Paths).
+    Filters tokens whose lowercase form equals ``'none'`` (case-insensitive).
+    Returns an empty set if ``plan_dir`` doesn't exist or contains no batch files.
     """
     if not plan_dir.exists():
         return set()
@@ -780,24 +726,17 @@ def compute_moves_union(plan_dir: Path) -> tuple[set[str], set[str]]:
     """
     Return the union of all Moves: sources and targets across every batch in plan_dir.
 
-    Iterates every ``??-*.md`` file under ``plan_dir`` except ``00-overview.md``
-    (mirroring ``compute_creates_union``), calls ``parse_moves`` on each, and
-    accumulates the source path (first element of each pair) and the destination
-    path (second element) into two independent sets.
+    Iterates every ``??-*.md`` file under ``plan_dir`` except ``00-overview.md`` (mirroring ``compute_creates_union``), calls ``parse_moves`` on each, and accumulates the source path (first element of each pair) and the destination path (second element) into two independent sets.
 
-    The source set mirrors the semantics of ``compute_deletes_union`` (sources
-    disappear after the move) and the target set mirrors ``compute_creates_union``
-    (targets appear after the move).  Callers that need to suppress
-    ``non-existent-path`` errors for move targets should treat ``targets`` the
-    same way they treat ``creates_union``.
+    The source set mirrors the semantics of ``compute_deletes_union`` (sources disappear after the move) and the target set mirrors ``compute_creates_union`` (targets appear after the move).
+    Callers that need to suppress ``non-existent-path`` errors for move targets should treat ``targets`` the same way they treat ``creates_union``.
 
     Args:
         plan_dir: Path to the plan directory containing batch markdown files.
 
     Returns:
-        A ``(sources, targets)`` tuple of sets of raw token strings (NOT resolved
-        Paths).  Returns ``(set(), set())`` when ``plan_dir`` does not exist or
-        contains no batch files with Moves: entries.
+        A ``(sources, targets)`` tuple of sets of raw token strings (NOT resolved Paths).
+        Returns ``(set(), set())`` when ``plan_dir`` does not exist or contains no batch files with Moves: entries.
     """
     if not plan_dir.exists():
         return (set(), set())
@@ -831,10 +770,9 @@ def resolve_ref_paths(
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
 
-    ``root`` is the optional filesystem sub-path declared in the plan
-    overview's frontmatter ``root:`` field. When present every raw path
-    is resolved under ``project_root / root``; otherwise directly under
-    ``project_root``.
+    ``root`` is the optional filesystem sub-path declared in the plan overview's frontmatter ``root:`` field.
+    When present every raw path is resolved under ``project_root / root``;
+    otherwise directly under ``project_root``.
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
@@ -842,37 +780,26 @@ def resolve_ref_paths(
     3. Candidate path under project_root (unchanged).
     4. Candidate path under git_root/raw (when git_root provided, no root).
     5. creates_union/deletes_union suppression (unchanged).
-    6. When ``soft_fail_gitignored`` is True and no candidate is on disk,
-       confirm via ``git check-ignore`` whether any candidate is
-       git-ignored under its own source root; if so, skip the ref with a
-       stderr warning instead of hard-failing (#733).
+    6. When ``soft_fail_gitignored`` is True and no candidate is on disk, confirm via ``git check-ignore`` whether any candidate is git-ignored under its own source root;
+        if so, skip the ref with a stderr warning instead of hard-failing (#733).
     7. Hard-fail ReviewError (unchanged).
 
     Keyword args:
-        creates_union: Set of raw token strings extracted from ``Creates:``
-            lines across all batches. A path not on disk but present in
-            ``creates_union`` is silently skipped — the file will exist
-            after the creating batch runs (#60).
-        deletes_union: Set of raw token strings extracted from ``Deletes:``
-            lines across all batches. A path not on disk but present in
-            ``deletes_union`` is silently skipped — the file has already
-            been deleted by a prior batch. Paths still on disk that appear
-            in ``deletes_union`` are resolved normally and included.
-        wiki_root: When provided, raw paths starting with ``wiki/`` are
-            resolved against ``wiki_root`` instead of ``project_root`` (#43).
-        git_root: When provided, paths not found under project_root are
-            tried under git_root as a fallback before suppression/hard-fail.
-        caller_label: Prefix used in ``ReviewError`` messages. Defaults to
-            the function name.
-        soft_fail_gitignored: When True, a missing non-wiki candidate that
-            is confirmed git-ignored (via ``git check-ignore``) under its
-            own source root is silently skipped with a stderr warning
-            instead of raising ``ReviewError``. Opt-in; the ``wiki/``
-            branch is never affected. Default False (#733).
+        creates_union: Set of raw token strings extracted from ``Creates:`` lines across all batches.
+            A path not on disk but present in ``creates_union`` is silently skipped — the file will exist after the creating batch runs (#60).
+        deletes_union: Set of raw token strings extracted from ``Deletes:`` lines across all batches.
+            A path not on disk but present in ``deletes_union`` is silently skipped — the file has already been deleted by a prior batch.
+            Paths still on disk that appear in ``deletes_union`` are resolved normally and included.
+        wiki_root: When provided, raw paths starting with ``wiki/`` are resolved against ``wiki_root`` instead of ``project_root`` (#43).
+        git_root: When provided, paths not found under project_root are tried under git_root as a fallback before suppression/hard-fail.
+        caller_label: Prefix used in ``ReviewError`` messages.
+            Defaults to the function name.
+        soft_fail_gitignored: When True, a missing non-wiki candidate that is confirmed git-ignored (via ``git check-ignore``) under its own source root is silently skipped with a stderr warning instead of raising ``ReviewError``.
+            Opt-in;
+            the ``wiki/`` branch is never affected.
+            Default False (#733).
 
-    Raises ``ReviewError`` when a candidate path is not on disk AND not in
-    either ``creates_union`` or ``deletes_union`` — hard-fail replaces the
-    old silent-skip + warning behaviour (#41).
+    Raises ``ReviewError`` when a candidate path is not on disk AND not in either ``creates_union`` or ``deletes_union`` — hard-fail replaces the old silent-skip + warning behaviour (#41).
     """
     creates = creates_union or set()
     deletes = deletes_union or set()
@@ -900,17 +827,12 @@ def resolve_ref_paths(
                 f"[{caller_label}] referenced path not found: {raw!r}; "
                 f"not in plan creates_union, not on disk; resolved candidate: {candidate}"
             )
-        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
-        # then project_root/root/raw, then git_root/raw (if no root). Each
-        # candidate is paired with the source_root it was built from, so a
-        # later soft-fail check can run `git check-ignore` against the
-        # right repo.
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available), then project_root/root/raw, then git_root/raw (if no root).
+        # Each candidate is paired with the source_root it was built from, so a later soft-fail check can run `git check-ignore` against the right repo.
         candidates: list[tuple[Path, Path]] = []
         if root and git_root is not None:
-            # When the worktree cwd is itself the `root` sub-path, project_root
-            # already ends with `root`, so project_root / root / raw doubles it.
-            # Try git_root / root / raw first so `root` is joined onto the repo
-            # root exactly once — matching how the plan was validated.
+            # When the worktree cwd is itself the `root` sub-path, project_root already ends with `root`, so project_root / root / raw doubles it.
+            # Try git_root / root / raw first so `root` is joined onto the repo root exactly once — matching how the plan was validated.
             candidates.append((git_root / root / raw, git_root))
         if root:
             candidates.append((project_root / root / raw, project_root))
@@ -928,9 +850,8 @@ def resolve_ref_paths(
         # Suppression via creates_union or deletes_union.
         if raw in creates or raw in deletes:
             continue
-        # Opt-in soft-fail: a missing ref that is confirmed git-ignored
-        # under its own source root is skipped with a warning instead of
-        # hard-failing (#733). Only attempted when the caller opted in.
+        # Opt-in soft-fail: a missing ref that is confirmed git-ignored under its own source root is skipped with a warning instead of hard-failing (#733).
+        # Only attempted when the caller opted in.
         if soft_fail_gitignored:
             skipped = False
             for cand, source_root in candidates:
@@ -939,8 +860,7 @@ def resolve_ref_paths(
                         ["git", "-C", str(source_root), "check-ignore", "-q", str(cand)]
                     )
                 except Exception:
-                    # Any failure (including a non-git source_root) means
-                    # "not confirmed ignored" — never propagates.
+                    # Any failure (including a non-git source_root) means "not confirmed ignored" — never propagates.
                     continue
                 if result.returncode == 0:
                     print(
@@ -970,13 +890,9 @@ def resolve_existing_paths(
 ) -> list[Path]:
     """Resolve raw paths and return only those that already exist on disk.
 
-    Mirrors resolve_ref_paths's standard-vs-wiki routing (wiki/ prefix
-    routes through wiki_root; otherwise project_root + root) plus optional
-    git_root fallback. Unlike resolve_ref_paths, missing paths and routing
-    failures are silently dropped — no warning, no error, no creates_union
-    check. Used to expand the bulk with cross-batch ancestor creates that
-    already exist; missing creates are not an error here, they just aren't
-    included.
+    Mirrors resolve_ref_paths's standard-vs-wiki routing (wiki/ prefix routes through wiki_root; otherwise project_root + root) plus optional git_root fallback.
+    Unlike resolve_ref_paths, missing paths and routing failures are silently dropped — no warning, no error, no creates_union check.
+    Used to expand the bulk with cross-batch ancestor creates that already exist; missing creates are not an error here, they just aren't included.
 
     Resolution order (first match wins):
     1. wiki/ prefix routes through wiki_root (unchanged).
@@ -986,10 +902,8 @@ def resolve_existing_paths(
     5. Silent drop (no raise).
 
     Keyword args:
-        wiki_root: When provided, raw paths starting with ``wiki/`` are
-            resolved against ``wiki_root`` instead of ``project_root``.
-        git_root: When provided, paths not found under project_root are
-            tried under git_root as a fallback before silent drop.
+        wiki_root: When provided, raw paths starting with ``wiki/`` are resolved against ``wiki_root`` instead of ``project_root``.
+        git_root: When provided, paths not found under project_root are tried under git_root as a fallback before silent drop.
     """
     result: list[Path] = []
     for raw in raw_paths:
@@ -1005,14 +919,11 @@ def resolve_existing_paths(
             if candidate.exists():
                 result.append(candidate)
             continue
-        # Non-wiki path resolution: try git_root/root/raw (if git_root available),
-        # then project_root/root/raw, then git_root/raw (if no root).
+        # Non-wiki path resolution: try git_root/root/raw (if git_root available), then project_root/root/raw, then git_root/raw (if no root).
         candidates = []
         if root and git_root is not None:
-            # When the worktree cwd is itself the `root` sub-path, project_root
-            # already ends with `root`, so project_root / root / raw doubles it.
-            # Try git_root / root / raw first so `root` is joined onto the repo
-            # root exactly once — matching how the plan was validated.
+            # When the worktree cwd is itself the `root` sub-path, project_root already ends with `root`, so project_root / root / raw doubles it.
+            # Try git_root / root / raw first so `root` is joined onto the repo root exactly once — matching how the plan was validated.
             candidates.append(git_root / root / raw)
         if root:
             candidates.append(project_root / root / raw)
@@ -1030,14 +941,10 @@ def resolve_existing_paths(
 def _load_root_from_overview(overview_path: Path) -> str | None:
     """Read the `root:` field from the overview's top fenced-yaml block.
 
-    v2 plan overviews use fenced ```yaml``` frontmatter (per the
-    project markdown convention; `---` is reserved for SKILL.md). This
-    parser locates the first ```yaml``` block and reads `root:` from
-    it. Returns the root string if present and truthy, else None.
-    Any structural problem (no block, unterminated, bad yaml, absent
-    key) silently yields None — the review surface degrades to
-    resolving paths against project_root directly, which is the right
-    behaviour for a mill-v2 worktree where root is typically empty.
+    v2 plan overviews use fenced ```yaml``` frontmatter (per the project markdown convention; `---` is reserved for SKILL.md).
+    This parser locates the first ```yaml``` block and reads `root:` from it.
+    Returns the root string if present and truthy, else None.
+    Any structural problem (no block, unterminated, bad yaml, absent key) silently yields None — the review surface degrades to resolving paths against project_root directly, which is the right behaviour for a mill-v2 worktree where root is typically empty.
     """
     try:
         text = overview_path.read_text(encoding="utf-8")
@@ -1073,12 +980,10 @@ def _load_root_from_overview(overview_path: Path) -> str | None:
 def _read_for_bulk(p: Path) -> str:
     """Read file content, handling .ipynb notebooks specially.
 
-    For .ipynb files: reads as JSON, extracts cell source for 'code' and
-    'markdown' cell types, joins sources with blank lines between cells.
+    For .ipynb files: reads as JSON, extracts cell source for 'code' and 'markdown' cell types, joins sources with blank lines between cells.
     For other extensions: returns standard UTF-8 text read.
 
-    On JSON parse error for .ipynb: prints warning to stderr and returns
-    empty string so the file still appears in bulk output as an empty section.
+    On JSON parse error for .ipynb: prints warning to stderr and returns empty string so the file still appears in bulk output as an empty section.
 
     If p is a directory: prints warning to stderr and returns empty string.
     """
@@ -1142,10 +1047,8 @@ def bulk_files_with_diff(
 ) -> str:
     """Like bulk_files but substitutes git diff output for small-diff files.
 
-    For each file: if the diff from start_sha to HEAD is smaller than
-    threshold * file_content_size, include the diff instead of full content.
-    Files with no diff (unchanged between start_sha and HEAD) are included
-    at full content so the reviewer has all context.
+    For each file: if the diff from start_sha to HEAD is smaller than threshold * file_content_size, include the diff instead of full content.
+    Files with no diff (unchanged between start_sha and HEAD) are included at full content so the reviewer has all context.
     """
     parts: list[str] = []
     for p in file_paths:
@@ -1211,11 +1114,9 @@ def build_manifest_section(file_paths: list[Path]) -> str:
         - <path-2>
         ...
 
-    The manifest is the FIRST thing the reviewer reads inside the
-    artefact section. Its job is to remove the long-context
-    haystack effect: the reviewer scans this list, then can answer
-    "is file X provided?" in O(1) instead of scanning a 200k-char
-    bulk for the matching `--- FILE: X ---` delimiter.
+    The manifest is the FIRST thing the reviewer reads inside the artefact section.
+    Its job is to remove the long-context haystack effect: the reviewer scans this list, then can answer "is file X provided?"
+    in O(1) instead of scanning a 200k-char bulk for the matching `--- FILE: X ---` delimiter.
     """
     if not file_paths:
         return "## Files included (N=0)\n\n(no files)"
@@ -1254,7 +1155,8 @@ _REVIEW_END = "MILL_REVIEW_END"
 def extract_review_content(raw: str) -> str:
     """Strip everything outside MILL_REVIEW_BEGIN / MILL_REVIEW_END markers.
 
-    Falls back to raw unchanged when markers are absent (e.g. test stubs).
+    Falls back to raw unchanged when markers are absent (e.g.
+    test stubs).
     """
     begin = raw.find(_REVIEW_BEGIN)
     if begin == -1:
@@ -1275,10 +1177,9 @@ def parse_missing_context(review_text: str) -> list[str]:
         - `path/a` — reason text
         - `path/b` — reason text
 
-    Returns the list of raw path tokens (NOT resolved Paths). Empty
-    list if the heading is absent or no bullet matches the expected
-    shape. Multi-line bullets are not supported — paths must appear
-    backtick-wrapped on their own bullet line.
+    Returns the list of raw path tokens (NOT resolved Paths).
+    Empty list if the heading is absent or no bullet matches the expected shape.
+    Multi-line bullets are not supported — paths must appear backtick-wrapped on their own bullet line.
     """
     lines = review_text.splitlines()
     in_section = False
@@ -1300,13 +1201,10 @@ def parse_missing_context(review_text: str) -> list[str]:
 
 
 def build_reattached_section(file_paths: list[Path]) -> str:
-    """Return a `## Re-attached files (you said these were missing)` block
-    with the listed files inlined via bulk_files.
+    """Return a `## Re-attached files (you said these were missing)` block with the listed files inlined via bulk_files.
 
-    Used by the NEED_CONTEXT resume retry: the missing-context paths
-    from the prior round are re-attached at the top of the new prompt
-    so the reviewer cannot claim absence again without contradicting
-    itself. The section is appended to the existing artefact section.
+    Used by the NEED_CONTEXT resume retry: the missing-context paths from the prior round are re-attached at the top of the new prompt so the reviewer cannot claim absence again without contradicting itself.
+    The section is appended to the existing artefact section.
     """
     if not file_paths:
         return ""
@@ -1329,17 +1227,11 @@ _TOOL_RULE_TOOL_USE = (
     "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
 )
 
-# Agent-mode bulk: the trap cell. A reviewer's `mode` derives from the
-# `tooluse` spec flag, which defaults to False, so the plain "bulk" name is
-# reachable in agent mode too. Today's non-agent bulk text opens with a bare
-# "Do NOT request tool calls", which under agent mode would contradict the
-# Write instruction below it and yield no .out.md and an ERROR envelope every
-# round. This cell instead forbids tool calls only for *gathering content*
-# ("everything you need is in this prompt") and carves out exactly one Write
-# -- the report to the file named in the brief's output-contract footer.
-# Because the templates' static read-only header is removed in a later
-# batch, this cell (like its tool-use sibling below) is also the sole
-# remaining statement of the read-only posture, so it restates it in full.
+# Agent-mode bulk: the trap cell.
+# A reviewer's `mode` derives from the `tooluse` spec flag, which defaults to False, so the plain "bulk" name is reachable in agent mode too.
+# Today's non-agent bulk text opens with a bare "Do NOT request tool calls", which under agent mode would contradict the Write instruction below it and yield no .out.md and an ERROR envelope every round.
+# This cell instead forbids tool calls only for *gathering content* ("everything you need is in this prompt") and carves out exactly one Write -- the report to the file named in the brief's output-contract footer.
+# Because the templates' static read-only header is removed in a later batch, this cell (like its tool-use sibling below) is also the sole remaining statement of the read-only posture, so it restates it in full.
 _TOOL_RULE_BULK_AGENT = (
     "**CRITICAL: Do NOT use any tool to gather content -- everything you need "
     "is in this prompt.**\n"
@@ -1351,9 +1243,7 @@ _TOOL_RULE_BULK_AGENT = (
     "**CRITICAL: Do NOT read `reviews/`. Evaluate fresh each round.**"
 )
 
-# Agent-mode tool-use: keeps the Read/Grep/Glob verification grant and adds
-# the same single-Write carve-out as the bulk-agent cell above, for the same
-# reason -- the report now goes to a file, not into the chat response.
+# Agent-mode tool-use: keeps the Read/Grep/Glob verification grant and adds the same single-Write carve-out as the bulk-agent cell above, for the same reason -- the report now goes to a file, not into the chat response.
 _TOOL_RULE_TOOL_USE_AGENT = (
     "**You MAY use Read, Grep, and Glob to verify claims against source files.**\n"
     "**CRITICAL: The one exception beyond that is Write -- use it exactly "
@@ -1368,28 +1258,18 @@ _TOOL_RULE_TOOL_USE_AGENT = (
 def build_tool_rule(mode: str, agent_mode: bool = False) -> str:
     """Return the <TOOL_RULE> block for a reviewer's MODE and dispatch channel.
 
-    Templates embed this as the top-of-prompt directive, and it is the only
-    channel-aware injection point in a review prompt -- the sole owner of
-    the read-only clause, the Write carve-out, and the report destination.
-    No template or agent definition may state a tool permission or output
-    destination of its own.
+    Templates embed this as the top-of-prompt directive,
+    and it is the only channel-aware injection point in a review prompt -- the sole owner of the read-only clause, the Write carve-out, and the report destination.
+    No template or agent definition may state a tool permission or output destination of its own.
 
-    Four cells result from crossing `mode` with `agent_mode`:
-      - bulk x non-agent, tool-use x non-agent: byte-identical to the
-        pre-agent-mode strings. This is the `--stage full` fallback path
-        (raw LLM-provider call, at most Read/Grep/Glob, no Write, no brief
-        to name a report file in) and must keep working verbatim.
-      - bulk x agent, tool-use x agent: same tool grants as their non-agent
-        counterparts, plus exactly one Write permitted for the report (named
-        by description only -- the literal path lives in write_brief's
-        footer, never a template token). Still forbid Edit, git, and bash.
+    Four cells result from crossing `mode` with `agent_mode`: - bulk x non-agent, tool-use x non-agent: byte-identical to the pre-agent-mode strings.
+        This is the `--stage full` fallback path (raw LLM-provider call, at most Read/Grep/Glob, no Write, no brief to name a report file in) and must keep working verbatim. - bulk x agent, tool-use x agent: same tool grants as their non-agent counterparts, plus exactly one Write permitted for the report (named by description only -- the literal path lives in write_brief's footer, never a template token).
+        Still forbid Edit, git, and bash.
 
     Args:
         mode: "bulk" or "tool-use".
-        agent_mode: When True, return the agent-mode cell (adds the single
-            Write carve-out). Defaults to False, which returns today's
-            pre-existing text unchanged -- this is what keeps every
-            existing positional callsite green.
+        agent_mode: When True, return the agent-mode cell (adds the single Write carve-out).
+            Defaults to False, which returns today's pre-existing text unchanged -- this is what keeps every existing positional callsite green.
 
     Returns:
         The <TOOL_RULE> markdown block for the requested cell.
@@ -1412,9 +1292,7 @@ def _check_large_prompt(
 ) -> tuple[bool, int]:
     """Check if prompt exceeds large_prompt threshold.
 
-    Returns (is_over_threshold, estimated_ktok) where estimated_ktok is computed as
-    len(prompt_text) // 4000 and threshold_ktok is read from
-    cfg["roles"][role][scope]["large_prompt"]["threshold_ktok"] (default 100).
+    Returns (is_over_threshold, estimated_ktok) where estimated_ktok is computed as len(prompt_text) // 4000 and threshold_ktok is read from cfg["roles"][role][scope]["large_prompt"]["threshold_ktok"] (default 100).
     """
     large_prompt_cfg = (
         cfg.get("roles", {}).get(role, {}).get(scope, {}).get("large_prompt")
@@ -1436,9 +1314,8 @@ def resolve_large_prompt_timeout(
 ) -> int:
     """Return large_prompt.timeout when prompt is over threshold and key is set, else default_timeout.
 
-    Uses _check_large_prompt to compute size check; returns the override value from
-    cfg["roles"][role][scope]["large_prompt"]["timeout"] if the prompt exceeds the
-    threshold and the timeout key is set, otherwise returns default_timeout.
+    Uses _check_large_prompt to compute size check;
+    returns the override value from cfg["roles"][role][scope]["large_prompt"]["timeout"] if the prompt exceeds the threshold and the timeout key is set, otherwise returns default_timeout.
     """
     is_over_threshold, _ = _check_large_prompt(prompt_text, cfg, role, scope)
     if not is_over_threshold:
@@ -1501,15 +1378,15 @@ def maybe_switch_spec_for_large_prompt(
 def render_prompt(template_name: str, **tokens) -> str:
     """Render a review prompt template from plugins/mill/templates/.
 
-    Auto-uppercases keyword-argument keys so callers can use idiomatic
-    Python kwarg style (e.g. artefact_path="..." becomes ARTEFACT_PATH).
+    Auto-uppercases keyword-argument keys so callers can use idiomatic Python kwarg style (e.g.
+    artefact_path="..."
+    becomes ARTEFACT_PATH).
 
     Template path:
         <scripts_dir>/../templates/<template_name>.md
 
     Raises FileNotFoundError if the template is absent.
-    Lets KeyError from _render.render() propagate unwrapped — a missing token
-    is a programming error, not a user error.
+    Lets KeyError from _render.render() propagate unwrapped — a missing token is a programming error, not a user error.
     """
     templates_dir = Path(__file__).parent.parent / "templates"
     template_path = templates_dir / f"{template_name}.md"
@@ -1521,26 +1398,21 @@ def render_prompt(template_name: str, **tokens) -> str:
 
 
 def parse_verdict(raw_output: str) -> str:
-    """Extract a valid verdict value from a fenced yaml block, or unfenced fallback.
+    """Extract a valid verdict value from a fenced yaml block,
+or unfenced fallback.
 
-    Scans raw_output for the first fenced ```yaml block (on its own line,
-    possibly with trailing whitespace). Extracts the 'verdict:' field from
-    inside the block (between the opening ```yaml and closing ``` fences).
+    Scans raw_output for the first fenced ```yaml block (on its own line, possibly with trailing whitespace). Extracts the 'verdict:' field from inside the block (between the opening ```yaml and closing ``` fences).
 
-    If no fenced block is found, attempts a fallback: scans lines for an
-    unfenced 'verdict: <VALUE>' line (allowing leading whitespace; strips quotes).
+    If no fenced block is found, attempts a fallback: scans lines for an unfenced 'verdict: <VALUE>' line (allowing leading whitespace; strips quotes).
     If <VALUE> is one of the valid verdicts, returns it.
 
     Valid verdict values:
-    - 'APPROVE'          — any review type
-    - 'REQUEST_CHANGES'  — plan and code review
-    - 'GAPS_FOUND'       — discussion review (v1 convention; a missing
-                           criterion is not a must-fix defect)
-    - 'NEED_CONTEXT'     — plan and code review only; reviewer cannot
-                           evaluate without source files that were not
-                           included in the bulk. Orchestrator responds by
-                           re-firing with `--extra-file` plus a notify +
-                           self-report entry.
+    - 'APPROVE' — any review type
+    - 'REQUEST_CHANGES' — plan and code review
+    - 'GAPS_FOUND' — discussion review (v1 convention; a missing criterion is not a must-fix defect)
+    - 'NEED_CONTEXT' — plan and code review only;
+        reviewer cannot evaluate without source files that were not included in the bulk.
+        Orchestrator responds by re-firing with `--extra-file` plus a notify + self-report entry.
 
     Raises ReviewError if:
     - No ```yaml opening fence is found AND no unfenced verdict line is found.
@@ -1548,8 +1420,7 @@ def parse_verdict(raw_output: str) -> str:
     - The 'verdict:' field is absent from the block.
     - The verdict value is not one of the four above.
 
-    The first ~400 chars of raw_output are included in error messages for
-    debuggability.
+    The first ~400 chars of raw_output are included in error messages for debuggability.
     """
     preview = raw_output[:400].strip()
     lines = raw_output.splitlines()
@@ -1616,10 +1487,8 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
     """
     Emit a warning if prose count diverges from heading count.
 
-    Only warns when heading_count > 0 (to suppress spurious warnings on clean
-    APPROVE reviews with no severity headings). The raw_output is filtered to
-    exclude lines starting with 'verdict:' before the prose scan, so verdict
-    lines cannot trigger warnings.
+    Only warns when heading_count > 0 (to suppress spurious warnings on clean APPROVE reviews with no severity headings).
+    The raw_output is filtered to exclude lines starting with 'verdict:' before the prose scan, so verdict lines cannot trigger warnings.
     """
     if heading_count == 0:
         return
@@ -1669,18 +1538,16 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
 def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     """Count "### [<severity>]" ATX headings in review output.
 
-    Searches for lines matching ``^###\\s+\\[<severity>\\]\\s+`` using
-    MULTILINE mode. The severity argument is required (keyword-only).
-    Match is case-sensitive. Only line-start headings are counted —
-    mid-line occurrences are ignored.
+    Searches for lines matching ``^###\\s+\\[<severity>\\]\\s+`` using MULTILINE mode.
+    The severity argument is required (keyword-only).
+    Match is case-sensitive.
+    Only line-start headings are counted — mid-line occurrences are ignored.
 
-    When the heading count is 0, falls back to scanning all fenced ```yaml
-    blocks for a `findings:` list, counting entries whose `severity` field
-    (case-insensitive) matches the severity argument.
+    When the heading count is 0, falls back to scanning all fenced ```yaml blocks for a `findings:` list, counting entries whose `severity` field (case-insensitive) matches the severity argument.
 
-    Emits a one-line stderr warning when a prose count phrase in the output
-    (e.g. "Five blocking issues remain") disagrees with the heading count.
-    The returned count is unchanged; the warning is for log inspection only (#225).
+    Emits a one-line stderr warning when a prose count phrase in the output (e.g. "Five blocking issues remain") disagrees with the heading count.
+    The returned count is unchanged;
+    the warning is for log inspection only (#225).
     """
     pattern = re.compile(
         r"^###\s+\[" + re.escape(severity) + r"\]\s+",
@@ -1737,22 +1604,17 @@ def count_unrecognized_severity_findings(
     """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md)."""
     unrecognized_count = 0
 
-    # Markdown headings: same "### [<label>]" shape parse_blocking_count
-    # matches, generalized to capture any all-uppercase bracketed label
-    # (the severity-vocabulary convention every known severity follows --
-    # BLOCKING, NIT, GAP, NOTE, MAJOR, MINOR, ...) rather than one fixed
-    # severity, so every heading in the document is inspected. A mixed-case
-    # bracket like "[Major]" is not a severity-shaped label at all and is
-    # deliberately not matched, case-sensitive like parse_blocking_count.
+    # Markdown headings: same "### [<label>]" shape parse_blocking_count matches, generalized to capture any all-uppercase bracketed label (the severity-vocabulary convention every known severity follows -- BLOCKING, NIT, GAP, NOTE, MAJOR, MINOR, ...)
+    # rather than one fixed severity, so every heading in the document is inspected.
+    # A mixed-case bracket like "[Major]" is not a severity-shaped label at all and is deliberately not matched, case-sensitive like parse_blocking_count.
     heading_pattern = re.compile(r"^###\s+\[([A-Z0-9-]+)\]\s+", re.MULTILINE)
     for match in heading_pattern.finditer(raw_output):
         label = match.group(1)
         if label != blocking_severity and label != nit_severity:
             unrecognized_count += 1
 
-    # Fenced yaml findings blocks: reuse parse_blocking_count's own
-    # fenced-block-scanning approach, but check every entry's severity
-    # against both known labels (case-insensitive) instead of one.
+    # Fenced yaml findings blocks: reuse parse_blocking_count's own fenced-block-scanning approach,
+    # but check every entry's severity against both known labels (case-insensitive) instead of one.
     blocking_upper = blocking_severity.upper()
     nit_upper = nit_severity.upper()
     lines = raw_output.splitlines()
@@ -1799,12 +1661,9 @@ def write_review_file(
     """Build a canonical review filename, create dirs, write content, return path.
 
     Filename rules:
-    - Discussion / code / plan-holistic:
-        <ts>-<type>-review-r<N>.md
-    - Plan per-batch (scope is a batch name, e.g. '01-setup'):
-        <ts>-plan-review-<scope>-r<N>.md
-    - Plan holistic (scope == 'holistic'):
-        <ts>-plan-review-r<N>.md
+    - Discussion / code / plan-holistic: <ts>-<type>-review-r<N>.md
+    - Plan per-batch (scope is a batch name, e.g. '01-setup'): <ts>-plan-review-<scope>-r<N>.md
+    - Plan holistic (scope == 'holistic'): <ts>-plan-review-r<N>.md
 
     Timestamp is UTC, formatted as YYYYMMDD-HHMMSS.
     """
@@ -1821,41 +1680,27 @@ def write_review_file(
     return out_path.resolve()
 
 
-# Horizontal whitespace only (`[ \t]`, not `\s`) between the colon and the
-# value -- `\s` also matches `\n`, which would let this pattern bleed across
-# a line boundary and swallow the line below when `reviewer_model:` has no
-# value of its own (e.g. a malformed `reviewer_model:\n` followed by a
-# non-blank line such as a closing yaml fence).
+# Horizontal whitespace only (`[ \t]`, not `\s`) between the colon and the value -- `\s` also matches `\n`, which would let this pattern bleed across a line boundary and swallow the line below when `reviewer_model:` has no value of its own (e.g.
+# a malformed `reviewer_model:\n` followed by a non-blank line such as a closing yaml fence).
 _RE_REVIEWER_MODEL_LINE = re.compile(r"^reviewer_model:[ \t]*\S.*$", re.MULTILINE)
 
 
 def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
     """
-    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output
-    so the persisted review file records the model that actually ran the
-    review, rather than the model the reviewer's own prompt-echoed text
-    claims it is (which is unreliable in agent-mode dispatch -- see #644).
+    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output so the persisted review file records the model that actually ran the review, rather than the model the reviewer's own prompt-echoed text claims it is (which is unreliable in agent-mode dispatch -- see #644).
 
     Behavior:
     1. If `actual_model` is None, the caller has no override to apply --
-       return `raw_text` completely unchanged (today's behavior).
-    2. Otherwise, search for a line matching `reviewer_model:[ \\t]*\\S.*`
-       (the line the review-prompt templates instruct the reviewer to echo,
-       e.g. `<REVIEWER_MODEL>` in review-code-batch.md). If found, replace
-       that line's value in place with `reviewer_model: {actual_model}`.
-    3. If no such line is found (the reviewer omitted or malformed it),
-       inject a new `reviewer_model: {actual_model}` line immediately after
-       the opening ` ```yaml ` fence of the fenced block that carries the
-       reviewer's `verdict:` line (the YAML header block). If no block
-       carries a `verdict:` line, fall back to the first ` ```yaml ` fence
-       in `raw_text`. If there is no ` ```yaml ` fence at all, there is
-       nowhere sensible to anchor the injection, so `raw_text` is returned
-       unchanged.
+    return `raw_text` completely unchanged (today's behavior).
+    2. Otherwise, search for a line matching `reviewer_model:[ \\t]*\\S.*` (the line the review-prompt templates instruct the reviewer to echo, e.g. `<REVIEWER_MODEL>` in review-code-batch.md).
+        If found, replace that line's value in place with `reviewer_model: {actual_model}`.
+    3. If no such line is found (the reviewer omitted or malformed it), inject a new `reviewer_model: {actual_model}` line immediately after the opening ` ```yaml ` fence of the fenced block that carries the reviewer's `verdict:` line (the YAML header block). If no block carries a `verdict:` line, fall back to the first ` ```yaml ` fence in `raw_text`.
+        If there is no ` ```yaml ` fence at all, there is nowhere sensible to anchor the injection, so `raw_text` is returned unchanged.
 
     Args:
         raw_text: Raw review output text, prior to verdict parsing or disk write.
-        actual_model: The model that actually produced this review, or None
-            to leave `raw_text` untouched.
+        actual_model: The model that actually produced this review,
+            or None to leave `raw_text` untouched.
 
     Returns:
         The (possibly rewritten) raw text.
@@ -1867,10 +1712,8 @@ def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
     if _RE_REVIEWER_MODEL_LINE.search(raw_text):
         return _RE_REVIEWER_MODEL_LINE.sub(replacement_line, raw_text, count=1)
 
-    # No well-formed reviewer_model line exists to rewrite. Find the yaml
-    # fenced block that carries the reviewer's verdict -- that is the
-    # header block the new line belongs in -- and remember the first yaml
-    # fence encountered as a fallback anchor in case no block has a verdict.
+    # No well-formed reviewer_model line exists to rewrite.
+    # Find the yaml fenced block that carries the reviewer's verdict -- that is the header block the new line belongs in -- and remember the first yaml fence encountered as a fallback anchor in case no block has a verdict.
     lines = raw_text.splitlines(keepends=True)
     first_fence_index: int | None = None
     header_fence_index: int | None = None
@@ -1915,19 +1758,17 @@ def finalize_scope(
 ) -> dict:
     """Finalize a single review scope by parsing verdict and writing the review file.
 
-    Runs apply_actual_model_override, then parse_verdict, then
-    write_review_file, and returns a dict with the review entry plus
-    blocking/nit counts for ReviewResult assembly.
+    Runs apply_actual_model_override, then parse_verdict, then write_review_file, and returns a dict with the review entry plus blocking/nit counts for ReviewResult assembly.
 
     Args:
         reviews_dir: Directory where review files are stored.
         review_type: Type of review ("discussion", "code", or "plan").
         round_n: Round number (integer).
         raw_text: Raw review output text to parse and write.
-        scope: Optional scope name ("holistic" or batch name); if None defaults to "holistic".
-        actual_model: The model that actually produced this review, used to
-            correct an unreliable self-reported `reviewer_model:` line before
-            parsing or writing; if None, `raw_text` is used unmodified.
+        scope: Optional scope name ("holistic" or batch name);
+            if None defaults to "holistic".
+        actual_model: The model that actually produced this review, used to correct an unreliable self-reported `reviewer_model:` line before parsing or writing;
+            if None, `raw_text` is used unmodified.
 
     Returns:
         Dict with keys: scope, verdict, file, blocking_count, nit_count.
@@ -1940,21 +1781,16 @@ def finalize_scope(
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
     )
-    # Severity labels are per-review-type: discussion uses GAP/NOTE; plan and
-    # code use BLOCKING/NIT. The old inline finalize paths counted the matching
-    # type-specific label, so finalize_scope must mirror that mapping rather
-    # than a single hardcoded severity.
+    # Severity labels are per-review-type: discussion uses GAP/NOTE;
+    # plan and code use BLOCKING/NIT.
+    # The old inline finalize paths counted the matching type-specific label, so finalize_scope must mirror that mapping rather than a single hardcoded severity.
     if review_type == "discussion":
         blocking_severity, nit_severity = "GAP", "NOTE"
     else:
         blocking_severity, nit_severity = "BLOCKING", "NIT"
     blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
     nit_count = parse_blocking_count(raw_text, severity=nit_severity)
-    # Fail loud on unrecognized severity labels rather than silently
-    # dropping them from both counters -- fold them into the
-    # blocking-equivalent bucket so an auto-approve round can never
-    # ignore a real finding just because the reviewer used an
-    # off-vocabulary label (e.g. [MAJOR] instead of [BLOCKING]).
+    # Fail loud on unrecognized severity labels rather than silently dropping them from both counters -- fold them into the blocking-equivalent bucket so an auto-approve round can never ignore a real finding just because the reviewer used an off-vocabulary label (e.g. [MAJOR] instead of [BLOCKING]).
     blocking_count += count_unrecognized_severity_findings(
         raw_text, blocking_severity=blocking_severity, nit_severity=nit_severity
     )
@@ -1979,12 +1815,11 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
     """Return the worst-case aggregate verdict across sub-verdicts.
 
     Rules:
-    - Any NEED_CONTEXT propagates up to the aggregate (orchestrator must
-      resolve the missing-context request before it can act on any
-      REQUEST_CHANGES finding, so NEED_CONTEXT takes priority).
+    - Any NEED_CONTEXT propagates up to the aggregate (orchestrator must resolve the missing-context request before it can act on any REQUEST_CHANGES finding, so NEED_CONTEXT takes priority).
     - Any REQUEST_CHANGES or ERROR escalates the aggregate to REQUEST_CHANGES.
     - All APPROVE → APPROVE.
-    - ERROR appears only inside reviews[] entries; aggregate is never ERROR.
+    - ERROR appears only inside reviews[] entries;
+        aggregate is never ERROR.
     """
     if "NEED_CONTEXT" in sub_verdicts:
         return "NEED_CONTEXT"
@@ -1995,29 +1830,15 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
 
 
 def load_config(hub_root: Path, mill_dir: Path) -> dict:
-    """Load mill config, delegating the core template/repo/local merge to
-    ``_config.load_config`` and layering two review-specific behaviors on top.
+    """Load mill config, delegating the core template/repo/local merge to ``_config.load_config`` and layering two review-specific behaviors on top.
 
-    ``_config.load_config`` owns the merge order (plugin template -> hub/repo
-    layer -> local stub -> real config -> env overrides), including its
-    2026-05-31 worktree-template cache-lag augmentation (source-tree template
-    keys not yet landed in the installed plugin cache are folded into the
-    unknown-key check's baseline before the delegate's own unknown-key
-    warning fires). Delegating here means this function automatically
-    inherits that fix and any future fix to the shared merge logic, instead
-    of re-diverging with its own copy.
+    ``_config.load_config`` owns the merge order (plugin template -> hub/repo layer -> local stub -> real config -> env overrides), including its 2026-05-31 worktree-template cache-lag augmentation (source-tree template keys not yet landed in the installed plugin cache are folded into the unknown-key check's baseline before the delegate's own unknown-key warning fires).
+    Delegating here means this function automatically inherits that fix and any future fix to the shared merge logic, instead of re-diverging with its own copy.
 
     On top of the delegate this wrapper adds:
-    1. Missing-source strictness: raises ``ReviewError`` when neither the
-       plugin template nor any repo-layer mill-config.yaml exists. This must
-       be checked independently of the delegate's return value, because
-       ``_config.load_config`` never raises and returns ``{}`` both when
-       nothing is found and when a legitimately-present source is empty.
-    2. A stale-``review:``-key warning: peeks at ``mill_dir /
-       config.local.yaml`` (read-only, alongside the delegate's own internal
-       read of the same file) and warns to stderr when it carries an
-       orphaned top-level ``review:`` block that should have been renamed to
-       ``roles:``.
+    1. Missing-source strictness: raises ``ReviewError`` when neither the plugin template nor any repo-layer mill-config.yaml exists.
+        This must be checked independently of the delegate's return value, because ``_config.load_config`` never raises and returns ``{}`` both when nothing is found and when a legitimately-present source is empty.
+    2. A stale-``review:``-key warning: peeks at ``mill_dir / config.local.yaml`` (read-only, alongside the delegate's own internal read of the same file) and warns to stderr when it carries an orphaned top-level ``review:`` block that should have been renamed to ``roles:``.
 
     Args:
         hub_root: Absolute path to the hub directory.
@@ -2027,14 +1848,11 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
         Merged configuration dict, as produced by ``_config.load_config``.
 
     Raises:
-        ReviewError: If neither the plugin template nor a repo-layer
-            mill-config.yaml source exists.
+        ReviewError: If neither the plugin template nor a repo-layer mill-config.yaml source exists.
     """
     worktree_root = mill_dir.parent
 
-    # Missing-source check, independent of the delegate's return value: an
-    # empty dict from the delegate does not distinguish "nothing found" from
-    # "a source was found but happened to be empty".
+    # Missing-source check, independent of the delegate's return value: an empty dict from the delegate does not distinguish "nothing found" from "a source was found but happened to be empty".
     template_path = resolve_plugin_template_path("mill-config.yaml")
     mill_cfg_path = resolve_repo_config_path(hub_root, worktree_root)
     if not template_path.exists() and mill_cfg_path is None:
@@ -2043,14 +1861,10 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
             f"and mill-config.yaml in hub, main worktree, or task worktree"
         )
 
-    # Delegate the core template/repo/local merge (including env overrides,
-    # env interpolation, and the dispatch back-compat shim) to the shared
-    # implementation.
+    # Delegate the core template/repo/local merge (including env overrides, env interpolation, and the dispatch back-compat shim) to the shared implementation.
     cfg = _core_load_config(hub_root, worktree_root)
 
-    # Stale-review-key warning: the delegate reads config.local.yaml
-    # internally but does not expose it, so this is re-derived here as a
-    # read-only peek at the same file.
+    # Stale-review-key warning: the delegate reads config.local.yaml internally but does not expose it, so this is re-derived here as a read-only peek at the same file.
     local_path = mill_dir / "config.local.yaml"
     if local_path.exists():
         with local_path.open(encoding="utf-8") as fh:

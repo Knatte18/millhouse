@@ -11,9 +11,8 @@ import yaml  # noqa: E402
 
 from _yaml_writer import quote_scalar  # noqa: E402
 
-# Risky scalars that must survive a YAML round-trip when embedded in
-# ``k: <value>`` context.  For each value v, we assert:
-#   yaml.safe_load(f"k: {quote_scalar(v)}")["k"] == v
+# Risky scalars that must survive a YAML round-trip when embedded in ``k: <value>`` context.
+# For each value v, we assert: yaml.safe_load(f"k: {quote_scalar(v)}")["k"] == v
 _RISKY_SCALARS = [
     "foo: bar",                    # colon
     "# heading",                   # leading hash
@@ -35,8 +34,7 @@ _RISKY_SCALARS = [
     "2026-04-28T08:35:28Z",        # ISO-8601 timestamp — PyYAML quotes this
 ]
 
-# Safe inputs that must round-trip AND must be byte-identical to the
-# bare value (no quotes added by PyYAML).
+# Safe inputs that must round-trip AND must be byte-identical to the bare value (no quotes added by PyYAML).
 _IDENTITY_CASES = [
     ("plain", "plain"),
     ("kebab-case-123", "kebab-case-123"),

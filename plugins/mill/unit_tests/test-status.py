@@ -139,9 +139,7 @@ def main() -> int:
             print("PASS: append_phase updates phase yaml + appends timeline row")
 
         # --- str-input-raises-TypeError regression tests (GitHub #597) ---
-        # A plain str passed where status_path (a pathlib.Path) is expected
-        # must raise a clear TypeError naming the offending function, not a
-        # bare AttributeError deep inside the module's read_text/exists calls.
+        # A plain str passed where status_path (a pathlib.Path) is expected must raise a clear TypeError naming the offending function, not a bare AttributeError deep inside the module's read_text/exists calls.
 
         try:
             append_phase("some/str/path", "phase", "2026-01-01T00:00:00Z")
@@ -390,8 +388,7 @@ def main() -> int:
             assert entry_list["verify_baseline_failures"] == failures, (
                 f"verify_baseline_failures not round-tripped: {entry_list['verify_baseline_failures']!r}"
             )
-            # Setting a list-valued field must not disturb other fields already
-            # set on the same entry earlier in this test.
+            # Setting a list-valued field must not disturb other fields already set on the same entry earlier in this test.
             assert entry_list["state"] == "running", (
                 f"unrelated field 'state' corrupted by list-valued write: {entry_list['state']!r}"
             )
@@ -810,8 +807,8 @@ def main() -> int:
             assert value is None, f"expected None on fresh file, got {value!r}"
             print("PASS: get_module_verify_baseline returns None on a fresh file")
 
-        # Test 2: set_module_verify_baseline("clean") inserts the row; a
-        # subsequent get_module_verify_baseline returns "clean".
+        # Test 2: set_module_verify_baseline("clean") inserts the row;
+        # a subsequent get_module_verify_baseline returns "clean".
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
@@ -823,9 +820,7 @@ def main() -> int:
             assert value == "clean", f"expected 'clean', got {value!r}"
             print("PASS: set_module_verify_baseline('clean') inserts the row")
 
-            # Test 3: a second set() with a different value rewrites the
-            # existing row in place -- exactly one module_verify_baseline:
-            # line survives, not a duplicate.
+            # Test 3: a second set() with a different value rewrites the existing row in place -- exactly one module_verify_baseline: line survives, not a duplicate.
             set_module_verify_baseline(sp, "pre-existing-failures")
             value = get_module_verify_baseline(sp)
             assert value == "pre-existing-failures", f"expected 'pre-existing-failures', got {value!r}"
@@ -848,8 +843,8 @@ def main() -> int:
                 pass
             print("PASS: set_module_verify_baseline rejects an unknown value")
 
-        # Test 5: clear_module_verify_baseline after a prior set("clean")
-        # removes the row; get_module_verify_baseline then returns None.
+        # Test 5: clear_module_verify_baseline after a prior set("clean") removes the row;
+        # get_module_verify_baseline then returns None.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
@@ -862,8 +857,7 @@ def main() -> int:
             assert value is None, f"expected None after clear, got {value!r}"
             print("PASS: clear_module_verify_baseline removes a previously-set row")
 
-        # Test 6: clear_module_verify_baseline is a no-op when the field was
-        # never set -- does not raise, file content unchanged.
+        # Test 6: clear_module_verify_baseline is a no-op when the field was never set -- does not raise, file content unchanged.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(

@@ -1,7 +1,9 @@
 """
 mill-cleanup — sweeper: reconcile hub git worktrees, wiki active/<slug>/ dirs, and Home.md markers based on status.md phase.
 
-Runs from the hub. Default applies removals; pass --dry-run to report only.
+Runs from the hub.
+Default applies removals;
+pass --dry-run to report only.
 """
 from __future__ import annotations
 
@@ -43,10 +45,7 @@ class CleanupPlan:
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
     orphan_portals: list[Path] = field(default_factory=list)
-    # Slugs whose Home.md marker is exactly "active" but have no worktree
-    # on disk, no local branch, and no portal junction -- safe to auto-reset
-    # to unclaimed.  "ready-to-merge" and "pr-pending" are live PR states
-    # and are never auto-reset.
+    # Slugs whose Home.md marker is exactly "active" but have no worktree on disk, no local branch, and no portal junction -- safe to auto-reset to unclaimed. "ready-to-merge" and "pr-pending" are live PR states and are never auto-reset.
     to_reset_unclaimed: list[str] = field(default_factory=list)
 
 
@@ -63,19 +62,16 @@ def _read_phase(status_path: Path) -> str | None:
         return None
 
 
-# Base pipeline phases that _status.append_phase writes verbatim (no
-# round-number or batch-name suffix). Round-suffixed / batch-embedded forms
-# are matched separately via _LIVE_PHASE_PATTERNS below.
+# Base pipeline phases that _status.append_phase writes verbatim (no round-number or batch-name suffix).
+# Round-suffixed / batch-embedded forms are matched separately via _LIVE_PHASE_PATTERNS below.
 _LIVE_PHASES = {
     "discussing", "discussed", "planning", "planned",
     "implementing", "blocked", "holistic-reviewing", "holistic-fixing",
     "holistic-approved",
 }
 
-# Round-suffixed and batch-name-embedded phase forms that _status.append_phase
-# writes throughout mill-start/mill-plan/mill-go (e.g. "discussion-fix-r2",
-# "reviewing-cleanup-live-phase-classification-r1"). These never appear as
-# bare set entries because the batch/round segments are dynamic.
+# Round-suffixed and batch-name-embedded phase forms that _status.append_phase writes throughout mill-start/mill-plan/mill-go (e.g. "discussion-fix-r2", "reviewing-cleanup-live-phase-classification-r1").
+# These never appear as bare set entries because the batch/round segments are dynamic.
 _LIVE_PHASE_PATTERNS = tuple(re.compile(p) for p in (
     r"^discussion-fix-r\d+$",
     r"^plan-review-r\d+$",
@@ -89,21 +85,13 @@ _LIVE_PHASE_PATTERNS = tuple(re.compile(p) for p in (
 
 def _is_live_phase(phase: str) -> bool:
     """
-    Classify whether a status.md ``phase`` value is a live, mid-pipeline
-    phase that build_plan should silently skip (as opposed to a terminal
-    phase like "done"/"abandoned"/"pr-pending", which are handled by their
-    own earlier branches, or a genuinely unrecognized value that should be
-    reported).
+    Classify whether a status.md ``phase`` value is a live, mid-pipeline phase that build_plan should silently skip (as opposed to a terminal phase like "done"/"abandoned"/"pr-pending", which are handled by their own earlier branches, or a genuinely unrecognized value that should be reported).
 
-    A hand-edited status.md can yield a non-str phase (e.g. unquoted
-    ``phase: 42`` parses as an int via yaml.safe_load), so this guards on
-    isinstance first rather than letting re.match raise TypeError and abort
-    the whole build_plan sweep over one malformed slug.
+    A hand-edited status.md can yield a non-str phase (e.g.
+    unquoted ``phase: 42`` parses as an int via yaml.safe_load), so this guards on isinstance first rather than letting re.match raise TypeError and abort the whole build_plan sweep over one malformed slug.
 
     Returns:
-        True when phase is a str and either exactly matches one of the
-        base pipeline phases in _LIVE_PHASES or matches one of the
-        round-suffixed / batch-embedded patterns in _LIVE_PHASE_PATTERNS.
+        True when phase is a str and either exactly matches one of the base pipeline phases in _LIVE_PHASES or matches one of the round-suffixed / batch-embedded patterns in _LIVE_PHASE_PATTERNS.
     """
     if not isinstance(phase, str):
         return False
@@ -133,21 +121,17 @@ def build_plan(
     """
     Build a CleanupPlan from current repo state.
 
-    No git or wiki writes (read-only git queries are permitted); reads
-    status.md files via _read_phase (file I/O). Each path in
-    ``active_worktrees`` is a worktree root discovered via
-    ``_spawn_core.discover_active_worktrees``.
+    No git or wiki writes (read-only git queries are permitted);
+    reads status.md files via _read_phase (file I/O).
+    Each path in ``active_worktrees`` is a worktree root discovered via ``_spawn_core.discover_active_worktrees``.
 
     Args:
-        active_worktrees: List of worktree root paths, each on a task
-            branch detected via ``_spawn_core.discover_active_worktrees``.
+        active_worktrees: List of worktree root paths, each on a task branch detected via ``_spawn_core.discover_active_worktrees``.
         home_tasks: Tasks parsed from wiki ``Home.md``.
         wiki_path: Path to the wiki clone root.
         hub_root: Absolute path to the hub git checkout.
-        container_path: When provided, scans ``<container_path>/wts/`` for
-            worktree directories that have no active marker (orphan worktrees)
-            and adds them to ``to_report``. Pass the result of
-            ``_paths.resolve_container_path(hub_root)`` from the caller.
+        container_path: When provided, scans ``<container_path>/wts/`` for worktree directories that have no active marker (orphan worktrees) and adds them to ``to_report``.
+            Pass the result of ``_paths.resolve_container_path(hub_root)`` from the caller.
             When ``None``, orphan worktree detection is skipped.
     """
     marker_by_slug: dict[str, str | None] = {t["slug"]: t.get("status") for t in home_tasks}
@@ -226,14 +210,12 @@ def build_plan(
 
     # Orphan worktree detection: git registry worktrees without active markers.
     # Use git worktree list --porcelain instead of raw directory scan.
-    # Only report wts/ entries that ARE registered git worktrees AND lack an
-    # active marker. Plain directories (not in the git registry) are silently
-    # ignored. CRITICAL: cross-reference Home.md before recommending deletion.
-    # A slug that is [active]/[ready-to-merge]/[pr-pending] is IN USE -- the
-    # .active junction may be stale or pointing elsewhere, but the worktree is
-    # live. Recommending 'git worktree remove --force' on a live worktree
-    # partially succeeds on Windows (admin dir deleted, working tree files
-    # truncated while session holds others open), corrupting the user's session.
+    # Only report wts/ entries that ARE registered git worktrees AND lack an active marker.
+    # Plain directories (not in the git registry) are silently ignored.
+    # CRITICAL: cross-reference Home.md before recommending deletion.
+    # A slug that is [active]/[ready-to-merge]/[pr-pending] is IN USE -- the .active junction may be stale or pointing elsewhere,
+    # but the worktree is live.
+    # Recommending 'git worktree remove --force' on a live worktree partially succeeds on Windows (admin dir deleted, working tree files truncated while session holds others open), corrupting the user's session.
     _IN_USE_MARKERS = {"active", "ready-to-merge", "pr-pending"}
     if container_path is not None:
         registered_worktrees = []
@@ -284,12 +266,9 @@ def build_plan(
             container_path / "portals", active_slugs
         )
 
-    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no
-    # worktree on disk. active_slugs is keyed off the .active junction, so a
-    # slug whose junction has drifted but whose worktree dir still exists is
-    # NOT truly orphaned -- only the junction is. Cross-reference container/wts/
-    # to avoid false positives that would mislead callers into "fixing" a
-    # healthy worktree.
+    # Orphan Home.md marker: [active]/[ready-to-merge]/[pr-pending] slug with no worktree on disk.
+    # active_slugs is keyed off the .active junction, so a slug whose junction has drifted but whose worktree dir still exists is NOT truly orphaned -- only the junction is.
+    # Cross-reference container/wts/ to avoid false positives that would mislead callers into "fixing" a healthy worktree.
     wts_slugs_on_disk: set[str] = set()
     if container_path is not None:
         wts_dir = container_path / "wts"
@@ -307,14 +286,10 @@ def build_plan(
             if task["slug"] in wts_slugs_on_disk:
                 # Already reported under the in-use-worktree warning above.
                 continue
-            # For the narrow safe case of a plain "active" marker: attempt
-            # automatic reconciliation to unclaimed if no worktree, no local
-            # branch, and no portal junction exist.  "ready-to-merge" and
-            # "pr-pending" are live PR states and must never be auto-reset.
+            # For the narrow safe case of a plain "active" marker: attempt automatic reconciliation to unclaimed if no worktree, no local branch, and no portal junction exist. "ready-to-merge" and "pr-pending" are live PR states and must never be auto-reset.
             if marker == "active":
                 slug_for_check = task["slug"]
-                # Probe for a local branch: an existing branch means the task
-                # is partially set up and should not be silently wiped.
+                # Probe for a local branch: an existing branch means the task is partially set up and should not be silently wiped.
                 branch_name = f"{branch_prefix}{slug_for_check}" if branch_prefix else slug_for_check
                 branch_check = _subprocess_util.run(
                     ["git", "-C", str(hub_root), "branch", "--list", branch_name]
@@ -386,12 +361,9 @@ def _resolve_inplace_mode(
 ) -> tuple[str, str]:
     """Determine whether a sweep record should use in-place or worktree cleanup.
 
-    Derives the hub's current slug via ``_marker.slug_from_branch`` and
-    delegates to ``_inplace.is_inplace``. When the stale-worktree edge
-    applies (branch matches AND a worktree dir exists), prompts the user
-    and returns their choice. The resolved task branch is returned alongside
-    the mode so callers can pass it directly to ``_apply_inplace_record``
-    without a second branch lookup.
+    Derives the hub's current slug via ``_marker.slug_from_branch`` and delegates to ``_inplace.is_inplace``.
+    When the stale-worktree edge applies (branch matches AND a worktree dir exists), prompts the user and returns their choice.
+    The resolved task branch is returned alongside the mode so callers can pass it directly to ``_apply_inplace_record`` without a second branch lookup.
 
     Args:
         record: The SlugRecord being evaluated.
@@ -402,9 +374,8 @@ def _resolve_inplace_mode(
         A ``(mode, task_branch)`` tuple where ``mode`` is one of:
         - ``"inplace"`` — skip worktree remove, delete branch only.
         - ``"worktree"`` — standard worktree remove flow.
-        - ``"abort"`` — user aborted; caller should skip this record.
-        ``task_branch`` is the current branch name when
-        ``mode == "inplace"``, and ``""`` otherwise.
+        - ``"abort"`` — user aborted;
+        caller should skip this record. ``task_branch`` is the current branch name when ``mode == "inplace"``, and ``""`` otherwise.
     """
     try:
         slug_for_record = _marker.slug_from_branch(hub_root, wiki_path, cfg)
@@ -441,11 +412,9 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
     """
     Delete the remote origin branch for a task, tolerating an already-absent ref.
 
-    Attempts `git push origin --delete <branch>` from `hub_root`. A non-zero
-    exit whose stderr contains "remote ref does not exist" is treated as success
-    (idempotent teardown -- the branch may never have been pushed, or was already
-    deleted by an earlier abandon/cleanup run). Any other non-zero exit is printed
-    to stderr as a non-fatal warning so the rest of the teardown proceeds.
+    Attempts `git push origin --delete <branch>` from `hub_root`.
+    A non-zero exit whose stderr contains "remote ref does not exist" is treated as success (idempotent teardown -- the branch may never have been pushed, or was already deleted by an earlier abandon/cleanup run).
+    Any other non-zero exit is printed to stderr as a non-fatal warning so the rest of the teardown proceeds.
 
     Args:
         hub_root: Absolute path to the hub git checkout used as the git -C target.
@@ -456,9 +425,8 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
     )
     if result.returncode != 0:
         stderr_lower = result.stderr.lower()
-        # "remote ref does not exist" or "unable to delete" signals the branch was
-        # never pushed or was already cleaned; both cases are acceptable -- nothing
-        # to remove.
+        # "remote ref does not exist" or "unable to delete" signals the branch was never pushed or was already cleaned;
+        # both cases are acceptable -- nothing to remove.
         if "remote ref does not exist" not in stderr_lower and "unable to delete" not in stderr_lower:
             print(
                 f"[cleanup] push origin --delete {branch!r} failed (non-fatal): "
@@ -481,19 +449,14 @@ def _apply_inplace_record(
 ) -> None:
     """Apply cleanup for a single in-place (no separate worktree) record.
 
-    Reads the parent branch from ``status.md``, checks out the parent
-    branch so we are not deleting the currently-checked-out branch,
-    deletes the task branch (``-d`` for done, ``-D`` for abandoned), and
-    removes the ``.active`` junction at ``hub_root / ".active"``. This
-    function does NOT remove the wiki active dir — ``apply_plan`` handles
-    that uniformly.
+    Reads the parent branch from ``status.md``, checks out the parent branch so we are not deleting the currently-checked-out branch, deletes the task branch (``-d`` for done, ``-D`` for abandoned), and removes the ``.active`` junction at ``hub_root / ".active"``.
+    This function does NOT remove the wiki active dir — ``apply_plan`` handles that uniformly.
 
     Args:
         record: The SlugRecord for the in-place task being cleaned.
         hub_root: Absolute path to the hub git checkout.
-        task_branch: The task branch name resolved by ``_resolve_inplace_mode``
-            via the current branch. Avoids a second git branch query.
-
+        task_branch: The task branch name resolved by ``_resolve_inplace_mode`` via the current branch.
+            Avoids a second git branch query.
     """
     # Read parent branch from status.md so we can check out safely.
     if record.worktree_path is not None:
@@ -523,7 +486,8 @@ def _apply_inplace_record(
         return
 
     # Determine deletion flag: done tasks get -d (safe); abandoned get -D (force).
-    # Phase is re-read from the worktree's status.md; fall back to -D when absent.
+    # Phase is re-read from the worktree's status.md;
+    # fall back to -D when absent.
     if record.worktree_path is not None:
         phase = _read_phase(_paths.status_path(record.worktree_path, cfg))
         delete_flag = "-d" if phase == "done" else "-D"
@@ -540,8 +504,7 @@ def _apply_inplace_record(
                 f"(may already be gone): {result.stderr.strip()!r}",
                 file=sys.stderr,
             )
-        # Delete the remote branch after the local branch is gone so that
-        # re-spawning the same slug starts clean (idempotent per Shared Decision).
+        # Delete the remote branch after the local branch is gone so that re-spawning the same slug starts clean (idempotent per Shared Decision).
         _delete_remote_branch(hub_root, task_branch)
     else:
         print(
@@ -573,8 +536,7 @@ def _apply_worktree_record(
 ) -> None:
     """Apply cleanup for a single record that has a separate git worktree.
 
-    Removes per-slug junctions inside the worktree, removes the worktree
-    itself, and deletes the branch.
+    Removes per-slug junctions inside the worktree, removes the worktree itself, and deletes the branch.
 
     Args:
         record: The SlugRecord for the task being cleaned.
@@ -583,9 +545,8 @@ def _apply_worktree_record(
         junctions_cfg: Junction template map from the wiki config.
     """
     if record.worktree_path is not None:
-        # remove_safe strips all junctions before removal and falls back
-        # to `_safe_rmtree.safe_rmtree` on long-path failures (junctions-stripped state
-        # makes that fallback safe). See GitHub issue #100.
+        # remove_safe strips all junctions before removal and falls back to `_safe_rmtree.safe_rmtree` on long-path failures (junctions-stripped state makes that fallback safe).
+        # See GitHub issue #100.
         _worktree.remove_safe(record.worktree_path, cwd=hub_root, junctions_cfg=junctions_cfg)
         if record.branch is not None:
             result = _subprocess_util.run(
@@ -598,8 +559,7 @@ def _apply_worktree_record(
                     file=sys.stderr,
                 )
             # Delete the remote branch so re-spawning the same slug starts clean.
-            # A missing remote ref is treated as success (idempotent teardown per
-            # Shared Decision "Remote-branch delete tolerates a missing ref").
+            # A missing remote ref is treated as success (idempotent teardown per Shared Decision "Remote-branch delete tolerates a missing ref").
             if record.branch:
                 _delete_remote_branch(hub_root, record.branch)
 
@@ -626,10 +586,7 @@ def _apply_pr_reap_record(
     """
     wiki_relative_paths: list[str] = []
 
-    # Delegate PR-state resolution to the shared helper, which applies
-    # MERGED > OPEN > CLOSED precedence across all PRs on this branch and
-    # collapses every error condition (gh absent, non-zero exit, empty/malformed
-    # JSON) into state="none".
+    # Delegate PR-state resolution to the shared helper, which applies MERGED > OPEN > CLOSED precedence across all PRs on this branch and collapses every error condition (gh absent, non-zero exit, empty/malformed JSON) into state="none".
     pr = _pr_state.resolve_pr_state(record.branch, hub_root)
     state = pr["state"]
     merge_commit = pr["merge_commit"]
@@ -670,8 +627,7 @@ def _apply_pr_reap_record(
             ["git", "-C", str(hub_root), "fetch", "origin", record.branch]
         )
         if fetch_branch.returncode == 0:
-            # Use FETCH_HEAD so the tag points to the remote's tip (what was
-            # actually merged), not the local worktree copy which may lag behind.
+            # Use FETCH_HEAD so the tag points to the remote's tip (what was actually merged), not the local worktree copy which may lag behind.
             tag_target = "FETCH_HEAD"
         else:
             merge_sha = (merge_commit or {}).get("oid") if merge_commit else None
@@ -766,8 +722,7 @@ def apply_plan(
             wiki.set_phase(wiki_path, slug, None)
 
     # Reconcile orphaned "active" markers that have no worktree, branch, or portal.
-    # This is the narrow safe auto-reset: only plain "active" (never live PR states)
-    # and only when all three presence signals are absent.
+    # This is the narrow safe auto-reset: only plain "active" (never live PR states) and only when all three presence signals are absent.
     for slug in plan.to_reset_unclaimed:
         wiki.set_phase(wiki_path, slug, None)
         print(

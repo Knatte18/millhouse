@@ -1,17 +1,9 @@
 """Unit tests for millpy-skills-index.py's frontmatter-handling logic.
 
-Covers the #589 fix: `_scan()` must distinguish a genuine YAML parse failure
-in a SKILL.md's frontmatter block (a `FrontmatterParseError`, reported with
-the underlying `yaml.YAMLError` message) from the unrelated case of a
-SKILL.md that has no `---`-delimited frontmatter block at all (reported as
-"missing frontmatter"). Both cases still drop the skill from the scan
-result -- this test only asserts the two failure modes are diagnosable via
-distinct stderr messages, not that either becomes tolerated.
+Covers the #589 fix: `_scan()` must distinguish a genuine YAML parse failure in a SKILL.md's frontmatter block (a `FrontmatterParseError`, reported with the underlying `yaml.YAMLError` message) from the unrelated case of a SKILL.md that has no `---`-delimited frontmatter block at all (reported as "missing frontmatter").
+Both cases still drop the skill from the scan result -- this test only asserts the two failure modes are diagnosable via distinct stderr messages, not that either becomes tolerated.
 
-Loads millpy-skills-index.py via importlib.util.spec_from_file_location
-(its hyphenated filename cannot be `import`ed directly -- same pattern used
-by test-abandon.py) and calls `_scan(repo_root)` directly against a fixture
-tree built with `safe_temp_dir()`, with no subprocess or real git involved.
+Loads millpy-skills-index.py via importlib.util.spec_from_file_location (its hyphenated filename cannot be `import`ed directly -- same pattern used by test-abandon.py) and calls `_scan(repo_root)` directly against a fixture tree built with `safe_temp_dir()`, with no subprocess or real git involved.
 """
 from __future__ import annotations
 
@@ -33,8 +25,7 @@ _SKILLS_INDEX_SRC = SCRIPTS / "millpy-skills-index.py"
 def _load_skills_index_module():
     """Load millpy-skills-index.py as a module named `mill_skills_index`.
 
-    Uses `mill_skills_index` (not `__main__`) so the `if __name__ ==
-    "__main__"` block at the bottom of the script does not fire on import.
+    Uses `mill_skills_index` (not `__main__`) so the `if __name__ == "__main__"` block at the bottom of the script does not fire on import.
     """
     spec = importlib.util.spec_from_file_location(
         "mill_skills_index", str(_SKILLS_INDEX_SRC)

@@ -1,10 +1,8 @@
 """
 Idempotent archive-tag creation with conflict resolution.
 
-When re-running mill-merge after a partial teardown, the archive tag may
-already exist from a prior attempt. This module provides create_or_resolve,
-which handles three conflict cases: same-SHA no-op, ancestor force-update,
-and divergent move-aside with numeric suffix.
+When re-running mill-merge after a partial teardown, the archive tag may already exist from a prior attempt.
+This module provides create_or_resolve, which handles three conflict cases: same-SHA no-op, ancestor force-update, and divergent move-aside with numeric suffix.
 """
 from __future__ import annotations
 
@@ -26,8 +24,7 @@ def create_or_resolve(
     When the tag already exists, inspects its relationship to the new target SHA:
     - Same SHA: no-op (tag already points at the desired commit).
     - Ancestor: force-update to the new SHA (tag is stale).
-    - Divergent: move the existing tag aside with a numeric suffix (-01, -02, ...),
-      then create a new tag at the new SHA.
+    - Divergent: move the existing tag aside with a numeric suffix (-01, -02, ...), then create a new tag at the new SHA.
 
     Args:
         worktree: Path to the git worktree.
@@ -40,7 +37,8 @@ def create_or_resolve(
           - tag: The final tag name (e.g. "archive/my-task" or "archive/my-task-01")
           - moved_aside_to: The moved-aside tag name if action=="moved_aside", else None
           - push_failed: True if any attempted `git push` for this action failed, else False
-          - push_error: Combined stderr describing the failure(s), or None if push_failed is False
+          - push_error: Combined stderr describing the failure(s),
+          or None if push_failed is False
     """
     # Resolve target SHA
     target_result = _subprocess_util.run(
@@ -125,8 +123,7 @@ def create_or_resolve(
             "push_error": push_error,
         }
 
-    # Divergent -- move aside and create new
-    # Find the next available suffix
+    # Divergent -- move aside and create new Find the next available suffix
     tags_result = _subprocess_util.run(
         ["git", "-C", str(worktree), "tag", "-l", f"archive/{slug}-*"],
         check=True,
@@ -172,8 +169,7 @@ def create_or_resolve(
         check=False,
     )
 
-    # Report failure of either push, naming which one(s) failed so an operator
-    # knows exactly which remote ref needs manual reconciliation.
+    # Report failure of either push, naming which one(s) failed so an operator knows exactly which remote ref needs manual reconciliation.
     moved_aside_push_failed = moved_aside_push.returncode != 0
     primary_push_failed = primary_push.returncode != 0
     push_failed = moved_aside_push_failed or primary_push_failed

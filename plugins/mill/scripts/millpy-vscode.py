@@ -1,19 +1,12 @@
 """
 mill-vscode — open VS Code in an active worktree.
 
-Scans the worktrees container directory for subdirectories whose current git
-branch matches an active task in Home.md, filters out worktrees that already
-have a VS Code window open, then shows a unified prompt: ``<Enter>`` spawns
-a new task and opens it, a number opens the listed worktree, or ``q`` quits.
+Scans the worktrees container directory for subdirectories whose current git branch matches an active task in Home.md, filters out worktrees that already have a VS Code window open, then shows a unified prompt: ``<Enter>`` spawns a new task and opens it, a number opens the listed worktree, or ``q`` quits.
 
 Usage:
     python millpy-vscode.py [--new | --slug <slug>] [--list] [--filter-open]
 
-    --new           Spawn a new task and open it without showing the picker.
-    --slug <slug>   Skip the picker and open the worktree for this slug.
-    --list          Print the list of active worktrees without launching.
-    --filter-open   Filter out worktrees that already have a VS Code window open.
-    --new and --slug are mutually exclusive.
+    --new Spawn a new task and open it without showing the picker. --slug <slug> Skip the picker and open the worktree for this slug. --list Print the list of active worktrees without launching. --filter-open Filter out worktrees that already have a VS Code window open. --new and --slug are mutually exclusive.
 
 Exit codes:
     0 — VS Code launched (or listing complete, or no active worktrees)
@@ -38,10 +31,7 @@ from _paths import resolve_git_root, resolve_hub_path, resolve_hub_relative_path
 def _build_code_argv(worktree_path: Path) -> list[str]:
     """Build the argv to open VS Code at ``worktree_path``.
 
-    On Windows, delegates resolution to cmd.exe so that ``code.cmd`` is
-    found via the full interactive PATH (including WindowsApps), which is
-    not inherited by Python subprocesses launched from debugpy or non-
-    interactive shells (see discussion.md § debugpy-path).
+    On Windows, delegates resolution to cmd.exe so that ``code.cmd`` is found via the full interactive PATH (including WindowsApps), which is not inherited by Python subprocesses launched from debugpy or non- interactive shells (see discussion.md § debugpy-path).
 
     On POSIX, ``code`` is on PATH and subprocess inherits it normally.
 
@@ -137,13 +127,11 @@ def _spawn_and_open(
 def main(argv: list[str] | None = None) -> int:
     """Open VS Code in an active child worktree selected by the user.
 
-    Resolves the worktrees directory from config, discovers all active
-    worktrees via ``_spawn_core.discover_active_worktrees``, filters out
-    worktrees that already have a VS Code window open, then presents a
-    unified prompt.
+    Resolves the worktrees directory from config, discovers all active worktrees via ``_spawn_core.discover_active_worktrees``, filters out worktrees that already have a VS Code window open, then presents a unified prompt.
 
     Args:
-        argv: Argument vector. Defaults to ``sys.argv[1:]``.
+        argv: Argument vector.
+        Defaults to ``sys.argv[1:]``.
 
     Returns:
         Exit code: 0 on success, 1 on error or invalid selection.

@@ -1,34 +1,23 @@
 """Source-tree guards: regressions against documented anti-patterns.
 
-Five checks bundled into one test file so we pay Python startup + import
-overhead once instead of five times. Each check scans `plugins/mill/` (and
-`plugins/codeguide/` for the wiki-cwd check) for forbidden patterns and
-returns FAIL with line numbers on hit.
+Five checks bundled into one test file so we pay Python startup + import overhead once instead of five times.
+Each check scans `plugins/mill/` (and `plugins/codeguide/` for the wiki-cwd check) for forbidden patterns and returns FAIL with line numbers on hit.
 
 Checks:
-  - no_direct_rmtree   -- no `shutil.rmtree` / `os.removedirs` / `rmdir /s`
-                          outside the explicit ALLOWED_FILES whitelist.
-                          Direct recursive-deletion that bypasses _safe_rmtree
-                          can follow NTFS junctions into wiki/portals state
-                          (the 2026-03 wiki-wipe incident, GitHub #100).
-  - no_unicode_arrow   -- no U+2192 `->` in any test-*.py. Windows cp1252
-                          consoles crash on non-ASCII stdout; use `->` in ASCII.
-  - no_wiki_cwd        -- no `cd .wiki`, `os.chdir(wiki)`, `cwd=wiki` in
-                          scripts/ or skills/. Wiki access goes through
-                          `_wiki` helpers, never via cwd change (2026-05-11
-                          incident). See CLAUDE.md `## Wiki access`.
-  - anti_weakening_guardrail -- assert the anti-weakening guardrail is present
-                          in both implementer-brief.md and mill-implementer.md
-                          (#492).
-  - no_windows_only_venv_check -- no SKILL.md that probes only the Windows
-                          venv (`.venv/Scripts/python.exe`) without also
-                          containing the POSIX counterpart
-                          (`.venv/bin/python`) anywhere in the same file.
-                          POSIX-only worktrees must not HALT on a venv-check
-                          idiom that only recognizes Windows.
+  - no_direct_rmtree -- no `shutil.rmtree` / `os.removedirs` / `rmdir /s` outside the explicit ALLOWED_FILES whitelist.
+      Direct recursive-deletion that bypasses _safe_rmtree can follow NTFS junctions into wiki/portals state (the 2026-03 wiki-wipe incident, GitHub #100).
+  - no_unicode_arrow -- no U+2192 `->` in any test-*.py.
+      Windows cp1252 consoles crash on non-ASCII stdout;
+      use `->` in ASCII.
+  - no_wiki_cwd -- no `cd .wiki`, `os.chdir(wiki)`, `cwd=wiki` in scripts/ or skills/.
+      Wiki access goes through `_wiki` helpers, never via cwd change (2026-05-11 incident).
+      See CLAUDE.md `## Wiki access`.
+  - anti_weakening_guardrail -- assert the anti-weakening guardrail is present in both implementer-brief.md and mill-implementer.md (#492).
+  - no_windows_only_venv_check -- no SKILL.md that probes only the Windows venv (`.venv/Scripts/python.exe`) without also containing the POSIX counterpart (`.venv/bin/python`) anywhere in the same file.
+      POSIX-only worktrees must not HALT on a venv-check idiom that only recognizes Windows.
 
-Each previously lived in its own test-no-*.py file. Consolidated 2026-05-28
-to reduce suite startup overhead (#388).
+Each previously lived in its own test-no-*.py file.
+Consolidated 2026-05-28 to reduce suite startup overhead (#388).
 """
 from __future__ import annotations
 
@@ -41,9 +30,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 MILL_DIR = HUB / "plugins" / "mill"
 
 
-# --------------------------------------------------------------------------- #
-# Check 1: no_direct_rmtree                                                   #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Check 1: no_direct_rmtree # --------------------------------------------------------------------------- #
 
 _RMTREE_PATTERNS: dict[str, str] = {
     "shutil.rmtree": r"shutil\.rmtree",
@@ -105,14 +92,10 @@ def _check_no_direct_rmtree() -> int:
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Check 2: no_unicode_arrow                                                   #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Check 2: no_unicode_arrow # --------------------------------------------------------------------------- #
 
 _ARROW_ALLOWED_FILES: set[str] = {
-    # Deliberately prints a literal arrow to verify a UTF-8 stdout guard
-    # survives non-ASCII output -- the arrow is the point of the test, not
-    # an accidental cp1252-unsafe print left in test code.
+    # Deliberately prints a literal arrow to verify a UTF-8 stdout guard survives non-ASCII output -- the arrow is the point of the test, not an accidental cp1252-unsafe print left in test code.
     "test-wiki-migrate-print.py",
 }
 
@@ -136,9 +119,7 @@ def _check_no_unicode_arrow() -> int:
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Check 3: no_wiki_cwd                                                        #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Check 3: no_wiki_cwd # --------------------------------------------------------------------------- #
 
 _WALK_ROOTS = [
     HUB / "plugins" / "mill" / "scripts",
@@ -201,9 +182,7 @@ def _check_no_wiki_cwd() -> int:
     return 1
 
 
-# --------------------------------------------------------------------------- #
-# Check 4: anti_weakening_guardrail                                           #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Check 4: anti_weakening_guardrail # --------------------------------------------------------------------------- #
 
 _ANTI_WEAKENING_MARKER = "Never weaken, relax, exclude, downgrade, or delete test assertions, conformance checks, or allowlist entries to make verify pass."
 
@@ -217,8 +196,7 @@ def _check_anti_weakening_guardrail() -> int:
     """
     Return 0 on PASS, 1 on FAIL.
 
-    Assert that the anti-weakening guardrail marker sentence is present in both
-    implementer-brief.md and mill-implementer.md (#492).
+    Assert that the anti-weakening guardrail marker sentence is present in both implementer-brief.md and mill-implementer.md (#492).
     """
     findings: list[str] = []
 
@@ -240,9 +218,7 @@ def _check_anti_weakening_guardrail() -> int:
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Check 5: no_windows_only_venv_check                                         #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Check 5: no_windows_only_venv_check # --------------------------------------------------------------------------- #
 
 _WINDOWS_VENV_CHECK_PATTERN = re.compile(
     r"(\[\s*!?\s*-f|test\s+-f)[^\n]*\.venv/Scripts/python\.exe"
@@ -255,12 +231,8 @@ def _check_no_windows_only_venv_check() -> int:
     """
     Return 0 on PASS, 1 on FAIL.
 
-    Coarse per-file tripwire, not a per-block proof (per the discussion's
-    Regression-guard decision): a file is flagged if it contains any
-    shell file-existence test against the Windows venv path but never
-    mentions the POSIX venv path anywhere else in the file. This does not
-    verify the two probes are paired within the same if-block -- it only
-    catches the file-level absence of a POSIX branch entirely.
+    Coarse per-file tripwire, not a per-block proof (per the discussion's Regression-guard decision): a file is flagged if it contains any shell file-existence test against the Windows venv path but never mentions the POSIX venv path anywhere else in the file.
+    This does not verify the two probes are paired within the same if-block -- it only catches the file-level absence of a POSIX branch entirely.
     """
     findings: list[tuple[str, int, str]] = []
 
@@ -289,9 +261,7 @@ def _check_no_windows_only_venv_check() -> int:
     return 0
 
 
-# --------------------------------------------------------------------------- #
-# Entry                                                                       #
-# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- # Entry # --------------------------------------------------------------------------- #
 
 def main() -> int:
     rc = 0

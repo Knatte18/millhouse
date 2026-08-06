@@ -1,8 +1,6 @@
 """Unit tests for millpy-abandon.py logic.
 
-Uses a trampoline subprocess that pre-patches sys.modules with mock _paths,
-_marker, _review_common, and _subprocess_util modules so no real git or wiki
-I/O occurs.
+Uses a trampoline subprocess that pre-patches sys.modules with mock _paths, _marker, _review_common, and _subprocess_util modules so no real git or wiki I/O occurs.
 """
 from __future__ import annotations
 
@@ -184,9 +182,7 @@ def main() -> int:
                 f"add not in cmds: {cmds}"
             assert ["git", "-C", wt_str, "commit", "-m", f"task: abandon {slug}"] in cmds, \
                 f"commit not in cmds: {cmds}"
-            # The final git operation must be push origin --delete <branch>,
-            # not a bare push -- we delete the remote branch instead of pushing
-            # an abandon-marker commit.
+            # The final git operation must be push origin --delete <branch>, not a bare push -- we delete the remote branch instead of pushing an abandon-marker commit.
             delete_cmds = [c for c in cmds if "push" in c and "--delete" in c]
             assert len(delete_cmds) == 1, \
                 f"expected exactly one 'push origin --delete' command, got: {cmds}"
@@ -286,15 +282,13 @@ def main() -> int:
         fail("stale lock proceed", exc)
 
     # --- (g-push-delete) push origin --delete tolerates "remote ref does not exist" stderr ---
-    # Verifies the Shared Decision: a non-zero exit whose stderr indicates the
-    # remote ref does not exist is treated as success (idempotent teardown).
+    # Verifies the Shared Decision: a non-zero exit whose stderr indicates the remote ref does not exist is treated as success (idempotent teardown).
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             slug = "test-task"
             wt, mill_dir, status_path = _make_worktree(tmp, slug, "implementing")
-            # Build a trampoline where push origin --delete returns non-zero
-            # with a "remote ref does not exist" message -- should succeed.
+            # Build a trampoline where push origin --delete returns non-zero with a "remote ref does not exist" message -- should succeed.
             abandon_src = (SCRIPTS / "millpy-abandon.py").as_posix()
             wt_posix = (tmp / "worktree").as_posix()
             wiki_posix = (tmp / "wiki").as_posix()
@@ -388,10 +382,7 @@ def main() -> int:
         fail("missing status.md", exc)
 
     # --- (h) hub-in-subdirectory: cfg reflects the hub's own branch_prefix ---
-    # Regression guard for #728: load_config's hub_root arg must be hub_dir
-    # (resolve_hub_path's return value), never the outer git-repo root -- so
-    # the branch derived for "git push origin --delete <branch>" reflects the
-    # hub's own mill-config.yaml, not a config found by walking from git_root.
+    # Regression guard for #728: load_config's hub_root arg must be hub_dir (resolve_hub_path's return value), never the outer git-repo root -- so the branch derived for "git push origin --delete <branch>" reflects the hub's own mill-config.yaml, not a config found by walking from git_root.
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -400,9 +391,7 @@ def main() -> int:
             hub_dir = tmp / "sub" / "hub"
             mill_dir = hub_dir / ".millhouse"
             mill_dir.mkdir(parents=True, exist_ok=True)
-            # status.md has no explicit branch: field, forcing derivation via
-            # cfg.spawn.branch_prefix -- making the derived branch an observable
-            # proxy for which cfg (hub's own vs. outer-root fallback) was used.
+            # status.md has no explicit branch: field, forcing derivation via cfg.spawn.branch_prefix -- making the derived branch an observable proxy for which cfg (hub's own vs. outer-root fallback) was used.
             status_path = hub_dir / "_mill" / "status.md"
             status_path.parent.mkdir(parents=True, exist_ok=True)
             status_path.write_text(
@@ -488,11 +477,9 @@ def main() -> int:
         fail("hub-in-subdirectory cfg", exc)
 
     # --- (i) bootstrap-vs-corrected-root reload: cfg and mill_dir both reload ---
-    # after resolve_active_hub. Verifies both effects of the reload: (1) the
-    # branch derived for the delete push comes from the corrected cfg, not the
-    # bootstrap one; (2) the builder-lock read uses the corrected mill_dir, not
-    # the stale bootstrap one -- a non-stale lock planted only at the bootstrap
-    # root must not block the run.
+    # after resolve_active_hub.
+    # Verifies both effects of the reload: (1) the branch derived for the delete push comes from the corrected cfg, not the bootstrap one;
+    # (2) the builder-lock read uses the corrected mill_dir, not the stale bootstrap one -- a non-stale lock planted only at the bootstrap root must not block the run.
     try:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
@@ -503,9 +490,7 @@ def main() -> int:
             corrected_mill_dir = corrected_dir / ".millhouse"
             bootstrap_mill_dir.mkdir(parents=True, exist_ok=True)
             corrected_mill_dir.mkdir(parents=True, exist_ok=True)
-            # A non-stale lock planted only at the bootstrap root: if the reload
-            # fix regresses and the bootstrap mill_dir is used for the lock read,
-            # this would incorrectly block the run (without --force).
+            # A non-stale lock planted only at the bootstrap root: if the reload fix regresses and the bootstrap mill_dir is used for the lock read, this would incorrectly block the run (without --force).
             now_ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             (bootstrap_mill_dir / _builder_lock.LOCK_FILENAME).write_text(
                 f"```yaml\nslug: other-task\ntimestamp: {now_ts}\n```\n", encoding="utf-8"
@@ -582,10 +567,7 @@ def main() -> int:
                 "sys.exit(mod.main())\n",
                 encoding="utf-8",
             )
-            # No --force: the run must proceed unblocked (past the builder-lock
-            # guard, then confirmed via "y" on stdin), proving the builder-lock
-            # read used the corrected mill_dir (no lock there), not the bootstrap
-            # one (which carries a fresh, non-stale lock).
+            # No --force: the run must proceed unblocked (past the builder-lock guard, then confirmed via "y" on stdin), proving the builder-lock read used the corrected mill_dir (no lock there), not the bootstrap one (which carries a fresh, non-stale lock).
             result = _run(corrected_dir, trampoline, stdin_input="y\n")
             assert result.returncode == 0, f"exit={result.returncode} stderr={result.stderr}"
             cmds = _read_git_cmds(tmp)

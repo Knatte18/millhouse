@@ -1,44 +1,24 @@
 """
-Sibling-path resolver: maps a (role, repo_root) pair to the canonical
-location of an adjacent sibling directory or repo.
+Sibling-path resolver: maps a (role, repo_root) pair to the canonical location of an adjacent sibling directory or repo.
 
-Container-form vs prefix-form
-------------------------------
-If ``repo_root.parent.name == "wts"`` (exact, case-sensitive), the repo
-is in *container-form*: the main worktree lives at
-``<container>/wts/<repo-name>/`` and siblings live next to ``wts/``.
+Container-form vs prefix-form ------------------------------ If ``repo_root.parent.name == "wts"`` (exact, case-sensitive), the repo is in *container-form*: the main worktree lives at ``<container>/wts/<repo-name>/`` and siblings live next to ``wts/``.
 
-    <container>/wts/
-    <container>/wiki/
-    <container>/codeguide/
-    <container>/portals/
+    <container>/wts/ <container>/wiki/ <container>/codeguide/ <container>/portals/
 
-Otherwise (*prefix-form*) siblings carry the repo's name as a prefix so
-multiple repos can share the same parent directory without collision.
+Otherwise (*prefix-form*) siblings carry the repo's name as a prefix so multiple repos can share the same parent directory without collision.
 
-    <container>/foo/
-    <container>/foo.worktrees/
-    <container>/foo.wiki/
-    <container>/foo.codeguide/
+    <container>/foo/ <container>/foo.worktrees/ <container>/foo.wiki/ <container>/foo.codeguide/
 
-Container-form detection is deliberately literal — ``Wts/`` or ``WTS/``
-fall through to prefix-form. Zero heuristics keeps the rule predictable.
-Old hub-form (``repo_root.name == "hub"``) is intentionally no longer
-recognised; it falls through to prefix-form and produces ``hub.wiki``,
-``hub.worktrees``, etc. Run ``millpy-migrate-layout.py`` to upgrade.
+Container-form detection is deliberately literal — ``Wts/`` or ``WTS/`` fall through to prefix-form.
+Zero heuristics keeps the rule predictable.
+Old hub-form (``repo_root.name == "hub"``) is intentionally no longer recognised;
+it falls through to prefix-form and produces ``hub.wiki``, ``hub.worktrees``, etc. Run ``millpy-migrate-layout.py`` to upgrade.
 
-Identical-twin rule
--------------------
-This file is a deliberate duplicate of ``plugins/mill/scripts/_sibling.py``.
-Each plugin carries its own copy to avoid any cross-plugin import
-assumption: plugin install paths are not guaranteed to be relative
-siblings of each other, so ``${CLAUDE_PLUGIN_ROOT}/../mill/scripts/...``
-cannot be relied upon. If you edit one, grep for the other and apply the
-same change.
+Identical-twin rule ------------------- This file is a deliberate duplicate of ``plugins/mill/scripts/_sibling.py``.
+Each plugin carries its own copy to avoid any cross-plugin import assumption: plugin install paths are not guaranteed to be relative siblings of each other, so ``${CLAUDE_PLUGIN_ROOT}/../mill/scripts/...`` cannot be relied upon.
+If you edit one, grep for the other and apply the same change.
 
-Usage
------
-Python::
+Usage ----- Python::
 
     from _sibling import resolve_path
     resolve_path("codeguide", Path("/c/Code/wts/millhouse"))
@@ -46,8 +26,7 @@ Python::
 
 CLI (for SKILL.md prose / subprocess callers)::
 
-    python _sibling.py codeguide /c/Code/wts/millhouse
-    # prints: /c/Code/codeguide
+    python _sibling.py codeguide /c/Code/wts/millhouse # prints: /c/Code/codeguide
 """
 from __future__ import annotations
 

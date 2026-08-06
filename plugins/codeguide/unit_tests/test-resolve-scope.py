@@ -166,9 +166,7 @@ def main() -> int:
             print("PASS: time arg 1h includes just-made commit's files")
 
         # Scenario 10: explicit paths (valid and nonexistent)
-        # This is the two-token explicit-path case, unaffected by the single-token
-        # ref-check broadened in Card 1 -- the len(args) == 1 guard in
-        # enumerate_scope means multi-token calls never reach _resolve_ref_token.
+        # This is the two-token explicit-path case, unaffected by the single-token ref-check broadened in Card 1 -- the len(args) == 1 guard in enumerate_scope means multi-token calls never reach _resolve_ref_token.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             _make_repo(tmp, with_origin=False)
@@ -227,10 +225,7 @@ def main() -> int:
             print("PASS: file in both committed range and diff appears only once in deduped output")
 
         # Scenario 14: single non-hex branch-name token with a literal ..HEAD suffix.
-        # Mirrors how a real `git branch -f "$CHK"` checkpoint works in mill-merge-in:
-        # the checkpoint branch is created (frozen) without checking it out, then main
-        # advances past it. "<base>..HEAD" must return what changed AFTER the
-        # checkpoint, never the checkpoint's own state -- same semantics as HEAD~3.
+        # Mirrors how a real `git branch -f "$CHK"` checkpoint works in mill-merge-in: the checkpoint branch is created (frozen) without checking it out, then main advances past it. "<base>..HEAD" must return what changed AFTER the checkpoint, never the checkpoint's own state -- same semantics as HEAD~3.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             _make_repo(tmp, with_origin=False)
@@ -273,8 +268,7 @@ def main() -> int:
                 f"expected base_branch=other-parent, got {summary['base_branch']}"
             print("PASS: --parent override wins over git-native base-branch detection")
 
-        # Scenario 17: --parent naming a branch that does not resolve locally falls back
-        # to git-native detection instead of raising or producing a silent empty scope.
+        # Scenario 17: --parent naming a branch that does not resolve locally falls back to git-native detection instead of raising or producing a silent empty scope.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             _make_repo(tmp, with_origin=True)
@@ -286,9 +280,7 @@ def main() -> int:
                 f"expected fallback base_branch=main, got {summary['base_branch']}"
             print("PASS: unresolvable --parent falls back to git-native base-branch detection")
 
-        # Scenario 18: single-token explicit-path regression -- confirms the broadened
-        # ref-check in Card 1 does not misroute a genuine single-token path into
-        # _head_rev_scope() when no branch/tag/commit shares that name.
+        # Scenario 18: single-token explicit-path regression -- confirms the broadened ref-check in Card 1 does not misroute a genuine single-token path into _head_rev_scope() when no branch/tag/commit shares that name.
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             _make_repo(tmp, with_origin=False)

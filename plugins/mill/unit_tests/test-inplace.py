@@ -37,18 +37,14 @@ def _test_is_inplace_true_when_topology_matches():
 def _test_is_inplace_false_when_topology_differs_735_regression():
     """Returns False when git_root is NOT the main worktree root.
 
-    Regression test for issue #735: a real separate worktree parked at a
-    non-canonical location (no directory at the canonical <wts>/<slug>/
-    path) must still be detected as a worktree, not misdetected as
-    in-place. The old path-existence implementation would have wrongly
-    returned True here.
+    Regression test for issue #735: a real separate worktree parked at a non-canonical location (no directory at the canonical <wts>/<slug>/ path) must still be detected as a worktree, not misdetected as in-place.
+    The old path-existence implementation would have wrongly returned True here.
     """
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         git_root = tmp / "hub"
         git_root.mkdir()
-        # Simulate the main worktree living elsewhere -- no directory is
-        # created at the canonical <wts>/my-task/ path at all.
+        # Simulate the main worktree living elsewhere -- no directory is created at the canonical <wts>/my-task/ path at all.
         main_root = tmp / "elsewhere" / "main"
         main_root.mkdir(parents=True)
         cfg = {}

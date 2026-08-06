@@ -1,8 +1,7 @@
 """Unit tests for review-plan and review-discussion --round auto-discovery in finalize stage.
 
-Tests the CLI-level --round defaulting path for both millpy-review-plan.py and
-millpy-review-discussion.py. Verifies that when --round is absent, discover_round
-is called to auto-detect the round number based on existing review files.
+Tests the CLI-level --round defaulting path for both millpy-review-plan.py and millpy-review-discussion.py.
+Verifies that when --round is absent, discover_round is called to auto-detect the round number based on existing review files.
 """
 from __future__ import annotations
 

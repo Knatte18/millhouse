@@ -1,40 +1,17 @@
 """Rendered-prompt conformance sweep -- the join node's integration guard.
 
-Batches 2 and 3 each removed half of the pre-existing output contract (the
-Python half: build_tool_rule / the CLIs; the static half: templates / the
-agent definition). Neither proves on its own that the two halves now agree,
-nor that agent-mode prose never leaks onto the shared ``--stage full``
-channel. This module renders the real ``prompt_text`` -- via
-``_review_common.render_prompt(<template>, tool_rule=build_tool_rule(mode,
-agent_mode), ...)`` -- for all five review templates, crossed with both
-reviewer MODEs ("bulk" / "tool-use") and both dispatch channels
-(agent_mode True / False), and asserts in both directions:
+Batches 2 and 3 each removed half of the pre-existing output contract (the Python half: build_tool_rule / the CLIs; the static half: templates / the agent definition).
+Neither proves on its own that the two halves now agree,
+nor that agent-mode prose never leaks onto the shared ``--stage full`` channel.
+This module renders the real ``prompt_text`` -- via ``_review_common.render_prompt(<template>, tool_rule=build_tool_rule(mode, agent_mode), ...)`` -- for all five review templates, crossed with both reviewer MODEs ("bulk" / "tool-use") and both dispatch channels (agent_mode True / False), and asserts in both directions:
 
-  - Agent-mode direction: the rendered prompt grants exactly one Write (for
-    the report), never forbids Write outright, never claims the reviewer's
-    sole output is its final chat message or return-as-text, and still
-    forbids Edit / git / bash.
-  - ``--stage full`` direction (the converse): the rendered prompt never
-    grants Write, never names a `.out.md` destination, and never carries a
-    `WROTE` ack instruction -- a `--stage full` reviewer has no brief and is
-    granted at most Read/Grep/Glob (_llm_claude.py:80); leaking the
-    agent-mode footer text here would break the API-error fallback.
+  - Agent-mode direction: the rendered prompt grants exactly one Write (for the report), never forbids Write outright, never claims the reviewer's sole output is its final chat message or return-as-text, and still forbids Edit / git / bash.
+  - ``--stage full`` direction (the converse): the rendered prompt never grants Write, never names a `.out.md` destination, and never carries a `WROTE` ack instruction -- a `--stage full` reviewer has no brief and is granted at most Read/Grep/Glob (_llm_claude.py:80); leaking the agent-mode footer text here would break the API-error fallback.
 
-Also asserts the two *static* surfaces directly, with their different
-invariants (Shared Decision `all tool statements live in build_tool_rule and
-nowhere else`):
-  - plugins/mill/templates/: no review template states a tool permission or
-    an output destination of its own.
-  - plugins/mill/agents/mill-reviewer.md: the file's `tools:` frontmatter
-    IS the grant mechanism and necessarily names a permission, so the
-    narrower static invariant is checked instead -- no `<OUTPUT_FILE>`
-    token, no claim that its sole output is its final message, no blanket
-    Write prohibition, while still forbidding Edit / Bash / NotebookEdit.
-    `mill-implementer.md` is out of scope (Shared Decision
-    `reviewers-only -- never touch the implementer path`).
+Also asserts the two *static* surfaces directly, with their different invariants (Shared Decision `all tool statements live in build_tool_rule and nowhere else`): - plugins/mill/templates/: no review template states a tool permission or an output destination of its own. - plugins/mill/agents/mill-reviewer.md: the file's `tools:` frontmatter IS the grant mechanism and necessarily names a permission, so the narrower static invariant is checked instead -- no `<OUTPUT_FILE>` token, no claim that its sole output is its final message, no blanket Write prohibition, while still forbidding Edit / Bash / NotebookEdit. `mill-implementer.md` is out of scope (Shared Decision `reviewers-only -- never touch the implementer path`).
 
-Plain `test_*` functions plus a `main()` runner; ASCII-only output, per the
-repo's unit-test convention (no pytest, no real git/wiki/LLM fixtures).
+Plain `test_*` functions plus a `main()` runner;
+ASCII-only output, per the repo's unit-test convention (no pytest, no real git/wiki/LLM fixtures).
 """
 
 from __future__ import annotations
@@ -60,11 +37,8 @@ TEMPLATE_NAMES = [
 
 MODES = ["bulk", "tool-use"]
 
-# Tokens every template needs besides `tool_rule` (supplied per-render below),
-# mirroring the render_prompt() call sites in _review_discussion.py,
-# _review_code.py, and _review_plan.py. The artefact_section stub is a
-# placeholder -- it carries no tool statements of its own, so it cannot
-# contaminate either direction's assertions.
+# Tokens every template needs besides `tool_rule` (supplied per-render below), mirroring the render_prompt() call sites in _review_discussion.py, _review_code.py, and _review_plan.py.
+# The artefact_section stub is a placeholder -- it carries no tool statements of its own, so it cannot contaminate either direction's assertions.
 _COMMON_TOKENS = {
     "task_title": "Sample Task",
     "artefact_section": "## Artefact\nfixture content, no tool statements here",
@@ -89,9 +63,7 @@ TEMPLATE_TOKENS = {
 def _render(name: str, mode: str, agent_mode: bool) -> str:
     """Render `name` with the real build_tool_rule() output for (mode, agent_mode).
 
-    Reproduces exactly what each backend's prepare() builds -- prepare()
-    renders the same template with the same tool_rule -- without standing up
-    git, wiki, or LLM fixtures.
+    Reproduces exactly what each backend's prepare() builds -- prepare() renders the same template with the same tool_rule -- without standing up git, wiki, or LLM fixtures.
     """
     tool_rule = _review_common.build_tool_rule(mode, agent_mode)
     tokens = {**TEMPLATE_TOKENS[name], "tool_rule": tool_rule}
@@ -104,8 +76,7 @@ def _read_template_source(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Agent-mode direction: agent_mode=True must grant Write, forbid Edit/git/bash,
-# and never claim the review is returned as chat text / a final message.
+# Agent-mode direction: agent_mode=True must grant Write, forbid Edit/git/bash, and never claim the review is returned as chat text / a final message.
 # ---------------------------------------------------------------------------
 
 
@@ -131,10 +102,7 @@ def test_agent_mode_grants_exactly_one_write_and_forbids_edit_git_bash() -> None
 def test_agent_mode_no_sole_output_contradiction() -> None:
     """(b) no claim that the reviewer's output is its final message / chat text.
 
-    A rendered agent-mode prompt must not tell the reviewer to "return review
-    as text" (the non-agent instruction) or that its "sole output is the
-    review file" (the deleted static claim) -- either would contradict the
-    Write-to-file carve-out granted above.
+    A rendered agent-mode prompt must not tell the reviewer to "return review as text" (the non-agent instruction) or that its "sole output is the review file" (the deleted static claim) -- either would contradict the Write-to-file carve-out granted above.
     """
     for name in TEMPLATE_NAMES:
         for mode in MODES:
@@ -149,8 +117,7 @@ def test_agent_mode_no_sole_output_contradiction() -> None:
 
 
 # ---------------------------------------------------------------------------
-# --stage full direction (the converse): agent_mode=False must never grant
-# Write, never name a .out.md destination, never carry a WROTE ack.
+# --stage full direction (the converse): agent_mode=False must never grant Write, never name a .out.md destination, never carry a WROTE ack.
 # ---------------------------------------------------------------------------
 
 
@@ -171,16 +138,12 @@ def test_stage_full_direction_grants_no_write_destination_or_ack() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Static surfaces: templates/ and agents/mill-reviewer.md carry DIFFERENT
-# invariants -- conflating them would produce an unsatisfiable test.
+# Static surfaces: templates/ and agents/mill-reviewer.md carry DIFFERENT invariants -- conflating them would produce an unsatisfiable test.
 # ---------------------------------------------------------------------------
 
 
 def test_templates_state_no_tool_permission_or_destination() -> None:
-    """No review template's static source states a tool permission or output
-    destination of its own -- those live only in build_tool_rule's agent
-    cells and write_brief's footer (Shared Decision `all tool statements
-    live in build_tool_rule and nowhere else`).
+    """No review template's static source states a tool permission or output destination of its own -- those live only in build_tool_rule's agent cells and write_brief's footer (Shared Decision `all tool statements live in build_tool_rule and nowhere else`).
     """
     for name in TEMPLATE_NAMES:
         source = _read_template_source(name)
@@ -192,9 +155,7 @@ def test_templates_state_no_tool_permission_or_destination() -> None:
 
 
 def test_agent_reviewer_static_invariant() -> None:
-    """mill-reviewer.md's tools: frontmatter IS the grant mechanism, so it
-    necessarily names a permission -- the narrower invariant card 14
-    actually produces is checked here instead of the templates/ rule above.
+    """mill-reviewer.md's tools: frontmatter IS the grant mechanism, so it necessarily names a permission -- the narrower invariant card 14 actually produces is checked here instead of the templates/ rule above.
     """
     text = (AGENTS_DIR / "mill-reviewer.md").read_text(encoding="utf-8")
     assert "<OUTPUT_FILE>" not in text, (
@@ -222,15 +183,11 @@ def test_agent_reviewer_static_invariant() -> None:
 def test_no_output_file_token_anywhere() -> None:
     """Pin the constraint that made the first design of this task unbuildable.
 
-    _render.render (_render.py:35) matches `<[A-Z][A-Z0-9_]*>` and raises
-    KeyError: Unresolved template tokens for any such token missing from the
-    caller's values dict. A literal <OUTPUT_FILE> in a template would
-    hard-fail rendering before write_brief ever runs, and is unsuppliable on
-    --stage full anyway; agent definitions are static text never passed
-    through _render, so a token there would reach the model raw. Sweeps
-    every file under both plugins/mill/templates/ and plugins/mill/agents/
-    (not just the five review templates and mill-reviewer.md) so a stray
-    <OUTPUT_FILE> in any sibling file is caught too.
+    _render.render (_render.py:35) matches `<[A-Z][A-Z0-9_]*>` and raises KeyError: Unresolved template tokens for any such token missing from the caller's values dict.
+    A literal <OUTPUT_FILE> in a template would hard-fail rendering before write_brief ever runs,
+    and is unsuppliable on --stage full anyway;
+    agent definitions are static text never passed through _render, so a token there would reach the model raw.
+    Sweeps every file under both plugins/mill/templates/ and plugins/mill/agents/ (not just the five review templates and mill-reviewer.md) so a stray <OUTPUT_FILE> in any sibling file is caught too.
     """
     for directory in (TEMPLATES_DIR, AGENTS_DIR):
         for path in sorted(directory.rglob("*")):

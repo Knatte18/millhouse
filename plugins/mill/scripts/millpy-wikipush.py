@@ -1,8 +1,7 @@
 """millpy-wikipush — commit and push manual wiki edits.
 
-Resolves the wiki repo from the current git root, commits every local
-change with an auto-generated message ``wiki: <file1>, <file2>``, and
-pushes. Pulls with ``--rebase`` if the push is rejected non-fast-forward.
+Resolves the wiki repo from the current git root, commits every local change with an auto-generated message ``wiki: <file1>, <file2>``, and pushes.
+Pulls with ``--rebase`` if the push is rejected non-fast-forward.
 
 Usage:
     millpy-wikipush.py [--leave-conflicts]
@@ -12,11 +11,8 @@ Exit codes:
     1 — non-conflict failure (lock busy, push error, etc.)
     2 — conflict during rebase
 
-When ``--leave-conflicts`` is passed (intended for skill/LLM use), the
-wiki is left in mid-rebase state so the caller can resolve and continue.
-Without the flag (manual operator use), the script aborts the rebase
-and resets the local commit so the wiki returns to its pre-script state
-(unstaged edits intact, no commit, no garbage) — "no harm done".
+When ``--leave-conflicts`` is passed (intended for skill/LLM use), the wiki is left in mid-rebase state so the caller can resolve and continue.
+Without the flag (manual operator use), the script aborts the rebase and resets the local commit so the wiki returns to its pre-script state (unstaged edits intact, no commit, no garbage) — "no harm done".
 """
 from __future__ import annotations
 

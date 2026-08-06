@@ -1,18 +1,18 @@
 """
 Review backend for discussion artefacts.
 
-Single holistic review call. The reviewer's tooluse flag (from the registry spec)
-decides whether the discussion file is inlined into the prompt or the reviewer is
-pointed at its path and reads it via Read/Grep/Glob. The backend writes the
-review file; the LLM does not use Write.
+Single holistic review call.
+The reviewer's tooluse flag (from the registry spec) decides whether the discussion file is inlined into the prompt or the reviewer is pointed at its path and reads it via Read/Grep/Glob.
+The backend writes the review file;
+the LLM does not use Write.
 
 Public API:
     prepare(cfg, slug, mill_dir, project_root, wiki_root) -> dict
-        Render prompt and resolve spec; return prepare dict with prompt_text, model, effort, round, reviews_dir, scope.
+    Render prompt and resolve spec; return prepare dict with prompt_text, model, effort, round, reviews_dir, scope.
     finalize(cfg, slug, raw_text, *, round_n, reviews_dir, mill_dir, project_root, wiki_root) -> ReviewResult
-        Parse verdict from raw_text and return ReviewResult.
+    Parse verdict from raw_text and return ReviewResult.
     run(cfg, slug, mill_dir, wiki_root, project_root, *, max_rounds=None) -> ReviewResult
-        Legacy API; calls prepare -> reviewer -> finalize.
+    Legacy API; calls prepare -> reviewer -> finalize.
 """
 from __future__ import annotations
 
@@ -55,19 +55,13 @@ def prepare(
     """Prepare a holistic discussion review by rendering the prompt.
 
     Args:
-        agent_mode: When True, build_tool_rule returns the agent-mode cell
-            (adds the single Write carve-out for the .out.md report).
-            Defaults to False so run()'s `--stage full` fallback keeps
-            receiving today's non-agent rule unchanged.
-        reviewer_override: When not None, overrides the config-resolved
-            discussion-review holistic reviewer for this call only --
-            nothing is written back to config. Bypasses the `reviewer:
-            null` disablement (but not the separate `rounds: 0` check
-            above), and skips the large-prompt auto-switch entirely.
-            Resolved with `reject_non_claude=agent_mode`: rejects a
-            non-Claude model when called from the Agent-mode `--stage
-            prepare` entrypoint (agent_mode=True), but accepts one when
-            called from run()'s internal, non-agent-mode invocation.
+        agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write carve-out for the .out.md report).
+            Defaults to False so run()'s `--stage full` fallback keeps receiving today's non-agent rule unchanged.
+        reviewer_override: When not None, overrides the config-resolved discussion-review holistic reviewer for this call only -- nothing is written back to config.
+            Bypasses the `reviewer: null` disablement (but not the separate `rounds: 0` check above),
+            and skips the large-prompt auto-switch entirely.
+            Resolved with `reject_non_claude=agent_mode`: rejects a non-Claude model when called from the Agent-mode `--stage prepare` entrypoint (agent_mode=True),
+            but accepts one when called from run()'s internal, non-agent-mode invocation.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -76,9 +70,8 @@ def prepare(
     discussion_path = resolve_path(cfg["paths"]["discussion_file"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
 
-    # 2. Round discovery and cap check. The max_rounds kwarg overrides the
-    # configured cap (mirrors run()'s pre-refactor behaviour); enforcing here
-    # covers both the full path and the agent-mode CLI prepare stage.
+    # 2. Round discovery and cap check.
+    # The max_rounds kwarg overrides the configured cap (mirrors run()'s pre-refactor behaviour); enforcing here covers both the full path and the agent-mode CLI prepare stage.
     round_n = discover_round(reviews_dir, "discussion", "holistic")
     effective_max = max_rounds if max_rounds is not None else cfg["roles"]["discussion-review"]["holistic"]["rounds"]
     if effective_max == 0:
@@ -88,15 +81,11 @@ def prepare(
             f"Round {round_n} exceeds max {effective_max} for discussion review"
         )
 
-    # 3. Resolve reviewer spec via registry. An explicit reviewer_override
-    # bypasses the `reviewer: null` disablement below; the config-resolved
-    # path is otherwise unchanged. reject_non_claude follows agent_mode:
-    # the Agent-mode `--stage prepare` CLI entrypoint (agent_mode=True) only
-    # ever dispatches Claude subagents, so an override naming another
-    # provider is rejected here; run()'s internal call (agent_mode=False)
-    # is the legacy direct-dispatch path, which must keep accepting any
-    # configured provider -- its own downstream resolve already uses
-    # reject_non_claude=False, so this call must not reject first.
+    # 3. Resolve reviewer spec via registry.
+    # An explicit reviewer_override bypasses the `reviewer: null` disablement below;
+    # the config-resolved path is otherwise unchanged.
+    # reject_non_claude follows agent_mode: the Agent-mode `--stage prepare` CLI entrypoint (agent_mode=True) only ever dispatches Claude subagents, so an override naming another provider is rejected here;
+    # run()'s internal call (agent_mode=False) is the legacy direct-dispatch path, which must keep accepting any configured provider -- its own downstream resolve already uses reject_non_claude=False, so this call must not reject first.
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
     if reviewer_override is not None:
@@ -173,10 +162,7 @@ def finalize(
         raw_text: Raw review output from the reviewer (should be extracted via extract_review_content).
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
-        actual_model: The model that actually produced this review, used to
-            correct an unreliable self-reported ``reviewer_model:`` line
-            before verdict parsing or disk write; passed through to
-            ``finalize_scope`` on the success path only.
+        actual_model: The model that actually produced this review, used to correct an unreliable self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through to ``finalize_scope`` on the success path only.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -242,9 +228,7 @@ def run(
     3. finalize() to parse verdict and return ReviewResult.
 
     Args:
-        reviewer_override: When not None, overrides the config-resolved
-            discussion-review holistic reviewer for this call only --
-            nothing is written back to config.
+        reviewer_override: When not None, overrides the config-resolved discussion-review holistic reviewer for this call only -- nothing is written back to config.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled
@@ -273,9 +257,8 @@ def run(
         reviews_dir = prepare_result["reviews_dir"]
 
         # Determine spec for reviewer call (need to resolve it again in prepare to get full spec).
-        # An explicit reviewer_override bypasses the reviewer: null disablement and skips the
-        # large-prompt auto-switch; reject_non_claude=False since this direct-dispatch path
-        # never calls model_to_tier and must keep accepting non-Claude aliases.
+        # An explicit reviewer_override bypasses the reviewer: null disablement and skips the large-prompt auto-switch;
+        # reject_non_claude=False since this direct-dispatch path never calls model_to_tier and must keep accepting non-Claude aliases.
         registry = _reviewers.load(project_root)
         if reviewer_override is not None:
             try:

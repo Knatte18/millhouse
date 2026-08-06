@@ -1,9 +1,8 @@
 """Discover and run every ``test-*.py`` in plugins/codeguide/unit_tests/.
 
-Exits 0 when all tests pass, 1 when any fails. Each test is invoked as
-a subprocess so a crash in one does not prevent the others from
-running; stdout/stderr of each is surfaced inline so failures are easy
-to spot in CI output.
+Exits 0 when all tests pass, 1 when any fails.
+Each test is invoked as a subprocess so a crash in one does not prevent the others from running;
+stdout/stderr of each is surfaced inline so failures are easy to spot in CI output.
 """
 from __future__ import annotations
 
@@ -22,8 +21,7 @@ def main() -> int:
         return 1
 
     # Force UTF-8 I/O so test output containing non-ASCII characters (e.g.
-    # the → arrow in pick_task_single_or_multi output) doesn't crash on
-    # Windows consoles that default to cp1252.
+    # the → arrow in pick_task_single_or_multi output) doesn't crash on Windows consoles that default to cp1252.
     child_env = os.environ.copy()
     child_env["PYTHONIOENCODING"] = "utf-8"
 

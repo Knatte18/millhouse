@@ -1,12 +1,8 @@
 """
 Integration test for mill-go supporting assets.
 
-Avoids burning real Opus/Sonnet tokens by mocking the reviewer — we
-wire _review_code.py against a stub ``_reviewer_dummy`` module that
-returns a canned APPROVE review. That exercises the refactored
-plan+source pipeline end-to-end (overview read, batch lookup,
-Reads:/Modifies:/Creates: parsing, resolve_ref_paths, bulk_files,
-write_review_file, parse_verdict) without an LLM call.
+Avoids burning real Opus/Sonnet tokens by mocking the reviewer — we wire _review_code.py against a stub ``_reviewer_dummy`` module that returns a canned APPROVE review.
+That exercises the refactored plan+source pipeline end-to-end (overview read, batch lookup, Reads:/Modifies:/Creates: parsing, resolve_ref_paths, bulk_files, write_review_file, parse_verdict) without an LLM call.
 
 Also covers:
     - implementer-brief.md renders with every token substituted
@@ -57,9 +53,7 @@ def _strip_leading_comment(text: str) -> str:
 def test_implementer_brief_template(scratch: Path) -> None:
     """implementer-brief.md substitutes every token without KeyError.
 
-    Builds a complete token dict including SESSION_ID, PARENT_BRANCH, LANGUAGE_SKILLS,
-    and START_SHA — all tokens that are present in the brief but were missing from the
-    original dict, causing KeyError from _render.render's strict unresolved-token check.
+    Builds a complete token dict including SESSION_ID, PARENT_BRANCH, LANGUAGE_SKILLS, and START_SHA — all tokens that are present in the brief but were missing from the original dict, causing KeyError from _render.render's strict unresolved-token check.
     """
     template = TEMPLATES / "implementer-brief.md"
     body = _strip_leading_comment(template.read_text(encoding="utf-8"))
@@ -67,8 +61,7 @@ def test_implementer_brief_template(scratch: Path) -> None:
     rendered_target.write_text(body, encoding="utf-8")
 
     # Write a minimal batch file so language_skills_directive can parse it.
-    # Using a .py extension so the directive returns python skills, mirroring
-    # the approach in test-language-skills-directive.py.
+    # Using a .py extension so the directive returns python skills, mirroring the approach in test-language-skills-directive.py.
     dummy_batch = scratch / "01-foundation.md"
     dummy_batch.write_text(
         "# Batch: foundation\n\n"
@@ -109,11 +102,9 @@ def test_implementer_brief_template(scratch: Path) -> None:
 def test_review_code_end_to_end(scratch: Path) -> None:
     """_review_code runs the full plan+source pipeline with a stub reviewer.
 
-    Lays out a minimal hub-style fixture: wiki with a one-batch plan,
-    a source file referenced under Reads:, and a mill_dir with slug
-    metadata. Plants a stub ``_reviewer_dummy`` module on the path so
-    load_reviewer finds it; asserts the resulting review file exists
-    and its verdict is what the stub emitted.
+    Lays out a minimal hub-style fixture: wiki with a one-batch plan, a source file referenced under Reads:, and a mill_dir with slug metadata.
+    Plants a stub ``_reviewer_dummy`` module on the path so load_reviewer finds it;
+    asserts the resulting review file exists and its verdict is what the stub emitted.
     """
     # --- wiki/active/<slug>/plan ---
     wiki_root = scratch / "wiki"

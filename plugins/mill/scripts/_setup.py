@@ -1,22 +1,18 @@
 """
 Shared hub-link creation and wiki-setup helpers.
 
-Creates junctions and hardlinks in a worktree by reading the ``junctions:``
-and ``hardlinks:`` blocks from ``mill-config.yaml``. A token-scope filter
-silently skips any entry whose target template references a token absent from
-the supplied ``tokens`` dict — this lets the same helper serve mill-setup
-(no ``<SLUG>`` token → ``<SLUG>``-bearing entries skipped) and mill-spawn
-(``<SLUG>`` present → all entries created).
+Creates junctions and hardlinks in a worktree by reading the ``junctions:`` and ``hardlinks:`` blocks from ``mill-config.yaml``.
+A token-scope filter silently skips any entry whose target template references a token absent from the supplied ``tokens`` dict — this lets the same helper serve mill-setup (no ``<SLUG>`` token → ``<SLUG>``-bearing entries skipped) and mill-spawn (``<SLUG>`` present → all entries created).
 
 Public API:
     create_hub_links(target_root, wiki_path, tokens) -> dict[str, list[Path]]
-        Create junctions and hardlinks from mill-config.yaml in target_root.
-        Returns a dict with keys "junctions" and "hardlinks", each a list of
-        created link_path values.
+    Create junctions and hardlinks from mill-config.yaml in target_root.
+    Returns a dict with keys "junctions" and "hardlinks", each a list of
+    created link_path values.
 
     clone_or_init(url, branch, dest) -> dict
-        Clone, init-orphan, or pull an existing wiki clone at dest.
-        Returns a status dict with "action" and "branch_existed_on_remote".
+    Clone, init-orphan, or pull an existing wiki clone at dest.
+    Returns a status dict with "action" and "branch_existed_on_remote".
 """
 from __future__ import annotations
 
@@ -44,44 +40,39 @@ def clone_or_init(url: str, branch: str | None, dest: Path) -> dict:
 
     Four code paths:
 
-    Path A — dest exists and dest/.git exists:
-        Verifies origin URL matches url; if branch is not None, verifies
-        current branch matches branch; then runs git pull --ff-only.
+    Path A — dest exists and dest/.git exists: Verifies origin URL matches url;
+        if branch is not None, verifies current branch matches branch;
+        then runs git pull --ff-only.
         Returns {"action": "pulled", "branch_existed_on_remote": None}.
 
-    Path B — dest exists but dest/.git is missing:
-        Raises WikiSetupError (dest is not a git repo).
+    Path B — dest exists but dest/.git is missing: Raises WikiSetupError (dest is not a git repo).
 
-    Path C — dest does not exist, branch is None:
-        Runs git clone <url> <dest> (remote HEAD).
+    Path C — dest does not exist, branch is None: Runs git clone <url> <dest> (remote HEAD).
         Returns {"action": "cloned", "branch_existed_on_remote": None}.
 
-    Path D — dest does not exist, branch is not None:
-        Checks remote branch existence via git ls-remote --heads.
-        Branch exists  → git clone -b <branch> --single-branch <url> <dest>.
-                         Returns {"action": "cloned", "branch_existed_on_remote": True}.
-        Branch missing → git init <dest>, git remote add origin <url>,
-                         git checkout --orphan <branch>, git config
-                         branch.<branch>.remote/merge so the first
-                         write_commit_push pushes upstream-cleanly.
-                         Returns {"action": "initialized", "branch_existed_on_remote": False}.
+    Path D — dest does not exist, branch is not None: Checks remote branch existence via git ls-remote --heads.
+        Branch exists → git clone -b <branch> --single-branch <url> <dest>.
+        Returns {"action": "cloned", "branch_existed_on_remote": True}.
+        Branch missing → git init <dest>, git remote add origin <url>, git checkout --orphan <branch>, git config branch.<branch>.remote/merge so the first write_commit_push pushes upstream-cleanly.
+        Returns {"action": "initialized", "branch_existed_on_remote": False}.
 
     This helper does NOT log or print — the caller shapes all user-facing messages.
-    All subprocess calls go through _subprocess_util.run; argv lists are explicit.
+    All subprocess calls go through _subprocess_util.run;
+    argv lists are explicit.
 
     Args:
-        url:    Remote wiki URL.
-        branch: Branch name to pin, or None to use the remote default.
-        dest:   Filesystem path where the wiki clone should live.
+        url: Remote wiki URL.
+        branch: Branch name to pin,
+        or None to use the remote default.
+        dest: Filesystem path where the wiki clone should live.
 
     Returns:
         dict with keys:
-          "action": "cloned" | "pulled" | "initialized"
-          "branch_existed_on_remote": True | False | None
+          "action": "cloned" | "pulled" | "initialized" "branch_existed_on_remote": True | False | None
 
     Raises:
         WikiSetupError: Unrecoverable clone/init/mismatch failure.
-        WikiPushError:  git pull --ff-only failed on an existing repo (Path A).
+        WikiPushError: git pull --ff-only failed on an existing repo (Path A).
     """
     if dest.exists():
         if not (dest / ".git").exists():
@@ -243,46 +234,38 @@ def create_hub_links(
 ) -> dict[str, list[Path]]:
     """Create junctions and hardlinks defined in *target_root*'s mill config.
 
-    Iterates both the ``junctions:`` and ``hardlinks:`` blocks from
-    ``mill-config.yaml``. For each entry:
+    Iterates both the ``junctions:`` and ``hardlinks:`` blocks from ``mill-config.yaml``.
+    For each entry:
 
     * Scans the target template for ``<TOKEN>`` references.
     * Intersects with the supplied *tokens* dict.
-    * Silently **skips** the entry if any required token is absent (token-scope
-      filter). This is how mill-setup (no ``SLUG``) and mill-spawn (``SLUG``
-      present) share one helper without separate config blocks.
+    * Silently **skips** the entry if any required token is absent (token-scope filter).
+        This is how mill-setup (no ``SLUG``) and mill-spawn (``SLUG`` present) share one helper without separate config blocks.
 
     Junction creation:
-        Calls ``_junction.resolve_target`` then ``_junction.create``. Ensures
-        the resolved target directory exists first when the template carries
-        ``<SLUG>`` (mimics the pre-existing mill-spawn behaviour). The strict
-        ``ValueError`` from ``_junction.resolve_target`` on unknown tokens is
-        preserved — filtering happens before the call so unknown tokens still
-        raise.
+        Calls ``_junction.resolve_target`` then ``_junction.create``.
+        Ensures the resolved target directory exists first when the template carries ``<SLUG>`` (mimics the pre-existing mill-spawn behaviour).
+        The strict ``ValueError`` from ``_junction.resolve_target`` on unknown tokens is preserved — filtering happens before the call so unknown tokens still raise.
 
     Hardlink creation (idempotent):
         * *link_path* absent → create directly via ``Path.hardlink_to``.
         * *link_path* present, inode matches target → skip (already correct).
-        * *link_path* present, inode differs → back up to ``<name>.bak``,
-          remove original, then create via ``Path.hardlink_to``.
+        * *link_path* present, inode differs → back up to ``<name>.bak``, remove original, then create via ``Path.hardlink_to``.
 
     Args:
         target_root: Directory where junctions and hardlinks are created.
             Relative paths in the config are resolved against this root.
         wiki_path: Path to the wiki clone used to read ``config.yaml``.
-        tokens: Token map passed to ``_junction.resolve_target``. Keys are
-            token names (e.g. ``"HUB_PATH"``, ``"SLUG"``); values are
-            concrete strings.
+        tokens: Token map passed to ``_junction.resolve_target``.
+            Keys are token names (e.g. ``"HUB_PATH"``, ``"SLUG"``);
+            values are concrete strings.
 
     Returns:
-        ``{"junctions": [link_path, ...], "hardlinks": [link_path, ...]}``
-        listing every link that was created or updated (skipped entries are
-        not included).
+        ``{"junctions": [link_path, ...], "hardlinks": [link_path, ...]}`` listing every link that was created or updated (skipped entries are not included).
 
     Raises:
-        ValueError: Cross-volume hardlink failure (OSError re-raised with
-            source and target paths named); or ``_junction.resolve_target``
-            finding an unknown token after filtering (logic error in caller).
+        ValueError: Cross-volume hardlink failure (OSError re-raised with source and target paths named);
+            or ``_junction.resolve_target`` finding an unknown token after filtering (logic error in caller).
     """
     hub_root = target_root
     junctions_cfg = _junction.read_junctions(hub_root)
@@ -291,9 +274,7 @@ def create_hub_links(
     created_junctions: list[Path] = []
     created_hardlinks: list[Path] = []
 
-    # ---------------------------------------------------------------------- #
-    # Junctions                                                                #
-    # ---------------------------------------------------------------------- #
+    # ---------------------------------------------------------------------- # Junctions # ---------------------------------------------------------------------- #
     for junction_rel, target_template in junctions_cfg.items():
         required = _required_tokens(target_template)
         if any(tok not in tokens for tok in required):
@@ -306,27 +287,19 @@ def create_hub_links(
             target.mkdir(parents=True, exist_ok=True)
 
         # Idempotency: skip on correct, recreate on drift, refuse on real directory.
-        # Use os.path.lexists (does NOT follow links) so a broken NTFS junction —
-        # whose target was deleted, making Path.exists() return False because it
-        # follows the junction to a missing target, and Path.is_symlink() return
-        # False because junctions are not Python symlinks — is still recognised
-        # as present and routed through the drift branch. Mirrors the
-        # lexists-based guard in _junction._is_junction_or_symlink.
+        # Use os.path.lexists (does NOT follow links) so a broken NTFS junction — whose target was deleted, making Path.exists() return False because it follows the junction to a missing target, and Path.is_symlink() return False because junctions are not Python symlinks — is still recognised as present and routed through the drift branch.
+        # Mirrors the lexists-based guard in _junction._is_junction_or_symlink.
         if os.path.lexists(str(link_path)):
             if _junction.points_to(link_path, target):
                 continue
-            # Drift: junction points elsewhere, is broken, or link_path is a
-            # regular file/dir. _junction.remove raises ValueError on a real
-            # directory — propagate unchanged.
+            # Drift: junction points elsewhere, is broken, or link_path is a regular file/dir. _junction.remove raises ValueError on a real directory — propagate unchanged.
             _junction.remove(link_path)
 
         _junction.create(target, link_path)
         created_junctions.append(link_path)
         print(f"[setup] junction created: {link_path} -> {target}", file=sys.stderr)
 
-    # ---------------------------------------------------------------------- #
-    # Hardlinks                                                                #
-    # ---------------------------------------------------------------------- #
+    # ---------------------------------------------------------------------- # Hardlinks # ---------------------------------------------------------------------- #
     for link_rel, target_template in hardlinks_cfg.items():
         required = _required_tokens(target_template)
         if any(tok not in tokens for tok in required):

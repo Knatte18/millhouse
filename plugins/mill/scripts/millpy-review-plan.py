@@ -1,22 +1,26 @@
 """mill-review-plan — CLI entry point for plan review.
 
-Resolves project roots, loads config, finds the active task slug, calls
-the plan review backend, and prints JSON to stdout.
+Resolves project roots, loads config, finds the active task slug, calls the plan review backend, and prints JSON to stdout.
 
 Flags:
-    --slug <slug>      Override active-slug detection (run from hub/main).
-    --holistic-only    Skip per-batch reviews; run only the holistic plan review.
-    --max-rounds <N>   Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
-                       (overrides both scopes) for this invocation. Default: use config values.
-    --no-holistic      Skip the holistic plan review; run per-batch reviews only.
+    --slug <slug> Override active-slug detection (run from hub/main).
+    --holistic-only Skip per-batch reviews;
+        run only the holistic plan review.
+    --max-rounds <N> Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds (overrides both scopes) for this invocation.
+        Default: use config values.
+    --no-holistic Skip the holistic plan review;
+        run per-batch reviews only.
     --reviewer <alias> Override roles.plan-review.holistic.reviewer for this invocation only.
-                       Holistic scope only -- batch-scope reviewer is unaffected. Default: use config value.
-    --skip-check <CHECK>  Skip a named validator check (repeatable). Silently ignores unknown names.
-    --skip-validate    Bypass the auto pre-review validator. Use only when you
-                       know the validator is false-positive on a finding.
+        Holistic scope only -- batch-scope reviewer is unaffected.
+        Default: use config value.
+    --skip-check <CHECK> Skip a named validator check (repeatable).
+        Silently ignores unknown names.
+    --skip-validate Bypass the auto pre-review validator.
+        Use only when you know the validator is false-positive on a finding.
 
 Exit codes:
-    0 — review complete; JSON result on stdout
+    0 — review complete;
+        JSON result on stdout
     1 — error (missing slug, bad config, backend failure, validator findings);
         message on stderr or JSON findings on stdout
 """
@@ -219,12 +223,10 @@ def main(argv: list[str] | None = None) -> int:
             round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
             agent_output_path = Path(args.agent_output)
-            # Agent-mode output is a file the reviewer wrote itself via Write,
-            # never HTML-escaped -- unlike the implementer's <task-notification>
-            # payload, so no unescape happens here. Missing file (e.g. the
-            # reviewer never wrote it) collapses to empty text rather than
-            # raising FileNotFoundError; the backend's own finalize turns that
-            # into a verdict: ERROR result on a zero exit code.
+            # Agent-mode output is a file the reviewer wrote itself via Write, never HTML-escaped -- unlike the implementer's <task-notification> payload, so no unescape happens here.
+            # Missing file (e.g.
+            # the reviewer never wrote it) collapses to empty text rather than raising FileNotFoundError;
+            # the backend's own finalize turns that into a verdict: ERROR result on a zero exit code.
             raw_text = (
                 agent_output_path.read_text(encoding="utf-8")
                 if agent_output_path.exists()

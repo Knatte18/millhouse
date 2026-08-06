@@ -1,8 +1,7 @@
 """Unit tests for plugins/mill/scripts/_psmux_capture.py.
 
-Pure-function tests on the output parser extract_response(). Each test
-uses an inline multi-line string snapshot and asserts the extracted
-response or exception.
+Pure-function tests on the output parser extract_response().
+Each test uses an inline multi-line string snapshot and asserts the extracted response or exception.
 """
 from __future__ import annotations
 

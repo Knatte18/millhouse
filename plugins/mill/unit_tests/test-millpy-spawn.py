@@ -2,8 +2,7 @@
 
 Verifies:
   - top-level import succeeds (smoke test for broken imports after refactor)
-  - main() calls _spawn_core helpers in the correct order with the correct
-    arguments on the happy path
+  - main() calls _spawn_core helpers in the correct order with the correct arguments on the happy path
   - BacklogEmpty from pick_task_single causes exit 0
   - ValueError from pick_task_single causes exit 1
   - RuntimeError from capture_parent_branch is translated to SystemExit
@@ -39,8 +38,7 @@ def test_smoke_import() -> None:
     if spec is None or spec.loader is None:
         raise AssertionError("Could not build module spec for millpy-spawn.py")
     mod = importlib.util.module_from_spec(spec)
-    # Provide minimal stubs for the heavy imports so the module loads without
-    # a real git repo or wiki on disk.
+    # Provide minimal stubs for the heavy imports so the module loads without a real git repo or wiki on disk.
     stubs = [
         "_junction", "_setup", "_spawn_core", "_vscode",
         "_worktree", "_paths", "_sibling", "_subprocess_util",
@@ -68,8 +66,7 @@ def test_smoke_import() -> None:
     setup_mod.create_hub_links = MagicMock(return_value={"junctions": [], "hardlinks": []})
     paths_mod.resolve_container_path = MagicMock(return_value=Path("/fake/container"))
 
-    # _spawn_core needs pick_worktree_color because mill-spawn imports it
-    # at module level via `from _spawn_core import pick_worktree_color`.
+    # _spawn_core needs pick_worktree_color because mill-spawn imports it at module level via `from _spawn_core import pick_worktree_color`.
     spawn_core_mod = sys.modules["_spawn_core"]
     spawn_core_mod.pick_worktree_color = MagicMock(return_value="#7d2d6b")
 
@@ -93,9 +90,7 @@ def test_smoke_import() -> None:
 def _make_subprocess_util_stub() -> types.ModuleType:
     """Return a _subprocess_util stub whose .run returns exit-code 2 by default.
 
-    Exit code 2 is what 'git ls-remote --exit-code' returns when the ref is
-    absent, so all happy-path tests proceed past the origin-branch pre-check
-    without blocking on an AttributeError.
+    Exit code 2 is what 'git ls-remote --exit-code' returns when the ref is absent, so all happy-path tests proceed past the origin-branch pre-check without blocking on an AttributeError.
     """
     import subprocess as _sp
     stub = types.ModuleType("_subprocess_util")
@@ -203,8 +198,7 @@ def _run_main_with_mocks(
     try:
         spec.loader.exec_module(mod)
 
-        # Patch config-loading and worktrees-dir resolution so main() doesn't
-        # hit the real filesystem.
+        # Patch config-loading and worktrees-dir resolution so main() doesn't hit the real filesystem.
         fake_cfg = {"spawn": {"branch_prefix": ""}}
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
@@ -231,8 +225,8 @@ def _run_main_with_mocks(
 
 
 def test_main_happy_path_calls_spawn_core_in_order() -> None:
-    """main() calls pick_task_single, claim_in_wiki, capture_parent_branch,
-    write_initial_status in that order."""
+    """main() calls pick_task_single, claim_in_wiki, capture_parent_branch, write_initial_status in that order.
+"""
     task = _make_fake_task(slug="my-task", title="My Task")
     exit_code, sc, _ = _run_main_with_mocks([], picked_task=task)
 
@@ -259,9 +253,8 @@ def test_main_happy_path_calls_spawn_core_in_order() -> None:
             f"write_initial_status branch mismatch: {status_call}"
         )
     # Must be called with worktree_path=, not wiki_path= (state on worktree).
-    # This is an intentional mock-level check: write_initial_status is patched
-    # so no files are touched on disk. The absence of wiki_path= in kwargs is
-    # the correct proxy — the real function writes to worktree_path/status.md.
+    # This is an intentional mock-level check: write_initial_status is patched so no files are touched on disk.
+    # The absence of wiki_path= in kwargs is the correct proxy — the real function writes to worktree_path/status.md.
     if "wiki_path" in status_call.kwargs:
         raise AssertionError(
             f"write_initial_status must not be called with wiki_path=: {status_call}"
@@ -384,8 +377,8 @@ def test_write_settings_uses_short_name_and_slug() -> None:
 
 def test_main_backlog_empty_exits_zero() -> None:
     """When pick_task_single_or_multi returns ("empty", None, []), main() returns 0."""
-    # pick_task_single_or_multi returns ("empty", None, []) for an empty backlog
-    # instead of raising BacklogEmpty. Verify that main() translates this to exit 0.
+    # pick_task_single_or_multi returns ("empty", None, []) for an empty backlog instead of raising BacklogEmpty.
+    # Verify that main() translates this to exit 0.
     import importlib.util
 
     spawn_path = HUB / "plugins" / "mill" / "scripts" / "millpy-spawn.py"
@@ -491,9 +484,7 @@ def test_main_runtime_error_from_capture_branch_raises_system_exit() -> None:
 def test_create_hub_links_called_after_portal_creation() -> None:
     """create_hub_links must be invoked AFTER the portal _junction.create call.
 
-    Uses a call_log side-effect to record the order of _junction.create and
-    _setup.create_hub_links invocations and asserts the portal entry is
-    created first.
+    Uses a call_log side-effect to record the order of _junction.create and _setup.create_hub_links invocations and asserts the portal entry is created first.
     """
     import importlib
     import importlib.util
@@ -621,9 +612,8 @@ def test_create_hub_links_called_after_portal_creation() -> None:
             f"portal target should be {expected_portal_target!r}, got {portal_target!r}"
         )
 
-    # .portals junction is NOT created by millpy-spawn directly; it is
-    # created (when configured) by _setup.create_hub_links via the
-    # mill-config.yaml junctions section.
+    # .portals junction is NOT created by millpy-spawn directly;
+    # it is created (when configured) by _setup.create_hub_links via the mill-config.yaml junctions section.
     expected_portals_link = Path("/fake/worktrees") / "my-task" / ".portals"
     portals_create_call = next(
         (c for c in all_create_calls
@@ -709,7 +699,8 @@ def _run_spawn_real_fs(
     """
     Run spawn main() with ``tmpdir`` as the root filesystem.
 
-    Mocks all git/wiki/junction operations; lets Python file I/O happen.
+    Mocks all git/wiki/junction operations;
+    lets Python file I/O happen.
     Returns ``(exit_code, worktree_path, vscode_mock, setup_mock)``.
     """
     import importlib.util
@@ -1079,12 +1070,9 @@ def test_spawn_empty_backlog_message_has_no_s_marker() -> None:
 
 
 def test_spawn_aborts_when_origin_branch_already_exists() -> None:
-    """When git ls-remote reports the branch already exists on origin, spawn must
-    abort with exit code 1 before creating any worktree, junction, or wiki claim.
+    """When git ls-remote reports the branch already exists on origin, spawn must abort with exit code 1 before creating any worktree, junction, or wiki claim.
 
-    Mocks _subprocess_util.run so that the ls-remote call returns exit code 0
-    (branch found) and asserts that _worktree.create, _junction.create, and
-    _spawn_core.claim_in_wiki are never invoked.
+    Mocks _subprocess_util.run so that the ls-remote call returns exit code 0 (branch found) and asserts that _worktree.create, _junction.create, and _spawn_core.claim_in_wiki are never invoked.
     """
     import importlib
     import importlib.util
@@ -1197,11 +1185,10 @@ def test_spawn_aborts_when_origin_branch_already_exists() -> None:
 
 
 def test_single_selection_does_not_call_multi_select_groom_then_claim() -> None:
-    """CLI-level contract: when pick returns mode=single, multi_select_groom_then_claim
-    is never invoked, so only the selected slug ever reaches claim_in_wiki.
+    """CLI-level contract: when pick returns mode=single, multi_select_groom_then_claim is never invoked, so only the selected slug ever reaches claim_in_wiki.
 
-    This is the spawn-side half of the #543 regression guard.  The core-level
-    half lives in test-spawn-core.py.
+    This is the spawn-side half of the #543 regression guard.
+    The core-level half lives in test-spawn-core.py.
     """
     task = _make_fake_task(slug="task-one", title="Task One")
 
@@ -1251,8 +1238,7 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
     - call wiki.set_phase(wiki_path, slug, None) to revert the Home.md claim
     - exit with code 1
 
-    The test forces write_initial_status to raise IOError (simulating a push
-    failure) and asserts both rollback side effects occur.
+    The test forces write_initial_status to raise IOError (simulating a push failure) and asserts both rollback side effects occur.
     """
     import importlib
     import importlib.util
@@ -1303,8 +1289,7 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
         "_sibling": types.ModuleType("_sibling"),
         "_subprocess_util": _make_subprocess_util_stub(),
     }
-    # Also inject wiki._client so the 'from wiki import _client as wiki' line
-    # in millpy-spawn.py binds to our mock, enabling assertion of set_phase calls.
+    # Also inject wiki._client so the 'from wiki import _client as wiki' line in millpy-spawn.py binds to our mock, enabling assertion of set_phase calls.
     saved: dict[str, object] = {}
     for name, stub in stub_map.items():
         saved[name] = sys.modules.get(name)
@@ -1315,10 +1300,8 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
     try:
         spec.loader.exec_module(mod)
 
-        # After exec, 'mod.wiki' is the module-level name bound by
-        # 'from wiki import _client as wiki'. Patch set_phase on it directly
-        # so we can assert the rollback call without relying on sys.modules
-        # side-channel injection surviving into the exec'd namespace.
+        # After exec, 'mod.wiki' is the module-level name bound by 'from wiki import _client as wiki'.
+        # Patch set_phase on it directly so we can assert the rollback call without relying on sys.modules side-channel injection surviving into the exec'd namespace.
         mod.wiki = wiki_client_mock
 
         fake_cfg = {"spawn": {"branch_prefix": ""}}

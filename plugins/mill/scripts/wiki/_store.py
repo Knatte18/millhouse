@@ -24,11 +24,9 @@ def _peek_slugs(entries: list, limit: int = 5) -> str:
 def validate_tasks_json_shape(data: object, path: Path) -> None:
     """Reject tasks.json shapes TinyDB cannot index, naming the offending location.
 
-    TinyDB blindly does ``tables["_default"]`` on the parsed JSON. When the file
-    is a flat top-level array (as written by the Go wiki port) or a task carries a
-    malformed field, that raises a bare ``TypeError: list indices must be integers
-    or slices, not str`` with no hint at the cause. This runs first and raises
-    WikiStoreFormatError with an actionable message instead.
+    TinyDB blindly does ``tables["_default"]`` on the parsed JSON.
+    When the file is a flat top-level array (as written by the Go wiki port) or a task carries a malformed field, that raises a bare ``TypeError: list indices must be integers or slices, not str`` with no hint at the cause.
+    This runs first and raises WikiStoreFormatError with an actionable message instead.
 
     Args:
         data: The parsed JSON (or None for an empty/new file).
@@ -106,9 +104,7 @@ def validate_tasks_json_shape(data: object, path: Path) -> None:
 class _ValidatingJSONStorage(JSONStorage):
     """JSONStorage that validates the tasks.json shape on every read.
 
-    Centralizes shape-checking so every TinyDB read path (init, reload, all
-    operations) raises an actionable WikiStoreFormatError before TinyDB indexes
-    a malformed structure.
+    Centralizes shape-checking so every TinyDB read path (init, reload, all operations) raises an actionable WikiStoreFormatError before TinyDB indexes a malformed structure.
     """
 
     def __init__(self, path: str, *args, **kwargs) -> None:

@@ -227,10 +227,8 @@ def main() -> int:
             "resolve_path must be re-exported identity from _sibling, not duplicated"
         print("PASS: _paths.resolve_path is _sibling.resolve_path (no duplication)")
 
-        # resolve_hub_path -- since the refactor, resolves via git common dir
-        # rather than trusting cwd. Outside a git repo, falls back to the
-        # provided/cwd path resolved (preserves the original behaviour for
-        # pre-init callers like mill-setup).
+        # resolve_hub_path -- since the refactor, resolves via git common dir rather than trusting cwd.
+        # Outside a git repo, falls back to the provided/cwd path resolved (preserves the original behaviour for pre-init callers like mill-setup).
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
@@ -247,8 +245,7 @@ def main() -> int:
             assert got.is_absolute(), f"result must be absolute: got {got}"
         print("PASS: resolve_hub_path(relative-style path) outside git -> falls back to absolute")
 
-        # Inside a git repo: returns the main worktree root regardless of
-        # whether cwd is the hub, a hub subdir, or a child worktree.
+        # Inside a git repo: returns the main worktree root regardless of whether cwd is the hub, a hub subdir, or a child worktree.
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp).resolve()
             hub = tmp_path / "hub"
@@ -286,9 +283,7 @@ def main() -> int:
                 f"M2+sub cwd=hub/nested: expected {hub_dir}, got {got2}"
         print("PASS: resolve_hub_path M2+sub returns hub subdir when cwd is inside it")
 
-        # Nested-layout fixture: mill project below git toplevel, with worktree-root stub
-        # This mirrors what millpy-spawn.py writes: {"hub_relative_path": hub_subpath}
-        # at worktree_root/.millhouse/config.local.yaml when the hub is a subdir.
+        # Nested-layout fixture: mill project below git toplevel, with worktree-root stub This mirrors what millpy-spawn.py writes: {"hub_relative_path": hub_subpath} at worktree_root/.millhouse/config.local.yaml when the hub is a subdir.
 
         # Test 1: Nested layout, cwd == nested hub dir
         with tempfile.TemporaryDirectory() as tmp:
@@ -358,8 +353,7 @@ def main() -> int:
             assert got.exists(), f"nested layout task path should exist on disk"
         print("PASS: resolve_task_path nested layout finds _mill/status.md under nested hub")
 
-        # Regression tests: flat layout (hub == git root) still works
-        # These pair with the nested tests above to ensure no regression.
+        # Regression tests: flat layout (hub == git root) still works These pair with the nested tests above to ensure no regression.
 
         # Regression 1: Flat layout, cwd == hub == git root
         with tempfile.TemporaryDirectory() as tmp:
@@ -569,8 +563,8 @@ def main() -> int:
             # Prefix-form: fallback is main_root.parent (no automatic prefix-form sibling)
             with patch("_paths.resolve_main_worktree_root", return_value=foo):
                 got = _paths.resolve_worktrees_dir({}, foo)
-            # Prefix-form fallback is main_root.parent = tmp_path; prefix-form users must
-            # configure spawn.worktrees_dir: for a sensible default.
+            # Prefix-form fallback is main_root.parent = tmp_path;
+            # prefix-form users must configure spawn.worktrees_dir: for a sensible default.
             assert got == tmp_path, f"worktrees prefix-form fallback: got {got}"
         print("PASS: resolve_worktrees_dir prefix-form fallback -> main_root.parent (configure override for real use)")
 
@@ -689,9 +683,7 @@ def main() -> int:
             assert "/absolute/path" in str(exc), f"ValueError missing offending value: {exc}"
         print("PASS: resolve_hub_relative_path absolute hub_subpath raises ValueError naming the value")
 
-        # resolve_active_worktree
-        # Worktree-mode tests: patch _marker.slug_from_branch to raise MarkerError
-        # (the caller's git_root is not a task-branch repo in these tests).
+        # resolve_active_worktree Worktree-mode tests: patch _marker.slug_from_branch to raise MarkerError (the caller's git_root is not a task-branch repo in these tests).
         # In-place tests: patch slug_from_branch to return slug + mock worktrees_dir.
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -836,21 +828,15 @@ def main() -> int:
                     pass
         print("PASS: resolve_active_worktree — nothing exists raises ActiveWorktreeNotFound")
 
-        # resolve_active_worktree skip_slug_validation fast path
-        # Card 6 replaces the daemon-backed _marker.slug_from_branch call with a
-        # cheap git-only branch-prefix comparison when skip_slug_validation=True.
+        # resolve_active_worktree skip_slug_validation fast path Card 6 replaces the daemon-backed _marker.slug_from_branch call with a cheap git-only branch-prefix comparison when skip_slug_validation=True.
         import _test_helpers  # noqa: E402
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             git_root = tmp_path / "hub"
-            # A real git repo is required here (unlike the M2 fixture above) --
-            # skip_slug_validation=True calls _pygit2_util.current_branch(git_root)
-            # against the real filesystem, which raises GitOpsError on a bare
-            # mkdir'd directory and would never reach the in-place check.
+            # A real git repo is required here (unlike the M2 fixture above) -- skip_slug_validation=True calls _pygit2_util.current_branch(git_root) against the real filesystem, which raises GitOpsError on a bare mkdir'd directory and would never reach the in-place check.
             repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
-            # cfg has no spawn.branch_prefix key, so the cheap prefix-strip check
-            # compares the raw branch name directly against slug with an empty prefix.
+            # cfg has no spawn.branch_prefix key, so the cheap prefix-strip check compares the raw branch name directly against slug with an empty prefix.
             _test_helpers.checkout_new_branch(repo, "my-task")
             with patch(
                 "_marker.slug_from_branch",
@@ -1172,8 +1158,7 @@ def main() -> int:
             assert got.exists(), "case 3: returned path must exist"
         print("PASS: require_status_path case 3: compat fallback (task/) -> returns path")
 
-        # Test resolve_git_root with start argument
-        # Test 1: resolve_git_root(start) on a real git repo
+        # Test resolve_git_root with start argument Test 1: resolve_git_root(start) on a real git repo
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
             # Initialize a real git repo

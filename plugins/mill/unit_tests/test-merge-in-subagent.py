@@ -92,8 +92,8 @@ def main() -> int:
         try:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
-                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
-                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub for real;
+                # mock both to keep project_root pinned to this fixture's own tempdir.
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
@@ -152,8 +152,8 @@ def main() -> int:
         try:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
-                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
-                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub for real;
+                # mock both to keep project_root pinned to this fixture's own tempdir.
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
@@ -233,8 +233,8 @@ def main() -> int:
         try:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
-                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
-                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub for real;
+                # mock both to keep project_root pinned to this fixture's own tempdir.
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
@@ -309,8 +309,8 @@ def main() -> int:
         try:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
-                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub
-                # for real; mock both to keep project_root pinned to this fixture's own tempdir.
+                # project_root's rebind (Card 11) now calls resolve_git_root/resolve_active_hub for real;
+                # mock both to keep project_root pinned to this fixture's own tempdir.
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=project_root),
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
@@ -351,11 +351,9 @@ def main() -> int:
             errors += 1
 
     # Case D: hub lives in a subdirectory of the outer git repo (#728 repro).
-    # load_config must be invoked with the resolved hub root -- bootstrap via
-    # _paths.resolve_hub_path(), and again after resolve_active_hub -- never
-    # the outer git-repo root, or the hub's own mill-config.yaml is silently
-    # missed in favor of a template/primary-clone fallback found by walking
-    # from git_root.
+    # load_config must be invoked with the resolved hub root -- bootstrap via _paths.resolve_hub_path(),
+    # and again after resolve_active_hub -- never the outer git-repo root,
+    # or the hub's own mill-config.yaml is silently missed in favor of a template/primary-clone fallback found by walking from git_root.
     with tempfile.TemporaryDirectory() as tmpdir:
         outer_root = Path(tmpdir)
         hub_dir = outer_root / "sub" / "hub"
@@ -377,8 +375,7 @@ def main() -> int:
                     "roles": {"implementer": {"model": "haiku"}},
                 }
             else:
-                # Stand-in for the template/primary-clone fallback the pre-fix
-                # code would silently pick up when passed the outer git-repo root.
+                # Stand-in for the template/primary-clone fallback the pre-fix code would silently pick up when passed the outer git-repo root.
                 cfg = {
                     "spawn": {"branch_prefix": "template-fallback-prefix"},
                     "merge": {"model": "haiku"},
@@ -391,9 +388,7 @@ def main() -> int:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=outer_root),
-                # project_root's bootstrap value (resolve_hub_path) and its
-                # resolve_active_hub-corrected value both land on the hub
-                # subdirectory -- neither must ever fall back to outer_root.
+                # project_root's bootstrap value (resolve_hub_path) and its resolve_active_hub-corrected value both land on the hub subdirectory -- neither must ever fall back to outer_root.
                 unittest.mock.patch.object(_paths, "resolve_hub_path", return_value=hub_dir),
                 unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=hub_dir),
                 unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config),
@@ -434,10 +429,9 @@ def main() -> int:
             print(f"FAIL: Case D setup error ({exc})", file=sys.stderr)
             errors += 1
 
-    # Case E: bootstrap cfg and the resolve_active_hub-corrected reload can
-    # genuinely differ. Downstream consumers -- the merge model name passed
-    # to _reviewers.resolve, and the timeout passed to _implementer_claude.run
-    # -- must come from the reloaded config, not the stale bootstrap one.
+    # Case E: bootstrap cfg and the resolve_active_hub-corrected reload can genuinely differ.
+    # Downstream consumers -- the merge model name passed to _reviewers.resolve,
+    # and the timeout passed to _implementer_claude.run -- must come from the reloaded config, not the stale bootstrap one.
     with tempfile.TemporaryDirectory() as tmpdir:
         bootstrap_root = Path(tmpdir) / "bootstrap"
         corrected_root = Path(tmpdir) / "corrected"
@@ -482,10 +476,8 @@ def main() -> int:
         try:
             with (
                 unittest.mock.patch.object(_marker, "slug_from_branch", side_effect=mock_slug_from_branch),
-                # resolve_git_root stays pinned to the real git repo (corrected_root)
-                # so downstream real git plumbing (resolve_container_path, git diff)
-                # keeps working; only the hub-root resolution (resolve_hub_path,
-                # resolve_active_hub) diverges, which is what this test targets.
+                # resolve_git_root stays pinned to the real git repo (corrected_root) so downstream real git plumbing (resolve_container_path, git diff) keeps working;
+                # only the hub-root resolution (resolve_hub_path, resolve_active_hub) diverges, which is what this test targets.
                 unittest.mock.patch.object(_paths, "resolve_git_root", return_value=corrected_root),
                 unittest.mock.patch.object(_paths, "resolve_hub_path", return_value=bootstrap_root),
                 unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=corrected_root),

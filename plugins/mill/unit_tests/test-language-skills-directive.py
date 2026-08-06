@@ -168,8 +168,8 @@ def test_render_implementer_brief() -> None:
         template_path = TEMPLATES_DIR / "implementer-brief.md"
         assert template_path.exists(), f"Template not found: {template_path}"
 
-        # Render with actual directive. START_SHA is included because _render.render
-        # raises KeyError on any unresolved token and the brief now contains <START_SHA>.
+        # Render with actual directive.
+        # START_SHA is included because _render.render raises KeyError on any unresolved token and the brief now contains <START_SHA>.
         tokens = {
             "TASK_TITLE": "Test",
             "SLUG": "test",
@@ -268,9 +268,7 @@ def _write_batch_file_with_moves(
 def test_move_only_batch_detects_go_language() -> None:
     """A batch with only Moves: entries (no Edits/Creates) detects Go skills from move paths.
 
-    This is the key regression guard for Card 22: the implementer must receive
-    golang-comments and golang-testing even when the batch has zero Edits/Creates
-    entries and the only touched files appear as move endpoints.
+    This is the key regression guard for Card 22: the implementer must receive golang-comments and golang-testing even when the batch has zero Edits/Creates entries and the only touched files appear as move endpoints.
     """
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file_with_moves(

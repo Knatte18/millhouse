@@ -1,17 +1,15 @@
 """
 VS Code open-window process probe.
 
-Detects which paths are currently open in a running VS Code editor by
-examining OS process tables, then provides a boundary-safe predicate for
-testing whether a given launch path appears in a VS Code process cmdline.
+Detects which paths are currently open in a running VS Code editor by examining OS process tables, then provides a boundary-safe predicate for testing whether a given launch path appears in a VS Code process cmdline.
 
 Public API:
     find_open_vscode_paths() -> set[Path]
-        Return the set of paths derived from running VS Code process cmdlines.
-        Returns an empty set on any probe failure.
+    Return the set of paths derived from running VS Code process cmdlines.
+    Returns an empty set on any probe failure.
     _path_matches_cmdline(launch_path: Path, cmdline: str) -> bool
-        Return True iff launch_path appears in cmdline, bounded by whitespace,
-        quotes, or string start/end. Case-insensitive on Windows.
+    Return True iff launch_path appears in cmdline, bounded by whitespace,
+    quotes, or string start/end. Case-insensitive on Windows.
 """
 from __future__ import annotations
 
@@ -32,10 +30,10 @@ def find_open_vscode_paths() -> set[Path]:
 
 
 def _probe_windows() -> set[Path]:
-    # VS Code on Windows doesn't expose workspace paths via Win32_Process.CommandLine —
-    # only renderer/extension args appear there. Workspace info lives in MainWindowTitle,
-    # which our .vscode/settings.json sets to "<short_name>: <slug>" for worktrees.
-    # Returned as Path objects for return-type compatibility; treat as opaque strings.
+    # VS Code on Windows doesn't expose workspace paths via Win32_Process.CommandLine — only renderer/extension args appear there.
+    # Workspace info lives in MainWindowTitle, which our .vscode/settings.json sets to "<short_name>: <slug>" for worktrees.
+    # Returned as Path objects for return-type compatibility;
+    # treat as opaque strings.
     # Uses ctypes Win32 API directly — avoids spawning powershell.exe (~1s startup cost).
     import ctypes
     import ctypes.wintypes
@@ -100,13 +98,12 @@ def signature_matches(launch_path: Path, slug: str, signature: str) -> bool:
 
     Two complementary checks:
 
-    1. POSIX cmdline-form: ``code /path/to/worktree`` — uses bounded path match
-       via ``_path_matches_cmdline``.
-    2. Windows title-form: ``<short_name>: <slug>`` from our ``.vscode/settings.json``
-       window.title template — uses slug-substring match (case-insensitive on Windows).
+    1. POSIX cmdline-form: ``code /path/to/worktree`` — uses bounded path match via ``_path_matches_cmdline``.
+    2. Windows title-form: ``<short_name>: <slug>`` from our ``.vscode/settings.json`` window.title template — uses slug-substring match (case-insensitive on Windows).
 
-    Either match passes. The two checks are independent: tests that mock signatures
-    as paths still hit the cmdline branch; real Windows runtime hits the slug branch.
+    Either match passes.
+    The two checks are independent: tests that mock signatures as paths still hit the cmdline branch;
+    real Windows runtime hits the slug branch.
     """
     if _path_matches_cmdline(launch_path, signature):
         return True
