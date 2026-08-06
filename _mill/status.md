@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: done
 slug: pydocreflow-longline-fallback-wrap
 branch: hanf/pydocreflow-longline-fallback-wrap
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-06T15:15:31Z'
+done  '2026-08-06T17:40:57Z'
 ```
