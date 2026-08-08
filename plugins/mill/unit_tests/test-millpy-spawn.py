@@ -199,15 +199,16 @@ def _run_main_with_mocks(
     # millpy-spawn.py resolves 'from wiki import _client as wiki' via this sys.modules key
     # (the "_wiki" entry above is a dead stub for a module name it never imports). Without
     # this, main() reaches the real wiki._client code against the fake '/fake/wiki' path.
+    wiki_client_mock = MagicMock()
     saved_wiki_client = sys.modules.get("wiki._client")
-    sys.modules["wiki._client"] = wiki_mock
+    sys.modules["wiki._client"] = wiki_client_mock
 
     try:
         spec.loader.exec_module(mod)
         # 'from wiki import _client as wiki' can resolve via a real '_client' attribute
         # already cached on the 'wiki' package object by an earlier test in this process,
         # bypassing the sys.modules injection above. Bind mod.wiki directly as a fallback.
-        mod.wiki = wiki_mock
+        mod.wiki = wiki_client_mock
 
         # Patch config-loading and worktrees-dir resolution so main() doesn't hit the real filesystem.
         fake_cfg = {"spawn": {"branch_prefix": ""}}
@@ -345,15 +346,16 @@ def test_write_settings_uses_short_name_and_slug() -> None:
         sys.modules[name] = stub
     # millpy-spawn.py resolves 'from wiki import _client as wiki' via this sys.modules key
     # (the "_wiki" entry above is a dead stub for a module name it never imports).
+    wiki_client_mock = MagicMock()
     saved_wiki_client = sys.modules.get("wiki._client")
-    sys.modules["wiki._client"] = wiki_mock
+    sys.modules["wiki._client"] = wiki_client_mock
 
     try:
         spec.loader.exec_module(mod)
         # 'from wiki import _client as wiki' can resolve via a real '_client' attribute
         # already cached on the 'wiki' package object by an earlier test in this process,
         # bypassing the sys.modules injection above. Bind mod.wiki directly as a fallback.
-        mod.wiki = wiki_mock
+        mod.wiki = wiki_client_mock
         fake_cfg = {"spawn": {"branch_prefix": ""}}
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
@@ -449,14 +451,15 @@ def test_main_backlog_empty_exits_zero() -> None:
         sys.modules[name] = stub
     # millpy-spawn.py resolves 'from wiki import _client as wiki' via this sys.modules key
     # (the "_wiki" entry above is a dead stub for a module name it never imports).
+    wiki_client_mock = MagicMock()
     saved_wiki_client = sys.modules.get("wiki._client")
-    sys.modules["wiki._client"] = wiki_mock
+    sys.modules["wiki._client"] = wiki_client_mock
     try:
         spec.loader.exec_module(mod)
         # 'from wiki import _client as wiki' can resolve via a real '_client' attribute
         # already cached on the 'wiki' package object by an earlier test in this process,
         # bypassing the sys.modules injection above. Bind mod.wiki directly as a fallback.
-        mod.wiki = wiki_mock
+        mod.wiki = wiki_client_mock
         fake_cfg = {"spawn": {}}
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
@@ -583,15 +586,16 @@ def test_create_hub_links_called_after_portal_creation() -> None:
         sys.modules[name] = stub
     # millpy-spawn.py resolves 'from wiki import _client as wiki' via this sys.modules key
     # (the "_wiki" entry above is a dead stub for a module name it never imports).
+    wiki_client_mock = MagicMock()
     saved_wiki_client = sys.modules.get("wiki._client")
-    sys.modules["wiki._client"] = wiki_mock
+    sys.modules["wiki._client"] = wiki_client_mock
 
     try:
         spec.loader.exec_module(mod)
         # 'from wiki import _client as wiki' can resolve via a real '_client' attribute
         # already cached on the 'wiki' package object by an earlier test in this process,
         # bypassing the sys.modules injection above. Bind mod.wiki directly as a fallback.
-        mod.wiki = wiki_mock
+        mod.wiki = wiki_client_mock
         fake_cfg = {"spawn": {"branch_prefix": ""}}
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
@@ -1187,15 +1191,16 @@ def test_spawn_aborts_when_origin_branch_already_exists() -> None:
         sys.modules[name] = stub
     # millpy-spawn.py resolves 'from wiki import _client as wiki' via this sys.modules key
     # (the "_wiki" entry above is a dead stub for a module name it never imports).
+    wiki_client_mock = MagicMock()
     saved_wiki_client = sys.modules.get("wiki._client")
-    sys.modules["wiki._client"] = wiki_mock
+    sys.modules["wiki._client"] = wiki_client_mock
 
     try:
         spec.loader.exec_module(mod)
         # 'from wiki import _client as wiki' can resolve via a real '_client' attribute
         # already cached on the 'wiki' package object by an earlier test in this process,
         # bypassing the sys.modules injection above. Bind mod.wiki directly as a fallback.
-        mod.wiki = wiki_mock
+        mod.wiki = wiki_client_mock
         fake_cfg = {"spawn": {"branch_prefix": ""}}
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
