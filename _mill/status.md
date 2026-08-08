@@ -70,7 +70,9 @@ batches:
     commit_sha: a8a7b0eec08a2ca4c64c3f3a9a7d750539fff7f6
     verify_baseline_failures: []
   - name: templates-and-config
-    state: pending
+    state: running
+    implementer_session: 90e9dfe3-cf37-48ec-9aca-b335974d3e37
+    start_sha: 5b15173a0f581dd42b2b54522fac579f98ed2189
     verify_baseline_failures: []
   - name: skill-mill-go
     state: pending
