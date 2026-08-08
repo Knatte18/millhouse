@@ -13,7 +13,7 @@ depends-on: [1]
 
 Wires the code-review backend onto batch 1's engine and confirms the one consumer that needs no code change at all.
 `_review_code.finalize` already receives `cfg`, so the ceiling wiring is a two-line change plus the `findings` passthrough; the code stage's default `blocking_classes` is the full class set, so no finding is demoted there today, which makes the demotion-free path worth asserting explicitly rather than assuming.
-`_nit_gate.find_unfixed_nit_scopes` delegates its counting to `parse_blocking_count`, so batch 1's widened regex already makes it match `### [NIT:consistency]` -- this batch adds the test that proves it and deliberately edits no `_nit_gate.py` source.
+`_nit_gate.compute_unfixed_nits` delegates its counting to `parse_blocking_count`, so batch 1's widened regex already makes it match `### [NIT:consistency]` -- this batch adds the test that proves it and deliberately edits no `_nit_gate.py` source.
 It runs in parallel with batches 2 and 3, which touch disjoint files.
 
 ## Cards
@@ -62,7 +62,7 @@ It runs in parallel with batches 2 and 3, which touch disjoint files.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add a test asserting `find_unfixed_nit_scopes` reports a scope whose final code-review file contains only `### [NIT:consistency]` headings, proving batch 1's widened `parse_blocking_count` pattern reaches this call site with no change to `_nit_gate.py` itself.
+- **Requirements:** Add a test asserting `compute_unfixed_nits` reports a scope whose final code-review file contains only `### [NIT:consistency]` headings, proving batch 1's widened `parse_blocking_count` pattern reaches this call site with no change to `_nit_gate.py` itself.
   Add a second test asserting a file containing a demoted heading -- `### [NIT:scope]` immediately followed by a `**Demoted-from:** BLOCKING` line -- is counted exactly once, so the inserted field line cannot inflate the nit count.
   Do not edit `plugins/mill/scripts/_nit_gate.py`; it delegates all counting to `parse_blocking_count`, and adding ceiling logic there would violate the `ceiling-applied-once-at-write-time` Shared Decision.
 - **Commit:** `test(nit-gate): assert classed and demoted NIT headings are counted`

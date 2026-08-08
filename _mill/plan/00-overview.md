@@ -85,9 +85,9 @@ batches:
 ### Decision: ceiling-applied-once-at-write-time
 
 - **Decision:** the `blocking_classes` ceiling, the demotion rewrite, and the per-class counting all live in `finalize_scope` in `_review_common.py` and nowhere else.
-  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s crash-recovery re-read, and `_nit_gate.find_unfixed_nit_scopes` -- never apply the ceiling.
+  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s crash-recovery re-read, and `_nit_gate.compute_unfixed_nits` -- never apply the ceiling.
   The two `_review_plan` sites do call `extract_findings`, because their entries feed the same aggregation as the write-time entries and would otherwise contribute counts without contributing findings; extraction is not ceiling application, and the file they read was already written in its demoted form.
-  `_nit_gate.find_unfixed_nit_scopes` needs only a count and stays on the widened `parse_blocking_count` regex.
+  `_nit_gate.compute_unfixed_nits` needs only a count and stays on the widened `parse_blocking_count` regex.
 - **Rationale:** those sites re-read a review file `finalize_scope` already wrote, so the demotion is already baked into the text they read; applying the ceiling again would be a no-op at best and a double-demotion at worst.
   `finalize_scope` also writes a file, which recovery and resume paths must not do.
 - **Applies to:** batches 1, 3, 4
