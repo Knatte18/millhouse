@@ -665,7 +665,8 @@ For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
 1.5.
 **Prior-notes digest (round N > 1 only).**
-If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker).
+If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker); the heading may carry a class suffix, so `### [NIT:consistency] <title>` matches as well as `### [NIT] <title>`, and the title is the heading text after the closing bracket in either form.
+A heading carrying a `**Demoted-from:** BLOCKING` line on the line below it was demoted by the stage ceiling and is a genuine NIT for the purposes of this prior-non-blocking-items list, not a suppressed BLOCKING.
 Extract the title text and the next non-empty line (which should contain Location and Issue fields).
 Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below.
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
@@ -717,6 +718,8 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 4. Branch on verdict:
    - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
+     `nit_count` is derived from the envelope's post-ceiling `findings` list; the per-finding `title`, `severity`, and `class` are available there too, if the fixer brief needs them.
+
      **Dispatch the NIT-fix pass whenever `nit_count > 0` — there is no exception to this for the Builder, even under time or performance pressure.
      'Non-blocking' does NOT mean optional: deferred nits re-surface as BLOCKING in later rounds and cost more total rounds.**
      The fixer, not the Builder, decides what to leave: within the pass, the fixer may leave a nit unfixed only when the reviewer explicitly marked it 'no action required' — that latitude governs the fixer's in-pass judgment, not the Builder's dispatch decision, and never excuses skipping the dispatch itself.
@@ -1025,7 +1028,8 @@ For each round `H` from 1 to `max_holistic_rounds`:
 
 2.5.
 **Prior-notes digest (round H > 1 only).**
-If `H > 1`: scan the prior round's review file (from round `H-1`, matching `*-code-review-r{H-1}.md` with no batch-name segment) for every line matching `### [NIT] <title>` (case-insensitive NIT marker).
+If `H > 1`: scan the prior round's review file (from round `H-1`, matching `*-code-review-r{H-1}.md` with no batch-name segment) for every line matching `### [NIT] <title>` (case-insensitive NIT marker); the heading may carry a class suffix, so `### [NIT:consistency] <title>` matches as well as `### [NIT] <title>`, and the title is the heading text after the closing bracket in either form.
+A heading carrying a `**Demoted-from:** BLOCKING` line on the line below it was demoted by the stage ceiling and is a genuine NIT for the purposes of this prior-non-blocking-items list, not a suppressed BLOCKING.
 Extract the title text and the next non-empty line (which should contain Location and Issue fields).
 Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-holistic-r{H}.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below.
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
@@ -1134,6 +1138,8 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
    
+   `nit_count` is derived from the envelope's post-ceiling `findings` list; the per-finding `title`, `severity`, and `class` are available there too, if the fixer brief needs them.
+
    **Dispatch the NIT-fix pass whenever `nit_count > 0` — there is no exception to this for the Builder, even under time or performance pressure.
    'Non-blocking' does NOT mean optional: deferred nits re-surface as BLOCKING in later rounds and cost more total rounds.**
    The fixer, not the Builder, decides what to leave: within the pass, the fixer may leave a nit unfixed only when the reviewer explicitly marked it 'no action required' — that latitude governs the fixer's in-pass judgment, not the Builder's dispatch decision, and never excuses skipping the dispatch itself.
@@ -1211,6 +1217,7 @@ the task remains in its current phase so the operator can inspect and re-run `/m
 
 **Manual recovery note.**
 The gate above requires a `nits-fixed-<scope>` row in status.md's timeline for each scope that has any `[NIT]` findings in its final code-review file — it does not inspect commits directly.
+A classed `[NIT:<class>]` heading counts identically to a bare `[NIT]` heading for this requirement.
 Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see "## Agent-mode dispatch" step 6).
 If an operator instead completes or verifies a NIT-fix pass manually, outside this documented flow (e.g. recovering from an orphaned or crashed fixer session), the gate still requires the marker to be appended by hand: `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`, where `scope` is the batch name or `"holistic"`.
 
