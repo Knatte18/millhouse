@@ -83,5 +83,7 @@ batches:
     start_sha: 14d5d683f475bbced9df1b147a3ca56a478e05ae
     commit_sha: 52ee57aab4c9adf4c688e4c343247193b187c3be
   - name: skills-start-plan-receiving
-    state: pending
+    state: running
+    implementer_session: 7dcb57f4-a6b6-4a08-a94d-19525ae48cc8
+    start_sha: e1522fc3575ee19a95f176ef72170f30f98f05a3
 ```
