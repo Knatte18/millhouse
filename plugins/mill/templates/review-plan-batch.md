@@ -97,10 +97,10 @@ date: <UTC YYYY-MM-DD>
 
 ## Findings
 
-### [BLOCKING] <short title, <60 chars>
+### [BLOCKING:design] <short title, <60 chars>
 **Step:** <card number or heading> **Issue:** <one sentence> **Fix:** <one sentence>
 
-### [NIT] <short title>
+### [NIT:consistency] <short title>
 **Step:** <card number or heading> **Issue:** <one sentence> **Fix:** <one sentence>
 
 ## Missing context
@@ -126,4 +126,24 @@ Verdict:
 - `REQUEST_CHANGES` — one or more BLOCKINGs.
 - `NEED_CONTEXT` — missing source files; orchestrator will re-fire.
 
+**Class is the second axis, encoded in the same bracket as severity, colon-separated, lowercase: `### [BLOCKING:design] <title>`.**
+A finding with no class, or a class outside the four names below, is a reviewer defect.
+The four recognised classes, identical in meaning across every review stage:
+
+- `design` — a decision is missing, wrong, or rests on a false premise.
+  Example: a card's `Requirements:` never states which of two conflicting approaches from the discussion to implement.
+- `scope` — the work inventory is incomplete, or the enumeration method is unreliable.
+  Example: a batch's `Context:` list omits a file the card's own `Requirements:` names.
+- `decision` — a named artifact with no stated disposition.
+  Example: a Shared Decision references a config key the plan never says whether the card should add, migrate, or leave alone.
+- `consistency` — the artefact contradicts itself, carries a superseded statement, or violates an established repo convention.
+  Example: two cards in the same batch prescribe different commit messages for the same file.
+
+**Class governs who decides and when the loop stops, never whether a finding gets fixed.**
+
 Omit `## Findings` if zero findings. Never invent findings to pad.
+
+## Out of scope for this stage
+
+- Per-line code correctness belongs to code review, not to plan review.
+- A plan reviewer judges whether the plan's method for enumerating work is reliable, not whether it re-enumerates the work itself.
