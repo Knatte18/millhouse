@@ -45,6 +45,7 @@ it).
 
 - **Context:**
   - `plugins/mill/scripts/millpy-claim.py`
+  - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/unit_tests/test-millpy-spawn.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-claim.py`
