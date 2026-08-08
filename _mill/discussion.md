@@ -312,7 +312,7 @@ Unifying the vocabulary in the same pass costs a larger diff once, instead of tw
 - Rationale: everything decided here is deterministic backend behaviour testable with in-memory fixtures.
   Asserting that a live reviewer emits well-formed `[BLOCKING:design]` headings would be a model-behaviour test — slow, paid, and flaky — and the unknown-class folding path is precisely the designed handling for when it does not.
 - Rejected: adding live-reviewer format assertions to the integration test;
-  folding the taxonomy tests into `test-review-common.py` with no new file (it is already 2011 lines).
+  folding the taxonomy tests into `test-review-common.py` with no new file (it is already 3983 lines).
 
 ## Technical context
 

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-08T16:48:52Z'
+discussion-fix-r2  '2026-08-08T17:18:56Z'
+discussed  '2026-08-08T17:18:56Z'
 ```
