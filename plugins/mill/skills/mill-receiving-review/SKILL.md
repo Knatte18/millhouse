@@ -53,6 +53,9 @@ These rationalizations are **never** valid reasons to skip a fix:
 - **NITs are not optional.**
   A finding marked `[NIT]` is fixed under the default rule.
   The only escape is the same Decision Tree (factually wrong / breaks existing functionality / conflicts with documented design / destabilizes other work).
+- **Class governs who decides and when the loop stops, never whether a finding gets fixed.**
+  A finding's class — `design`, `scope`, `decision`, or `consistency` — and any `**Demoted-from:** BLOCKING` marker say who adjudicates it and whether it can hold the review loop open.
+  Neither ever licenses leaving the finding unfixed.
 
 ---
 
