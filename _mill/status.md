@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -21,4 +21,5 @@ planning  '2026-08-08T17:26:30Z'
 plan-review-r1  '2026-08-08T17:34:40Z'
 plan-fix-r1  '2026-08-08T17:35:05Z'
 plan-review-r2  '2026-08-08T17:40:28Z'
+planned  '2026-08-08T17:40:49Z'
 ```
