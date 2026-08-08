@@ -65,6 +65,11 @@ def _load_claim_module(stub_map: dict) -> object:
         saved[name] = sys.modules.get(name)
         sys.modules[name] = stub
     spec.loader.exec_module(mod)
+    # 'from wiki import _client as wiki' can resolve via a real '_client' attribute already
+    # cached on the 'wiki' package object by an earlier test in this process, bypassing the
+    # sys.modules["wiki._client"] injection above. Bind mod.wiki directly so every scenario
+    # reaches the stub instead of the real wiki._client module.
+    mod.wiki = stub_map["wiki._client"]
     return mod, saved
 
 
@@ -104,6 +109,10 @@ def _make_stub_map(
         "_junction": MagicMock(),
         "_config": config_mod,
         "_sibling": types.ModuleType("_sibling"),
+        # millpy-claim.py resolves 'from wiki import _client as wiki' via this sys.modules
+        # key; without it, every scenario's mod.main() reaches the real wiki._client code
+        # against the fake '/fake/wiki' path and hangs in _ensure_daemon's spawn-poll loop.
+        "wiki._client": MagicMock(),
     }
 
 
