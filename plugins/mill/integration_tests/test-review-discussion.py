@@ -4,7 +4,7 @@ Integration test for millpy-review-discussion.py
 Sets up a temporary .millhouse/ layout with a seeded slug file, a wiki/ junction pointing at a
 fixture wiki containing a sample discussion.md, then invokes millpy-review-discussion.py and
 asserts: - Exit 0 - Valid JSON with type/round/verdict/reviews fields - verdict in {APPROVE,
-GAPS_FOUND} (discussion uses v1 GAPS_FOUND vocab) - reviews has 1 entry, scope == "holistic" -
+REQUEST_CHANGES} - reviews has 1 entry, scope == "holistic" -
 review file exists on disk - review file has YAML frontmatter with matching verdict:
 
 Also tests the "No active task" error path.
@@ -163,7 +163,7 @@ def main() -> int:
             failed = True
             return 1
 
-        if result.get("verdict") not in ("APPROVE", "GAPS_FOUND"):
+        if result.get("verdict") not in ("APPROVE", "REQUEST_CHANGES"):
             print(f"FAIL: unexpected verdict {result.get('verdict')!r}")
             failed = True
             return 1
