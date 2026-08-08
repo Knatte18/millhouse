@@ -156,6 +156,10 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         result = json.loads(stdout)
         self.assertEqual(result["verdict"], "ERROR")
         self.assertIn("pre-launch test", stderr)
+        self.assertEqual(result["blocking_count"], 0)
+        self.assertEqual(result["nit_count"], 0)
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["reviews"][0]["findings"], [])
 
     def test_discussion_success(self):
         """Discussion CLI: success returns exit 0 with APPROVE envelope."""
@@ -221,6 +225,10 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         result = json.loads(stdout)
         self.assertEqual(result["verdict"], "ERROR")
         self.assertIn("pre-launch test", stderr)
+        self.assertEqual(result["blocking_count"], 0)
+        self.assertEqual(result["nit_count"], 0)
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["reviews"][0]["findings"], [])
 
     def test_code_success(self):
         """Code CLI: success returns exit 0 with APPROVE envelope."""
@@ -290,6 +298,10 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         result = json.loads(stdout)
         self.assertEqual(result["verdict"], "ERROR")
         self.assertIn("pre-launch test", stderr)
+        self.assertEqual(result["blocking_count"], 0)
+        self.assertEqual(result["nit_count"], 0)
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["reviews"][0]["findings"], [])
 
     def test_plan_success(self):
         """Plan CLI: success returns exit 0 with APPROVE envelope."""
@@ -346,6 +358,10 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         self.assertEqual(result["verdict"], "ERROR")
         self.assertEqual(result["type"], "plan")
         self.assertIn("unhandled review error", result["reviews"][0]["error"])
+        self.assertEqual(result["blocking_count"], 0)
+        self.assertEqual(result["nit_count"], 0)
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["reviews"][0]["findings"], [])
 
 
 if __name__ == "__main__":

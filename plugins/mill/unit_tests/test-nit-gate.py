@@ -18,6 +18,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _safe_rmtree  # noqa: E402
 import _nit_gate  # noqa: E402
+import _review_common  # noqa: E402
 
 
 def _create_review_file(
@@ -229,6 +230,57 @@ class TestNitGate(unittest.TestCase):
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, nonexistent_reviews, status_path)
         self.assertEqual(result, [])
+
+    def test_gate_flags_scope_with_only_classed_nit_headings(self):
+        """
+        Card 19, check 1: a final code-review file containing only `### [NIT:consistency]` headings
+        is flagged, proving batch 1's widened `parse_blocking_count` pattern reaches this call site
+        with no change to `_nit_gate.py` itself.
+        """
+        filename = "20260601-100000-code-review-batch1-r1.md"
+        content = (
+            "# Review\n\n"
+            "### [NIT:consistency] contradicts an earlier statement\n"
+            "The artefact contradicts a prior claim.\n"
+        )
+        (self.reviews_dir / filename).write_text(content, encoding="utf-8")
+
+        timeline = [
+            "implementing  2026-06-01T10:00:00Z",
+            "approved-batch1  2026-06-01T10:30:00Z",
+        ]
+        status_path = self._make_status_file(timeline)
+
+        result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
+        self.assertEqual(result, ["batch1"])
+
+    def test_gate_counts_demoted_nit_heading_exactly_once(self):
+        """
+        Card 19, check 2: a `### [NIT:scope]` heading immediately followed by a
+        `**Demoted-from:** BLOCKING` field line is counted exactly once -- the inserted field line
+        must not inflate the nit count.
+        """
+        filename = "20260601-100000-code-review-batch1-r1.md"
+        content = (
+            "# Review\n\n"
+            "### [NIT:scope] work inventory incomplete\n"
+            "**Demoted-from:** BLOCKING\n"
+            "The enumeration missed one file.\n"
+        )
+        (self.reviews_dir / filename).write_text(content, encoding="utf-8")
+
+        timeline = [
+            "implementing  2026-06-01T10:00:00Z",
+            "approved-batch1  2026-06-01T10:30:00Z",
+        ]
+        status_path = self._make_status_file(timeline)
+
+        result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
+        # Flagged (unfixed) proves the heading was seen; the real assertion is the exactly-once
+        # count, checked directly against parse_blocking_count below.
+        self.assertEqual(result, ["batch1"])
+        nit_count = _review_common.parse_blocking_count(content, severity="NIT")
+        self.assertEqual(nit_count, 1)
 
     def test_marker_precedes_approve_row(self):
         """

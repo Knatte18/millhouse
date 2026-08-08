@@ -32,10 +32,9 @@ from _review_common import (
     finalize_scope,
     load_task_title,
     maybe_switch_spec_for_large_prompt,
-    parse_blocking_count,
-    parse_verdict,
     read_constraints_md,
     render_prompt,
+    resolve_blocking_classes,
     resolve_path,
     worktree_snapshot_guard,
     write_review_file,
@@ -179,6 +178,7 @@ def finalize(
     Raises:
         ReviewError: if verdict cannot be parsed from raw_text.
     """
+    blocking_classes = resolve_blocking_classes(cfg, "discussion", "holistic")
     try:
         review_entry = finalize_scope(
             reviews_dir,
@@ -187,6 +187,7 @@ def finalize(
             raw_text,
             scope="holistic",
             actual_model=actual_model,
+            blocking_classes=blocking_classes,
         )
     except ReviewError as exc:
         path = write_review_file(reviews_dir, "discussion", round_n, raw_text, scope="holistic")
@@ -200,6 +201,7 @@ def finalize(
                 "verdict": "ERROR",
                 "file": str(path),
                 "error": f"parse_verdict failed: {exc}",
+                "findings": [],
                 "session_id": None,
             }],
         )
@@ -210,10 +212,12 @@ def finalize(
         verdict=review_entry["verdict"],
         blocking_count=review_entry["blocking_count"],
         nit_count=review_entry["nit_count"],
+        findings=review_entry["findings"],
         reviews=[{
             "scope": "holistic",
             "verdict": review_entry["verdict"],
             "file": review_entry["file"],
+            "findings": review_entry["findings"],
             "session_id": None,
         }],
     )
@@ -254,7 +258,13 @@ def run(
                 round=0,
                 verdict="APPROVE",
                 blocking_count=0,
-                reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True}],
+                reviews=[{
+                    "scope": "holistic",
+                    "verdict": "APPROVE",
+                    "file": None,
+                    "skipped": True,
+                    "findings": [],
+                }],
             )
 
         # Prepare
@@ -300,6 +310,7 @@ def run(
                     "verdict": "ERROR",
                     "file": None,
                     "error": str(exc),
+                    "findings": [],
                     "session_id": None,
                 }],
             )

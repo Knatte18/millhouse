@@ -32,10 +32,21 @@ Public API:
     for NEED_CONTEXT retry
     build_tool_rule()    — dispatch-aware <TOOL_RULE> block (bulk / tool-use x non-agent / agent-mode)
     render_prompt() — render a template from plugins/mill/templates/
-    parse_verdict() — extract APPROVE/REQUEST_CHANGES from fenced yaml block
-    parse_blocking_count() — count "### [<severity>]" headings in review output
+    parse_verdict() — extract APPROVE/REQUEST_CHANGES from fenced yaml block; GAPS_FOUND is
+    accepted on read (historical) and normalised to REQUEST_CHANGES
+    parse_blocking_count() — count "### [<severity>]" (optionally classed) headings in review
+    output; historical re-read sites only -- extract_findings() covers the new-review path
     count_unrecognized_severity_findings() — count findings whose severity matches neither of the
     two recognized labels, scanning both headings and YAML fallback
+    Finding — dataclass; severity, class (cls), title, demoted
+    extract_findings() — single pass over a review's raw text producing every Finding exactly
+    once, scanning both the heading and fenced-YAML mechanisms
+    apply_blocking_ceiling() — demote BLOCKING findings whose class is outside blocking_classes to
+    NIT, in place; never promotes and never touches a cls-None finding
+    rewrite_demoted_findings() — rewrite every on-disk representation (heading and yaml) of each
+    demoted finding so the file agrees with the envelope
+    resolve_blocking_classes() — read roles.<role>.<scope>.blocking_classes from config, falling
+    back to the documented per-stage default
     write_review_file() — write a review file with a canonical timestamp name
     aggregate_verdict() — worst-case verdict across a list of sub-verdicts
     load_config() — load mill-config.yaml + optional config.local.yaml
@@ -282,10 +293,64 @@ def _porcelain_diff(before: list[str], after: list[str]) -> str:
 # Data classes
 # ---------------------------------------------------------------------------
 
+# Unified severity vocabulary (all three review types: discussion, plan, code).
+# GAP/NOTE/GAPS_FOUND are historical v1 discussion-review-only values; parse_verdict()
+# still accepts GAPS_FOUND on read for archive readability, but nothing emits it again.
+BLOCKING_SEVERITY = "BLOCKING"
+NIT_SEVERITY = "NIT"
+
+# The four class names a finding's heading bracket may carry, e.g. "### [BLOCKING:design] ...".
+# Meaning is identical across all three review types (see class-definitions-generic-across-stages):
+#   design       -- a decision is missing, wrong, or rests on a false premise.
+#   scope        -- the work inventory is incomplete, or the enumeration method is unreliable.
+#   decision     -- a named artifact with no stated disposition.
+#   consistency  -- the artefact contradicts itself, carries a superseded statement, or violates an
+#       established repo convention.
+RECOGNIZED_CLASSES = ("design", "scope", "decision", "consistency")
+
+
+@dataclass
+class Finding:
+    """A single severity+class finding extracted from a reviewer's raw output.
+
+    ``cls`` is ``None`` when the finding's heading carried no class suffix or an unrecognised one
+    (e.g. ``### [BLOCKING]`` or ``### [BLOCKING:perf]``) -- such a finding is exempt from the
+    ``blocking_classes`` ceiling in ``apply_blocking_ceiling``, per the
+    unknown-class-preserves-stated-severity Shared Decision.
+    ``demoted`` is ``True`` once ``apply_blocking_ceiling`` has downgraded this finding from
+    ``BLOCKING`` to ``NIT``, or when ``extract_findings`` reads it back from a review file that
+    already carries the demotion marker written by ``rewrite_demoted_findings``.
+
+    This dataclass carries no field naming which of the two mechanisms (markdown heading or fenced
+    ``findings:`` YAML) the finding came from -- ``rewrite_demoted_findings`` keys its rewrite on
+    ``title`` (and ``cls``) and updates every representation, so an origin tag would be both unused
+    and wrong for a title that appears in both mechanisms.
+    """
+
+    severity: str
+    cls: str | None
+    title: str
+    demoted: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        # Serialised key is "class" (Python attribute is "cls" because "class" is reserved).
+        return {
+            "severity": self.severity,
+            "class": self.cls,
+            "title": self.title,
+            "demoted": self.demoted,
+        }
+
 
 @dataclass
 class ReviewResult:
-    """Serialisable result returned by every review backend's run() function."""
+    """Serialisable result returned by every review backend's run() function.
+
+    ``blocking_count`` and ``nit_count`` are derived values kept consistent with ``findings`` -- they
+    count, respectively, the ``BLOCKING`` and ``NIT`` entries in ``findings``.
+    ``findings`` aggregates across sub-reviews by concatenation, exactly as ``blocking_count`` and
+    ``nit_count`` already aggregate by summation.
+    """
 
     type: str  # "discussion" | "plan" | "code"
     round: int
@@ -293,6 +358,7 @@ class ReviewResult:
     reviews: list[dict] = field(default_factory=list)
     blocking_count: int = 0
     nit_count: int = 0
+    findings: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -301,6 +367,7 @@ class ReviewResult:
             "verdict": self.verdict,
             "blocking_count": self.blocking_count,
             "nit_count": self.nit_count,
+            "findings": self.findings,
             "reviews": self.reviews,
         }
 
@@ -1514,7 +1581,9 @@ or unfenced fallback.
     Valid verdict values:
     - 'APPROVE' — any review type
     - 'REQUEST_CHANGES' — plan and code review
-    - 'GAPS_FOUND' — discussion review (v1 convention; a missing criterion is not a must-fix defect)
+    - 'GAPS_FOUND' — historical v1 discussion-review value, accepted for archive readability only.
+        No template emits it again;
+        any occurrence found is normalised to 'REQUEST_CHANGES' before this function returns.
     - 'NEED_CONTEXT' — plan and code review only;
         reviewer cannot evaluate without source files that were not included in the bulk.
         Orchestrator responds by re-firing with `--extra-file` plus a notify + self-report entry.
@@ -1562,7 +1631,8 @@ or unfenced fallback.
                     "GAPS_FOUND",
                     "NEED_CONTEXT",
                 ):
-                    return value
+                    # Normalise the historical v1 value to its unified-vocabulary equivalent.
+                    return "REQUEST_CHANGES" if value == "GAPS_FOUND" else value
                 raise ReviewError(
                     f"Could not parse verdict: invalid value {value!r}; "
                     f"expected APPROVE, REQUEST_CHANGES, GAPS_FOUND, or NEED_CONTEXT.\n"
@@ -1580,7 +1650,8 @@ or unfenced fallback.
         if stripped.startswith("verdict:"):
             value = stripped[len("verdict:") :].strip().strip('"').strip("'")
             if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
-                return value
+                # Normalise the historical v1 value to its unified-vocabulary equivalent.
+                return "REQUEST_CHANGES" if value == "GAPS_FOUND" else value
 
     raise ReviewError(
         f"Could not parse verdict: no ```yaml block found and no unfenced verdict line found.\n"
@@ -1643,15 +1714,23 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
 
 
 def parse_blocking_count(raw_output: str, *, severity: str) -> int:
-    """Count "### [<severity>]" ATX headings in review output.
+    """Count "### [<severity>]" or "### [<severity>:<class>]" ATX headings in review output.
 
-    Searches for lines matching ``^###\\s+\\[<severity>\\]\\s+`` using MULTILINE mode.
+    Searches for lines matching ``^###\\s+\\[<severity>(?::[a-z-]+)?\\]\\s+`` using MULTILINE mode --
+    the optional class suffix (e.g. ``:design``) is matched and ignored, so a classed heading is
+    counted purely on its severity token.
     The severity argument is required (keyword-only).
     Match is case-sensitive.
     Only line-start headings are counted — mid-line occurrences are ignored.
 
     When the heading count is 0, falls back to scanning all fenced ```yaml blocks for a `findings:`
     list, counting entries whose `severity` field (case-insensitive) matches the severity argument.
+    A `class:` field alongside `severity:` on the same entry does not affect this count.
+
+    This function remains in use only for the historical re-read sites named in the
+    ceiling-applied-once-at-write-time Shared Decision (_review_plan.py's recovery/resume re-reads
+    and _nit_gate.py); the new-review path goes through extract_findings() instead, which classifies
+    every finding in a single pass.
 
     Emits a one-line stderr warning when a prose count phrase in the output (e.g. "Five blocking
     issues remain") disagrees with the heading count.
@@ -1659,7 +1738,7 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     the warning is for log inspection only (#225).
     """
     pattern = re.compile(
-        r"^###\s+\[" + re.escape(severity) + r"\]\s+",
+        r"^###\s+\[" + re.escape(severity) + r"(?::[a-z-]+)?\]\s+",
         re.MULTILINE,
     )
     heading_count = len(pattern.findall(raw_output))
@@ -1710,13 +1789,20 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
 def count_unrecognized_severity_findings(
     raw_output: str, *, blocking_severity: str, nit_severity: str
 ) -> int:
-    """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md)."""
+    """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md).
+
+    This function has no unknown-*class* responsibility -- that classification lives in
+    extract_findings(), in the same single pass that builds the findings list, which is what
+    prevents a classed-but-off-vocabulary-severity heading (e.g. "### [NIT:perf]") from being
+    counted here as well as there.
+    """
     unrecognized_count = 0
 
     # Markdown headings: same "### [<label>]" shape parse_blocking_count matches, generalized to capture any all-uppercase bracketed label (the severity-vocabulary convention every known severity follows -- BLOCKING, NIT, GAP, NOTE, MAJOR, MINOR, ...)
     # rather than one fixed severity, so every heading in the document is inspected.
     # A mixed-case bracket like "[Major]" is not a severity-shaped label at all and is deliberately not matched, case-sensitive like parse_blocking_count.
-    heading_pattern = re.compile(r"^###\s+\[([A-Z0-9-]+)\]\s+", re.MULTILINE)
+    # An optional class suffix (e.g. ":design") is matched and ignored -- this function judges a classed heading on its severity token alone.
+    heading_pattern = re.compile(r"^###\s+\[([A-Z0-9-]+)(?::[a-z-]+)?\]\s+", re.MULTILINE)
     for match in heading_pattern.finditer(raw_output):
         label = match.group(1)
         if label != blocking_severity and label != nit_severity:
@@ -1758,6 +1844,343 @@ def count_unrecognized_severity_findings(
         index += 1
 
     return unrecognized_count
+
+
+# Matches a finding heading in the new class-aware syntax: "### [BLOCKING:design] <title>".
+# The class group is optional -- "### [BLOCKING] <title>" has cls=None.
+_RE_FINDING_HEADING = re.compile(
+    r"^###\s+\[(?P<sev>[A-Z0-9-]+)(?::(?P<cls>[a-z-]+))?\]\s+(?P<title>.*)$",
+    re.MULTILINE,
+)
+
+# The re-read signal for a heading-mechanism demotion: rewrite_demoted_findings inserts this line as
+# the first field line of a demoted finding, and extract_findings looks for it to set demoted=True
+# on a finding it re-reads from an already-written file.
+_RE_DEMOTED_FROM_MARKER = re.compile(r"^\*\*Demoted-from:\*\*\s*BLOCKING\s*$", re.MULTILINE)
+
+
+def _iter_yaml_block_findings(raw_text: str) -> list[dict]:
+    """Return every `findings:` list entry from every fenced ```yaml block in raw_text, concatenated
+    in block order.
+
+    Mirrors parse_blocking_count's own fenced-block-scanning approach: a block that fails to parse as
+    YAML, or that carries no `findings:` list, contributes nothing and is skipped silently -- the
+    same tolerant behaviour every other yaml-fallback scan in this module already has.
+    """
+    entries: list[dict] = []
+    lines = raw_text.splitlines()
+    index = 0
+    while index < len(lines):
+        if lines[index].rstrip() == "```yaml":
+            body_lines: list[str] = []
+            index += 1
+            while index < len(lines) and lines[index].rstrip() != "```":
+                body_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                try:
+                    parsed = yaml.safe_load("\n".join(body_lines))
+                except yaml.YAMLError:
+                    index += 1
+                    continue
+                if isinstance(parsed, dict) and isinstance(parsed.get("findings"), list):
+                    entries.extend(e for e in parsed["findings"] if isinstance(e, dict))
+        index += 1
+    return entries
+
+
+def extract_findings(raw_text: str) -> list[Finding]:
+    """Extract every finding in raw_text exactly once, scanning both the markdown-heading mechanism
+    and the fenced-`findings:`-YAML mechanism unconditionally.
+
+    Neither scan is gated on the other's result, per the dual-mechanism-scan-preserved Shared
+    Decision -- a mixed-format document (headings for one severity, a yaml block for the other) must
+    not be able to hide a finding in whichever mechanism the known labels did not use.
+
+    Severity classification: a severity equal to BLOCKING_SEVERITY or NIT_SEVERITY is kept as-is
+    (uppercased first for the YAML path, since YAML authors are not held to the heading's uppercase
+    convention);
+    any other severity is forced to BLOCKING_SEVERITY, preserving the existing house rule that an
+    off-vocabulary severity folds into the blocking bucket.
+
+    Class classification: a class in RECOGNIZED_CLASSES is kept;
+    a missing or unrecognised class becomes None (exempt from the ceiling) and emits one ASCII-only
+    stderr warning naming the finding's title.
+
+    Results are concatenated heading-scan-first, then deduplicated across mechanisms ONLY: a title
+    produced by the yaml scan is dropped when and only when the heading scan already produced that
+    same title.
+    Two findings sharing a title within a single mechanism are both kept -- heading-vs-heading and
+    yaml-vs-yaml alike -- because they are genuinely distinct findings, and collapsing them would
+    silently drop one from both the returned list and the derived scalars.
+
+    `demoted` is set to True when the finding already carries the marker rewrite_demoted_findings
+    writes: a `**Demoted-from:** BLOCKING` field line for the heading mechanism, or a `demoted_from`
+    entry field for the yaml mechanism.
+    This function never applies the ceiling itself -- it only reports a demotion that is already
+    recorded in the text, which is what lets the historical re-read sites in _review_plan.py agree
+    with the envelope produced when the finding was first finalized.
+    """
+    matches = list(_RE_FINDING_HEADING.finditer(raw_text))
+    heading_findings: list[Finding] = []
+    heading_titles: set[str] = set()
+    for i, m in enumerate(matches):
+        title = m.group("title").strip()
+        sev_token = m.group("sev")
+        severity = (
+            sev_token if sev_token in (BLOCKING_SEVERITY, NIT_SEVERITY) else BLOCKING_SEVERITY
+        )
+        cls_token = m.group("cls")
+        cls = cls_token if cls_token in RECOGNIZED_CLASSES else None
+        if cls is None:
+            print(
+                f"[_review_common] warning: finding has unknown or missing class -- {title}",
+                file=sys.stderr,
+            )
+        # A finding's field lines run from the end of its own heading to the start of the next
+        # heading (or end of text) -- that span is where a **Demoted-from:** marker would live.
+        field_start = m.end()
+        field_end = matches[i + 1].start() if i + 1 < len(matches) else len(raw_text)
+        demoted = bool(_RE_DEMOTED_FROM_MARKER.search(raw_text[field_start:field_end]))
+        heading_findings.append(Finding(severity=severity, cls=cls, title=title, demoted=demoted))
+        heading_titles.add(title)
+
+    yaml_findings: list[Finding] = []
+    for entry in _iter_yaml_block_findings(raw_text):
+        title = str(entry.get("title", "")).strip()
+        # Cross-mechanism dedup only: a yaml title already seen from the heading scan is dropped.
+        if not title or title in heading_titles:
+            continue
+        sev_raw = str(entry.get("severity", "")).upper()
+        severity = sev_raw if sev_raw in (BLOCKING_SEVERITY, NIT_SEVERITY) else BLOCKING_SEVERITY
+        cls_raw = entry.get("class")
+        cls = cls_raw if cls_raw in RECOGNIZED_CLASSES else None
+        if cls is None:
+            print(
+                f"[_review_common] warning: finding has unknown or missing class -- {title}",
+                file=sys.stderr,
+            )
+        demoted = bool(entry.get("demoted_from"))
+        yaml_findings.append(Finding(severity=severity, cls=cls, title=title, demoted=demoted))
+
+    return heading_findings + yaml_findings
+
+
+def apply_blocking_ceiling(
+    findings: list[Finding], blocking_classes: frozenset[str]
+) -> list[Finding]:
+    """Demote every BLOCKING finding whose class falls outside blocking_classes to NIT, in place.
+
+    A finding whose `cls` is None is never demoted -- an unclassifiable finding cannot be checked
+    against `blocking_classes`, per the unknown-class-preserves-stated-severity Shared Decision.
+    A finding already at NIT_SEVERITY is never promoted;
+    the stage table is a ceiling, never a floor, per the ceiling-demotes-only Shared Decision.
+
+    Mutates and returns `findings` for caller convenience (the list is also what
+    rewrite_demoted_findings and the blocking/nit scalar counts read next).
+    """
+    for finding in findings:
+        if (
+            finding.severity == BLOCKING_SEVERITY
+            and finding.cls is not None
+            and finding.cls not in blocking_classes
+        ):
+            finding.severity = NIT_SEVERITY
+            finding.demoted = True
+    return findings
+
+
+def _demote_yaml_entry_text(entry_text: str) -> str:
+    """Rewrite one fenced-yaml `findings:` entry's raw text: `severity: BLOCKING` -> `severity: NIT`,
+    plus an added `demoted_from: BLOCKING` field line.
+
+    Operates as a line-level edit on `entry_text` (the entry's own lines, bullet included) rather
+    than a yaml.safe_dump round-trip, which would reorder keys, restyle quoting, and drop comments
+    across the whole fenced block.
+    """
+    lines = entry_text.splitlines(keepends=True)
+    # The new field line's indentation matches this entry's other standalone field lines (e.g.
+    # "  class: scope") -- found by scanning past the first (bullet) line for the first line that is
+    # pure leading whitespace followed by content.
+    field_indent = None
+    for line in lines[1:]:
+        m = re.match(r"^(\s+)\S", line)
+        if m:
+            field_indent = m.group(1)
+            break
+    if field_indent is None:
+        # Single-line entry (bullet and first key on the same line) -- derive the field indent from
+        # the bullet's own leading whitespace plus two spaces.
+        bullet_m = re.match(r"^(\s*)-", lines[0])
+        base = bullet_m.group(1) if bullet_m else ""
+        field_indent = base + "  "
+
+    out_lines: list[str] = []
+    inserted = False
+    for line in lines:
+        rewritten = re.sub(r"(severity:\s*)BLOCKING\b", r"\1NIT", line, count=1, flags=re.IGNORECASE)
+        out_lines.append(rewritten)
+        if not inserted and re.search(r"severity:\s*BLOCKING\b", line, re.IGNORECASE):
+            newline = "\n" if line.endswith("\n") else ""
+            out_lines.append(f"{field_indent}demoted_from: BLOCKING{newline}")
+            inserted = True
+    return "".join(out_lines)
+
+
+def _find_yaml_findings_entries(body_lines: list[str]) -> list[tuple[int, int]]:
+    """Return (start, end) line-index spans (relative to body_lines) for every list item under a
+    `findings:` key inside one fenced yaml block's body.
+
+    `end` is exclusive. Returns an empty list when body_lines carries no `findings:` key.
+    """
+    findings_idx = None
+    findings_indent = None
+    for idx, line in enumerate(body_lines):
+        m = re.match(r"^(\s*)findings:\s*$", line.rstrip("\n"))
+        if m:
+            findings_idx = idx
+            findings_indent = len(m.group(1))
+            break
+    if findings_idx is None:
+        return []
+
+    entries: list[tuple[int, int]] = []
+    entry_indent = None
+    start = None
+    i = findings_idx + 1
+    while i < len(body_lines):
+        line = body_lines[i].rstrip("\n")
+        if line.strip() == "":
+            i += 1
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= findings_indent:
+            # Dedent back to findings:'s own level or shallower -- a sibling top-level key, or the
+            # end of the mapping this findings: key lives in.
+            break
+        m = re.match(r"^(\s*)-\s", line)
+        if m and (entry_indent is None or indent == entry_indent):
+            if start is not None:
+                entries.append((start, i))
+            start = i
+            entry_indent = indent
+        i += 1
+    if start is not None:
+        entries.append((start, i))
+    return entries
+
+
+def _rewrite_demoted_headings(
+    raw_text: str, demote_pairs: set[tuple[str, str | None]]
+) -> str:
+    """Rewrite every `### [BLOCKING:<cls>] <title>` heading whose (title, cls) pair is in
+    demote_pairs to `### [NIT:<cls>] <title>`, inserting a `**Demoted-from:** BLOCKING` line as the
+    first non-blank line after the heading (preserving a blank line between the heading and its
+    first field line, when one is present).
+    """
+    lines = raw_text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_FINDING_HEADING.match(line.rstrip("\n"))
+        if m and m.group("sev") == BLOCKING_SEVERITY and m.group("cls") is not None:
+            title = m.group("title").strip()
+            cls = m.group("cls")
+            if (title, cls) in demote_pairs:
+                newline = "\n" if line.endswith("\n") else ""
+                out.append(f"### [{NIT_SEVERITY}:{cls}] {m.group('title')}{newline}")
+                i += 1
+                if i < len(lines) and lines[i].strip() == "":
+                    out.append(lines[i])
+                    i += 1
+                out.append("**Demoted-from:** BLOCKING\n")
+                continue
+        out.append(line)
+        i += 1
+    return "".join(out)
+
+
+def _rewrite_demoted_yaml_entries(
+    raw_text: str, demote_pairs: set[tuple[str, str | None]]
+) -> str:
+    """Rewrite every fenced `findings:` yaml entry whose (title, class) pair is in demote_pairs and
+    whose severity is BLOCKING (case-insensitively), via _demote_yaml_entry_text.
+    """
+    lines = raw_text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].rstrip("\n") != "```yaml":
+            out.append(lines[i])
+            i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+        block_start = i
+        while i < len(lines) and lines[i].rstrip("\n") != "```":
+            i += 1
+        body_lines = lines[block_start:i]
+
+        entries = _find_yaml_findings_entries(body_lines)
+        cursor = 0
+        for start, end in entries:
+            out.extend(body_lines[cursor:start])
+            entry_text = "".join(body_lines[start:end])
+            try:
+                parsed = yaml.safe_load(entry_text)
+            except yaml.YAMLError:
+                out.append(entry_text)
+                cursor = end
+                continue
+            entry_dict = parsed[0] if isinstance(parsed, list) and parsed else None
+            if (
+                isinstance(entry_dict, dict)
+                and str(entry_dict.get("severity", "")).upper() == BLOCKING_SEVERITY
+                and (str(entry_dict.get("title", "")).strip(), entry_dict.get("class"))
+                in demote_pairs
+            ):
+                out.append(_demote_yaml_entry_text(entry_text))
+            else:
+                out.append(entry_text)
+            cursor = end
+        out.extend(body_lines[cursor:])
+
+        if i < len(lines):
+            out.append(lines[i])  # closing fence
+            i += 1
+    return "".join(out)
+
+
+def rewrite_demoted_findings(raw_text: str, findings: list[Finding]) -> str:
+    """Rewrite raw_text so every demoted finding's on-disk representation agrees with `findings`.
+
+    For each finding with `demoted is True`, keyed on the pair (title, cls) rather than on title
+    alone, rewrites EVERY occurrence matching that pair -- not just the first -- across BOTH
+    representations extract_findings reads: the markdown-heading mechanism and the fenced
+    `findings:`-YAML mechanism.
+    Rewriting both is required by the demotion-rewritten-into-review-file Shared Decision: a
+    demotion visible in only one representation reproduces the exact file/envelope divergence that
+    Decision exists to prevent.
+
+    Matching on (title, cls) and rewriting every matching occurrence, rather than tracking a count of
+    how many Finding entries share a title, is what makes duplicate titles safe: two
+    `### [BLOCKING:scope] Missing test coverage` headings are both out-of-ceiling and both demoted,
+    so both are rewritten, while a same-titled `### [BLOCKING:design]` heading does not match the
+    (title, "scope") pair and is correctly left alone.
+
+    Every finding reaching this function with `demoted is True` has a non-None `cls` -- only
+    apply_blocking_ceiling sets `demoted`, and it never demotes a `cls is None` finding -- so no
+    pair in demote_pairs has a None class component.
+
+    Returns raw_text unchanged (byte-identical) when no finding is demoted.
+    """
+    demote_pairs = {(f.title, f.cls) for f in findings if f.demoted}
+    if not demote_pairs:
+        return raw_text
+    raw_text = _rewrite_demoted_headings(raw_text, demote_pairs)
+    raw_text = _rewrite_demoted_yaml_entries(raw_text, demote_pairs)
+    return raw_text
 
 
 def write_review_file(
@@ -1872,11 +2295,24 @@ def finalize_scope(
     *,
     scope: str | None = None,
     actual_model: str | None = None,
+    blocking_classes: frozenset[str] | None = None,
 ) -> dict:
-    """Finalize a single review scope by parsing verdict and writing the review file.
+    """Finalize a single review scope by parsing verdict, extracting findings, applying the
+    blocking-class ceiling, and writing the review file.
 
-    Runs apply_actual_model_override, then parse_verdict, then write_review_file, and returns a dict
-    with the review entry plus blocking/nit counts for ReviewResult assembly.
+    Runs, in order: apply_actual_model_override; parse_verdict(raw_text); extract_findings(raw_text);
+    when `blocking_classes` is not None, apply_blocking_ceiling on the extracted findings and then
+    rewrite_demoted_findings on raw_text, so the file on disk agrees with the (possibly demoted)
+    findings before it is written; write_review_file with the (possibly-rewritten) text.
+    `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
+    the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
+    are no longer used on this path, per the single-pass-finding-extraction Shared Decision.
+
+    The returned `verdict` is recomputed from the post-ceiling findings, per the
+    verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
+    `NEED_CONTEXT`, that value passes through unchanged;
+    otherwise the returned verdict is `REQUEST_CHANGES` when `blocking_count > 0`, else `APPROVE`.
+    The reviewer's own `verdict:` line is advisory only past this point.
 
     Args:
         reviews_dir: Directory where review files are stored.
@@ -1888,31 +2324,32 @@ def finalize_scope(
         actual_model: The model that actually produced this review, used to correct an unreliable
             self-reported `reviewer_model:` line before parsing or writing;
             if None, `raw_text` is used unmodified.
+        blocking_classes: The set of classes that stay BLOCKING at this stage (see
+            resolve_blocking_classes). `None` means "apply no ceiling" -- every historical/test call
+            site that does not pass it keeps today's counting behaviour untouched. Every production
+            call site passes this explicitly.
 
     Returns:
-        Dict with keys: scope, verdict, file, blocking_count, nit_count.
+        Dict with keys: scope, verdict, file, blocking_count, nit_count, findings (a list of
+        Finding.to_dict() dicts, in extract_findings' concatenation order).
 
     Raises:
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
     verdict = parse_verdict(raw_text)
+    findings = extract_findings(raw_text)
+    if blocking_classes is not None:
+        findings = apply_blocking_ceiling(findings, blocking_classes)
+        raw_text = rewrite_demoted_findings(raw_text, findings)
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
     )
-    # Severity labels are per-review-type: discussion uses GAP/NOTE;
-    # plan and code use BLOCKING/NIT.
-    # The old inline finalize paths counted the matching type-specific label, so finalize_scope must mirror that mapping rather than a single hardcoded severity.
-    if review_type == "discussion":
-        blocking_severity, nit_severity = "GAP", "NOTE"
-    else:
-        blocking_severity, nit_severity = "BLOCKING", "NIT"
-    blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
-    nit_count = parse_blocking_count(raw_text, severity=nit_severity)
-    # Fail loud on unrecognized severity labels rather than silently dropping them from both counters -- fold them into the blocking-equivalent bucket so an auto-approve round can never ignore a real finding just because the reviewer used an off-vocabulary label (e.g. [MAJOR] instead of [BLOCKING]).
-    blocking_count += count_unrecognized_severity_findings(
-        raw_text, blocking_severity=blocking_severity, nit_severity=nit_severity
-    )
+    blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
+    nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
+
+    if verdict != "NEED_CONTEXT":
+        verdict = "REQUEST_CHANGES" if blocking_count > 0 else "APPROVE"
 
     effective_scope = scope if scope else "holistic"
 
@@ -1922,6 +2359,7 @@ def finalize_scope(
         "file": str(review_path),
         "blocking_count": blocking_count,
         "nit_count": nit_count,
+        "findings": [f.to_dict() for f in findings],
     }
 
 
@@ -1947,6 +2385,56 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
         if v in ("REQUEST_CHANGES", "ERROR"):
             return "REQUEST_CHANGES"
     return "APPROVE"
+
+
+# Per-stage default blocking_classes, used by resolve_blocking_classes when a hub's mill-config.yaml
+# has not (yet) set roles.<role>.<scope>.blocking_classes.
+# Keyed by role name (see _REVIEW_TYPE_TO_ROLE below for the review_type -> role mapping).
+DEFAULT_BLOCKING_CLASSES: dict[str, frozenset[str]] = {
+    "discussion-review": frozenset({"design"}),
+    "plan-review": frozenset({"design", "scope"}),
+    "code-review": frozenset({"design", "scope", "decision", "consistency"}),
+}
+
+_REVIEW_TYPE_TO_ROLE = {
+    "discussion": "discussion-review",
+    "plan": "plan-review",
+    "code": "code-review",
+}
+
+
+def resolve_blocking_classes(cfg: dict, review_type: str, scope: str | None) -> frozenset[str]:
+    """Return the set of classes that stay BLOCKING at this review stage.
+
+    Reads `cfg["roles"][<role>][<scope_key>]["blocking_classes"]` defensively -- every level in that
+    path may be missing or None -- where `<role>` is `review_type` mapped through
+    _REVIEW_TYPE_TO_ROLE ("discussion" -> "discussion-review", "plan" -> "plan-review", "code" ->
+    "code-review") and `<scope_key>` is "holistic" when `scope` is None or the literal "holistic",
+    else "batch".
+
+    When the config key is present and is a non-empty list of strings, returns
+    `frozenset(value)`. Otherwise falls back to DEFAULT_BLOCKING_CLASSES[role] -- a hub whose
+    mill-config.yaml has not been updated with `blocking_classes:` degrades to the documented default
+    rather than raising.
+
+    Never raises. An unrecognised `review_type` (not one of "discussion", "plan", "code") falls back
+    to `frozenset(RECOGNIZED_CLASSES)`, so an unknown caller can never accidentally demote every
+    finding it produces.
+    """
+    role = _REVIEW_TYPE_TO_ROLE.get(review_type)
+    if role is None:
+        return frozenset(RECOGNIZED_CLASSES)
+
+    scope_key = "holistic" if scope is None or scope == "holistic" else "batch"
+
+    roles_cfg = cfg.get("roles") if isinstance(cfg, dict) else None
+    role_cfg = roles_cfg.get(role) if isinstance(roles_cfg, dict) else None
+    scope_cfg = role_cfg.get(scope_key) if isinstance(role_cfg, dict) else None
+    value = scope_cfg.get("blocking_classes") if isinstance(scope_cfg, dict) else None
+
+    if isinstance(value, list) and value:
+        return frozenset(value)
+    return DEFAULT_BLOCKING_CLASSES[role]
 
 
 def load_config(hub_root: Path, mill_dir: Path) -> dict:

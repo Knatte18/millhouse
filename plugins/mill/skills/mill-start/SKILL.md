@@ -37,20 +37,20 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 **Phase: Discussion Review — `--auto` changes:**
 
-- Before the loop, initialise: `prev_gap_titles: set[str] = set()` and `extension_used: bool = False`.
+- Before the loop, initialise: `prev_blocking_titles: set[str] = set()` and `extension_used: bool = False`.
 - Review still runs up to `max_review_rounds` (no skip).
 - The `mill-receiving-review` skill is still loaded unconditionally at the start of the review phase, before round 1's dispatch (the existing non-negotiable rule applies, reworded to "before evaluating or acting on findings" — see step 3 of Phase: Discussion Review).
   Under `--auto` the PUSH BACK path of the decision tree is unavailable: there is no operator to escalate to.
-  Every gap AND every NOTE returned by the reviewer is treated as FIX regardless of the decision-tree outcome (factually-wrong findings included).
+  Every BLOCKING finding AND every NIT finding returned by the reviewer is treated as FIX regardless of the decision-tree outcome (factually-wrong findings included).
   PUSH BACK is unavailable because no operator is present.
-- On `GAPS_FOUND`, the assistant auto-resolves each gap by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
+- On `REQUEST_CHANGES`, the assistant auto-resolves each BLOCKING finding by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
 - On APPROVE, read the review file.
-  If zero `[NOTE]` findings: break the loop and proceed to Handoff (auto-path identical to interactive 4a).
-  If one or more `[NOTE]` findings: take the interactive 4b path verbatim — auto-resolve each NOTE by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, then follow interactive step 4b's status-append calls and commit verbatim (see step 4b for the exact calls and commit), then push and break loop per 4b. The Q&A log is NOT touched for NOTEs — the fixer report is the audit trail.
-- At the end of each GAPS_FOUND round (after committing and pushing gap fixes): (1) parse the current round's gap titles from the review file (heading text of each `### [GAP]` finding) into `current_gap_titles`;
-  (2) if `round >= max_review_rounds` — non-progress check: if `current_gap_titles.isdisjoint(prev_gap_titles)` AND `not extension_used`: set `extension_used = True`, allow one more round (do NOT block), and continue the loop (`round += 1`);
+  If zero `[NIT]` findings: break the loop and proceed to Handoff (auto-path identical to interactive 4a).
+  If one or more `[NIT]` findings: take the interactive 4b path verbatim — auto-resolve each NIT by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, then follow interactive step 4b's status-append calls and commit verbatim (see step 4b for the exact calls and commit), then push and break loop per 4b. The Q&A log is NOT touched for NITs — the fixer report is the audit trail.
+- At the end of each REQUEST_CHANGES round (after committing and pushing fixes): (1) read the round's `findings` list from the JSON envelope -- this list is post-ceiling, so a finding the ceiling demoted to NIT is not present as BLOCKING and correctly does not count toward non-progress -- and take the `title` of every entry whose `severity` is `BLOCKING` into `current_blocking_titles`;
+  (2) if `round >= max_review_rounds` — non-progress check: if `current_blocking_titles.isdisjoint(prev_blocking_titles)` AND `not extension_used`: set `extension_used = True`, allow one more round (do NOT block), and continue the loop (`round += 1`);
   otherwise (overlap exists, or `extension_used` is already `True`): call `_status.set_blocked(status_path, f"auto: discussion review gaps unresolved after {N} rounds", timestamp=_timestamp.now_utc_iso())`, then `if [ -d <worktree>/_mill/briefs ]; then git -C <worktree> add _mill/briefs/; fi && git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git -C <worktree> push`, then halt — do NOT proceed to Handoff;
-  (3) update `prev_gap_titles = current_gap_titles` (every round, including the extension round).
+  (3) update `prev_blocking_titles = current_blocking_titles` (every round, including the extension round).
 - Because `extension_used` was just set to `True` in this iteration, the next iteration's Step 2 dispatch (the discussion-review prepare call) for this extension round MUST pass `--max-rounds <max_review_rounds + 1>` (Agent-mode: as `<args>`;
   subprocess/psmux: appended to the inner `millpy-review-discussion.py` invocation) so that `_review_discussion.py:prepare()`'s `round_n > effective_max` check does not reject it;
   every other round (i.e. when `extension_used` is not freshly set this iteration) omits the flag entirely and relies on the configured cap.
@@ -221,7 +221,7 @@ This widens the prior status.md-only safeguard to the whole `_mill/` tree (`disc
 
 Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable.
 Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, not embedded in the `<task-notification>` payload (which now carries only a one-line ack);
-the orchestrator must read that review file to present gaps or NOTEs to the user, so the skill must already be active in context before that file is ever read.
+the orchestrator must read that review file to present BLOCKING findings or NITs to the user, so the skill must already be active in context before that file is ever read.
 Loading it this early is still correct, it is just no longer motivated by the payload containing the findings.
 
 The new schema has two skip conditions: `rounds: 0` OR `reviewer: null` means "skip discussion review".
@@ -244,7 +244,7 @@ Each round:
    This recovery applies even though mill-start is interactive and has no autonomous stuck machinery;
    the one-retry plus subprocess fallback is the defined recovery, after which the skill surfaces to the operator.
 
-   **Agent-mode properties:** mill-start remains interactive and the GAPS_FOUND / APPROVE-with-NOTE branches (steps 4a/4b/5) are unchanged once the envelope is in hand.
+   **Agent-mode properties:** mill-start remains interactive and the REQUEST_CHANGES / APPROVE-with-NIT branches (steps 4a/4b/5) are unchanged once the envelope is in hand.
    Preserve `--auto` mode behavior.
    For the async background-agent launch, notification handling, and stopped/interrupted agent recovery, see the "## Agent-mode dispatch" section in `plugins/mill/skills/mill-go/SKILL.md` — that section is the single source of truth;
    do not re-assert synchronous return behavior here.
@@ -267,7 +267,7 @@ Each round:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
    ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> surface a clear message to the operator: "discussion-review worker died (logout?); re-run the discussion-review step" and **halt** with no auto-refire. State explicitly that mill-start is always interactive and has no stuck_type / autonomous machinery, so it differs from mill-go's infrastructure one-retry path. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The script writes the review file under `_mill/reviews/` and emits a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "GAPS_FOUND", "blocking_count": <int>, "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
+   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> surface a clear message to the operator: "discussion-review worker died (logout?); re-run the discussion-review step" and **halt** with no auto-refire. State explicitly that mill-start is always interactive and has no stuck_type / autonomous machinery, so it differs from mill-go's infrastructure one-retry path. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The script writes the review file under `_mill/reviews/` and emits a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": <int>, "nit_count": <int>, "findings": [{"severity": "BLOCKING" | "NIT", "class": "design" | "scope" | "decision" | "consistency" | null, "title": "<heading text>", "demoted": true | false}], "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
 
 Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way.
 This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
@@ -316,12 +316,13 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
    Do NOT auto-retry beyond the second pass.
    The two-pass cap mirrors mill-go's Step 4.5.
 
-4a. On APPROVE (verdict from JSON) with no NOTE findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NOTE]`-prefixed findings.
+4a. On APPROVE (verdict from JSON) with no NIT findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NIT]`-prefixed findings.
+The heading may carry a class suffix — `### [NIT:scope]` counts as a NIT exactly like a bare `### [NIT]` — so a classed heading is never missed.
 Break the loop and proceed to Handoff.
 The review file is committed at Handoff (so the path is auditable) — see Phase: Handoff.
 
-4b. On APPROVE with one or more `[NOTE]` findings: apply each NOTE fix per the `mill-receiving-review` decision tree by editing `<discussion_path>` directly.
-Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NOTE: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NOTE: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
+4b. On APPROVE with one or more `[NIT]` findings: apply each NIT fix per the `mill-receiving-review` decision tree by editing `<discussion_path>` directly.
+Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
 Call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`, then call `_status.append_phase(status_path, "discussed", _timestamp.now_utc_iso())`.
 Single git commit covering exactly four pathspecs — `<discussion_path>`, `<reviews_dir>/`, `<status_path>`, `_mill/briefs/` — with message `mill-start: discussion-fix round {N} for {slug}`.
 Push.
@@ -333,17 +334,20 @@ Do NOT run round N+1.
 Do NOT advance the round counter;
 the fixer report's `discussion-fix-r<N>` reuses the just-completed review round's `N` value.
 
-5. On GAPS_FOUND: read the review file and enumerate each `[GAP]` finding.
+5. On REQUEST_CHANGES: read the review file and enumerate each `[BLOCKING]` finding.
+   The heading may carry a class suffix — `### [BLOCKING:design]` counts as a BLOCKING finding exactly like a bare `### [BLOCKING]` — so a classed heading is never missed.
+   Routing here is on severity alone: whether a finding is presented to the operator as a gap in this step depends only on its `BLOCKING` severity, never on its class.
+   Class never enters this SKILL's routing decision — the discussion stage's `blocking_classes` ceiling has already produced exactly the intended routing set by the time this file is written, so duplicating that logic here would only risk diverging from it.
    Present gaps to the user in **sequential batches of at most 5 gaps per batch**.
    Each gap is formatted as a numbered question whose resolution options follow the `mill:conversation` rule — numbered text list, the recommended option is option 1 (the SKILL must use its judgment + context to propose a recommended resolution and 1–3 distinct alternatives).
    Free-text gap prompts are forbidden;
    the SKILL must coerce every gap into options form, just as the auto-mode rule does for interview questions in Phase: Discuss.
    Wait for the user to answer every gap in the current batch before presenting the next batch.
    As each batch's answers arrive, apply them to an in-memory copy of `<discussion_path>` (do NOT write the file mid-round).
-   If the same review file also carries one or more `[NOTE]` findings alongside the gaps, apply each NOTE via the `mill-receiving-review` fix-everything default directly to the same in-memory `<discussion_path>` copy — this mirrors the auto-mode rule already documented earlier in this SKILL ("every gap AND every NOTE returned by the reviewer is treated as FIX").
-   NOTE fixes fold into the same round's write and commit as the gap resolutions: no separate commit, no separate fixer report,
-   and the Q&A log is not used for NOTEs (gaps are Q&A-logged;
-   NOTEs are not).
+   If the same review file also carries one or more `[NIT]` findings alongside the gaps, apply each NIT via the `mill-receiving-review` fix-everything default directly to the same in-memory `<discussion_path>` copy — this mirrors the auto-mode rule already documented earlier in this SKILL ("every BLOCKING finding AND every NIT finding returned by the reviewer is treated as FIX").
+   NIT fixes fold into the same round's write and commit as the gap resolutions: no separate commit, no separate fixer report,
+   and the Q&A log is not used for NITs (gaps are Q&A-logged;
+   NITs are not).
    When the final batch in this round is answered, write `<discussion_path>`, commit on the task branch (`git -C <worktree> add <discussion_path> <reviews_dir>/ _mill/briefs/ && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`), push, and start round N+1.
    If a gap is genuinely impossible to answer (operator does not know yet), the operator may pick the recommended option and add a follow-up note inline — that is the same fallback as Phase: Discuss.
 

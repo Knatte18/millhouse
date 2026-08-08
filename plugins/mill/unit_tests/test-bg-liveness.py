@@ -254,7 +254,7 @@ class TestCheckBgStatus(unittest.TestCase):
             log_path.write_text(
                 f"[mill-bg] WORKER PID={pid_value} START 2026-05-17T15:00:00Z\n"
                 "some worker output\n"
-                '{"type": "discussion", "round": 1, "verdict": "GAPS_FOUND"}\n',
+                '{"type": "discussion", "round": 1, "verdict": "REQUEST_CHANGES"}\n',
                 encoding="utf-8",
             )
             # Fresh mtime + os.kill raises OSError -> probe will report assumed-alive

@@ -84,10 +84,10 @@ date: <UTC YYYY-MM-DD>
 
 ## Findings
 
-### [BLOCKING] <short title, <60 chars>
+### [BLOCKING:design] <short title, <60 chars>
 **Location:** `path/to/file.py:42` (or `:42-58`) **Issue:** <one sentence> **Fix:** <one sentence>
 
-### [NIT] <short title>
+### [NIT:consistency] <short title>
 **Location:** `path/to/file.py:N` **Issue:** <one sentence> **Fix:** <one sentence>
 
 ## Missing context
@@ -113,4 +113,23 @@ Verdict:
 - `REQUEST_CHANGES` — one or more BLOCKINGs.
 - `NEED_CONTEXT` — one or more missing source files; orchestrator will re-fire.
 
+**Class is the second axis, encoded in the same bracket as severity, colon-separated, lowercase: `### [BLOCKING:design] <title>`.**
+A finding with no class, or a class outside the four names below, is a reviewer defect.
+The four recognised classes, identical in meaning across every review stage:
+
+- `design` — a decision is missing, wrong, or rests on a false premise.
+  Example: the implementation fixes the symptom at one call site but never resolves which layer owns the validation.
+- `scope` — the work inventory is incomplete, or the enumeration method is unreliable.
+  Example: a card's `Edits:` file was converted but a sibling file with the identical helper was left unconverted.
+- `decision` — a named artifact with no stated disposition.
+  Example: a config key the plan introduced is added but never wired into the loader that reads it.
+- `consistency` — the artefact contradicts itself, carries a superseded statement, or violates an established repo convention.
+  Example: the new function's error handling contradicts the pattern used by every other function in the same file.
+
+**Class governs who decides and when the loop stops, never whether a finding gets fixed.**
+
 Omit `## Findings` if zero findings. Never invent findings to pad.
+
+## Out of scope for this stage
+
+- Re-litigating a decision already recorded in `discussion.md` is out of scope unless new evidence contradicts it.

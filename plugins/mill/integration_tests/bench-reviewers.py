@@ -174,16 +174,10 @@ def main() -> None:
                 except Exception:
                     verdict = "PARSE_FAIL"
 
-                if review_type == "discussion":
-                    findings = (
-                        _review_common.parse_blocking_count(text, severity="GAP")
-                        + _review_common.parse_blocking_count(text, severity="NOTE")
-                    )
-                else:
-                    findings = (
-                        _review_common.parse_blocking_count(text, severity="BLOCKING")
-                        + _review_common.parse_blocking_count(text, severity="NIT")
-                    )
+                findings = (
+                    _review_common.parse_blocking_count(text, severity="BLOCKING")
+                    + _review_common.parse_blocking_count(text, severity="NIT")
+                )
 
                 format_ok = (
                     text.strip().startswith("# Review:")

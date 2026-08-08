@@ -277,6 +277,7 @@ def test_review_plan_finalize_round_required() -> bool:
                     "blocking_count": 0,
                     "nit_count": 0,
                     "file": "x.md",
+                    "findings": [],
                 }
             )
 
@@ -348,6 +349,7 @@ def test_review_plan_finalize_receives_raw_text_byte_identical() -> bool:
                 "blocking_count": 0,
                 "nit_count": 0,
                 "file": "x.md",
+                "findings": [],
             }
         )
 
@@ -417,6 +419,7 @@ def test_review_plan_finalize_no_prepare() -> bool:
                     "blocking_count": 0,
                     "nit_count": 0,
                     "file": "x.md",
+                    "findings": [],
                 }
             )
 

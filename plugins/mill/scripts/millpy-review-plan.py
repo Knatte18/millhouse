@@ -247,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
                 "verdict": review_entry["verdict"],
                 "blocking_count": review_entry["blocking_count"],
                 "nit_count": review_entry["nit_count"],
+                "findings": review_entry["findings"],
                 "reviews": [review_entry],
             }
             print(json.dumps(result_dict))

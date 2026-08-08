@@ -50,7 +50,7 @@ The consumer has full context of the discussion;
 do NOT explain background.
 Cite the section, state what's wrong, propose the fix.
 
-Target length: ~300 tokens for APPROVE (just verdict + brief summary), ~600–900 tokens for GAPS_FOUND (one finding block per issue).
+Target length: ~300 tokens for APPROVE (just verdict + brief summary), ~600–900 tokens for REQUEST_CHANGES (one finding block per issue).
 If you produce more than ~1200 tokens, you are being verbose — compress.
 
 ```
@@ -58,7 +58,7 @@ MILL_REVIEW_BEGIN
 # Review: <TASK_TITLE>
 
 ```yaml
-verdict: APPROVE | GAPS_FOUND
+verdict: APPROVE | REQUEST_CHANGES
 reviewer_model: <REVIEWER_MODEL>
 reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: <artefact reference>
@@ -67,29 +67,47 @@ date: <UTC YYYY-MM-DD>
 
 ## Findings
 
-### [GAP] <short title, <60 chars>
+### [BLOCKING:design] <short title, <60 chars>
 **Section:** <§ or heading> **Issue:** <one sentence — what's missing or ambiguous> **Fix:** <one sentence — what to clarify or add>
 
-### [NOTE] <short title>
+### [NIT:scope] <short title>
 **Section:** <§> **Issue:** <one sentence> **Fix:** <one sentence>
 
 ## Verdict
 
-<APPROVE | GAPS_FOUND>
+<APPROVE | REQUEST_CHANGES>
 <one sentence — max 20 words>
 MILL_REVIEW_END
 ```
 
-Severity rules (discussion-specific, per v1 convention):
-- `GAP` — must resolve before plan writing can proceed.
-- `NOTE` — record but do not block.
+Severity rules:
+- `BLOCKING` — must resolve before plan writing can proceed.
+- `NIT` — record but do not block.
 
-**Severity vocabulary is closed.** Use ONLY `GAP` or `NOTE` as the bracketed label in a finding heading -- never invent another word. If a finding's severity feels ambiguous, default to `GAP`, never `NOTE`.
+**Severity vocabulary is closed.** Use ONLY `BLOCKING` or `NIT` as the bracketed label in a finding heading -- never invent another word. If a finding's severity feels ambiguous, default to `BLOCKING`, never `NIT`.
 
 Verdict rules:
-- `APPROVE` — zero GAPs. NOTEs fine.
-- `GAPS_FOUND` — one or more GAPs.
+- `APPROVE` — zero BLOCKINGs. NITs fine.
+- `REQUEST_CHANGES` — one or more BLOCKINGs.
 
-Note: plan and code reviews use `BLOCKING` / `NIT` + `REQUEST_CHANGES`. Discussion review uses `GAP` / `NOTE` + `GAPS_FOUND` because the semantics differ — a discussion "gap" is missing information, not a must-fix defect.
+**Class is the second axis, encoded in the same bracket as severity, colon-separated, lowercase: `### [BLOCKING:design] <title>`.**
+A finding with no class, or a class outside the four names below, is a reviewer defect.
+The four recognised classes, identical in meaning across every review stage:
+
+- `design` — a decision is missing, wrong, or rests on a false premise.
+  Example: the discussion never says which of two incompatible caching strategies the plan should use.
+- `scope` — the work inventory is incomplete, or the enumeration method is unreliable.
+  Example: the discussion names three affected modules but the source tree shows a fourth with the same pattern.
+- `decision` — a named artifact with no stated disposition.
+  Example: the discussion references a legacy config key it never says whether to keep, migrate, or delete.
+- `consistency` — the artefact contradicts itself, carries a superseded statement, or violates an established repo convention.
+  Example: the discussion's constraints section says "no new dependencies" while a later section proposes adding one.
+
+**Class governs who decides and when the loop stops, never whether a finding gets fixed.**
 
 Omit the `## Findings` section entirely if there are zero findings. Never invent findings to pad the review.
+
+## Out of scope for this stage
+
+- Call-site enumeration and compile-breakage enumeration belong to the build and to code review, not to discussion review.
+- An unreliable enumeration method is ONE `design` finding about the method itself, never N `scope` findings naming individual files.

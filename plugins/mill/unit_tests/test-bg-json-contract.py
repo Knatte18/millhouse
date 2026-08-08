@@ -39,7 +39,7 @@ class TestJsonContractConsumer(unittest.TestCase):
         log_text = (
             "[mill-bg] WORKER PID=12345 START ...\n"
             "some output\n"
-            '{"type": "plan", "round": 2, "verdict": "GAPS_FOUND"}\n'
+            '{"type": "plan", "round": 2, "verdict": "REQUEST_CHANGES"}\n'
         )
         self.assertTrue(_bg._has_valid_json_result(log_text))
 

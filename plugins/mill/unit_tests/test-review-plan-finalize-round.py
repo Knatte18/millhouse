@@ -75,6 +75,7 @@ def main() -> int:
                 "session_id": None,
                 "blocking_count": 0,
                 "nit_count": 0,
+                "findings": [],
                 "round": 1
             }
 
@@ -132,6 +133,7 @@ def main() -> int:
                 "session_id": None,
                 "blocking_count": 0,
                 "nit_count": 0,
+                "findings": [],
                 "round": 2
             }
 

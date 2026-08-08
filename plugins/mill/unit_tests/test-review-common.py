@@ -3243,10 +3243,14 @@ def main() -> int:
     # parse_verdict: unfenced fallback line
     # ---------------------------------------------------------------------------
 
-    # parse_verdict: unfenced verdict line with leading whitespace
+    # parse_verdict: unfenced verdict line with leading whitespace -- GAPS_FOUND is a historical v1
+    # discussion-review value, accepted for archive readability but normalised to REQUEST_CHANGES.
     raw = "  verdict: GAPS_FOUND\n"
-    assert parse_verdict(raw) == "GAPS_FOUND"
-    print("PASS: parse_verdict unfenced verdict line with leading whitespace")
+    assert parse_verdict(raw) == "REQUEST_CHANGES"
+    print(
+        "PASS: parse_verdict unfenced verdict line with leading whitespace "
+        "normalises GAPS_FOUND to REQUEST_CHANGES"
+    )
 
     # parse_verdict: fenced block still works as primary path
     raw = "# Review: X\n\n```yaml\nverdict: APPROVE\n```\n"

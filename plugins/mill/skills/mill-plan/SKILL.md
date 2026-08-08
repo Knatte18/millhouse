@@ -57,7 +57,7 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
   ```
   No regex widening on this side.
   This is deliberate, not an oversight: mill-start's `discussion-fix-r{N}` phase value (written mid-loop during its own Discussion Review, per `mill-start/SKILL.md`'s step 4b) is always folded into the same commit as the immediately following `discussed` write and is never itself pushed as a standalone, externally observable phase;
-  and mill-start's GAPS_FOUND loop makes no `_status.append_phase` call at all.
+  and mill-start's REQUEST_CHANGES loop makes no `_status.append_phase` call at all.
   The entire span of mill-start's active work — including every round of its own review loop, in both branches — is therefore already fully covered by the single exact value `discussing`, unlike mill-go's side, where mill-plan's own Plan Review loop commits its approve-phase and its Handoff-phase as separate, independently observable commits.
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
@@ -381,12 +381,12 @@ Each round:
 
 **Guardrail:** NIT/BLOCKING fixes during Plan Review apply ONLY to files under `<plan_dir>` — never to the actual source files the plan describes editing, even when a finding quotes an exact source location.
 
-4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
+4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings — the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
 Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`.
 Push.
 Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
 
-4b. On `APPROVE` with one or more `[NIT]` findings: apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
+4b. On `APPROVE` with one or more `[NIT]` findings (the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
 Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
 Re-validate the plan DAG via `_plan_dag.validate`.
 Call `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
@@ -437,6 +437,7 @@ further rounds only churn cosmetic NITs.
 4d. On `REQUEST_CHANGES` AND `blocking_count > 0`:
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
    - Read each review file.
+     The `findings` list in the envelope is post-ceiling: a finding shown as `[NIT:scope]` in the review file with a `**Demoted-from:** BLOCKING` line was demoted by the stage ceiling and is handled as a NIT, not as a BLOCKING.
      For each finding, run the `mill-receiving-review` decision tree.
    - Apply fixes to plan files.
    - Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
