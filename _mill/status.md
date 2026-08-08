@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-validate-heuristic-fixes
 slug: mill-plan-validate-heuristic-gaps-2
 branch: hanf/mill-plan-validate-heuristic-gaps-2
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-review-r1  '2026-08-08T17:22:57Z'
 plan-fix-r1  '2026-08-08T17:22:57Z'
 planned  '2026-08-08T17:23:17Z'
 implementing  '2026-08-08T17:23:52Z'
+approved-plan-validate-heuristic-fixes  '2026-08-08T17:31:53Z'
 ```
 
 ## Batches
@@ -28,8 +29,9 @@ implementing  '2026-08-08T17:23:52Z'
 ```yaml
 batches:
   - name: plan-validate-heuristic-fixes
-    state: running
+    state: approved
     implementer_session: d648e54f-ddc0-45de-ad62-7ac5132df3f0
     start_sha: 4ba2a945c0610f458a4045ea69635bd6807e9c69
+    commit_sha: cc61790bc20b24d9eb8b293b79f9b8cb614f4308
     verify_baseline_failures: []
 ```
