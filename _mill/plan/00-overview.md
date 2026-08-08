@@ -3,7 +3,7 @@
 ```yaml
 task: 'Unit test suite: hangs, unmocked-path errors, and stuck/success envelope bug found in piecewise sweep'
 slug: 'mill-unit-test-suite-breakage'
-approved: false
+approved: true
 started: '20260808-172311'
 parent: 'main'
 root: ""
