@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-mill-go
+phase: approved-skills-start-plan-receiving
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -39,6 +39,7 @@ approved-plan-backend  '2026-08-08T18:47:37Z'
 approved-code-backend  '2026-08-08T18:52:20Z'
 approved-templates-and-config  '2026-08-08T18:59:58Z'
 approved-skill-mill-go  '2026-08-08T19:02:44Z'
+approved-skills-start-plan-receiving  '2026-08-08T19:07:15Z'
 ```
 
 ## Batches
@@ -83,7 +84,8 @@ batches:
     start_sha: 14d5d683f475bbced9df1b147a3ca56a478e05ae
     commit_sha: 52ee57aab4c9adf4c688e4c343247193b187c3be
   - name: skills-start-plan-receiving
-    state: running
+    state: approved
     implementer_session: 7dcb57f4-a6b6-4a08-a94d-19525ae48cc8
     start_sha: e1522fc3575ee19a95f176ef72170f30f98f05a3
+    commit_sha: 9011385577a241c7111fdee8054bcbb32bd4519b
 ```
