@@ -68,7 +68,9 @@ batches:
     (0.3s) ---', 'FAIL -- 3 of 3 in 0.3s: [''test-bg-json-contract.py'', ''test-agent-mode-dispatch.py'',
     ''test-millpy-merge-in-subagent.py'']']
   - name: full-suite-regression
-    state: pending
+    state: running
+    implementer_session: 8d7b5201-55b2-4107-a514-179f147112eb
+    start_sha: b9fe4d88e949f1e7740c663a0696f7912c2a48ce
     verify_baseline_failures: [FAILED (failures=3), FAILED (failures=1), 'FAIL -- 9 of 16 tests: [''test_main_happy_path_calls_spawn_core_in_order'',
     ''test_write_settings_uses_short_name_and_slug'', ''test_main_backlog_empty_exits_zero'',
     ''test_main_value_error_from_picker_exits_one'', ''test_main_runtime_error_from_capture_branch_raises_system_exit'',
