@@ -40,15 +40,24 @@ implementing  '2026-08-08T18:18:42Z'
 ```yaml
 batches:
   - name: core-taxonomy
-    state: pending
+    state: running
+    implementer_session: e30c1a64-fbe4-4f97-97f3-ad539e2fd640
+    start_sha: 539f39e30fb144cedc2c4f4ebaa205a0f7c440ce
+    verify_baseline_failures: []
   - name: discussion-backend
     state: pending
+    verify_baseline_failures: [FAILED (failures=3), '--- FAIL test-bg-json-contract.py (0.2s) ---', 'FAIL -- 1 of
+    4 in 1.0s: [''test-bg-json-contract.py'']', '--- FAIL test-bg-json-contract.py
+    (0.1s) ---', 'FAIL -- 1 of 4 in 0.9s: [''test-bg-json-contract.py'']']
   - name: plan-backend
     state: pending
+    verify_baseline_failures: []
   - name: code-backend
     state: pending
+    verify_baseline_failures: []
   - name: templates-and-config
     state: pending
+    verify_baseline_failures: []
   - name: skill-mill-go
     state: pending
   - name: skills-start-plan-receiving
