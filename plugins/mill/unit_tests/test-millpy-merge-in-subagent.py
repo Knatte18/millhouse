@@ -40,7 +40,9 @@ def _clean_gate_side_effect(argv, **kwargs):
     contains neither "conflict marker" nor any of the test's input filenames.
     """
     if "rev-parse" in argv:
-        return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+        return subprocess.CompletedProcess(
+            args=argv, returncode=0, stdout="a" * 40 + "\n", stderr=""
+        )
     return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
 
 

@@ -5271,6 +5271,102 @@ def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
             return 1
 
 
+def test_check_card_missing_field_fence_guard_clean() -> int:
+    """Issue #776's exact repro: a fenced ### heading in Requirements: must not truncate the card."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "  ### Some Heading\n"
+            "  ```\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert check == [], (
+                f"expected no card-missing-field findings for a fenced ### heading "
+                f"in Requirements:, got: {check}"
+            )
+            print("PASS test_check_card_missing_field_fence_guard_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_card_missing_field_fence_guard_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_card_missing_field_fence_guard_real_boundary_still_detected() -> int:
+    """Regression guard: the fence guard must not over-suppress a genuine card boundary."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        frontmatter = (
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+        )
+        card1 = (
+            "### Card 1: example\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n"
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "  ### Not A Real Heading\n"
+            "  ```\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        card2 = (
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n" + frontmatter
+            + "## Cards\n\n" + card1 + "\n" + card2
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        missing_field_hits = [e for e in result if e["check"] == "card-missing-field"]
+        numbering_hits = [e for e in result if e["check"] == "card-numbering"]
+        try:
+            assert missing_field_hits == [], (
+                f"expected no card-missing-field findings, got: {missing_field_hits}"
+            )
+            assert numbering_hits == [], (
+                f"expected no card-numbering findings, got: {numbering_hits}"
+            )
+            print("PASS test_check_card_missing_field_fence_guard_real_boundary_still_detected")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_card_missing_field_fence_guard_real_boundary_still_detected: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # verify-excludes-edited-tagged-test check (#724)
 # ---------------------------------------------------------------------------
@@ -5280,6 +5376,12 @@ _GO_MOD_TEXT = "module example.com/alpha\n\ngo 1.21\n"
 _INTEGRATION_TAGGED_TEST_GO = "//go:build integration\n\npackage foo\n"
 
 _UNTAGGED_TEST_GO = "package foo\n\nfunc TestFoo(t *testing.T) {}\n"
+
+_SCOUT_TAGGED_TEST_GO = "//go:build scout\n\npackage foo\n"
+_SMOKE_TAGGED_TEST_GO = "//go:build smoke\n\npackage foo\n"
+_GOOS_ONLY_TAGGED_TEST_GO = "//go:build linux\n\npackage foo\n"
+_SCOUT_AND_SMOKE_TAGGED_TEST_GO = "//go:build scout && smoke\n\npackage foo\n"
+_LINUX_AND_SCOUT_TAGGED_TEST_GO = "//go:build linux && scout\n\npackage foo\n"
 
 _HEADER_COMMENT_INTEGRATION_TAGGED_TEST_GO = (
     "// Copyright 2024 Foo Corp.\n"
@@ -5554,6 +5656,317 @@ def test_verify_excludes_edited_tagged_test_creates_only_clean() -> int:
             return 1
 
 
+def test_verify_excludes_edited_tagged_test_scout_tag_no_tags_flag_dirty() -> int:
+    """Custom "scout" tag, verify: has no -tags -> one finding naming "scout"."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SCOUT_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["path"] == "pkg/foo_test.go", f"wrong path: {e['path']!r}"
+            assert "scout" in e["message"], f"message missing 'scout': {e['message']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_scout_tag_no_tags_flag_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_scout_tag_no_tags_flag_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_scout_tag_tags_scout_clean() -> int:
+    """Custom "scout" tag, verify: has -tags scout -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SCOUT_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags scout", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_scout_tag_tags_scout_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_scout_tag_tags_scout_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_smoke_tag_no_tags_flag_dirty() -> int:
+    """Custom "smoke" tag, verify: has no -tags -> one finding naming "smoke"."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            assert "smoke" in check[0]["message"], f"message missing 'smoke': {check[0]['message']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_smoke_tag_no_tags_flag_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_smoke_tag_no_tags_flag_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_smoke_tag_tags_smoke_clean() -> int:
+    """Custom "smoke" tag, verify: has -tags smoke -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags smoke", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_smoke_tag_tags_smoke_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_smoke_tag_tags_smoke_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_goos_only_no_tags_flag_clean() -> int:
+    """Denylist-correctness regression guard: a plain //go:build linux file never needs -tags linux."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_GOOS_ONLY_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings for a GOOS-only build tag, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_goos_only_no_tags_flag_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_goos_only_no_tags_flag_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_multi_file_batch_untested_second_file_dirty() -> int:
+    """Two tagged files in one batch, verify: only covers the first -> one finding for the second."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        foo_file = project_root / "pkg" / "foo_test.go"
+        foo_file.parent.mkdir(parents=True, exist_ok=True)
+        foo_file.write_text(_SCOUT_TAGGED_TEST_GO, encoding="utf-8")
+        bar_file = project_root / "pkg" / "bar_test.go"
+        bar_file.write_text(_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags scout",
+            edits=["pkg/foo_test.go", "pkg/bar_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["path"] == "pkg/bar_test.go", f"wrong path: {e['path']!r}"
+            assert "smoke" in e["message"], f"message missing 'smoke': {e['message']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_multi_file_batch_untested_second_file_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_multi_file_batch_untested_second_file_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_multi_file_batch_both_tags_clean() -> int:
+    """Two tagged files in one batch, verify: covers both tags -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        foo_file = project_root / "pkg" / "foo_test.go"
+        foo_file.parent.mkdir(parents=True, exist_ok=True)
+        foo_file.write_text(_SCOUT_TAGGED_TEST_GO, encoding="utf-8")
+        bar_file = project_root / "pkg" / "bar_test.go"
+        bar_file.write_text(_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags scout,smoke",
+            edits=["pkg/foo_test.go", "pkg/bar_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_multi_file_batch_both_tags_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_multi_file_batch_both_tags_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_no_tags_dirty() -> int:
+    """One file composed of two custom tags, no -tags flag -> one finding naming the alphabetically-first tag."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "baz_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SCOUT_AND_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/baz_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["path"] == "pkg/baz_test.go", f"wrong path: {e['path']!r}"
+            assert "scout" in e["message"], f"message missing 'scout': {e['message']!r}"
+            assert "smoke" not in e["message"], f"message unexpectedly contains 'smoke': {e['message']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_no_tags_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_no_tags_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_second_tag_only_clean() -> int:
+    """Same composed-tag file, verify: names only the second/non-first tag -> zero findings (ANY-tag rule)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "baz_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_SCOUT_AND_SMOKE_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags smoke", edits=["pkg/baz_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_second_tag_only_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_second_tag_only_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty() -> int:
+    """GOOS + custom tag composed in one expression -> denylist strips "linux", custom "scout" still discovered."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        test_file = project_root / "pkg" / "foo_test.go"
+        test_file.parent.mkdir(parents=True, exist_ok=True)
+        test_file.write_text(_LINUX_AND_SCOUT_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./...", edits=["pkg/foo_test.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-excludes-edited-tagged-test"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["path"] == "pkg/foo_test.go", f"wrong path: {e['path']!r}"
+            assert "scout" in e["message"], f"message missing 'scout': {e['message']!r}"
+            assert "linux" not in e["message"], f"message unexpectedly contains 'linux': {e['message']!r}"
+            print("PASS test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -5713,6 +6126,8 @@ def main() -> int:
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
+        test_check_card_missing_field_fence_guard_clean,
+        test_check_card_missing_field_fence_guard_real_boundary_still_detected,
         # verify-excludes-edited-tagged-test check (#724)
         test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
         test_verify_excludes_edited_tagged_test_tags_integration_clean,
@@ -5722,6 +6137,16 @@ def main() -> int:
         test_verify_excludes_edited_tagged_test_malformed_verify_no_crash,
         test_verify_excludes_edited_tagged_test_header_comment_scan_dirty,
         test_verify_excludes_edited_tagged_test_creates_only_clean,
+        test_verify_excludes_edited_tagged_test_scout_tag_no_tags_flag_dirty,
+        test_verify_excludes_edited_tagged_test_scout_tag_tags_scout_clean,
+        test_verify_excludes_edited_tagged_test_smoke_tag_no_tags_flag_dirty,
+        test_verify_excludes_edited_tagged_test_smoke_tag_tags_smoke_clean,
+        test_verify_excludes_edited_tagged_test_goos_only_no_tags_flag_clean,
+        test_verify_excludes_edited_tagged_test_multi_file_batch_untested_second_file_dirty,
+        test_verify_excludes_edited_tagged_test_multi_file_batch_both_tags_clean,
+        test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_no_tags_dirty,
+        test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_second_tag_only_clean,
+        test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty,
     ]
 
     errors = 0

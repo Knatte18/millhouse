@@ -123,7 +123,7 @@ class TestJsonContractEmitter(unittest.TestCase):
                 # Mock git rev-parse HEAD
                 mock_run_result = unittest.mock.MagicMock()
                 mock_run_result.returncode = 0
-                mock_run_result.stdout = "new_sha_123\n"
+                mock_run_result.stdout = "a" * 40 + "\n"
                 mock_run.return_value = mock_run_result
                 with unittest.mock.patch.object(
                     _implementer_common._cleanliness, "compute_scope_violations", return_value=[]
@@ -210,6 +210,35 @@ class TestJsonContractEmitter(unittest.TestCase):
             self.assertIn("no structured report", parsed.get("reason", ""))
         except json.JSONDecodeError as e:
             self.fail(f"_forward_output did not emit valid JSON fallback: {emitted!r}, error: {e}")
+
+    def test_forward_output_stuck_verify_passthrough_survives_bad_corrective_sha(self) -> None:
+        """An already-classified stuck/verify envelope must pass through unchanged even when
+        the corrective ``git rev-parse HEAD`` call would return a malformed SHA -- the
+        commit-SHA correction block only ever runs on the status: success path, so this
+        mocked malformed-SHA return is never even consulted here."""
+        agent_output = (
+            "some log output\n"
+            '{"status": "stuck", "stuck_type": "verify", "session_id": "fake-session"}\n'
+        )
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        output_buffer = StringIO()
+        with contextlib.redirect_stdout(output_buffer):
+            with unittest.mock.patch.object(_implementer_common._subprocess_util, "run") as mock_run:
+                mock_run_result = unittest.mock.MagicMock()
+                mock_run_result.returncode = 0
+                mock_run_result.stdout = "not-a-sha\n"
+                mock_run.return_value = mock_run_result
+                with unittest.mock.patch.object(
+                    _implementer_common._cleanliness, "compute_scope_violations", return_value=[]
+                ):
+                    _implementer_common._forward_output(agent_output, project_root)
+        emitted = output_buffer.getvalue().strip()
+        try:
+            parsed = json.loads(emitted)
+            self.assertEqual(parsed["status"], "stuck")
+            self.assertEqual(parsed["stuck_type"], "verify")
+        except json.JSONDecodeError as e:
+            self.fail(f"_forward_output did not emit valid JSON: {emitted!r}, error: {e}")
 
 
 if __name__ == "__main__":
