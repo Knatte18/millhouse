@@ -32,10 +32,21 @@ Public API:
     for NEED_CONTEXT retry
     build_tool_rule()    — dispatch-aware <TOOL_RULE> block (bulk / tool-use x non-agent / agent-mode)
     render_prompt() — render a template from plugins/mill/templates/
-    parse_verdict() — extract APPROVE/REQUEST_CHANGES from fenced yaml block
-    parse_blocking_count() — count "### [<severity>]" headings in review output
+    parse_verdict() — extract APPROVE/REQUEST_CHANGES from fenced yaml block; GAPS_FOUND is
+    accepted on read (historical) and normalised to REQUEST_CHANGES
+    parse_blocking_count() — count "### [<severity>]" (optionally classed) headings in review
+    output; historical re-read sites only -- extract_findings() covers the new-review path
     count_unrecognized_severity_findings() — count findings whose severity matches neither of the
     two recognized labels, scanning both headings and YAML fallback
+    Finding — dataclass; severity, class (cls), title, demoted
+    extract_findings() — single pass over a review's raw text producing every Finding exactly
+    once, scanning both the heading and fenced-YAML mechanisms
+    apply_blocking_ceiling() — demote BLOCKING findings whose class is outside blocking_classes to
+    NIT, in place; never promotes and never touches a cls-None finding
+    rewrite_demoted_findings() — rewrite every on-disk representation (heading and yaml) of each
+    demoted finding so the file agrees with the envelope
+    resolve_blocking_classes() — read roles.<role>.<scope>.blocking_classes from config, falling
+    back to the documented per-stage default
     write_review_file() — write a review file with a canonical timestamp name
     aggregate_verdict() — worst-case verdict across a list of sub-verdicts
     load_config() — load mill-config.yaml + optional config.local.yaml
@@ -2284,11 +2295,24 @@ def finalize_scope(
     *,
     scope: str | None = None,
     actual_model: str | None = None,
+    blocking_classes: frozenset[str] | None = None,
 ) -> dict:
-    """Finalize a single review scope by parsing verdict and writing the review file.
+    """Finalize a single review scope by parsing verdict, extracting findings, applying the
+    blocking-class ceiling, and writing the review file.
 
-    Runs apply_actual_model_override, then parse_verdict, then write_review_file, and returns a dict
-    with the review entry plus blocking/nit counts for ReviewResult assembly.
+    Runs, in order: apply_actual_model_override; parse_verdict(raw_text); extract_findings(raw_text);
+    when `blocking_classes` is not None, apply_blocking_ceiling on the extracted findings and then
+    rewrite_demoted_findings on raw_text, so the file on disk agrees with the (possibly demoted)
+    findings before it is written; write_review_file with the (possibly-rewritten) text.
+    `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
+    the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
+    are no longer used on this path, per the single-pass-finding-extraction Shared Decision.
+
+    The returned `verdict` is recomputed from the post-ceiling findings, per the
+    verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
+    `NEED_CONTEXT`, that value passes through unchanged;
+    otherwise the returned verdict is `REQUEST_CHANGES` when `blocking_count > 0`, else `APPROVE`.
+    The reviewer's own `verdict:` line is advisory only past this point.
 
     Args:
         reviews_dir: Directory where review files are stored.
@@ -2300,31 +2324,32 @@ def finalize_scope(
         actual_model: The model that actually produced this review, used to correct an unreliable
             self-reported `reviewer_model:` line before parsing or writing;
             if None, `raw_text` is used unmodified.
+        blocking_classes: The set of classes that stay BLOCKING at this stage (see
+            resolve_blocking_classes). `None` means "apply no ceiling" -- every historical/test call
+            site that does not pass it keeps today's counting behaviour untouched. Every production
+            call site passes this explicitly.
 
     Returns:
-        Dict with keys: scope, verdict, file, blocking_count, nit_count.
+        Dict with keys: scope, verdict, file, blocking_count, nit_count, findings (a list of
+        Finding.to_dict() dicts, in extract_findings' concatenation order).
 
     Raises:
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
     verdict = parse_verdict(raw_text)
+    findings = extract_findings(raw_text)
+    if blocking_classes is not None:
+        findings = apply_blocking_ceiling(findings, blocking_classes)
+        raw_text = rewrite_demoted_findings(raw_text, findings)
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
     )
-    # Severity labels are per-review-type: discussion uses GAP/NOTE;
-    # plan and code use BLOCKING/NIT.
-    # The old inline finalize paths counted the matching type-specific label, so finalize_scope must mirror that mapping rather than a single hardcoded severity.
-    if review_type == "discussion":
-        blocking_severity, nit_severity = "GAP", "NOTE"
-    else:
-        blocking_severity, nit_severity = "BLOCKING", "NIT"
-    blocking_count = parse_blocking_count(raw_text, severity=blocking_severity)
-    nit_count = parse_blocking_count(raw_text, severity=nit_severity)
-    # Fail loud on unrecognized severity labels rather than silently dropping them from both counters -- fold them into the blocking-equivalent bucket so an auto-approve round can never ignore a real finding just because the reviewer used an off-vocabulary label (e.g. [MAJOR] instead of [BLOCKING]).
-    blocking_count += count_unrecognized_severity_findings(
-        raw_text, blocking_severity=blocking_severity, nit_severity=nit_severity
-    )
+    blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
+    nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
+
+    if verdict != "NEED_CONTEXT":
+        verdict = "REQUEST_CHANGES" if blocking_count > 0 else "APPROVE"
 
     effective_scope = scope if scope else "holistic"
 
@@ -2334,6 +2359,7 @@ def finalize_scope(
         "file": str(review_path),
         "blocking_count": blocking_count,
         "nit_count": nit_count,
+        "findings": [f.to_dict() for f in findings],
     }
 
 
