@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-backend
+phase: approved-code-backend
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -36,6 +36,7 @@ implementing  '2026-08-08T18:18:42Z'
 approved-core-taxonomy  '2026-08-08T18:32:41Z'
 approved-discussion-backend  '2026-08-08T18:40:18Z'
 approved-plan-backend  '2026-08-08T18:47:37Z'
+approved-code-backend  '2026-08-08T18:52:20Z'
 ```
 
 ## Batches
@@ -63,9 +64,10 @@ batches:
     commit_sha: d24c9054904d7b3a8ac569871792865f18737f20
     verify_baseline_failures: []
   - name: code-backend
-    state: running
+    state: approved
     implementer_session: 1280ad51-66d9-411f-9484-83c72bb5b055
     start_sha: 6899a654d081b326bdc7ddea926cf406b3266964
+    commit_sha: a8a7b0eec08a2ca4c64c3f3a9a7d750539fff7f6
     verify_baseline_failures: []
   - name: templates-and-config
     state: pending
