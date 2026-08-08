@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-claude-sub-idle-mock
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-08-08T17:35:05Z'
 plan-review-r2  '2026-08-08T17:40:28Z'
 planned  '2026-08-08T17:40:49Z'
 implementing  '2026-08-08T17:41:25Z'
+approved-claude-sub-idle-mock  '2026-08-08T18:15:55Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-08-08T17:41:25Z'
 ```yaml
 batches:
   - name: claude-sub-idle-mock
-    state: running
+    state: approved
     implementer_session: 33bb8421-b731-4b0f-a767-5e52fd6beb9c
     start_sha: 17e3be41f60052becd1d574d36f5f3ee9e1f0f9a
+    commit_sha: f20bbd9074a6cf8ff1d128fcf7f47bbd03d4b3be
     verify_baseline_failures: []
   - name: wiki-stub-fixes
     state: pending
