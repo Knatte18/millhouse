@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-templates-and-config
+phase: approved-skill-mill-go
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-discussion-backend  '2026-08-08T18:40:18Z'
 approved-plan-backend  '2026-08-08T18:47:37Z'
 approved-code-backend  '2026-08-08T18:52:20Z'
 approved-templates-and-config  '2026-08-08T18:59:58Z'
+approved-skill-mill-go  '2026-08-08T19:02:44Z'
 ```
 
 ## Batches
@@ -77,9 +78,10 @@ batches:
     commit_sha: 0c4fcf1112875ef776470b17a080f0df0cdba3cd
     verify_baseline_failures: []
   - name: skill-mill-go
-    state: running
+    state: approved
     implementer_session: ad6ecb6f-00c3-4a06-baea-754f4350d4ac
     start_sha: 14d5d683f475bbced9df1b147a3ca56a478e05ae
+    commit_sha: 52ee57aab4c9adf4c688e4c343247193b187c3be
   - name: skills-start-plan-receiving
     state: pending
 ```
