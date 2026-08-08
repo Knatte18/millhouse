@@ -1787,25 +1787,34 @@ def _forward_output(
             print(json.dumps(_incomplete_envelope))
             return 0
 
-        result = _subprocess_util.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=project_root,
-        )
-        if result.returncode == 0 and _is_valid_commit_sha(result.stdout.strip()):
-            parsed["commit_sha"] = result.stdout.strip()
-            violations = _cleanliness.compute_scope_violations(project_root, git_root)
-            if violations:
-                parsed["scope_violations"] = violations
-            print(json.dumps(parsed))
+        # The corrective git rev-parse HEAD / _is_valid_commit_sha block below only ever
+        # applies to a self-reported status: success -- every other status (already-classified
+        # stuck/*, or anything else that reaches this point) must print through unchanged.
+        # Running the correction unconditionally here previously let an unrelated corrective-SHA
+        # failure silently corrupt an already-correct stuck/transient or stuck/verify report into
+        # stuck/logic (see the forward-output-stuck-passthrough postmortem).
+        if parsed.get("status") == "success":
+            result = _subprocess_util.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=project_root,
+            )
+            if result.returncode == 0 and _is_valid_commit_sha(result.stdout.strip()):
+                parsed["commit_sha"] = result.stdout.strip()
+                violations = _cleanliness.compute_scope_violations(project_root, git_root)
+                if violations:
+                    parsed["scope_violations"] = violations
+                print(json.dumps(parsed))
+            else:
+                # The corrective git rev-parse HEAD call failed or returned a malformed SHA -- never pass an agent's unvalidated self-reported commit_sha through on the success path (see #744 postmortem).
+                _correction_failure = {
+                    "status": "stuck",
+                    "stuck_type": "logic",
+                    "reason": "commit_sha correction failed: git rev-parse HEAD did not return a well-formed SHA",
+                    "session_id": session_id or parsed.get("session_id") or "unknown",
+                }
+                print(json.dumps(_correction_failure))
         else:
-            # The corrective git rev-parse HEAD call failed or returned a malformed SHA -- never pass an agent's unvalidated self-reported commit_sha through on the success path (see #744 postmortem).
-            _correction_failure = {
-                "status": "stuck",
-                "stuck_type": "logic",
-                "reason": "commit_sha correction failed: git rev-parse HEAD did not return a well-formed SHA",
-                "session_id": session_id or parsed.get("session_id") or "unknown",
-            }
-            print(json.dumps(_correction_failure))
+            print(json.dumps(parsed))
         return 0
     try:
         if (
