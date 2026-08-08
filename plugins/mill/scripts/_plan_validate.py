@@ -36,9 +36,9 @@ Checks performed (check keys):
     verify-unrelated-test-file — verify: --only test-file token untouched by its own batch and
         byte-identical to the parent branch
     verify-excludes-edited-tagged-test — Go-specific (gated on go.mod presence);
-        flags a batch whose Edits:-only _test.go files include a //go:build ...integration...-tagged
-            file when the batch's verify: command lacks a matching -tags ...integration...
-        flag
+        discovers each edited _test.go file's custom tag(s) from its own //go:build expression via
+        denylist (GOOS/GOARCH/reserved-word/release-version tags excluded), and flags every edited
+        tagged file independently whose batch verify: command lacks a matching -tags flag
     wiki-config-mutation — batch Edits:/Creates: contains mill-config.yaml (self-applying layout
         risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
@@ -1937,7 +1937,7 @@ def _check_verify_not_isolated(
 # ---------------------------------------------------------------------------
 
 # Matches a Go build-constraint comment line: "//go:build <expr>".
-# The captured expression is checked for the word "integration".
+# The captured expression's identifiers are extracted and filtered against the denylist below to discover custom tags.
 _RE_GO_BUILD_CONSTRAINT = re.compile(r"^//go:build\s+(?P<expr>.*)$")
 
 # Matches a -tags flag (space or = separated) and its value, which may be a quoted (comma/space-separated) list or a single bare (comma-separated) token.
@@ -1946,22 +1946,54 @@ _RE_VERIFY_TAGS_FLAG = re.compile(r"-tags[= ]+(\"[^\"]*\"|'[^']*'|\S+)")
 # Safety net bounding the //go:build header-comment scan well above real-world license-header lengths (Apache-2.0 ~15 lines, BSD-3-Clause ~25-27 lines), so a long copyright header never causes an unbounded scan.
 _GO_BUILD_TAG_SCAN_LINES = 40
 
+# Standard Go build tags that are never "custom" -- discovering a GOOS/GOARCH/reserved/
+# release-version identifier in a //go:build expression must not require a matching -tags
+# flag (those tags are satisfied automatically, never via -tags).
+_GO_BUILD_DENYLIST_GOOS = frozenset({
+    "aix", "android", "darwin", "dragonfly", "freebsd", "hurd", "illumos", "ios", "js",
+    "linux", "nacl", "netbsd", "openbsd", "plan9", "solaris", "wasip1", "windows", "zos",
+})
+_GO_BUILD_DENYLIST_GOARCH = frozenset({
+    "386", "amd64", "amd64p32", "arm", "armbe", "arm64", "arm64be", "loong64", "mips",
+    "mipsle", "mips64", "mips64le", "mips64p32", "mips64p32le", "ppc", "ppc64", "ppc64le",
+    "riscv", "riscv64", "s390", "s390x", "sparc", "sparc64", "wasm",
+})
+_GO_BUILD_DENYLIST_RESERVED = frozenset({
+    "cgo", "race", "msan", "asan", "unix", "boringcrypto", "gc", "gccgo", "purego", "ignore",
+})
+# Release-version tags (e.g. "go1.21") are also never custom.
+_RE_GO_RELEASE_VERSION_TAG = re.compile(r"^go[1-9]\d*\.\d+$")
 
-def _go_file_is_integration_tagged(path: Path) -> bool:
+# Deliberate divergence from _implementer_common.py's _GO_BUILD_TAG_GOOS/_GO_BUILD_TAG_GOARCH
+# (lines 1014-1017 there): that smaller set is safe only because its caller
+# (_go_build_tag_retiering_stuck) runs `go build -tags <tag>` downstream, so a
+# misclassified real GOOS/GOARCH value fails the compile and surfaces as stuck_type: verify
+# (fails closed). This check has no downstream compile step -- a misclassified value here
+# would silently create a new, never-corrected false positive, so it intentionally uses a
+# larger, more complete denylist and must not share a constant with that smaller set.
+
+
+def _go_file_custom_tags(path: Path) -> set[str]:
     """
-    Return True if a Go source file's leading //go:build constraint mentions "integration".
+    Return the set of custom build tags discovered in a Go source file's leading //go:build line.
 
     Scans from the top of the file, skipping blank lines and `//`-comment lines (a license/copyright
     header may precede the build-constraint line);
     the first line that is neither blank nor a `//`-comment ends the scan (e.g. `package foo` or a
     `/*` block comment opener).
     Bounded to the first `_GO_BUILD_TAG_SCAN_LINES` lines.
+    On the first scanned `//go:build` line, every identifier in its constraint expression is
+    extracted and the ones NOT in `_GO_BUILD_DENYLIST_GOOS`, `_GO_BUILD_DENYLIST_GOARCH`,
+    `_GO_BUILD_DENYLIST_RESERVED`, and not matching `_RE_GO_RELEASE_VERSION_TAG` (a
+    custom tag discovered from the file's own `//go:build` expression, GOOS/GOARCH/
+    reserved-word/release-version tags excluded via denylist) are returned.
 
     Args:
         path: Path to an existing Go source file on disk.
 
     Returns:
-        True if a scanned `//go:build` line's constraint expression contains the word "integration".
+        The set[str] of custom tags found on the first scanned `//go:build` line; empty when no such
+        line is found before the scan ends.
     """
     text = path.read_text(encoding="utf-8")
     for line in text.splitlines()[:_GO_BUILD_TAG_SCAN_LINES]:
@@ -1971,31 +2003,40 @@ def _go_file_is_integration_tagged(path: Path) -> bool:
         if not stripped.startswith("//"):
             break
         m = _RE_GO_BUILD_CONSTRAINT.match(stripped)
-        if m and re.search(r"\bintegration\b", m.group("expr")):
-            return True
-    return False
+        if m:
+            identifiers = re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", m.group("expr"))
+            return {
+                ident for ident in identifiers
+                if ident not in _GO_BUILD_DENYLIST_GOOS
+                and ident not in _GO_BUILD_DENYLIST_GOARCH
+                and ident not in _GO_BUILD_DENYLIST_RESERVED
+                and not _RE_GO_RELEASE_VERSION_TAG.match(ident)
+            }
+    return set()
 
 
-def _verify_command_has_integration_tag(command: str) -> bool:
+def _verify_command_has_any_tag(command: str, tags: set[str]) -> bool:
     """
-    Return True if a verify: command's -tags flag value includes "integration".
+    Return True if a verify: command's -tags flag value includes any of `tags`.
 
-    Matches `-tags integration`, `-tags=integration`, and a quoted or bare comma-separated value
-    like `-tags "integration,other"` or `-tags integration,other`.
-    A value like `integrationtest` does not count -- the match requires "integration" as an exact
-    comma/whitespace-split token, not a substring.
+    Matches `-tags <tag>`, `-tags=<tag>`, and a quoted or bare comma-separated value like
+    `-tags "<tag>,other"` or `-tags <tag>,other`.
+    A value that merely contains a tag as a substring (e.g. `integrationtest` for tag
+    `integration`) does not count -- the match requires an exact comma/whitespace-split token,
+    not a substring.
 
     Args:
         command: The verify: command string (already normalized via `_plan_dag.parse_verify_field`).
+        tags: The set of custom tags to match against; the check passes if ANY of them appears.
 
     Returns:
-        True if any `-tags` flag in the command carries "integration" as one of its
+        True if any `-tags` flag in the command carries at least one of `tags` as one of its
         comma/whitespace-split values.
     """
     for m in _RE_VERIFY_TAGS_FLAG.finditer(command):
         value = m.group(1).strip("\"'")
         tokens = re.split(r"[,\s]+", value)
-        if "integration" in tokens:
+        if set(tokens) & tags:
             return True
     return False
 
@@ -2009,7 +2050,7 @@ def _check_verify_excludes_edited_tagged_test(
     git_root: Path | None = None,
 ) -> list[dict]:
     """
-    Flag a batch whose verify: command silently skips an edited integration-tagged Go test.
+    Flag a batch whose verify: command silently skips an edited custom-tagged Go test.
 
     Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open for every non-Go project
     -- mirrors `_check_verify_not_isolated`'s `is_python_project` gate.
@@ -2017,16 +2058,19 @@ def _check_verify_excludes_edited_tagged_test(
     For each batch, collects `Edits:`-only tokens ending in `_test.go` (via `_parse_edits_only`,
     filtered to that suffix). `Creates:` tokens are deliberately excluded from this collection: a
     `Creates:` target does not exist on disk at plan-validation time (this codebase's established
-    convention), so `resolve_existing_paths` would never confirm it as integration-tagged anyway --
-    an accepted, documented limitation, not a bug (see the Card 6 `(h)` regression scenario).
+    convention), so `resolve_existing_paths` would never confirm it as custom-tagged anyway -- an
+    accepted, documented limitation, not a bug (see the Card 6 `(h)` regression scenario).
 
-    Each resolved edited test file is scanned via `_go_file_is_integration_tagged`.
-    When a batch has at least one edited integration-tagged test, its `verify:` command (normalized
-    via `_plan_dag.parse_verify_field`; a malformed `{cwd, command}` mapping raises `ValueError` --
-    caught and skipped here since `_check_verify_malformed_cwd` is the sole reporter for that) must
-    carry a `-tags` flag whose value includes "integration" (`_verify_command_has_integration_tag`);
-    otherwise this check reports the batch with one finding naming the first (sorted) tagged token
-    found.
+    Each resolved edited test file is scanned via `_go_file_custom_tags`, which discovers custom
+    tags from the file's own `//go:build` expression (GOOS/GOARCH/reserved-word/release-version
+    tags excluded via denylist). Every edited tagged file is checked independently -- not just the
+    first -- so a batch editing multiple custom-tagged test files gets one finding per untested
+    file. The batch's `verify:` command (normalized once per batch via `_plan_dag.parse_verify_field`;
+    a malformed `{cwd, command}` mapping raises `ValueError` -- caught and skipped here since
+    `_check_verify_malformed_cwd` is the sole reporter for that) must carry a `-tags` flag whose
+    value includes at least one of a file's discovered tags (`_verify_command_has_any_tag`);
+    otherwise this check reports one finding for that file, naming the alphabetically-first
+    (`sorted(tags)[0]`) discovered tag for determinism.
 
     Error dict shape: ``{check, batch, card, path, message}``.
 
@@ -2042,8 +2086,8 @@ def _check_verify_excludes_edited_tagged_test(
         git_root: Optional repo root, threaded to `resolve_existing_paths`.
 
     Returns:
-        List of error dicts, one per batch with an edited integration-tagged test file whose verify:
-        command lacks a matching -tags flag.
+        List of error dicts, one per edited custom-tagged test file whose batch verify: command
+        lacks a matching -tags flag.
     """
     if not (project_root / "go.mod").exists():
         return []
@@ -2056,19 +2100,6 @@ def _check_verify_excludes_edited_tagged_test(
         if not edited_test_tokens:
             continue
 
-        tagged_token: str | None = None
-        for token in edited_test_tokens:
-            resolved = resolve_existing_paths(
-                [token], project_root, root, wiki_root=wiki_root, git_root=git_root,
-            )
-            if not resolved:
-                continue
-            if _go_file_is_integration_tagged(resolved[0]):
-                tagged_token = token
-                break
-        if tagged_token is None:
-            continue
-
         try:
             frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
             command, _cwd = _plan_dag.parse_verify_field(
@@ -2078,18 +2109,26 @@ def _check_verify_excludes_edited_tagged_test(
             # _check_verify_malformed_cwd is the sole reporter for this.
             continue
 
-        if command is None or not _verify_command_has_integration_tag(command):
-            errors.append({
-                "check": "verify-excludes-edited-tagged-test",
-                "batch": batch_path.stem,
-                "card": None,
-                "path": tagged_token,
-                "message": (
-                    f"batch '{batch_path.stem}' edits integration-tagged test "
-                    f"'{tagged_token}' but its verify: command lacks a matching "
-                    "-tags ...integration... flag"
-                ),
-            })
+        for token in edited_test_tokens:
+            resolved = resolve_existing_paths(
+                [token], project_root, root, wiki_root=wiki_root, git_root=git_root,
+            )
+            if not resolved:
+                continue
+            tags = _go_file_custom_tags(resolved[0])
+            if not tags:
+                continue
+            if command is None or not _verify_command_has_any_tag(command, tags):
+                errors.append({
+                    "check": "verify-excludes-edited-tagged-test",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": token,
+                    "message": (
+                        f"batch '{batch_path.stem}' edits custom-tagged test '{token}' but its "
+                        f"verify: command lacks a matching -tags flag naming '{sorted(tags)[0]}'"
+                    ),
+                })
 
     return errors
 
