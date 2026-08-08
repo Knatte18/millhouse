@@ -265,27 +265,31 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Two GAP headings -> blocking_count == 2
+            # Two BLOCKING:design headings -> blocking_count == 2 (design survives the
+            # discussion stage's blocking_classes ceiling, so the count is unaffected by demotion).
             two_gaps = (
                 "# Review\n\n"
-                "### [GAP] missing rationale\n\n- bullet\n\n"
-                "### [GAP] unclear scope\n\n- bullet\n\n"
-                "```yaml\nverdict: GAPS_FOUND\n```\n"
+                "### [BLOCKING:design] missing rationale\n\n- bullet\n\n"
+                "### [BLOCKING:design] unclear scope\n\n- bullet\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([(two_gaps, "sid-gaps")])
             r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "REQUEST_CHANGES", (
+                f"expected REQUEST_CHANGES, got {r.verdict}"
+            )
             assert r.blocking_count == 2, (
                 f"expected blocking_count=2, got {r.blocking_count}"
             )
-            print("PASS blocking_count: two GAP headings -> blocking_count == 2")
+            print("PASS blocking_count: two BLOCKING:design headings -> blocking_count == 2")
 
-            # Zero GAPs -> blocking_count == 0
+            # Zero BLOCKING headings -> blocking_count == 0
             stub.seed([(APPROVE_TEXT, "sid-no-gaps")])
             r2 = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
             assert r2.blocking_count == 0, (
                 f"expected blocking_count=0, got {r2.blocking_count}"
             )
-            print("PASS blocking_count: no GAP headings -> blocking_count == 0")
+            print("PASS blocking_count: no BLOCKING headings -> blocking_count == 0")
 
         except AssertionError as exc:
             errors += 1
@@ -324,11 +328,11 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Two NOTE headings and zero GAPs -> nit_count == 2, blocking_count == 0
+            # Two NIT:design headings and zero BLOCKING -> nit_count == 2, blocking_count == 0
             two_notes = (
                 "# Review\n\n"
-                "### [NOTE] minor style issue\n\n- bullet\n\n"
-                "### [NOTE] consider this optimization\n\n- bullet\n\n"
+                "### [NIT:design] minor style issue\n\n- bullet\n\n"
+                "### [NIT:design] consider this optimization\n\n- bullet\n\n"
                 "```yaml\nverdict: APPROVE\n```\n"
             )
             stub.seed([(two_notes, "sid-notes")])
@@ -338,7 +342,7 @@ def main() -> int:
                 f"expected blocking_count=0, got {r.blocking_count}"
             )
             print(
-                "PASS nit_count: two NOTE headings -> nit_count == 2, blocking_count == 0"
+                "PASS nit_count: two NIT:design headings -> nit_count == 2, blocking_count == 0"
             )
 
         except AssertionError as exc:
@@ -348,6 +352,131 @@ def main() -> int:
             errors += 1
             print(
                 f"FAIL nit_count (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # findings list length equals blocking_count + nit_count, at both the
+    # top level and inside reviews[0]
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Two BLOCKING:design and one NIT:design -> findings length == 3.
+            mixed = (
+                "# Review\n\n"
+                "### [BLOCKING:design] missing rationale\n\n- bullet\n\n"
+                "### [BLOCKING:design] unclear scope\n\n- bullet\n\n"
+                "### [NIT:design] minor style issue\n\n- bullet\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(mixed, "sid-findings")])
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            expected_len = r.blocking_count + r.nit_count
+            assert len(r.findings) == expected_len, (
+                f"expected top-level findings length {expected_len}, got {len(r.findings)}"
+            )
+            assert len(r.reviews[0]["findings"]) == expected_len, (
+                f"expected reviews[0] findings length {expected_len}, "
+                f"got {len(r.reviews[0]['findings'])}"
+            )
+            print(
+                "PASS findings length: top-level and reviews[0] findings both "
+                "equal blocking_count + nit_count"
+            )
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL findings length: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL findings length (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # BLOCKING:scope findings are demoted at the discussion stage (scope is
+    # outside discussion-review's default blocking_classes) -> APPROVE
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            two_scope_findings = (
+                "# Review\n\n"
+                "### [BLOCKING:scope] incomplete inventory\n\n- bullet\n\n"
+                "### [BLOCKING:scope] unreliable enumeration\n\n- bullet\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(two_scope_findings, "sid-scope-only")])
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "APPROVE", (
+                f"expected APPROVE (scope demoted to NIT), got {r.verdict}"
+            )
+            assert r.blocking_count == 0, (
+                f"expected blocking_count=0, got {r.blocking_count}"
+            )
+            assert r.nit_count == len(r.findings), (
+                f"expected nit_count == number of findings ({len(r.findings)}), "
+                f"got {r.nit_count}"
+            )
+            assert all(f["demoted"] for f in r.findings), (
+                f"expected every finding demoted, got {r.findings}"
+            )
+            print(
+                "PASS BLOCKING:scope demotion: scope-only findings yield APPROVE "
+                "with all findings demoted"
+            )
+
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL BLOCKING:scope demotion: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL BLOCKING:scope demotion (unexpected {type(exc).__name__}): {exc}",
                 file=sys.stderr,
             )
         finally:
