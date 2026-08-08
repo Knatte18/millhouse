@@ -65,6 +65,11 @@ def _load_claim_module(stub_map: dict) -> object:
         saved[name] = sys.modules.get(name)
         sys.modules[name] = stub
     spec.loader.exec_module(mod)
+    # 'from wiki import _client as wiki' can resolve via a real '_client' attribute already
+    # cached on the 'wiki' package object by an earlier test in this process, bypassing the
+    # sys.modules["wiki._client"] injection above. Bind mod.wiki directly so every scenario
+    # reaches the stub instead of the real wiki._client module.
+    mod.wiki = stub_map["wiki._client"]
     return mod, saved
 
 
@@ -104,6 +109,10 @@ def _make_stub_map(
         "_junction": MagicMock(),
         "_config": config_mod,
         "_sibling": types.ModuleType("_sibling"),
+        # millpy-claim.py resolves 'from wiki import _client as wiki' via this sys.modules
+        # key; without it, every scenario's mod.main() reaches the real wiki._client code
+        # against the fake '/fake/wiki' path and hangs in _ensure_daemon's spawn-poll loop.
+        "wiki._client": MagicMock(),
     }
 
 
@@ -258,6 +267,7 @@ def test_main_happy_path_calls_spawn_core_helpers() -> None:
             patch.object(mod, "_is_dirty", return_value=False),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
         ):
             exit_code = mod.main(["--slug", "my-task"])
     finally:
@@ -367,6 +377,7 @@ def test_main_dirty_tree_stash_invokes_git_stash() -> None:
             patch.object(mod, "_prompt_dirty_tree", return_value=1),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
         ):
             exit_code = mod.main(["--slug", "my-task"])
     finally:
@@ -431,6 +442,7 @@ def test_main_multi_path_skips_claim_in_wiki() -> None:
             patch.object(mod, "_is_dirty", return_value=False),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
         ):
             exit_code = mod.main([])
     finally:
@@ -656,6 +668,7 @@ def test_main_hub_title_flip_when_cwd_is_hub() -> None:
             patch.object(mod, "_is_dirty", return_value=False),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=green_settings),
+            patch.object(Path, "mkdir", return_value=None),
         ):
             exit_code = mod.main(["--slug", "my-task"])
     finally:
@@ -711,6 +724,7 @@ def test_hub_paths_use_cwd_not_git_root() -> None:
             patch.object(mod, "_is_dirty", return_value=False),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value="# Home\n"),
+            patch.object(Path, "mkdir", return_value=None),
         ):
             exit_code = mod.main(["--slug", "my-task"])
     finally:
