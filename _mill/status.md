@@ -77,7 +77,9 @@ batches:
     commit_sha: 0c4fcf1112875ef776470b17a080f0df0cdba3cd
     verify_baseline_failures: []
   - name: skill-mill-go
-    state: pending
+    state: running
+    implementer_session: ad6ecb6f-00c3-4a06-baea-754f4350d4ac
+    start_sha: 14d5d683f475bbced9df1b147a3ca56a478e05ae
   - name: skills-start-plan-receiving
     state: pending
 ```
