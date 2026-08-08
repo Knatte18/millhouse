@@ -3,7 +3,7 @@
 ```yaml
 task: "Classify review GAPs by kind (design/scope/decision/consistency); scope discussion review to what downstream stages cannot catch"
 slug: "review-gap-classification-by-kind"
-approved: false
+approved: true
 started: "20260808-172233"
 parent: "main"
 root: ""
