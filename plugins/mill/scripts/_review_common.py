@@ -1936,6 +1936,223 @@ def extract_findings(raw_text: str) -> list[Finding]:
     return heading_findings + yaml_findings
 
 
+def apply_blocking_ceiling(
+    findings: list[Finding], blocking_classes: frozenset[str]
+) -> list[Finding]:
+    """Demote every BLOCKING finding whose class falls outside blocking_classes to NIT, in place.
+
+    A finding whose `cls` is None is never demoted -- an unclassifiable finding cannot be checked
+    against `blocking_classes`, per the unknown-class-preserves-stated-severity Shared Decision.
+    A finding already at NIT_SEVERITY is never promoted;
+    the stage table is a ceiling, never a floor, per the ceiling-demotes-only Shared Decision.
+
+    Mutates and returns `findings` for caller convenience (the list is also what
+    rewrite_demoted_findings and the blocking/nit scalar counts read next).
+    """
+    for finding in findings:
+        if (
+            finding.severity == BLOCKING_SEVERITY
+            and finding.cls is not None
+            and finding.cls not in blocking_classes
+        ):
+            finding.severity = NIT_SEVERITY
+            finding.demoted = True
+    return findings
+
+
+def _demote_yaml_entry_text(entry_text: str) -> str:
+    """Rewrite one fenced-yaml `findings:` entry's raw text: `severity: BLOCKING` -> `severity: NIT`,
+    plus an added `demoted_from: BLOCKING` field line.
+
+    Operates as a line-level edit on `entry_text` (the entry's own lines, bullet included) rather
+    than a yaml.safe_dump round-trip, which would reorder keys, restyle quoting, and drop comments
+    across the whole fenced block.
+    """
+    lines = entry_text.splitlines(keepends=True)
+    # The new field line's indentation matches this entry's other standalone field lines (e.g.
+    # "  class: scope") -- found by scanning past the first (bullet) line for the first line that is
+    # pure leading whitespace followed by content.
+    field_indent = None
+    for line in lines[1:]:
+        m = re.match(r"^(\s+)\S", line)
+        if m:
+            field_indent = m.group(1)
+            break
+    if field_indent is None:
+        # Single-line entry (bullet and first key on the same line) -- derive the field indent from
+        # the bullet's own leading whitespace plus two spaces.
+        bullet_m = re.match(r"^(\s*)-", lines[0])
+        base = bullet_m.group(1) if bullet_m else ""
+        field_indent = base + "  "
+
+    out_lines: list[str] = []
+    inserted = False
+    for line in lines:
+        rewritten = re.sub(r"(severity:\s*)BLOCKING\b", r"\1NIT", line, count=1, flags=re.IGNORECASE)
+        out_lines.append(rewritten)
+        if not inserted and re.search(r"severity:\s*BLOCKING\b", line, re.IGNORECASE):
+            newline = "\n" if line.endswith("\n") else ""
+            out_lines.append(f"{field_indent}demoted_from: BLOCKING{newline}")
+            inserted = True
+    return "".join(out_lines)
+
+
+def _find_yaml_findings_entries(body_lines: list[str]) -> list[tuple[int, int]]:
+    """Return (start, end) line-index spans (relative to body_lines) for every list item under a
+    `findings:` key inside one fenced yaml block's body.
+
+    `end` is exclusive. Returns an empty list when body_lines carries no `findings:` key.
+    """
+    findings_idx = None
+    findings_indent = None
+    for idx, line in enumerate(body_lines):
+        m = re.match(r"^(\s*)findings:\s*$", line.rstrip("\n"))
+        if m:
+            findings_idx = idx
+            findings_indent = len(m.group(1))
+            break
+    if findings_idx is None:
+        return []
+
+    entries: list[tuple[int, int]] = []
+    entry_indent = None
+    start = None
+    i = findings_idx + 1
+    while i < len(body_lines):
+        line = body_lines[i].rstrip("\n")
+        if line.strip() == "":
+            i += 1
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent <= findings_indent:
+            # Dedent back to findings:'s own level or shallower -- a sibling top-level key, or the
+            # end of the mapping this findings: key lives in.
+            break
+        m = re.match(r"^(\s*)-\s", line)
+        if m and (entry_indent is None or indent == entry_indent):
+            if start is not None:
+                entries.append((start, i))
+            start = i
+            entry_indent = indent
+        i += 1
+    if start is not None:
+        entries.append((start, i))
+    return entries
+
+
+def _rewrite_demoted_headings(
+    raw_text: str, demote_pairs: set[tuple[str, str | None]]
+) -> str:
+    """Rewrite every `### [BLOCKING:<cls>] <title>` heading whose (title, cls) pair is in
+    demote_pairs to `### [NIT:<cls>] <title>`, inserting a `**Demoted-from:** BLOCKING` line as the
+    first non-blank line after the heading (preserving a blank line between the heading and its
+    first field line, when one is present).
+    """
+    lines = raw_text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_FINDING_HEADING.match(line.rstrip("\n"))
+        if m and m.group("sev") == BLOCKING_SEVERITY and m.group("cls") is not None:
+            title = m.group("title").strip()
+            cls = m.group("cls")
+            if (title, cls) in demote_pairs:
+                newline = "\n" if line.endswith("\n") else ""
+                out.append(f"### [{NIT_SEVERITY}:{cls}] {m.group('title')}{newline}")
+                i += 1
+                if i < len(lines) and lines[i].strip() == "":
+                    out.append(lines[i])
+                    i += 1
+                out.append("**Demoted-from:** BLOCKING\n")
+                continue
+        out.append(line)
+        i += 1
+    return "".join(out)
+
+
+def _rewrite_demoted_yaml_entries(
+    raw_text: str, demote_pairs: set[tuple[str, str | None]]
+) -> str:
+    """Rewrite every fenced `findings:` yaml entry whose (title, class) pair is in demote_pairs and
+    whose severity is BLOCKING (case-insensitively), via _demote_yaml_entry_text.
+    """
+    lines = raw_text.splitlines(keepends=True)
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        if lines[i].rstrip("\n") != "```yaml":
+            out.append(lines[i])
+            i += 1
+            continue
+        out.append(lines[i])
+        i += 1
+        block_start = i
+        while i < len(lines) and lines[i].rstrip("\n") != "```":
+            i += 1
+        body_lines = lines[block_start:i]
+
+        entries = _find_yaml_findings_entries(body_lines)
+        cursor = 0
+        for start, end in entries:
+            out.extend(body_lines[cursor:start])
+            entry_text = "".join(body_lines[start:end])
+            try:
+                parsed = yaml.safe_load(entry_text)
+            except yaml.YAMLError:
+                out.append(entry_text)
+                cursor = end
+                continue
+            entry_dict = parsed[0] if isinstance(parsed, list) and parsed else None
+            if (
+                isinstance(entry_dict, dict)
+                and str(entry_dict.get("severity", "")).upper() == BLOCKING_SEVERITY
+                and (str(entry_dict.get("title", "")).strip(), entry_dict.get("class"))
+                in demote_pairs
+            ):
+                out.append(_demote_yaml_entry_text(entry_text))
+            else:
+                out.append(entry_text)
+            cursor = end
+        out.extend(body_lines[cursor:])
+
+        if i < len(lines):
+            out.append(lines[i])  # closing fence
+            i += 1
+    return "".join(out)
+
+
+def rewrite_demoted_findings(raw_text: str, findings: list[Finding]) -> str:
+    """Rewrite raw_text so every demoted finding's on-disk representation agrees with `findings`.
+
+    For each finding with `demoted is True`, keyed on the pair (title, cls) rather than on title
+    alone, rewrites EVERY occurrence matching that pair -- not just the first -- across BOTH
+    representations extract_findings reads: the markdown-heading mechanism and the fenced
+    `findings:`-YAML mechanism.
+    Rewriting both is required by the demotion-rewritten-into-review-file Shared Decision: a
+    demotion visible in only one representation reproduces the exact file/envelope divergence that
+    Decision exists to prevent.
+
+    Matching on (title, cls) and rewriting every matching occurrence, rather than tracking a count of
+    how many Finding entries share a title, is what makes duplicate titles safe: two
+    `### [BLOCKING:scope] Missing test coverage` headings are both out-of-ceiling and both demoted,
+    so both are rewritten, while a same-titled `### [BLOCKING:design]` heading does not match the
+    (title, "scope") pair and is correctly left alone.
+
+    Every finding reaching this function with `demoted is True` has a non-None `cls` -- only
+    apply_blocking_ceiling sets `demoted`, and it never demotes a `cls is None` finding -- so no
+    pair in demote_pairs has a None class component.
+
+    Returns raw_text unchanged (byte-identical) when no finding is demoted.
+    """
+    demote_pairs = {(f.title, f.cls) for f in findings if f.demoted}
+    if not demote_pairs:
+        return raw_text
+    raw_text = _rewrite_demoted_headings(raw_text, demote_pairs)
+    raw_text = _rewrite_demoted_yaml_entries(raw_text, demote_pairs)
+    return raw_text
+
+
 def write_review_file(
     reviews_dir: Path,
     review_type: str,
