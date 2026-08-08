@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-forward-output-stuck-passthrough
+phase: approved-full-suite-regression
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-08-08T17:41:25Z'
 approved-claude-sub-idle-mock  '2026-08-08T18:15:55Z'
 approved-wiki-stub-fixes  '2026-08-08T18:23:25Z'
 approved-forward-output-stuck-passthrough  '2026-08-08T18:26:57Z'
+approved-full-suite-regression  '2026-08-08T18:29:00Z'
 ```
 
 ## Batches
@@ -68,9 +69,10 @@ batches:
     (0.3s) ---', 'FAIL -- 3 of 3 in 0.3s: [''test-bg-json-contract.py'', ''test-agent-mode-dispatch.py'',
     ''test-millpy-merge-in-subagent.py'']']
   - name: full-suite-regression
-    state: running
+    state: approved
     implementer_session: 8d7b5201-55b2-4107-a514-179f147112eb
     start_sha: b9fe4d88e949f1e7740c663a0696f7912c2a48ce
+    commit_sha: 4eb32629e9cd57ba089bdde05e8dba7220326ab8
     verify_baseline_failures: [FAILED (failures=3), FAILED (failures=1), 'FAIL -- 9 of 16 tests: [''test_main_happy_path_calls_spawn_core_in_order'',
     ''test_write_settings_uses_short_name_and_slug'', ''test_main_backlog_empty_exits_zero'',
     ''test_main_value_error_from_picker_exits_one'', ''test_main_runtime_error_from_capture_branch_raises_system_exit'',
