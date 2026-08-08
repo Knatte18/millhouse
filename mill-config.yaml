@@ -36,23 +36,28 @@ roles:
     holistic:
       rounds: 8
       reviewer: sonnethigh
+      blocking_classes: [design]
   plan-review:
     batch:
       rounds: 0
       reviewer: null
+      blocking_classes: [design, scope]
     holistic:
       rounds: 7
       reviewer: sonnethigh
+      blocking_classes: [design, scope]
   code-review:
     batch:
       rounds: 0
       reviewer: null
+      blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 5
       reviewer: sonnethigh
       fallback_reviewer: null
       fallback_on:
       - rate-limit
+      blocking_classes: [design, scope, decision, consistency]
     diff_scope_threshold: 0.25
   implementer:
     self_fix_rounds: 2

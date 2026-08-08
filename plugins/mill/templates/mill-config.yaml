@@ -140,11 +140,17 @@ roles:
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+      # blocking_classes -- per-stage ceiling: a BLOCKING finding whose class is not in this
+      # list is demoted to NIT when the review is finalized; a finding is never promoted.
+      # Omitting this key falls back to the per-stage default documented in
+      # _review_common.DEFAULT_BLOCKING_CLASSES.
+      blocking_classes: [design]
 
   plan-review:
     batch:
       rounds: 0
       reviewer: null
+      blocking_classes: [design, scope]
     holistic:
       rounds: 4
       reviewer: sonnetmax
@@ -152,11 +158,13 @@ roles:
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
       #   timeout: 3600          # optional: override the default holistic_timeout for large prompts
+      blocking_classes: [design, scope]
 
   code-review:
     batch:
       rounds: 0
       reviewer: null
+      blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 4
       reviewer: sonnethigh
@@ -166,6 +174,7 @@ roles:
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
+      blocking_classes: [design, scope, decision, consistency]
     diff_scope_threshold: 0.25
 
   implementer:
