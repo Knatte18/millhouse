@@ -70,12 +70,12 @@ from _review_common import (
     load_task_title,
     maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
-    parse_blocking_count,
     parse_missing_context,
     parse_moves,
     parse_verdict,
     read_constraints_md,
     render_prompt,
+    resolve_blocking_classes,
     resolve_existing_paths,
     resolve_path,
     resolve_ref_paths,
@@ -556,9 +556,11 @@ def finalize(
     if scope is not None:
         raw_text = _splice_rename_nit_findings(raw_text, scope, slug, cfg, project_root)
 
+    blocking_classes = resolve_blocking_classes(cfg, "code", scope)
     try:
         review_entry = finalize_scope(
-            reviews_dir, "code", round_n, raw_text, scope=scope, actual_model=actual_model
+            reviews_dir, "code", round_n, raw_text, scope=scope, actual_model=actual_model,
+            blocking_classes=blocking_classes,
         )
     except ReviewError as exc:
         path = write_review_file(
@@ -578,6 +580,7 @@ def finalize(
                 "verdict": "ERROR",
                 "file": str(path),
                 "error": f"parse_verdict failed: {exc}",
+                "findings": [],
                 "session_id": None,
             }],
         )
@@ -588,10 +591,12 @@ def finalize(
         verdict=review_entry["verdict"],
         blocking_count=review_entry["blocking_count"],
         nit_count=review_entry["nit_count"],
+        findings=review_entry["findings"],
         reviews=[{
             "scope": scope_label,
             "verdict": review_entry["verdict"],
             "file": review_entry["file"],
+            "findings": review_entry["findings"],
             "session_id": None,
         }],
     )
@@ -634,7 +639,13 @@ def run(
                 round=0,
                 verdict="APPROVE",
                 blocking_count=0,
-                reviews=[{"scope": scope_label, "verdict": "APPROVE", "file": None, "skipped": True}],
+                reviews=[{
+                    "scope": scope_label,
+                    "verdict": "APPROVE",
+                    "file": None,
+                    "skipped": True,
+                    "findings": [],
+                }],
             )
 
         # Prepare
@@ -675,6 +686,7 @@ def run(
                     "verdict": "ERROR",
                     "file": None,
                     "error": str(exc),
+                    "findings": [],
                     "session_id": None,
                 }],
             )
@@ -700,6 +712,7 @@ def run(
                     "verdict": "ERROR",
                     "file": str(path),
                     "error": f"parse_verdict failed: {exc}",
+                    "findings": [],
                     "session_id": session_id,
                 }],
             )
@@ -739,6 +752,7 @@ def run(
                             "verdict": "ERROR",
                             "file": None,
                             "error": f"resume retry failed: {exc}",
+                            "findings": [],
                             "session_id": None,
                         }],
                     )
@@ -762,6 +776,7 @@ def run(
                             "verdict": "ERROR",
                             "file": str(path),
                             "error": f"parse_verdict failed: {exc}",
+                            "findings": [],
                             "session_id": session_id,
                         }],
                     )
