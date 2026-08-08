@@ -148,6 +148,25 @@ it literally.
   `-tags` flag should not produce a message that says "integration".
 - Rejected: none — this follows directly from generalizing the detection itself.
 
+### bug1-message-tag-selection-deterministic
+
+- Decision: `_go_file_custom_tags` returns `set[str]` (matching uses set intersection, order
+  doesn't matter there). When a file has more than one custom tag, the finding message names
+  `sorted(tags)[0]` — the alphabetically-first custom tag — never raw set-iteration order.
+- Rationale: Python's `set[str]` iteration order for strings is not guaranteed stable/
+  deterministic across runs (no insertion-order guarantee like `dict`), so "the first
+  discovered tag" as originally phrased in Technical context was ambiguous and would make the
+  finding message's exact wording flaky across runs/interpreter versions for a
+  multi-tag-in-one-file case (e.g. `//go:build scout && smoke`). `sorted(...)[0]` is
+  deterministic and matches this same function's own existing convention one call up: `edited_test_tokens`
+  is already built via `sorted(t for t in _parse_edits_only(batch_path) if ...)` for the same
+  determinism reason.
+- Rejected: preserving `re.findall`'s source-order via a list before the denylist filter (i.e.
+  "first tag as it appears in the `//go:build` expression") — also deterministic, but adds a
+  second ordered-list code path alongside the `set[str]` used for matching, for a message-only
+  cosmetic difference; `sorted()` reuses the pattern already established one line up in the same
+  function.
+
 ### bug1-rename-integration-specific-identifiers
 
 - Decision: `_go_file_is_integration_tagged` is renamed to `_go_file_custom_tags` (returns
@@ -198,8 +217,8 @@ it literally.
   `tagged_token: str | None` and `break`s at the first tagged file (lines 2059-2068); per
   `bug1-check-every-tagged-file-not-just-first` this becomes a loop with no `break` that
   independently resolves each edited test token's custom-tag set and appends one finding per
-  untested tagged file, carrying that file's own custom-tag set (or its first discovered tag,
-  for the message) alongside its token path.
+  untested tagged file, carrying that file's own custom-tag set (or `sorted(tags)[0]` per
+  `bug1-message-tag-selection-deterministic`, for the message) alongside its token path.
 - `_RE_GO_BUILD_CONSTRAINT` (line 1941) already captures the full expression string via its
   `expr` named group — the generalized identifier-extraction reuses this same capture, no regex
   change needed there.
@@ -248,6 +267,13 @@ captured under Scope/Decisions above.
     → 1 finding naming the untested `smoke` file — this is the regression guard proving the
     loop no longer stops at the first tagged file. A companion clean case (same two files,
     `verify: -tags scout,smoke`) → 0 findings.
+  - **Multi-composed-tag single file** (per `bug1-any-tag-match-semantics` /
+    `bug1-message-tag-selection-deterministic`): one test file with
+    `//go:build scout && smoke`, `verify:` with no `-tags` → 1 finding whose message names
+    `scout` (the alphabetically-first of the two, deterministic per `sorted(tags)[0]`). A
+    companion clean case, same fixture, `verify: -tags smoke` (only the second/non-first tag)
+    → 0 findings — proves the "ANY tag matches" rule from `bug1-any-tag-match-semantics` is
+    independent of which tag the message-selection logic happens to name.
   - All 7 existing tests at line 5297+ must still pass unmodified (the `integration` case is
     just one instance of the generalized "custom tag" concept now, not special-cased code).
 
@@ -306,3 +332,12 @@ captured under Scope/Decisions above.
   downstream compile step, so an unrecognized-but-real GOOS/GOARCH value falling through the
   small set would create a new, never-corrected false positive instead of failing safely. See
   the `_implementer_common.py` divergence note under `bug1-tag-discovery-via-denylist`.
+- **Q:** (discussion-review r2 GAP) `_go_file_custom_tags` returns `set[str]`, and the finding
+  message was specified as naming "its first discovered tag" — but `set[str]` iteration order
+  isn't guaranteed deterministic. What determines the named tag when a single file has more
+  than one custom tag? **A:** [auto-pick] `sorted(tags)[0]` — deterministic, alphabetically
+  first — reusing this same function's own existing `sorted(...)` convention for
+  `edited_test_tokens` one call up. **Why:** an ambiguous "first discovered" spec over a
+  `set[str]` would make the finding message's wording flaky across runs; also added a
+  single-file multi-composed-tag test case, which was previously unexercised. See
+  `bug1-message-tag-selection-deterministic`.
