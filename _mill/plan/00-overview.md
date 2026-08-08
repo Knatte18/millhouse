@@ -119,8 +119,11 @@ batches:
 
 ### Decision: dual-mechanism-scan-preserved
 
-- **Decision:** `extract_findings` scans **both** the markdown-heading mechanism and the fenced-`findings:`-YAML mechanism unconditionally, concatenates the results, and deduplicates by heading title.
+- **Decision:** `extract_findings` scans **both** the markdown-heading mechanism and the fenced-`findings:`-YAML mechanism unconditionally, concatenates the results, and deduplicates by heading title **across mechanisms only**.
+  Two findings from the same mechanism that share a title are both kept.
   Neither scan is gated on the other's result.
+- **Why the dedup is cross-mechanism only:** its purpose is to stop one finding being counted twice for appearing in both representations, not to merge distinct findings within one.
+  A flat first-occurrence-wins dedup would drop a genuine second finding whose title happened to match, and would leave a `BLOCKING` heading on disk that no surviving `Finding` demotes.
 - **Rationale:** this is the mixed-format property `count_unrecognized_severity_findings` was written to hold -- a document using markdown headings for one severity and a YAML block for the other must not be able to hide a finding in whichever mechanism the known labels did not use.
   A regression here is the most likely silent failure of the whole change.
 - **Applies to:** batches 1, 3, 4
