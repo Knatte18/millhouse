@@ -289,6 +289,7 @@ def main() -> int:
                      mock.patch("_psmux.kill_session") as m_kill, \
                      mock.patch.object(mod, "_wait_for_marker_in_pane", return_value=True), \
                      mock.patch.object(mod, "_wait_for_idle_prompt", side_effect=mock_wait_for_idle_fails), \
+                     mock.patch.object(mod, "_wait_for_idle_stable", return_value=False), \
                      mock.patch("_paths.resolve_git_root", return_value=tmpdir_path), \
                      mock.patch("_config.load_config", return_value={}), \
                      mock.patch("sys.stdout", new_callable=io.StringIO), \
