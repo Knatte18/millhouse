@@ -38,8 +38,11 @@ it literally.
 
 **In:**
 - `_go_file_is_integration_tagged` / `_verify_command_has_integration_tag` /
-  `_check_verify_excludes_edited_tagged_test`: generalize from a single hardcoded tag name to
-  discovering the actual custom tag(s) from the file's own `//go:build` expression.
+  `_check_verify_excludes_edited_tagged_test` (renamed to `_go_file_custom_tags` /
+  `_verify_command_has_any_tag` per `bug1-rename-integration-specific-identifiers`): generalize
+  from a single hardcoded tag name to discovering the actual custom tag(s) from each edited
+  file's own `//go:build` expression, and check every edited tagged test file in the batch
+  (not just the first one found, per `bug1-check-every-tagged-file-not-just-first`).
 - `_parse_cards`: track fenced-code-block depth so a `### ` line inside an open fence never
   starts or ends a card block.
 - Unit tests for both fixes, following existing conventions in
@@ -81,6 +84,20 @@ it literally.
 - Rejected: (a) expanding the hardcoded set to `{integration, smoke, scout}` — doesn't
   generalize, still wrong for the next repo's tag name; (b) treating every identifier as custom
   with no denylist — simplest, but creates the GOOS/GOARCH false-positive described above.
+- **Deliberate divergence from `_implementer_common.py`'s `_GO_BUILD_TAG_GOOS`/
+  `_GO_BUILD_TAG_GOARCH` (lines 1014-1017):** that existing precedent uses a small, explicitly
+  non-exhaustive set (`{"linux", "darwin", "windows", "freebsd"}` / `{"amd64", "arm64",
+  "386"}`) and documents that an unrecognized-but-real GOOS/GOARCH value is safe to
+  misclassify as "custom" there, because its caller (`_go_build_tag_retiering_stuck`) actually
+  runs `go build -tags <tag>` downstream — a bogus tag fails the compile and surfaces as
+  `stuck_type: verify`, i.e. the misclassification fails closed. This check has no such
+  downstream compile step: it is a static validator whose only effect is requiring a `-tags`
+  flag in `verify:`. A misclassified real GOOS/GOARCH value here (e.g. some less-common value
+  missing from a small set, like `openbsd` or `wasm`) would silently create a *new*,
+  never-corrected false positive — the exact failure mode this task exists to eliminate — not
+  a safely-failing one. This check therefore intentionally uses a larger, more complete
+  denylist than the existing precedent rather than reusing or extending that smaller set;
+  the two checks have different safety directions and must not share one constant.
 
 ### bug1-any-tag-match-semantics
 
@@ -96,6 +113,32 @@ it literally.
 - Rejected: requiring all custom tags to match — deferred as future work if a real repo hits
   this gap; not proven necessary by either issue.
 
+### bug1-check-every-tagged-file-not-just-first
+
+- Decision: `_check_verify_excludes_edited_tagged_test`'s loop over `edited_test_tokens`
+  (line ~2059) currently sets `tagged_token` on the first tagged file found and `break`s,
+  checking only that one file against `verify:`. The generalized check removes the `break`:
+  it walks every edited test token, resolves each one, and for every file that is tagged
+  (has ≥1 custom tag per `bug1-tag-discovery-via-denylist`), independently checks that file's
+  custom-tag set against `verify:`'s `-tags` value using the "any tag matches" rule from
+  `bug1-any-tag-match-semantics`. A batch editing both a `scout`-tagged and a `smoke`-tagged
+  test file, with `verify: -tags scout`, now correctly still flags the untested `smoke` file —
+  today's single-file logic would silently pass with 0 findings. Each untested tagged file
+  produces its own finding (error dict), not one finding per batch — the existing shape
+  (`errors.append(...)` once per batch) generalizes to appending once per untested file inside
+  the same per-batch loop iteration.
+- Rationale: verified against source that the current `break` genuinely stops at the first
+  tagged file. Generalizing tag *discovery* per file without also generalizing the *loop* to
+  cover every tagged file would reproduce bug 1's exact false-negative class inside the fix
+  itself — a `verify:` command satisfying only the first-found file's tag would pass even
+  though a second, differently-tagged file is silently excluded from the build. Fixing
+  discovery but not coverage would be a materially incomplete fix.
+- Rejected: keeping the single-file `break` and documenting it as an accepted limitation —
+  rejected because it isn't a narrow, unlikely-to-matter edge case like the existing
+  `Creates:`-only limitation; it directly undermines the generalization this task is doing,
+  and multi-file batches with different build tags are exactly the shape a Go repo with
+  multiple test tiers (integration/smoke/scout) is likely to produce.
+
 ### bug1-message-uses-discovered-tag
 
 - Decision: The finding message interpolates the actual discovered custom tag name(s) (e.g.
@@ -104,6 +147,24 @@ it literally.
 - Rationale: the hardcoded wording is part of the same bug — a `scout`-tagged file with no
   `-tags` flag should not produce a message that says "integration".
 - Rejected: none — this follows directly from generalizing the detection itself.
+
+### bug1-rename-integration-specific-identifiers
+
+- Decision: `_go_file_is_integration_tagged` is renamed to `_go_file_custom_tags` (returns
+  `set[str]` of discovered custom tags, empty set = untagged, replacing the current `bool`
+  return) and `_verify_command_has_integration_tag` is renamed to
+  `_verify_command_has_any_tag(command: str, tags: set[str]) -> bool`. The module-level
+  docstring block (lines 38-41) and both functions' own docstrings are reworded to describe
+  "custom tag discovered from the file's own `//go:build` expression" instead of the literal
+  word "integration". `_RE_GO_BUILD_CONSTRAINT`'s comment (line 1940, "checked for the word
+  'integration'") is updated to describe the denylist-based extraction instead.
+- Rationale: generalizing the behavior while leaving `..._is_integration_tagged`-shaped names
+  and "integration"-only docstrings in place would be actively misleading to the next reader —
+  the whole point of this task is that "integration" was never a safe hardcode. Renaming is
+  cheap (function is called from exactly one check, `_check_verify_excludes_edited_tagged_test`,
+  plus its own unit tests) and there is no external/cross-file API surface to preserve.
+- Rejected: leaving the legacy names in place with updated docstrings only — rejected because
+  the name itself is the misleading part, not just the prose describing it.
 
 ### bug2-fence-guard-both-boundaries
 
@@ -122,24 +183,29 @@ it literally.
 
 ## Technical context
 
-- `_parse_cards` (line 126): the function to fix. Called from 7 call sites in the same file
-  (lines 750, 838, 872, 1503, 1715, 2511, plus its own definition) — all call it fresh on
-  `batch_text`/`text`, so the fix is a single localized change with no call-site updates needed.
+- `_parse_cards` (line 126): the function to fix. Called from 6 call sites in the same file
+  (lines 750, 838, 872, 1503, 1715, 2511) — all call it fresh on `batch_text`/`text`, so the
+  fix is a single localized change with no call-site updates needed.
 - `_requirements_fence_aware_body` (line 1622): the existing fence-aware precedent to mirror —
   same `in_fence` toggle-on-` ``` `-prefix convention, already proven correct and referenced by
   its own "fence-aware-boundary-detection" Decision note (this task's bug2 decision above is the
   second application of that same pattern, not a new one).
-- `_go_file_is_integration_tagged` (line 1950), `_verify_command_has_integration_tag` (line
-  1979), `_check_verify_excludes_edited_tagged_test` (line 2003): the three functions to
-  generalize for bug 1. `_check_verify_excludes_edited_tagged_test` currently tracks a single
-  `tagged_token: str | None`; generalizing to a tag set changes this to carry the file's custom
-  tag set (or at minimum the first discovered custom tag name, for the message) alongside the
-  token path.
+- `_go_file_is_integration_tagged` (line 1950, renamed `_go_file_custom_tags` per
+  `bug1-rename-integration-specific-identifiers`), `_verify_command_has_integration_tag` (line
+  1979, renamed `_verify_command_has_any_tag`), `_check_verify_excludes_edited_tagged_test`
+  (line 2003): the three functions to generalize for bug 1.
+  `_check_verify_excludes_edited_tagged_test` currently tracks a single
+  `tagged_token: str | None` and `break`s at the first tagged file (lines 2059-2068); per
+  `bug1-check-every-tagged-file-not-just-first` this becomes a loop with no `break` that
+  independently resolves each edited test token's custom-tag set and appends one finding per
+  untested tagged file, carrying that file's own custom-tag set (or its first discovered tag,
+  for the message) alongside its token path.
 - `_RE_GO_BUILD_CONSTRAINT` (line 1941) already captures the full expression string via its
   `expr` named group — the generalized identifier-extraction reuses this same capture, no regex
   change needed there.
 - `_GO_BUILD_TAG_SCAN_LINES` (line 1947, bounded to 40 lines) and the header-comment-skipping
-  scan logic in `_go_file_is_integration_tagged` are unrelated to either bug and stay unchanged.
+  scan logic in `_go_file_custom_tags` (renamed, see above) are unrelated to either bug and stay
+  unchanged.
 - Existing unit tests for bug 1's check live in `plugins/mill/unit_tests/test-plan-validate.py`
   starting at line 5297 (`test_verify_excludes_edited_tagged_test_*`, 7 tests: (a) no-tags-flag
   dirty, (b) tags-integration clean, (c) tags-integration-comma-other clean, (d) no-build-tag
@@ -165,7 +231,7 @@ captured under Scope/Decisions above.
 
 ## Testing
 
-- **Bug 1 (`_go_file_is_integration_tagged` / `_verify_command_has_integration_tag` /
+- **Bug 1 (`_go_file_custom_tags` / `_verify_command_has_any_tag` /
   `_check_verify_excludes_edited_tagged_test`) — TDD candidates:**
   - `scout`-tagged test file (`//go:build scout`), `verify:` with no `-tags` → 1 finding naming
     `scout` (mirrors existing test (a), generalized).
@@ -177,6 +243,11 @@ captured under Scope/Decisions above.
     this very fix (the most important new test; nothing today exercises this path since the
     only pre-existing "no relevant tag" fixture is `_UNTAGGED_TEST_GO`, which has no
     `//go:build` line at all rather than a GOOS-only one).
+  - **Multi-file batch** (per `bug1-check-every-tagged-file-not-just-first`): a batch editing
+    both a `scout`-tagged and a `smoke`-tagged test file, `verify:` carrying only `-tags scout`
+    → 1 finding naming the untested `smoke` file — this is the regression guard proving the
+    loop no longer stops at the first tagged file. A companion clean case (same two files,
+    `verify: -tags scout,smoke`) → 0 findings.
   - All 7 existing tests at line 5297+ must still pass unmodified (the `integration` case is
     just one instance of the generalized "custom tag" concept now, not special-cased code).
 
@@ -218,3 +289,20 @@ captured under Scope/Decisions above.
   (multiple custom-tag cases, a GOOS-only regression guard, and a fence-boundary regression
   guard), not just the minimal reported repro. **Why:** the denylist and both-boundaries
   decisions each introduce a specific new regression risk that needs its own test.
+- **Q:** (discussion-review r1 GAP) `_check_verify_excludes_edited_tagged_test` breaks at the
+  first tagged edited file and checks only that one — should the generalized check validate
+  every edited tagged file in the batch, or is single-file coverage an accepted limitation?
+  **A:** [auto-pick] Validate every edited tagged file independently; remove the `break`, emit
+  one finding per untested tagged file. **Why:** leaving the `break` in place would reproduce
+  bug 1's exact false-negative class inside the fix itself — a batch editing both a
+  `scout`-tagged and a `smoke`-tagged file with `verify: -tags scout` would otherwise still
+  silently pass despite the untested `smoke` file. See `bug1-check-every-tagged-file-not-just-first`.
+- **Q:** (discussion-review r1 GAP) `_implementer_common.py` already has a small
+  `_GO_BUILD_TAG_GOOS`/`_GO_BUILD_TAG_GOARCH` denylist for an analogous purpose — should this
+  task's new denylist reuse/extend that set instead of introducing a separate, larger one?
+  **A:** [auto-pick] No — keep a separate, larger denylist; explicitly document why. **Why:**
+  the existing precedent's small set is safe only because its caller fails closed downstream
+  (a bogus `-tags` value there triggers an actual `go build` failure); this check has no such
+  downstream compile step, so an unrecognized-but-real GOOS/GOARCH value falling through the
+  small set would create a new, never-corrected false positive instead of failing safely. See
+  the `_implementer_common.py` divergence note under `bug1-tag-discovery-via-denylist`.
