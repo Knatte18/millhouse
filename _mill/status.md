@@ -56,7 +56,9 @@ batches:
     4 in 1.0s: [''test-bg-json-contract.py'']', '--- FAIL test-bg-json-contract.py
     (0.1s) ---', 'FAIL -- 1 of 4 in 0.9s: [''test-bg-json-contract.py'']']
   - name: plan-backend
-    state: pending
+    state: running
+    implementer_session: d7bbc8ed-1a7e-485d-911c-69469fe406d5
+    start_sha: 9be63288c2db0f66845969e46da63983ab1aa73b
     verify_baseline_failures: []
   - name: code-backend
     state: pending
