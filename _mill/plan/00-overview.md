@@ -122,7 +122,7 @@ batches:
 ### Decision: dual-mechanism-scan-preserved
 
 - **Decision:** `extract_findings` scans **both** the markdown-heading mechanism and the fenced-`findings:`-YAML mechanism unconditionally, concatenates the results, and deduplicates by heading title **across mechanisms only**.
-  Two findings from the same mechanism that share a title are both kept.
+  A yaml-scan title is dropped when and only when the heading scan already produced that same title; two findings sharing a title within one mechanism are both kept, heading-vs-heading and yaml-vs-yaml alike.
   Neither scan is gated on the other's result.
 - **Why the dedup is cross-mechanism only:** its purpose is to stop one finding being counted twice for appearing in both representations, not to merge distinct findings within one.
   A flat first-occurrence-wins dedup would drop a genuine second finding whose title happened to match, and would leave a `BLOCKING` heading on disk that no surviving `Finding` demotes.

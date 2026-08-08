@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r5
+phase: plan-fix-r6
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -28,4 +28,6 @@ plan-review-r4  '2026-08-08T17:58:59Z'
 plan-fix-r4  '2026-08-08T17:58:59Z'
 plan-review-r5  '2026-08-08T18:07:51Z'
 plan-fix-r5  '2026-08-08T18:07:51Z'
+plan-review-r6  '2026-08-08T18:12:54Z'
+plan-fix-r6  '2026-08-08T18:12:54Z'
 ```
