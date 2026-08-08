@@ -55,7 +55,9 @@ batches:
   '--- FAIL test-millpy-spawn.py (0.2s) ---', '--- FAIL test-millpy-claim.py (110.4s)
     ---', 'FAIL -- 2 of 2 in 110.4s: [''test-millpy-spawn.py'', ''test-millpy-claim.py'']']
   - name: forward-output-stuck-passthrough
-    state: pending
+    state: running
+    implementer_session: 7454d04a-0a70-4801-81c1-348a7051fda0
+    start_sha: 1404092782a1f2904d8683a4d96f7f08612d8ba9
     verify_baseline_failures: [FAILED (failures=3), FAILED (failures=1), FAILED (failures=4), '--- FAIL test-bg-json-contract.py
     (0.2s) ---', '--- FAIL test-agent-mode-dispatch.py (0.3s) ---', '--- FAIL test-millpy-merge-in-subagent.py
     (0.4s) ---', 'FAIL -- 3 of 3 in 0.4s: [''test-bg-json-contract.py'', ''test-agent-mode-dispatch.py'',
