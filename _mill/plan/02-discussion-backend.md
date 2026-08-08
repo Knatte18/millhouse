@@ -45,10 +45,12 @@ It runs in parallel with batches 3 and 4, which touch disjoint files.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In `print_error_envelope`, add `"findings": []` to the envelope dict immediately after `"blocking_count": 0`, and add `"findings": []` to the single dict inside its `reviews` list.
-  Update `print_error_envelope`'s docstring to state that the envelope mirrors `ReviewResult.to_dict()`'s key set with zeroed counts and an empty findings list.
-  In `test-review-cli-error-envelope.py`, extend the existing key-set assertions to require `findings` at both the top level and inside `reviews[0]`, and assert both are empty lists.
-- **Commit:** `feat(review): add findings to the shared ERROR envelope`
+- **Requirements:** In `print_error_envelope`, add `"nit_count": 0` and `"findings": []` to the envelope dict immediately after `"blocking_count": 0`, and add `"findings": []` to the single dict inside its `reviews` list.
+  The `nit_count` addition closes a pre-existing gap: today's error envelope carries `blocking_count` but no `nit_count`, so it does not in fact mirror `ReviewResult.to_dict()`'s key set.
+  Adding the key is preferable to weakening the docstring, because consumers that branch on `nit_count` -- mill-go gates its NIT-fix dispatch on `nit_count > 0` -- should read a zero from an ERROR envelope rather than an absent key.
+  Update `print_error_envelope`'s docstring to state that the envelope mirrors `ReviewResult.to_dict()`'s key set with zeroed counts and an empty findings list, which is true only once `nit_count` is present.
+  In `test-review-cli-error-envelope.py`, **add** key-set assertions -- the file currently asserts only `verdict` values and exit codes, so there are none to extend -- requiring `blocking_count`, `nit_count`, and `findings` at the top level and `findings` inside `reviews[0]`, and asserting the counts are `0` and both findings lists are empty.
+- **Commit:** `feat(review): add nit_count and findings to the shared ERROR envelope`
 
 ### Card 11: Discussion flow test on the unified vocabulary
 

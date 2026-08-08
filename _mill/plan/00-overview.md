@@ -31,7 +31,7 @@ batches:
     name: plan-backend
     file: 03-plan-backend.md
     depends-on: [1]
-    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py"
+    verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py test-review-plan-finalize-round.py"
   - number: 4
     name: code-backend
     file: 04-code-backend.md
@@ -85,8 +85,10 @@ batches:
 ### Decision: ceiling-applied-once-at-write-time
 
 - **Decision:** the `blocking_classes` ceiling, the demotion rewrite, and the per-class counting all live in `finalize_scope` in `_review_common.py` and nowhere else.
-  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s crash-recovery re-read, and `_nit_gate.compute_unfixed_nits` -- never apply the ceiling.
-  The two `_review_plan` sites do call `extract_findings`, because their entries feed the same aggregation as the write-time entries and would otherwise contribute counts without contributing findings; extraction is not ceiling application, and the file they read was already written in its demoted form.
+  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s mid-round-resume re-read, and `_nit_gate.compute_unfixed_nits` -- never apply the ceiling.
+  Only `_scan_approved_batches` calls `extract_findings`, because its carryforward entries do reach card 15's aggregation and would otherwise contribute counts without contributing findings; extraction is not ceiling application, and the file it reads was already written in its demoted form.
+  `run`'s mid-round-resume block is left untouched: it populates `_disk_reviews`, which is never merged into `reviews` and is read only for a `len()` in a log line, so its entries reach no envelope.
+  That discard is a pre-existing bug in the resume path and is explicitly out of scope here -- fixing it changes what a resumed plan review returns.
   `_nit_gate.compute_unfixed_nits` needs only a count and stays on the widened `parse_blocking_count` regex.
 - **Rationale:** those sites re-read a review file `finalize_scope` already wrote, so the demotion is already baked into the text they read; applying the ceiling again would be a no-op at best and a double-demotion at worst.
   `finalize_scope` also writes a file, which recovery and resume paths must not do.
@@ -217,5 +219,6 @@ batches:
 - `plugins/mill/unit_tests/test-review-discussion-flow.py`
 - `plugins/mill/unit_tests/test-review-finalize.py`
 - `plugins/mill/unit_tests/test-review-output-contract.py`
+- `plugins/mill/unit_tests/test-review-plan-finalize-round.py`
 - `plugins/mill/unit_tests/test-review-plan-flow.py`
 - `plugins/mill/unit_tests/test-review-templates.py`

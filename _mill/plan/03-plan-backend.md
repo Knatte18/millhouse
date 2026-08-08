@@ -5,7 +5,7 @@ task: "Classify review GAPs by kind (design/scope/decision/consistency); scope d
 batch: "plan-backend"
 number: 3
 cards: 4
-verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py"
+verify: "PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-review-plan-flow.py test-review-plan-finalize-round.py"
 depends-on: [1]
 ```
 
@@ -50,9 +50,13 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
   In `_scan_approved_batches`, replace the `parse_blocking_count` + `count_unrecognized_severity_findings` counting with `findings = extract_findings(raw)` and derive `blocking_count` and `nit_count` from that list, then add `"findings": [f.to_dict() for f in findings]` to the returned carryforward entry dict.
   Do **not** call `apply_blocking_ceiling` or `finalize_scope` here: the file being read was already written in its demoted form, so the ceiling is already baked into the text and re-applying it would be a double demotion, and `finalize_scope` writes a file, which this recovery path must not do.
   This card's `extract_findings` use is extraction, not ceiling application, and so does not violate the `ceiling-applied-once-at-write-time` Shared Decision; without it these carryforward entries would contribute their counts to card 15's aggregate scalars while contributing nothing to the aggregate `findings` list, making the envelope's scalars disagree with its own list.
-  Apply the identical treatment to `run`'s crash-recovery re-read block, which re-reads an already-written review file for the same reason and feeds the same aggregation: replace its `parse_blocking_count` + `count_unrecognized_severity_findings` pair with `extract_findings`, derive its `blocking_count` from the list, and add `"findings": [f.to_dict() for f in findings]` to the entry it builds.
-  Add a one-line comment at each of the two sites stating that the file being read was already written in its demoted form, so extraction alone is correct and no ceiling is applied.
-  After this card, `parse_blocking_count` and `count_unrecognized_severity_findings` have no remaining caller in `_review_plan.py`; remove both from its import block if nothing else in the file references them.
+  Add a one-line comment at `_scan_approved_batches` stating that the file being read was already written in its demoted form, so extraction alone is correct and no ceiling is applied.
+  Leave `run`'s mid-round-resume re-read block (`if resume_round is not None:`) **entirely unchanged** -- its `parse_blocking_count` and `count_unrecognized_severity_findings` calls, and the `_disk_reviews` list they populate, stay exactly as they are.
+  That block builds `_disk_reviews` but never appends or extends it into `reviews`; the list is consumed only by the `len(_disk_reviews)` in its own stderr log line, so its entries never reach the returned `ReviewResult` and never reach card 15's aggregation.
+  Adding `extract_findings` or a `findings` key there would therefore be dead work justified by a false premise.
+  This is a pre-existing bug in that resume path -- per-batch entries recovered from disk are silently discarded -- and it is **not** in this task's scope to fix: repairing it changes what a resumed plan review returns, which is a behavioural change unrelated to the class taxonomy.
+  Do not fix it in this batch; the Handoff `mill-self-report` pass files it separately.
+  Because that block keeps its two callers, `parse_blocking_count` and `count_unrecognized_severity_findings` both remain in use in `_review_plan.py`; leave its import block alone.
 - **Commit:** `feat(review): apply blocking-class ceiling at plan finalize and run sites`
 
 ### Card 15: Aggregate findings across sub-reviews
@@ -62,11 +66,15 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
 - **Edits:**
   - `plugins/mill/scripts/_review_plan.py`
   - `plugins/mill/scripts/millpy-review-plan.py`
+  - `plugins/mill/unit_tests/test-review-plan-finalize-round.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** In `_review_plan.run`, next to the existing `aggregate_blocking = sum(...)` and `aggregate_nit = sum(...)` lines, add `aggregate_findings = [f for r in reviews for f in r.get("findings", [])]` and pass it as `findings=aggregate_findings` to the `ReviewResult(...)` constructor, so the top-level list is the concatenation of the per-scope lists exactly as the scalars are their summation.
   In `millpy-review-plan.py`, the hand-built `result_dict` for the finalize stage currently mirrors `ReviewResult.to_dict()` by hand: add `"findings": review_entry["findings"]` to it, positioned after `"nit_count"` and before `"reviews"` so the key order matches `to_dict()`.
+  Keep this a direct key access rather than `review_entry.get("findings", [])`: card 14 makes `_review_plan.finalize` return the key on every path, so a missing key is a contract violation that should fail loudly, not be silently defaulted.
+  That direct access does break an existing test, which this card fixes rather than works around: `plugins/mill/unit_tests/test-review-plan-finalize-round.py` patches `_review_plan.finalize` with a `stub_review_entry` dict that has no `"findings"` key, in both of its `--stage finalize` cases, so the new access would raise an uncaught `KeyError` there.
+  Add `"findings": []` to both `stub_review_entry` literals in that file so the stubs satisfy the contract card 14 establishes.
 - **Commit:** `feat(review): aggregate findings across plan sub-reviews`
 
 ### Card 16: Plan flow tests for the ceiling and envelope
@@ -89,6 +97,6 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
 
 ## Batch Tests
 
-`verify:` runs `test-review-plan-flow.py`, the file that exercises `_review_plan.prepare`, `finalize`, `run`, and `_scan_approved_batches` end to end with in-memory fixtures, and the only unit-test file this batch edits.
-`test-review-plan-finalize-round.py` is deliberately excluded: this batch does not touch round discovery or the finalize-round path it covers, and pulling it in would widen the gate beyond what the batch changes.
+`verify:` runs `test-review-plan-flow.py`, the file that exercises `_review_plan.prepare`, `finalize`, `run`, and `_scan_approved_batches` end to end with in-memory fixtures, plus `test-review-plan-finalize-round.py`, whose `finalize`-stage stubs card 15 edits.
+The second file is in the gate because card 15's direct `review_entry["findings"]` access runs on the exact code path those stubs drive; excluding it would let a stale stub raise an uncaught `KeyError` that this batch's own gate never sees.
 `millpy-review-plan.py`'s hand-built envelope has no dedicated unit test today; card 15 keeps its key set identical to `ReviewResult.to_dict()`, which `test-review-plan-flow.py` asserts on the `run` path.
