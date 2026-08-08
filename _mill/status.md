@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -42,6 +42,7 @@ approved-skill-mill-go  '2026-08-08T19:02:44Z'
 approved-skills-start-plan-receiving  '2026-08-08T19:07:15Z'
 holistic-reviewing  '2026-08-08T19:07:40Z'
 holistic-approved  '2026-08-08T19:11:57Z'
+done  '2026-08-08T19:12:32Z'
 ```
 
 ## Batches
