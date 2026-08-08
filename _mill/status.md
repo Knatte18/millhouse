@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skills-start-plan-receiving
+phase: holistic-reviewing
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -40,6 +40,7 @@ approved-code-backend  '2026-08-08T18:52:20Z'
 approved-templates-and-config  '2026-08-08T18:59:58Z'
 approved-skill-mill-go  '2026-08-08T19:02:44Z'
 approved-skills-start-plan-receiving  '2026-08-08T19:07:15Z'
+holistic-reviewing  '2026-08-08T19:07:40Z'
 ```
 
 ## Batches
