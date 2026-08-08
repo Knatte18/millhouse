@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-claude-sub-idle-mock
+phase: approved-wiki-stub-fixes
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-08-08T17:40:28Z'
 planned  '2026-08-08T17:40:49Z'
 implementing  '2026-08-08T17:41:25Z'
 approved-claude-sub-idle-mock  '2026-08-08T18:15:55Z'
+approved-wiki-stub-fixes  '2026-08-08T18:23:25Z'
 ```
 
 ## Batches
@@ -37,9 +38,10 @@ batches:
     commit_sha: f20bbd9074a6cf8ff1d128fcf7f47bbd03d4b3be
     verify_baseline_failures: []
   - name: wiki-stub-fixes
-    state: running
+    state: approved
     implementer_session: 48f303e2-1bf2-41ed-b661-ee749125b3d3
     start_sha: fd08ccad034a78f0ff1ecea67fbb457b6318bb55
+    commit_sha: 10bbe0caa842ed7f33770da9627fd865facbce51
     verify_baseline_failures: ['FAIL -- 9 of 16 tests: [''test_main_happy_path_calls_spawn_core_in_order'', ''test_write_settings_uses_short_name_and_slug'',
     ''test_main_backlog_empty_exits_zero'', ''test_main_value_error_from_picker_exits_one'',
     ''test_main_runtime_error_from_capture_branch_raises_system_exit'', ''test_create_hub_links_called_after_portal_creation'',

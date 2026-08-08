@@ -1,0 +1,11 @@
+No tracked in-scope modification left uncommitted. Card-count check: batch declares 3 cards (Card 2, 3, 4). Commits found: `1b86eb23` matches Card 2's message, `475e964f` matches Card 4's message (combined Card 3+4), and `10bbe0ca` is an additional necessary fix (mkdir mocking) within Card 2's file scope required to make verify pass, not a separate card. All 3 cards are complete: 3 of 3 cards committed.
+
+{"status":"success","commit_sha":"10bbe0caa842ed7f33770da9627fd865facbce51","session_id":"48f303e2-1bf2-41ed-b661-ee749125b3d3","cards_done":[2,3,4]}
+
+Summary: All 3 cards in batch `02-wiki-stub-fixes.md` are committed (3 of 3).
+
+- Card 2 (`1b86eb23`): added `"wiki._client": MagicMock()` to `_make_stub_map()` and `mod.wiki` binding in `_load_claim_module()` in `/home/knatte/Code/millhouse/wts/mill-unit-test-suite-breakage/plugins/mill/unit_tests/test-millpy-claim.py`.
+- Cards 3+4 combined (`475e964f`, one commit per plan's combined-commit allowance): applied the wiki-stub save/inject/restore mechanic to `_run_main_with_mocks` and to the 4 standalone test functions (`test_write_settings_uses_short_name_and_slug`, `test_main_backlog_empty_exits_zero`, `test_create_hub_links_called_after_portal_creation`, `test_spawn_aborts_when_origin_branch_already_exists`) in `/home/knatte/Code/millhouse/wts/mill-unit-test-suite-breakage/plugins/mill/unit_tests/test-millpy-spawn.py`.
+- Additional necessary fix (`10bbe0ca`, within Card 2's scope): the wiki-stub fix unmasked a separate latent gap — 5 `test-millpy-claim.py` scenarios reached real `Path.mkdir()` calls (`Errno 13: Permission denied: '/fake'`) that were previously hidden behind the daemon-spawn hang. Added `patch.object(Path, "mkdir", return_value=None)` to those 5 tests, matching the pattern already used by other passing tests in the same file. Confirmed via `git stash`/`main:` comparison that this failure was not introduced by unrelated causes — it was a direct, necessary consequence of the wiki-stub fix reaching previously-unreachable code.
+
+Verify command (`run-all.py --only test-millpy-claim.py test-millpy-spawn.py`) now passes both files: 14/14 mill-claim tests and 16/16 mill-spawn tests, no hangs. All commits pushed to `hanf/mill-unit-test-suite-breakage`.
