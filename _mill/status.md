@@ -47,7 +47,9 @@ batches:
     commit_sha: 3f01fe69f9f363cc95877f8f75d75844903e1f81
     verify_baseline_failures: []
   - name: discussion-backend
-    state: pending
+    state: running
+    implementer_session: 0b9ff793-28a5-444b-a49f-672326afe5f4
+    start_sha: e440134e0a0bb4f60590c37b93fa224a7b8430f9
     verify_baseline_failures: [FAILED (failures=3), '--- FAIL test-bg-json-contract.py (0.2s) ---', 'FAIL -- 1 of
     4 in 1.0s: [''test-bg-json-contract.py'']', '--- FAIL test-bg-json-contract.py
     (0.1s) ---', 'FAIL -- 1 of 4 in 0.9s: [''test-bg-json-contract.py'']']
