@@ -2125,6 +2125,56 @@ def aggregate_verdict(sub_verdicts: list[str]) -> str:
     return "APPROVE"
 
 
+# Per-stage default blocking_classes, used by resolve_blocking_classes when a hub's mill-config.yaml
+# has not (yet) set roles.<role>.<scope>.blocking_classes.
+# Keyed by role name (see _REVIEW_TYPE_TO_ROLE below for the review_type -> role mapping).
+DEFAULT_BLOCKING_CLASSES: dict[str, frozenset[str]] = {
+    "discussion-review": frozenset({"design"}),
+    "plan-review": frozenset({"design", "scope"}),
+    "code-review": frozenset({"design", "scope", "decision", "consistency"}),
+}
+
+_REVIEW_TYPE_TO_ROLE = {
+    "discussion": "discussion-review",
+    "plan": "plan-review",
+    "code": "code-review",
+}
+
+
+def resolve_blocking_classes(cfg: dict, review_type: str, scope: str | None) -> frozenset[str]:
+    """Return the set of classes that stay BLOCKING at this review stage.
+
+    Reads `cfg["roles"][<role>][<scope_key>]["blocking_classes"]` defensively -- every level in that
+    path may be missing or None -- where `<role>` is `review_type` mapped through
+    _REVIEW_TYPE_TO_ROLE ("discussion" -> "discussion-review", "plan" -> "plan-review", "code" ->
+    "code-review") and `<scope_key>` is "holistic" when `scope` is None or the literal "holistic",
+    else "batch".
+
+    When the config key is present and is a non-empty list of strings, returns
+    `frozenset(value)`. Otherwise falls back to DEFAULT_BLOCKING_CLASSES[role] -- a hub whose
+    mill-config.yaml has not been updated with `blocking_classes:` degrades to the documented default
+    rather than raising.
+
+    Never raises. An unrecognised `review_type` (not one of "discussion", "plan", "code") falls back
+    to `frozenset(RECOGNIZED_CLASSES)`, so an unknown caller can never accidentally demote every
+    finding it produces.
+    """
+    role = _REVIEW_TYPE_TO_ROLE.get(review_type)
+    if role is None:
+        return frozenset(RECOGNIZED_CLASSES)
+
+    scope_key = "holistic" if scope is None or scope == "holistic" else "batch"
+
+    roles_cfg = cfg.get("roles") if isinstance(cfg, dict) else None
+    role_cfg = roles_cfg.get(role) if isinstance(roles_cfg, dict) else None
+    scope_cfg = role_cfg.get(scope_key) if isinstance(role_cfg, dict) else None
+    value = scope_cfg.get("blocking_classes") if isinstance(scope_cfg, dict) else None
+
+    if isinstance(value, list) and value:
+        return frozenset(value)
+    return DEFAULT_BLOCKING_CLASSES[role]
+
+
 def load_config(hub_root: Path, mill_dir: Path) -> dict:
     """Load mill config, delegating the core template/repo/local merge to ``_config.load_config``
     and layering two review-specific behaviors on top.
