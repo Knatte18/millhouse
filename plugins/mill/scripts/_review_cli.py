@@ -24,6 +24,9 @@ def print_error(exc: ReviewError) -> None:
 def print_error_envelope(review_type: str, msg: str) -> None:
     """Emit ERROR-shaped JSON envelope on stdout and human-readable error on stderr.
 
+    The envelope mirrors ReviewResult.to_dict()'s key set with zeroed counts and an empty
+    findings list, so a consumer that reads either shape sees the same keys.
+
     Args:
         review_type: One of "discussion", "plan", or "code".
         msg: Error message to include in both stderr and the JSON envelope.
@@ -34,6 +37,8 @@ def print_error_envelope(review_type: str, msg: str) -> None:
         "round": 0,
         "verdict": "ERROR",
         "blocking_count": 0,
-        "reviews": [{"scope": "holistic", "verdict": "ERROR", "error": msg}],
+        "nit_count": 0,
+        "findings": [],
+        "reviews": [{"scope": "holistic", "verdict": "ERROR", "error": msg, "findings": []}],
     }
     print(json.dumps(envelope))
