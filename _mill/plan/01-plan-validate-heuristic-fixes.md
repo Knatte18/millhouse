@@ -148,17 +148,19 @@ well under the batch size cap.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Add 9 new test functions immediately after `test_verify_excludes_edited_tagged_test_creates_only_clean`
-  and before the `# --- Runner ---` section, following the existing 8 tests' fixture/assertion
-  style exactly (`tempfile.TemporaryDirectory()`, `_make_overview`, `_make_verify_only_batch_text`,
-  `_write_plan`, `_plan_validate.run`, filter on `e["check"] == "verify-excludes-edited-tagged-test"`,
-  try/assert/print PASS/except AssertionError/print FAIL-to-stderr). Add new Go-source fixture
-  constants alongside the existing `_INTEGRATION_TAGGED_TEST_GO` / `_UNTAGGED_TEST_GO` block:
+  Add 10 new test functions immediately after `test_verify_excludes_edited_tagged_test_creates_only_clean`
+  and before the `# Runner` banner comment (the two-line `# ----...` / `# Runner` block), following
+  the existing 8 tests' fixture/assertion style exactly (`tempfile.TemporaryDirectory()`,
+  `_make_overview`, `_make_verify_only_batch_text`, `_write_plan`, `_plan_validate.run`, filter on
+  `e["check"] == "verify-excludes-edited-tagged-test"`, try/assert/print PASS/except
+  AssertionError/print FAIL-to-stderr). Add new Go-source fixture constants alongside the existing
+  `_INTEGRATION_TAGGED_TEST_GO` / `_UNTAGGED_TEST_GO` block:
   ```python
   _SCOUT_TAGGED_TEST_GO = "//go:build scout\n\npackage foo\n"
   _SMOKE_TAGGED_TEST_GO = "//go:build smoke\n\npackage foo\n"
   _GOOS_ONLY_TAGGED_TEST_GO = "//go:build linux\n\npackage foo\n"
   _SCOUT_AND_SMOKE_TAGGED_TEST_GO = "//go:build scout && smoke\n\npackage foo\n"
+  _LINUX_AND_SCOUT_TAGGED_TEST_GO = "//go:build linux && scout\n\npackage foo\n"
   ```
   New tests (each writes `go.mod` via `_GO_MOD_TEXT` into `project_root` first, matching every
   existing test in this block):
@@ -196,8 +198,15 @@ well under the batch size cap.
      — same fixture as test 8, `verify_command="PYTHONPATH= go test ./... -tags smoke"` (only the
      second/non-first tag) -> assert zero findings (proves the "ANY tag matches" rule is
      independent of which tag the message-selection logic happens to name).
+  10. `test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty` — one file at
+      `pkg/foo_test.go` written with `_LINUX_AND_SCOUT_TAGGED_TEST_GO`,
+      `edits=["pkg/foo_test.go"]`, no `-tags` -> assert exactly 1 finding whose
+      `path == "pkg/foo_test.go"`, whose `message` contains `"scout"`, and whose `message` does
+      NOT contain `"linux"` (proves the denylist strips only the standard `linux` identifier from
+      a mixed GOOS+custom expression while still discovering the custom `scout` tag from the same
+      expression).
 
-  Register all 9 new test function names in `main()`'s `tests` list, immediately after the
+  Register all 10 new test function names in `main()`'s `tests` list, immediately after the
   existing `test_verify_excludes_edited_tagged_test_creates_only_clean` entry, in the same order
   as authored above.
 - **Commit:** `test(plan-validate): cover custom-tag discovery, multi-file, and multi-composed-tag verify-excludes-edited-tagged-test cases`

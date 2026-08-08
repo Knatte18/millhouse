@@ -3,7 +3,7 @@
 ```yaml
 task: "_plan_validate.py: hardcoded tag-name check and fenced-code-block-unaware card parsing"
 slug: mill-plan-validate-heuristic-gaps-2
-approved: false
+approved: true
 started: '20260808-171155'
 parent: main
 root: ""
