@@ -1570,7 +1570,9 @@ or unfenced fallback.
     Valid verdict values:
     - 'APPROVE' — any review type
     - 'REQUEST_CHANGES' — plan and code review
-    - 'GAPS_FOUND' — discussion review (v1 convention; a missing criterion is not a must-fix defect)
+    - 'GAPS_FOUND' — historical v1 discussion-review value, accepted for archive readability only.
+        No template emits it again;
+        any occurrence found is normalised to 'REQUEST_CHANGES' before this function returns.
     - 'NEED_CONTEXT' — plan and code review only;
         reviewer cannot evaluate without source files that were not included in the bulk.
         Orchestrator responds by re-firing with `--extra-file` plus a notify + self-report entry.
@@ -1618,7 +1620,8 @@ or unfenced fallback.
                     "GAPS_FOUND",
                     "NEED_CONTEXT",
                 ):
-                    return value
+                    # Normalise the historical v1 value to its unified-vocabulary equivalent.
+                    return "REQUEST_CHANGES" if value == "GAPS_FOUND" else value
                 raise ReviewError(
                     f"Could not parse verdict: invalid value {value!r}; "
                     f"expected APPROVE, REQUEST_CHANGES, GAPS_FOUND, or NEED_CONTEXT.\n"
@@ -1636,7 +1639,8 @@ or unfenced fallback.
         if stripped.startswith("verdict:"):
             value = stripped[len("verdict:") :].strip().strip('"').strip("'")
             if value in ("APPROVE", "REQUEST_CHANGES", "GAPS_FOUND", "NEED_CONTEXT"):
-                return value
+                # Normalise the historical v1 value to its unified-vocabulary equivalent.
+                return "REQUEST_CHANGES" if value == "GAPS_FOUND" else value
 
     raise ReviewError(
         f"Could not parse verdict: no ```yaml block found and no unfenced verdict line found.\n"
@@ -1699,15 +1703,23 @@ def _warn_if_prose_diverges(raw_output: str, severity: str, heading_count: int) 
 
 
 def parse_blocking_count(raw_output: str, *, severity: str) -> int:
-    """Count "### [<severity>]" ATX headings in review output.
+    """Count "### [<severity>]" or "### [<severity>:<class>]" ATX headings in review output.
 
-    Searches for lines matching ``^###\\s+\\[<severity>\\]\\s+`` using MULTILINE mode.
+    Searches for lines matching ``^###\\s+\\[<severity>(?::[a-z-]+)?\\]\\s+`` using MULTILINE mode --
+    the optional class suffix (e.g. ``:design``) is matched and ignored, so a classed heading is
+    counted purely on its severity token.
     The severity argument is required (keyword-only).
     Match is case-sensitive.
     Only line-start headings are counted — mid-line occurrences are ignored.
 
     When the heading count is 0, falls back to scanning all fenced ```yaml blocks for a `findings:`
     list, counting entries whose `severity` field (case-insensitive) matches the severity argument.
+    A `class:` field alongside `severity:` on the same entry does not affect this count.
+
+    This function remains in use only for the historical re-read sites named in the
+    ceiling-applied-once-at-write-time Shared Decision (_review_plan.py's recovery/resume re-reads
+    and _nit_gate.py); the new-review path goes through extract_findings() instead, which classifies
+    every finding in a single pass.
 
     Emits a one-line stderr warning when a prose count phrase in the output (e.g. "Five blocking
     issues remain") disagrees with the heading count.
@@ -1715,7 +1727,7 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
     the warning is for log inspection only (#225).
     """
     pattern = re.compile(
-        r"^###\s+\[" + re.escape(severity) + r"\]\s+",
+        r"^###\s+\[" + re.escape(severity) + r"(?::[a-z-]+)?\]\s+",
         re.MULTILINE,
     )
     heading_count = len(pattern.findall(raw_output))
@@ -1766,13 +1778,20 @@ def parse_blocking_count(raw_output: str, *, severity: str) -> int:
 def count_unrecognized_severity_findings(
     raw_output: str, *, blocking_severity: str, nit_severity: str
 ) -> int:
-    """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md)."""
+    """Count findings whose severity matches neither recognized label, always scanning both the heading mechanism and the YAML-fallback mechanism unconditionally -- never gating one on the other's result -- since a mixed-format document could otherwise hide an unrecognized severity in whichever mechanism the two known severities did not use (deliberate, not a bug -- see the "Accepted risk" note in _mill/discussion.md).
+
+    This function has no unknown-*class* responsibility -- that classification lives in
+    extract_findings(), in the same single pass that builds the findings list, which is what
+    prevents a classed-but-off-vocabulary-severity heading (e.g. "### [NIT:perf]") from being
+    counted here as well as there.
+    """
     unrecognized_count = 0
 
     # Markdown headings: same "### [<label>]" shape parse_blocking_count matches, generalized to capture any all-uppercase bracketed label (the severity-vocabulary convention every known severity follows -- BLOCKING, NIT, GAP, NOTE, MAJOR, MINOR, ...)
     # rather than one fixed severity, so every heading in the document is inspected.
     # A mixed-case bracket like "[Major]" is not a severity-shaped label at all and is deliberately not matched, case-sensitive like parse_blocking_count.
-    heading_pattern = re.compile(r"^###\s+\[([A-Z0-9-]+)\]\s+", re.MULTILINE)
+    # An optional class suffix (e.g. ":design") is matched and ignored -- this function judges a classed heading on its severity token alone.
+    heading_pattern = re.compile(r"^###\s+\[([A-Z0-9-]+)(?::[a-z-]+)?\]\s+", re.MULTILINE)
     for match in heading_pattern.finditer(raw_output):
         label = match.group(1)
         if label != blocking_severity and label != nit_severity:
