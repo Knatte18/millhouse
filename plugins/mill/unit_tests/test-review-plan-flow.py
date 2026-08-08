@@ -28,6 +28,7 @@ from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_plan import prepare as plan_prepare  # noqa: E402
+from _review_plan import _scan_approved_batches  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _test_helpers import seed_wiki_config, write_local_overlay  # noqa: E402
 
@@ -2219,6 +2220,212 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test33 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 34 — top-level findings equals concatenation of per-scope findings, counts consistent (Card 16, check 1)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("alpha", "01-alpha.md", ["src/a.py"], []),
+            ("beta",  "02-beta.md",  ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            alpha_text = (
+                "# Review\n\n"
+                "### [BLOCKING] issue one\n\n- b\n\n"
+                "### [NIT] issue two\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            beta_text = (
+                "# Review\n\n"
+                "### [NIT] issue three\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
+            stub.seed([
+                (alpha_text, "sid-alpha"),
+                (beta_text, "sid-beta"),
+                (APPROVE_TEXT, "sid-hol"),
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            per_scope_findings = [f for rv in r.reviews for f in rv.get("findings", [])]
+            assert r.findings == per_scope_findings, (
+                "top-level findings must equal the concatenation of per-scope findings lists"
+            )
+            assert len(r.findings) == r.blocking_count + r.nit_count, (
+                f"expected len(findings) == blocking_count + nit_count, "
+                f"got {len(r.findings)} vs {r.blocking_count}+{r.nit_count}"
+            )
+            assert r.blocking_count == 1 and r.nit_count == 2, (
+                f"expected blocking_count=1 nit_count=2, got {r.blocking_count}/{r.nit_count}"
+            )
+            print("PASS test34: top-level findings == concatenation of per-scope findings, counts consistent")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test34: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test34 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 35 — [BLOCKING:consistency] demoted to NIT at plan stage (outside default plan-review
+    # blocking_classes {"design", "scope"}), while [BLOCKING:scope] survives as BLOCKING (Card 16, check 2)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            classed_text = (
+                "# Review\n\n"
+                "### [BLOCKING:consistency] contradiction\n\n- b\n\n"
+                "### [BLOCKING:scope] missing item\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(APPROVE_TEXT, "sid-alpha"), (classed_text, "sid-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, holistic_only=False)
+            rv_hol = next(rv for rv in r.reviews if rv["scope"] == "holistic")
+            findings_by_title = {f["title"]: f for f in rv_hol["findings"]}
+            consistency_finding = findings_by_title["contradiction"]
+            scope_finding = findings_by_title["missing item"]
+            assert consistency_finding["severity"] == "NIT", (
+                f"expected [BLOCKING:consistency] demoted to NIT, got {consistency_finding['severity']}"
+            )
+            assert consistency_finding["demoted"] is True, (
+                f"expected demoted=True on the consistency finding, got {consistency_finding}"
+            )
+            assert scope_finding["severity"] == "BLOCKING", (
+                f"expected [BLOCKING:scope] to survive as BLOCKING, got {scope_finding['severity']}"
+            )
+            assert scope_finding["demoted"] is False, (
+                f"expected demoted=False on the surviving scope finding, got {scope_finding}"
+            )
+            print("PASS test35: [BLOCKING:consistency] demoted to NIT, [BLOCKING:scope] survives (plan-stage ceiling)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test35: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test35 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 36 — _scan_approved_batches applies no second ceiling: a re-read demoted heading yields
+    # the same counts as a plain heading (Card 16, check 3)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            demoted_text = (
+                "# Review\n\n### [NIT:scope] cosmetic\n\n**Demoted-from:** BLOCKING\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
+            plain_text = (
+                "# Review\n\n### [NIT] cosmetic\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
+            (reviews_dir / "20260601-000001-plan-review-demoted-batch-r1.md").write_text(
+                demoted_text, encoding="utf-8"
+            )
+            (reviews_dir / "20260601-000002-plan-review-plain-batch-r1.md").write_text(
+                plain_text, encoding="utf-8"
+            )
+
+            result = _scan_approved_batches(reviews_dir)
+            demoted_entry = result["demoted-batch"]
+            plain_entry = result["plain-batch"]
+
+            assert demoted_entry["blocking_count"] == plain_entry["blocking_count"] == 0, (
+                f"expected blocking_count=0 for both, got demoted={demoted_entry['blocking_count']} "
+                f"plain={plain_entry['blocking_count']}"
+            )
+            assert demoted_entry["nit_count"] == plain_entry["nit_count"] == 1, (
+                f"expected nit_count=1 for both, got demoted={demoted_entry['nit_count']} "
+                f"plain={plain_entry['nit_count']}"
+            )
+            # The re-read never applies a second ceiling -- it only reports what the marker already says.
+            assert demoted_entry["findings"][0]["demoted"] is True, (
+                f"expected demoted=True re-read from the Demoted-from marker, got {demoted_entry['findings']}"
+            )
+            assert plain_entry["findings"][0]["demoted"] is False, (
+                f"expected demoted=False for a plain heading, got {plain_entry['findings']}"
+            )
+            print("PASS test36: _scan_approved_batches counts match for demoted vs plain headings (no second ceiling)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test36: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test36 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 37 — carryforward + aggregation together: this is the regression guard for the
+    # aggregation drop -- a carried-forward batch's findings must appear in the top-level list, not
+    # just its counts (Card 16, check 4)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [
+            ("a", "01-a.md", ["src/a.py"], []),
+            ("b", "02-b.md", ["src/b.py"], []),
+        ]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            # 01-a approved in r1 with a real [NIT] finding -- carried forward, not re-reviewed.
+            APPROVE_WITH_NIT_TEXT = (
+                "# Review: test\n\n### [NIT] cosmetic\n\n- b\n\n"
+                "```yaml\nverdict: APPROVE\n```\n"
+            )
+            (reviews_dir / "20260601-000001-plan-review-01-a-r1.md").write_text(
+                APPROVE_WITH_NIT_TEXT, encoding="utf-8"
+            )
+            # holistic-r1 marks round 1 complete so detect_resume_round returns None (normal path).
+            (reviews_dir / "20260601-000002-plan-review-r1.md").write_text(
+                APPROVE_TEXT, encoding="utf-8"
+            )
+
+            fresh_b_text = (
+                "# Review\n\n### [BLOCKING] fresh issue\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            # Only 02-b and holistic need fresh responses; 01-a is carried forward.
+            stub.seed([(fresh_b_text, "sid-fresh-b"), (APPROVE_TEXT, "sid-fresh-hol")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+
+            assert len(r.findings) == r.blocking_count + r.nit_count, (
+                f"expected len(findings) == blocking_count + nit_count, "
+                f"got {len(r.findings)} vs {r.blocking_count}+{r.nit_count} "
+                f"(asserting only the scalars would still pass with findings silently missing)"
+            )
+            carried_titles = {f["title"] for f in r.findings}
+            assert "cosmetic" in carried_titles, (
+                f"carried-forward 01-a finding missing from top-level findings list: {carried_titles}"
+            )
+            print("PASS test37: carryforward + aggregation -- carried-forward findings reach the top-level list")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test37: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test37 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
