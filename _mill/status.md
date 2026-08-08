@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-08T16:49:13Z'
+discussion-fix-r2  '2026-08-08T17:14:19Z'
+discussed  '2026-08-08T17:14:19Z'
 ```
