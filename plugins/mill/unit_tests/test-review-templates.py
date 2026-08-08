@@ -15,6 +15,7 @@ Covers:
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -24,6 +25,14 @@ TEMPLATES_DIR = HUB / "plugins" / "mill" / "templates"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import _review_common  # noqa: E402
+
+# Mirrors _review_common.RECOGNIZED_CLASSES -- kept as a literal tuple (not imported) so this test
+# also catches an accidental drift between the backend's class list and the templates it renders.
+RECOGNIZED_CLASSES = ("design", "scope", "decision", "consistency")
+
+ANTI_LADDER_SENTENCE = (
+    "Class governs who decides and when the loop stops, never whether a finding gets fixed."
+)
 
 TEMPLATE_NAMES = [
     "review-discussion",
@@ -138,6 +147,53 @@ def test_no_output_file_token() -> None:
     print("PASS test_no_output_file_token")
 
 
+def test_unified_vocabulary_and_class_taxonomy() -> None:
+    """All five review templates speak the unified BLOCKING/NIT vocabulary with a class suffix.
+
+    Covers the unified-severity-vocabulary and class-syntax-in-bracket Shared Decisions: the retired
+    GAP/NOTE/GAPS_FOUND tokens are gone, every template shows a classed BLOCKING and NIT finding-heading
+    example, an ``## Out of scope for this stage`` section is present, and the anti-ladder guarantee
+    sentence appears verbatim.
+    """
+    blocking_heading_re = re.compile(r"### \[BLOCKING:([a-z]+)\]")
+    nit_heading_re = re.compile(r"### \[NIT:([a-z]+)\]")
+    for name in TEMPLATE_NAMES:
+        source = _read_template_source(name)
+
+        # The retired per-type vocabulary must not survive as a bracketed severity label or a
+        # verdict value -- none of the five templates use "GAP"/"NOTE" for anything else, so a
+        # blanket substring check is safe (confirmed by inspection, not just at test-write time --
+        # test_all_templates_render below would fail loudly if a template reintroduced either word
+        # as a real token this test doesn't otherwise cover).
+        for retired_token in ("GAP", "NOTE", "GAPS_FOUND"):
+            assert retired_token not in source, (
+                f"{name} still contains the retired token {retired_token!r}"
+            )
+
+        blocking_classes = set(blocking_heading_re.findall(source))
+        assert blocking_classes, f"{name} has no ### [BLOCKING:<class>] finding-heading example"
+        assert blocking_classes <= set(RECOGNIZED_CLASSES), (
+            f"{name} has a BLOCKING finding-heading example with an unrecognised class: "
+            f"{blocking_classes - set(RECOGNIZED_CLASSES)}"
+        )
+
+        nit_classes = set(nit_heading_re.findall(source))
+        assert nit_classes, f"{name} has no ### [NIT:<class>] finding-heading example"
+        assert nit_classes <= set(RECOGNIZED_CLASSES), (
+            f"{name} has a NIT finding-heading example with an unrecognised class: "
+            f"{nit_classes - set(RECOGNIZED_CLASSES)}"
+        )
+
+        assert "## Out of scope for this stage" in source, (
+            f"{name} missing the '## Out of scope for this stage' section"
+        )
+
+        assert ANTI_LADDER_SENTENCE in source, (
+            f"{name} missing the anti-ladder guarantee sentence verbatim"
+        )
+    print("PASS test_unified_vocabulary_and_class_taxonomy")
+
+
 def main() -> int:
     tests = [
         test_all_templates_render,
@@ -145,6 +201,7 @@ def main() -> int:
         test_kept_prose_stays_kept,
         test_plan_criteria_bullets_present,
         test_no_output_file_token,
+        test_unified_vocabulary_and_class_taxonomy,
     ]
     failures: list[str] = []
     for fn in tests:

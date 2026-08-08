@@ -227,6 +227,58 @@ def test_no_output_file_token_anywhere() -> None:
     print("PASS test_no_output_file_token_anywhere")
 
 
+# ---------------------------------------------------------------------------
+# review-output.schema.md contract: the schema is the authoritative source for the finding-heading
+# grammar, the findings envelope shape, and the retired-vocabulary boundary -- these tests assert
+# against the file on disk, not a copied string, so a drift in the schema fails here directly.
+# ---------------------------------------------------------------------------
+
+SCHEMA_PATH = TEMPLATES_DIR / "review-output.schema.md"
+
+
+def test_schema_documents_findings_envelope_keys() -> None:
+    """review-output.schema.md documents the findings-list entry shape.
+
+    Each entry is `{"severity", "class", "title", "demoted"}` per the structured-findings-in-envelope
+    Shared Decision -- pins that the schema doc, not just the code, states the exact key set.
+    """
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    for key in ("severity", "class", "title", "demoted"):
+        assert f'"{key}"' in text, (
+            f"review-output.schema.md missing findings entry key {key!r}"
+        )
+    print("PASS test_schema_documents_findings_envelope_keys")
+
+
+def test_schema_every_blocking_heading_carries_class_suffix() -> None:
+    """Every `### [BLOCKING` occurrence in the schema carries a class suffix.
+
+    The finding-heading grammar appears twice in review-output.schema.md -- once in `## File format`,
+    once in the fenced example inside the `## Findings` body section -- and the second occurrence is
+    the easy one to miss because it carries no GAP/NOTE token and so looks already-correct to a search
+    driven by the retired vocabulary.
+    This sweep catches either occurrence (plus the class-section's inline `### [BLOCKING:design]`
+    example) regressing back to the classless `### [BLOCKING]` form.
+    A colon appearing before the `<title>` placeholder on the same line is the class-suffix signal,
+    regardless of whether the class is expressed as a literal name (`:design`) or as the grammar's
+    enumerated alternatives (`:design|scope|decision|consistency`).
+    """
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    occurrences = [
+        line for line in text.splitlines() if line.strip().startswith("### [BLOCKING")
+    ]
+    assert len(occurrences) == 2, (
+        f"expected exactly 2 finding-heading grammar occurrences in review-output.schema.md, "
+        f"found {len(occurrences)}: {occurrences!r}"
+    )
+    for line in occurrences:
+        prefix = line.split("<", 1)[0]
+        assert ":" in prefix, (
+            f"review-output.schema.md finding-heading occurrence missing a class suffix: {line!r}"
+        )
+    print("PASS test_schema_every_blocking_heading_carries_class_suffix")
+
+
 def main() -> int:
     tests = [
         test_agent_mode_grants_exactly_one_write_and_forbids_edit_git_bash,
@@ -235,6 +287,8 @@ def main() -> int:
         test_templates_state_no_tool_permission_or_destination,
         test_agent_reviewer_static_invariant,
         test_no_output_file_token_anywhere,
+        test_schema_documents_findings_envelope_keys,
+        test_schema_every_blocking_heading_carries_class_suffix,
     ]
     failures: list[str] = []
     for fn in tests:
