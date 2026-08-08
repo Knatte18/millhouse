@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
-plan: null
+plan: _mill/plan
 parent: main
 task: 'Unit test suite: hangs, unmocked-path errors, and stuck/success envelope bug found in piecewise sweep'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-08T16:49:13Z'
 discussion-fix-r2  '2026-08-08T17:14:19Z'
 discussed  '2026-08-08T17:14:19Z'
+planning  '2026-08-08T17:26:30Z'
 ```
