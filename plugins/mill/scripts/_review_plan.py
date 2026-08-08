@@ -48,6 +48,7 @@ from _review_common import (
     count_unrecognized_severity_findings,
     detect_resume_round,
     discover_round,
+    extract_findings,
     finalize_scope,
     load_task_title,
     maybe_switch_spec_for_large_prompt,
@@ -58,6 +59,7 @@ from _review_common import (
     parse_verdict,
     read_constraints_md,
     render_prompt,
+    resolve_blocking_classes,
     resolve_existing_paths,
     resolve_large_prompt_timeout,
     resolve_path,
@@ -143,6 +145,8 @@ def _review_one_batch(
     wiki_root: Path,
     git_root: Path,
     bulk_timeout: int | None,
+    *,
+    blocking_classes: frozenset[str],
 ) -> dict:
     """Review a single plan batch file.
 Returns a reviews[] entry dict.
@@ -157,6 +161,9 @@ Returns a reviews[] entry dict.
             Suppressed in resolve_ref_paths alongside
         creates_union so downstream batches referencing a move target don't
         raise ReviewError.
+        blocking_classes: The pre-resolved per-scope blocking-class ceiling for this batch, supplied
+            by the caller (this worker does not receive `cfg` and cannot call
+            `resolve_blocking_classes` itself). Passed straight through to `finalize_scope`.
     """
     try:
         round_n = discover_round(reviews_dir, "plan", batch_path.stem)
@@ -249,6 +256,7 @@ Returns a reviews[] entry dict.
                 "file": None,
                 "error": str(exc),
                 "session_id": None,
+                "findings": [],
             }
 
         verdict = parse_verdict(raw)
@@ -285,10 +293,14 @@ Returns a reviews[] entry dict.
                         "file": None,
                         "error": f"resume retry failed: {exc}",
                         "session_id": None,
+                        "findings": [],
                     }
                 # Second NEED_CONTEXT propagates to caller untouched.
 
-        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope=batch_path.stem)
+        review_entry = finalize_scope(
+            reviews_dir, "plan", round_n, raw, scope=batch_path.stem,
+            blocking_classes=blocking_classes,
+        )
         print(
             f"[_review_plan] batch {batch_path.stem}: verdict={review_entry['verdict']} "
             f"file={Path(review_entry['file']).name}",
@@ -302,6 +314,7 @@ Returns a reviews[] entry dict.
             "nit_count": review_entry["nit_count"],
             "file": review_entry["file"],
             "session_id": session_id,
+            "findings": review_entry["findings"],
         }
     except ReviewError as exc:
         # ERROR shape verified 20250517 to match Shared Decisions (#338)
@@ -314,6 +327,7 @@ Returns a reviews[] entry dict.
             "file": None,
             "error": str(exc),
             "session_id": None,
+            "findings": [],
         }
 
 
@@ -833,6 +847,9 @@ def run(
                                     wiki_root,
                                     git_root,
                                     bulk_timeout,
+                                    blocking_classes=resolve_blocking_classes(
+                                        cfg, "plan", batch_path.stem
+                                    ),
                                 )
                                 futures_map[future] = batch_path
 
