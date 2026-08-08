@@ -37,7 +37,9 @@ batches:
     commit_sha: f20bbd9074a6cf8ff1d128fcf7f47bbd03d4b3be
     verify_baseline_failures: []
   - name: wiki-stub-fixes
-    state: pending
+    state: running
+    implementer_session: 48f303e2-1bf2-41ed-b661-ee749125b3d3
+    start_sha: fd08ccad034a78f0ff1ecea67fbb457b6318bb55
     verify_baseline_failures: ['FAIL -- 9 of 16 tests: [''test_main_happy_path_calls_spawn_core_in_order'', ''test_write_settings_uses_short_name_and_slug'',
     ''test_main_backlog_empty_exits_zero'', ''test_main_value_error_from_picker_exits_one'',
     ''test_main_runtime_error_from_capture_branch_raises_system_exit'', ''test_create_hub_links_called_after_portal_creation'',
