@@ -1590,6 +1590,159 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
+    # Test 24 — code stage's default blocking_classes is the full class set, so every classed
+    # BLOCKING heading survives the ceiling as BLOCKING with no demotion (Card 18, check 1).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            classed_text = (
+                "# Review: test\n\n"
+                "### [BLOCKING:design] missing decision\n\n- b\n\n"
+                "### [BLOCKING:scope] incomplete inventory\n\n- b\n\n"
+                "### [BLOCKING:decision] undisposed artifact\n\n- b\n\n"
+                "### [BLOCKING:consistency] contradicts convention\n\n- b\n\n"
+                "```yaml\nverdict: REQUEST_CHANGES\n```\n"
+            )
+            stub.seed([(classed_text, "sid-classed")])
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
+            assert r.blocking_count == 4, f"expected blocking_count=4, got {r.blocking_count}"
+            assert len(r.findings) == 4, f"expected 4 findings, got {len(r.findings)}"
+            for finding in r.findings:
+                assert finding["severity"] == "BLOCKING", (
+                    f"expected every finding to stay BLOCKING at the code stage, got {finding}"
+                )
+                assert finding["demoted"] is False, (
+                    f"code stage's default blocking_classes is the full class set -- no finding "
+                    f"should be demoted, got {finding}"
+                )
+            print(
+                "PASS test24: all four classed BLOCKING headings survive at the code stage "
+                "(demotion-free ceiling, Card 18)"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test24: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test24 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 25 — advisory rename-check NITs spliced by _splice_rename_nit_findings appear in the
+    # finalize envelope's findings list, confirming the splice happens before extraction (Card 18,
+    # check 2).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_dir = project_root / "plan"
+
+            def _make_batch_with_moves_for_splice(name: str, moves: list[tuple[str, str]]) -> str:
+                """Return minimal batch file text with a Moves: field."""
+                moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
+                return (
+                    f"# Batch: {name}\n\n"
+                    "```yaml\n"
+                    f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
+                    "```\n\n"
+                    "## Cards\n\n### Card 1\n\n"
+                    "- **Context:** none\n"
+                    "- **Edits:** none\n"
+                    "- **Creates:** none\n"
+                    "- **Deletes:** none\n"
+                    f"- **Moves:**\n{moves_lines}\n"
+                )
+
+            (plan_dir / "01-alpha.md").write_text(
+                _make_batch_with_moves_for_splice(
+                    "alpha", [("old/module.py", "new/module.py")]
+                ),
+                encoding="utf-8",
+            )
+
+            fake_start_sha = "aabbccdd1234567890abcdef1234567890abcdef"
+            mill_state_dir = project_root / "_mill"
+            mill_state_dir.mkdir(parents=True, exist_ok=True)
+            (mill_state_dir / "status.md").write_text(
+                "# Status: test-slug\n\n"
+                "```yaml\n"
+                "phase: implement\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    start_sha: {fake_start_sha}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+
+            add_delete_diff = "A\tnew/module.py\nD\told/module.py\n"
+            fake_completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout=add_delete_diff, stderr=""
+            )
+
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+
+            approve_raw = (
+                "# Review: test\n\n"
+                "```yaml\nverdict: APPROVE\n```\n\n"
+                "## Findings\n\n(none)\n\n"
+                "## Verdict\n\nAPPROVE\n"
+            )
+
+            with unittest.mock.patch("_subprocess_util.run", return_value=fake_completed):
+                result = code_finalize(
+                    cfg,
+                    SLUG,
+                    approve_raw,
+                    scope="alpha",
+                    round_n=1,
+                    reviews_dir=reviews_dir,
+                    mill_dir=mill_dir,
+                    project_root=project_root,
+                    wiki_root=wiki_root,
+                    git_root=project_root,
+                )
+
+            assert result.verdict == "APPROVE", (
+                f"advisory rename NIT must not change verdict from APPROVE, got {result.verdict!r}"
+            )
+            assert len(result.findings) == 1, (
+                f"expected the spliced NIT to appear once in the envelope's findings list, "
+                f"got {result.findings}"
+            )
+            spliced_finding = result.findings[0]
+            assert spliced_finding["severity"] == "NIT", (
+                f"expected the spliced finding's severity to be NIT, got {spliced_finding}"
+            )
+            assert "old/module.py" in spliced_finding["title"] and "new/module.py" in spliced_finding["title"], (
+                f"expected the spliced finding's title to reference both move-pair paths, "
+                f"got {spliced_finding['title']!r}"
+            )
+            assert result.reviews[0]["findings"] == result.findings, (
+                "per-scope reviews[] findings must match the top-level findings list"
+            )
+            print(
+                "PASS test25: rename-check advisory NIT spliced before extraction appears in "
+                "finalize envelope's findings list (Card 18)"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test25: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test25 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
     # project_root rebind: briefs_dir resolves under resolve_active_hub, not resolve_hub_path's decoy (#675)
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
