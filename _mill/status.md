@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-core-taxonomy
+phase: approved-discussion-backend
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -34,6 +34,7 @@ plan-review-r7  '2026-08-08T18:17:49Z'
 planned  '2026-08-08T18:18:05Z'
 implementing  '2026-08-08T18:18:42Z'
 approved-core-taxonomy  '2026-08-08T18:32:41Z'
+approved-discussion-backend  '2026-08-08T18:40:18Z'
 ```
 
 ## Batches
@@ -47,9 +48,10 @@ batches:
     commit_sha: 3f01fe69f9f363cc95877f8f75d75844903e1f81
     verify_baseline_failures: []
   - name: discussion-backend
-    state: running
+    state: approved
     implementer_session: 0b9ff793-28a5-444b-a49f-672326afe5f4
     start_sha: e440134e0a0bb4f60590c37b93fa224a7b8430f9
+    commit_sha: 53fc77ce56b935c604a78733f04c01dc7da8ee2d
     verify_baseline_failures: [FAILED (failures=3), '--- FAIL test-bg-json-contract.py (0.2s) ---', 'FAIL -- 1 of
     4 in 1.0s: [''test-bg-json-contract.py'']', '--- FAIL test-bg-json-contract.py
     (0.1s) ---', 'FAIL -- 1 of 4 in 0.9s: [''test-bg-json-contract.py'']']
