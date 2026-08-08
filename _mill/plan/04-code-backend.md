@@ -32,7 +32,8 @@ It runs in parallel with batches 2 and 3, which touch disjoint files.
   Resolving after the splice is required, not cosmetic: `_splice_rename_nit_findings` injects advisory `NIT` findings into `raw_text`, and those injected findings must be visible to the single `extract_findings` pass inside `finalize_scope`, which only sees the text passed to it.
   On the success path, set `findings=review_entry["findings"]` on the returned `ReviewResult` and add `"findings": review_entry["findings"]` to the dict inside its `reviews=[...]` list.
   On the `ReviewError` path, add `"findings": []` to its `reviews[0]` dict.
-  Add `"findings": []` to every other hand-built review-entry dict in `_review_code.py` that currently sets `blocking_count=0`, so the key is present on every path.
+  Add `"findings": []` to every hand-built dict inside a `reviews=[...]` list elsewhere in `_review_code.py` -- the skipped-scope, ERROR, and other early-return `ReviewResult` constructions -- so the per-scope key is present on every path.
+  The enclosing `ReviewResult(...)` calls need no explicit `findings` argument: the dataclass field defaults to an empty list, so the top level is already correct wherever the constructor omits it.
   Remove the now-unused `parse_blocking_count` name from the import block only if nothing else in the file references it.
 - **Commit:** `feat(review): thread blocking_classes and findings through code finalize`
 

@@ -85,7 +85,9 @@ batches:
 ### Decision: ceiling-applied-once-at-write-time
 
 - **Decision:** the `blocking_classes` ceiling, the demotion rewrite, and the per-class counting all live in `finalize_scope` in `_review_common.py` and nowhere else.
-  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s crash-recovery re-read, and `_nit_gate.find_unfixed_nit_scopes` -- get only the widened regex, never the ceiling.
+  The historical re-read sites -- `_review_plan._scan_approved_batches`, `_review_plan.run`'s crash-recovery re-read, and `_nit_gate.find_unfixed_nit_scopes` -- never apply the ceiling.
+  The two `_review_plan` sites do call `extract_findings`, because their entries feed the same aggregation as the write-time entries and would otherwise contribute counts without contributing findings; extraction is not ceiling application, and the file they read was already written in its demoted form.
+  `_nit_gate.find_unfixed_nit_scopes` needs only a count and stays on the widened `parse_blocking_count` regex.
 - **Rationale:** those sites re-read a review file `finalize_scope` already wrote, so the demotion is already baked into the text they read; applying the ceiling again would be a no-op at best and a double-demotion at worst.
   `finalize_scope` also writes a file, which recovery and resume paths must not do.
 - **Applies to:** batches 1, 3, 4
@@ -135,6 +137,7 @@ batches:
 
 - **Decision:** when the ceiling demotes a finding, `finalize_scope` rewrites the heading in the text it is about to write -- `### [BLOCKING:scope] X` becomes `### [NIT:scope] X` -- and inserts a `**Demoted-from:** BLOCKING` line as the first field line of that finding.
   The rewrite happens after `apply_actual_model_override` and before `write_review_file`, so the file on disk is the demoted form.
+  Because `extract_findings` reads findings from both the markdown-heading mechanism and the fenced-`findings:`-YAML mechanism, the rewrite must correct **both** representations, keyed on the finding's title -- a demotion visible in only one of them is the same file/envelope divergence this Decision exists to prevent.
 - **Rationale:** a SKILL reading the review file and a SKILL reading the envelope must route identically; if the file kept `[BLOCKING:scope]` while the envelope counted a NIT, mill-start would surface it as an operator question while the envelope said `APPROVE`.
   It also means the historical re-read sites see already-demoted files.
 - **Applies to:** batches 1, 5, 6
@@ -180,6 +183,7 @@ batches:
 ## All Files Touched
 
 - `mill-config.yaml`
+- `plugins/mill/integration_tests/bench-reviewers.py`
 - `plugins/mill/integration_tests/test-review-discussion.py`
 - `plugins/mill/scripts/_review_cli.py`
 - `plugins/mill/scripts/_review_code.py`

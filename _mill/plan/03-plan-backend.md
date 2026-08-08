@@ -12,8 +12,8 @@ depends-on: [1]
 ## Batch Scope
 
 Wires the plan-review backend onto batch 1's engine.
-Plan review is the only backend with two scopes, four `finalize_scope` call sites, a batch worker that does not receive `cfg`, an aggregation step over `reviews[]`, and two historical re-read sites that must stay ceiling-free.
-This batch threads a resolved `blocking_classes` set into all four write-time call sites, concatenates the `findings` lists at the aggregation site, adds `findings` to the hand-built envelope in `millpy-review-plan.py`, and leaves the two re-read sites on the widened-regex-only path required by the `ceiling-applied-once-at-write-time` Shared Decision.
+Plan review is the only backend with two scopes, five `finalize_scope` call sites, a batch worker that does not receive `cfg`, an aggregation step over `reviews[]`, and two historical re-read sites that must stay ceiling-free.
+This batch threads a resolved `blocking_classes` set into all five write-time call sites, concatenates the `findings` lists at the aggregation site, adds `findings` to the hand-built envelope in `millpy-review-plan.py`, and leaves the two re-read sites on the ceiling-free path required by the `ceiling-applied-once-at-write-time` Shared Decision -- while still giving the carryforward re-read site a `findings` list, because that site's entries feed the same aggregation as the write-time entries and would otherwise make the envelope's scalars disagree with its list.
 It runs in parallel with batches 2 and 4, which touch disjoint files.
 
 ## Cards
@@ -27,7 +27,7 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Add `resolve_blocking_classes` to `_review_plan.py`'s `from _review_common import (...)` block.
+- **Requirements:** Add `resolve_blocking_classes` and `extract_findings` to `_review_plan.py`'s `from _review_common import (...)` block.
   Add a keyword-only parameter `blocking_classes: frozenset[str]` to `_review_one_batch`, documented in its docstring as the pre-resolved per-scope ceiling supplied by the caller because this worker does not receive `cfg`.
   Pass it through to the `finalize_scope(reviews_dir, "plan", round_n, raw, scope=batch_path.stem)` call as `blocking_classes=blocking_classes`, and add `"findings": review_entry["findings"]` to the dict this function returns on the success path.
   On both of its ERROR-shaped return dicts -- the `LLMError` resume-retry failure and the outer `ReviewError` handler -- add `"findings": []`.
@@ -46,7 +46,12 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
 - **Requirements:** In `_review_plan.finalize`, compute `blocking_classes = resolve_blocking_classes(cfg, "plan", scope)` and pass it as `blocking_classes=blocking_classes` to its `finalize_scope` call; add `"findings": review_entry["findings"]` to the success-path return dict and `"findings": []` to the `ReviewError`-path return dict.
   In `run`, do the same for each of the three remaining `finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")` call sites, using `resolve_blocking_classes(cfg, "plan", "holistic")` for all three, and add `"findings": review_entry["findings"]` to each of the corresponding review-entry dicts built from those calls.
   Add `"findings": []` to every hand-built zero-count review-entry dict in `run` that currently sets `"blocking_count": 0` and `"nit_count": 0`, so the key is present on every entry regardless of path.
-  Do not touch the `parse_blocking_count` / `count_unrecognized_severity_findings` calls in `_scan_approved_batches` or in `run`'s crash-recovery re-read block -- those are historical re-read sites and must stay ceiling-free per the `ceiling-applied-once-at-write-time` Shared Decision; add a one-line comment at each stating that the file being read was already written in its demoted form.
+  In `_scan_approved_batches`, replace the `parse_blocking_count` + `count_unrecognized_severity_findings` counting with `findings = extract_findings(raw)` and derive `blocking_count` and `nit_count` from that list, then add `"findings": [f.to_dict() for f in findings]` to the returned carryforward entry dict.
+  Do **not** call `apply_blocking_ceiling` or `finalize_scope` here: the file being read was already written in its demoted form, so the ceiling is already baked into the text and re-applying it would be a double demotion, and `finalize_scope` writes a file, which this recovery path must not do.
+  This card's `extract_findings` use is extraction, not ceiling application, and so does not violate the `ceiling-applied-once-at-write-time` Shared Decision; without it these carryforward entries would contribute their counts to card 15's aggregate scalars while contributing nothing to the aggregate `findings` list, making the envelope's scalars disagree with its own list.
+  Apply the identical treatment to `run`'s crash-recovery re-read block, which re-reads an already-written review file for the same reason and feeds the same aggregation: replace its `parse_blocking_count` + `count_unrecognized_severity_findings` pair with `extract_findings`, derive its `blocking_count` from the list, and add `"findings": [f.to_dict() for f in findings]` to the entry it builds.
+  Add a one-line comment at each of the two sites stating that the file being read was already written in its demoted form, so extraction alone is correct and no ceiling is applied.
+  After this card, `parse_blocking_count` and `count_unrecognized_severity_findings` have no remaining caller in `_review_plan.py`; remove both from its import block if nothing else in the file references them.
 - **Commit:** `feat(review): apply blocking-class ceiling at plan finalize and run sites`
 
 ### Card 15: Aggregate findings across sub-reviews
@@ -77,6 +82,8 @@ It runs in parallel with batches 2 and 4, which touch disjoint files.
   Add one test asserting the top-level `findings` list on the `ReviewResult` from `run` equals the concatenation of the per-scope `findings` lists in `reviews[]`, and that `blocking_count` and `nit_count` remain consistent with it.
   Add one test asserting a `### [BLOCKING:consistency]` finding at the plan stage is demoted to `NIT` -- `consistency` is outside `plan-review`'s default `blocking_classes` -- while a `### [BLOCKING:scope]` finding at the same stage survives as `BLOCKING`, which is the distinction between the plan and discussion stages.
   Add one test asserting `_scan_approved_batches` returns the same counts for a review file already containing a demoted `### [NIT:scope]` heading with a `**Demoted-from:** BLOCKING` line as it does for a plain `### [NIT]` heading, confirming the re-read site applies no second ceiling.
+  Add one test covering carryforward plus aggregation together: a `run` invocation where at least one batch is carried forward by `_scan_approved_batches` with a non-zero `nit_count` and at least one batch is reviewed fresh, asserting the resulting `ReviewResult`'s `len(findings) == blocking_count + nit_count` and that the carried-forward batch's findings appear in the top-level list.
+  This is the regression guard for the aggregation drop -- assert the length identity and the membership together, since asserting only the scalars would still pass with the findings silently missing.
 - **Commit:** `test(review): cover plan-stage ceiling, aggregation, and re-read sites`
 
 ## Batch Tests
