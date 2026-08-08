@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -32,4 +32,25 @@ plan-review-r6  '2026-08-08T18:12:54Z'
 plan-fix-r6  '2026-08-08T18:12:54Z'
 plan-review-r7  '2026-08-08T18:17:49Z'
 planned  '2026-08-08T18:18:05Z'
+implementing  '2026-08-08T18:18:42Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: core-taxonomy
+    state: pending
+  - name: discussion-backend
+    state: pending
+  - name: plan-backend
+    state: pending
+  - name: code-backend
+    state: pending
+  - name: templates-and-config
+    state: pending
+  - name: skill-mill-go
+    state: pending
+  - name: skills-start-plan-receiving
+    state: pending
 ```
