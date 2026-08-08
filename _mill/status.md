@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-validate-heuristic-gaps-2
 branch: hanf/mill-plan-validate-heuristic-gaps-2
 plan: _mill/plan
@@ -20,4 +20,13 @@ planning  '2026-08-08T17:17:18Z'
 plan-review-r1  '2026-08-08T17:22:57Z'
 plan-fix-r1  '2026-08-08T17:22:57Z'
 planned  '2026-08-08T17:23:17Z'
+implementing  '2026-08-08T17:23:52Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-validate-heuristic-fixes
+    state: pending
 ```
