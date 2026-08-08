@@ -1816,6 +1816,126 @@ def count_unrecognized_severity_findings(
     return unrecognized_count
 
 
+# Matches a finding heading in the new class-aware syntax: "### [BLOCKING:design] <title>".
+# The class group is optional -- "### [BLOCKING] <title>" has cls=None.
+_RE_FINDING_HEADING = re.compile(
+    r"^###\s+\[(?P<sev>[A-Z0-9-]+)(?::(?P<cls>[a-z-]+))?\]\s+(?P<title>.*)$",
+    re.MULTILINE,
+)
+
+# The re-read signal for a heading-mechanism demotion: rewrite_demoted_findings inserts this line as
+# the first field line of a demoted finding, and extract_findings looks for it to set demoted=True
+# on a finding it re-reads from an already-written file.
+_RE_DEMOTED_FROM_MARKER = re.compile(r"^\*\*Demoted-from:\*\*\s*BLOCKING\s*$", re.MULTILINE)
+
+
+def _iter_yaml_block_findings(raw_text: str) -> list[dict]:
+    """Return every `findings:` list entry from every fenced ```yaml block in raw_text, concatenated
+    in block order.
+
+    Mirrors parse_blocking_count's own fenced-block-scanning approach: a block that fails to parse as
+    YAML, or that carries no `findings:` list, contributes nothing and is skipped silently -- the
+    same tolerant behaviour every other yaml-fallback scan in this module already has.
+    """
+    entries: list[dict] = []
+    lines = raw_text.splitlines()
+    index = 0
+    while index < len(lines):
+        if lines[index].rstrip() == "```yaml":
+            body_lines: list[str] = []
+            index += 1
+            while index < len(lines) and lines[index].rstrip() != "```":
+                body_lines.append(lines[index])
+                index += 1
+            if index < len(lines):
+                try:
+                    parsed = yaml.safe_load("\n".join(body_lines))
+                except yaml.YAMLError:
+                    index += 1
+                    continue
+                if isinstance(parsed, dict) and isinstance(parsed.get("findings"), list):
+                    entries.extend(e for e in parsed["findings"] if isinstance(e, dict))
+        index += 1
+    return entries
+
+
+def extract_findings(raw_text: str) -> list[Finding]:
+    """Extract every finding in raw_text exactly once, scanning both the markdown-heading mechanism
+    and the fenced-`findings:`-YAML mechanism unconditionally.
+
+    Neither scan is gated on the other's result, per the dual-mechanism-scan-preserved Shared
+    Decision -- a mixed-format document (headings for one severity, a yaml block for the other) must
+    not be able to hide a finding in whichever mechanism the known labels did not use.
+
+    Severity classification: a severity equal to BLOCKING_SEVERITY or NIT_SEVERITY is kept as-is
+    (uppercased first for the YAML path, since YAML authors are not held to the heading's uppercase
+    convention);
+    any other severity is forced to BLOCKING_SEVERITY, preserving the existing house rule that an
+    off-vocabulary severity folds into the blocking bucket.
+
+    Class classification: a class in RECOGNIZED_CLASSES is kept;
+    a missing or unrecognised class becomes None (exempt from the ceiling) and emits one ASCII-only
+    stderr warning naming the finding's title.
+
+    Results are concatenated heading-scan-first, then deduplicated across mechanisms ONLY: a title
+    produced by the yaml scan is dropped when and only when the heading scan already produced that
+    same title.
+    Two findings sharing a title within a single mechanism are both kept -- heading-vs-heading and
+    yaml-vs-yaml alike -- because they are genuinely distinct findings, and collapsing them would
+    silently drop one from both the returned list and the derived scalars.
+
+    `demoted` is set to True when the finding already carries the marker rewrite_demoted_findings
+    writes: a `**Demoted-from:** BLOCKING` field line for the heading mechanism, or a `demoted_from`
+    entry field for the yaml mechanism.
+    This function never applies the ceiling itself -- it only reports a demotion that is already
+    recorded in the text, which is what lets the historical re-read sites in _review_plan.py agree
+    with the envelope produced when the finding was first finalized.
+    """
+    matches = list(_RE_FINDING_HEADING.finditer(raw_text))
+    heading_findings: list[Finding] = []
+    heading_titles: set[str] = set()
+    for i, m in enumerate(matches):
+        title = m.group("title").strip()
+        sev_token = m.group("sev")
+        severity = (
+            sev_token if sev_token in (BLOCKING_SEVERITY, NIT_SEVERITY) else BLOCKING_SEVERITY
+        )
+        cls_token = m.group("cls")
+        cls = cls_token if cls_token in RECOGNIZED_CLASSES else None
+        if cls is None:
+            print(
+                f"[_review_common] warning: finding has unknown or missing class -- {title}",
+                file=sys.stderr,
+            )
+        # A finding's field lines run from the end of its own heading to the start of the next
+        # heading (or end of text) -- that span is where a **Demoted-from:** marker would live.
+        field_start = m.end()
+        field_end = matches[i + 1].start() if i + 1 < len(matches) else len(raw_text)
+        demoted = bool(_RE_DEMOTED_FROM_MARKER.search(raw_text[field_start:field_end]))
+        heading_findings.append(Finding(severity=severity, cls=cls, title=title, demoted=demoted))
+        heading_titles.add(title)
+
+    yaml_findings: list[Finding] = []
+    for entry in _iter_yaml_block_findings(raw_text):
+        title = str(entry.get("title", "")).strip()
+        # Cross-mechanism dedup only: a yaml title already seen from the heading scan is dropped.
+        if not title or title in heading_titles:
+            continue
+        sev_raw = str(entry.get("severity", "")).upper()
+        severity = sev_raw if sev_raw in (BLOCKING_SEVERITY, NIT_SEVERITY) else BLOCKING_SEVERITY
+        cls_raw = entry.get("class")
+        cls = cls_raw if cls_raw in RECOGNIZED_CLASSES else None
+        if cls is None:
+            print(
+                f"[_review_common] warning: finding has unknown or missing class -- {title}",
+                file=sys.stderr,
+            )
+        demoted = bool(entry.get("demoted_from"))
+        yaml_findings.append(Finding(severity=severity, cls=cls, title=title, demoted=demoted))
+
+    return heading_findings + yaml_findings
+
+
 def write_review_file(
     reviews_dir: Path,
     review_type: str,
