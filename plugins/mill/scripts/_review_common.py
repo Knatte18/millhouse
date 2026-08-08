@@ -282,10 +282,64 @@ def _porcelain_diff(before: list[str], after: list[str]) -> str:
 # Data classes
 # ---------------------------------------------------------------------------
 
+# Unified severity vocabulary (all three review types: discussion, plan, code).
+# GAP/NOTE/GAPS_FOUND are historical v1 discussion-review-only values; parse_verdict()
+# still accepts GAPS_FOUND on read for archive readability, but nothing emits it again.
+BLOCKING_SEVERITY = "BLOCKING"
+NIT_SEVERITY = "NIT"
+
+# The four class names a finding's heading bracket may carry, e.g. "### [BLOCKING:design] ...".
+# Meaning is identical across all three review types (see class-definitions-generic-across-stages):
+#   design       -- a decision is missing, wrong, or rests on a false premise.
+#   scope        -- the work inventory is incomplete, or the enumeration method is unreliable.
+#   decision     -- a named artifact with no stated disposition.
+#   consistency  -- the artefact contradicts itself, carries a superseded statement, or violates an
+#       established repo convention.
+RECOGNIZED_CLASSES = ("design", "scope", "decision", "consistency")
+
+
+@dataclass
+class Finding:
+    """A single severity+class finding extracted from a reviewer's raw output.
+
+    ``cls`` is ``None`` when the finding's heading carried no class suffix or an unrecognised one
+    (e.g. ``### [BLOCKING]`` or ``### [BLOCKING:perf]``) -- such a finding is exempt from the
+    ``blocking_classes`` ceiling in ``apply_blocking_ceiling``, per the
+    unknown-class-preserves-stated-severity Shared Decision.
+    ``demoted`` is ``True`` once ``apply_blocking_ceiling`` has downgraded this finding from
+    ``BLOCKING`` to ``NIT``, or when ``extract_findings`` reads it back from a review file that
+    already carries the demotion marker written by ``rewrite_demoted_findings``.
+
+    This dataclass carries no field naming which of the two mechanisms (markdown heading or fenced
+    ``findings:`` YAML) the finding came from -- ``rewrite_demoted_findings`` keys its rewrite on
+    ``title`` (and ``cls``) and updates every representation, so an origin tag would be both unused
+    and wrong for a title that appears in both mechanisms.
+    """
+
+    severity: str
+    cls: str | None
+    title: str
+    demoted: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        # Serialised key is "class" (Python attribute is "cls" because "class" is reserved).
+        return {
+            "severity": self.severity,
+            "class": self.cls,
+            "title": self.title,
+            "demoted": self.demoted,
+        }
+
 
 @dataclass
 class ReviewResult:
-    """Serialisable result returned by every review backend's run() function."""
+    """Serialisable result returned by every review backend's run() function.
+
+    ``blocking_count`` and ``nit_count`` are derived values kept consistent with ``findings`` -- they
+    count, respectively, the ``BLOCKING`` and ``NIT`` entries in ``findings``.
+    ``findings`` aggregates across sub-reviews by concatenation, exactly as ``blocking_count`` and
+    ``nit_count`` already aggregate by summation.
+    """
 
     type: str  # "discussion" | "plan" | "code"
     round: int
@@ -293,6 +347,7 @@ class ReviewResult:
     reviews: list[dict] = field(default_factory=list)
     blocking_count: int = 0
     nit_count: int = 0
+    findings: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -301,6 +356,7 @@ class ReviewResult:
             "verdict": self.verdict,
             "blocking_count": self.blocking_count,
             "nit_count": self.nit_count,
+            "findings": self.findings,
             "reviews": self.reviews,
         }
 
