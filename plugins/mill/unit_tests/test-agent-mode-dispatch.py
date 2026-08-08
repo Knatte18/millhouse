@@ -195,7 +195,7 @@ class TestImplementerModeParity(unittest.TestCase):
         # All other git calls (config, branch, add, commit, push, log) return a sensible default CompletedProcess so prepare's commit sequence succeeds.
         self._in_finalize = False
         self._prepare_head_sha = "abc1234"
-        self._finalize_head_sha = "def5678"
+        self._finalize_head_sha = "d" * 40
 
         def _git_side_effect(*args, **kwargs):
             argv = args[0] if args else kwargs.get("args", [])
