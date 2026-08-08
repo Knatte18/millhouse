@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r1  '2026-08-08T17:34:40Z'
 plan-fix-r1  '2026-08-08T17:35:05Z'
 plan-review-r2  '2026-08-08T17:40:28Z'
 planned  '2026-08-08T17:40:49Z'
+implementing  '2026-08-08T17:41:25Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: claude-sub-idle-mock
+    state: pending
+  - name: wiki-stub-fixes
+    state: pending
+  - name: forward-output-stuck-passthrough
+    state: pending
+  - name: full-suite-regression
+    state: pending
 ```
