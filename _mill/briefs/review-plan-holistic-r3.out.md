@@ -1,0 +1,33 @@
+MILL_REVIEW_BEGIN
+# Review: Classify review GAPs by kind (design/scope/decision/consistency); scope discussion review to what downstream stages cannot catch — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: Claude Sonnet 4.5 (self-reported, unverified)
+reviewed_file: plan/
+date: 2026-08-08
+```
+
+## Findings
+
+### [BLOCKING:consistency] extract_findings loses demoted status on re-read paths
+**Location:** Batch 1 Card 2/4 (extract_findings) x Batch 3 Card 14 (`_scan_approved_batches`, `run`'s crash-recovery re-read block)
+**Issue:** Card 2 mandates `demoted` is always `False` on return from `extract_findings`, and it never reads the `**Demoted-from:** BLOCKING` marker line. At the two historical re-read sites the plan wires onto `extract_findings` (`_scan_approved_batches`, and `run`'s per-batch resume re-read at line ~782), the file on disk may already carry a demoted `[NIT:scope]` heading with a `**Demoted-from:**` line, but the resulting `findings` entries will report `demoted: false` even though the finding was in fact demoted. The `blocking_count`/`nit_count` scalars stay correct (severity token is read as-is), but the structured `findings` list — the very envelope contract this task adds — silently disagrees with itself depending on whether an entry came fresh from `finalize_scope` or via carryforward/resume.
+**Fix:** Either have `extract_findings` also detect the `**Demoted-from:**` marker and set `demoted=True` when present, or have the two re-read call sites post-process the extracted list to set `demoted=True` for any finding whose heading is followed by that marker.
+
+### [NIT:consistency] review-output.schema.md has two finding-heading examples, Card 23 only names one
+**Location:** Batch 5 Card 23; `plugins/mill/templates/review-output.schema.md` lines 23 and 72
+**Issue:** The schema file shows the finding-heading grammar twice: once in the `## File format` block (line 23, currently `### [BLOCKING|NIT|GAP|NOTE] <finding title>`) and again in the `### \`## Findings\`` body section (line 72, currently `### [BLOCKING|NIT] <finding title>`, no class). Card 23's requirement text quotes only the line-23 form as the "from" string, so an implementer working literally from the card may update line 23 (which visibly still has GAP/NOTE) and miss line 72 (which looks already-correct because it has no GAP/NOTE to remove), leaving the body-section example without the new class syntax. No test in Card 25 checks both occurrences — the five review templates (which each have exactly one occurrence, verified) are template-tested, but schema.md's own second occurrence isn't asserted.
+**Fix:** Have Card 23 explicitly name both the `## File format` block and the `### \`## Findings\`` body-section example as separate edit sites requiring the class suffix.
+
+### [NIT:consistency] review-output.schema.md's raise-condition bullet not updated for the now-3-value grammar
+**Location:** Batch 5 Card 23; `plugins/mill/templates/review-output.schema.md` line ~59
+**Issue:** Card 23 shrinks the two `verdict:` grammar lines to the 3-value "emitted set" (`APPROVE | REQUEST_CHANGES | NEED_CONTEXT`), consistent with `GAPS_FOUND` no longer being emitted. But `parse_verdict`'s actual accepted-input closed set stays 4-wide (`GAPS_FOUND` retained for back-compat per the `gaps-found-back-compat` Decision), and the nearby "It raises ReviewError if... The verdict: value is not one of the four listed above" bullet (in the `## Metadata block fields` section) still says "four" while the grammar line right above it will show only three values — a self-contradiction Card 23 doesn't call out for update.
+**Fix:** Add this bullet to Card 23's edit list, rephrasing it to distinguish "grammar shows 3 emitted values" from "parser accepts a 4th historical value (`GAPS_FOUND`) without raising."
+
+## Verdict
+
+REQUEST_CHANGES
+One real correctness gap (demoted flag lost on carryforward/resume re-read) plus two related schema-doc completeness gaps in Card 23.
+MILL_REVIEW_END

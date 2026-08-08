@@ -86,10 +86,14 @@ Each version is kept to three or four lines so the added section cannot inflate 
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Change the finding-heading grammar from `### [BLOCKING|NIT|GAP|NOTE] <finding title>` to `### [BLOCKING|NIT][:design|scope|decision|consistency] <finding title>` and describe the class suffix as optional in grammar but required in practice, with a missing or unrecognised class documented as a reviewer defect that preserves the stated severity, records `class: null`, and is exempt from the ceiling.
+- **Requirements:** The finding-heading grammar appears **twice** in this file and both occurrences must be updated to `### [BLOCKING|NIT][:design|scope|decision|consistency] <finding title>`: once in the `## File format` block, where it currently reads `### [BLOCKING|NIT|GAP|NOTE] <finding title>`, and again in the fenced markdown example inside the `### `## Findings`` body section, where it currently reads `### [BLOCKING|NIT] <finding title>`.
+  The second occurrence is the easy one to miss, because it carries no `GAP` / `NOTE` token and so looks already-correct to a search driven by the retired vocabulary; it is nonetheless missing the class suffix.
+  Describe the class suffix as optional in grammar but required in practice, with a missing or unrecognised class documented as a reviewer defect that preserves the stated severity, records `class: null`, and is exempt from the ceiling.
   Replace the sentence stating each review type recognises two severity labels with one stating all three review types recognise exactly `BLOCKING` and `NIT`, and that an ambiguous finding defaults to `BLOCKING`.
   Add a class section defining the four class names per the `class-definitions-generic-across-stages` Shared Decision, documenting the per-stage `blocking_classes` ceiling as demote-only, and carrying the anti-ladder sentence verbatim.
   Update the verdict table so `GAPS_FOUND` is described as a historical discussion-review value that `parse_verdict` still accepts and normalises to `REQUEST_CHANGES`, and is never emitted; update the two `verdict:` grammar lines and the envelope field table to list `APPROVE`, `REQUEST_CHANGES`, `NEED_CONTEXT` as the emitted set.
+  In the `parse_verdict` raise-condition bullet list, the final bullet reads "The `verdict:` value is not one of the four listed above" -- once the grammar lines above it show three values that sentence contradicts itself, so rewrite it to state that `parse_verdict` raises when the value is none of the three emitted values **and** not the historical `GAPS_FOUND`, which it accepts without raising and normalises to `REQUEST_CHANGES`.
+  This keeps the doc honest about the asymmetry the `gaps-found-back-compat` Decision creates: the emitted set is three values wide, the accepted-input set is four.
   Document the envelope's `findings` list with the exact entry shape `{"severity", "class", "title", "demoted"}`, state that `blocking_count` and `nit_count` are derived from it, and state that it appears per-scope inside `reviews[]` and aggregated at the top level.
 - **Commit:** `docs(schema): document class taxonomy, ceiling, and findings envelope`
 
@@ -127,6 +131,7 @@ Each version is kept to three or four lines so the added section cannot inflate 
 - **Moves:** none
 - **Requirements:** In `test-review-templates.py`, add one parametrised check over all five review templates asserting each contains no occurrence of the tokens `GAP`, `NOTE`, or `GAPS_FOUND` as a bracketed severity label or verdict value; contains at least one finding-heading example of the form `### [BLOCKING:<class>]` and one of the form `### [NIT:<class>]` whose class is in the four recognised names; contains a `## Out of scope for this stage` section heading; and contains the anti-ladder sentence "Class governs who decides and when the loop stops, never whether a finding gets fixed." verbatim.
   In `test-review-output-contract.py`, update any assertion that encodes the old per-type severity vocabulary or the old verdict set, and add an assertion that `review-output.schema.md` documents the `findings` entry keys `severity`, `class`, `title`, and `demoted`.
+  Add an assertion that **every** `### [BLOCKING` occurrence in `review-output.schema.md` carries a class suffix, so the body-section example card 23 identifies as the easy-to-miss second occurrence cannot silently keep the classless form.
   Assert against the template files on disk rather than against a copied string, so the tests fail if a template drifts.
 - **Commit:** `test(templates): assert unified vocabulary, class syntax, and anti-ladder text`
 

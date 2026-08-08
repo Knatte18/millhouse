@@ -138,6 +138,8 @@ batches:
 - **Decision:** when the ceiling demotes a finding, `finalize_scope` rewrites the heading in the text it is about to write -- `### [BLOCKING:scope] X` becomes `### [NIT:scope] X` -- and inserts a `**Demoted-from:** BLOCKING` line as the first field line of that finding.
   The rewrite happens after `apply_actual_model_override` and before `write_review_file`, so the file on disk is the demoted form.
   Because `extract_findings` reads findings from both the markdown-heading mechanism and the fenced-`findings:`-YAML mechanism, the rewrite must correct **both** representations, keyed on the finding's title -- a demotion visible in only one of them is the same file/envelope divergence this Decision exists to prevent.
+  The marker written by the rewrite is also the **re-read signal**: `extract_findings` sets `demoted: True` when it sees it, so a finding re-read from an already-written file reports the same `demoted` value it had when it was first finalized.
+  Without that, the two `_review_plan.py` re-read sites would emit `demoted: false` for genuinely demoted findings and the envelope's `findings` list would disagree with itself across paths.
 - **Rationale:** a SKILL reading the review file and a SKILL reading the envelope must route identically; if the file kept `[BLOCKING:scope]` while the envelope counted a NIT, mill-start would surface it as an operator question while the envelope said `APPROVE`.
   It also means the historical re-read sites see already-demoted files.
 - **Applies to:** batches 1, 5, 6
