@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-unit-test-suite-breakage
 branch: hanf/mill-unit-test-suite-breakage
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-wiki-stub-fixes  '2026-08-08T18:23:25Z'
 approved-forward-output-stuck-passthrough  '2026-08-08T18:26:57Z'
 approved-full-suite-regression  '2026-08-08T18:29:00Z'
 holistic-reviewing  '2026-08-08T18:29:25Z'
+holistic-fixing  '2026-08-08T18:33:08Z'
 ```
 
 ## Batches
