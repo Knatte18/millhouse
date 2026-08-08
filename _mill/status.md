@@ -63,7 +63,9 @@ batches:
     commit_sha: d24c9054904d7b3a8ac569871792865f18737f20
     verify_baseline_failures: []
   - name: code-backend
-    state: pending
+    state: running
+    implementer_session: 1280ad51-66d9-411f-9484-83c72bb5b055
+    start_sha: 6899a654d081b326bdc7ddea926cf406b3266964
     verify_baseline_failures: []
   - name: templates-and-config
     state: pending
