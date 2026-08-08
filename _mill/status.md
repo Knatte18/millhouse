@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-core-taxonomy
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
 plan: _mill/plan
@@ -33,6 +33,7 @@ plan-fix-r6  '2026-08-08T18:12:54Z'
 plan-review-r7  '2026-08-08T18:17:49Z'
 planned  '2026-08-08T18:18:05Z'
 implementing  '2026-08-08T18:18:42Z'
+approved-core-taxonomy  '2026-08-08T18:32:41Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ implementing  '2026-08-08T18:18:42Z'
 ```yaml
 batches:
   - name: core-taxonomy
-    state: running
+    state: approved
     implementer_session: e30c1a64-fbe4-4f97-97f3-ad539e2fd640
     start_sha: 539f39e30fb144cedc2c4f4ebaa205a0f7c440ce
+    commit_sha: 3f01fe69f9f363cc95877f8f75d75844903e1f81
     verify_baseline_failures: []
   - name: discussion-backend
     state: pending
