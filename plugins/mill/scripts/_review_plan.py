@@ -109,11 +109,12 @@ return {stem: carryforward_entry} for approved batches.
             )
             continue
         if verdict == "APPROVE":
-            blocking_count = parse_blocking_count(raw, severity="BLOCKING")
-            blocking_count += count_unrecognized_severity_findings(
-                raw, blocking_severity="BLOCKING", nit_severity="NIT"
-            )
-            nit_count = parse_blocking_count(raw, severity="NIT")
+            # The file being read here was already written in its demoted form by finalize_scope
+            # (ceiling-applied-once-at-write-time): extraction alone is correct, and no ceiling is
+            # applied on this re-read path.
+            findings = extract_findings(raw)
+            blocking_count = sum(1 for f in findings if f.severity == "BLOCKING")
+            nit_count = sum(1 for f in findings if f.severity == "NIT")
             result[batch_stem] = {
                 "scope": batch_stem,
                 "round": n,
@@ -122,6 +123,7 @@ return {stem: carryforward_entry} for approved batches.
                 "nit_count": nit_count,
                 "file": str(path),
                 "session_id": None,
+                "findings": [f.to_dict() for f in findings],
             }
 
     return result
@@ -611,10 +613,12 @@ return a review entry dict.
         "session_id"}.
     """
     scope_label = scope or "holistic"
+    blocking_classes = resolve_blocking_classes(cfg, "plan", scope)
 
     try:
         review_entry = finalize_scope(
-            reviews_dir, "plan", round_n, raw_text, scope=scope, actual_model=actual_model
+            reviews_dir, "plan", round_n, raw_text, scope=scope, actual_model=actual_model,
+            blocking_classes=blocking_classes,
         )
     except ReviewError as exc:
         path = write_review_file(
@@ -629,6 +633,7 @@ return a review entry dict.
             "file": str(path),
             "error": f"parse_verdict failed: {exc}",
             "session_id": None,
+            "findings": [],
         }
 
     return {
@@ -639,6 +644,7 @@ return a review entry dict.
         "nit_count": review_entry["nit_count"],
         "file": review_entry["file"],
         "session_id": None,
+        "findings": review_entry["findings"],
     }
 
 
@@ -763,12 +769,12 @@ def run(
             if batch_max_rounds == 0:
                 print("[_review_plan] batch rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
                 batch_entries = [
-                    {"scope": b.stem, "verdict": "APPROVE", "file": None, "skipped": True}
+                    {"scope": b.stem, "verdict": "APPROVE", "file": None, "skipped": True, "findings": []}
                     for b in batch_files
                 ]
                 return ReviewResult(
                     type="plan", round=0, verdict="APPROVE", blocking_count=0,
-                    reviews=batch_entries if batch_entries else [{"scope": "batch", "verdict": "APPROVE", "file": None, "skipped": True}],
+                    reviews=batch_entries if batch_entries else [{"scope": "batch", "verdict": "APPROVE", "file": None, "skipped": True, "findings": []}],
                 )
             if resume_round is not None:
                 # Mid-round resume: per-batch files for this round already exist on disk;
@@ -870,7 +876,7 @@ def run(
                 print("[_review_plan] holistic rounds=0 -- review disabled, returning APPROVE stub", file=sys.stderr)
                 return ReviewResult(
                     type="plan", round=0, verdict="APPROVE", blocking_count=0,
-                    reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True}],
+                    reviews=[{"scope": "holistic", "verdict": "APPROVE", "file": None, "skipped": True, "findings": []}],
                 )
             round_n = discover_round(reviews_dir, "plan", "holistic")
             if round_n > holistic_max_rounds:
@@ -971,6 +977,7 @@ def run(
                     "file": None,
                     "error": str(exc),
                     "session_id": None,
+                    "findings": [],
                 })
             else:
                 try:
@@ -1008,11 +1015,15 @@ def run(
                                     "file": None,
                                     "error": f"resume retry failed: {exc}",
                                     "session_id": None,
+                                    "findings": [],
                                 })
                                 # error entry appended above; else branch writes the review file on success
                             else:
                                 # Second NEED_CONTEXT propagates to caller untouched.
-                                review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
+                                review_entry = finalize_scope(
+                                    reviews_dir, "plan", round_n, raw, scope="holistic",
+                                    blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                                )
                                 print(
                                     f"[_review_plan] holistic: verdict={review_entry['verdict']} "
                                     f"file={Path(review_entry['file']).name}",
@@ -1026,10 +1037,14 @@ def run(
                                     "nit_count": review_entry["nit_count"],
                                     "file": review_entry["file"],
                                     "session_id": session_id,
+                                    "findings": review_entry["findings"],
                                 })
                         else:
                             # No resolvable paths to re-attach — propagate NEED_CONTEXT.
-                            review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
+                            review_entry = finalize_scope(
+                                reviews_dir, "plan", round_n, raw, scope="holistic",
+                                blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                            )
                             print(
                                 f"[_review_plan] holistic: verdict={review_entry['verdict']} "
                                 f"file={Path(review_entry['file']).name}",
@@ -1043,9 +1058,13 @@ def run(
                                 "nit_count": review_entry["nit_count"],
                                 "file": review_entry["file"],
                                 "session_id": session_id,
+                                "findings": review_entry["findings"],
                             })
                     else:
-                        review_entry = finalize_scope(reviews_dir, "plan", round_n, raw, scope="holistic")
+                        review_entry = finalize_scope(
+                            reviews_dir, "plan", round_n, raw, scope="holistic",
+                            blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                        )
                         print(
                             f"[_review_plan] holistic: verdict={review_entry['verdict']} "
                             f"file={Path(review_entry['file']).name}",
@@ -1059,6 +1078,7 @@ def run(
                             "nit_count": review_entry["nit_count"],
                             "file": review_entry["file"],
                             "session_id": session_id,
+                            "findings": review_entry["findings"],
                         })
                 except ReviewError as exc:
                     path = write_review_file(reviews_dir, "plan", round_n, raw, scope="holistic")
@@ -1071,6 +1091,7 @@ def run(
                         "file": str(path),
                         "error": f"parse_verdict failed: {exc}",
                         "session_id": session_id,
+                        "findings": [],
                     })
 
         aggregate = aggregate_verdict([r["verdict"] for r in reviews])
