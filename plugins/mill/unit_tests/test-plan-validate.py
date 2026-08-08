@@ -5271,6 +5271,102 @@ def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
             return 1
 
 
+def test_check_card_missing_field_fence_guard_clean() -> int:
+    """Issue #776's exact repro: a fenced ### heading in Requirements: must not truncate the card."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "  ### Some Heading\n"
+            "  ```\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert check == [], (
+                f"expected no card-missing-field findings for a fenced ### heading "
+                f"in Requirements:, got: {check}"
+            )
+            print("PASS test_check_card_missing_field_fence_guard_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_card_missing_field_fence_guard_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_card_missing_field_fence_guard_real_boundary_still_detected() -> int:
+    """Regression guard: the fence guard must not over-suppress a genuine card boundary."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        frontmatter = (
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+        )
+        card1 = (
+            "### Card 1: example\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n"
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "  ### Not A Real Heading\n"
+            "  ```\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        card2 = (
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n" + frontmatter
+            + "## Cards\n\n" + card1 + "\n" + card2
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        missing_field_hits = [e for e in result if e["check"] == "card-missing-field"]
+        numbering_hits = [e for e in result if e["check"] == "card-numbering"]
+        try:
+            assert missing_field_hits == [], (
+                f"expected no card-missing-field findings, got: {missing_field_hits}"
+            )
+            assert numbering_hits == [], (
+                f"expected no card-numbering findings, got: {numbering_hits}"
+            )
+            print("PASS test_check_card_missing_field_fence_guard_real_boundary_still_detected")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_card_missing_field_fence_guard_real_boundary_still_detected: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # verify-excludes-edited-tagged-test check (#724)
 # ---------------------------------------------------------------------------
@@ -6030,6 +6126,8 @@ def main() -> int:
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
+        test_check_card_missing_field_fence_guard_clean,
+        test_check_card_missing_field_fence_guard_real_boundary_still_detected,
         # verify-excludes-edited-tagged-test check (#724)
         test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
         test_verify_excludes_edited_tagged_test_tags_integration_clean,
