@@ -28,5 +28,8 @@ implementing  '2026-08-08T17:23:52Z'
 ```yaml
 batches:
   - name: plan-validate-heuristic-fixes
-    state: pending
+    state: running
+    implementer_session: d648e54f-ddc0-45de-ad62-7ac5132df3f0
+    start_sha: 4ba2a945c0610f458a4045ea69635bd6807e9c69
+    verify_baseline_failures: []
 ```
