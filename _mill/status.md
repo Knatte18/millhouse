@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: review-gap-classification-by-kind
 branch: hanf/review-gap-classification-by-kind
-plan: null
+plan: _mill/plan
 parent: main
 task: Classify review GAPs by kind (design/scope/decision/consistency); scope discussion review to what downstream stages cannot catch
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-08T16:48:52Z'
 discussion-fix-r2  '2026-08-08T17:18:56Z'
 discussed  '2026-08-08T17:18:56Z'
+planning  '2026-08-08T17:28:52Z'
 ```
