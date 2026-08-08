@@ -126,29 +126,33 @@ _REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Req
 def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     """Return list of (card_number, card_lines) pairs.
 
-    Each card block starts at a ``### Card N:`` line and ends just before the next ``### `` heading
-    or at EOF.
+    Each card block starts at a ``### Card N:`` line and ends just before the next ``### ``
+    heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines starting
+    with ``` ``` ```, toggled per ``_requirements_fence_aware_body``'s convention) never starts
+    or ends a card block.
     """
     lines = batch_text.splitlines()
     cards: list[tuple[int, list[str]]] = []
     current_num: int | None = None
     current_lines: list[str] = []
+    in_fence = False
 
     for line in lines:
-        m = re.match(r"^###\s+Card\s+(\d+)\s*:", line)
+        m = re.match(r"^###\s+Card\s+(\d+)\s*:", line) if not in_fence else None
         if m:
             if current_num is not None:
                 cards.append((current_num, current_lines))
             current_num = int(m.group(1))
             current_lines = [line]
         elif current_num is not None:
-            # Any other ### heading terminates the current card block.
-            if line.startswith("### "):
+            if not in_fence and line.startswith("### "):
                 cards.append((current_num, current_lines))
                 current_num = None
                 current_lines = []
             else:
                 current_lines.append(line)
+        if line.startswith("```"):
+            in_fence = not in_fence
 
     if current_num is not None:
         cards.append((current_num, current_lines))
