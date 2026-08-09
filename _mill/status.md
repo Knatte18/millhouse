@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: verify-baseline-nested-worktree-orphan-risk
 branch: hanf/verify-baseline-nested-worktree-orphan-risk
 plan: _mill/plan
@@ -27,6 +27,7 @@ holistic-reviewing  '2026-08-09T06:21:19Z'
 holistic-fixing  '2026-08-09T06:23:47Z'
 nits-fixed-holistic  '2026-08-09T06:25:29Z'
 holistic-approved  '2026-08-09T06:25:37Z'
+done  '2026-08-09T06:26:04Z'
 ```
 
 ## Batches
