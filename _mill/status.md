@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: verify-baseline-nested-worktree-orphan-risk
 branch: hanf/verify-baseline-nested-worktree-orphan-risk
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussed  '2026-08-09T05:59:33Z'
 planning  '2026-08-09T06:05:00Z'
 plan-review-r1  '2026-08-09T06:09:40Z'
 plan-fix-r1  '2026-08-09T06:09:59Z'
+plan-fix-r2  '2026-08-09T06:15:08Z'
 ```

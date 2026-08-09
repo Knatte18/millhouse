@@ -3,7 +3,7 @@
 ```yaml
 task: _verify_baseline.py transient worktrees can be orphaned when the task worktree is force-removed mid-computation
 slug: verify-baseline-nested-worktree-orphan-risk
-approved: false
+approved: true
 started: 2026-08-09T06:00:29Z
 parent: main
 root: ""
