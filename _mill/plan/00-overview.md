@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go/mill-plan/mill-merge: dispatch-classification, watchdog, entry-gate, and implementer-compliance gaps (round 2)'
 slug: mill-pipeline-dispatch-entrygate-gaps
-approved: false
+approved: true
 started: '2026-08-09T07:07:14Z'
 parent: main
 root: ""

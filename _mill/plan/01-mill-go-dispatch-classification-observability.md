@@ -53,7 +53,8 @@ No batch-local decisions differ from `## Shared Decisions` in the overview — t
   Replace it with `**(c) Non-clean terminal notification for a reviewer or fixer dispatch — NEW liveness probe.**`.
   Immediately below that heading, the opening sentence currently reads "Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3 (...)." — insert, before that sentence, a new sentence defining the widened trigger using the identical concrete test worded in Card 1: the `<task-notification>`'s `<status>` tag is present and its value is not `completed` (observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>`), AND the message does not contain (a)'s literal API-error marker text.
   Leave the rest of (c) — the still-running/no-longer-running branching, the `#595` cross-reference, and the closing paragraph citing `#587`/`#595` and the `stopped/interrupted-notification liveness probe (#587, #595)` Decision — unchanged; those already describe mechanism, not the trigger condition being widened here.
-  Do not touch the "**Agent-mode properties**" bullet list later in the file (which also uses "stopped/interrupted" language) — that section is out of scope for this task, which is scoped to only step 4's classification branches.
+  Leave the "**Agent-mode properties**" bullet list later in the file structurally unchanged, but append one clause to its existing "A background agent IS a detached worker and CAN be stopped or interrupted." bullet: after that sentence, add "('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 4(b)/(c) now test for — see step 4 above.)" so the properties summary is not left describing a narrower trigger than the one it summarizes.
+  Do not otherwise reword or restructure the "Agent-mode properties" bullet list — this is the one additive clause, nothing else in that section changes.
 - **Commit:** `docs(mill-go): widen step 4(c) heading and trigger to status-based non-clean-terminal test`
 
 ### Card 3: Document the Agent-tool `<status>` tag in harness-tool-contracts.md
@@ -65,7 +66,7 @@ No batch-local decisions differ from `## Shared Decisions` in the overview — t
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  In the `## Agent tool` section, the third bullet currently reads: "Delivers exactly ONE combined-result `<task-notification>` when the subagent finishes, is stopped, or is interrupted — the notification payload carries the subagent's final message text."
+  In the `## Agent tool` section, the second bullet currently reads: "Delivers exactly ONE combined-result `<task-notification>` when the subagent finishes, is stopped, or is interrupted — the notification payload carries the subagent's final message text."
   This sentence currently implies message-text is the only signal on this path.
   Append a new sentence to that same bullet (do not start a new bullet): "Agent-tool `<task-notification>`s also carry a `<status>` tag, with `completed` for clean success and other values (`failed`, `stopped`, `interrupted`) for everything else, alongside the existing message-text-based signals."
   Leave every other bullet in the `## Agent tool` section (the `agentId` bullet, the stopped/interrupted-can-be-stale bullet, the `agentId`-vs-`session_id` distinction bullet) and the entire `## Monitor tool` section below it unchanged.
