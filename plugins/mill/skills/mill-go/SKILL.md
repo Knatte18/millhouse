@@ -280,7 +280,8 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    A clean turn-exhaustion stop after Batch 1 lands on the `incomplete` branch, not the transient branch — finalize now reclassifies a partial-batch verify failure or no-JSON inference as `incomplete` rather than `transient`.
 
-   **(c) Stopped/interrupted notification for a reviewer or fixer dispatch — NEW liveness probe.**
+   **(c) Non-clean terminal notification for a reviewer or fixer dispatch — NEW liveness probe.**
+   The widened trigger: the `<task-notification>`'s `<status>` tag is present and its value is not `completed` (observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>`), AND the message does not contain (a)'s literal API-error marker text.
    Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
    Branch on the result:
    - **If it reports the agent is still running:** take no dispatch action this turn.
@@ -348,6 +349,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 **Agent-mode properties:**
 - No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
 - A background agent IS a detached worker and CAN be stopped or interrupted.
+  ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 4(b)/(c) now test for — see step 4 above.)
   A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 4's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 4(b);
   reviewer/fixer: liveness-probe-then-one-retry-transient path per step 4(c)).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
