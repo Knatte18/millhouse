@@ -41,7 +41,9 @@ batches:
     commit_sha: 1a9fb81aa4084e12c6467c10647673025ed1af4f
     verify_baseline_failures: []
   - name: implementer-brief-heartbeat-nudge
-    state: pending
+    state: running
+    implementer_session: 579df96d-a59c-4df9-8575-13002c17a681
+    start_sha: f8ef5e8cca0b7510b8efdee2264e9cf81295b699
   - name: mill-plan-revise-reentry
     state: pending
   - name: review-plan-reviews-subdir-plumbing
