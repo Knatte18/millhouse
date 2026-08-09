@@ -345,7 +345,9 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       Record the new `agentId` this re-dispatch returns, in case a further resume is needed.
    3. **After recovery.**
       Re-parse the finalize envelope and branch in step 7.
-      A `status: success` (or inferred success) means the batch finished — proceed normally.
+      A `status: success` (or inferred success) means the batch finished — when the re-parsed envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: log inferred-success for {batch_name} (post-recovery)"`), before proceeding normally.
+      This is a structurally separate check from the step 4(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
+      When `inferred` is absent or `false`, skip this call entirely.
       If the envelope is **still** `stuck_type: incomplete` after one warm resume and one `--resume-incomplete` fallback, hand it to the `### Stuck escalation` `incomplete` branch (it does not silently loop).
 
 7. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
