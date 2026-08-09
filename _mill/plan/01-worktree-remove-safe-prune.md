@@ -58,6 +58,7 @@ Single batch: restructure `_worktree.remove_safe` (`plugins/mill/scripts/_worktr
 
 - **Context:**
   - `plugins/mill/scripts/_worktree.py`
+  - `plugins/mill/scripts/_verify_baseline.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-worktree.py`
 - **Creates:** none
