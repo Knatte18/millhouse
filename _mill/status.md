@@ -60,7 +60,9 @@ batches:
     commit_sha: 1f3829910c6760479146c585b68c960423c5d0e9
     verify_baseline_failures: []
   - name: mill-merge-status-absent-fallback
-    state: pending
+    state: running
+    implementer_session: 95405777-2126-4386-8c13-84700ca57bc1
+    start_sha: 70cfc38f1773dac4c43307c9af1fd121316d8028
   - name: mill-go-treeguard-explicit-guard
     state: pending
 ```
