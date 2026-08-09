@@ -283,6 +283,11 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    **(c) Non-clean terminal notification for a reviewer or fixer dispatch — NEW liveness probe.**
    The widened trigger: the `<task-notification>`'s `<status>` tag is present and its value is not `completed` (observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>`), AND the message does not contain (a)'s literal API-error marker text.
    Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
+   For the **reviewer sub-case only** (not fixer): before calling `TaskOutput`, first check whether `output_path` (the absolute path read verbatim from step 2's prepare envelope, per step 6's existing convention "For the three review CLIs, `<path>` is the `output_path` field read verbatim from step 2's prepare envelope") already exists on disk via a `test -f <output_path>` shell check.
+   If the file exists: treat the reviewer as no-longer-running and proceed straight to the existing "no longer running" branch below (skip the `TaskOutput` call entirely for this occurrence).
+   If the file does not exist: the result is ambiguous (still-running or dead-before-writing) — fall back to `TaskOutput` exactly as today, unchanged.
+   This `test -f` pre-check applies to the reviewer sub-case of (c) only;
+   the fixer sub-case of (c), and the implementer's mirrored probe in (b) above, continue using `TaskOutput` unchanged — fixer and implementer have no autonomously-written deliverable file available before their terminal notification arrives (per the `cheap-liveness-check-reviewer-only (#784)` Decision), so no equivalent check exists for them.
    Branch on the result:
    - **If it reports the agent is still running:** take no dispatch action this turn.
      Do not re-dispatch, do not classify as `stuck_type: transient`.
