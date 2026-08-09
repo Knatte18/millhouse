@@ -240,9 +240,13 @@ def remove_safe(
             Junction-safe by design.
         4. If git fails with a long-path error (Windows, common when ``.scratch/`` has deep claude
             session JSONs), fall back to ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions
-            are already gone — then ``git worktree prune`` to clear git's internal registry.
-        5. Any other git failure is re-raised;
+            are already gone.
+        5. Any other git failure not eligible for the rmtree fallback (an unrecognized error, or
+            one matching a lock pattern) is re-raised before prune ever runs;
             callers handle "in use" messages etc.
+        6. Once either the direct-success path (step 3) or the fallback path (step 4) has actually
+            removed the worktree, run ``git worktree prune`` exactly once to clear git's internal
+            registry of the removed worktree's administrative entry.
 
     See GitHub issue #100 for the data-loss incident this guards against.
 
@@ -273,38 +277,39 @@ def remove_safe(
     cmd.append(str(path))
     result = _subprocess_util.run(cmd)
     if result.returncode == 0:
-        print(f"[worktree] remove_safe: removed via git ({path})", file=sys.stderr)
-        return
-
-    stderr = result.stderr.strip()
-    _rmtree_fallback_patterns = (
-        "Filename too long",
-        "filename too long",
-        "is not a working tree",
-        "Directory not empty",   # Windows: nested .scratch/ test fixtures
-        "directory not empty",
-    )
-    rmtree_fallback = any(p in stderr for p in _rmtree_fallback_patterns)
-    _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
-    if any(p in stderr for p in _lock_patterns):
-        raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")
-    if not rmtree_fallback:
-        raise WorktreeError(
-            f"git worktree remove failed (path={path}): {stderr!r}"
+        removed_via = "git"
+    else:
+        stderr = result.stderr.strip()
+        _rmtree_fallback_patterns = (
+            "Filename too long",
+            "filename too long",
+            "is not a working tree",
+            "Directory not empty",   # Windows: nested .scratch/ test fixtures
+            "directory not empty",
         )
+        rmtree_fallback = any(p in stderr for p in _rmtree_fallback_patterns)
+        _lock_patterns = ("Permission denied", "is in use", "Access is denied", "Invalid argument")
+        if any(p in stderr for p in _lock_patterns):
+            raise WorktreeLockedError(f"worktree is locked (path={path}): {stderr!r}")
+        if not rmtree_fallback:
+            raise WorktreeError(
+                f"git worktree remove failed (path={path}): {stderr!r}"
+            )
 
-    # Long-path / not-a-working-tree fallback. Junctions are stripped, so _safe_rmtree is safe.
-    print(
-        "[worktree] remove_safe: git failed; falling back to _safe_rmtree (junctions already stripped)",
-        file=sys.stderr,
-    )
-    if path.exists():
-        try:
-            _safe_rmtree.safe_rmtree(path, allowed_root=path)
-        except PermissionError as exc:
-            raise WorktreeLockedError(
-                f"worktree is locked via rmtree fallback (path={path}): {exc}"
-            ) from exc
+        # Long-path / not-a-working-tree fallback. Junctions are stripped, so _safe_rmtree is safe.
+        print(
+            "[worktree] remove_safe: git failed; falling back to _safe_rmtree (junctions already stripped)",
+            file=sys.stderr,
+        )
+        if path.exists():
+            try:
+                _safe_rmtree.safe_rmtree(path, allowed_root=path)
+            except PermissionError as exc:
+                raise WorktreeLockedError(
+                    f"worktree is locked via rmtree fallback (path={path}): {exc}"
+                ) from exc
+
+        removed_via = "fallback"
 
     prune = _subprocess_util.run(
         ["git", "-C", str(cwd), "worktree", "prune"],
@@ -315,7 +320,7 @@ def remove_safe(
             f"{prune.stderr.strip()!r}",
             file=sys.stderr,
         )
-    print(f"[worktree] remove_safe: removed via fallback ({path})", file=sys.stderr)
+    print(f"[worktree] remove_safe: removed via {removed_via} ({path})", file=sys.stderr)
 
 
 def _is_windows_junction(path: Path) -> bool:
