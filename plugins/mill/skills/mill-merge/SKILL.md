@@ -308,17 +308,7 @@ This step is direct path only.
      git push origin "$CHILD_BRANCH"
      ```
 
-  6. Append the `pr-pending` phase and commit+push `<status_path>` on the task branch:
-
-     ```python
-     _status.append_phase(status_path, "pr-pending", _timestamp.now_utc_iso())
-     ```
-
-     ```bash
-     git add <status_path> && git commit -m "chore: pr-pending after branch-protection fallback" && git push
-     ```
-
-  7. Flip Home.md to `[pr-pending]`:
+  6. Flip Home.md to `[pr-pending]`:
 
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -329,13 +319,15 @@ This step is direct path only.
      "
      ```
 
-  8. Report to the user:
+     This wiki call is the sole durable record of the `pr-pending` transition for this fallback path — `status_path` no longer exists at this point (Step 4's own cleanup commit, which runs earlier in this same invocation, already removed it), so there is nothing left in `_mill/status.md` to append a phase to; this matches the wiki-fallback convention this file's own Entry Step 5 phase gate already documents for when `status_path` is absent.
+
+  7. Report to the user:
 
      ```
      Direct push rejected by branch protection — switched to PR path. PR: <url>. Consider setting `git.require_pr_to_base: true` in mill-config.yaml.
      ```
 
-  9. Skip to Step 8 (Release lock).
+  8. Skip to Step 8 (Release lock).
      Do not run Steps 6 (archive tag) or 7 (Home.md flip).
      Re-run `/mill-merge` after the PR lands to complete teardown.
 
