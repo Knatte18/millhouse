@@ -53,7 +53,9 @@ batches:
     start_sha: 25e89628c073ee02bc407113d8df7d0d0f95a349
     commit_sha: 803e4b458181bfbdb59ead7bcd8213b8698345c2
   - name: review-plan-reviews-subdir-plumbing
-    state: pending
+    state: running
+    implementer_session: bf63401d-42ea-4d0f-89a7-fec56549e96e
+    start_sha: aa3aaa2225b93ef173901f77333c8ef952f41592
     verify_baseline_failures: []
   - name: mill-merge-status-absent-fallback
     state: pending
