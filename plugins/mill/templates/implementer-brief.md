@@ -117,6 +117,7 @@ Shortcuts that bypass the Shared Decision corrupt the design record and will be 
 ## Verify
 
 After every card in the batch is committed, run the batch's `verify:` command (from the batch file's frontmatter).
+If the `verify:` command is actually several sequential sub-invocations (for example, more than one `go test` call, or a `go test` run followed by a `go test -tags integration` run), print a brief progress line before each sub-invocation (for example, `Running: go test ./builderengine/...`) instead of staying silent until all of them finish — a long silent verify phase can be mistaken for a stalled session and killed by the harness's stream watchdog.
 If it fails:
 
 - Try to self-fix in this same session, committing each attempt.
