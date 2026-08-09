@@ -1,0 +1,29 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go/mill-plan/mill-merge: dispatch-classification, watchdog, entry-gate, and implementer-compliance gaps (round 2) — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-08-09
+```
+
+All 7 batches were verified against source. Summary of checks performed:
+
+- **Batch 1** (dispatch classification): step 4(b)/4(c) widened to `<status>`-based non-clean-terminal trigger, verified verbatim in `mill-go/SKILL.md` (lines 258-299); harness-tool-contracts.md's Agent-tool bullet correctly appended with the `<status>` tag sentence without a new bullet; reviewer-only `test -f` pre-check present and scoped correctly (fixer/implementer unaffected); both `append_inferred_success_log` call sites (step 4(b) clean-success and step 6.5 after-recovery) present with matching signature and independent-of-each-other framing.
+- **Batch 2** (treeguard): all 12 call sites (grep-confirmed) now show the explicit `if result["triggered"]:` guard; exactly one signature note at the first "Code Review loop" site, matching `_treeguard.check_and_restore`/`_status.append_recovery_log`'s real signatures; no duplicate signature note elsewhere; indentation preserved at the two nested rate-limit-fallback sites.
+- **Batch 3** (`_status.py` helper): `append_inferred_success_log`/`_find_inferred_success_log_block`/`_INFERRED_SUCCESS_LOG_HEADING` modeled correctly on `append_recovery_log`'s pattern, constants co-located as required; `test-status.py` covers all 5 required cases (lazy creation, second-row append, row-format, non-disturbance of Timeline/phase, two malformed-fence ValueError cases) and imports the new symbol.
+- **Batch 4** (implementer-brief heartbeat): new sentence inserted exactly between the frontmatter-sourcing sentence and "If it fails:", nothing else in `## Verify` touched.
+- **Batch 5** (`--revise` re-entry): `argument-hint` correctly ordered after `description:`; Step 0.5 un-numbered and placed before the existing numbered list without renumbering; step 4 pre-check correctly ordered before the table (including the `approved: true` unconditional-halt row); `revise-<N>` namespacing and `--reviews-subdir` flag-passing documented consistently with batch 6's actual implementation.
+- **Batch 6** (reviews_subdir plumbing): `prepare()`/`run()` both gained `reviews_subdir: str | None = None` after `reviewer_override`, with matching docstring and identical `if reviews_subdir: reviews_dir = reviews_dir / reviews_subdir` line; `millpy-review-plan.py` threads `--reviews-subdir` through all three sites (prepare, finalize's direct `reviews_dir` resolution before `discover_round`, and the `full` branch); `test-review-plan-flow.py` tests 38-39 cover both `prepare()` and `run()`, subdir-set vs. default-None cases, and round-independence from the bare `reviews_dir`.
+- **Batch 7** (mill-merge fallback): Entry Step 4 correctly branches on `status_path.exists()` before calling `_parent_branch.resolve(...)`, preserving the existing `ParentBranchError` handling unchanged for the file-exists case; Step 5's branch-protection fallback sub-step 6 (`append_phase`) is fully removed, remaining sub-steps renumbered 6/7/8 with no gap and no stale cross-reference (the one surviving "sub-step 5" reference at line 288 predates the deleted step and is correctly unaffected); the wiki `set_phase` call gained the required "sole durable record" sentence.
+
+Cross-batch contracts verified: `_status.append_inferred_success_log` signature is identical between batch 1's prose call sites and batch 3's implementation; `--reviews-subdir` flag name and per-invocation-only contract are identical between batch 5's prose and batch 6's CLI implementation. All files in the overview's "All Files Touched" list match the files actually edited; no out-of-plan files found. `doc-batches-preserve-file-conventions` is respected in every governed batch (bold-lead-in style in mill-go, plain-numbered-sentence style in mill-merge Entry, ordered-list style in mill-merge Steps).
+
+No findings.
+
+## Verdict
+
+APPROVE
+All seven batches match their plan cards; cross-batch contracts (signatures, CLI flags) are consistent end-to-end.
+MILL_REVIEW_END
