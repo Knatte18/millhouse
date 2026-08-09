@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-go/mill-plan/mill-merge: dispatch-classification, watchdog, entry-gate, and implementer-compliance gaps (round 2)'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-09T05:47:57Z'
 discussed  '2026-08-09T06:59:38Z'
+planning  '2026-08-09T07:16:45Z'
 ```
