@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-brief-heartbeat-nudge
+phase: approved-mill-plan-revise-reentry
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-08-09T07:36:57Z'
 approved-mill-go-dispatch-classification-observability  '2026-08-09T07:41:34Z'
 approved-status-inferred-success-helper  '2026-08-09T07:45:16Z'
 approved-implementer-brief-heartbeat-nudge  '2026-08-09T07:46:59Z'
+approved-mill-plan-revise-reentry  '2026-08-09T07:49:38Z'
 ```
 
 ## Batches
@@ -47,9 +48,10 @@ batches:
     start_sha: f8ef5e8cca0b7510b8efdee2264e9cf81295b699
     commit_sha: d85baaf27cc04e7843f93c21f33e5d0086ed0e05
   - name: mill-plan-revise-reentry
-    state: running
+    state: approved
     implementer_session: 3ef1fc1a-1fdf-41b0-9312-5bfb1ed6ec51
     start_sha: 25e89628c073ee02bc407113d8df7d0d0f95a349
+    commit_sha: 803e4b458181bfbdb59ead7bcd8213b8698345c2
   - name: review-plan-reviews-subdir-plumbing
     state: pending
     verify_baseline_failures: []
