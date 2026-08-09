@@ -344,6 +344,7 @@ def prepare(
     git_root: Path,
     agent_mode: bool = False,
     reviewer_override: str | None = None,
+    reviews_subdir: str | None = None,
 ) -> dict:
     """Prepare a plan review by rendering the prompt for a single scope.
 
@@ -361,12 +362,20 @@ def prepare(
             Bypasses the `reviewer: null` disablement and skips the large-prompt auto-switch
                 entirely.
             No-op when `scope is not None` (batch scope is unaffected).
+        reviews_subdir: When not None, appended as a subdirectory under the config-resolved
+            `reviews_dir` for this call only (e.g. `revise-2`) -- used by mill-plan's `--revise`
+            re-entry mode to give a revision pass its own round-numbering namespace, distinct
+            from the original approved pass's review files.
+            Mirrors `reviewer_override`'s per-invocation-only contract; nothing is written back
+            to config.
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
     """
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+    if reviews_subdir:
+        reviews_dir = reviews_dir / reviews_subdir
 
     batch_files = sorted(
         p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
@@ -660,6 +669,7 @@ def run(
     holistic_only: bool = False,
     no_holistic: bool = False,
     reviewer_override: str | None = None,
+    reviews_subdir: str | None = None,
 ) -> ReviewResult:
     """Run plan review: parallel per-batch + optional holistic.
 
@@ -686,6 +696,12 @@ def run(
             Skips the large-prompt auto-switch entirely.
             The per-batch reviewer resolution (the immediately-preceding half of step 3) is
                 completely untouched by this parameter.
+        reviews_subdir: When not None, appended as a subdirectory under the config-resolved
+            `reviews_dir` for this call only (e.g. `revise-2`) -- used by mill-plan's `--revise`
+            re-entry mode to give a revision pass its own round-numbering namespace, distinct
+            from the original approved pass's review files.
+            Mirrors `reviewer_override`'s per-invocation-only contract; nothing is written back
+            to config.
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
@@ -694,6 +710,8 @@ def run(
         # 1. Paths and round
         plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
         reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+        if reviews_subdir:
+            reviews_dir = reviews_dir / reviews_subdir
         batch_max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["plan-review"]["batch"]["rounds"]
         holistic_max_rounds = max_rounds if max_rounds is not None else cfg["roles"]["plan-review"]["holistic"]["rounds"]
         bulk_timeout = cfg["llm"]["bulk_timeout"]
