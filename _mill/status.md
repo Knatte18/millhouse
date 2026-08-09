@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: verify-baseline-nested-worktree-orphan-risk
 branch: hanf/verify-baseline-nested-worktree-orphan-risk
 plan: _mill/plan
@@ -21,4 +21,13 @@ plan-review-r1  '2026-08-09T06:09:40Z'
 plan-fix-r1  '2026-08-09T06:09:59Z'
 plan-fix-r2  '2026-08-09T06:15:08Z'
 planned  '2026-08-09T06:15:48Z'
+implementing  '2026-08-09T06:16:24Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: worktree-remove-safe-prune
+    state: pending
 ```
