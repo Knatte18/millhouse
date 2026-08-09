@@ -28,15 +28,19 @@ implementing  '2026-08-09T07:36:57Z'
 ```yaml
 batches:
   - name: mill-go-dispatch-classification-observability
-    state: pending
+    state: running
+    implementer_session: 98811c8c-b22e-4d90-8017-df87980e1d8d
+    start_sha: 9efd0175a75c95357f23b3df2cd288295e2b568d
   - name: status-inferred-success-helper
     state: pending
+    verify_baseline_failures: []
   - name: implementer-brief-heartbeat-nudge
     state: pending
   - name: mill-plan-revise-reentry
     state: pending
   - name: review-plan-reviews-subdir-plumbing
     state: pending
+    verify_baseline_failures: []
   - name: mill-merge-status-absent-fallback
     state: pending
   - name: mill-go-treeguard-explicit-guard
