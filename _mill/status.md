@@ -47,7 +47,9 @@ batches:
     start_sha: f8ef5e8cca0b7510b8efdee2264e9cf81295b699
     commit_sha: d85baaf27cc04e7843f93c21f33e5d0086ed0e05
   - name: mill-plan-revise-reentry
-    state: pending
+    state: running
+    implementer_session: 3ef1fc1a-1fdf-41b0-9312-5bfb1ed6ec51
+    start_sha: 25e89628c073ee02bc407113d8df7d0d0f95a349
   - name: review-plan-reviews-subdir-plumbing
     state: pending
     verify_baseline_failures: []
