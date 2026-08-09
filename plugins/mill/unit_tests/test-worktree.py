@@ -1,6 +1,8 @@
 """Unit tests for plugins/mill/scripts/_worktree.py."""
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -298,6 +300,58 @@ def main() -> int:
                 with patch("_worktree.kill_stale_holders"):
                     remove_safe(path, cwd=cwd, junctions_cfg={})
             print("PASS: remove_safe exits cleanly when path absent and 'is not a working tree'")
+
+        # --- remove_safe prunes a stale nested-worktree registration after force-removing the enclosing task worktree ---
+        # Real git, no mocks: reproduces the exact orphan scenario from GitHub issue tracking
+        # _verify_baseline.py's transient nested worktree — a task worktree force-removed mid
+        # computation leaves its nested `.scratch/nested` worktree's administrative entry behind
+        # in the hub's common gitdir until `git worktree prune` clears it.
+        with tempfile.TemporaryDirectory() as tmp:
+            hub = Path(tmp) / "hub"
+            hub.mkdir()
+            _git_init(hub)
+
+            # Register the outer task worktree off the hub on its own branch.
+            task_wt = Path(tmp) / "task"
+            subprocess.run(
+                ["git", "-C", str(hub), "worktree", "add", "-b", "task-branch", str(task_wt)],
+                check=True, capture_output=True,
+            )
+
+            # Register a nested worktree inside the task worktree's .scratch/ dir, against the
+            # hub's common gitdir — mirroring _verify_baseline._checkout_parent_branch's real
+            # detached-HEAD baseline-checkout behavior.
+            nested_path = task_wt / ".scratch" / "nested"
+            (task_wt / ".scratch").mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["git", "-C", str(hub), "worktree", "add", "--detach", str(nested_path), "HEAD"],
+                check=True, capture_output=True,
+            )
+
+            # Force-remove the outer task worktree via the real remove_safe (no mocks), capturing
+            # stderr so we can later confirm which removal branch actually ran.
+            captured = io.StringIO()
+            with contextlib.redirect_stderr(captured):
+                remove_safe(task_wt, cwd=hub, junctions_cfg={})
+
+            assert not task_wt.exists(), f"expected task worktree dir removed, still exists: {task_wt}"
+
+            # The nested worktree's directory went with it, so its stale git administrative entry
+            # must have been pruned rather than left orphaned in the hub's common gitdir.
+            wt_result = list_worktrees(hub)
+            surviving_nested = [e for e in wt_result if Path(e["path"]) == nested_path]
+            assert not surviving_nested, (
+                f"expected nested worktree registration pruned, found surviving entries: {surviving_nested}"
+            )
+
+            # Pin down that the outer removal went through the direct-success branch (git
+            # worktree remove --force returning 0), not the fallback branch — otherwise this
+            # test could silently pass by only re-exercising the fallback branch's pre-existing
+            # prune call.
+            assert "removed via git" in captured.getvalue(), (
+                f"expected direct-success removal branch, captured stderr: {captured.getvalue()!r}"
+            )
+            print("PASS: remove_safe prunes stale nested-worktree registration after force-removing enclosing task worktree")
 
         # --- processes_holding_path: only records whose cmdline references worktree ---
         with tempfile.TemporaryDirectory() as tmp:
