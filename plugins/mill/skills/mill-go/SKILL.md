@@ -1035,7 +1035,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    do not poll it.
 
 2. **Skip this step when step 1 returned branch (a) or any sub-branch of (c).**
-   Tree-guard checkpoint: call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — on trigger, call _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
+   Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
    Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: holistic reviewing round {H}"`.
 
 2.5.
@@ -1047,7 +1047,7 @@ Build a digest: one line per NIT finding, in format "- Title: issue context" (AS
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
+3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch immediately following in this same step, which keeps its existing worktree_snapshot_guard coverage unchanged.
 
    If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
@@ -1088,7 +1088,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way.
+   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
    This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
    Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
@@ -1097,12 +1097,12 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
 
-   Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
+   Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
    Does not apply to the subprocess/psmux branch immediately below.
 
    If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
+   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
 
    If `dispatch == subprocess` or `psmux`:
 
@@ -1135,14 +1135,14 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    1. Emit `_notify.notify("mill-go.holistic-fallback", f"swap reviewer -> {fallback_name}", slug=slug, round=H)`.
    2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`.
       Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
-   3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before re-running sub-step 3 with the swapped reviewer below.
+   3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before re-running sub-step 3 with the swapped reviewer below.
       Applies only when dispatch == agent;
       the subprocess/psmux path keeps its existing worktree_snapshot_guard coverage.
 
       Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer.
       The round counter `H` is **not** consumed.
 
-      Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
+      Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
    4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
       Do NOT cascade to a second fallback.
    5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
