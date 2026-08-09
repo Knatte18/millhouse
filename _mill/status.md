@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-plan-reviews-subdir-plumbing
+phase: approved-mill-merge-status-absent-fallback
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-status-inferred-success-helper  '2026-08-09T07:45:16Z'
 approved-implementer-brief-heartbeat-nudge  '2026-08-09T07:46:59Z'
 approved-mill-plan-revise-reentry  '2026-08-09T07:49:38Z'
 approved-review-plan-reviews-subdir-plumbing  '2026-08-09T07:54:27Z'
+approved-mill-merge-status-absent-fallback  '2026-08-09T07:56:56Z'
 ```
 
 ## Batches
@@ -60,9 +61,10 @@ batches:
     commit_sha: 1f3829910c6760479146c585b68c960423c5d0e9
     verify_baseline_failures: []
   - name: mill-merge-status-absent-fallback
-    state: running
+    state: approved
     implementer_session: 95405777-2126-4386-8c13-84700ca57bc1
     start_sha: 70cfc38f1773dac4c43307c9af1fd121316d8028
+    commit_sha: b71289c511219c185ed56e159063eddd5737697e
   - name: mill-go-treeguard-explicit-guard
     state: pending
 ```
