@@ -66,5 +66,7 @@ batches:
     start_sha: 70cfc38f1773dac4c43307c9af1fd121316d8028
     commit_sha: b71289c511219c185ed56e159063eddd5737697e
   - name: mill-go-treeguard-explicit-guard
-    state: pending
+    state: running
+    implementer_session: 9d188fb8-a71d-46b6-9b79-1a2c56fe4303
+    start_sha: 6615e9f2ce728c1edcd4309f7883ed6a7352aed7
 ```
