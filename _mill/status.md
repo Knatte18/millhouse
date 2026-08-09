@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-worktree-remove-safe-prune
 slug: verify-baseline-nested-worktree-orphan-risk
 branch: hanf/verify-baseline-nested-worktree-orphan-risk
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-08-09T06:09:59Z'
 plan-fix-r2  '2026-08-09T06:15:08Z'
 planned  '2026-08-09T06:15:48Z'
 implementing  '2026-08-09T06:16:24Z'
+approved-worktree-remove-safe-prune  '2026-08-09T06:20:47Z'
 ```
 
 ## Batches
@@ -29,8 +30,9 @@ implementing  '2026-08-09T06:16:24Z'
 ```yaml
 batches:
   - name: worktree-remove-safe-prune
-    state: running
+    state: approved
     implementer_session: 0f748ca9-9721-49cd-bbda-78e72a0fc40f
     start_sha: 1d83eba2ff75db20257a8f7cac0c0c9e792ac1d4
+    commit_sha: ced7b6db9d71e9c4b133232256d35f5005bfda53
     verify_baseline_failures: []
 ```
