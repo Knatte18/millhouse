@@ -13,7 +13,7 @@ A background subagent dispatched via `Agent(subagent_type: ..., model: ..., prom
 
 - Returns immediately with a launch acknowledgement carrying an `agentId` — the harness runtime handle for the live subagent.
   Retain it: it is what `SendMessage`/`TaskOutput` address to warm-resume or probe the same session.
-- Delivers exactly ONE combined-result `<task-notification>` when the subagent finishes, is stopped, or is interrupted — the notification payload carries the subagent's final message text.
+- Delivers exactly ONE combined-result `<task-notification>` when the subagent finishes, is stopped, or is interrupted — the notification payload carries the subagent's final message text. Agent-tool `<task-notification>`s also carry a `<status>` tag, with `completed` for clean success and other values (`failed`, `stopped`, `interrupted`) for everything else, alongside the existing message-text-based signals.
 - A background agent IS a detached worker and CAN be stopped or interrupted independently of the orchestrator;
   a stopped/ interrupted notification can be stale (an agent reported "killed" can still be running and deliver a real completion notification later).
   Probe with `TaskOutput(task_id: <agentId>, block: false)` before trusting a stop/interrupt notification as terminal.

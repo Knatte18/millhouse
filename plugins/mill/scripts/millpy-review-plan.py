@@ -102,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Override roles.plan-review.holistic.reviewer for this invocation only (e.g. sonnetmax). Holistic scope only -- batch-scope reviewer is unaffected. Nothing is written back to config.",
     )
     parser.add_argument(
+        "--reviews-subdir",
+        default=None,
+        help="Append this subdirectory under the resolved reviews_dir for this invocation only (e.g. revise-2), used by mill-plan's --revise re-entry mode. Nothing is written back to config.",
+    )
+    parser.add_argument(
         "--actual-model",
         default=None,
         help=(
@@ -184,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
             prepare_result = prepare(
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
-                reviewer_override=args.reviewer,
+                reviewer_override=args.reviewer, reviews_subdir=args.reviews_subdir,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -221,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         round_n = args.round
         reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
+        if args.reviews_subdir:
+            reviews_dir = reviews_dir / args.reviews_subdir
         if round_n is None:
             round_n = discover_round(reviews_dir, "plan", "holistic")
         try:
@@ -294,6 +301,7 @@ def main(argv: list[str] | None = None) -> int:
                 holistic_only=args.holistic_only,
                 no_holistic=args.no_holistic,
                 reviewer_override=args.reviewer,
+                reviews_subdir=args.reviews_subdir,
             )
             print(json.dumps(result.to_dict()))
             return 0

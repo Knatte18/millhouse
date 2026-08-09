@@ -1,6 +1,7 @@
 ---
 name: mill-plan
 description: In a spawned worktree with a committed discussion.md, autonomously write a batch-based implementation plan, self-review it via mill-review-plan, and hand off to mill-go.
+argument-hint: "[--revise]"
 ---
 
 # mill-plan
@@ -15,6 +16,18 @@ Your job is to turn `discussion.md` into an implementation plan detailed enough 
 **Step 0: Load `mill:conversation`.**
 Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
+
+**Step 0.5 — Parse arguments.**
+Read `$ARGUMENTS`. Token-walk left-to-right:
+
+- `--revise` — set a local `revise_requested = True`. May appear at most once.
+- Any other token: halt with usage hint:
+
+  > Unknown argument: `<token>` in `$ARGUMENTS`
+  >
+  > usage: `/mill-plan [--revise]`
+
+Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` itself, since `status_path` isn't resolved until "Path Setup" (which runs after Entry steps 1-3) and `plan_dir` isn't derived during Entry at all today; the actual `--revise` validation is Entry step 4's new pre-check row, which already has both values in scope.
 
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
@@ -38,6 +51,12 @@ Derive:
 
 4. Read `status_path` and inspect `phase:` + the plan state on disk (no `plan_dir` dir at worktree root, using `cfg['paths']['plan_dir']`).
    Decide entry branch:
+
+   **`--revise` pre-check.** Whenever `revise_requested` is set (from Step 0.5), this pre-check runs **before** every row of the table below, as a distinct pre-check, not merely appended after it — this ordering is required because the table's existing `| approved: true in overview frontmatter | ... |` row is unconditional on `phase:`, and its condition (`approved: true`) is also satisfied throughout the entire `phase: planned` window `--revise` targets (since `approved:` stays `true` for the whole duration of mill-go's later run too — mill-go's own Prepare step immediately overwrites `phase: planned` to `phase: implementing` the moment execution starts, so `phase: planned` is the narrow, correct window that can only be true in the intended pre-execution period); without this explicit precedence, `--revise` would always hit the pre-existing halt row before ever reaching the new logic.
+   Read `phase = _status.read_full(status_path)["yaml"].get("phase")` and the overview frontmatter's `approved:` field (via the file's existing YAML-block-extraction pattern already used elsewhere in this file for the `approved:` field).
+   - If **both** `phase == "planned"` **and** `approved` is currently `true`: proceed with the revise action — (1) flip `approved: false` in `plan/00-overview.md` via the same direct-`Edit` convention already used elsewhere in this file for that field (no `_status.py` involvement, since `approved:` intentionally lives outside `status.md` per this file's own "## Board discipline" section); (2) call `_status.append_phase(status_path, "planning", <timestamp>)`; (3) commit both mutations together on the task branch in one commit (`git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: --revise re-open plan review for {slug}"`) and push; (4) fall through into the existing `phase: planning`/`plan-review-r{N}`/`plan-fix-r{N}` re-entry row (Phase: Plan Review; do NOT rewrite plan files) unmodified.
+   - If `revise_requested` is set but the condition is **not** met (any phase other than `planned`, or `approved` is not `true`): halt with an explicit message naming the current `phase:` value and stating that revising a plan mill-go has already started executing (or has not yet been approved) is unsupported — do not silently force-flip `phase: planning` onto a task with committed/approved batches.
+   - When `revise_requested` is not set, skip this entire pre-check and fall through to the existing table exactly as it is today.
 
    | state | action |
    | --- | --- |
@@ -241,6 +260,12 @@ Push.
 **Path Setup (Plan Review).**
 Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])`.
 Use this variable for all review file path references in this phase.
+
+When `revise_requested` is set (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
+This mirrors `discover_round`'s own `max(found) + 1` pattern (in `_review_common.py`), applied one level up at the subdirectory level, and supports any number of `--revise` passes on the same task over time — a second `--revise` (e.g. after the first revision was re-approved and mill-go later needs another correction) resolves to `revise-2`, never colliding with or overwriting `revise-1`'s files, since `RE_SIMPLE`/`RE_BATCH` (the fixed-shape filename regexes `discover_round` matches against) have no room for a distinguishing prefix and only work correctly once scoped to a distinct directory.
+Every prepare/finalize CLI invocation dispatched later in this same Plan Review round (both the Agent-mode branch's `--stage prepare`/`--stage finalize` calls and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must pass a new `--reviews-subdir revise-{N+1}` flag whenever `revise_requested` is set, mirroring the existing `--reviewer` flag's documented contract: "override for this invocation only, nothing written back to config."
+When `revise_requested` is not set, omit `--reviews-subdir` entirely and use `reviews_dir` exactly as resolved today — this override never activates for a normal (non-`--revise`) Plan Review run.
+This namespacing does not alter `reviews_dir`'s use anywhere else in this file (e.g. Phase: Plan's own writes, which are unaffected by `--revise` since `--revise` only ever re-enters Phase: Plan Review, never Phase: Plan).
 
 **Tree-guard safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call in this phase (steps 4a/4b/4c/4d below), call `_treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`.
 If the returned dict's `"triggered"` field is `True`, call `_status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` immediately after — this records the detection non-blockingly;

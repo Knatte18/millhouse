@@ -14,6 +14,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _status import (
+    append_inferred_success_log,
     append_phase,
     append_recovery_log,
     clear_module_verify_baseline,
@@ -977,6 +978,116 @@ def main() -> int:
             except ValueError:
                 pass
         print("PASS: append_recovery_log raises ValueError when the fenced block is unterminated")
+
+        # --- append_inferred_success_log tests ---
+        ts_is = "2026-08-09T09:00:00Z"
+
+        # Test 1: lazy section creation on first call.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_is, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert "## Inferred-success log" not in initial, (
+                "render_initial output should not pre-seed the inferred-success-log section"
+            )
+            append_inferred_success_log(sp, "status-inferred-success-helper", 1, ts_is)
+            contents = sp.read_text(encoding="utf-8")
+            assert "## Inferred-success log" in contents, (
+                "inferred-success-log heading not created on first call"
+            )
+            isl_lines = contents.splitlines()
+            heading_idx = isl_lines.index("## Inferred-success log")
+            fence_open_idx = isl_lines.index("```text", heading_idx)
+            fence_close_idx = isl_lines.index("```", fence_open_idx + 1)
+            body = isl_lines[fence_open_idx + 1 : fence_close_idx]
+            expected_row = f"{quote_scalar(ts_is)}  status-inferred-success-helper  round 1"
+            assert body == [expected_row], f"unexpected inferred-success-log body: {body!r}"
+            print("PASS: append_inferred_success_log creates the section lazily on first call")
+
+            # Test 2: append-only on second call -- first row survives, second appended.
+            append_inferred_success_log(
+                sp, "mill-go-treeguard-explicit-guard", 2, "2026-08-09T09:05:00Z"
+            )
+            contents2 = sp.read_text(encoding="utf-8")
+            isl_lines2 = contents2.splitlines()
+            heading_idx2 = isl_lines2.index("## Inferred-success log")
+            fence_open_idx2 = isl_lines2.index("```text", heading_idx2)
+            fence_close_idx2 = isl_lines2.index("```", fence_open_idx2 + 1)
+            body2 = isl_lines2[fence_open_idx2 + 1 : fence_close_idx2]
+            expected_row2 = (
+                f"{quote_scalar('2026-08-09T09:05:00Z')}  mill-go-treeguard-explicit-guard  round 2"
+            )
+            assert body2 == [expected_row, expected_row2], (
+                f"expected two rows with the first unchanged, got {body2!r}"
+            )
+            print("PASS: append_inferred_success_log appends a second row without disturbing the first")
+
+        # Test 3: row contains the batch name and round number in the expected format.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_is, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_inferred_success_log(sp, "review-plan-reviews-subdir-plumbing", 3, ts_is)
+            contents = sp.read_text(encoding="utf-8")
+            assert "review-plan-reviews-subdir-plumbing  round 3" in contents, (
+                f"expected batch name and round in row, got: {contents!r}"
+            )
+            print("PASS: append_inferred_success_log row contains batch name and round number")
+
+        # Test 4: does not disturb ## Timeline or the yaml block's phase: field.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_is, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            before_full = read_full(sp)
+            append_inferred_success_log(sp, "status-inferred-success-helper", 1, ts_is)
+            after_full = read_full(sp)
+            assert after_full["yaml"]["phase"] == before_full["yaml"]["phase"], (
+                "phase: changed after append_inferred_success_log"
+            )
+            assert after_full["timeline"] == before_full["timeline"], (
+                "## Timeline rows changed after append_inferred_success_log"
+            )
+            print("PASS: append_inferred_success_log does not disturb ## Timeline or the yaml block's phase:")
+
+        # Test 5: malformed section raises ValueError.
+        # 5a: heading present, no fenced block at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_is, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Inferred-success log\n")
+            try:
+                append_inferred_success_log(sp, "status-inferred-success-helper", 1, ts_is)
+                assert False, "expected ValueError for missing fence"
+            except ValueError:
+                pass
+        print("PASS: append_inferred_success_log raises ValueError when the fenced block is missing")
+
+        # 5b: heading present, opening fence present, no closing fence before EOF.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_is, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Inferred-success log\n\n```text\n")
+            try:
+                append_inferred_success_log(sp, "status-inferred-success-helper", 1, ts_is)
+                assert False, "expected ValueError for unterminated fence"
+            except ValueError:
+                pass
+        print("PASS: append_inferred_success_log raises ValueError when the fenced block is unterminated")
 
         print("All _status unit tests passed.")
         return 0
