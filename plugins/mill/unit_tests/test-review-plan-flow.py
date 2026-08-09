@@ -2429,6 +2429,113 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 38 — prepare() reviews_subdir override resolves reviews_dir under a namespaced
+    # subdirectory for this call only; omitting it (the default) leaves reviews_dir unchanged.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("01-setup", "01-setup.md", [], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Case 1: reviews_subdir given -- prepare()'s internal reviews_dir gains the subdir.
+            result_subdir = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root, reviews_subdir="revise-2",
+            )
+            assert result_subdir["reviews_dir"] == project_root / "reviews" / "revise-2", (
+                f"expected reviews_dir namespaced under revise-2, got {result_subdir['reviews_dir']}"
+            )
+
+            # Case 2: reviews_subdir omitted (default None) -- reviews_dir resolves exactly as
+            # before this batch, a regression guard confirming the override is opt-in only.
+            result_default = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            assert result_default["reviews_dir"] == project_root / "reviews", (
+                f"expected bare reviews_dir when reviews_subdir omitted, got {result_default['reviews_dir']}"
+            )
+            print("PASS test38: prepare() reviews_subdir namespaces reviews_dir; default omission leaves it unchanged")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test38: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test38 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 39 — run() reviews_subdir override discovers rounds independently of the bare
+    # reviews_dir: a revise-2 subdirectory with no review files yet discovers round 1 even when
+    # the parent reviews_dir already has round 3+ files from the original approved pass. Omitting
+    # reviews_subdir (the default) still consults the bare reviews_dir exactly as before this batch.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # Pre-populate the bare reviews_dir with round 1-3 files (unparseable content -- only
+            # the filenames matter for discover_round) for both the alpha batch and holistic scope,
+            # simulating an original approved pass that already reached round 3.
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            for i in (1, 2, 3):
+                (reviews_dir / f"2026060{i}-000001-plan-review-01-alpha-r{i}.md").write_text(
+                    "stale round file, content irrelevant to discover_round", encoding="utf-8",
+                )
+                (reviews_dir / f"2026060{i}-000002-plan-review-r{i}.md").write_text(
+                    "stale round file, content irrelevant to discover_round", encoding="utf-8",
+                )
+
+            # Case 1: reviews_subdir="revise-2" -- the subdir has no review files yet, so both
+            # scopes discover round 1 there, independent of the bare dir's round 3+ files.
+            _seed_approve(2)
+            r_subdir = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                reviews_subdir="revise-2",
+            )
+            assert r_subdir.verdict == "APPROVE", f"expected APPROVE, got {r_subdir.verdict}"
+            rv_alpha = next(rv for rv in r_subdir.reviews if rv["scope"] == "01-alpha")
+            rv_hol = next(rv for rv in r_subdir.reviews if rv["scope"] == "holistic")
+            assert str(reviews_dir / "revise-2") in rv_alpha["file"], (
+                f"expected alpha review file under revise-2 subdir, got {rv_alpha['file']!r}"
+            )
+            assert "01-alpha-r1" in Path(rv_alpha["file"]).name, (
+                f"expected alpha round 1 inside the fresh revise-2 subdir, got {Path(rv_alpha['file']).name}"
+            )
+            assert str(reviews_dir / "revise-2") in rv_hol["file"], (
+                f"expected holistic review file under revise-2 subdir, got {rv_hol['file']!r}"
+            )
+            assert "plan-review-r1" in Path(rv_hol["file"]).name, (
+                f"expected holistic round 1 inside the fresh revise-2 subdir, got {Path(rv_hol['file']).name}"
+            )
+
+            # Case 2: reviews_subdir omitted (default None) -- the bare reviews_dir's round 3+
+            # files are still consulted exactly as before this batch, so round 4 exceeds cfg's
+            # max of 3 and raises ReviewError -- a regression guard confirming the override is
+            # opt-in only.
+            try:
+                stub.seed([(APPROVE_TEXT, "sid-should-not-be-consumed")])
+                plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+                errors += 1
+                print("FAIL test39: expected ReviewError for round 4 exceeding cfg max=3 with reviews_subdir omitted", file=sys.stderr)
+            except Exception as exc:
+                assert "exceeds max" in str(exc), f"expected 'exceeds max' in error, got {exc!r}"
+                print("PASS test39: run() reviews_subdir discovers rounds independently of the bare reviews_dir; default omission still uses it")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test39: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test39 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
