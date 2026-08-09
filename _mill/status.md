@@ -34,7 +34,9 @@ batches:
     start_sha: 9efd0175a75c95357f23b3df2cd288295e2b568d
     commit_sha: 7e162c5d5f0a4a4baafcba0440b630138bf5785b
   - name: status-inferred-success-helper
-    state: pending
+    state: running
+    implementer_session: ffaf80a9-9b6e-4f39-869d-3ea10d02ceb4
+    start_sha: c11f93311ce3f4a05a8928638f919afd098590ba
     verify_baseline_failures: []
   - name: implementer-brief-heartbeat-nudge
     state: pending
