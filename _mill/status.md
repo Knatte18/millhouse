@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: verify-baseline-nested-worktree-orphan-risk
 branch: hanf/verify-baseline-nested-worktree-orphan-risk
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-09T05:48:04Z'
+discussed  '2026-08-09T05:59:33Z'
 ```
