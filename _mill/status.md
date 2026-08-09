@@ -29,5 +29,8 @@ implementing  '2026-08-09T06:16:24Z'
 ```yaml
 batches:
   - name: worktree-remove-safe-prune
-    state: pending
+    state: running
+    implementer_session: 0f748ca9-9721-49cd-bbda-78e72a0fc40f
+    start_sha: 1d83eba2ff75db20257a8f7cac0c0c9e792ac1d4
+    verify_baseline_failures: []
 ```
