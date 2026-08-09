@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-mill-go-dispatch-classification-observability
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-08-09T07:25:39Z'
 plan-fix-r2  '2026-08-09T07:36:05Z'
 planned  '2026-08-09T07:36:30Z'
 implementing  '2026-08-09T07:36:57Z'
+approved-mill-go-dispatch-classification-observability  '2026-08-09T07:41:34Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-08-09T07:36:57Z'
 ```yaml
 batches:
   - name: mill-go-dispatch-classification-observability
-    state: running
+    state: approved
     implementer_session: 98811c8c-b22e-4d90-8017-df87980e1d8d
     start_sha: 9efd0175a75c95357f23b3df2cd288295e2b568d
+    commit_sha: 7e162c5d5f0a4a4baafcba0440b630138bf5785b
   - name: status-inferred-success-helper
     state: pending
     verify_baseline_failures: []
