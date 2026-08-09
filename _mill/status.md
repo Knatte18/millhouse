@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-treeguard-explicit-guard
+phase: holistic-reviewing
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-mill-plan-revise-reentry  '2026-08-09T07:49:38Z'
 approved-review-plan-reviews-subdir-plumbing  '2026-08-09T07:54:27Z'
 approved-mill-merge-status-absent-fallback  '2026-08-09T07:56:56Z'
 approved-mill-go-treeguard-explicit-guard  '2026-08-09T08:00:12Z'
+holistic-reviewing  '2026-08-09T08:00:39Z'
 ```
 
 ## Batches
