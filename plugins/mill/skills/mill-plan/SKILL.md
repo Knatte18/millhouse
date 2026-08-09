@@ -1,6 +1,7 @@
 ---
 name: mill-plan
 description: In a spawned worktree with a committed discussion.md, autonomously write a batch-based implementation plan, self-review it via mill-review-plan, and hand off to mill-go.
+argument-hint: "[--revise]"
 ---
 
 # mill-plan
@@ -15,6 +16,18 @@ Your job is to turn `discussion.md` into an implementation plan detailed enough 
 **Step 0: Load `mill:conversation`.**
 Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
+
+**Step 0.5 — Parse arguments.**
+Read `$ARGUMENTS`. Token-walk left-to-right:
+
+- `--revise` — set a local `revise_requested = True`. May appear at most once.
+- Any other token: halt with usage hint:
+
+  > Unknown argument: `<token>` in `$ARGUMENTS`
+  >
+  > usage: `/mill-plan [--revise]`
+
+Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` itself, since `status_path` isn't resolved until "Path Setup" (which runs after Entry steps 1-3) and `plan_dir` isn't derived during Entry at all today; the actual `--revise` validation is Entry step 4's new pre-check row, which already has both values in scope.
 
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
