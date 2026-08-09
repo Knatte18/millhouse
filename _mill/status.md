@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: mill-pipeline-dispatch-entrygate-gaps
 branch: hanf/mill-pipeline-dispatch-entrygate-gaps
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussed  '2026-08-09T06:59:38Z'
 planning  '2026-08-09T07:16:45Z'
 plan-fix-r1  '2026-08-09T07:25:39Z'
 plan-fix-r2  '2026-08-09T07:36:05Z'
+planned  '2026-08-09T07:36:30Z'
 ```
