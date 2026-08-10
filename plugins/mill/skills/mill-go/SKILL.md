@@ -482,6 +482,8 @@ An errored batch just means that batch's own per-batch verify gate falls back to
 Why this must run before batch 1 specifically, eagerly and once: per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision ("Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**"), this ordering guarantees no implementer session has touched dependency manifests yet, so the transient worktree's reused dependency state is still guaranteed to match the parent branch tip.
 Skip this step entirely for every batch after the first.
 
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `--stage baseline`'s `per_batch` substage replays every batch's `verify:` command to seed `verify_baseline_failures`, which is an arbitrary, potentially slow project command with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
 This is a shared check-and-invoke block, referenced (not duplicated) from two different insertion points in "### 1.
