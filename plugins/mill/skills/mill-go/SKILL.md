@@ -482,6 +482,8 @@ An errored batch just means that batch's own per-batch verify gate falls back to
 Why this must run before batch 1 specifically, eagerly and once: per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision ("Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**"), this ordering guarantees no implementer session has touched dependency manifests yet, so the transient worktree's reused dependency state is still guaranteed to match the parent branch tip.
 Skip this step entirely for every batch after the first.
 
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `--stage baseline`'s `per_batch` substage replays every batch's `verify:` command to seed `verify_baseline_failures`, which is an arbitrary, potentially slow project command with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
 This is a shared check-and-invoke block, referenced (not duplicated) from two different insertion points in "### 1.
@@ -1124,6 +1126,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    The round counter `H` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
+   Before halting: `_status.set_blocked(status_path, f"holistic code review ERROR-only round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (ERROR-only round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("mill-go.blocked", f"holistic review: ERROR-only round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`).
    If sub-step 3.6 does NOT apply, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user.
    Do NOT auto-retry beyond the second pass.
 
@@ -1143,9 +1146,9 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
       The round counter `H` is **not** consumed.
 
       Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
+   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (fallback also failed at round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("mill-go.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
       Do NOT cascade to a second fallback.
-   5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
+   5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review (rate-limited, no fallback)"` and push; invoke the holistic cleanup block; `_notify.notify("mill-go.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
       The operator-visible message is intentional -- silent infinite fallback is wrong.
 
 4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
@@ -1197,8 +1200,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`;
-   `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s)")`;
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
    commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"` and push;
    invoke the holistic cleanup block;
    halt with "Holistic review exhausted {max_holistic_rounds} round(s).
