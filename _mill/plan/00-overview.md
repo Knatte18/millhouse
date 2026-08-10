@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py: path-reference heuristic false positives (round 3) + run() docstring drift'
 slug: mill-plan-validate-heuristic-gaps-3
-approved: false
+approved: true
 started: 20260810-174901
 parent: main
 root: ""
