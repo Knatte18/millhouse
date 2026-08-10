@@ -3,7 +3,7 @@
 ```yaml
 task: '_review_common/_review_plan: verdict/count consistency and path-suppression gaps'
 slug: mill-review-backend-consistency-gaps
-approved: false
+approved: true
 started: '2026-08-10T18:02:40Z'
 parent: main
 root: ""
