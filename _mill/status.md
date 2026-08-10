@@ -28,7 +28,11 @@ implementing  '2026-08-10T18:20:29Z'
 ```yaml
 batches:
   - name: mill-go-blocked-halt-fixes
-    state: pending
+    state: running
+    implementer_session: bd1e7bf4-4441-491d-921a-617ed5f0e057
+    start_sha: 2dbca6b65ebbec106439ffb22c218227ae6c530b
+    verify_baseline_failures: []
   - name: mill-plan-portable-cross-refs
     state: pending
+    verify_baseline_failures: []
 ```
