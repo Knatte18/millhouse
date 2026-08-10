@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-review-backend-consistency-gaps
 branch: hanf/mill-review-backend-consistency-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: '_review_common/_review_plan: verdict/count consistency and path-suppression gaps'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-10T17:36:11Z'
 discussed  '2026-08-10T17:51:52Z'
+planning  '2026-08-10T18:08:52Z'
 ```
