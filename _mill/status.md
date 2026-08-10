@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-go-skilldoc-accuracy-gaps
 branch: hanf/mill-go-skilldoc-accuracy-gaps
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r3  '2026-08-10T18:01:18Z'
 discussed  '2026-08-10T18:01:18Z'
 planning  '2026-08-10T18:14:24Z'
 plan-fix-r1  '2026-08-10T18:19:44Z'
+planned  '2026-08-10T18:20:01Z'
 ```
