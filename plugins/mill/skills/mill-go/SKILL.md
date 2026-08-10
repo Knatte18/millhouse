@@ -1198,8 +1198,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`;
-   `_status.update_field(status_path, "blocked_reason", f"holistic review exhausted {max_holistic_rounds} round(s)")`;
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
    commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-go: blocked on holistic review"` and push;
    invoke the holistic cleanup block;
    halt with "Holistic review exhausted {max_holistic_rounds} round(s).
