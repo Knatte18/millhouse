@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r3
+phase: planned
 slug: mill-review-backend-consistency-gaps
 branch: hanf/mill-review-backend-consistency-gaps
 plan: _mill/plan
@@ -22,4 +22,5 @@ plan-fix-r1  '2026-08-10T18:20:50Z'
 plan-review-r2  '2026-08-10T18:31:36Z'
 plan-fix-r2  '2026-08-10T18:31:36Z'
 plan-review-r3  '2026-08-10T18:37:24Z'
+planned  '2026-08-10T18:37:37Z'
 ```
