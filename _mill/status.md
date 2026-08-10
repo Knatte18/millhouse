@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-plan-context-soft-fail
+phase: approved-finalize-verdict-rewrite
 slug: mill-review-backend-consistency-gaps
 branch: hanf/mill-review-backend-consistency-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-review-r3  '2026-08-10T18:37:24Z'
 planned  '2026-08-10T18:37:37Z'
 implementing  '2026-08-10T18:38:01Z'
 approved-review-plan-context-soft-fail  '2026-08-10T18:46:29Z'
+approved-finalize-verdict-rewrite  '2026-08-10T18:50:00Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     commit_sha: eb85f42f98de8a1f0a677adfef500f79c822ab35
     verify_baseline_failures: []
   - name: finalize-verdict-rewrite
-    state: running
+    state: approved
     implementer_session: a42c4707-abd0-4a49-95a5-bd5704b2f285
     start_sha: dab24fea662f88a5c354a40161d3b3a259dd8754
+    commit_sha: 6be496d66478c187df46fb9ca0363fd2c0179332
     verify_baseline_failures: []
   - name: review-loop-min-rounds
     state: pending
