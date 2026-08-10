@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-review-backend-consistency-gaps
 branch: hanf/mill-review-backend-consistency-gaps
 plan: _mill/plan
@@ -23,4 +23,17 @@ plan-review-r2  '2026-08-10T18:31:36Z'
 plan-fix-r2  '2026-08-10T18:31:36Z'
 plan-review-r3  '2026-08-10T18:37:24Z'
 planned  '2026-08-10T18:37:37Z'
+implementing  '2026-08-10T18:38:01Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-plan-context-soft-fail
+    state: pending
+  - name: finalize-verdict-rewrite
+    state: pending
+  - name: review-loop-min-rounds
+    state: pending
 ```
