@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-skilldoc-accuracy-gaps
 branch: hanf/mill-go-skilldoc-accuracy-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-mill-go-blocked-halt-fixes  '2026-08-10T18:24:03Z'
 approved-mill-plan-portable-cross-refs  '2026-08-10T18:26:22Z'
 holistic-reviewing  '2026-08-10T18:26:46Z'
 holistic-approved  '2026-08-10T18:29:13Z'
+done  '2026-08-10T18:29:31Z'
 ```
 
 ## Batches
