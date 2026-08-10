@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-blocked-halt-fixes
+phase: approved-mill-plan-portable-cross-refs
 slug: mill-go-skilldoc-accuracy-gaps
 branch: hanf/mill-go-skilldoc-accuracy-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-08-10T18:19:44Z'
 planned  '2026-08-10T18:20:01Z'
 implementing  '2026-08-10T18:20:29Z'
 approved-mill-go-blocked-halt-fixes  '2026-08-10T18:24:03Z'
+approved-mill-plan-portable-cross-refs  '2026-08-10T18:26:22Z'
 ```
 
 ## Batches
@@ -35,8 +36,9 @@ batches:
     commit_sha: deadef374e737a9e7fb2c04c9973bcaa02f11a6c
     verify_baseline_failures: []
   - name: mill-plan-portable-cross-refs
-    state: running
+    state: approved
     implementer_session: 1258ab2b-5526-4215-a81e-dbe3c7ae8eab
     start_sha: 22d31347715f4a4c6e8c7d733bba961572817483
+    commit_sha: 4116327a1126d19a0b4616150d51de80d7c4cdbe
     verify_baseline_failures: []
 ```
