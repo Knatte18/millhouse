@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-plan-validate-heuristic-gaps-3
 branch: hanf/mill-plan-validate-heuristic-gaps-3
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-08-10T18:09:14Z'
 approved-heuristic-gaps  '2026-08-10T18:15:53Z'
 holistic-reviewing  '2026-08-10T18:16:13Z'
 holistic-approved  '2026-08-10T18:18:27Z'
+done  '2026-08-10T18:18:48Z'
 ```
 
 ## Batches
