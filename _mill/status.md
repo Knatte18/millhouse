@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-review-backend-consistency-gaps
 branch: hanf/mill-review-backend-consistency-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-review-plan-context-soft-fail  '2026-08-10T18:46:29Z'
 approved-finalize-verdict-rewrite  '2026-08-10T18:50:00Z'
 approved-review-loop-min-rounds  '2026-08-10T18:56:47Z'
 holistic-reviewing  '2026-08-10T18:57:08Z'
+holistic-approved  '2026-08-10T18:59:58Z'
 ```
 
 ## Batches
