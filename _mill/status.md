@@ -45,6 +45,8 @@ batches:
     commit_sha: 6be496d66478c187df46fb9ca0363fd2c0179332
     verify_baseline_failures: []
   - name: review-loop-min-rounds
-    state: pending
+    state: running
+    implementer_session: b0137d65-8ba3-44d9-a682-879fe662dc4f
+    start_sha: fbc75782e57018f953f272a4f71c045b7a63967f
     verify_baseline_failures: []
 ```
