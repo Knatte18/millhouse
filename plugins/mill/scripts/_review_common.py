@@ -2376,7 +2376,11 @@ def finalize_scope(
     findings before it is written; write_review_file with the (possibly-rewritten) text.
     `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
     the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
-    are no longer used on this path, per the single-pass-finding-extraction Shared Decision.
+    are no longer used on this path, per the single-pass-finding-extraction Shared Decision. When
+    this call's ceiling demotion actually flipped the recomputed verdict away from the reviewer's
+    original one, rewrite_verdict_token also rewrites the persisted file's fenced `verdict:` field
+    and `## Verdict` section token to match, so the on-disk artifact never disagrees with the
+    returned envelope's `verdict` for a demotion this call performed.
 
     The returned `verdict` is recomputed from the post-ceiling findings, per the
     verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
@@ -2407,19 +2411,29 @@ def finalize_scope(
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
-    verdict = parse_verdict(raw_text)
+    original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
+    demoted_any = False
     if blocking_classes is not None:
         findings = apply_blocking_ceiling(findings, blocking_classes)
+        demoted_any = any(f.demoted for f in findings)
         raw_text = rewrite_demoted_findings(raw_text, findings)
-    review_path = write_review_file(
-        reviews_dir, review_type, round_n, raw_text, scope=scope
-    )
     blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
     nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
 
+    verdict = original_verdict
     if verdict != "NEED_CONTEXT":
         verdict = "REQUEST_CHANGES" if blocking_count > 0 else "APPROVE"
+
+    # Only rewrite the persisted verdict tokens when THIS call's ceiling demotion actually
+    # flipped the recomputed verdict -- never for a pre-existing reviewer-stated/finding-count
+    # mismatch unrelated to demotion (that mismatch is surfaced via the returned envelope only).
+    if demoted_any and verdict != original_verdict:
+        raw_text = rewrite_verdict_token(raw_text, verdict)
+
+    review_path = write_review_file(
+        reviews_dir, review_type, round_n, raw_text, scope=scope
+    )
 
     effective_scope = scope if scope else "holistic"
 
