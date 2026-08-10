@@ -1374,6 +1374,17 @@ _PROHIBITION_MARKERS = (
     "not modify",
 )
 
+# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging.
+_CITATION_MARKERS = (
+    "as an example",
+    "as examples",
+    "for example",
+    "e.g.",
+    "such as",
+    "cited as",
+    "citing",
+)
+
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
 _PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json")
 
@@ -1460,6 +1471,7 @@ def _check_context_completeness(
     root: str | None,
     creates_union: set[str],
     deletes_union: set[str],
+    moves_sources: set[str],
     moves_targets: set[str],
     *,
     wiki_root: Path | None = None,
@@ -1476,13 +1488,18 @@ def _check_context_completeness(
     token in ``Requirements:`` that independently resolves to a real file (on disk, or a plan-wide
     ``Creates:``/``Deletes:``/Moves-target reference) must also appear in that same card's own
     Context:/Edits:/Creates:/Deletes:/Moves:-source set.
-    Two exemptions prevent false positives:
+    Three exemptions prevent false positives:
 
     1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a file the card must NOT
     act on, not an unlisted dependency.
-    2. Non-path-shaped or unresolvable tokens (JSON keys, function names, sentinel strings) are
-    never flagged -- only genuine file references that this validator can independently confirm
-    exist.
+    2. Citation-marker sentences (e.g. naming `x.py` as an example) cite a file for illustration,
+    not as an unlisted read dependency.
+    3. A token matching the plan-wide ``moves_sources`` set is exempt in any later card's
+    ``Requirements:``, not just the declaring card's own -- mirrors how ``creates_union``/
+    ``deletes_union`` are already plan-wide.
+
+    Non-path-shaped or unresolvable tokens (JSON keys, function names, sentinel strings) are never
+    flagged -- only genuine file references that this validator can independently confirm exist.
 
     Note: markdown's double-backtick-escape convention (`` `path` ``) is not detected by this regex;
     future citations needing that format should be aware they won't be checked by
@@ -1496,6 +1513,7 @@ def _check_context_completeness(
         root: Optional root subfolder for source refs.
         creates_union: Plan-wide union of Creates: targets.
         deletes_union: Plan-wide union of Deletes: targets.
+        moves_sources: Plan-wide union of Moves: source paths.
         moves_targets: Plan-wide union of Moves: destination paths.
         wiki_root: Optional wiki root path for wiki/-prefixed refs.
         git_root: Optional repo root for git_root-relative resolution.
@@ -1529,6 +1547,10 @@ def _check_context_completeness(
                     if any(marker in lowered_line for marker in _PROHIBITION_MARKERS):
                         continue
 
+                    # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
+                    if any(marker in lowered_line for marker in _CITATION_MARKERS):
+                        continue
+
                     # Strip a trailing line-range suffix before testing resolvability and matching;
                     # the ORIGINAL token is kept for the emitted error's "path" field.
                     stripped_token = _RE_LINE_RANGE.sub("", token)
@@ -1551,6 +1573,8 @@ def _check_context_completeness(
                         own_refs = _card_own_reference_set(card_text)
 
                     if stripped_token in own_refs:
+                        continue
+                    if stripped_token in moves_sources:
                         continue
                     if "/" not in stripped_token and any(
                         Path(stripped_token).name == Path(entry).name for entry in own_refs
@@ -2712,7 +2736,8 @@ def run(
     errors.extend(_check_wiki_config_mutation(batch_files))
     errors.extend(_check_plugin_manifest_context_missing(batch_files))
     errors.extend(_check_context_completeness(
-        batch_files, project_root, effective_root, creates_union, deletes_union, moves_targets,
+        batch_files, project_root, effective_root, creates_union, deletes_union,
+        moves_sources, moves_targets,
         wiki_root=wiki_root,
         git_root=git_root,
     ))
