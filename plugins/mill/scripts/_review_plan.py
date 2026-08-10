@@ -415,15 +415,25 @@ def prepare(
 
         round_n = discover_round(reviews_dir, "plan", scope)
 
-        raw_refs = parse_batch_refs(batch_path)
-        raw_refs_set = set(raw_refs)
+        # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
+        context_only_refs = parse_batch_refs(batch_path, fields=("Context",))
+        other_refs = parse_batch_refs(batch_path, fields=("Edits", "Creates", "Deletes"))
+        raw_refs = context_only_refs + other_refs
+        raw_refs_set = set(context_only_refs) | set(other_refs)
         # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets_union
-        reads = resolve_ref_paths(
-            raw_refs, project_root, root,
+        other_reads = resolve_ref_paths(
+            other_refs, project_root, root,
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
+        context_reads = resolve_ref_paths(
+            context_only_refs, project_root, root,
+            creates_union=combined_creates, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+            soft_fail_gitignored=True,
+        )
+        reads = [*other_reads, *context_reads]
 
         ancestors_on_disk = resolve_existing_paths(
             [raw for raw in combined_creates if raw not in raw_refs],
