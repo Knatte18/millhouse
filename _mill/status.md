@@ -31,9 +31,14 @@ implementing  '2026-08-10T18:38:01Z'
 ```yaml
 batches:
   - name: review-plan-context-soft-fail
-    state: pending
+    state: running
+    implementer_session: 8fb854cd-69a1-4001-a158-c097c9fca432
+    start_sha: 31137a96a6efb2ac8f6a6b49c7d4a09ec6638a83
+    verify_baseline_failures: []
   - name: finalize-verdict-rewrite
     state: pending
+    verify_baseline_failures: []
   - name: review-loop-min-rounds
     state: pending
+    verify_baseline_failures: []
 ```
