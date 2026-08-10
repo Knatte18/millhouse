@@ -1368,6 +1368,10 @@ _PROHIBITION_MARKERS = (
     "must not touch",
     "do not touch",
     "not touch",
+    "never change",
+    "not change",
+    "never modify",
+    "not modify",
 )
 
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
