@@ -36,6 +36,7 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`.
    Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
+   Read `roles.plan-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Plan Review below).
    Entry step 4's `phase: discussing` row additionally reads two `pipeline.*` keys at the point of use (see "Entry-gate wait for upstream mill-start" below): `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent) — and `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError` → halt with "this worktree was not created by mill-spawn".
@@ -339,6 +340,20 @@ Each round:
    Before re-running via millpy-bg for the `plan-validator-fix` slug, verify `pwd` in the Bash terminal matches the task worktree.
    If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
+**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE`, or (at step 4c only) `REQUEST_CHANGES` with `blocking_count == 0` (see step 4c below), compute:
+
+```
+converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in envelope["findings"])
+```
+
+**Exception — mill-plan's site only.** `envelope["findings"]` is not safe to read directly at this site: `_review_plan.py`'s `_scan_approved_batches` (called from `run()`) splices already-approved, carried-forward batches' own `findings` — which can carry a stale `demoted: true` marker written by an earlier round's ceiling, re-read verbatim off disk via `extract_findings` — into the same `reviews[]` list every round, and `aggregate_findings = [f for r in reviews for f in r.get("findings", [])]` folds those stale entries into the envelope's top-level `findings` unconditionally. If `plan-review.batch` is ever enabled, a demotion from an unrelated, already-approved batch would make `not any(f.get("demoted") for f in envelope["findings"])` permanently `False`, so the gate could never converge before the round cap forces the implicit-approve fallback, every round. At this site, replace `envelope["findings"]` with a round-filtered variant: `current_round_findings = [f for r in envelope["reviews"] if r.get("round") == envelope["round"] for f in r.get("findings", [])]`, then `converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in current_round_findings)`. This works because `_scan_approved_batches`' carryforward entries retain their own original approval round (`"round": n`, always < the current round once a fresh round has run), while every entry produced by the current round (freshly-reviewed batches plus the holistic scope) shares the current round number — and `envelope["round"]` is `_review_plan.run()`'s own `agg_round = max(r["round"] for r in reviews)`, i.e. the current round, so the filter cleanly excludes carryforward and keeps only this round's live findings.
+
+- `converged is True`: proceed exactly as the branch's terminal actions describe below (no behavior change).
+- `converged is False` AND `round < max_review_rounds`: still apply any `[NIT]` fixes the branch describes (real, safe work), but do NOT execute the branch's terminal phase-transition / approve-commit / break-loop actions. Instead continue the loop to round N+1 exactly as the file's own next-round-continuation path already does — no operator gap-prompt (there are zero BLOCKING findings to present).
+- `converged is False` AND `round >= max_review_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to that round's commit message (whichever of 4a/4b/4c fires) so the shortfall is auditable.
+- The gate applies only to 4a, 4b, and 4c — never to 4d (`REQUEST_CHANGES` AND `blocking_count > 0`) or step 6 (max-rounds escape with BLOCKINGs remaining) — those already continue/hard-block by existing logic, untouched.
+- The gate is orthogonal to `mill-start --auto`'s `prev_blocking_titles`/`extension_used` non-progress-extension machinery — that machinery is specific to mill-start and is never read or written here.
+
 2. **Waiting is never a decision point.**
    Waiting on this dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — both the max-rounds escape (step 6) and the non-progress check (step 5) resolve by halting via `_status.set_blocked`, never by prompting.
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
@@ -406,20 +421,25 @@ Each round:
 
 **Guardrail:** NIT/BLOCKING fixes during Plan Review apply ONLY to files under `<plan_dir>` — never to the actual source files the plan describes editing, even when a finding quotes an exact source location.
 
-4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings — the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
-Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"`.
+4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings — the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): compute `converged` per the Convergence gate above.
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
+Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message.
 Push.
 Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
+If not `converged` and `round < max_review_rounds`: 4a has no NITs to fix, so take no action this round — continue to round N+1.
 
 4b. On `APPROVE` with one or more `[NIT]` findings (the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
 Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
 Re-validate the plan DAG via `_plan_dag.validate`.
-Call `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
+This NIT-fix work, fixer report, and DAG re-validation happen regardless of `converged` — real work, safe either way.
+Compute `converged` per the Convergence gate above.
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
 Set overview frontmatter `approved: true` via direct Edit.
 Single git commit covering exactly four pathspecs — `<plan_dir>`, `<reviews_dir>`, `<status_path>`, `_mill/briefs/` — with message `mill-plan: plan-fix round {N} for {slug}` (matches existing 4d message shape;
-the round counter is NOT advanced).
+the round counter is NOT advanced) — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message.
 Push.
 Break loop → Handoff.
+If not `converged` and `round < max_review_rounds`: still call `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)` and commit the NIT fixes (same single commit shape as above, without the `approved: true` flip and without the loop-break/Handoff transition) and push — the fix genuinely happened — then continue to round N+1 instead of breaking.
 
 4.5.
 **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
@@ -454,10 +474,13 @@ Break loop → Handoff.
    Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4c's NIT path.)*
 
 4c. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs.
-Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md`, append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status + `_mill/briefs/`), break loop → Handoff.
+Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` — this happens regardless of `converged`, real work either way.
+Compute `converged` per the Convergence gate above (this branch is one of the gate's `APPROVE`-equivalent sites, per that section's opening sentence).
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status + `_mill/briefs/`; when not `converged`, append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message), break loop → Handoff.
 Do NOT run round N+1.
 Rationale: 0-BLOCKING means the planner and reviewer have converged;
-further rounds only churn cosmetic NITs.
+further rounds only churn cosmetic NITs — this is exactly the premature-termination case a ceiling-demoted BLOCKING can otherwise mask, which is what the convergence gate now guards against.
+If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the fixer report (same single commit shape as above, without the `approved: true` flip and without the loop-break/Handoff transition) and push, then continue to round N+1 instead of breaking.
 
 4d. On `REQUEST_CHANGES` AND `blocking_count > 0`:
    - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
