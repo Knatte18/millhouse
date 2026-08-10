@@ -11,9 +11,10 @@ TEMPLATES_DIR = HUB / "plugins" / "mill" / "templates"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from _render import render  # noqa: E402
-from _shortcuts import SHORTCUT_SCRIPTS, write_all  # noqa: E402
+from _shortcuts import SHORTCUT_SCRIPTS, write_all, write_all_sh  # noqa: E402
 
 TEMPLATE_PATH = TEMPLATES_DIR / "shortcut-wrapper.cmd"
+TEMPLATE_PATH_SH = TEMPLATES_DIR / "shortcut-wrapper.sh"
 
 
 def main() -> int:
@@ -166,6 +167,108 @@ def main() -> int:
                 errors += 1
         if legacy_errors == 0:
             print(f"PASS: write_all deletes all legacy .py and .ps1 wrappers for {len(SHORTCUT_SCRIPTS)} scripts")
+
+    # --- render(sh template, {...tokens...}) substitutes MILL_PYTHON + SCRIPT_PATH ---
+    fake_latest_path = Path("/fake/latest")
+    fake_mill_python_sh = str(fake_latest_path / ".venv" / "bin" / "python")
+    fake_script_path = str(fake_latest_path / "scripts" / "millpy-status.py")
+    rendered_sh = render(
+        TEMPLATE_PATH_SH,
+        {
+            "SCRIPT": "millpy-status",
+            "SCRIPT_PATH": fake_script_path,
+            "MILL_PYTHON": fake_mill_python_sh,
+        },
+    )
+    if "#!/bin/sh" not in rendered_sh:
+        print("FAIL: rendered sh template does not contain '#!/bin/sh'", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered sh template is a POSIX shell script (#!/bin/sh)")
+    if fake_mill_python_sh not in rendered_sh:
+        print("FAIL: rendered sh template does not contain MILL_PYTHON path", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered sh template contains MILL_PYTHON path")
+    if fake_script_path not in rendered_sh:
+        print("FAIL: rendered sh template does not contain SCRIPT_PATH", file=sys.stderr)
+        errors += 1
+    else:
+        print("PASS: rendered sh template contains SCRIPT_PATH")
+
+    # --- write_all_sh against empty tempdir creates one executable .sh file per SHORTCUT_SCRIPTS entry ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir = Path(tmpdir)
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        written = write_all_sh(mill_dir, fake_latest_path)
+        expected_count = len(SHORTCUT_SCRIPTS)
+        if len(written) != expected_count:
+            print(
+                f"FAIL: write_all_sh wrote {len(written)} files, expected {expected_count}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print(f"PASS: write_all_sh creates all {expected_count} wrapper files")
+        for script in SHORTCUT_SCRIPTS:
+            target = mill_dir / f"{script}.sh"
+            if not target.exists():
+                print(f"FAIL: .sh wrapper missing for {script}", file=sys.stderr)
+                errors += 1
+                continue
+            content = target.read_text(encoding="utf-8")
+            if f"{script}.py" not in content:
+                print(
+                    f"FAIL: sh wrapper for {script} does not reference {script}.py",
+                    file=sys.stderr,
+                )
+                errors += 1
+            if not target.stat().st_mode & 0o111:
+                print(f"FAIL: .sh wrapper for {script} is not executable", file=sys.stderr)
+                errors += 1
+        if errors == 0:
+            print("PASS: all sh wrappers contain the correct script reference and are executable")
+
+    # --- write_all_sh against tempdir already containing same files -> returns empty list ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir = Path(tmpdir)
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        write_all_sh(mill_dir, fake_latest_path)  # first run — writes all
+        written_second = write_all_sh(mill_dir, fake_latest_path)  # second run — all identical
+        if written_second:
+            print(
+                f"FAIL: second write_all_sh returned {len(written_second)} paths, expected 0",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: second write_all_sh returns empty list (all up-to-date)")
+
+    # --- write_all_sh against tempdir with legacy .py and .ps1 wrappers -> both deleted, .sh present ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir = Path(tmpdir)
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        for script in SHORTCUT_SCRIPTS:
+            (mill_dir / f"{script}.py").write_text("# legacy py wrapper\n", encoding="utf-8")
+            (mill_dir / f"{script}.ps1").write_text("# legacy ps1 wrapper\n", encoding="utf-8")
+        write_all_sh(mill_dir, fake_latest_path)
+        legacy_errors = 0
+        for script in SHORTCUT_SCRIPTS:
+            if (mill_dir / f"{script}.py").exists():
+                print(f"FAIL: legacy .py wrapper still exists for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
+            if (mill_dir / f"{script}.ps1").exists():
+                print(f"FAIL: legacy .ps1 wrapper still exists for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
+        for script in SHORTCUT_SCRIPTS:
+            if not (mill_dir / f"{script}.sh").exists():
+                print(f"FAIL: .sh wrapper missing after legacy cleanup for {script}", file=sys.stderr)
+                legacy_errors += 1
+                errors += 1
+        if legacy_errors == 0:
+            print(f"PASS: write_all_sh deletes all legacy .py and .ps1 wrappers for {len(SHORTCUT_SCRIPTS)} scripts")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

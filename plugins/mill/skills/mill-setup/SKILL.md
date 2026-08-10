@@ -88,7 +88,7 @@ test -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" && echo "${CLAUDE_PLUGIN_ROOT}/
 
 `uv sync` creates `.venv/bin/python` on POSIX (Linux/macOS) and `.venv/Scripts/python.exe` on Windows — checking which one exists is more reliable than branching on `uname`/`$OS`, since it reflects the venv actually on disk rather than the host running the check.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7, Windows only), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7 — `write_all` on Windows, `write_all_sh` on POSIX), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
 
 ## Phases
 
@@ -352,30 +352,30 @@ print('hub .gitignore:', 'updated' if changed else 'already up to date')
 
 Log the result.
 
-### Phase 4.7 — CMD shortcut wrappers (Windows only)
+### Phase 4.7 — Shortcut wrappers (platform-specific: `.cmd` on Windows, `.sh` on POSIX)
 
-**Windows only — skip entirely on POSIX.**
-Both sub-steps below are terminal-convenience only: `.cmd` files have no meaning outside `cmd.exe`, and `_winenv.py` uses `winreg`, which does not exist on POSIX.
-Neither is required for mill itself to function — every mill skill already receives `PYTHONPATH=` inline per invocation (see "How to invoke the helpers"), never via a persistent global env var.
-On POSIX, log `Phase 4.7 skipped (Windows-only convenience wrappers, not needed on POSIX)` and move to Phase 4.8.
+Both variants are terminal-convenience only: neither is required for mill itself to function — every mill skill already receives `PYTHONPATH=` inline per invocation (see "How to invoke the helpers"), never via a persistent global env var.
+The wrapper format branches on platform (`os.name == 'nt'` → `.cmd`; else → `.sh`); the `winreg`-based `PYTHONPATH` user-env-var write below remains Windows-only (`winreg` does not exist on POSIX) — on POSIX, skip that sub-step and log `PYTHONPATH user env var skipped (Windows-only, not needed on POSIX)`.
 
 On Windows, creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script.
-Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via `uv run --active`.
+On POSIX, creates `.millhouse/<script>.sh` forwarders (executable, `#!/bin/sh`) for the same scripts.
+Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via a direct Python invocation:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
-import _shortcuts
+import os, _shortcuts
 from pathlib import Path
 cache = Path.home() / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
 latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
-written = _shortcuts.write_all(Path('.millhouse'), latest_path)
+writer = _shortcuts.write_all if os.name == 'nt' else _shortcuts.write_all_sh
+written = writer(Path('.millhouse'), latest_path)
 print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
 "
 ```
 
 Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 
-Then set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version via Python `winreg`:
+**Windows only** — set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version via Python `winreg`:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
@@ -392,8 +392,8 @@ print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) a
 
 Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
-**Note:** After running `update-plugins.ps1` to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the `.cmd` wrappers to the new version.
-If upgrading from a pre-CMD hub (one where `.millhouse/` still contains `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd` wrappers in a single pass, and Phase 8 will verify their absence.
+**Note:** After running `update-plugins.ps1` (Windows) or updating the plugin cache (POSIX) to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the wrappers to the new version.
+If upgrading from a pre-wrapper hub (one where `.millhouse/` still contains legacy `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd`/`.sh` wrappers in a single pass, and Phase 8 will verify their absence.
 
 
 ### Phase 4.8 — Write `MILL_PYTHON` to `~/.claude/settings.json`
@@ -528,8 +528,8 @@ halt with a specific error if any fails:
 - Every hub junction (entries without `<SLUG>` from `mill-config.yaml`) exists and resolves to its expected target
 - `.gitignore` contains the mill-managed marker block with glob entries
 - `hub_relative_path:` is set in `.millhouse/config.local.yaml`
-- **Windows only:** every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists).
-  Skip this check entirely on POSIX — Phase 4.7 never runs there.
+- Every script in `_shortcuts.SHORTCUT_SCRIPTS` has a wrapper at `.millhouse/<script>.cmd` (Windows) or `.millhouse/<script>.sh` (POSIX) — and no legacy `.millhouse/<script>.py` or `.millhouse/<script>.ps1` exists.
+  On POSIX, also check the `.sh` wrapper is executable (`os.access(path, os.X_OK)`).
 - **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`).
   Skip this check entirely on POSIX.
 - `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree);
@@ -552,7 +552,7 @@ mill-setup complete.
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
-  Shortcut wrappers: N .cmd scripts under .millhouse/ (Windows only — omit this line on POSIX)
+  Shortcut wrappers: N .cmd scripts under .millhouse/ (Windows) / N .sh scripts under .millhouse/ (POSIX)
   PYTHONPATH (User): <scripts> (Windows only — omit this line on POSIX)
   MILL_PYTHON:       <python-path>
 
@@ -598,8 +598,8 @@ Re-running after a partial or complete setup is always safe:
 - `_Sidebar.md` regenerated unconditionally;
   commit only if bytes changed.
 - `.vscode/settings.json` already green → skipped.
-- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only;
-  Phase 4.7 is a no-op on POSIX).
+- Shortcut wrappers (`.cmd` on Windows, `.sh` on POSIX) re-checked against the current latest plugin version on every run — only stale/missing ones are rewritten (Phase 4.7).
+- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only; that sub-step is a no-op on POSIX).
 - Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value;
   writes only if they differ.
 
