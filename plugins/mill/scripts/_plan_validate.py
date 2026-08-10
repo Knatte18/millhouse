@@ -1589,7 +1589,7 @@ def _check_context_completeness(
                         "message": (
                             f"card {card_num}'s Requirements: references '{token}' "
                             f"which is not in this card's "
-                            f"Context:/Edits:/Creates:/Deletes:/Moves:"
+                            f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
                         ),
                         "line": line.strip(),
                     })
