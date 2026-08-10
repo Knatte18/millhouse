@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-skilldoc-accuracy-gaps
 branch: hanf/mill-go-skilldoc-accuracy-gaps
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-10T17:36:23Z'
+discussion-fix-r3  '2026-08-10T18:01:18Z'
+discussed  '2026-08-10T18:01:18Z'
 ```
