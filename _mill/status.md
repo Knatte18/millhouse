@@ -28,5 +28,8 @@ implementing  '2026-08-10T18:09:14Z'
 ```yaml
 batches:
   - name: heuristic-gaps
-    state: pending
+    state: running
+    implementer_session: b22b550f-0516-4933-b2b7-017f36e759a6
+    start_sha: aff139abd15a452b60edfe13abda0fe6cd10bcfc
+    verify_baseline_failures: []
 ```
