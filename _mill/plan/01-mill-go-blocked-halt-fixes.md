@@ -19,6 +19,7 @@ This batch delivers all three `plugins/mill/skills/mill-go/SKILL.md` prose fixes
 
 - **Context:**
   - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/scripts/_notify.py`
   - `_mill/discussion.md`
 - **Edits:**
   - `plugins/mill/skills/mill-go/SKILL.md`

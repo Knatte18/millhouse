@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go/mill-plan SKILL.md: undocumented mutation sequences, precondition bugs, and non-portable cross-references'
 slug: mill-go-skilldoc-accuracy-gaps
-approved: false
+approved: true
 started: 20260810-181019
 parent: main
 root: ""
