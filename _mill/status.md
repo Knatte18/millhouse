@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-heuristic-gaps
+phase: holistic-reviewing
 slug: mill-plan-validate-heuristic-gaps-3
 branch: hanf/mill-plan-validate-heuristic-gaps-3
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-08-10T17:56:45Z'
 planned  '2026-08-10T17:56:59Z'
 implementing  '2026-08-10T18:09:14Z'
 approved-heuristic-gaps  '2026-08-10T18:15:53Z'
+holistic-reviewing  '2026-08-10T18:16:13Z'
 ```
 
 ## Batches
