@@ -92,8 +92,13 @@ reproduction captured during an actual plan-writing session, not a hypothetical.
 
 - Decision: change the error message at `_check_context_completeness`'s error-emission site (currently
   `"...which is not in this card's Context:/Edits:/Creates:/Deletes:/Moves:"`) to append `-source`
-  after `Moves:`. Update `mill-plan/SKILL.md`'s `context-completeness` fix-table row (currently reads
-  "...the card's own Edits:/Creates:/Deletes:/Moves: already covers it...") the same way.
+  after `Moves:`. Update `mill-plan/SKILL.md`'s `context-completeness` fix-table row (line ~320) the
+  same way — but that row is only **partially** stale: its first clause ("the card's own
+  `Edits:`/`Creates:`/`Deletes:`/`Moves:` already covers it") is unqualified and needs the `-source`
+  suffix, while a later clause in the same row ("a token that legitimately belongs to
+  `Deletes:`/`Moves:`-source means the check should not have fired at all") is already correctly
+  qualified. Fix only the first occurrence — a blind find/replace across the row would turn the
+  already-correct clause into `Moves:-source-source`.
 - Rationale: the module docstring (top of `_plan_validate.py`, line ~46-47) already documents the
   check correctly as `Moves:-source`; only the runtime message and the SKILL.md prose lagged. Issue
   explicitly names both sites.
