@@ -2206,6 +2206,248 @@ def test_check_context_completeness_dirty_odd_backtick_count_line_field() -> int
             return 1
 
 
+def test_check_context_completeness_clean_citation_marker() -> int:
+    """Requirements: names a file via a _CITATION_MARKERS phrase -> zero errors (citation exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements="  Follow the pattern shown, citing `src/a.py` as an example of the pattern to follow.\n",
+        )
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_citation_marker")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_clean_citation_marker: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_dirty_citation_marker_absent() -> int:
+    """Same file reference reworded to drop every citation-marker phrase -> one error (no over-exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements="  See `src/a.py` for the pattern to follow.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_dirty_citation_marker_absent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_citation_marker_absent: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_moves_source_plan_wide() -> int:
+    """Requirements: token in a LATER batch names an EARLIER batch's Moves: source -> zero errors (plan-wide exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "old.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": [1]},
+        ])
+        batch_a = _make_batch_file(
+            "alpha",
+            card_num=1,
+            moves=[("old.py", "new.py")],
+        )
+        batch_a += "\n## Rename mechanic\n\nUse `git mv` then apply surgical edits.\n"
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            edits=["src/c.py"],
+            requirements="  Reuse the logic that used to live in `old.py`.\n",
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_moves_source_plan_wide")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_moves_source_plan_wide: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged() -> int:
+    """Same two-batch shape, but the later batch's Requirements: names the Moves: TARGET instead of the source -> one error (target-only exemption stays per-card)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "old.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": [1]},
+        ])
+        batch_a = _make_batch_file(
+            "alpha",
+            card_num=1,
+            moves=[("old.py", "new.py")],
+        )
+        batch_a += "\n## Rename mechanic\n\nUse `git mv` then apply surgical edits.\n"
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            edits=["src/c.py"],
+            requirements="  The relocated file will live at `new.py`.\n",
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "new.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_message_includes_moves_source_qualifier() -> int:
+    """Error message field's trailing field list reads Moves:-source, not bare Moves:."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "helper.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements="  See `src/helper.py` for the pattern to follow.\n",
+        )
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "Moves:-source" in check_errors[0]["message"], (
+                f"expected 'Moves:-source' in message, got: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_message_includes_moves_source_qualifier")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_message_includes_moves_source_qualifier: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_prohibition_marker_change_modify() -> int:
+    """Requirements: lines using "do not change"/"must not modify" phrasing on real files -> zero errors (prohibition exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "x.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "y.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  Implementers do not change `src/x.py` as part of this card.\n"
+                "  Implementers must not modify `src/y.py` as part of this card.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_prohibition_marker_change_modify")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_prohibition_marker_change_modify: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_requirements_quote_indent_drift_clean_exact_match() -> int:
     """Fence content is already a byte-exact substring of the target Edits: file -> no error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -6042,6 +6284,12 @@ def main() -> int:
         test_check_context_completeness_clean_directory_reference_not_on_disk,
         test_check_context_completeness_clean_double_slash_token,
         test_check_context_completeness_dirty_odd_backtick_count_line_field,
+        test_check_context_completeness_clean_citation_marker,
+        test_check_context_completeness_dirty_citation_marker_absent,
+        test_check_context_completeness_clean_moves_source_plan_wide,
+        test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged,
+        test_check_context_completeness_message_includes_moves_source_qualifier,
+        test_check_context_completeness_clean_prohibition_marker_change_modify,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
