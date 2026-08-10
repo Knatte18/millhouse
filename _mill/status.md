@@ -35,6 +35,8 @@ batches:
     commit_sha: deadef374e737a9e7fb2c04c9973bcaa02f11a6c
     verify_baseline_failures: []
   - name: mill-plan-portable-cross-refs
-    state: pending
+    state: running
+    implementer_session: 1258ab2b-5526-4215-a81e-dbe3c7ae8eab
+    start_sha: 22d31347715f4a4c6e8c7d733bba961572817483
     verify_baseline_failures: []
 ```
