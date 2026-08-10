@@ -38,7 +38,9 @@ batches:
     commit_sha: eb85f42f98de8a1f0a677adfef500f79c822ab35
     verify_baseline_failures: []
   - name: finalize-verdict-rewrite
-    state: pending
+    state: running
+    implementer_session: a42c4707-abd0-4a49-95a5-bd5704b2f285
+    start_sha: dab24fea662f88a5c354a40161d3b3a259dd8754
     verify_baseline_failures: []
   - name: review-loop-min-rounds
     state: pending
