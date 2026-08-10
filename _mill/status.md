@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-merge-in-recompute-baseline-crash
 branch: hanf/mill-merge-in-recompute-baseline-crash
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-10T18:35:13Z'
+discussion-fix-r1  '2026-08-10T18:44:22Z'
+discussed  '2026-08-10T18:44:22Z'
 ```
