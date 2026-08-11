@@ -14,6 +14,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _status import (
+    append_fork_fallback_log,
     append_inferred_success_log,
     append_phase,
     append_recovery_log,
@@ -1088,6 +1089,102 @@ def main() -> int:
             except ValueError:
                 pass
         print("PASS: append_inferred_success_log raises ValueError when the fenced block is unterminated")
+
+        # --- append_fork_fallback_log tests ---
+        ts_ff = "2026-08-11T09:00:00Z"
+
+        # Test 1: lazy section creation on first call.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert "## Fork-fallback log" not in initial, (
+                "render_initial output should not pre-seed the fork-fallback-log section"
+            )
+            append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+            contents = sp.read_text(encoding="utf-8")
+            assert "## Fork-fallback log" in contents, (
+                "fork-fallback-log heading not created on first call"
+            )
+            ff_lines = contents.splitlines()
+            heading_idx = ff_lines.index("## Fork-fallback log")
+            fence_open_idx = ff_lines.index("```text", heading_idx)
+            fence_close_idx = ff_lines.index("```", fence_open_idx + 1)
+            body = ff_lines[fence_open_idx + 1 : fence_close_idx]
+            expected_row = f"{quote_scalar(ts_ff)}  status-fork-fallback-helper"
+            assert body == [expected_row], f"unexpected fork-fallback-log body: {body!r}"
+            print("PASS: append_fork_fallback_log creates the section lazily on first call")
+
+            # Test 2: append-only on second call -- first row survives, second appended.
+            append_fork_fallback_log(
+                sp, "mill-go2-implementer-override", "2026-08-11T09:05:00Z"
+            )
+            contents2 = sp.read_text(encoding="utf-8")
+            ff_lines2 = contents2.splitlines()
+            heading_idx2 = ff_lines2.index("## Fork-fallback log")
+            fence_open_idx2 = ff_lines2.index("```text", heading_idx2)
+            fence_close_idx2 = ff_lines2.index("```", fence_open_idx2 + 1)
+            body2 = ff_lines2[fence_open_idx2 + 1 : fence_close_idx2]
+            expected_row2 = (
+                f"{quote_scalar('2026-08-11T09:05:00Z')}  mill-go2-implementer-override"
+            )
+            assert body2 == [expected_row, expected_row2], (
+                f"expected two rows with the first unchanged, got {body2!r}"
+            )
+            print("PASS: append_fork_fallback_log appends a second row without disturbing the first")
+
+        # Test 3: phase: is untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            before_full = read_full(sp)
+            append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+            after_full = read_full(sp)
+            assert after_full["yaml"]["phase"] == before_full["yaml"]["phase"], (
+                "phase: changed after append_fork_fallback_log"
+            )
+            assert after_full["timeline"] == before_full["timeline"], (
+                "## Timeline rows changed after append_fork_fallback_log"
+            )
+            print("PASS: append_fork_fallback_log does not disturb ## Timeline or the yaml block's phase:")
+
+        # Test 4: malformed section raises ValueError.
+        # 4a: heading present, no fenced block at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Fork-fallback log\n")
+            try:
+                append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+                assert False, "expected ValueError for missing fence"
+            except ValueError:
+                pass
+        print("PASS: append_fork_fallback_log raises ValueError when the fenced block is missing")
+
+        # 4b: heading present, opening fence present, no closing fence before EOF.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Fork-fallback log\n\n```text\n")
+            try:
+                append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+                assert False, "expected ValueError for unterminated fence"
+            except ValueError:
+                pass
+        print("PASS: append_fork_fallback_log raises ValueError when the fenced block is unterminated")
 
         print("All _status unit tests passed.")
         return 0
