@@ -27,6 +27,8 @@ Tests come first (card 3), then the variant override (card 4), then the base pro
   - `plugins/mill/skills/mill-go/SKILL.md`
   - `plugins/mill/skills/mill-go2/SKILL.md`
   - `plugins/mill/skills/mill-go-base/SKILL.md`
+  - `plugins/mill/skills/mill-start/SKILL.md`
+  - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Edits:**
   - `plugins/mill/unit_tests/test-mill-go-variants.py`
 - **Creates:** none
@@ -39,7 +41,7 @@ Tests come first (card 3), then the variant override (card 4), then the base pro
 
   Add `_check_mill_go2_declares_fork_override() -> list[str]`. For `mill-go2` only, take `_section_body` of `## Dispatch overrides` and assert its first non-blank line is not `(none)`, then assert each of these substrings is present in the body: `implementer`, `subagent_type: "fork"`, `not the orchestrator`, `fork-fallback`, `unclaimed`. Emit one distinct failure string per missing substring, naming the substring, so a partial regression is diagnosable. Also assert the first non-blank line of `mill-go2`'s `## Driver preamble` body is exactly `(none)` — that override point stays unclaimed by this task.
 
-  Add `_check_base_fork_paragraph_survives() -> list[str]`. Against `mill-go-base/SKILL.md` assert the literal `**Why not fork?**` is present, since `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md` both cite the paragraph by that name, and assert the substring `parent's tools` is present, since `mill-plan/SKILL.md` cites the tool-inheritance claim specifically. Name both citing files in the failure strings.
+  Add `_check_base_fork_paragraph_survives() -> list[str]`. Against `mill-go-base/SKILL.md` assert the literal `**Why not fork?**` is present, since `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md` both cite the paragraph by that name, and assert the substring `parent's tools` is present, since `plugins/mill/skills/mill-plan/SKILL.md` paraphrases that tool-inheritance claim as "a fork always inherits the parent's **full tool access**" and points back at this paragraph for it. Name both referring files in the failure strings.
 
   Register all three new check functions in `main()`'s `checks` tuple, appended after `_check_parameterization_lock`. Update `main()`'s docstring, which currently says "Run all seven variant-contract checks", to the new count.
 
@@ -82,8 +84,8 @@ applies to them unchanged.
 - **Dispatch cold at every point that exists to escape a dispatch which already failed
   to complete:** step 6.5.2's `--resume-incomplete` re-dispatch and Resume's
   `running`-state re-dispatch. Forking either would re-enter the failure mode it exists
-  to escape. Step 6.5.1's warm `SendMessage` resume is unaffected either way: it
-  addresses a live `agentId`, which a fork returns just as a cold agent does.
+  to escape. Step 6.5.1's warm `SendMessage` resume needs no assignment either way — it
+  re-addresses an already-live handle rather than dispatching afresh.
 - **De-briefing (the prompt's opening).** State that you are the implementer for this
   batch and not the orchestrator; that every instruction inherited from the driver
   session belongs to the driver and not to you; that you must not drive the batch loop
@@ -145,7 +147,7 @@ The driver's own context growth across many batches is a known, unmeasured risk.
   2. **Add the mill-go2 cross-reference.** One sentence recording that mill-go2 accepts these trade-offs for the implementer role only, pointing at its `## Dispatch overrides`, and stating that every other role and every mill-go dispatch keeps the fresh-`Agent` default.
   3. **Amend the closing "used only in mill-start's Explore phase" sentence.** It is already stale before this task touches it: `plugins/mill/skills/mill-plan/SKILL.md`'s "Fork scope guardrail" section sanctions a second live fork-usage site — Phase: Plan research that genuinely depends on the parent's in-flight reasoning, under a narrow justification plus a git-status scope check. Rewrite the sentence to name all three sites rather than counting mill-go2 as the second: mill-start's Explore phase, mill-plan's Phase: Plan research dispatch, and, experimentally, mill-go2's implementer override. Do not assert an ordinal ("second site") anywhere — the count is what went stale the first time.
 
-  Two literals must survive byte-for-byte because other skills cite them: the heading `**Why not fork?**`, cited by name from `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`; and disqualifier (2)'s claim that a fork inherits the **parent's tools**, cited specifically from `plugins/mill/skills/mill-plan/SKILL.md`. Card 3 asserts on both. Disqualifier (1)'s model-assignment claim is also unchanged.
+  Two literals must survive byte-for-byte because other skills cite them: the heading `**Why not fork?**`, cited by name from `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`; and disqualifier (2)'s claim that a fork inherits the **parent's tools**, which `plugins/mill/skills/mill-plan/SKILL.md` paraphrases and points back here for. Card 3 asserts on both. Disqualifier (1)'s model-assignment claim is also unchanged.
 
   Do not introduce `"mill-go: `, `_notify.notify("mill-go.`, or `[mill-go]` — `_check_parameterization_lock` bans all three from the base as well as from variants. Writing `mill-go2` and `mill-go` as bare prose is safe and is already established practice in this file's own frontmatter.
 - **Commit:** `docs(mill-go-base): correct fork disqualifier 3 and cross-reference mill-go2's implementer override`
