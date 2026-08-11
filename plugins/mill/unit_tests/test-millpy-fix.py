@@ -834,6 +834,101 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["scope"], "holistic")
 
+    def test_stage_prepare_batch_scope_prior_blocking_threaded_into_render(self):
+        """--stage prepare --scope batch --prior-blocking <path>: PRIOR_BLOCKING token equals the
+        fixture file's exact text (#02 Card 5)."""
+        prior_blocking_file = self.tmp_path / "prior-blocking.md"
+        prior_blocking_file.write_text(
+            "### [BLOCKING] some earlier finding\nDo not reintroduce this.\n",
+            encoding="utf-8",
+        )
+        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
+            mock_render.return_value = "Brief text"
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                    "--prior-blocking", str(prior_blocking_file),
+                ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        self.assertEqual(
+            mock_render.call_args[0][1]["PRIOR_BLOCKING"],
+            prior_blocking_file.read_text(encoding="utf-8"),
+        )
+
+    def test_stage_prepare_holistic_scope_prior_blocking_threaded_into_render(self):
+        """--stage prepare --scope holistic --prior-blocking <path>: PRIOR_BLOCKING token equals the
+        fixture file's exact text (#02 Card 5)."""
+        prior_blocking_file = self.tmp_path / "prior-blocking.md"
+        prior_blocking_file.write_text(
+            "### [BLOCKING] some earlier finding\nDo not reintroduce this.\n",
+            encoding="utf-8",
+        )
+        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
+            mock_render.return_value = "Brief text"
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                    "--prior-blocking", str(prior_blocking_file),
+                ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        self.assertEqual(
+            mock_render.call_args[0][1]["PRIOR_BLOCKING"],
+            prior_blocking_file.read_text(encoding="utf-8"),
+        )
+
+    def test_prior_blocking_omitted_renders_as_none(self):
+        """--prior-blocking omitted entirely -> PRIOR_BLOCKING token renders as "(none)"."""
+        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
+            mock_render.return_value = "Brief text"
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        self.assertEqual(mock_render.call_args[0][1]["PRIOR_BLOCKING"], "(none)")
+
+    def test_prior_blocking_empty_file_renders_as_none(self):
+        """--prior-blocking pointing at an existing but empty (zero-byte) file -> PRIOR_BLOCKING
+        renders as "(none)" (covers empty-digest-file-reads-as-none)."""
+        prior_blocking_file = self.tmp_path / "empty-prior-blocking.md"
+        prior_blocking_file.write_text("", encoding="utf-8")
+        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
+            mock_render.return_value = "Brief text"
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, out = self._run_main([
+                    "--scope", "batch",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                    "--prior-blocking", str(prior_blocking_file),
+                ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        self.assertEqual(mock_render.call_args[0][1]["PRIOR_BLOCKING"], "(none)")
+
     def test_stage_finalize_reads_agent_output(self):
         """--stage finalize: reads agent output file, calls finalize_from_output."""
         agent_output_path = self.tmp_path / "agent-output.txt"
