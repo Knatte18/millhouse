@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-wire-prior-blocking-digest
+phase: holistic-reviewing
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ approved-prior-blocking-digest-helper  '2026-08-11T04:40:58Z'
 approved-millpy-fix-prior-blocking-flag  '2026-08-11T04:44:19Z'
 approved-done-gate-lint-defaults  '2026-08-11T04:46:36Z'
 approved-mill-go-wire-prior-blocking-digest  '2026-08-11T04:48:59Z'
+holistic-reviewing  '2026-08-11T04:49:22Z'
 ```
 
 ## Batches
