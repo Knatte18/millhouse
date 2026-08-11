@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-merge-in-recompute-baseline-crash
 branch: hanf/mill-merge-in-recompute-baseline-crash
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-08-11T03:37:47Z'
 implementing  '2026-08-11T03:38:13Z'
 approved-crash-fix  '2026-08-11T03:42:15Z'
 holistic-reviewing  '2026-08-11T03:42:35Z'
+holistic-approved  '2026-08-11T03:43:48Z'
 ```
 
 ## Batches
