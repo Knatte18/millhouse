@@ -48,6 +48,8 @@ batches:
     commit_sha: 181a41b0633632a66f51d347aeade89e605b5fa1
     verify_baseline_failures: []
   - name: repoint-refs
-    state: pending
+    state: running
+    implementer_session: 85e5e05b-8a4a-4c43-9542-eacf14c8bf7a
+    start_sha: ba4e066e2de0b5ed82d233542db29a6959f5a6d6
     verify_baseline_failures: []
 ```
