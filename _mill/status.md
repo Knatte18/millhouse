@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-thin-variants
+phase: approved-repoint-refs
 slug: mill-go2-scaffold
 branch: hanf/mill-go2-scaffold
 plan: _mill/plan
@@ -29,6 +29,7 @@ planned  '2026-08-11T12:30:24Z'
 implementing  '2026-08-11T12:30:50Z'
 approved-extract-base  '2026-08-11T12:36:45Z'
 approved-thin-variants  '2026-08-11T12:40:48Z'
+approved-repoint-refs  '2026-08-11T12:44:53Z'
 ```
 
 ## Batches
@@ -48,8 +49,9 @@ batches:
     commit_sha: 181a41b0633632a66f51d347aeade89e605b5fa1
     verify_baseline_failures: []
   - name: repoint-refs
-    state: running
+    state: approved
     implementer_session: 85e5e05b-8a4a-4c43-9542-eacf14c8bf7a
     start_sha: ba4e066e2de0b5ed82d233542db29a6959f5a6d6
+    commit_sha: b0ee7acf0b7419e3d885700592cc9ff7241b90c9
     verify_baseline_failures: []
 ```
