@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-merge-in-recompute-baseline-crash
 branch: hanf/mill-merge-in-recompute-baseline-crash
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-08-10T18:35:13Z'
 discussion-fix-r1  '2026-08-10T18:44:22Z'
 discussed  '2026-08-10T18:44:22Z'
 planning  '2026-08-11T03:33:36Z'
+plan-fix-r1  '2026-08-11T03:37:06Z'
 ```

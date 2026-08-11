@@ -3,7 +3,7 @@
 ```yaml
 task: mill-merge-in --recompute-baseline crashes uncaught on absent status.md
 slug: mill-merge-in-recompute-baseline-crash
-approved: false
+approved: true
 started: '2026-08-11T03:32:45Z'
 parent: main
 root: ""

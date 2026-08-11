@@ -40,7 +40,9 @@ Fix the last of the three #803 crash sites: `_run_recompute_baseline()` in `mill
   ```
   No new import is needed (`_paths` and `json` are already imported at module top level). Do not add a `file=sys.stderr` diagnostic line — this mirrors the `parent_branch = _parent_branch.resolve(...)` sibling block (lines 247-251), not the `compute_baseline` sibling block.
 
-  In `TestMillpyMergeInSubagent` (`test-millpy-merge-in-subagent.py`), add one new test method immediately before the `class TestVerifyConflictMarkersGate` line (end of `TestMillpyMergeInSubagent`'s body):
+  Also update the function's docstring (`millpy-merge-in-subagent.py` lines 211-214): its "Never raises" paragraph enumerates failure paths as "no module-wide verify configured, parent branch unresolvable, or the computation itself raising" — add "status.md absent" as a fourth enumerated failure path so the docstring stays accurate to the fixed behavior.
+
+  In `TestMillpyMergeInSubagent` (`test-millpy-merge-in-subagent.py`), add one new test method immediately after `test_2x_finalize_conflicts_missing_files_flag` (the class's last existing method, ending at line 846) — still indented inside `TestMillpyMergeInSubagent`'s body, and before the module-level `def _git(args, cwd, check=True):` helper (line 849) and the subsequent `class TestVerifyConflictMarkersGate` (line 864). Do not place it after `_git` or outside the class — that would break indentation/`self` semantics:
   ```python
       def test_20_recompute_baseline_missing_status_md(self):
           """--recompute-baseline with status.md absent -> exit 0, baseline:error JSON, no raise.
