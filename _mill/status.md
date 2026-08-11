@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-extract-base
 slug: mill-go2-scaffold
 branch: hanf/mill-go2-scaffold
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r3  '2026-08-11T12:26:12Z'
 plan-review-r4  '2026-08-11T12:30:08Z'
 planned  '2026-08-11T12:30:24Z'
 implementing  '2026-08-11T12:30:50Z'
+approved-extract-base  '2026-08-11T12:36:45Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-08-11T12:30:50Z'
 ```yaml
 batches:
   - name: extract-base
-    state: running
+    state: approved
     implementer_session: 7923875b-d9e0-4b63-a4dc-716521797eb5
     start_sha: 9bc54884ad633de2ab36c69bb15adec901c0a431
+    commit_sha: eea8c21c03b7be312219358516e2e1b30c7263b9
     verify_baseline_failures: []
   - name: thin-variants
     state: pending
