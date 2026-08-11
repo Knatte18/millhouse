@@ -88,8 +88,15 @@ reviews day to day.
   every one of `_llm_claude.py`, `_llm_gemini.py`, `_reviewer_test_stub.py` change in lockstep — all
   three are dispatched polymorphically by `provider` name (`_reviewer_single.run()` does
   `importlib.import_module(f"_llm_{provider}")`), so the return shape is a shared contract, not a
-  per-module choice. `run_implementer()` (used by `millpy-implement.py`/`millpy-fix.py`, unrelated
-  callers) is explicitly NOT touched — only `run_bulk`/`run_tool_use`. Callers of
+  per-module choice. `run_implementer()`'s **external contract** (used by
+  `millpy-implement.py`/`millpy-fix.py`, unrelated callers) stays a plain `(text, session_id)`
+  2-tuple — but its **body is not untouched**: `run_bulk()`, `run_tool_use()`, and
+  `run_implementer()` all currently do `return _invoke(...)` directly with no unpacking
+  (`_llm_claude.py` lines ~428-437, ~462-471, ~504-514), so once `_invoke()` itself returns
+  `ReviewerCallResult`, `run_implementer()`'s body must change to
+  `result = _invoke(...); return result.text, result.session_id` purely to keep returning its old
+  2-tuple shape to its own unrelated callers — a mechanical unwrap, not a scope expansion into
+  implementer/fixer cost-visibility. Callers of
   `run_bulk`/`run_tool_use`/`_reviewer_single.run` (re-enumerated including `integration_tests/`,
   which an earlier `scripts/`-only grep missed): the three review backends
   (`_review_discussion.py`, `_review_plan.py`, `_review_code.py`), **plus**
@@ -413,3 +420,13 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   directly); it must be updated in lockstep, added to Technical context and Testing. **Why:** the
   grep that produced "only 3" excluded `integration_tests/`; a real caller outside that scope would
   silently break with no unit-test coverage to catch it.
+- **Q:** (Discussion review r2 gap) `run_bulk()`/`run_tool_use()`/`run_implementer()` all currently
+  do `return _invoke(...)` directly with no unpacking — if `_invoke()`'s return type changes to
+  `ReviewerCallResult`, doesn't `run_implementer()`'s return value change too, contradicting
+  "explicitly NOT touched"? **A:** [auto-pick] Yes — `run_implementer()`'s *external contract*
+  (2-tuple) stays the same, but its body needs a one-line unwrap
+  (`result = _invoke(...); return result.text, result.session_id`) purely to preserve that contract
+  for its own unrelated callers. **Why:** "NOT touched" was inaccurate about the body while
+  correctly describing the external contract/scope — the mechanical unwrap isn't a scope expansion
+  into implementer/fixer cost-visibility, it's required plumbing to avoid breaking an unrelated
+  caller.
