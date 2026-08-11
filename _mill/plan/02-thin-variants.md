@@ -33,19 +33,20 @@ directory tree.
 
 - **Context:**
   - `_mill/discussion.md`
-  - `plugins/mill/unit_tests/test-guards.py`
+  - `plugins/mill/unit_tests/test-skill-helper-drift.py`
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/unit_tests/test-mill-go-variants.py`
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Create a new test file following the house shape used by `test-guards.py`: a
-  module docstring, `HUB = Path(__file__).resolve().parent.parent.parent.parent`,
+- **Requirements:** Create a new test file following the house shape used by
+  `plugins/mill/unit_tests/test-skill-helper-drift.py`: a module docstring,
+  `HUB = Path(__file__).resolve().parent.parent.parent.parent`,
   `SKILLS = HUB / "plugins" / "mill" / "skills"`, one function per check returning a list of failure
-  strings, a `main()` that prints `PASS:` / `FAIL:` lines and returns 0 or 1, and
-  `sys.exit(main())` under `if __name__ == "__main__":`. ASCII-only output — no non-ASCII characters
-  in any `print()` string.
+  strings, a `main()` that prints those strings to stderr and emits a `PASS:` or `FAIL:` summary
+  line, returning 0 or 1, and `sys.exit(main())` under `if __name__ == "__main__":`. ASCII-only
+  output — no non-ASCII characters in any `print()` string.
 
   Define `VARIANTS = ("mill-go", "mill-go2")` and `BASE = "mill-go-base"` as module constants, and
   build every file path the test reads as `SKILLS / <name> / "SKILL.md"`. The two variant files do
@@ -100,11 +101,21 @@ directory tree.
 - **Requirements:** Create the file at the path batch 1 vacated. It has exactly five parts, in this
   order, and contains no machinery of any kind:
 
-  1. `---` frontmatter with `name: mill-go` and, as `description:`, the exact description value that
-     `mill-go/SKILL.md` carried before batch 1 relocated it — recover it verbatim from
-     `git -C <worktree> show HEAD~N:plugins/mill/skills/mill-go/SKILL.md` or from the pre-move
-     frontmatter, so `/mill-go`'s entry in the operator's skill list is byte-identical to today's.
-     It begins "In a spawned worktree with an approved plan, sequentially execute every batch...".
+  1. `---` frontmatter with `name: mill-go` and, as `description:`, the exact description value the
+     mill-go skill carried before batch 1 relocated it, so `/mill-go`'s entry in the operator's skill
+     list stays byte-identical to today's. Recover it verbatim — do not retype it from memory — with:
+
+     ````bash
+     git -C <worktree> show 6442a688:plugins/mill/skills/mill-go/SKILL.md | head -4
+     ````
+
+     `6442a688` is the last commit before this task's plan work began and is the anchor the rest of
+     this plan cites for verified counts; use that literal SHA, never a relative `HEAD~N` offset.
+     The recovered line begins "description: In a spawned worktree with an approved plan,
+     sequentially execute every batch...". If that SHA is unreachable (a rebase since planning),
+     find the pre-move blob with
+     `git -C <worktree> log --follow --oneline -- plugins/mill/skills/mill-go-base/SKILL.md` and read
+     the commit immediately before the rename; do not fall back to retyping.
   2. The H1 title line `# mill-go`.
   3. A `## Variant binding` section whose body is a fenced yaml block containing the single line
      `VARIANT_LABEL: mill-go`.
