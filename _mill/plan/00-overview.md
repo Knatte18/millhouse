@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go2: fork-based fixer (NIT-fix) dispatch'
 slug: 'mill-go2-fork-fixer'
-approved: false
+approved: true
 started: '2026-08-11T14:06:00Z'
 parent: 'main'
 root: ""
