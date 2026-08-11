@@ -41,7 +41,8 @@ base skill that both orchestrators load.
 - New `plugins/mill/skills/mill-go2/SKILL.md` — same thin shape, `VARIANT_LABEL: mill-go2`, both
   override-point sections `(none)` today.
 - Repoint every existing cross-reference that names `mill-go/SKILL.md` as the location of machinery
-  that has moved to the base (full enumeration under Technical context).
+  that has moved to the base, and add `mill-go2` to the two prose orchestrator-lists that name
+  `mill-go` without citing its path (full enumeration under Technical context).
 - Update `plugins/mill/unit_tests/test-guards.py`'s `_WIKI_CWD_ALLOWLIST` and
   `plugins/mill/unit_tests/test-skill-helper-drift.py`'s `mill_go_skill_path` locks to target the
   base file.
@@ -299,6 +300,20 @@ and repointed to `mill-go-base/SKILL.md`:
   string**), 720 (comment)
 - `plugins/mill/unit_tests/test-phase-wait.py` — line 153 (comment)
 - `plugins/mill/skills/mill-go/SKILL.md` — line 321 self-reference
+
+Two further sites name `mill-go` in prose *without* citing its file path, so they fall outside the
+enumeration above and would go stale silently once a second orchestrator exists. Both list the
+orchestrators a Bash-convention rule applies to, and both must gain `mill-go2`:
+
+- `plugins/mill/skills/cli/SKILL.md:40` — "Autonomous agents (mill-plan, mill-go) constructing new
+  Bash commands must use the resolved path verbatim …"
+- `plugins/mill/skills/conversation/SKILL.md:74` — "Applies to every Bash call made directly by the
+  orchestrator (mill-start, mill-plan, mill-go, …)"
+
+Neither is a behaviour gap — the underlying rules are enforced by the base's own Step 0 and by the
+`mill:conversation` load that every variant inherits — so this is accuracy maintenance, not a
+correctness fix. Add `mill-go2` to both lists. Do **not** add `mill-go-base`: these lists name what an
+operator invokes, and the base is never invoked directly.
 
 Note the "Why not fork?" paragraph at `mill-go/SKILL.md:399-406` is referenced by both
 `mill-start/SKILL.md:179` and `mill-plan/SKILL.md:119`. It moves to the base with everything else.
