@@ -134,7 +134,11 @@ two already-shipped helpers with live callers for no behavioural gain, which is 
   `read_fork_fallback_log` docstring must state that this section, unlike
   `## Tracked-file recovery log` and `## Inferred-success log`, is control-flow state rather than a
   write-only audit trail: the mill-go2 fixer override reads it to reconstruct its `fork_attempted`
-  predicate across a crash-resume, so the reader must not be removed as dead code. The
+  predicate, so the reader must not be removed as dead code. State the guarantee's scope exactly as
+  Shared Decision `fork-fallback-log-is-control-flow-state` frames it — the reader keeps a recorded
+  fallback cold across a resume;
+  it does not make forking idempotent across a crash that happens before any fallback is recorded.
+  The
   `append_fork_fallback_log` docstring must state that the row is committed before the cold retry is
   issued, and that this ordering is what makes the reconstruction available when it is needed.
 

@@ -38,13 +38,28 @@ Batch-local decisions live in each batch file._
 ### Decision: fork-fallback-log-is-control-flow-state
 
 - **Decision:** the `## Fork-fallback log` section in `status.md` is read back by the mill-go2 fixer
-  override to reconstruct its `fork_attempted` predicate after a crash-resume.
+  override to reconstruct its `fork_attempted` predicate.
   It is therefore control-flow state, not a write-only audit artifact, and both the helper docstrings
   and the override prose must say so explicitly.
+- **Scope of the guarantee — state it precisely, do not overclaim.** The reader prevents re-forking
+  **after a fallback has already been recorded**: it keeps the cold retry cold when the session dies
+  between the fallback commit and the retry's own completion, and it keeps later resumes cold for
+  that same scope and round.
+  It does **not** make forking idempotent across every crash.
+  A session that dies while a fork is still in flight, before any terminal failure is classified,
+  leaves no row, and the resumed session forks again for that scope and round.
+  That re-fork is the intended behaviour, not a leak: no terminal failure was ever classified, so
+  neither `cold-fallback-on-first-terminal-failure` nor the shared one-retry budget has been
+  consumed, and the resumed session is issuing that scope's genuine first attempt.
+  Discussion Decision `fork-attempted-must-survive-resume` additionally accepts one narrow true gap
+  — a death after the terminal failure but before the fallback row is committed, a single commit
+  wide, costing at most one extra fork attempt.
+  Closing it would require a pre-dispatch write, which would log fallbacks that never happened and
+  corrupt the fork-death-rate measurement the log exists to produce, so it is deliberately left open.
 - **Rationale:** the two existing audit logs it is modelled on (`## Tracked-file recovery log`,
   `## Inferred-success log`) have no reader, which is why neither has a read counterpart.
   A later maintainer who assumes the same of this section would delete the reader and silently
-  reintroduce the double-fork-on-resume bug that discussion review round 3 raised.
+  reintroduce the post-fallback double-fork that discussion review round 3 raised.
 - **Applies to:** all batches
 
 ### Decision: fork-covers-all-fixer-dispatch

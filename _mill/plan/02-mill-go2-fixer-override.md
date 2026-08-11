@@ -59,6 +59,11 @@ the role, carries the fork literal) rather than trying to validate the instructi
 
   - `mill-go2`'s extracted body is not `None`, is not the string `"(none)"`, contains the literal
     `fixer`, and contains the literal `subagent_type: "fork"`.
+  - `mill-go2`'s extracted body contains no line that is exactly `(none)` after stripping. The
+    not-exactly-`"(none)"` assertion above does not cover this: an override appended below a leftover
+    placeholder line makes the body no longer equal `"(none)"` while still carrying both required
+    literals, so every other assertion passes and the stale placeholder ships. This is its own
+    condition with its own `FAIL:` string, checked per line rather than against the whole body.
   - `mill-go`'s extracted body is not `None` and is exactly the string `"(none)"` after stripping.
     Write this as an equality, never a `"(none)" in body` containment check — the equality is what
     fails loudly if the extraction rule ever regresses to running to EOF and starts swallowing the
