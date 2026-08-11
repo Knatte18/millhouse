@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)'
 slug: mill-go-quality-gate-gaps
-approved: false
+approved: true
 started: 20260811-042158
 parent: hanf/mill-merge-in-recompute-baseline-crash
 root: ""

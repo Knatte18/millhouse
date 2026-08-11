@@ -81,7 +81,7 @@ This batch adds a `--prior-blocking <path>` CLI flag to `millpy-fix.py`, threads
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  - Follow this file's existing conventions exactly: the `_make_fixture(tmp_path)` tempfile-backed fixture helper, and `unittest.mock.patch.object(millpy_fix._render, "render", ...)` / `unittest.mock.patch.object(millpy_fix._implementer_claude, "run")`-style patching already used by its `--nits-only` / `NITS_ONLY_CARVEOUT` tests.
+  - Follow this file's existing conventions exactly: the `_make_fixture(tmp_path)` tempfile-backed fixture helper, and `unittest.mock.patch.object(millpy_fix._render, "render", ...)` / `unittest.mock.patch.object(millpy_fix._implementer_claude, "run")`-style patching already used elsewhere in this file. Note this file's existing `--nits-only` / `NITS_ONLY_CARVEOUT` tests patch `_render.render` with `return_value="Brief text"` only and assert on the JSON envelope, never on `call_args` — the new tests below are the first in this file to patch `_render.render` as a bare `Mock` and inspect `call_args` directly; follow the concrete instructions below exactly rather than an existing precedent for that specific pattern.
   - Add a test that runs `main(argv)` with `--stage prepare`, `--scope batch`, and `--prior-blocking <path>` pointing at a fixture file containing non-empty text, with `_render.render` patched as a bare `Mock` (not `return_value`-only, so `call_args` is inspectable) — assert `mock_render.call_args[0][1]["PRIOR_BLOCKING"]` equals the fixture file's exact text.
   - Add the same test for `--scope holistic`.
   - Add a test with `--prior-blocking` omitted entirely — assert `mock_render.call_args[0][1]["PRIOR_BLOCKING"] == "(none)"`.
