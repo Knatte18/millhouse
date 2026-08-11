@@ -681,7 +681,7 @@ converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelo
 
 - `converged is True`: proceed exactly as step 4's `APPROVE` branch describes (no behavior change).
 - `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the per-batch cleanup block, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
-- `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"mill-go: approve batch {batch_name}"`) so the shortfall is auditable.
+- `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: approve batch {batch_name}"`) so the shortfall is auditable.
 - Step 5 (Max-rounds exhaustion) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
@@ -1013,7 +1013,7 @@ converged = (H >= min_holistic_rounds) and not any(f.get("demoted") for f in env
 
 - `converged is True`: proceed exactly as the `APPROVE` branch describes (no behavior change).
 - `converged is False` AND `H < max_holistic_rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, "holistic-approved", ...)`, the approve-commit, the holistic cleanup block, "Proceed to Handoff"). Instead continue the loop to round H+1.
-- `converged is False` AND `H >= max_holistic_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"mill-go: holistic approve {slug}"`) so the shortfall is auditable.
+- `converged is False` AND `H >= max_holistic_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: holistic approve {slug}"`) so the shortfall is auditable.
 - Step 7 (Rounds exhausted) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
 For each round `H` from 1 to `max_holistic_rounds`:
