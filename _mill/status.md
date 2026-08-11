@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go2-implementer-override
+phase: holistic-reviewing
 slug: mill-go2-fork-implementer
 branch: hanf/mill-go2-fork-implementer
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-08-11T14:21:11Z'
 implementing  '2026-08-11T14:21:47Z'
 approved-status-fork-fallback-helper  '2026-08-11T14:26:14Z'
 approved-mill-go2-implementer-override  '2026-08-11T14:33:02Z'
+holistic-reviewing  '2026-08-11T14:33:31Z'
 ```
 
 ## Batches
