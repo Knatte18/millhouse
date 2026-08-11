@@ -89,8 +89,16 @@ reviews day to day.
   three are dispatched polymorphically by `provider` name (`_reviewer_single.run()` does
   `importlib.import_module(f"_llm_{provider}")`), so the return shape is a shared contract, not a
   per-module choice. `run_implementer()` (used by `millpy-implement.py`/`millpy-fix.py`, unrelated
-  callers) is explicitly NOT touched — only `run_bulk`/`run_tool_use`, confirmed used exclusively by
-  the three review backends (`_review_discussion.py`, `_review_plan.py`, `_review_code.py`).
+  callers) is explicitly NOT touched — only `run_bulk`/`run_tool_use`. Callers of
+  `run_bulk`/`run_tool_use`/`_reviewer_single.run` (re-enumerated including `integration_tests/`,
+  which an earlier `scripts/`-only grep missed): the three review backends
+  (`_review_discussion.py`, `_review_plan.py`, `_review_code.py`), **plus**
+  `plugins/mill/integration_tests/bench-reviewers.py`, a benchmarking tool that calls
+  `_reviewer_single.run()` directly and unpacks a bare `text, _sid = ...` 2-tuple. This file must be
+  updated in lockstep with the dataclass change (unpack the new fields it doesn't otherwise need, or
+  ignore them) — it is a real caller, not test fixture code exempt from the contract change, and
+  breaking it silently would go unnoticed since it runs outside the unit-test suite (`run-all.py`
+  doesn't cover `integration_tests/`).
 - Rationale: a dataclass avoids an ever-growing positional tuple across 3 provider modules and 3
   review backends' call sites; optional fields degrade cleanly per-provider/per-mode.
 - Rejected: growing the tuple arity (fragile positional unpacking at every call site); a plain dict
@@ -135,16 +143,72 @@ reviews day to day.
 - Rejected: blocking this task on a live-probe spike of the CLI's exact `result`-event schema before
   any code is written; skipping tool-call counting entirely.
 
-### Duration for multi-call rounds: sum across resume retries
+### `cost_usd` sourcing for Claude subprocess/psmux mode
 
-- Decision: When a round makes more than one `_invoke()` call (the `NEED_CONTEXT` retry path in
-  `_review_code.py::run()` / `_review_discussion.py` / `_review_plan.py`, which resumes the same
-  session with `resume=True` after re-attaching missing files), the round's persisted `duration_s`
-  is the sum of every `_invoke()` call's `dt` for that round, not just the final call's.
-- Rationale: the true cost of reaching that round's verdict includes every call it took, not just
-  the last one.
-- Rejected: reporting only the final call's duration (undercounts rounds that needed a
-  `NEED_CONTEXT` retry).
+- Decision: `_parse_stream_json()` opportunistically reads a `total_cost_usd` field from the
+  terminal `"result"` event, mirroring exactly how the `tool-call-counting` Decision treats
+  `num_turns` — extract it when present, leave `cost_usd: None` when the installed CLI's schema
+  doesn't carry it. No live-probe of the CLI is required before plan-writing (same deferral as
+  `num_turns`). The psmux branch (bypasses `_parse_stream_json()` entirely) always reports
+  `cost_usd: None` — there is no equivalent field in its raw-stdout capture. This mirrors the
+  `tool_calls` Decision's structure exactly, rather than leaving `cost_usd` a bare mention in
+  Technical context with no actual Decision behind it.
+- Rationale: `total_cost_usd` is documented as a field of the same `"result"` event `num_turns`
+  comes from, so the same extraction pass and the same opportunistic/no-guarantee treatment apply
+  without new mechanism.
+- Rejected: always `None` regardless of what the CLI exposes (throws away real data the CLI likely
+  already provides, same reasoning that made `num_turns` opportunistic rather than skipped);
+  blocking discussion on a live-probe (same reasoning as the `num_turns` deferral).
+
+### Duration for multi-call rounds: sum across every retry, at every layer
+
+- Decision: `duration_s` sums the wall-clock cost of every attempt a round actually took, at both
+  layers where a round can make more than one call:
+  1. **Cross-`_invoke()`-call summation** (`_reviewer_single.run()`-level resume calls): the
+     `NEED_CONTEXT` retry path in `_review_code.py::run()` / `_review_discussion.py` /
+     `_review_plan.py`, which calls `_reviewer_single.run(..., resume=True)` a second time within
+     the same round — the round's persisted `duration_s` is the sum of every such call's `dt`.
+  2. **Intra-`_invoke()` fast-fail-retry summation**: `_invoke()`'s subprocess branch (~lines
+     350-400) computes `dt = time.monotonic() - start` right after the *first* subprocess attempt,
+     then may fast-fail-retry (non-zero exit, <2s, empty stdout, not resume) and re-run the
+     subprocess — today `dt` is never recomputed after that retry, so a round hitting this path
+     would undercount to just the failed first attempt's sub-2-second time. Fix: move the `dt`
+     computation to after the fast-fail-retry block (i.e. compute `time.monotonic() - start` once,
+     at the very end of `_invoke()`, after any retry has completed) — since `start` is captured
+     once before the first attempt, this single end-of-function computation naturally sums both
+     attempts without needing an explicit accumulator.
+- Rationale: the true cost of reaching a round's verdict includes every call/attempt it took at
+  every layer, not just the last one — dropping either layer's retry time (call-level or
+  attempt-level) produces a silent undercount for exactly the rounds that had a rough edge (missing
+  context, or a flaky first subprocess attempt).
+- Rejected: reporting only the final call's/attempt's duration at either layer (undercounts exactly
+  the rounds this Decision exists to handle correctly).
+
+### Agent-mode duration across a transient re-dispatch
+
+- Decision: Under agent-mode (see "Agent-mode is in scope" Decision above), `mill-go-base/SKILL.md`
+  step 4(a) documents that a raw-API-error notification triggers one fresh re-dispatch (a brand-new
+  `Agent()` call with a fresh brief/session) before falling back or escalating; step 4(c) documents
+  that a stopped/interrupted notification can be *stale* — the orchestrator probes via `TaskOutput`
+  and, if the agent is still running, keeps waiting for its eventual real completion notification
+  without any new dispatch. These two cases are handled differently for `duration_s`:
+  - **Transient re-dispatch (4a):** sum the wall-clock of every dispatch attempt for the round —
+    the timer for the failed attempt (from its own `Agent()` call to the error notification) plus
+    the timer for the fresh re-dispatch, exactly the same "sum every attempt" rationale as the
+    subprocess/psmux Decision above.
+  - **Stale stop/interrupt probe-and-wait (4c):** this is NOT a re-dispatch — there is only ever one
+    `Agent()` call for that attempt. The orchestrator's single timer keeps running continuously
+    from that one `Agent()` call until whichever notification is ultimately treated as terminal for
+    it; no summation logic is needed because there is nothing to sum.
+- Rationale: consistent with the "true round cost" rationale already established for
+  `NEED_CONTEXT`/fast-fail-retry summation — a round that needed a fresh re-dispatch genuinely cost
+  the wall-clock of both attempts. The stale-notification case needed calling out explicitly because
+  it superficially resembles a retry (multiple notifications for one logical unit of work) but is
+  actually a single dispatch whose notification arrived late.
+- Rejected: measuring only the final successful dispatch's duration for the 4(a) case (undercounts,
+  same reasoning as every other retry-summation Decision); treating the 4(c) probe-and-wait as a
+  restart of the timer (would undercount by dropping the time already spent waiting before the
+  probe).
 
 ### Summary command: new dedicated command, per-task scope
 
@@ -181,10 +245,12 @@ reviews day to day.
 - **`_reviewer_single.run()`** (`_reviewer_single.py`) is the single dispatch point across
   providers — `provider == "test_stub"` short-circuits to `_reviewer_test_stub.run()`; otherwise
   `importlib.import_module(f"_llm_{provider}")` and calls `.run_tool_use` or `.run_bulk` depending
-  on `spec.get("tooluse")`. Confirmed callers of `run_bulk`/`run_tool_use`/`_reviewer_single.run`:
-  only `_review_code.py`, `_review_discussion.py`, `_review_plan.py` (grepped repo-wide).
-  `run_implementer` has different, unrelated callers (`millpy-implement.py`, `millpy-fix.py`) — not
-  in scope.
+  on `spec.get("tooluse")`. Confirmed callers of `run_bulk`/`run_tool_use`/`_reviewer_single.run`,
+  re-grepped across the whole repo (not just `plugins/mill/scripts/`): `_review_code.py`,
+  `_review_discussion.py`, `_review_plan.py`, **and** `plugins/mill/integration_tests/bench-reviewers.py`
+  (a benchmarking tool — calls `_reviewer_single.run()` directly and unpacks a bare 2-tuple; must be
+  updated in lockstep, see the dataclass Decision above). `run_implementer` has different, unrelated
+  callers (`millpy-implement.py`, `millpy-fix.py`) — not in scope.
 - **Second provider — `_llm_gemini.py`** mirrors `_llm_claude.py`'s `(text, session_id)` contract
   with its own `_parse_gemini_stream_json()`/`_invoke()`. Any return-shape change to the
   `run_bulk`/`run_tool_use` contract must land in this file too, in lockstep, plus
@@ -250,6 +316,10 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
 - **`_reviewer_test_stub.py` / `test-reviewers.py`**: update the stub's return shape to match;
   confirm `_reviewer_single.run()`'s polymorphic dispatch works unchanged for all three providers
   post-change.
+- **`plugins/mill/integration_tests/bench-reviewers.py`**: update its `text, _sid = _reviewer_single.run(...)`
+  unpack for the new dataclass return (see Technical context) — not a unit test, but a real caller
+  outside `run-all.py`'s coverage, so this update has no automated safety net and must be checked by
+  hand.
 - **`_review_common.py`** (TDD candidate): unit-test the yaml-header injection for the three new
   fields the same way `apply_actual_model_override()` is presumably already tested — cases:
   no existing fields (inject after fence), fields already present (rewrite in place), no yaml fence
@@ -321,3 +391,25 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   (missing the new yaml fields) — render as "n/a", or require a backfill migration? **A:**
   [auto-pick] Render `"n/a"` per missing cell at read time; no backfill. **Why:** old review files
   must stay readable; this is a read-time default, not a schema requirement.
+- **Q:** (Discussion review r1 gap) `_invoke()`'s fast-fail retry re-runs the subprocess but never
+  recomputes `dt` — should the persisted `duration_s` sum both attempts, or accept the undercount?
+  **A:** [auto-pick] Sum both attempts, by moving the `dt` computation to after the fast-fail-retry
+  block completes (since `start` is captured once before the first attempt, this naturally
+  accumulates without an explicit accumulator). **Why:** consistent with the "true round cost"
+  rationale already used for `NEED_CONTEXT` summation — an undercounted retry is the same class of
+  bug either way.
+- **Q:** (Discussion review r1 gap) Agent-mode's `mill-go-base/SKILL.md` step 4(a) triggers a fresh
+  re-dispatch on a raw-API-error notification, and step 4(c) can leave the orchestrator waiting
+  unboundedly for a stale stop/interrupt notification — should `duration_s` sum across either case?
+  **A:** [auto-pick] Sum across a 4(a) transient re-dispatch (two separate `Agent()` calls, same
+  round); do NOT restart the timer for a 4(c) stale-notification wait (one `Agent()` call, one
+  continuous timer — nothing to sum). **Why:** 4(a) is a genuine retry (same summation rationale as
+  every other retry Decision); 4(c) only superficially resembles one — restarting the timer there
+  would drop real elapsed time.
+- **Q:** (Discussion review r1 gap) The caller-enumeration for `run_bulk`/`run_tool_use`/
+  `_reviewer_single.run()` was grepped only under `plugins/mill/scripts/` — does a wider grep change
+  the "only 3 backends" scoping for the dataclass-conversion Decision? **A:** [auto-pick] Yes —
+  `plugins/mill/integration_tests/bench-reviewers.py` is a fourth caller (unpacks a bare 2-tuple
+  directly); it must be updated in lockstep, added to Technical context and Testing. **Why:** the
+  grep that produced "only 3" excluded `integration_tests/`; a real caller outside that scope would
+  silently break with no unit-test coverage to catch it.
