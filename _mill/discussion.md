@@ -610,6 +610,15 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   with its siblings is flagged to preserve as-is, not silently unify. **Why:** the "no review file"
   premise was checked against only one representative case, not the actual 5 call sites across all
   three backends — most of them do write a file, and `ERROR`'s "never in review files" schema rule
-  describes the finalized artifact, not this raw pre-validation text. **Why:** the two branches source duration from different places — a
+  describes the finalized artifact, not this raw pre-validation text.
+- **Q:** (Operator override, round 8) Round 8's reviewer dispatch was interrupted mid-run
+  (`status: killed`) and the operator instructed approving now and handing off rather than letting
+  round 8 run to completion — should the loop finish round 8 first? **A:** Operator decision: no —
+  stop the review loop here and proceed straight to Handoff. Rounds 1-7 each surfaced and fixed a
+  real, verified gap (agent-mode duration semantics, exception-path duration on both the call- and
+  parse-failure branches, caller-enumeration completeness, the fast-fail-retry gate, and the 4(c)
+  probe condition) — the discussion has been through 7 rounds of adversarial review with every
+  finding fixed, none pushed back. Round 8 was cut short by explicit operator instruction, not by
+  reviewer approval or the convergence gate; no round-8 findings exist to evaluate. **Why:** the two branches source duration from different places — a
   single "attach it to the exception" fix only worked for the branch that actually raises before
   ever getting a `ReviewerCallResult`.
