@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go2-scaffold
 branch: hanf/mill-go2-scaffold
 plan: _mill/plan
@@ -33,6 +33,7 @@ approved-repoint-refs  '2026-08-11T12:44:53Z'
 holistic-reviewing  '2026-08-11T12:45:17Z'
 holistic-fixing  '2026-08-11T12:49:55Z'
 holistic-reviewing  '2026-08-11T12:53:03Z'
+holistic-approved  '2026-08-11T12:56:20Z'
 ```
 
 ## Batches
