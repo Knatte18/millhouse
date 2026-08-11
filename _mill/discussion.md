@@ -278,23 +278,41 @@ reviews day to day.
      call returned normally), so this branch reads it directly from the already-obtained
      `ReviewerCallResult`, not via `getattr` on the caught exception, and includes it in this
      branch's own synthetic `ERROR` `reviews[...]` entry.
-  Neither branch ever calls `finalize()`, and because `ERROR` never appears inside a review file
-  (`review-output.schema.md`'s Verdict-vocabulary table: "`ERROR` ... never in review files"), both
-  branches' duration is envelope/print-only — no yaml-header injection happens for a round that
-  produced no review file at all, but the JSON envelope's `reviews[...]` entry and the
-  orchestrator's one-line post-round print both get it either way.
+  **Correction — the parse-failure branch usually DOES write a raw review file, unlike the
+  call-failure branch, which never does:** verified across all three backends, most
+  `except ReviewError` sites in the parse-failure path call `write_review_file()` with the raw
+  (unparsed) reviewer text and set `"file": str(path)` — `_review_code.py::run()`'s two sites
+  (~697-718, ~761-782), `_review_discussion.py::run()`'s site (~193), and `_review_plan.py`'s
+  per-batch-finalize site (~664-674) and holistic-run site (~1145-1153) all do this. Only
+  `_review_plan.py`'s per-batch `run()` site (~331-343) writes no file and sets `"file": None` — a
+  **pre-existing inconsistency** across `_review_plan.py`'s own three `ReviewError` sites, not
+  something this task introduces. So: `duration_s` for a parse-failure round is injected into that
+  raw file's yaml header via the same find-or-inject helper used elsewhere (see the "Persistence"
+  Decision), tolerant of a malformed or entirely absent yaml fence (the raw text is unparsed
+  reviewer output, not a schema-conformant review file, so the fence may not exist in the expected
+  shape) — falling back to envelope/print-only exactly like the call-failure branch when there is no
+  fence to anchor on, or (for `_review_plan.py`'s one no-file site specifically) when there is no
+  file at all. The pre-existing `_review_plan.py` file/no-file inconsistency itself is flagged here
+  for mill-plan/the implementer to preserve as-is (out of this task's scope to unify) rather than
+  silently paper over by, e.g., making all three sites write a file as an incidental side effect of
+  adding duration-injection code.
+  Because `ERROR` never appears inside a **schema-conformant** review file
+  (`review-output.schema.md`'s Verdict-vocabulary table: "`ERROR` ... never in review files" — that
+  rule describes the finalized, schema-conformant artifact `finalize_scope()`/`finalize()` produce,
+  not the raw unparsed text these `ReviewError` branches persist directly via `write_review_file()`
+  before any schema validation occurs), injecting `duration_s` into this raw file does not violate
+  that rule.
 - Rationale: a timed-out, rate-limited, or malformed-output round is exactly the highest-cost case
-  this feature exists to surface — silently dropping duration on *either* ERROR-producing branch
-  would hide expensive rounds from the one piece of tooling built to show cost. The two branches
-  need calling out separately because they get their duration from different places (an attribute on
-  the caught exception vs. a field on an already-successful call's return value) — a single
-  "attach it to the exception" fix, as originally written, only covered the first branch and would
-  have silently missed the second.
+  this feature exists to surface — silently dropping duration on *any* ERROR-producing branch would
+  hide expensive rounds from the one piece of tooling built to show cost, and a raw file that
+  already exists on disk for most of these rounds is a place to put it that costs nothing extra to
+  build (same find-or-inject helper, more tolerant fallback).
 - Rejected: leaving either ERROR branch with no duration at all (defeats the purpose for the worst
-  cases); trying to persist error-round duration into a review file (contradicts the schema's
-  explicit "ERROR never appears inside a review file" rule); reading `getattr(exc, "duration_s")` in
-  the `ReviewError` branch too (there is no exception attribute to read there — the call succeeded,
-  so the value lives on the return object, not on anything raised).
+  cases); assuming no review file ever exists for a parse-failure round (contradicted by source at 4
+  of 5 call sites); silently making `_review_plan.py`'s one no-file site start writing a file too
+  (unrelated scope creep into a pre-existing inconsistency this task didn't create); reading
+  `getattr(exc, "duration_s")` in the `ReviewError` branch (there is no exception attribute to read
+  there — the call succeeded, so the value lives on the return object, not on anything raised).
 
 ### Summary command: new dedicated command, per-task scope
 
@@ -424,8 +442,12 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   assert the synthetic `ERROR` `reviews[...]` entry from the `except LLMError` branch carries that
   value through; (2) mock a successful `_reviewer_single.run` (real `ReviewerCallResult` with a
   `duration_s`) whose text then fails `parse_verdict()`, assert the `except ReviewError` branch's
-  synthetic `ERROR` entry also carries that same `duration_s` through — this is the branch the
-  original "attach it to the exception" fix would have silently missed.
+  synthetic `ERROR` entry also carries that same `duration_s` through, AND assert the raw file
+  `write_review_file()` wrote for that branch gets `duration_s` injected into its (possibly
+  malformed) yaml header; (3) for `_review_plan.py`'s one no-file `ReviewError` site specifically
+  (its per-batch `run()` path), assert duration stays envelope/print-only (no file exists to inject
+  into) and that this pre-existing file/no-file inconsistency across `_review_plan.py`'s three
+  `ReviewError` sites is left as-is, not silently unified.
 - **Agent-mode dispatch**: update `test-agent-mode-dispatch.py` for the new finalize-stage flags
   (`--duration-s`, `--tool-calls`, `--cost-usd`) on the three review CLIs, including the
   agent-mode-specific case where `tool_calls`/`cost_usd` are omitted/`"n/a"` and only `duration_s`
@@ -575,6 +597,19 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   absent, the result is ambiguous and falls back to `TaskOutput`, which can land in either outcome.
   **Why:** SKILL.md step 4(c) states the file-exists case skips straight to "no longer running,"
   and the file-absent case explicitly says "the result is ambiguous ... fall back to `TaskOutput`" —
-  the discussion had the two conditions swapped. **Why:** the two branches source duration from different places — a
+  the discussion had the two conditions swapped.
+- **Q:** (Discussion review r7 gap) The exception-path duration Decision claimed the parse-failure
+  (`except ReviewError`) branch produces "no review file at all" — is that true across all three
+  backends? **A:** [auto-pick] No — 4 of 5 `ReviewError` call sites across `_review_code.py`,
+  `_review_discussion.py`, and `_review_plan.py` call `write_review_file()` and persist the raw,
+  unparsed reviewer text with a real `file` path; only `_review_plan.py`'s per-batch `run()` site
+  writes no file (`"file": None`) — a pre-existing inconsistency within `_review_plan.py` itself,
+  not something this task caused. Fix: `duration_s` gets injected into that raw file's yaml header
+  (same find-or-inject helper, tolerant of a malformed/absent fence since it's unparsed text) at the
+  4 sites that do write one; the 1 no-file site stays envelope/print-only, and its inconsistency
+  with its siblings is flagged to preserve as-is, not silently unify. **Why:** the "no review file"
+  premise was checked against only one representative case, not the actual 5 call sites across all
+  three backends — most of them do write a file, and `ERROR`'s "never in review files" schema rule
+  describes the finalized artifact, not this raw pre-validation text. **Why:** the two branches source duration from different places — a
   single "attach it to the exception" fix only worked for the branch that actually raises before
   ever getting a `ReviewerCallResult`.
