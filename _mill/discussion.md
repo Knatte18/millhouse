@@ -40,10 +40,10 @@ There is nothing further to wait for.
   cold-fallback, fallback-recording, and experiment-risk text described under Decisions.
 - `plugins/mill/unit_tests/test-mill-go-variants.py` — add one contract check locking the fork
   override's presence in `mill-go2` and its absence in `mill-go`.
-- `plugins/mill/scripts/_status.py` — add `append_fork_fallback_log`, an append-only audit-log
-  helper mirroring the existing `append_inferred_success_log`.
-  Required by Decision `fallback-record-must-not-overwrite-phase`;
-  this is the task's only production-code change.
+- `plugins/mill/scripts/_status.py` — add two helpers, the task's only production-code change:
+  `append_fork_fallback_log` (append-only, mirroring the existing `append_inferred_success_log`,
+  required by Decision `fallback-record-must-not-overwrite-phase`) and its companion reader
+  `read_fork_fallback_log` (required by Decision `fork-attempted-must-survive-resume`).
 - `plugins/mill/unit_tests/` — coverage for that helper (see `Testing` for whether it extends an
   existing file or adds one).
 
@@ -126,7 +126,7 @@ There is nothing further to wait for.
   imply a discrimination step that Override point A already performs structurally.
 - On the envelope field: `emit_prepare` does set `"role": role` unconditionally
   (`_implementer_common.py:1362`) and `millpy-fix.py` does pass the literal `"fix"`
-  (`millpy-fix.py:653-666`), so `role: "fix"` is present in every fixer envelope and is useful when
+  (`millpy-fix.py:655`), so `role: "fix"` is present in every fixer envelope and is useful when
   reading a transcript after the fact.
   Nothing in the override depends on it, and the override must not be written as though it does.
 - Rejected: keying on the envelope `role` field, the CLI name, or `subagent_type` — the first two
@@ -160,11 +160,14 @@ There is nothing further to wait for.
 - Decision: the `### fixer` override text must state its own applicability condition explicitly:
   it governs the **first** fixer dispatch for a given scope and round, and does **not** govern
   step 4's automatic re-dispatch.
-  The Builder tracks a local per-scope-per-round flag (e.g. `fork_attempted`), sets it when it
-  issues the forked dispatch, and uses the default `Agent()` call — the envelope's own
-  `subagent_type` and `model` — whenever that flag is already set.
-  The flag resets at the start of each new scope/round dispatch, so a later fix round in the same
-  task forks again rather than staying cold for the remainder of the run.
+  The Builder resolves a per-scope-per-round `fork_attempted` predicate, and uses the default
+  `Agent()` call — the envelope's own `subagent_type` and `model` — whenever it is true.
+  The predicate is true when **either** the Builder already issued a forked dispatch for this
+  scope and round in the current session, **or** a `## Fork-fallback log` row exists in `status.md`
+  for this scope and round.
+  It is scoped per scope/round, so a later fix round in the same task forks again rather than
+  staying cold for the remainder of the run.
+  See Decision `fork-attempted-must-survive-resume` for why the on-disk half is mandatory.
 - Rationale: the cold retry is not a fresh trip through the dispatch pattern's steps 1-3.
   Step 4(a) says "re-dispatch once immediately using a fresh brief and session"
   (`mill-go-base/SKILL.md:271`) and step 4(c) routes to "the existing one-retry transient
@@ -189,6 +192,47 @@ There is nothing further to wait for.
   editing the base to add an attempt-aware signal to Override point A (conflicts with
   `no-base-edits`, and would change shared machinery for one variant's benefit).
 
+### fork-attempted-must-survive-resume
+
+- Decision: the `fork_attempted` predicate must be reconstructible from disk, not held only in
+  Builder-session memory.
+  Add a companion read helper `_status.read_fork_fallback_log(status_path)` returning the logged
+  `(scope, round)` entries, and have the override's applicability condition consult it.
+- Rationale: `## Resume`'s `fixing` branch re-runs the whole dispatch flow in a **fresh Builder
+  session**: "in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the
+  current on-disk state.
+  Follow the Agent-mode dispatch pattern" (`mill-go-base/SKILL.md:964-969`).
+  That re-entry passes through step 3, so Override point A is consulted again with no memory of the
+  prior attempt.
+  A crash in the window between the fallback commit and the cold retry's own completion therefore
+  resumes onto `phase: fixing-{scope}-r{N}` and forks a **second** time — silently violating both
+  `cold-fallback-on-first-terminal-failure` (one fork, then cold) and
+  `fallback-consumes-existing-retry-budget` (mill-go2 tolerates exactly as much failure as
+  mill-go).
+  The fallback row is already on disk and already committed at that point, because
+  `record-the-fallback` writes and commits it *before* the cold retry is issued.
+  Reconstruction is therefore always available exactly when it is needed;
+  the ordering that makes this work is not incidental and must not be reordered.
+- Consequence: `## Fork-fallback log` is not purely an audit artifact — it is **control-flow
+  state**.
+  This distinguishes it from its two model helpers: nothing reads `## Tracked-file recovery log` or
+  `## Inferred-success log`, which is why neither has a read counterpart.
+  Say so explicitly wherever the new helpers are documented, so a later reader does not "clean up"
+  the log as write-only.
+- Residual risk, accepted and documented: if the orchestrator dies *after* the fork's terminal
+  failure but *before* the fallback row is committed, the resumed session sees no row and forks
+  again.
+  The window is a single commit wide, the outcome is one extra fork attempt rather than a
+  correctness failure, and closing it would require a pre-dispatch write — which would log
+  fallbacks that never happened and corrupt the very measurement
+  `record-the-fallback` exists to produce.
+  Accepting the narrow window is strictly better than poisoning the data.
+- Rejected: leaving the flag session-local and documenting double-fork-on-resume as residual risk
+  (the window is not narrow — it spans the entire cold-retry dispatch, which is the slowest part of
+  the round — and it breaks the retry-budget comparability the experiment is measured against);
+  having Resume write a phase literal to signal the attempt (reintroduces exactly the
+  `phase:`-overwrite breakage that `fallback-record-must-not-overwrite-phase` exists to avoid).
+
 ### fallback-consumes-existing-retry-budget
 
 - Decision: the cold fallback **consumes** the base's existing one-retry-transient budget.
@@ -210,7 +254,7 @@ There is nothing further to wait for.
   followed by
   `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: fork-fallback for fixer {scope} r{N}"`.
   `{scope}` is the batch name for batch scope and the literal `holistic` for holistic scope,
-  matching the `scope_label` the fix CLI already computes (`millpy-fix.py:655`).
+  matching the `scope_label` the fix CLI already computes (`millpy-fix.py:652`).
   `append_fork_fallback_log` is a **new helper this task adds** to `plugins/mill/scripts/_status.py`
   (see Decision `fallback-record-must-not-overwrite-phase` for why, and `Testing` for its coverage).
 - Rationale: how often a forked fixer dies is the single most valuable measurement this experiment
@@ -525,6 +569,23 @@ Do not re-test the lazy-section-insert machinery itself beyond the above — it 
 `_find_inferred_success_log_block`'s already-covered pattern, and the new helper's own
 `_find_fork_fallback_log_block` is a direct copy.
 
+**TDD candidate 1b — `_status.read_fork_fallback_log` in the same file.**
+The reader has no existing analog to copy (neither audit-log helper has one), so specify it fully:
+
+- Returns an empty list when the `## Fork-fallback log` section is absent entirely — the common
+  case, and the one the `fork_attempted` predicate hits on every non-fallback round.
+  This must **not** raise.
+- Round-trips what `append_fork_fallback_log` writes: append two rows with different
+  scope/round pairs, read them back, and get both with scope and round intact.
+- Round is returned as an `int`, not the string it is stored as — the predicate compares it against
+  the round number the Builder holds.
+- Distinguishes scopes that differ only by round, and rounds that differ only by scope, so the
+  predicate cannot false-positive across a `(batch-a, 1)` / `(batch-a, 2)` pair.
+
+The predicate this feeds is "does a row exist for this exact scope and round", so exact-match
+lookup on both fields is the behaviour that matters;
+ordering of the returned list is not contractual and should not be asserted.
+
 **TDD candidate 2 — the one new check in `test-mill-go-variants.py`.**
 Write the check first against the current `(none)` state, watch it fail, then write the override
 text and watch it pass.
@@ -670,6 +731,20 @@ instrument for that observation.
   skill`` line, or EOF — whichever comes first.
   **Why:** `## Dispatch overrides` is the last `##` header in both variant files, so the boilerplate
   has no header separating it from the section body.
+- **Q:** Discussion review r3 [BLOCKING]: `## Resume`'s `fixing` branch re-runs the dispatch flow in
+  a fresh Builder session, so a session-local `fork_attempted` flag is lost and the resumed session
+  re-forks instead of going cold.
+  **A:** [auto-pick] Make the predicate reconstructible from disk — add
+  `_status.read_fork_fallback_log` and consult it, since the fallback row is already written and
+  committed before the cold retry is issued.
+  **Why:** the alternative (document double-fork-on-resume as residual risk) leaves a window
+  spanning the entire cold-retry dispatch and breaks the retry-budget comparability the experiment
+  is measured against.
+  See Decision `fork-attempted-must-survive-resume`.
+- **Q:** Discussion review r3 [NIT]: `scope_label` was cited at `millpy-fix.py:655`.
+  **A:** [auto-pick] Corrected to `:652`;
+  `:655` is the literal `"fix"` role string, and the separate citation for that was tightened to
+  `:655` from a loose `:653-666` range at the same time.
 - **Q:** Is the "a fork notifies identically to a cold `Agent()` call" claim spike-confirmed?
   **A:** No — it is a mechanical inference;
   `harness-tool-contracts.md` spiked the Agent tool generally, not `subagent_type: "fork"`.
