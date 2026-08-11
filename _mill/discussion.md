@@ -64,6 +64,9 @@ There is nothing further to wait for.
   `subprocess`/`psmux` run of `/mill-go2` is unaffected and keeps today's `millpy-bg` behaviour.
   The hub config is `dispatch: agent` (`mill-config.yaml:10`), so the Agent-mode branch is the one
   that matters in practice.
+- Driver-session context growth over a long task, and any periodic driver re-fork or reset to
+  bound it.
+  See Decision `driver-context-growth-not-mitigated-here`.
 
 ## Decisions
 
@@ -206,6 +209,34 @@ There is nothing further to wait for.
   saying nothing (the cost then lives only in the wiki proposal, invisible to anyone reading the
   skill).
 
+### driver-context-growth-not-mitigated-here
+
+- Decision: this task adds no mitigation for unbounded driver-session context growth across a long
+  task.
+  The question is scoped out deliberately, not overlooked.
+- Provenance: this is the third of the three open questions carried by the sibling task's proposal
+  (`mill-go2-fork-implementer`), which this task's own wiki body incorporates by reference for the
+  shared Webster research.
+  This task's own body lists only two open questions, both of which are answered above —
+  the fallback-contract shape by `cold-fallback-on-first-terminal-failure` plus
+  `Technical context`'s "What is unchanged by forking", and the model/config-key question by
+  `driver-model-guardrail-is-documentation-only`.
+  It is recorded here so a cold reader can see it was considered.
+- Rationale: context growth is a property of the **driver session**, not of the fixer dispatch.
+  Any mitigation — periodic driver re-fork, a reset checkpoint between batches — would be
+  variant-wide machinery affecting every role, which collides with Decision `no-base-edits` and
+  with the 4096-byte variant cap.
+  It is also the wrong place to look first: the fixer is the cheapest fork in the system (NIT-fix
+  passes are narrow and there are few per task) against one implementer fork per batch, so if
+  driver bloat becomes real it will surface on the sibling task's implementer path long before it
+  surfaces here.
+  Finally, it is an observational question with no mechanical answer available yet — there is
+  nothing to build until a real `/mill-go2` run demonstrates the problem and shows its shape.
+- Rejected: adding a driver re-fork or reset mechanism in this task (variant-wide machinery,
+  requires base edits, and speculative ahead of any evidence);
+  leaving the question unmentioned (a cold reader cannot distinguish a considered omission from a
+  missed one, which is exactly the gap this entry closes).
+
 ### no-base-edits
 
 - Decision: `mill-go-base/SKILL.md` is not edited by this task, including its `Why not fork?`
@@ -305,8 +336,18 @@ pre-check does not apply to the fixer (`mill-go-base/SKILL.md:312-316`).
 **What is unchanged by forking.**
 Steps 4 (classification and recovery), 5 (write the notification message to `<brief_path>.out.md`),
 6 (`--stage finalize`), and 7 (branch on verdict) all operate on the `<task-notification>` and the
-`agentId`, both of which a fork delivers identically to a cold `Agent()` call — see
-`plugins/mill/docs/harness-tool-contracts.md:10-22` for the confirmed notification contract.
+`agentId`.
+`plugins/mill/docs/harness-tool-contracts.md:10-22` records the confirmed contract for those two
+things — a launch acknowledgement carrying an `agentId`, then exactly one combined-result
+`<task-notification>` with a `<status>` tag — but it was spiked against `Agent(subagent_type: ...)`
+generally and does **not** single out `subagent_type: "fork"`.
+That a fork delivers both identically is therefore a mechanical inference (same tool, same
+notification pipe), not an independently spike-confirmed fact.
+The inference is load-bearing: steps 4 through 7 are reused unchanged on the strength of it.
+It is also the cheapest thing to falsify — the very first `/mill-go2` run exercises it, and a fork
+whose notification shape differs would show up immediately as a misclassified dispatch rather than
+as a subtle wrong answer.
+If that happens, the fix is scoped to the override's fallback trigger, not to the base.
 Step 6 for `millpy-fix.py` still requires `--review-file` at every stage (its argparse validates
 before branching on `--stage`), still passes `--session-id` and `--start-sha`, still passes
 `--nits-only` when and only when the prepare envelope carried `nits_only: true`, and still needs an
@@ -453,6 +494,18 @@ instrument for that observation.
   **A:** [auto-pick] Extend `test-mill-go-variants.py` with one new check.
   **Why:** that file already owns every assertion about these two SKILL.md files;
   a second file would drift.
+- **Q:** The shared research carries a third open question — does the long-lived driver session need
+  to periodically re-fork or reset to bound its own context growth?
+  **A:** Scoped out explicitly, with no mitigation in this task.
+  **Why:** it is a driver-session property rather than a fixer-dispatch one, so any mitigation would
+  be variant-wide machinery colliding with `no-base-edits` and the byte cap;
+  and the implementer path forks far more often, so driver bloat would surface there first.
+  Recorded as a Decision so the omission is legible as a choice.
+- **Q:** Is the "a fork notifies identically to a cold `Agent()` call" claim spike-confirmed?
+  **A:** No — it is a mechanical inference;
+  `harness-tool-contracts.md` spiked the Agent tool generally, not `subagent_type: "fork"`.
+  Stated as an inference in `Technical context` rather than as a confirmed fact, and named as the
+  first thing a real run falsifies.
 - **Q:** Does `mill-go-base` need any edits, including to its `Why not fork?` section?
   **A:** [auto-pick] None — the override is purely additive in the variant file.
   **Why:** Override point A already consults the variant at every dispatch, and naming a specific
