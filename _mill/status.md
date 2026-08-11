@@ -41,7 +41,9 @@ batches:
     commit_sha: eea8c21c03b7be312219358516e2e1b30c7263b9
     verify_baseline_failures: []
   - name: thin-variants
-    state: pending
+    state: running
+    implementer_session: b2f72414-540a-4031-8b2a-f3e84a44cb95
+    start_sha: ea06108e82fedbefea3ed8d5de446bf169b5c5ba
     verify_baseline_failures: []
   - name: repoint-refs
     state: pending
