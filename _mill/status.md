@@ -6,6 +6,7 @@ slug: mill-go2-fork-implementer
 branch: hanf/mill-go2-fork-implementer
 plan: _mill/plan
 parent: main
+module_verify_baseline: clean
 task: 'mill-go2: fork-based implementer dispatch'
 task_description: |
   mill-go2: fork-based implementer dispatch
@@ -31,7 +32,11 @@ implementing  '2026-08-11T14:21:47Z'
 ```yaml
 batches:
   - name: status-fork-fallback-helper
-    state: pending
+    state: running
+    implementer_session: 9523b984-460c-47bf-8f98-09658f2dd8ee
+    start_sha: d09eb5710c0b084fb3af16ee3b1d3ac2f7105cc8
+    verify_baseline_failures: []
   - name: mill-go2-implementer-override
     state: pending
+    verify_baseline_failures: []
 ```
