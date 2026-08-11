@@ -514,13 +514,13 @@ def main(argv=None) -> int:
         return 1
 
     # Fail fast when a full-stage (in-process, synchronous) run is misrouted under agent-mode dispatch. --stage defaults to "full", so a bare invocation and an explicit `--stage full` both hit this guard;
-    # agent-mode hubs must instead go through the prepare/finalize two-call split (see mill-go/SKILL.md "## Agent-mode dispatch").
+    # agent-mode hubs must instead go through the prepare/finalize two-call split (see mill-go-base/SKILL.md "## Agent-mode dispatch").
     # Checked here -- immediately after cfg loads, before any git config check, slug resolution, or wiki daemon I/O -- so a misconfigured call fails in milliseconds rather than blocking for up to cfg["llm"]["implementer_timeout"] (default 1800s).
     if args.stage == "full" and _agent_dispatch.resolve_dispatch_mode(cfg) == "agent":
         print(
             "millpy-implement.py: --stage full is incompatible with dispatch: agent"
             " config. Use --stage prepare followed by --stage finalize instead"
-            " (see mill-go/SKILL.md \"## Agent-mode dispatch\").",
+            " (see mill-go-base/SKILL.md \"## Agent-mode dispatch\").",
             file=sys.stderr,
         )
         return 1
@@ -717,7 +717,7 @@ def main(argv=None) -> int:
     # snapshot_path always points to the same file name (derived from batch name) so a resume dispatch reuses the snapshot written by the original dispatch without re-capturing it, preserving the original new-dirt baseline.
     snapshot_path = project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"
 
-    # A re-run of `--stage prepare` (never `--stage full`, whose fresh-mint/transient-retry contract per mill-go/SKILL.md step 2 must not change) against a batch that a prior prepare call already dispatched -- state "running" with a session recorded -- must reuse that session_id/start_sha rather than minting fresh state.
+    # A re-run of `--stage prepare` (never `--stage full`, whose fresh-mint/transient-retry contract per mill-go-base/SKILL.md step 2 must not change) against a batch that a prior prepare call already dispatched -- state "running" with a session recorded -- must reuse that session_id/start_sha rather than minting fresh state.
     # Without this, a re-dispatched prepare (e.g.
     # mill-go resuming after a transient dispatch failure) would overwrite implementer_session in status.md and make a second "mill-go: start batch" commit, both of which corrupt state the agent-mode dispatch loop and finalize's completeness recount rely on (#625, #635, #643).
     # Resolved once, before the resume/fresh-mint branches below, so the three-way branch reads as: resume-after-incomplete, prepare-reuse, fresh-mint.

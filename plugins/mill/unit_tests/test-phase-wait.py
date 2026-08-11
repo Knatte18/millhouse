@@ -150,7 +150,7 @@ def main() -> int:
                     "end-to-end"
                 )
 
-        # Case 14: matches_wait_trigger — the six widened Entry-gate phase values mill-go/SKILL.md's "Mid-execution phase-gate widening" subsection routes on.
+        # Case 14: matches_wait_trigger — the six widened Entry-gate phase values mill-go-base/SKILL.md's "Mid-execution phase-gate widening" subsection routes on.
         widened_exact = {
             "implementing",
             "reviewing",

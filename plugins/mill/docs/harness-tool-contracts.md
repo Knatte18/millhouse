@@ -19,7 +19,7 @@ A background subagent dispatched via `Agent(subagent_type: ..., model: ..., prom
   Probe with `TaskOutput(task_id: <agentId>, block: false)` before trusting a stop/interrupt notification as terminal.
 - `agentId` is distinct from any LLM-conversation `session_id` / `implementer_session` recorded in `status.md` — the former is the harness worker handle, the latter identifies the LLM conversation for finalize/cleanup purposes.
 
-See `mill-go/SKILL.md`'s "## Agent-mode dispatch" section for the full dispatch/recovery pattern built on this contract.
+See `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for the full dispatch/recovery pattern built on this contract.
 
 ## Monitor tool
 
@@ -31,4 +31,4 @@ A poll script run via `Monitor(command: ..., persistent: true, ...)`:
   Do not conflate the two when writing a new entry-gate wait or similar poll-and-notify pattern.
 - Runs bash, not PowerShell, regardless of the operator's terminal — see `cli/SKILL.md`.
 
-See `mill-go/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section for two independent consumers of this contract.
+See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section for two independent consumers of this contract.
