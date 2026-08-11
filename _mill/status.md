@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-11T03:38:26Z'
+discussed  '2026-08-11T04:13:48Z'
 ```
