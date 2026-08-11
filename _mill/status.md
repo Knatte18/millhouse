@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-done-gate-lint-defaults
+phase: approved-mill-go-wire-prior-blocking-digest
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ implementing  '2026-08-11T04:34:15Z'
 approved-prior-blocking-digest-helper  '2026-08-11T04:40:58Z'
 approved-millpy-fix-prior-blocking-flag  '2026-08-11T04:44:19Z'
 approved-done-gate-lint-defaults  '2026-08-11T04:46:36Z'
+approved-mill-go-wire-prior-blocking-digest  '2026-08-11T04:48:59Z'
 ```
 
 ## Batches
@@ -47,7 +48,8 @@ batches:
     start_sha: b87c18498dbb5ec01d959e289b0580f05d80cb9e
     commit_sha: 77cb66266cdc6bf53076a5b86de741288e86cb73
   - name: mill-go-wire-prior-blocking-digest
-    state: running
+    state: approved
     implementer_session: 00d00f60-09c2-4e6e-b62c-24d617a8bfa9
     start_sha: 017f38cd1b280bb7f762c840fb4bce94f2d00573
+    commit_sha: 5b879212c89762fc27e99cb990028eb815ec693b
 ```
