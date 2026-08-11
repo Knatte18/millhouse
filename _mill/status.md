@@ -41,7 +41,9 @@ batches:
     commit_sha: 35119e763ec0d17e754b974faabac1fcd235628f
     verify_baseline_failures: []
   - name: done-gate-lint-defaults
-    state: pending
+    state: running
+    implementer_session: 848c10ad-5107-4c68-963b-f2267d7eb9af
+    start_sha: b87c18498dbb5ec01d959e289b0580f05d80cb9e
   - name: mill-go-wire-prior-blocking-digest
     state: pending
 ```
