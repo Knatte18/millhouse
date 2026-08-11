@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go2-scaffold
 branch: hanf/mill-go2-scaffold
 plan: _mill/plan
@@ -26,4 +26,17 @@ plan-review-r3  '2026-08-11T12:26:12Z'
 plan-fix-r3  '2026-08-11T12:26:12Z'
 plan-review-r4  '2026-08-11T12:30:08Z'
 planned  '2026-08-11T12:30:24Z'
+implementing  '2026-08-11T12:30:50Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: extract-base
+    state: pending
+  - name: thin-variants
+    state: pending
+  - name: repoint-refs
+    state: pending
 ```
