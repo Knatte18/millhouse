@@ -233,7 +233,15 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    Also extract from the envelope: `session_id` (string or null), `round` (integer), `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs), `effort` (string or null -- present only when the resolved spec has a non-null effort tier, e.g. `"high"`), and `output_path` (absolute path string -- present only on the three review CLIs' envelopes;
    used verbatim as `--agent-output` in step 6, never re-derived).
 
-3. **Call Agent tool:** Invoke the Agent tool with:
+3. **Call Agent tool:**
+
+   Override point A: consult your variant's `## Dispatch overrides` for this role; if it declares
+   one, follow it instead of the default `Agent()` call below. The role for the current dispatch is
+   the one named by the calling subsection (implementer, fixer, reviewer, or merge-in). A variant
+   whose `## Dispatch overrides` section contains only `(none)` declares no override for any role,
+   and the default `Agent()` call below applies unchanged.
+
+   Invoke the Agent tool with:
    - `subagent_type`: the value from step 2
    - `model`: the value from step 2
    - `prompt`: `"Read this file and follow the instructions exactly: <brief_path>"`
