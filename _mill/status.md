@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-fork-fallback-log
+phase: approved-mill-go2-fixer-override
 slug: mill-go2-fork-fixer
 branch: hanf/mill-go2-fork-fixer
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-review-r4  '2026-08-11T14:34:24Z'
 planned  '2026-08-11T14:34:34Z'
 implementing  '2026-08-11T14:35:10Z'
 approved-status-fork-fallback-log  '2026-08-11T14:40:28Z'
+approved-mill-go2-fixer-override  '2026-08-11T14:43:50Z'
 ```
 
 ## Batches
@@ -39,8 +40,9 @@ batches:
     commit_sha: de3642c6a56c526899dec6ceaed04d7f40646f02
     verify_baseline_failures: []
   - name: mill-go2-fixer-override
-    state: running
+    state: approved
     implementer_session: 03de3ad6-af51-4132-a7d8-e3b4cd7f8674
     start_sha: fd502fd0504f39433f0db6235f1db346d015e7df
+    commit_sha: d788f94415a249e2d20619e6eba7981ec86cd9ea
     verify_baseline_failures: []
 ```
