@@ -71,7 +71,7 @@ This is non-negotiable for new skills and applies retroactively — when you tou
 - **Never use `sed`.**
   It triggers a permission prompt on every invocation, which blocks unattended/autonomous runs.
   Use `Edit`/`Read`/`Write`, or `awk`/`grep`/plain `cat` for a genuine one-liner.
-  Applies to every Bash call made directly by the orchestrator (mill-start, mill-plan, mill-go,
+  Applies to every Bash call made directly by the orchestrator (mill-start, mill-plan, mill-go, mill-go2,
   and any skill that loads this file) and to any `Agent(subagent_type: "fork")` dispatch, which inherits this rule along with the rest of the parent's context.
 
 ## Worktree isolation

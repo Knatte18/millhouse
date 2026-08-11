@@ -1,14 +1,14 @@
 ---
-name: mill-go
-description: In a spawned worktree with an approved plan, sequentially execute every batch in the plan's DAG. Per batch spawn one implementer Sonnet, run code review, loop with receive-review on REQUEST_CHANGES, halt on stuck. Hand off to mill-finalize.
+name: mill-go2
+description: Experimental, opt-in variant of the mill-go orchestrator. Behaviourally identical to /mill-go today; exists so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.
 ---
 
-# mill-go
+# mill-go2
 
 ## Variant binding
 
 ```yaml
-VARIANT_LABEL: mill-go
+VARIANT_LABEL: mill-go2
 ```
 
 ## Driver preamble

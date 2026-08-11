@@ -20,7 +20,7 @@ No tracked `_mill/` file may be edited before step 6 — the one exception is st
    - `wiki_path = _paths.resolve_wiki_path(git_root)`
    - `worktree_root = _paths.resolve_hub_path()`
    - `cfg = _config.load_config(worktree_root, git_root)` — signature `_config.load_config(hub_root: Path, worktree_root: Path) -> dict`;
-     called with this exact `(hub_root, git_root)` argument shape for consistency with the established call pattern used elsewhere in the codebase, e.g. `mill-go/SKILL.md`'s "0.55" block.
+     called with this exact `(hub_root, git_root)` argument shape for consistency with the established call pattern used elsewhere in the codebase, e.g. `mill-go-base/SKILL.md`'s "0.55" block.
    - `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)` — on `_marker.MarkerError`, halt: "this worktree was not created by mill-spawn" (identical wording to `mill-start`'s Entry step 3 halt).
    - `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`
 

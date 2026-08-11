@@ -175,7 +175,7 @@ def _run_regression_locks() -> list[str]:
         )
 
     # #496 lock: check mill-go SKILL.md
-    mill_go_skill_path = SKILLS / "mill-go" / "SKILL.md"
+    mill_go_skill_path = SKILLS / "mill-go-base" / "SKILL.md"
     try:
         mill_go_skill_text = mill_go_skill_path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError) as e:
