@@ -96,7 +96,9 @@ reviews day to day.
   `ReviewerCallResult`, `run_implementer()`'s body must change to
   `result = _invoke(...); return result.text, result.session_id` purely to keep returning its old
   2-tuple shape to its own unrelated callers — a mechanical unwrap, not a scope expansion into
-  implementer/fixer cost-visibility. Callers of
+  implementer/fixer cost-visibility. The full list of callers needing a lockstep update (not just
+  this dataclass Decision's own scope) is maintained in one place — see the "Reliable caller
+  enumeration" Decision below — rather than repeated ad hoc here. Callers of
   `run_bulk`/`run_tool_use`/`_reviewer_single.run` (re-enumerated including `integration_tests/`,
   which an earlier `scripts/`-only grep missed): the three review backends
   (`_review_discussion.py`, `_review_plan.py`, `_review_code.py`), **plus**
@@ -217,6 +219,52 @@ reviews day to day.
   restart of the timer (would undercount by dropping the time already spent waiting before the
   probe).
 
+### Reliable caller enumeration: grep by exact symbol, not by directory guess
+
+- Decision: the caller list for `run_bulk`/`run_tool_use`/`_reviewer_single.run()` is not trustworthy
+  as a hand-maintained prose list — it has already been wrong twice during this discussion (missed
+  `integration_tests/` entirely in the first pass; missed two of three files under
+  `integration_tests/` in the follow-up pass that supposedly fixed that). The reliable method,
+  to be run once at implementation time (not re-derived by hand again): `grep -rn
+  "run_bulk(\|run_tool_use(\|_reviewer_single\.run(" plugins/mill --include="*.py"`, then exclude the
+  three defining files themselves (`_llm_claude.py`, `_llm_gemini.py`, `_reviewer_single.py`) from
+  the result. Running that exact command now (2026-08-11) against this repo produces the complete
+  set: `_review_code.py`, `_review_discussion.py`, `_review_plan.py` (the three review backends, as
+  already documented), plus `integration_tests/bench-reviewers.py`,
+  `integration_tests/smoke-llm-claude.py`, `integration_tests/smoke-llm-gemini.py` (all three
+  benchmarking/smoke-test tools — none covered by `run-all.py`), plus `unit_tests/test-llm-claude.py`,
+  `unit_tests/test-llm-gemini.py`, `unit_tests/test-reviewers.py` (already covered by the Testing
+  section). `_implementer_claude.py` calls only `run_implementer()` — confirmed out of scope,
+  unaffected. mill-plan should re-run this exact grep against the worktree at plan-writing time
+  (not trust this list as frozen) since new callers could appear between now and implementation.
+- Rationale: a manual, prose-only enumeration has now demonstrably missed real callers twice in this
+  same discussion; a named, reproducible command is the only way to make "the enumeration is
+  complete" a checkable claim instead of a repeatedly-wrong guess.
+- Rejected: another one-off manual grep pass with no reusable command named (would have the same
+  failure mode a third time); an import-graph static-analysis tool (more machinery than a two-clause
+  grep needs).
+
+### Duration on the exception/error path
+
+- Decision: `_invoke()`'s failure paths (raising `LLMError`, `LLMSessionError`, or
+  `LLMRateLimitError` — all three are plain `Exception` subclasses per `_llm_common.py`, carrying
+  only a message string today) gain an optional `duration_s` attribute, set to the elapsed
+  wall-clock (`time.monotonic() - start`, using the same `start` already captured at the top of
+  `_invoke()`) at the point each exception is raised. The three review backends'
+  `except LLMError as exc:` branches (e.g. `_review_code.py::run()` lines ~678-692, ~744-758, which
+  build a synthetic `verdict: "ERROR"` `reviews[...]` entry and never call `finalize()`) read
+  `getattr(exc, "duration_s", None)` and include it as that entry's `duration_s` field. Because
+  `ERROR` never appears inside a review file (`review-output.schema.md`'s Verdict-vocabulary table:
+  "`ERROR` ... never in review files"), this duration is envelope/print-only for error rounds — no
+  yaml-header injection happens for a round that produced no review file at all, but the JSON
+  envelope's `reviews[...]` entry and the orchestrator's one-line post-round print both get it.
+- Rationale: a timed-out or rate-limited round is exactly the highest-cost case this feature exists
+  to surface — silently dropping duration for every failure path would hide the most expensive
+  rounds from the one piece of tooling built to show cost.
+- Rejected: leaving error-path rounds with no duration at all (defeats the purpose for the worst
+  cases); trying to persist error-round duration into a review file (contradicts the schema's
+  explicit "ERROR never appears inside a review file" rule).
+
 ### Summary command: new dedicated command, per-task scope
 
 - Decision: New CLI `millpy-review-summary.py` + thin skill wrapper `mill-review-summary`, following
@@ -252,12 +300,15 @@ reviews day to day.
 - **`_reviewer_single.run()`** (`_reviewer_single.py`) is the single dispatch point across
   providers — `provider == "test_stub"` short-circuits to `_reviewer_test_stub.run()`; otherwise
   `importlib.import_module(f"_llm_{provider}")` and calls `.run_tool_use` or `.run_bulk` depending
-  on `spec.get("tooluse")`. Confirmed callers of `run_bulk`/`run_tool_use`/`_reviewer_single.run`,
-  re-grepped across the whole repo (not just `plugins/mill/scripts/`): `_review_code.py`,
-  `_review_discussion.py`, `_review_plan.py`, **and** `plugins/mill/integration_tests/bench-reviewers.py`
-  (a benchmarking tool — calls `_reviewer_single.run()` directly and unpacks a bare 2-tuple; must be
-  updated in lockstep, see the dataclass Decision above). `run_implementer` has different, unrelated
-  callers (`millpy-implement.py`, `millpy-fix.py`) — not in scope.
+  on `spec.get("tooluse")`. Complete caller list per the "Reliable caller enumeration" Decision's
+  named grep command (re-run 2026-08-11): `_review_code.py`, `_review_discussion.py`,
+  `_review_plan.py` (the three review backends), plus three integration/benchmark tools —
+  `integration_tests/bench-reviewers.py`, `integration_tests/smoke-llm-claude.py`,
+  `integration_tests/smoke-llm-gemini.py` — all three unpacking bare 2-tuples and all three outside
+  `run-all.py`'s unit-test coverage, so all three must be updated in lockstep by hand (see Testing).
+  `run_implementer` has different, unrelated callers (`millpy-implement.py`, `millpy-fix.py` via
+  `_implementer_claude.py`) — confirmed calling only `run_implementer()`, not `run_bulk`/
+  `run_tool_use` — not in scope.
 - **Second provider — `_llm_gemini.py`** mirrors `_llm_claude.py`'s `(text, session_id)` contract
   with its own `_parse_gemini_stream_json()`/`_invoke()`. Any return-shape change to the
   `run_bulk`/`run_tool_use` contract must land in this file too, in lockstep, plus
@@ -323,10 +374,12 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
 - **`_reviewer_test_stub.py` / `test-reviewers.py`**: update the stub's return shape to match;
   confirm `_reviewer_single.run()`'s polymorphic dispatch works unchanged for all three providers
   post-change.
-- **`plugins/mill/integration_tests/bench-reviewers.py`**: update its `text, _sid = _reviewer_single.run(...)`
-  unpack for the new dataclass return (see Technical context) — not a unit test, but a real caller
-  outside `run-all.py`'s coverage, so this update has no automated safety net and must be checked by
-  hand.
+- **`plugins/mill/integration_tests/{bench-reviewers,smoke-llm-claude,smoke-llm-gemini}.py`**: update
+  every `text, sid = ...` / `text, _sid = ...` unpack for the new dataclass return (see Technical
+  context's "Reliable caller enumeration" Decision for the exact grep that found all three) — none
+  are unit tests, all three are real callers outside `run-all.py`'s coverage, so these updates have
+  no automated safety net and must be checked by hand (run each script manually against a live
+  Claude/Gemini CLI, per their own docstrings, after editing).
 - **`_review_common.py`** (TDD candidate): unit-test the yaml-header injection for the three new
   fields the same way `apply_actual_model_override()` is presumably already tested — cases:
   no existing fields (inject after fence), fields already present (rewrite in place), no yaml fence
@@ -335,7 +388,9 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
 - **`_review_discussion.py` / `_review_plan.py` / `_review_code.py`**: update
   `test-review-discussion-flow.py`, `test-review-plan-flow.py`, `test-review-code-flow.py`,
   `test-review-finalize.py` for the new fields flowing into `result.reviews[...]` and
-  `ReviewResult.to_dict()`.
+  `ReviewResult.to_dict()`. Also add a case per backend for the exception-path `duration_s` Decision:
+  raise an `LLMError` with `duration_s` set from a mocked `_reviewer_single.run`, assert the
+  synthetic `ERROR` `reviews[...]` entry carries that `duration_s` value through unchanged.
 - **Agent-mode dispatch**: update `test-agent-mode-dispatch.py` for the new finalize-stage flags
   (`--duration-s`, `--tool-calls`, `--cost-usd`) on the three review CLIs, including the
   agent-mode-specific case where `tool_calls`/`cost_usd` are omitted/`"n/a"` and only `duration_s`
@@ -430,3 +485,24 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   correctly describing the external contract/scope — the mechanical unwrap isn't a scope expansion
   into implementer/fixer cost-visibility, it's required plumbing to avoid breaking an unrelated
   caller.
+- **Q:** (Discussion review r3 gap) `_invoke()`'s failure paths raise `LLMError`/`LLMSessionError`/
+  `LLMRateLimitError` instead of returning — since these carry only a message string and the review
+  backends' `except LLMError` branches never call `finalize()`, does duration get lost entirely for
+  timed-out/rate-limited/errored rounds? **A:** [auto-pick] Yes, today it would — fix: give the three
+  exception classes an optional `duration_s` attribute set at raise time; the backends' error
+  branches read it via `getattr` into the synthetic `ERROR` `reviews[...]` entry. This is
+  envelope/print-only (no review file exists for an `ERROR` verdict, per the schema doc). **Why:** a
+  timed-out or rate-limited round is exactly the highest-cost case this feature exists to surface —
+  losing duration there defeats the purpose for the worst rounds.
+- **Q:** (Discussion review r3 gap) The r1 fix widened the caller-enumeration list but a full
+  repo-wide grep (`grep -rn "run_bulk(\|run_tool_use(\|_reviewer_single\.run(" plugins/mill
+  --include="*.py"`) still finds two more unlisted callers (`smoke-llm-claude.py`,
+  `smoke-llm-gemini.py`) — is the enumeration method itself the problem, not just its current
+  output? **A:** [auto-pick] Yes — name the exact grep command as a Decision (not a prose list) so
+  "the enumeration is complete" becomes a checkable, reproducible claim; mill-plan re-runs it at
+  plan-writing time rather than trusting this discussion's list as frozen. Running it now surfaces
+  the complete set: the 3 review backends + `bench-reviewers.py` + `smoke-llm-claude.py` +
+  `smoke-llm-gemini.py` (integration/smoke tools, no `run-all.py` coverage) + the 3 already-listed
+  unit test files. **Why:** a manual prose enumeration has now been wrong twice in this same
+  discussion — a named, reproducible command is the only way to stop re-deriving an unreliable
+  answer by hand.
