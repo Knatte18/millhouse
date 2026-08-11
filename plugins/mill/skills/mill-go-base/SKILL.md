@@ -425,8 +425,10 @@ Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent
 A fork inherits the parent's context,
 but that inheritance costs three things every role above depends on: (1) a fork always runs on the **parent's model** and ignores a `model` override, breaking mill's per-role model assignment — implementer-class roles carry a literal `model:` key (`roles.implementer.model: sonnethigh`, `roles.fixer.model: haiku`, and merge-in's `model: haiku`, all in `plugins/mill/templates/mill-config.yaml`), while reviewer roles instead name a *reviewer* from `agents.yaml` (e.g. `roles.discussion-review.holistic.reviewer: sonnetmax` in the shipped template) whose model is resolved from that registry and mapped to an Agent tier by `_agent_dispatch.model_to_tier` — fork breaks both mechanisms, since it ignores the `model` argument either way;
 (2) a fork inherits the **parent's tools**, so a reviewer forked from mill-go would hold `Edit`, `Write`, and `Bash` beyond its briefs-scoped grant and lose its read-only guarantee;
-(3) a fork has **no on-disk brief**, so a forked dispatch cannot be resumed after a crash the way `--resume-incomplete` resumes a briefed dispatch.
-Fork is therefore used only in mill-start's Explore phase (see `mill-start/SKILL.md`), where none of these three disqualifiers apply.
+(3) a fork's **crash-resume path is unverified** — `millpy-implement.py --stage prepare` writes the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 4's liveness probe and step 6.5's warm resume depend on.
+mill-go2 accepts these trade-offs for the implementer role only, as an experiment — see its `## Dispatch overrides`;
+every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
+Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
 Fork's advertised "the child's tool output stays out of the parent" is **not** a differentiator here either — an ordinary fresh Agent call already keeps a subagent's tool output out of the parent's context.
 
 ### 0. Wiki health-check

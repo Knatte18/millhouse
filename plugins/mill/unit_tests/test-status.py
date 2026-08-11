@@ -14,6 +14,7 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _status import (
+    append_fixer_fork_fallback_log,
     append_fork_fallback_log,
     append_inferred_success_log,
     append_phase,
@@ -25,7 +26,7 @@ from _status import (
     read,
     read_batches,
     read_branch,
-    read_fork_fallback_log,
+    read_fixer_fork_fallback_log,
     read_full,
     read_slug,
     read_status,
@@ -1091,8 +1092,8 @@ def main() -> int:
                 pass
         print("PASS: append_inferred_success_log raises ValueError when the fenced block is unterminated")
 
-        # --- append_fork_fallback_log / read_fork_fallback_log tests ---
-        ts_ff = "2026-08-11T10:00:00Z"
+        # --- append_fork_fallback_log tests (implementer-role helper) ---
+        ts_ff = "2026-08-11T09:00:00Z"
 
         # Test 1: lazy section creation on first call.
         with tempfile.TemporaryDirectory() as tmp:
@@ -1104,7 +1105,106 @@ def main() -> int:
             assert "## Fork-fallback log" not in initial, (
                 "render_initial output should not pre-seed the fork-fallback-log section"
             )
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
+            append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+            contents = sp.read_text(encoding="utf-8")
+            assert "## Fork-fallback log" in contents, (
+                "fork-fallback-log heading not created on first call"
+            )
+            ff_lines = contents.splitlines()
+            heading_idx = ff_lines.index("## Fork-fallback log")
+            fence_open_idx = ff_lines.index("```text", heading_idx)
+            fence_close_idx = ff_lines.index("```", fence_open_idx + 1)
+            body = ff_lines[fence_open_idx + 1 : fence_close_idx]
+            expected_row = f"{quote_scalar(ts_ff)}  status-fork-fallback-helper"
+            assert body == [expected_row], f"unexpected fork-fallback-log body: {body!r}"
+            print("PASS: append_fork_fallback_log creates the section lazily on first call")
+
+            # Test 2: append-only on second call -- first row survives, second appended.
+            append_fork_fallback_log(
+                sp, "mill-go2-implementer-override", "2026-08-11T09:05:00Z"
+            )
+            contents2 = sp.read_text(encoding="utf-8")
+            ff_lines2 = contents2.splitlines()
+            heading_idx2 = ff_lines2.index("## Fork-fallback log")
+            fence_open_idx2 = ff_lines2.index("```text", heading_idx2)
+            fence_close_idx2 = ff_lines2.index("```", fence_open_idx2 + 1)
+            body2 = ff_lines2[fence_open_idx2 + 1 : fence_close_idx2]
+            expected_row2 = (
+                f"{quote_scalar('2026-08-11T09:05:00Z')}  mill-go2-implementer-override"
+            )
+            assert body2 == [expected_row, expected_row2], (
+                f"expected two rows with the first unchanged, got {body2!r}"
+            )
+            print("PASS: append_fork_fallback_log appends a second row without disturbing the first")
+
+        # Test 3: phase: is untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            before_full = read_full(sp)
+            append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+            after_full = read_full(sp)
+            assert after_full["yaml"]["phase"] == before_full["yaml"]["phase"], (
+                "phase: changed after append_fork_fallback_log"
+            )
+            assert after_full["timeline"] == before_full["timeline"], (
+                "## Timeline rows changed after append_fork_fallback_log"
+            )
+            print("PASS: append_fork_fallback_log does not disturb ## Timeline or the yaml block's phase:")
+
+        # Test 4: malformed section raises ValueError.
+        # 4a: heading present, no fenced block at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Fork-fallback log\n")
+            try:
+                append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+                assert False, "expected ValueError for missing fence"
+            except ValueError:
+                pass
+        print("PASS: append_fork_fallback_log raises ValueError when the fenced block is missing")
+
+        # 4b: heading present, opening fence present, no closing fence before EOF.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            with open(sp, "a", encoding="utf-8") as f:
+                f.write("\n## Fork-fallback log\n\n```text\n")
+            try:
+                append_fork_fallback_log(sp, "status-fork-fallback-helper", ts_ff)
+                assert False, "expected ValueError for unterminated fence"
+            except ValueError:
+                pass
+        print("PASS: append_fork_fallback_log raises ValueError when the fenced block is unterminated")
+
+        # --- append_fixer_fork_fallback_log / read_fixer_fork_fallback_log tests (fixer-role helper) ---
+        # Named distinctly from append_fork_fallback_log above -- see _status.py's docstring for
+        # why the two sibling-task audit helpers share the '## Fork-fallback log' section but not
+        # a function name.
+        ts_ffx = "2026-08-11T10:00:00Z"
+
+        # Test 1: lazy section creation on first call.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert "## Fork-fallback log" not in initial, (
+                "render_initial output should not pre-seed the fork-fallback-log section"
+            )
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
             contents = sp.read_text(encoding="utf-8")
             assert "## Fork-fallback log" in contents, (
                 "fork-fallback-log heading not created on first call"
@@ -1114,13 +1214,13 @@ def main() -> int:
             fence_open_idx = ffl_lines.index("```text", heading_idx)
             fence_close_idx = ffl_lines.index("```", fence_open_idx + 1)
             body = ffl_lines[fence_open_idx + 1 : fence_close_idx]
-            expected_row = f"{quote_scalar(ts_ff)}  batch-a  round 1"
+            expected_row = f"{quote_scalar(ts_ffx)}  batch-a  round 1"
             assert body == [expected_row], f"unexpected fork-fallback-log body: {body!r}"
-            print("PASS: append_fork_fallback_log creates the section lazily on first call")
+            print("PASS: append_fixer_fork_fallback_log creates the section lazily on first call")
 
             # Test 2: append-only on second call -- first row survives, second appended.
             # A "holistic" scope is paired here with a "batch-a" scope from Test 1's first row, covering both scope shapes the reader must discriminate.
-            append_fork_fallback_log(sp, "holistic", 2, "2026-08-11T10:05:00Z")
+            append_fixer_fork_fallback_log(sp, "holistic", 2, "2026-08-11T10:05:00Z")
             contents2 = sp.read_text(encoding="utf-8")
             ffl_lines2 = contents2.splitlines()
             heading_idx2 = ffl_lines2.index("## Fork-fallback log")
@@ -1132,7 +1232,7 @@ def main() -> int:
                 f"expected two rows with the first unchanged, got {body2!r}"
             )
             print(
-                "PASS: append_fork_fallback_log appends a second row without disturbing "
+                "PASS: append_fixer_fork_fallback_log appends a second row without disturbing "
                 "the first, covering both scope shapes"
             )
 
@@ -1140,15 +1240,15 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            append_fork_fallback_log(sp, "batch-a", 3, ts_ff)
+            append_fixer_fork_fallback_log(sp, "batch-a", 3, ts_ffx)
             contents = sp.read_text(encoding="utf-8")
             assert "batch-a  round 3" in contents, (
                 f"expected scope and round in row, got: {contents!r}"
             )
-            print("PASS: append_fork_fallback_log row contains scope and round number")
+            print("PASS: append_fixer_fork_fallback_log row contains scope and round number")
 
         # Test 4: does not disturb ## Timeline or the yaml block's phase: field.
         # This is the regression lock for the discussion-review round-1 BLOCKING finding: reusing
@@ -1158,20 +1258,20 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
             before_full = read_full(sp)
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
             after_full = read_full(sp)
             assert after_full["yaml"]["phase"] == before_full["yaml"]["phase"], (
-                "phase: changed after append_fork_fallback_log"
+                "phase: changed after append_fixer_fork_fallback_log"
             )
             assert after_full["timeline"] == before_full["timeline"], (
-                "## Timeline rows changed after append_fork_fallback_log"
+                "## Timeline rows changed after append_fixer_fork_fallback_log"
             )
             print(
-                "PASS: append_fork_fallback_log does not disturb ## Timeline or the yaml "
+                "PASS: append_fixer_fork_fallback_log does not disturb ## Timeline or the yaml "
                 "block's phase:"
             )
 
@@ -1180,34 +1280,34 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
             with open(sp, "a", encoding="utf-8") as f:
                 f.write("\n## Fork-fallback log\n")
             try:
-                append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
+                append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
                 assert False, "expected ValueError for missing fence"
             except ValueError:
                 pass
-        print("PASS: append_fork_fallback_log raises ValueError when the fenced block is missing")
+        print("PASS: append_fixer_fork_fallback_log raises ValueError when the fenced block is missing")
 
         # 5b: heading present, opening fence present, no closing fence before EOF.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
             with open(sp, "a", encoding="utf-8") as f:
                 f.write("\n## Fork-fallback log\n\n```text\n")
             try:
-                append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
+                append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
                 assert False, "expected ValueError for unterminated fence"
             except ValueError:
                 pass
         print(
-            "PASS: append_fork_fallback_log raises ValueError when the fenced block is "
+            "PASS: append_fixer_fork_fallback_log raises ValueError when the fenced block is "
             "unterminated"
         )
 
@@ -1216,60 +1316,60 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            result = read_fork_fallback_log(sp)
+            result = read_fixer_fork_fallback_log(sp)
             assert result == [], f"expected [] on absent section, got {result!r}"
-            print("PASS: read_fork_fallback_log returns [] on absent section without raising")
+            print("PASS: read_fixer_fork_fallback_log returns [] on absent section without raising")
 
         # Test 7: round-trip -- compared as a set of (scope, round) pairs, since list ordering
         # is explicitly not contractual.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
-            append_fork_fallback_log(sp, "holistic", 2, "2026-08-11T10:05:00Z")
-            entries = read_fork_fallback_log(sp)
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
+            append_fixer_fork_fallback_log(sp, "holistic", 2, "2026-08-11T10:05:00Z")
+            entries = read_fixer_fork_fallback_log(sp)
             pairs = {(e["scope"], e["round"]) for e in entries}
             assert pairs == {("batch-a", 1), ("holistic", 2)}, f"round-trip mismatch: {pairs!r}"
-            print("PASS: read_fork_fallback_log round-trips scope and round for both entries")
+            print("PASS: read_fixer_fork_fallback_log round-trips scope and round for both entries")
 
         # Test 8: round is returned as an int, not the string it is stored as.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
-            entries = read_fork_fallback_log(sp)
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
+            entries = read_fixer_fork_fallback_log(sp)
             assert isinstance(entries[0]["round"], int), (
                 f"expected round as int, got {type(entries[0]['round'])}"
             )
-            print("PASS: read_fork_fallback_log returns round as int")
+            print("PASS: read_fixer_fork_fallback_log returns round as int")
 
         # Test 9: exact-match discrimination -- stops the fork_attempted predicate
         # false-positiving across rounds of the same scope or scopes of the same round.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
-            append_fork_fallback_log(sp, "batch-a", 2, "2026-08-11T10:05:00Z")
-            append_fork_fallback_log(sp, "batch-b", 1, "2026-08-11T10:10:00Z")
-            entries = read_fork_fallback_log(sp)
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
+            append_fixer_fork_fallback_log(sp, "batch-a", 2, "2026-08-11T10:05:00Z")
+            append_fixer_fork_fallback_log(sp, "batch-b", 1, "2026-08-11T10:10:00Z")
+            entries = read_fixer_fork_fallback_log(sp)
             pairs = {(e["scope"], e["round"]) for e in entries}
             assert pairs == {("batch-a", 1), ("batch-a", 2), ("batch-b", 1)}, (
                 f"exact-match discrimination failed: {pairs!r}"
             )
             print(
-                "PASS: read_fork_fallback_log discriminates exactly across rounds of the "
+                "PASS: read_fixer_fork_fallback_log discriminates exactly across rounds of the "
                 "same scope and scopes of the same round"
             )
 
@@ -1278,23 +1378,23 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
-                "Task", "Desc", ts_ff, "main", slug="t-slug", branch="hanf/t-slug"
+                "Task", "Desc", ts_ffx, "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            append_fork_fallback_log(sp, "batch-a", 1, ts_ff)
+            append_fixer_fork_fallback_log(sp, "batch-a", 1, ts_ffx)
             contents = sp.read_text(encoding="utf-8")
             lines = contents.splitlines()
             heading_idx = lines.index("## Fork-fallback log")
             fence_open_idx = lines.index("```text", heading_idx)
             lines.insert(fence_open_idx + 1, "not a valid row")
             sp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            entries = read_fork_fallback_log(sp)
+            entries = read_fixer_fork_fallback_log(sp)
             assert len(entries) == 1, f"expected exactly one parsed row, got {entries!r}"
             assert entries[0]["scope"] == "batch-a" and entries[0]["round"] == 1, (
                 f"unexpected surviving entry: {entries[0]!r}"
             )
             print(
-                "PASS: read_fork_fallback_log skips a non-matching row inside the fence "
+                "PASS: read_fixer_fork_fallback_log skips a non-matching row inside the fence "
                 "rather than raising"
             )
 
