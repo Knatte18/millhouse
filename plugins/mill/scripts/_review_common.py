@@ -2183,6 +2183,76 @@ def rewrite_demoted_findings(raw_text: str, findings: list[Finding]) -> str:
     return raw_text
 
 
+def rewrite_verdict_token(raw_text: str, new_verdict: str) -> str:
+    """Rewrite raw_text's two persisted verdict tokens (the fenced-yaml `verdict:` field and the
+    `## Verdict` section's first line) to `new_verdict`, in place.
+
+    `finalize_scope` is the sole caller: after the blocking-class ceiling recomputes the verdict,
+    the on-disk artifact still shows the reviewer's original (pre-ceiling) verdict unless this
+    helper runs. It is a no-op-preserving companion to `rewrite_demoted_findings` -- the caller
+    (Card 7) gates whether this function is even invoked, so the "byte-identical when nothing needs
+    to change" guarantee is enforced one level up rather than inside this function.
+
+    Two independent in-place rewrites:
+    1. Fenced-yaml `verdict:` field -- reuses `apply_actual_model_override`'s header-fence-finding
+       scan verbatim as the location strategy: iterate ` ```yaml ` fence-delimited blocks, and the
+       block whose body contains a line matching `^verdict:\\s*\\S` is the header block. That
+       line's value is replaced in place, preserving its original trailing newline. If no
+       yaml-fenced block has a `verdict:` line, this half is left unmodified -- defensive only,
+       since `finalize_scope` only reaches this helper after `parse_verdict` already succeeded on
+       the same `raw_text`.
+    2. `## Verdict` section token -- per review-output.schema.md's `### \\`## Verdict\\`` contract
+       (a required section with exactly two lines: the verdict token, then a one-sentence
+       summary), scans for a line whose stripped content is exactly `## Verdict`, then finds the
+       first subsequent non-blank line -- that line is the verdict token. Only that line's content
+       is replaced, preserving its trailing newline; the following summary line is untouched. If
+       no `## Verdict` heading is found, this half is left unmodified -- defensive only, since
+       every template emits one.
+
+    Returns:
+        The rewritten text.
+    """
+    lines = raw_text.splitlines(keepends=True)
+
+    # Locate the yaml header block (the fenced block whose body carries the `verdict:` line) and
+    # rewrite that line's value in place.
+    index = 0
+    while index < len(lines):
+        if lines[index].rstrip("\n") != "```yaml":
+            index += 1
+            continue
+        block_end = index + 1
+        while block_end < len(lines) and lines[block_end].rstrip("\n") != "```":
+            block_end += 1
+        block_body_start = index + 1
+        for body_index in range(block_body_start, block_end):
+            if re.match(r"^verdict:\s*\S", lines[body_index]):
+                newline = "\n" if lines[body_index].endswith("\n") else ""
+                lines[body_index] = f"verdict: {new_verdict}{newline}"
+                break
+        else:
+            index = block_end + 1
+            continue
+        break
+
+    # Locate the `## Verdict` section heading and rewrite its first non-blank line (the verdict
+    # token itself), leaving the following one-sentence summary line untouched.
+    heading_index = None
+    for line_index, line in enumerate(lines):
+        if line.rstrip("\n") == "## Verdict":
+            heading_index = line_index
+            break
+    if heading_index is not None:
+        for line_index in range(heading_index + 1, len(lines)):
+            if lines[line_index].strip() == "":
+                continue
+            newline = "\n" if lines[line_index].endswith("\n") else ""
+            lines[line_index] = f"{new_verdict}{newline}"
+            break
+
+    return "".join(lines)
+
+
 def write_review_file(
     reviews_dir: Path,
     review_type: str,
@@ -2306,7 +2376,11 @@ def finalize_scope(
     findings before it is written; write_review_file with the (possibly-rewritten) text.
     `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
     the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
-    are no longer used on this path, per the single-pass-finding-extraction Shared Decision.
+    are no longer used on this path, per the single-pass-finding-extraction Shared Decision. When
+    this call's ceiling demotion actually flipped the recomputed verdict away from the reviewer's
+    original one, rewrite_verdict_token also rewrites the persisted file's fenced `verdict:` field
+    and `## Verdict` section token to match, so the on-disk artifact never disagrees with the
+    returned envelope's `verdict` for a demotion this call performed.
 
     The returned `verdict` is recomputed from the post-ceiling findings, per the
     verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
@@ -2337,19 +2411,29 @@ def finalize_scope(
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
-    verdict = parse_verdict(raw_text)
+    original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
+    demoted_any = False
     if blocking_classes is not None:
         findings = apply_blocking_ceiling(findings, blocking_classes)
+        demoted_any = any(f.demoted for f in findings)
         raw_text = rewrite_demoted_findings(raw_text, findings)
-    review_path = write_review_file(
-        reviews_dir, review_type, round_n, raw_text, scope=scope
-    )
     blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
     nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
 
+    verdict = original_verdict
     if verdict != "NEED_CONTEXT":
         verdict = "REQUEST_CHANGES" if blocking_count > 0 else "APPROVE"
+
+    # Only rewrite the persisted verdict tokens when THIS call's ceiling demotion actually
+    # flipped the recomputed verdict -- never for a pre-existing reviewer-stated/finding-count
+    # mismatch unrelated to demotion (that mismatch is surfaced via the returned envelope only).
+    if demoted_any and verdict != original_verdict:
+        raw_text = rewrite_verdict_token(raw_text, verdict)
+
+    review_path = write_review_file(
+        reviews_dir, review_type, round_n, raw_text, scope=scope
+    )
 
     effective_scope = scope if scope else "holistic"
 

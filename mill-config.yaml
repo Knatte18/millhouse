@@ -35,6 +35,7 @@ roles:
   discussion-review:
     holistic:
       rounds: 8
+      min_rounds: 1
       reviewer: sonnethigh
       blocking_classes: [design]
   plan-review:
@@ -44,15 +45,18 @@ roles:
       blocking_classes: [design, scope]
     holistic:
       rounds: 7
+      min_rounds: 1
       reviewer: sonnethigh
       blocking_classes: [design, scope]
   code-review:
     batch:
       rounds: 0
+      min_rounds: 1
       reviewer: null
       blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 5
+      min_rounds: 1
       reviewer: sonnethigh
       fallback_reviewer: null
       fallback_on:

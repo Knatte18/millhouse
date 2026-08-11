@@ -174,15 +174,25 @@ Returns a reviews[] entry dict.
                 f"Round {round_n} exceeds max {max_rounds} for plan review (batch={batch_path.stem})"
             )
 
-        raw_refs = parse_batch_refs(batch_path)
-        raw_refs_set = set(raw_refs)
+        # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
+        context_only_refs = parse_batch_refs(batch_path, fields=("Context",))
+        other_refs = parse_batch_refs(batch_path, fields=("Edits", "Creates", "Deletes"))
+        raw_refs = context_only_refs + other_refs
+        raw_refs_set = set(context_only_refs) | set(other_refs)
         # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets
-        reads = resolve_ref_paths(
-            raw_refs, project_root, root,
+        other_reads = resolve_ref_paths(
+            other_refs, project_root, root,
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
+        context_reads = resolve_ref_paths(
+            context_only_refs, project_root, root,
+            creates_union=combined_creates, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+            soft_fail_gitignored=True,
+        )
+        reads = [*other_reads, *context_reads]
 
         ancestors_on_disk = resolve_existing_paths(
             [raw for raw in combined_creates if raw not in raw_refs],
@@ -405,15 +415,25 @@ def prepare(
 
         round_n = discover_round(reviews_dir, "plan", scope)
 
-        raw_refs = parse_batch_refs(batch_path)
-        raw_refs_set = set(raw_refs)
+        # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
+        context_only_refs = parse_batch_refs(batch_path, fields=("Context",))
+        other_refs = parse_batch_refs(batch_path, fields=("Edits", "Creates", "Deletes"))
+        raw_refs = context_only_refs + other_refs
+        raw_refs_set = set(context_only_refs) | set(other_refs)
         # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets_union
-        reads = resolve_ref_paths(
-            raw_refs, project_root, root,
+        other_reads = resolve_ref_paths(
+            other_refs, project_root, root,
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
+        context_reads = resolve_ref_paths(
+            context_only_refs, project_root, root,
+            creates_union=combined_creates, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+            soft_fail_gitignored=True,
+        )
+        reads = [*other_reads, *context_reads]
 
         ancestors_on_disk = resolve_existing_paths(
             [raw for raw in combined_creates if raw not in raw_refs],
@@ -506,18 +526,30 @@ def prepare(
                 raise ReviewError("plan-review holistic reviewer is null")
             holistic_spec = _reviewers.resolve(registry, holistic_name)
 
-        # Union all Context:/Edits:/Creates: across all batch files
-        all_raw_refs: dict[str, None] = {}
+        # Union all Context:/Edits:/Creates: across all batch files.
+        # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
+        all_context_refs: dict[str, None] = {}
+        all_other_refs: dict[str, None] = {}
         for batch_path in batch_files:
-            for ref in parse_batch_refs(batch_path):
-                all_raw_refs[ref] = None
+            for ref in parse_batch_refs(batch_path, fields=("Context",)):
+                all_context_refs[ref] = None
+            for ref in parse_batch_refs(batch_path, fields=("Edits", "Creates", "Deletes")):
+                all_other_refs[ref] = None
+        all_raw_refs = {**all_context_refs, **all_other_refs}
         # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
         combined_creates = creates_union | moves_targets_union
-        all_reads = resolve_ref_paths(
-            list(all_raw_refs.keys()), project_root, root,
+        all_other_reads = resolve_ref_paths(
+            list(all_other_refs.keys()), project_root, root,
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
         )
+        all_context_reads = resolve_ref_paths(
+            list(all_context_refs.keys()), project_root, root,
+            creates_union=combined_creates, deletes_union=deletes_union,
+            wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+            soft_fail_gitignored=True,
+        )
+        all_reads = [*all_other_reads, *all_context_reads]
 
         all_creates_on_disk = resolve_existing_paths(
             [r for r in combined_creates if r not in all_raw_refs],
@@ -903,18 +935,30 @@ def run(
                 )
             print("[_review_plan] running holistic review", file=sys.stderr)
 
-            # Union all Context:/Edits:/Creates: across all batch files
-            all_raw_refs: dict[str, None] = {}
+            # Union all Context:/Edits:/Creates: across all batch files.
+            # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
+            all_context_refs: dict[str, None] = {}
+            all_other_refs: dict[str, None] = {}
             for batch_path in batch_files:
-                for ref in parse_batch_refs(batch_path):
-                    all_raw_refs[ref] = None
+                for ref in parse_batch_refs(batch_path, fields=("Context",)):
+                    all_context_refs[ref] = None
+                for ref in parse_batch_refs(batch_path, fields=("Edits", "Creates", "Deletes")):
+                    all_other_refs[ref] = None
+            all_raw_refs = {**all_context_refs, **all_other_refs}
             # Merge move targets into creates suppression set so downstream batches referencing a move target don't raise ReviewError.
             combined_creates = creates_union | moves_targets_union
-            all_reads = resolve_ref_paths(
-                list(all_raw_refs.keys()), project_root, root,
+            all_other_reads = resolve_ref_paths(
+                list(all_other_refs.keys()), project_root, root,
                 creates_union=combined_creates, deletes_union=deletes_union,
                 wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             )
+            all_context_reads = resolve_ref_paths(
+                list(all_context_refs.keys()), project_root, root,
+                creates_union=combined_creates, deletes_union=deletes_union,
+                wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
+                soft_fail_gitignored=True,
+            )
+            all_reads = [*all_other_reads, *all_context_reads]
 
             all_creates_on_disk = resolve_existing_paths(
                 [r for r in combined_creates if r not in all_raw_refs],

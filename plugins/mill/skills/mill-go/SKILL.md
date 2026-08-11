@@ -43,7 +43,9 @@ this skill is loaded defensively in case a future addition needs its numbered-op
    - `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent).
    - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
+   - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
+   - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `## Holistic code review` below.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
@@ -643,6 +645,20 @@ Skip the rest of this section.
 
 - Set batch state → `reviewing`, `review_round: 1`.
 - `extra_files = []`.
+- `min_batch_rounds = cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("min_rounds", 1)`.
+
+**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (step 4's `APPROVE` branch below), compute:
+
+```
+converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelope["findings"])
+```
+
+`envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
+
+- `converged is True`: proceed exactly as step 4's `APPROVE` branch describes (no behavior change).
+- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the per-batch cleanup block, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
+- `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"mill-go: approve batch {batch_name}"`) so the shortfall is auditable.
+- Step 5 (Max-rounds exhaustion) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
@@ -750,7 +766,10 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
      ```
-     Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path. After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"`. Invoke the per-batch cleanup block. Break out of the loop → next batch.
+     Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path.
+     After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
+     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Invoke the per-batch cleanup block. Break out of the loop → next batch.
+     If not `converged` and `N < roles.code-review.batch.rounds`: skip the terminal actions above and continue to round N+1 (re-dispatch code review for this batch).
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file.
      For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("mill-go.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`.
      Record this gap for mill-self-report (see Handoff).
@@ -957,7 +976,21 @@ If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a d
 Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
 
 `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`.
+`min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`.
 Loop variable `H` starts at 1. `extra_files = []`.
+
+**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (the `APPROVE` branch below), compute:
+
+```
+converged = (H >= min_holistic_rounds) and not any(f.get("demoted") for f in envelope["findings"])
+```
+
+`envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
+
+- `converged is True`: proceed exactly as the `APPROVE` branch describes (no behavior change).
+- `converged is False` AND `H < max_holistic_rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, "holistic-approved", ...)`, the approve-commit, the holistic cleanup block, "Proceed to Handoff"). Instead continue the loop to round H+1.
+- `converged is False` AND `H >= max_holistic_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"mill-go: holistic approve {slug}"`) so the shortfall is auditable.
+- Step 7 (Rounds exhausted) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
 For each round `H` from 1 to `max_holistic_rounds`:
 
@@ -1171,7 +1204,10 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
    ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path. After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: holistic approve {slug}"`, where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Invoke the holistic cleanup block. Proceed to Handoff.
+   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
+   After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
+   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "mill-go: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Invoke the holistic cleanup block. Proceed to Handoff.
+   If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer;
    the fixer loads `mill-receiving-review` (see Principles below).
