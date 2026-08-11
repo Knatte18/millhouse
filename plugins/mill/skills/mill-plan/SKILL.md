@@ -116,7 +116,7 @@ Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exis
 Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
 **Fork scope guardrail.** mill-plan has no fork-dispatch guidance today;
-prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `mill-go/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
+prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
 
 Reserve `Agent(subagent_type: "fork")` for research that genuinely depends on the parent's in-flight reasoning to be useful.
 When a fork IS used under that narrower justification, all of the following apply: (a) The fork's prompt must explicitly forbid Edit/Write calls, forbid mutating Bash commands, and forbid touching `plan_dir`, `status_path`, or any `mill-config.yaml`/`config.local.yaml`. (b) Immediately BEFORE dispatching the fork, capture a `git status --porcelain` snapshot (scoped to the worktree) as a baseline.
@@ -359,7 +359,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
    If `subprocess` or `psmux`: use the subprocess branch below.
@@ -378,7 +378,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
      the same cycle repeats).
      Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
    - **If `errors` key is absent** (validator success): The envelope contains `{"stage": "prepare", "brief_path": ..., ...}`.
-     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `mill-go/SKILL.md` "## Agent-mode dispatch").
+     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `mill-go-base/SKILL.md` "## Agent-mode dispatch").
 
    The discriminator is the **presence of the `errors` key in the JSON**, not the exit code or any other field.
    Validator errors emit exit code 1 with `errors` in the JSON;
@@ -393,7 +393,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize, including any validator-fix re-invocation cycle), and on trigger call _status.append_recovery_log the same way.
    This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
@@ -449,7 +449,7 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
