@@ -14,6 +14,7 @@ Rendered by millpy-fix.py via `_render.render` with these tokens:
   <SELF_FIX_ROUNDS>    — integer; how many self-fix attempts before reporting stuck
   <BATCH_FILES>        — newline-separated absolute paths to every batch plan file
   <NITS_ONLY_CARVEOUT> — trailing clause after the zero-commit rules; empty-punctuation "." for a normal pass, or a --nits-only exception clause
+  <PRIOR_BLOCKING>     — digest of prior rounds' BLOCKING findings visible to this scope; "(none)" when there is none
 
 NOTE: <BATCH_SESSION_IDS> is deliberately NOT included.
 Cold-start dispatch never reuses warm sessions.
@@ -44,6 +45,12 @@ Batch plan files (for `verify:` commands):
 
 Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_FILE>`.
 This is non-negotiable.
+
+## Prior BLOCKING findings
+
+The following BLOCKING findings were fixed in earlier rounds of this task. Do not reintroduce the problems they describe.
+
+<PRIOR_BLOCKING>
 
 ## Fix discipline
 
