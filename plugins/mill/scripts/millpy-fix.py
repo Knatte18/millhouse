@@ -262,6 +262,15 @@ def main(argv=None) -> int:
         action="store_true",
         help="Fix nits only (write nits-fixed marker if successful).",
     )
+    parser.add_argument(
+        "--prior-blocking",
+        default=None,
+        help=(
+            "Path to a file containing a digest of prior rounds' BLOCKING findings "
+            "for this scope. Used with --nits-only so the fixer does not blindly "
+            "reintroduce an earlier BLOCKING problem. Omit if none available."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # Validate mutual constraints
@@ -376,6 +385,7 @@ def main(argv=None) -> int:
     if not review_file.exists():
         print(f"review file not found: {review_file}", file=sys.stderr)
         return 1
+    prior_blocking_path = Path(args.prior_blocking) if args.prior_blocking else None
 
     plan_base = _paths.resolve_task_path(project_root, "_mill/plan/")
     overview_path = plan_base / "00-overview.md"
@@ -454,6 +464,20 @@ def main(argv=None) -> int:
         if args.nits_only
         else "."
     )
+
+    # Build the prior-BLOCKING digest text for the <PRIOR_BLOCKING> render token.
+    # A missing path, a non-existent file, and an existing-but-empty (or whitespace-only) file
+    # all read as "(none)" -- unlike _review_code.py's --prior-notes handling, which only checks
+    # file-existence, because build_digest can legitimately return "" and the orchestrator always
+    # writes that empty string to disk rather than skipping the write (empty-digest-file-reads-as-none).
+    if (
+        prior_blocking_path is not None
+        and prior_blocking_path.is_file()
+        and prior_blocking_path.read_text(encoding="utf-8").strip()
+    ):
+        prior_blocking_text = prior_blocking_path.read_text(encoding="utf-8")
+    else:
+        prior_blocking_text = "(none)"
 
     # Branch on scope (for prepare and full stages)
     if args.scope == "batch":
@@ -535,6 +559,7 @@ def main(argv=None) -> int:
                     batch_file
                 ),
                 "NITS_ONLY_CARVEOUT": nits_only_carveout,
+                "PRIOR_BLOCKING": prior_blocking_text,
             },
         )
 
@@ -599,6 +624,7 @@ def main(argv=None) -> int:
                 "SELF_FIX_ROUNDS": str(self_fix_rounds),
                 "BATCH_FILES": batch_files_text,
                 "NITS_ONLY_CARVEOUT": nits_only_carveout,
+                "PRIOR_BLOCKING": prior_blocking_text,
             },
         )
 
