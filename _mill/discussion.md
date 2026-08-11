@@ -95,10 +95,33 @@ base skill that both orchestrators load.
 ### override-point-terminology
 
 - Decision: the two variant-fillable sections are called **override points**. The word **hook** must
-  not be used for them anywhere — in the SKILL files, the plan, commit messages, or code comments.
+  not be introduced to describe them anywhere — in the SKILL files, the plan, commit messages, or
+  code comments. This is a ban on *new* usage naming the override mechanism, not a global ban on the
+  English word: `mill-go/SKILL.md` already contains two incidental occurrences that move to the base
+  unchanged under the byte-for-byte rule ("At the hook point, run all of:" in the per-batch baseline
+  recapture section, and "this mode has no separate finalize call to hook before" in the Implement
+  section). Neither refers to an override point, and neither is reworded.
 - Rationale: `hook` already means Claude Code's `settings.json` hook mechanism (`PreToolUse`,
   `UserPromptSubmit`, …). Overloading it in mill's own docs would make both meanings ambiguous.
-- Rejected: "hook", "extension point", "slot".
+  Scoping the ban to new override-point usage keeps it from colliding with the byte-for-byte move
+  guarantee — a blanket textual ban would force a silent reword of source text this task promises
+  not to touch.
+- Rejected: "hook", "extension point", "slot" as the term. Also rejected: a blanket
+  no-`hook`-anywhere rule, for the collision described above.
+
+### preamble-to-base
+
+- Decision: the pre-`## Entry` preamble of today's `mill-go/SKILL.md` — the `> Wiki access:` banner
+  and the "You are the **Builder** — a lean orchestrator" role paragraph — moves to `mill-go-base`.
+  It is not reproduced in either thin variant. Each of the three files carries its own `---`
+  frontmatter and its own `# <name>` title.
+- Rationale: both are machinery-level instructions to whoever is driving the batch loop, and the
+  driver is the base. Reproducing them per variant would recreate exactly the duplication
+  `three-file-split` exists to remove. This also settles the `test-guards.py` allowlist concretely:
+  the banner is the only line in the entire file matching `_WIKI_CWD_PATTERNS`, so the allowlist
+  entry follows it to the base — `mill-go-base/SKILL.md` is added, `mill-go/SKILL.md` is removed,
+  and `mill-go2/SKILL.md` is never added.
+- Rejected: reproducing the preamble in each thin variant; leaving its destination unstated.
 
 ### two-override-points
 
@@ -224,14 +247,39 @@ subsections `### 0.` through `### 3.` plus `### Stuck escalation` / `### Blocked
 `## Holistic code review`, `## Handoff`, `## Principles`, `## Board discipline`. All of it moves to
 the base.
 
+The pre-`## Entry` preamble — the `> Wiki access:` banner and the "You are the **Builder** — a lean
+orchestrator" role paragraph — also moves to the base; see the `preamble-to-base` Decision. Each of
+the three files keeps its own `---` frontmatter and its own `# <name>` title line, which is the only
+text that is necessarily per-file rather than moved.
+
 ### What is parameterized in the base
 
-- 20 SKILL-authored `commit -m "mill-go: …"` messages, at lines 195, 275, 350, 632, 643, 670, 771,
-  839, 850, 861, 866, 870, 872, 1074, 1162, 1182, 1184, 1209, 1226, 1229.
-- 7 `_notify.notify("mill-go.…")` event names, at lines 774, 839, 876, 1162, 1171, 1182, 1184, 1371.
-- The `[mill-go]` prefix in operator-facing echo/halt strings (e.g. lines 22, 539, 574).
+Three literal families become `VARIANT_LABEL`. **Do not work from a hand-copied line list** — this
+repo is self-hosting and `mill-go/SKILL.md` is under active development, so line numbers will have
+shifted by the time the plan is written and again by the time it is implemented. Regenerate the work
+inventory with these commands, run from the task worktree:
 
-Everything else is moved byte-for-byte.
+```bash
+F=plugins/mill/skills/mill-go/SKILL.md
+grep -n 'commit -m "mill-go: ' "$F"          # SKILL-authored commit subjects
+grep -n '_notify\.notify("mill-go\.'  "$F"   # notify event names
+grep -n '\[mill-go\]' "$F"                   # operator-facing echo/halt prefixes
+```
+
+Counts as of commit `6442a688` (2026-08-11), for sanity-checking the grep output — a mismatch means
+mill-go changed since this discussion, which is information, not an error:
+
+| Family | Sites | Notes |
+| --- | --- | --- |
+| `commit -m "mill-go: …"` | 26 | |
+| `_notify.notify("mill-go.…")` | 8 call sites | 5 distinct event names: `blocked` (×4), `done`, `holistic-fallback`, `review-exhausted`, `review-need-context` |
+| `[mill-go]` echo/halt prefix | 10 | |
+
+Every one of these sites must be parameterized. A missed site silently keeps a `mill-go:` prefix
+under mill-go2, defeating `variant-label-in-logs`.
+
+Everything else is moved byte-for-byte, with one narrow exception recorded under
+`preamble-to-base` below (each file necessarily carries its own frontmatter and `# <name>` title).
 
 ### Cross-references that must be repointed
 
@@ -255,9 +303,12 @@ Its content stays accurate for both variants as of this task, since neither fork
 ### Test locks that must be updated
 
 - `plugins/mill/unit_tests/test-guards.py:141` — `_WIKI_CWD_ALLOWLIST` contains
-  `"plugins/mill/skills/mill-go/SKILL.md"`. The wiki-cwd patterns it allowlists move to the base, so
-  the base path must be added. Whether the mill-go entry is then removed depends on whether any such
-  pattern remains in the thin variant file — it should not.
+  `"plugins/mill/skills/mill-go/SKILL.md"`. Exactly one line in the whole file matches
+  `_WIKI_CWD_PATTERNS`: the `> Wiki access:` banner in the pre-Entry preamble. Per `preamble-to-base`
+  that banner moves to the base, so: add `"plugins/mill/skills/mill-go-base/SKILL.md"`, remove the
+  `mill-go` entry, and do not add `mill-go2`. The removal is not optional bookkeeping — leaving a
+  stale allowlist entry would mask a future reintroduction of a wiki-cwd pattern into the thin
+  variant.
 - `plugins/mill/unit_tests/test-skill-helper-drift.py:178,185` — reads `mill-go/SKILL.md` and asserts
   the literal `reviews_dir = hub / '_mill/reviews'` is present (the #496 regression lock). That
   string moves to the base; the test must follow it.
@@ -344,7 +395,12 @@ Scenarios it must cover:
 - `mill-go-base/SKILL.md` contains the directive that halts when no variant bound a `VARIANT_LABEL`.
 - Neither variant file contains the machinery — a size or marker assertion catching a future
   regression where someone re-inlines the base into a variant.
-- The word `hook` does not appear in any of the three files (per `override-point-terminology`).
+- The override points are never described as "hooks": the assertion is scoped to the two override
+  point section headers and the base's two directives that consult them, **not** a global search for
+  the word in the file. A blanket search would fail immediately on the two incidental pre-existing
+  occurrences the base inherits byte-for-byte — see `override-point-terminology`. Asserting the
+  scoped form and asserting the absence of those two known strings are different tests; only the
+  scoped one is wanted.
 
 **Updated existing tests.** `test-guards.py` and `test-skill-helper-drift.py` must pass with their
 locks retargeted at the base. These are updates to existing assertions, not new scenarios.
@@ -370,4 +426,7 @@ review, and handoff. This is what proves the base survived extraction; no file-l
 - **Q:** Should anything currently inline in mill-go's prose be extracted into a `_*.py` helper first? **A:** No.
 - **Q:** Had the Webster module in Loomyard been read in detail? **A:** Not until asked; reading it produced the second override point, since a fork inheriting the base's driver instructions can misidentify itself as the driver — Webster treats that as run-fatal and guards it in the driver's own prompt, which override point A alone cannot express.
 - **Q:** Declare the driver-preamble override point now, or let the fork task add it? **A:** Now — deferring it would force the fork task to reopen the base, which is the coupling this task exists to remove.
-- **Q:** Terminology for the two variant-fillable sections? **A:** "Override point". "Hook" is banned — it already means Claude Code's settings.json hook mechanism.
+- **Q:** Terminology for the two variant-fillable sections? **A:** "Override point". "Hook" is banned as a *new* name for the mechanism — it already means Claude Code's settings.json hook mechanism — but the ban does not extend to two incidental pre-existing occurrences of the English word that the base inherits byte-for-byte.
+- **Q:** Should the parameterization inventory be hand-enumerated line numbers, or regenerated by grep at implementation time? **A:** Grep commands, with the verified counts kept only as an as-of-commit sanity check. Line numbers in a self-hosting repo go stale between discussion, plan, and implementation.
+- **Q:** Where does the pre-Entry preamble (wiki-access banner, Builder role paragraph) go? **A:** To the base, not reproduced per variant — which also settles the test-guards allowlist as base-added / mill-go-removed / mill-go2-never-added.
+- **Q:** How should the remaining review rounds be handled? **A:** Operator delegated all of them: apply the recommended resolution to every gap and every NIT without prompting, for all rounds.
