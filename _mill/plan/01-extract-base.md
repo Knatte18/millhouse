@@ -60,14 +60,21 @@ the thin `mill-go/SKILL.md` in its place.
   this description is what appears in the operator's skill list and in the generated root skills
   index, so it must not read as an invocable orchestrator.
   (3) Change the H1 title line `# mill-go` to `# mill-go-base`.
+  (4) Repoint the file's one self-reference: in the `## Agent-mode dispatch` step-6 paragraph about
+  passing `--actual-model <value>` to the three review CLIs, the phrase "the `effort-tier-review-cli`
+  batch's step-3 `mill-go/SKILL.md` edit" cites this file by its old path. Change that citation to
+  `mill-go-base/SKILL.md`. Locate it with `grep -n 'mill-go/SKILL\.md'` against the relocated file
+  rather than by line number — it was line 321 as of commit `6442a688`, and it must be the only
+  match; if grep returns more than one, repoint all of them and note the extra sites in this card's
+  commit message.
   Everything else in the file — the `> Wiki access:` banner, the "You are the **Builder** — a lean
   orchestrator" role paragraph, and every section from `## Entry` through `## Board discipline` —
-  moves unchanged in this card. The banner and the role paragraph are machinery-level instructions
+  moves unchanged in these four edits. The banner and the role paragraph are machinery-level instructions
   to whoever drives the batch loop, which is the base, so they belong here and are NOT reproduced in
   either thin variant.
 - **Commit:** `refactor(mill-go): relocate SKILL.md machinery to mill-go-base`
 
-### Card 2: Add the variant-binding and driver-preamble directives at the top of Entry
+### Card 2: Add the variant-binding and driver-preamble directives ahead of Entry step 0
 
 - **Context:**
   - `_mill/discussion.md`
@@ -76,13 +83,18 @@ the thin `mill-go/SKILL.md` in its place.
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Insert a new `**Step 0a: Variant binding and driver preamble.**` block
-  immediately after the `## Entry` heading and immediately BEFORE the existing
-  `**Step 0: Verify \`CLAUDE_PLUGIN_ROOT\`.**` block. Step 0a must run first because the existing
-  Step 0 halt string is one of the `[mill-go]` prefixes card 4 parameterizes, so `VARIANT_LABEL` has
-  to be bound before it is reached.
+- **Requirements:** Insert a new `**Variant binding and driver preamble.**` block immediately after
+  the `## Entry` heading and immediately BEFORE the existing
+  `**Step 0: Verify \`CLAUDE_PLUGIN_ROOT\`.**` block. It must run first because the existing Step 0
+  halt string is one of the `[mill-go]` prefixes card 4 parameterizes, so `VARIANT_LABEL` has to be
+  bound before Step 0 is reached.
 
-  Step 0a must state all of the following:
+  Leave the block unnumbered rather than labelling it `Step 0a`. The file's existing sequence runs
+  `0`, `0b`, `0.5`, `0.55`, `0.6`, in which a lettered suffix always means "after"; a `0a` that runs
+  before `0` would invert that convention. Open the block with a sentence stating it runs before
+  Step 0 and why, so the ordering is explicit without a number.
+
+  The block must state all of the following:
   - This skill is never invoked directly. A variant skill loads it and binds `VARIANT_LABEL` in that
     variant's own `## Variant binding` block.
   - Read the variant's `## Variant binding` block, bind `VARIANT_LABEL` to the value declared there,
@@ -162,7 +174,8 @@ the thin `mill-go/SKILL.md` in its place.
     `\[mill-go\]` grep.
   - Every other occurrence of the string `mill-go` in this file — narrative prose, section
     cross-references, `millpy-bg` slug arguments, `[mill-bg]` markers — is left byte-for-byte
-    unchanged.
+    unchanged. The one path self-reference this file carried was already repointed by card 1's
+    fourth surgical edit; do not revisit it here.
   - The commit subjects written by Python scripts (`mill-go: start batch`,
     `mill-go: fixing batch`, `mill-go: holistic fix round`) are produced by scripts under
     `plugins/mill/scripts/`, not by this file, and are out of scope for this plan entirely. Do not
