@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go2: opt-in skill scaffold cloned from mill-go (no fork yet)'
 slug: 'mill-go2-scaffold'
-approved: false
+approved: true
 started: '20260811-120222'
 parent: 'main'
 root: ""
