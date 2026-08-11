@@ -119,7 +119,7 @@ llm:
 pipeline:
   auto_merge: false
   auto_report: true
-  done_gate: null  # Repo-wide test command run from git_root before marking done. null = disabled. e.g. "go test ./..." or "dotnet test". (#561)
+  done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) even when a full test run is skipped as too slow. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561)
   done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
   max_cards_per_batch: 10  # batch-oversized validator gate (#371)
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
