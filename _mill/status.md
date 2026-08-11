@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go2-fork-implementer
 branch: hanf/mill-go2-fork-implementer
 plan: _mill/plan
@@ -23,4 +23,15 @@ plan-review-r2  '2026-08-11T14:15:12Z'
 plan-fix-r2  '2026-08-11T14:15:12Z'
 plan-review-r3  '2026-08-11T14:21:00Z'
 planned  '2026-08-11T14:21:11Z'
+implementing  '2026-08-11T14:21:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-fork-fallback-helper
+    state: pending
+  - name: mill-go2-implementer-override
+    state: pending
 ```
