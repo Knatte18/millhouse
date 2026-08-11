@@ -209,8 +209,8 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     why a bare call to it would not recompute after a merge-in without this explicit reset.
 
     Never raises -- every failure path (no module-wide verify configured, parent branch
-    unresolvable, or the computation itself raising) prints a JSON line describing the outcome and
-    returns 0 without blocking the merge-in;
+    unresolvable, status.md absent, or the computation itself raising) prints a JSON line
+    describing the outcome and returns 0 without blocking the merge-in;
     a baseline-recompute failure must never fail an otherwise successful merge.
 
     Args:
@@ -221,7 +221,11 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     Returns:
         Always 0 -- outcomes are communicated through the printed JSON line.
     """
-    status_path = _paths.require_status_path(project_root, cfg)
+    try:
+        status_path = _paths.require_status_path(project_root, cfg)
+    except Exception as e:
+        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
+        return 0
 
     plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
