@@ -47,5 +47,7 @@ batches:
     start_sha: b87c18498dbb5ec01d959e289b0580f05d80cb9e
     commit_sha: 77cb66266cdc6bf53076a5b86de741288e86cb73
   - name: mill-go-wire-prior-blocking-digest
-    state: pending
+    state: running
+    implementer_session: 00d00f60-09c2-4e6e-b62c-24d617a8bfa9
+    start_sha: 017f38cd1b280bb7f762c840fb4bce94f2d00573
 ```
