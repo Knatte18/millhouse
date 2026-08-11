@@ -205,19 +205,28 @@ reviews day to day.
     the timer for the failed attempt (from its own `Agent()` call to the error notification) plus
     the timer for the fresh re-dispatch, exactly the same "sum every attempt" rationale as the
     subprocess/psmux Decision above.
-  - **Stale stop/interrupt probe-and-wait (4c):** this is NOT a re-dispatch — there is only ever one
-    `Agent()` call for that attempt. The orchestrator's single timer keeps running continuously
-    from that one `Agent()` call until whichever notification is ultimately treated as terminal for
-    it; no summation logic is needed because there is nothing to sum.
+  - **Stale-notification probe (4c) — two distinct outcomes, not one:** step 4(c)'s
+    `TaskOutput`-based liveness probe has two outcomes with different summation behavior:
+    - **Probe says still running:** this is NOT a re-dispatch — there is only ever one `Agent()`
+      call for that attempt. The orchestrator's single timer keeps running continuously from that
+      one `Agent()` call until whichever notification is ultimately treated as terminal for it; no
+      summation is needed because there is nothing to sum.
+    - **Probe says no-longer-running, or the probe call itself errors:** `mill-go-base/SKILL.md`
+      step 4(c) is explicit that this outcome "proceed[s] to the existing one-retry transient
+      classification from (a) and re-dispatch exactly as today" — i.e. it triggers a second,
+      brand-new `Agent()` call, functionally identical to 4(a)'s re-dispatch (including the
+      reviewer-only `test -f output_path` shortcut, which still funnels into this same branch when
+      the file is absent). This outcome sums durations exactly like 4(a) — it is a real re-dispatch,
+      not a continuation of the same timer.
 - Rationale: consistent with the "true round cost" rationale already established for
   `NEED_CONTEXT`/fast-fail-retry summation — a round that needed a fresh re-dispatch genuinely cost
-  the wall-clock of both attempts. The stale-notification case needed calling out explicitly because
-  it superficially resembles a retry (multiple notifications for one logical unit of work) but is
-  actually a single dispatch whose notification arrived late.
-- Rejected: measuring only the final successful dispatch's duration for the 4(a) case (undercounts,
-  same reasoning as every other retry-summation Decision); treating the 4(c) probe-and-wait as a
-  restart of the timer (would undercount by dropping the time already spent waiting before the
-  probe).
+  the wall-clock of both attempts, whether that re-dispatch was triggered by 4(a)'s raw-API-error
+  path or by 4(c)'s probe confirming the prior attempt is dead. Only 4(c)'s *other* outcome (probe
+  says still running) is genuinely a single continuous dispatch with nothing to sum.
+- Rejected: measuring only the final successful dispatch's duration for the 4(a)/4(c)-dead case
+  (undercounts, same reasoning as every other retry-summation Decision); treating all of 4(c) as a
+  single non-summed timer regardless of probe outcome (contradicted by step 4(c)'s own text, which
+  routes the probe-confirmed-dead outcome through the identical re-dispatch code path as 4(a)).
 
 ### Reliable caller enumeration: grep by exact symbol, not by directory guess
 
@@ -244,26 +253,41 @@ reviews day to day.
   failure mode a third time); an import-graph static-analysis tool (more machinery than a two-clause
   grep needs).
 
-### Duration on the exception/error path
+### Duration on the exception/error path — both the call-failure AND the parse-failure ERROR branches
 
-- Decision: `_invoke()`'s failure paths (raising `LLMError`, `LLMSessionError`, or
-  `LLMRateLimitError` — all three are plain `Exception` subclasses per `_llm_common.py`, carrying
-  only a message string today) gain an optional `duration_s` attribute, set to the elapsed
-  wall-clock (`time.monotonic() - start`, using the same `start` already captured at the top of
-  `_invoke()`) at the point each exception is raised. The three review backends'
-  `except LLMError as exc:` branches (e.g. `_review_code.py::run()` lines ~678-692, ~744-758, which
-  build a synthetic `verdict: "ERROR"` `reviews[...]` entry and never call `finalize()`) read
-  `getattr(exc, "duration_s", None)` and include it as that entry's `duration_s` field. Because
-  `ERROR` never appears inside a review file (`review-output.schema.md`'s Verdict-vocabulary table:
-  "`ERROR` ... never in review files"), this duration is envelope/print-only for error rounds — no
-  yaml-header injection happens for a round that produced no review file at all, but the JSON
-  envelope's `reviews[...]` entry and the orchestrator's one-line post-round print both get it.
-- Rationale: a timed-out or rate-limited round is exactly the highest-cost case this feature exists
-  to surface — silently dropping duration for every failure path would hide the most expensive
-  rounds from the one piece of tooling built to show cost.
-- Rejected: leaving error-path rounds with no duration at all (defeats the purpose for the worst
+- Decision: every synthetic `verdict: "ERROR"` `reviews[...]` entry carries `duration_s` through,
+  covering **both** ERROR-producing branches each backend has, not just one:
+  1. **Call failure** — `_invoke()`'s failure paths (raising `LLMError`, `LLMSessionError`, or
+     `LLMRateLimitError` — all three are plain `Exception` subclasses per `_llm_common.py`, carrying
+     only a message string today) gain an optional `duration_s` attribute, set to the elapsed
+     wall-clock (`time.monotonic() - start`, using the same `start` already captured at the top of
+     `_invoke()`) at the point each exception is raised. The three review backends'
+     `except LLMError as exc:` branches (e.g. `_review_code.py::run()` lines ~678-692, ~744-758)
+     read `getattr(exc, "duration_s", None)` into that entry's `duration_s` field.
+  2. **Parse failure after a successful call** — each backend also has a separate
+     `except ReviewError as exc:` branch (e.g. `_review_code.py::run()` lines ~697-718, ~761-782),
+     reached when the reviewer call itself *succeeded* but `parse_verdict(raw)` then raised — the
+     call's `ReviewerCallResult.duration_s` is already known here (no exception carried it; the
+     call returned normally), so this branch reads it directly from the already-obtained
+     `ReviewerCallResult`, not via `getattr` on the caught exception, and includes it in this
+     branch's own synthetic `ERROR` `reviews[...]` entry.
+  Neither branch ever calls `finalize()`, and because `ERROR` never appears inside a review file
+  (`review-output.schema.md`'s Verdict-vocabulary table: "`ERROR` ... never in review files"), both
+  branches' duration is envelope/print-only — no yaml-header injection happens for a round that
+  produced no review file at all, but the JSON envelope's `reviews[...]` entry and the
+  orchestrator's one-line post-round print both get it either way.
+- Rationale: a timed-out, rate-limited, or malformed-output round is exactly the highest-cost case
+  this feature exists to surface — silently dropping duration on *either* ERROR-producing branch
+  would hide expensive rounds from the one piece of tooling built to show cost. The two branches
+  need calling out separately because they get their duration from different places (an attribute on
+  the caught exception vs. a field on an already-successful call's return value) — a single
+  "attach it to the exception" fix, as originally written, only covered the first branch and would
+  have silently missed the second.
+- Rejected: leaving either ERROR branch with no duration at all (defeats the purpose for the worst
   cases); trying to persist error-round duration into a review file (contradicts the schema's
-  explicit "ERROR never appears inside a review file" rule).
+  explicit "ERROR never appears inside a review file" rule); reading `getattr(exc, "duration_s")` in
+  the `ReviewError` branch too (there is no exception attribute to read there — the call succeeded,
+  so the value lives on the return object, not on anything raised).
 
 ### Summary command: new dedicated command, per-task scope
 
@@ -388,9 +412,13 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
 - **`_review_discussion.py` / `_review_plan.py` / `_review_code.py`**: update
   `test-review-discussion-flow.py`, `test-review-plan-flow.py`, `test-review-code-flow.py`,
   `test-review-finalize.py` for the new fields flowing into `result.reviews[...]` and
-  `ReviewResult.to_dict()`. Also add a case per backend for the exception-path `duration_s` Decision:
-  raise an `LLMError` with `duration_s` set from a mocked `_reviewer_single.run`, assert the
-  synthetic `ERROR` `reviews[...]` entry carries that `duration_s` value through unchanged.
+  `ReviewResult.to_dict()`. Also add two cases per backend for the "Duration on the exception/error
+  path" Decision: (1) raise an `LLMError` with `duration_s` set from a mocked `_reviewer_single.run`,
+  assert the synthetic `ERROR` `reviews[...]` entry from the `except LLMError` branch carries that
+  value through; (2) mock a successful `_reviewer_single.run` (real `ReviewerCallResult` with a
+  `duration_s`) whose text then fails `parse_verdict()`, assert the `except ReviewError` branch's
+  synthetic `ERROR` entry also carries that same `duration_s` through — this is the branch the
+  original "attach it to the exception" fix would have silently missed.
 - **Agent-mode dispatch**: update `test-agent-mode-dispatch.py` for the new finalize-stage flags
   (`--duration-s`, `--tool-calls`, `--cost-usd`) on the three review CLIs, including the
   agent-mode-specific case where `tool_calls`/`cost_usd` are omitted/`"n/a"` and only `duration_s`
@@ -506,3 +534,21 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   unit test files. **Why:** a manual prose enumeration has now been wrong twice in this same
   discussion — a named, reproducible command is the only way to stop re-deriving an unreliable
   answer by hand.
+- **Q:** (Discussion review r4 gap) The 4(c) Decision claimed there's only ever one `Agent()` call
+  for a stale-notification probe — but `mill-go-base/SKILL.md` step 4(c) also has a
+  probe-confirmed-dead outcome that explicitly re-dispatches via 4(a)'s path. Is that outcome a
+  re-dispatch after all? **A:** [auto-pick] Yes — 4(c) has two outcomes, not one: "still running"
+  (single continuous timer, no summation) and "confirmed dead / probe error" (a real second
+  `Agent()` call, sums exactly like 4(a)). **Why:** step 4(c)'s own text routes the dead-probe
+  outcome through the identical re-dispatch code path as 4(a) — treating all of 4(c) as
+  non-summing contradicted the SKILL text the Decision was supposed to describe.
+- **Q:** (Discussion review r4 gap) The exception-path duration Decision only covers `except LLMError`
+  (a failed call) — but each backend also has a separate `except ReviewError` branch for a
+  *successful* call whose `parse_verdict()` then fails, which also builds a synthetic `ERROR` entry.
+  Does that branch lose duration too? **A:** [auto-pick] Yes, as originally written it would — fix:
+  extend the Decision to cover both branches, reading `duration_s` from `getattr(exc, ...)` in the
+  `LLMError` branch (no return value exists) but from the already-obtained `ReviewerCallResult`
+  directly in the `ReviewError` branch (the call succeeded; the value lives on the return object,
+  not on anything raised). **Why:** the two branches source duration from different places — a
+  single "attach it to the exception" fix only worked for the branch that actually raises before
+  ever getting a `ReviewerCallResult`.
