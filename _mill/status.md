@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
-plan: null
+plan: _mill/plan
 parent: hanf/mill-merge-in-recompute-baseline-crash
 task: 'mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-11T03:38:26Z'
 discussed  '2026-08-11T04:13:48Z'
+planning  '2026-08-11T04:27:35Z'
 ```
