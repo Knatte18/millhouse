@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go2: fork-based implementer dispatch'
 slug: mill-go2-fork-implementer
-approved: false
+approved: true
 started: '2026-08-11T13:57:18Z'
 parent: main
 root: ""
