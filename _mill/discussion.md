@@ -155,6 +155,40 @@ There is nothing further to wait for.
   immediate escalation with no cold attempt (drops the fallback the task explicitly requires);
   adding a fork-path-specific liveness probe (duplicates step 4(c)).
 
+### override-applies-to-first-attempt-only
+
+- Decision: the `### fixer` override text must state its own applicability condition explicitly:
+  it governs the **first** fixer dispatch for a given scope and round, and does **not** govern
+  step 4's automatic re-dispatch.
+  The Builder tracks a local per-scope-per-round flag (e.g. `fork_attempted`), sets it when it
+  issues the forked dispatch, and uses the default `Agent()` call — the envelope's own
+  `subagent_type` and `model` — whenever that flag is already set.
+  The flag resets at the start of each new scope/round dispatch, so a later fix round in the same
+  task forks again rather than staying cold for the remainder of the run.
+- Rationale: the cold retry is not a fresh trip through the dispatch pattern's steps 1-3.
+  Step 4(a) says "re-dispatch once immediately using a fresh brief and session"
+  (`mill-go-base/SKILL.md:271`) and step 4(c) routes to "the existing one-retry transient
+  classification from (a) and re-dispatch exactly as today" (`:322-323`) — both are actions inside
+  step 4, and neither says to re-enter step 3.
+  Override point A lives in step 3 and is **role-scoped only**: its text resolves which role is
+  dispatching, and carries no attempt-number signal whatsoever.
+  So nothing structural distinguishes "first dispatch" from "step 4's retry", and an override that
+  merely says "fork the fixer" would fork again on the retry — silently converting the cold
+  fallback into an infinite-fork loop bounded only by the retry budget, which is the exact opposite
+  of Decision `cold-fallback-on-first-terminal-failure`.
+  The distinction has to be carried by the override's own prose because there is nowhere else to put
+  it without editing the base.
+- Consequence for the plan: this is the one place the override text must be written as a
+  conditional rather than a flat substitution.
+  Budget bytes for it (see Constraint `variant-file-byte-cap`);
+  it is not optional prose.
+- Rejected: relying on step 4 to re-enter step 3 and re-consult (undefined in the base — and if it
+  did re-consult, it would fork again, which is wrong);
+  keying the retry's dispatch shape on an envelope field (no field carries attempt number — the
+  prepare envelope is rebuilt identically for a retry);
+  editing the base to add an attempt-aware signal to Override point A (conflicts with
+  `no-base-edits`, and would change shared machinery for one variant's benefit).
+
 ### fallback-consumes-existing-retry-budget
 
 - Decision: the cold fallback **consumes** the base's existing one-retry-transient budget.
@@ -498,8 +532,23 @@ This is a genuine TDD candidate because the assertion is fully specified before 
 
 Add a `_check_fork_override()` function following the file's established shape (module-level
 function returning `list[str]` of `FAIL: ...` strings, registered in `main()`'s `checks` tuple).
-It should extract the `## Dispatch overrides` section body — from that header line to the next line
-beginning `## ` or end of file — for each variant, then assert:
+It should extract the `## Dispatch overrides` section body for each variant, then assert the
+conditions below.
+
+**The extraction rule needs care.**
+The naive "from the header line to the next line beginning `## ` or end of file" rule is **wrong**
+against the files as they exist today.
+`## Dispatch overrides` is the last `##` header in both variant files, and the shared closing
+paragraph — `Load the `mill:mill-go-base` skill via the Skill tool, ...` — sits directly beneath it
+with no separating header.
+A run-to-EOF rule therefore swallows that boilerplate into the section body, and the
+`mill-go`-is-exactly-`(none)` assertion below fails on the unedited file.
+
+Extract instead from the line after `## Dispatch overrides` up to whichever of these comes first:
+the next line beginning `## `, the line beginning ``Load the `mill:mill-go-base` skill``, or end of
+file.
+Then strip surrounding whitespace.
+Assert on that body:
 
 - `mill-go2`'s section body is **not** `(none)`, names the `fixer` role, and contains the literal
   `subagent_type: "fork"`.
@@ -514,6 +563,11 @@ Update `main()`'s docstring, which currently reads "Run all seven variant-contra
 - The section is filled with text that never names `fork`, e.g. a prose note that forgets the
   actual dispatch change.
 - `mill-go`'s `(none)` is deleted or replaced during a sibling-task merge conflict resolution.
+- The extraction rule regresses to running to EOF and starts swallowing the shared
+  `mill:mill-go-base` loading paragraph into the section body.
+  Guard this by asserting the extracted `mill-go` body is exactly `(none)` — that assertion fails
+  loudly the moment the boilerplate leaks in, which is precisely why it is stated as an equality
+  rather than a `"(none)" in body` containment check.
 
 **Regression coverage that comes for free** from the existing checks, once the file is edited:
 the 4096-byte cap, the four machinery literals, the three required header lines, the
@@ -600,6 +654,22 @@ instrument for that observation.
   `role-identification-is-structural`.
   **Why:** the per-role `### fixer` subsection already performs the discrimination;
   envelope-inspection prose would cost bytes and imply a step the base does not ask for.
+- **Q:** Discussion review r2 [BLOCKING]: step 4's retry is an action inside step 4, not a fresh
+  pass through step 3 — so what stops the override from being re-consulted and forking again
+  instead of going cold?
+  **A:** [auto-pick] The override text states its own applicability condition (first attempt per
+  scope/round) and the Builder tracks a local `fork_attempted` flag.
+  **Why:** Override point A is role-scoped and carries no attempt-number signal, and nothing in the
+  envelope does either;
+  without the condition the cold fallback silently becomes a re-fork.
+  See Decision `override-applies-to-first-attempt-only`.
+- **Q:** Discussion review r2 [BLOCKING]: the prescribed section-extraction rule runs to EOF and
+  swallows the shared `mill:mill-go-base` loading paragraph, so the `mill-go`-is-`(none)` assertion
+  fails on the unedited file.
+  **A:** [auto-pick] Stop extraction at the next `## ` line, the ``Load the `mill:mill-go-base`
+  skill`` line, or EOF — whichever comes first.
+  **Why:** `## Dispatch overrides` is the last `##` header in both variant files, so the boilerplate
+  has no header separating it from the section body.
 - **Q:** Is the "a fork notifies identically to a cold `Agent()` call" claim spike-confirmed?
   **A:** No — it is a mechanical inference;
   `harness-tool-contracts.md` spiked the Agent tool generally, not `subagent_type: "fork"`.
