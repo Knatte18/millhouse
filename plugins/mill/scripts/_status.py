@@ -35,6 +35,7 @@ Public API:
     clear_module_verify_baseline(status_path) -> None
     append_recovery_log(status_path, timestamp, restored_paths) -> None
     append_inferred_success_log(status_path, batch_name, round, timestamp) -> None
+    append_fork_fallback_log(status_path, batch_name, timestamp) -> None
 """
 from __future__ import annotations
 
@@ -504,6 +505,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 _BATCHES_HEADING = "## Batches"
 _RECOVERY_LOG_HEADING = "## Tracked-file recovery log"
 _INFERRED_SUCCESS_LOG_HEADING = "## Inferred-success log"
+_FORK_FALLBACK_LOG_HEADING = "## Fork-fallback log"
 _BATCH_ALLOWED_KEYS = {
     "state",
     "implementer_session",
@@ -1217,6 +1219,112 @@ def append_inferred_success_log(
         lines.extend(
             [_INFERRED_SUCCESS_LOG_HEADING, "", _TIMELINE_FENCE, new_row, "```"]
         )
+    else:
+        # Insert into the existing fenced block — an append, never a whole-section replace.
+        _heading_idx, _fence_open, fence_close_idx, _section_end = located
+        lines.insert(fence_close_idx, new_row)
+
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Fork-fallback log — audit trail for mill-go2's cold-fallback-on-dead-fork path
+# ---------------------------------------------------------------------------
+
+
+def _find_fork_fallback_log_block(lines: list[str]) -> tuple[int, int, int, int] | None:
+    r"""Locate the fork-fallback-log section's heading and fenced-text body.
+
+    Structurally identical to ``_find_inferred_success_log_block``, but scans for
+    ``_FORK_FALLBACK_LOG_HEADING`` instead of ``_INFERRED_SUCCESS_LOG_HEADING`` — this section is a
+    plain append-only text block, not a yaml list, matching the sibling logs' own convention.
+
+    Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)`` where:
+    - ``heading_idx`` points at the ``## Fork-fallback log`` line,
+    - ``fence_open_idx`` points at the opening ``\`\`\`text``,
+    - ``fence_close_idx`` points at the closing ``\`\`\``,
+    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or
+    EOF).
+
+    Returns ``None`` if the heading is absent.
+    """
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == _FORK_FALLBACK_LOG_HEADING:
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+
+    # Fence discovery is scoped to the section (until next ## heading).
+    section_end_idx = len(lines) - 1
+    for j in range(heading_idx + 1, len(lines)):
+        if lines[j].startswith("## "):
+            section_end_idx = j - 1
+            break
+
+    fence_open_idx = None
+    for j in range(heading_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == _TIMELINE_FENCE:
+            fence_open_idx = j
+            break
+    if fence_open_idx is None:
+        raise ValueError(
+            f"{_FORK_FALLBACK_LOG_HEADING} section missing its {_TIMELINE_FENCE} block"
+        )
+    fence_close_idx = None
+    for j in range(fence_open_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```":
+            fence_close_idx = j
+            break
+    if fence_close_idx is None:
+        raise ValueError(
+            f"{_FORK_FALLBACK_LOG_HEADING} {_TIMELINE_FENCE} block is unterminated"
+        )
+    return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
+
+
+def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str) -> None:
+    """
+    Append one audit row recording a mill-go2 cold fallback (a forked implementer dying and being
+    replaced by a fresh cold-dispatched agent) to ``status.md``.
+
+    The ``## Fork-fallback log`` section is created lazily on first call, mirroring
+    ``append_inferred_success_log``'s lazy-insert-if-absent pattern for ``## Inferred-success log`` —
+    each call adds one new row inside the existing fenced block, never rewriting or dropping a prior
+    row.
+
+    This function is the caller's explicit, separate audit-append step.
+    Detecting the dead fork and dispatching the cold fallback happen entirely on the caller's side;
+    this helper only records that the fallback occurred.
+
+    Unlike ``append_inferred_success_log``, the row carries no round number: at most one cold
+    fallback occurs per batch for the implementer role, so a round column would name a dimension
+    that cannot vary.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        batch_name: The batch whose forked implementer died and was replaced by a cold fallback.
+        timestamp: ISO-8601 UTC timestamp for the fallback event;
+            written through ``_yaml_writer.quote_scalar`` to match ``append_inferred_success_log``'s
+                quoted timestamp convention.
+
+    Raises:
+        ValueError: the fork-fallback-log heading is present but its fenced block is missing or
+        unterminated.
+    """
+    _require_path(status_path, "append_fork_fallback_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    new_row = f"{quote_scalar(timestamp)}  {batch_name}"
+
+    located = _find_fork_fallback_log_block(lines)
+    if located is None:
+        # Append a new section at the end with leading blank separator, mirroring append_inferred_success_log's absent-section branch.
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend([_FORK_FALLBACK_LOG_HEADING, "", _TIMELINE_FENCE, new_row, "```"])
     else:
         # Insert into the existing fenced block — an append, never a whole-section replace.
         _heading_idx, _fence_open, fence_close_idx, _section_end = located
