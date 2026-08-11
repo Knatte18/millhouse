@@ -36,6 +36,8 @@ Public API:
     append_recovery_log(status_path, timestamp, restored_paths) -> None
     append_inferred_success_log(status_path, batch_name, round, timestamp) -> None
     append_fork_fallback_log(status_path, batch_name, timestamp) -> None
+    append_fixer_fork_fallback_log(status_path, scope, round, timestamp) -> None
+    read_fixer_fork_fallback_log(status_path) -> list[dict]
 """
 from __future__ import annotations
 
@@ -1229,7 +1231,12 @@ def append_inferred_success_log(
 
 # ---------------------------------------------------------------------------
 # Fork-fallback log — audit trail for mill-go2's cold-fallback-on-dead-fork path
+# (also control-flow state for the fixer override's fork_attempted predicate)
 # ---------------------------------------------------------------------------
+
+_FORK_FALLBACK_ROW_RE = re.compile(
+    r"^\S+\s\s(?P<scope>.+?)\s\sround\s(?P<round>\d+)\s*$"
+)
 
 
 def _find_fork_fallback_log_block(lines: list[str]) -> tuple[int, int, int, int] | None:
@@ -1331,3 +1338,123 @@ def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str)
         lines.insert(fence_close_idx, new_row)
 
     status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def append_fixer_fork_fallback_log(
+    status_path: Path, scope: str, round: int, timestamp: str
+) -> None:
+    """
+    Append one row recording a cold fork-fallback retry for the mill-go2 fixer override to
+    ``status.md``.
+
+    Named distinctly from :func:`append_fork_fallback_log` (the implementer-role sibling helper,
+    which carries no round number) because the two audit-append helpers were designed
+    independently by sibling tasks against the same ``## Fork-fallback log`` section and
+    lazy-insert-if-absent convention, but need different row shapes: the fixer override tracks a
+    fallback per scope *and* round, while at most one cold fallback occurs per batch for the
+    implementer role.
+    Both helpers share the section and its ``_find_fork_fallback_log_block`` locator;
+    :func:`read_fixer_fork_fallback_log`'s row parser simply skips any row it does not recognise,
+    so rows from either helper coexist safely in the same fenced block.
+
+    The ``## Fork-fallback log`` section is created lazily on first call, mirroring
+    ``append_inferred_success_log``'s lazy-insert-if-absent pattern — each call adds one new row
+    inside the existing fenced block, never rewriting or dropping a prior row.
+
+    The row is committed *before* the cold retry itself is issued, so a session that dies during
+    or immediately after the retry still leaves the row behind — that ordering is what makes
+    ``read_fixer_fork_fallback_log``'s reconstruction available exactly when a resumed session
+    needs it.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        scope: The fixer dispatch scope this fallback applies to — a batch name, or the literal
+            ``"holistic"`` for the holistic-review fixer pass.
+        round: The review round the fallback happened on.
+        timestamp: ISO-8601 UTC timestamp for the fallback event;
+            written through ``_yaml_writer.quote_scalar`` to match ``append_inferred_success_log``'s
+                quoted timestamp convention.
+
+    Raises:
+        ValueError: the fork-fallback-log heading is present but its fenced block is missing or
+        unterminated.
+    """
+    _require_path(status_path, "append_fixer_fork_fallback_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    new_row = f"{quote_scalar(timestamp)}  {scope}  round {round}"
+
+    located = _find_fork_fallback_log_block(lines)
+    if located is None:
+        # Append a new section at the end with leading blank separator, mirroring
+        # append_inferred_success_log's absent-section branch.
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend(
+            [_FORK_FALLBACK_LOG_HEADING, "", _TIMELINE_FENCE, new_row, "```"]
+        )
+    else:
+        # Insert into the existing fenced block — an append, never a whole-section replace.
+        _heading_idx, _fence_open, fence_close_idx, _section_end = located
+        lines.insert(fence_close_idx, new_row)
+
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_fixer_fork_fallback_log(status_path: Path) -> list[dict]:
+    """
+    Return every recorded fixer fork-fallback row as ``{"scope": str, "round": int}`` dicts.
+
+    Unlike ``## Tracked-file recovery log`` and ``## Inferred-success log``, which are write-only
+    audit trails with no reader, this section is control-flow state: the mill-go2 fixer override
+    reads it to reconstruct its ``fork_attempted`` predicate before deciding whether to fork again
+    for a given scope and round.
+    The reader must not be removed as dead code just because it has no other caller in this
+    module — doing so would silently reintroduce a post-fallback double-fork.
+
+    The guarantee this reader provides is narrow: it keeps a recorded fallback cold across a
+    resume — once a row exists for a scope and round, later resumes skip re-forking for that same
+    scope and round.
+    It does **not** make forking idempotent across a crash that happens before any fallback is
+    recorded — a session that dies while a fork is still in flight, before any terminal failure is
+    classified, leaves no row, and a resumed session forks again for that scope and round.
+
+    Structural corruption (a missing or unterminated fenced block) still raises, matching the
+    append side's posture, but a single line inside the fence that does not match the row format
+    is skipped rather than raising — one hand-edited or corrupted row must not take the
+    orchestrator down mid-run.
+    This also means a row written by :func:`append_fork_fallback_log` (the implementer-role
+    helper's own, differently-shaped row) is silently skipped rather than raising.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Returns:
+        One dict per parsed row, each with keys ``scope`` (``str``) and ``round`` (``int``).
+        Returns ``[]`` when the ``## Fork-fallback log`` heading is absent — the common path every
+        non-fallback fixer round hits.
+        List ordering is not contractual.
+
+    Raises:
+        ValueError: the fork-fallback-log heading is present but its fenced block is missing or
+        unterminated.
+    """
+    _require_path(status_path, "read_fixer_fork_fallback_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    located = _find_fork_fallback_log_block(lines)
+    if located is None:
+        return []
+    _heading_idx, fence_open_idx, fence_close_idx, _section_end = located
+
+    entries: list[dict] = []
+    for line in lines[fence_open_idx + 1 : fence_close_idx]:
+        match = _FORK_FALLBACK_ROW_RE.match(line)
+        if match is None:
+            continue
+        entries.append(
+            {"scope": match.group("scope"), "round": int(match.group("round"))}
+        )
+    return entries

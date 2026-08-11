@@ -7,7 +7,8 @@ Asserts that every skill listed in VARIANTS is a thin wrapper that binds its own
 `mill-go-base` for all machinery, and carries none of that machinery itself. Also
 locks the base's unbound-halt directive, the scoped no-hook-as-a-name rule for the
 two override points, and the three-literal-family parameterization that keeps a
-variant's own name out of the base's shell/notify/echo strings.
+variant's own name out of the base's shell/notify/echo strings. Also locks each
+variant's declared fixer-dispatch override.
 """
 from __future__ import annotations
 
@@ -46,6 +47,42 @@ VARIANT_LABEL_LITERALS = (
 def _variant_path(name: str) -> Path:
     """Build the SKILL.md path for a variant or the base, by directory name."""
     return SKILLS / name / "SKILL.md"
+
+
+def _dispatch_overrides_body(text: str) -> str | None:
+    """
+    Extract the body of the ``## Dispatch overrides`` section from a variant file.
+
+    Returns ``None`` when the header line is absent.
+    Otherwise walks the lines after the header and stops at whichever comes first: a line
+    beginning ``"## "``, a line beginning ``"Load the `mill:mill-go-base` skill"``, or end of
+    file.
+    The second stop condition is not optional detail: ``## Dispatch overrides`` is the last
+    ``##`` header in both variant files, and the shared closing paragraph that loads the base
+    sits directly beneath it with no separating header, so a naive run-to-EOF rule would
+    swallow that boilerplate into the body and make the ``mill-go``-is-exactly-``(none)``
+    assertion fail on an unedited file.
+
+    Returns:
+        The joined, ``.strip()``ped section body, or ``None`` if the header is missing.
+    """
+    lines = text.splitlines()
+    header_idx: int | None = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == "## Dispatch overrides":
+            header_idx = i
+            break
+    if header_idx is None:
+        return None
+
+    body_lines: list[str] = []
+    for line in lines[header_idx + 1 :]:
+        if line.startswith("## "):
+            break
+        if line.startswith("Load the `mill:mill-go-base` skill"):
+            break
+        body_lines.append(line)
+    return "\n".join(body_lines).strip()
 
 
 def _read(path: Path) -> str:
@@ -223,6 +260,68 @@ def _check_parameterization_lock() -> list[str]:
     return failures
 
 
+def _check_fork_override() -> list[str]:
+    """
+    Lock the mill-go2 fixer fork override in place and confirm mill-go stays unedited.
+
+    Five scenarios this check exists to catch, each with its own distinguishable ``FAIL:``
+    string: the override added to the wrong variant, the placeholder ``(none)`` left in place
+    alongside the override, a section filled with prose that never names ``fork``, mill-go's
+    ``(none)`` deleted during a sibling-task merge resolution, and the extraction rule
+    regressing to running to EOF.
+    """
+    failures: list[str] = []
+
+    mill_go2_path = _variant_path("mill-go2")
+    mill_go2_body = _dispatch_overrides_body(_read(mill_go2_path))
+
+    if mill_go2_body is None:
+        failures.append(f"FAIL: {mill_go2_path}: no '## Dispatch overrides' section found")
+    else:
+        if mill_go2_body == "(none)":
+            failures.append(
+                f"FAIL: {mill_go2_path}: '## Dispatch overrides' body is still the '(none)' "
+                "placeholder -- fixer fork override missing"
+            )
+        if "fixer" not in mill_go2_body:
+            failures.append(
+                f"FAIL: {mill_go2_path}: '## Dispatch overrides' body does not contain the "
+                "literal 'fixer'"
+            )
+        if 'subagent_type: "fork"' not in mill_go2_body:
+            failures.append(
+                f"FAIL: {mill_go2_path}: '## Dispatch overrides' body does not contain the "
+                'literal \'subagent_type: "fork"\''
+            )
+        # Checked per line, not against the whole body: an override appended below a leftover
+        # placeholder line makes the body no longer equal "(none)" while still carrying both
+        # required literals above, so every other assertion here would pass and the stale
+        # placeholder would ship undetected.
+        for line in mill_go2_body.splitlines():
+            if line.strip() == "(none)":
+                failures.append(
+                    f"FAIL: {mill_go2_path}: '## Dispatch overrides' body still contains a "
+                    "stray '(none)' placeholder line alongside the override"
+                )
+                break
+
+    mill_go_path = _variant_path("mill-go")
+    mill_go_body = _dispatch_overrides_body(_read(mill_go_path))
+
+    if mill_go_body is None:
+        failures.append(f"FAIL: {mill_go_path}: no '## Dispatch overrides' section found")
+    # Written as an equality, never a "(none)" in body containment check -- the equality is
+    # what fails loudly if the extraction rule ever regresses to running to EOF and starts
+    # swallowing the shared base-loading paragraph.
+    elif mill_go_body != "(none)":
+        failures.append(
+            f"FAIL: {mill_go_path}: '## Dispatch overrides' body is {mill_go_body!r}, "
+            "expected exactly '(none)' -- mill-go must stay unedited by this experiment"
+        )
+
+    return failures
+
+
 def _section_body(text: str, header: str) -> list[str]:
     """
     Return the raw lines strictly between a header line and the next `## ` header.
@@ -362,7 +461,7 @@ def _check_base_fork_paragraph_survives() -> list[str]:
 
 
 def main() -> int:
-    """Run all ten variant-contract checks and print a PASS/FAIL summary line."""
+    """Run all eleven variant-contract checks and print a PASS/FAIL summary line."""
     checks = (
         _check_label_binding,
         _check_override_sections_present,
@@ -371,6 +470,7 @@ def main() -> int:
         _check_variants_carry_no_machinery,
         _check_override_points_are_not_hooks,
         _check_parameterization_lock,
+        _check_fork_override,
         _check_mill_go_overrides_stay_none,
         _check_mill_go2_declares_fork_override,
         _check_base_fork_paragraph_survives,
