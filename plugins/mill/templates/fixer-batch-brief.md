@@ -16,6 +16,7 @@ Rendered by millpy-fix.py via `_render.render` with these tokens:
   <SELF_FIX_ROUNDS>    — integer; how many self-fix attempts before reporting stuck
   <LANGUAGE_SKILLS>    — markdown block naming required language-specific skills
   <NITS_ONLY_CARVEOUT> — trailing clause after the zero-commit rules; empty-punctuation "." for a normal pass, or a --nits-only exception clause
+  <PRIOR_BLOCKING>     — digest of prior rounds' BLOCKING findings visible to this scope; "(none)" when there is none
 
 (`_render.render` strips this comment automatically.) -->
 # Fixer Brief — <TASK_TITLE> / <BATCH_NAME>
@@ -39,6 +40,12 @@ Load the **mill-receiving-review** skill before reading any finding in `<REVIEW_
 This is non-negotiable.
 
 <LANGUAGE_SKILLS>
+
+## Prior BLOCKING findings
+
+The following BLOCKING findings were fixed in earlier rounds of this task. Do not reintroduce the problems they describe.
+
+<PRIOR_BLOCKING>
 
 ## Fix discipline
 
