@@ -28,5 +28,8 @@ implementing  '2026-08-11T03:38:13Z'
 ```yaml
 batches:
   - name: crash-fix
-    state: pending
+    state: running
+    implementer_session: 50cc4b48-664a-4521-a5f3-9c120bf61bd3
+    start_sha: de485e491a8d21616bf1df5b6fb4f2f855d8c6a5
+    verify_baseline_failures: []
 ```
