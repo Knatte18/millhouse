@@ -83,6 +83,7 @@ the role, carries the fork literal) rather than trying to validate the instructi
 ### Card 4: Write the fixer fork override in mill-go2's SKILL.md
 
 - **Context:**
+  - `plugins/mill/scripts/_status.py`
   - `plugins/mill/skills/mill-go/SKILL.md`
   - `plugins/mill/skills/mill-go-base/SKILL.md`
   - `plugins/mill/unit_tests/test-mill-go-variants.py`
@@ -92,6 +93,12 @@ the role, carries the fork literal) rather than trying to validate the instructi
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
+  Confirm the two `_status` call signatures the block below quotes — `append_fork_fallback_log` and
+  `read_fork_fallback_log` — against `plugins/mill/scripts/_status.py` as batch 1 finalized them,
+  before writing the block. Argument names and order must match the shipped helpers exactly;
+  the block is the runtime contract the mill-go2 Builder follows, and a signature that drifts from
+  the module is a silent runtime failure nothing in this repo's tests would catch.
+
   Replace the single `(none)` line under `## Dispatch overrides` with the block below, verbatim.
   Leave the `## Dispatch overrides` header line itself byte-identical — the required-header check
   matches it against `splitlines()`, so altering, indenting, or suffixing it breaks the contract.
@@ -155,10 +162,21 @@ comes from the brief and finalize's `scope_violations` gate), and forfeits
     the contract that finalize's `scope_violations` gate depends on;
     inherited context is additive, never a substitute.
 
+  Also update the file's frontmatter `description:` line, which currently claims the variant is
+  "Behaviourally identical to /mill-go today" — true until this card lands and false the moment it
+  does. Replace that single line with:
+
+```
+description: Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.
+```
+
+  Leave the frontmatter's `name:` line and the `---` delimiters untouched.
+
   After the edit, the file must be under 4096 bytes — the thin-variant cap the contract test
   enforces. The block above lands the file at roughly 2330 bytes, leaving about 1770 bytes of
-  headroom for the sibling `mill-go2-fork-implementer` task's `### implementer` block. Keep it there:
-  do not pad the section with restatements of base behaviour.
+  headroom for the sibling `mill-go2-fork-implementer` task's `### implementer` block (the reworded
+  `description:` line is included in that figure). Keep it there: do not pad the section with
+  restatements of base behaviour.
 
 - **Commit:** `feat(mill-go2): fork-dispatch the fixer role`
 
