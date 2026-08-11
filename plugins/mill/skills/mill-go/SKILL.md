@@ -1240,8 +1240,21 @@ unfixed_nits = _nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status
 If `unfixed_nits` is non-empty, self-resolve once: for each `scope` in `unfixed_nits`, locate that scope's latest code-review file by mirroring `_nit_gate._find_final_code_review`'s own matching exactly (`_review_common.RE_SIMPLE`/`RE_BATCH`, both anchored at the filename start): for `holistic`, a match is a filename where the leading `<timestamp>-` is immediately followed by `code-review-r<digits>.md` with nothing else in between (RE_SIMPLE, type `code`) — do NOT use an unanchored glob like `*-code-review-r*.md` for this, since a per-batch scope whose name itself starts with `r` (e.g. `retry-fix` -> `...-code-review-retry-fix-r1.md`) contains that substring and would be wrongly picked up;
 for a per-batch scope, a match is a filename where the leading `<timestamp>-` is immediately followed by `code-review-{scope}-r<digits>.md` with `{scope}` matching this batch's exact name (RE_BATCH, type `code`, batch `{scope}`).
 Among matching files, sort by filename descending (the leading timestamp makes this chronological) and take the first.
+
+**Prior-blocking digest.**
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+import _prior_blocking, pathlib
+digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='batch', batch_name='<scope>')
+pathlib.Path('<briefs_dir>/prior-blocking-<scope>-r<N>.txt').write_text(digest, encoding='utf-8')
+"
+```
+Use `scope='batch', batch_name='<scope>'` when `<scope>` is a per-batch scope name, or `scope='holistic'` (no `batch_name`) when `<scope> == "holistic"`, writing to `<briefs_dir>/prior-blocking-<scope>-r<N>.txt` or `<briefs_dir>/prior-blocking-holistic-r<H>.txt` respectively (same naming convention as `## Execute` step 4 and `## Holistic code review` step 4).
+As with those two sites, this is called at every round with no round guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`.
+
 Dispatch the NIT-fix pass for that review file using the identical CLI, args, and dispatch-mode handling already documented for the in-flow NIT-fix pass: see `## Execute` step 4's `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `## Holistic code review` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
 `<N>`/`<H>` are read from the review filename.
+That identical shape now includes `--prior-blocking <digest-path>` too (per `## Execute` step 4's and `## Holistic code review` step 4's edits to those two sites), so this site's dispatch carries it automatically with no separate argument string of its own.
 This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-<scope>` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
 After the dispatch completes, re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`.
 
