@@ -92,7 +92,7 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
   - Wait for the `<task-notification>`.
     A `Monitor` run of this poll script delivers exactly one per-line event notification (the single `READY` / `BLOCKED: ...` / `TIMEOUT after ...` line the script echoes before exiting, carried in that notification's `<event>` tag), immediately followed by a second, separate terminal notification (`<status>completed</status>`, no `<event>` tag) once the script's process actually exits — this two-notification shape (confirmed by a live spike during this task's plan review, not assumed from the Agent tool's differently-shaped single-result notification) is expected and requires no special handling: act on the first notification's `<event>` content;
     the second, event-less completion notification for the same `task_id` carries no further information and needs no separate branch.
-    See `plugins/mill/docs/harness-tool-contracts.md` for this contract's canonical write-up.
+    See `../../docs/harness-tool-contracts.md` for this contract's canonical write-up.
     Branch on the `<event>` content:
     - **`READY`** — re-run Entry step 4 from its top: re-read `status_path` fresh and re-evaluate the whole entry-branch table again from scratch (do not assume `discussed` is now the phase and jump straight to Phase: Plan).
     - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to the operator. mill-plan's phase table has no pre-existing `blocked` row to reuse the exact message shape from (unlike mill-go's side) — halt with a message of the same shape mill-plan already uses elsewhere for a `BLOCKED:`-prefixed halt (e.g. the Plan Review non-progress/max-rounds `_status.set_blocked` halts): state the phase is blocked and surface `<reason>` verbatim.
@@ -116,7 +116,7 @@ Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exis
 Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
 **Fork scope guardrail.** mill-plan has no fork-dispatch guidance today;
-prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `plugins/mill/skills/mill-go/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
+prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `mill-go/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
 
 Reserve `Agent(subagent_type: "fork")` for research that genuinely depends on the parent's in-flight reasoning to be useful.
 When a fork IS used under that narrower justification, all of the following apply: (a) The fork's prompt must explicitly forbid Edit/Write calls, forbid mutating Bash commands, and forbid touching `plan_dir`, `status_path`, or any `mill-config.yaml`/`config.local.yaml`. (b) Immediately BEFORE dispatching the fork, capture a `git status --porcelain` snapshot (scoped to the worktree) as a baseline.
@@ -318,7 +318,7 @@ Each round:
    | move-mechanic-missing          | Add the canonical `## Rename mechanic` section (copied from `plugins/mill/templates/plan-batch.md`) to the offending batch file, placed before `## Batch Scope`. |
    | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Edits: + Creates: + Moves: target paths (Move source paths are excluded — they disappear, like Deletes: tokens). (The overview list is derivative; the cards are the source of truth.) |
    | plugin-manifest-context-missing | Add `plugins/mill/.claude-plugin/plugin.json` to the offending batch's `Context:` list (unless the batch's own `Edits:` already includes it, in which case the check should not have fired — re-verify the check's `Creates:`/`Edits:`/`Deletes:` prefix match before editing the plan). |
-   | context-completeness           | Add the referenced file to the card's `Context:` list (unless the card's own `Edits:`/`Creates:`/`Deletes:`/`Moves:` already covers it, in which case re-verify the check's own-list cross-reference before editing — the "add to Context:" remedy applies only when the token is absent from all five fields; a token that legitimately belongs to `Deletes:`/`Moves:`-source means the check should not have fired at all). The error dict's `line` field carries the exact offending `Requirements:` line (stripped), so the fixer can locate it directly without re-deriving it from the batch file. |
+   | context-completeness           | Add the referenced file to the card's `Context:` list (unless the card's own `Edits:`/`Creates:`/`Deletes:`/`Moves:`-source already covers it, in which case re-verify the check's own-list cross-reference before editing — the "add to Context:" remedy applies only when the token is absent from all five fields; a token that legitimately belongs to `Deletes:`/`Moves:`-source means the check should not have fired at all). The error dict's `line` field carries the exact offending `Requirements:` line (stripped), so the fixer can locate it directly without re-deriving it from the batch file. |
    | requirements-quote-indent-drift | Locate the card's `Requirements:` fence identified by the error payload's `message` (its fence index and the reported strip amount `N` — the message carries no content snippet). Strip exactly `N` leading space characters from each line of the fence body (not necessarily to column 0 — preserve whatever baseline indentation remains after the strip) so its content is a literal byte-exact substring of the target `Edits:` file named in the payload's `path` field. |
    | verify-not-isolated            | Open the per-batch file named by the error payload's `batch:` field (resolve `_mill/plan/<batch>.md`). Read the offending command from the payload's `path:` field. Replace the frontmatter line `verify: <original>` with `verify: PYTHONPATH= <original>` (literal `PYTHONPATH=`, single space, original command). One row, one prepend. |
    | verify-unrelated-test-file     | Remove the named token (the payload's `path:` field) from the offending batch's `verify:` command frontmatter (identified by the payload's `batch:` field). Log what was dropped and why in the validator-fix commit message, so the drop is auditable rather than silent. |
@@ -359,7 +359,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
    If `subprocess` or `psmux`: use the subprocess branch below.
@@ -378,7 +378,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
      the same cycle repeats).
      Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
    - **If `errors` key is absent** (validator success): The envelope contains `{"stage": "prepare", "brief_path": ..., ...}`.
-     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `plugins/mill/skills/mill-go/SKILL.md` "## Agent-mode dispatch").
+     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `mill-go/SKILL.md` "## Agent-mode dispatch").
 
    The discriminator is the **presence of the `errors` key in the JSON**, not the exit code or any other field.
    Validator errors emit exit code 1 with `errors` in the JSON;
@@ -414,7 +414,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
 
    The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
 
-3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (`plugins/mill/skills/mill-receiving-review/SKILL.md`;
+3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (`mill-receiving-review/SKILL.md`;
    it was already loaded unconditionally at the start of this phase — see the note immediately after the `### Phase: Plan Review` heading above).
    Non-negotiable.
    The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
@@ -449,7 +449,7 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
