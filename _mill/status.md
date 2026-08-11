@@ -39,6 +39,8 @@ batches:
     commit_sha: de3642c6a56c526899dec6ceaed04d7f40646f02
     verify_baseline_failures: []
   - name: mill-go2-fixer-override
-    state: pending
+    state: running
+    implementer_session: 03de3ad6-af51-4132-a7d8-e3b4cd7f8674
+    start_sha: fd502fd0504f39433f0db6235f1db346d015e7df
     verify_baseline_failures: []
 ```
