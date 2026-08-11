@@ -5,7 +5,7 @@ phase: done
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
 plan: _mill/plan
-parent: hanf/mill-merge-in-recompute-baseline-crash
+parent: main
 task: 'mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)'
 task_description: |
   mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)
