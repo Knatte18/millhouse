@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go2-fork-fixer
 branch: hanf/mill-go2-fork-fixer
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-go2: fork-based fixer (NIT-fix) dispatch'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-11T13:12:27Z'
 discussed  '2026-08-11T14:02:16Z'
+planning  '2026-08-11T14:09:02Z'
 ```
