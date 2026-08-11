@@ -31,7 +31,7 @@ MACHINERY_LITERALS = (
 )
 
 MILL_GO_LITERALS = (
-    'commit -m "mill-go: ',
+    '"mill-go: ',
     '_notify.notify("mill-go.',
     "[mill-go]",
 )
