@@ -32,7 +32,11 @@ implementing  '2026-08-11T14:35:10Z'
 ```yaml
 batches:
   - name: status-fork-fallback-log
-    state: pending
+    state: running
+    implementer_session: 0f5777b4-514d-44a6-9183-574d111af05a
+    start_sha: e62d4dd187a8f1f76b17f038a0e47441da5fe933
+    verify_baseline_failures: []
   - name: mill-go2-fixer-override
     state: pending
+    verify_baseline_failures: []
 ```
