@@ -178,14 +178,17 @@ reviews day to day.
      `_review_plan.py`, which calls `_reviewer_single.run(..., resume=True)` a second time within
      the same round — the round's persisted `duration_s` is the sum of every such call's `dt`.
   2. **Intra-`_invoke()` fast-fail-retry summation**: `_invoke()`'s subprocess branch (~lines
-     350-400) computes `dt = time.monotonic() - start` right after the *first* subprocess attempt,
-     then may fast-fail-retry (non-zero exit, <2s, empty stdout, not resume) and re-run the
-     subprocess — today `dt` is never recomputed after that retry, so a round hitting this path
-     would undercount to just the failed first attempt's sub-2-second time. Fix: move the `dt`
-     computation to after the fast-fail-retry block (i.e. compute `time.monotonic() - start` once,
-     at the very end of `_invoke()`, after any retry has completed) — since `start` is captured
-     once before the first attempt, this single end-of-function computation naturally sums both
-     attempts without needing an explicit accumulator.
+     350-400) computes `dt = time.monotonic() - start` right after the *first* subprocess attempt —
+     this `dt` is not just a timing side-note, it's the value the fast-fail-retry gate itself
+     evaluates (`result.returncode != 0 and dt < 2.0 and ...`, line ~371) and the value its debug
+     print reports (line ~377), so it must still exist, computed exactly where it is today, before
+     the retry decision runs. Today `dt` is never recomputed after a retry actually happens, so a
+     round hitting this path would undercount to just the failed first attempt's sub-2-second time.
+     Fix: keep the existing first-attempt `dt` computation and the gate/print that depend on it
+     completely unchanged; separately, add a *second*, final `time.monotonic() - start` computation
+     at the very end of `_invoke()` (after the retry block, whether or not a retry actually ran) to
+     produce the cumulative duration that gets returned/persisted as `duration_s` — two distinct
+     timing reads from the same `start`, not one relocated computation.
 - Rationale: the true cost of reaching a round's verdict includes every call/attempt it took at
   every layer, not just the last one — dropping either layer's retry time (call-level or
   attempt-level) produces a silent undercount for exactly the rounds that had a rough edge (missing
@@ -549,6 +552,16 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   extend the Decision to cover both branches, reading `duration_s` from `getattr(exc, ...)` in the
   `LLMError` branch (no return value exists) but from the already-obtained `ReviewerCallResult`
   directly in the `ReviewError` branch (the call succeeded; the value lives on the return object,
-  not on anything raised). **Why:** the two branches source duration from different places — a
+  not on anything raised).
+- **Q:** (Discussion review r5 gap) The layer-2 (intra-`_invoke()`) fix said to move the `dt`
+  computation to after the fast-fail-retry block — but `dt` is also what the retry gate itself
+  evaluates (`dt < 2.0`) and what its debug print reports, both *before* any retry happens. Does
+  relocating that computation break the gate? **A:** [auto-pick] Yes, as originally phrased it
+  would — fix: keep today's first-attempt `dt` (and the gate/print reading it) completely
+  unchanged; add a *second*, separate `time.monotonic() - start` computed after the retry block for
+  the cumulative `duration_s` that actually gets returned/persisted. **Why:** the gate needs a
+  timing value that exists before the retry decision runs; the persisted duration needs one that
+  exists after it — these are two different reads of the same `start`, not one relocatable
+  computation. **Why:** the two branches source duration from different places — a
   single "attach it to the exception" fix only worked for the branch that actually raises before
   ever getting a `ReviewerCallResult`.
