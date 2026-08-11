@@ -40,6 +40,12 @@ There is nothing further to wait for.
   cold-fallback, fallback-recording, and experiment-risk text described under Decisions.
 - `plugins/mill/unit_tests/test-mill-go-variants.py` — add one contract check locking the fork
   override's presence in `mill-go2` and its absence in `mill-go`.
+- `plugins/mill/scripts/_status.py` — add `append_fork_fallback_log`, an append-only audit-log
+  helper mirroring the existing `append_inferred_success_log`.
+  Required by Decision `fallback-record-must-not-overwrite-phase`;
+  this is the task's only production-code change.
+- `plugins/mill/unit_tests/` — coverage for that helper (see `Testing` for whether it extends an
+  existing file or adds one).
 
 **Out:**
 
@@ -49,10 +55,10 @@ There is nothing further to wait for.
 - `plugins/mill/skills/mill-go/SKILL.md` — stays `(none)` for both override points.
   The production orchestrator is unchanged by this task, which is the entire reason the variant
   split exists.
-- Every Python script.
-  No change to `millpy-fix.py`, `_implementer_common.py`, `_agent_dispatch.py`, or any other
-  helper.
-  This task is SKILL.md text plus one test function.
+- Every Python script **except** `_status.py`'s one new helper.
+  No change to `millpy-fix.py`, `_implementer_common.py`, `_agent_dispatch.py`, `_notify.py`, or any
+  other helper, and no change to any existing function in `_status.py` — `append_fork_fallback_log`
+  is purely additive and no existing caller is touched.
 - The implementer, reviewer, and merge-in roles.
   Reviewer is explicitly and permanently out of scope for forking (see Decision
   `reviewer-stays-cold`);
@@ -105,20 +111,27 @@ There is nothing further to wait for.
   a shortened prompt that leans on inherited context (breaks the brief-is-the-contract invariant
   that finalize's `scope_violations` gate depends on).
 
-### role-detection-via-envelope
+### role-identification-is-structural
 
-- Decision: the Builder identifies a fixer dispatch by the prepare envelope's `role` field being
-  `"fix"`.
-- Rationale: `emit_prepare` sets `"role": role` unconditionally
-  (`plugins/mill/scripts/_implementer_common.py:1362`), and `millpy-fix.py` passes the literal
-  `"fix"` at its only prepare call site (`millpy-fix.py:653-666`).
-  The field is already in the envelope the Builder parses at step 2, so no new discrimination
-  logic and no script change is needed.
-- Rejected: keying on the CLI name (`millpy-fix.py`) in the invocation text (works, but is a
-  string the Builder would have to remember across the dispatch rather than a field it already
-  parsed);
-  keying on `subagent_type` (useless — fixer and implementer both resolve to
-  `mill:mill-implementer`, see Technical context).
+- Decision: no role-detection logic is written at all.
+  The override applies because of **where it sits** — Override point A states that "the role for the
+  current dispatch is the one named by the calling subsection" (`mill-go-base/SKILL.md:238-242`),
+  so a `### fixer` subsection is consulted at fixer dispatches and nowhere else.
+  Decision `per-role-subsections-for-sibling-disjointness` already produces exactly that structure,
+  which makes this free.
+- Rationale: an earlier draft made this a decision about keying on the prepare envelope's
+  `role: "fix"` field, weighing that against the CLI name and `subagent_type`.
+  All three were answers to a question the base does not ask.
+  Writing envelope-inspection prose into the override would add bytes against the 4096-byte cap and
+  imply a discrimination step that Override point A already performs structurally.
+- On the envelope field: `emit_prepare` does set `"role": role` unconditionally
+  (`_implementer_common.py:1362`) and `millpy-fix.py` does pass the literal `"fix"`
+  (`millpy-fix.py:653-666`), so `role: "fix"` is present in every fixer envelope and is useful when
+  reading a transcript after the fact.
+  Nothing in the override depends on it, and the override must not be written as though it does.
+- Rejected: keying on the envelope `role` field, the CLI name, or `subagent_type` — the first two
+  are redundant with structural placement, and the third does not discriminate at all (fixer and
+  implementer both resolve to `mill:mill-implementer`, see Technical context).
 
 ### cold-fallback-on-first-terminal-failure
 
@@ -156,22 +169,67 @@ There is nothing further to wait for.
 
 ### record-the-fallback
 
-- Decision: immediately before the cold retry, emit both a notification and a status row, then
-  commit the row:
+- Decision: immediately before the cold retry, emit a notification and append a dedicated audit-log
+  row, then commit the row:
   `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"fixer {scope} r{N}", slug=slug)` and
-  `_status.append_phase(status_path, f"fork-fallback-fix-{scope}-r{N}", _timestamp.now_utc_iso())`,
+  `_status.append_fork_fallback_log(status_path, scope, N, _timestamp.now_utc_iso())`,
   followed by
   `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: fork-fallback for fixer {scope} r{N}"`.
   `{scope}` is the batch name for batch scope and the literal `holistic` for holistic scope,
   matching the `scope_label` the fix CLI already computes (`millpy-fix.py:655`).
+  `append_fork_fallback_log` is a **new helper this task adds** to `plugins/mill/scripts/_status.py`
+  (see Decision `fallback-record-must-not-overwrite-phase` for why, and `Testing` for its coverage).
 - Rationale: how often a forked fixer dies is the single most valuable measurement this experiment
   produces, and an unrecorded fallback is invisible once the session ends.
-  Both helpers are already used throughout the base, and committing the row immediately matches the
-  base's own pattern for `self-resolved-verify-logic` and `self-resolved-terminal-dirt`.
 - Rejected: `_notify` only (lost once the session ends);
   nothing at all (makes the experiment unmeasurable);
   folding the row into the fixer's own next commit (the fixer commits from a separate session and
   may never reach a commit if the cold retry also fails).
+
+### fallback-record-must-not-overwrite-phase
+
+- Decision: the fallback record must **not** go through `_status.append_phase`.
+  It goes through a new append-only audit-log helper,
+  `_status.append_fork_fallback_log(status_path, scope, round, timestamp)`, which creates and
+  appends to a `## Fork-fallback log` section and never touches the top-level `phase:` field.
+- Rationale: `append_phase` overwrites `phase:` in the top yaml block (`_status.py:425-432`), and
+  `phase:` drives the entry gate's phase table (`mill-go-base/SKILL.md:114-121`) plus the
+  mid-execution widening predicate (`:127-132`).
+  That predicate matches an exact set
+  `{implementing, reviewing, fixing, self-resolved-verify-logic, holistic-approved}` and the regexes
+  `^approved-.*$`, `^reviewing-.*-r\d+$`, `^fixing-.*-r\d+$`, `^holistic-reviewing$`.
+  A literal like `fork-fallback-fix-<scope>-r<N>` matches none of them, so a session crash between
+  the fallback commit and the cold retry's own next phase write would resume onto the table's
+  `any other -> surface + halt` row (`:121`) — the task would halt on a phase name nothing
+  recognises.
+  Registering the literal in the widening table would fix that but requires editing
+  `mill-go-base/SKILL.md`, which Decision `no-base-edits` forbids and which would put a
+  variant-specific string in the shared base.
+  An append-only audit section sidesteps the conflict entirely: `phase:` keeps whatever value the
+  in-flight fix round already set (`fixing-{scope}-r{N}`, which the widening regex
+  `^fixing-.*-r\d+$` already matches and routes to `## Resume`), so crash-resume behaves exactly as
+  it does for a non-forked fixer.
+- Precedent: two append-only audit-log helpers already exist and are the direct model for this one —
+  `_status.append_recovery_log` (`:1067`) and `_status.append_inferred_success_log` (`:1175`).
+  Both lazily create their own `## ... log` section on first call, append one row per call inside
+  the existing fenced block, and never rewrite prior rows or touch `phase:`.
+  The new helper mirrors `append_inferred_success_log` line for line, differing only in heading
+  constant and row format.
+- Correction to the record: an earlier draft of Decision `record-the-fallback` justified the
+  `append_phase` call by citing `self-resolved-verify-logic` and `self-resolved-terminal-dirt` as
+  precedent.
+  That was wrong on both counts.
+  `self-resolved-verify-logic` **is** registered in the widening exact-set
+  (`mill-go-base/SKILL.md:130`), so it is precedent for registering a literal, not for skipping
+  registration;
+  `self-resolved-terminal-dirt` is written during Handoff, where there is no subsequent resume
+  exposure, so it is not analogous to a mid-fix write at all.
+- Rejected: registering `fork-fallback-fix-<scope>-r<N>` in the base's widening table (conflicts
+  with `no-base-edits`, and leaks a variant-specific literal into shared machinery);
+  reusing the existing `fixing-{scope}-r{N}` literal (resume-safe, but records nothing — it is the
+  string the fix CLI already writes, so the fallback would leave no trace);
+  `_status.update_field` with a top-level key (does not touch `phase:`, but overwrites rather than
+  appends, so a second fallback in the same task would clobber the first).
 
 ### broader-tool-grant-accepted-as-documented-risk
 
@@ -409,11 +467,31 @@ arrow glyph.
 
 ## Testing
 
-This task changes SKILL.md prose plus one test function;
-there is no runtime Python behaviour to unit-test.
-Coverage is therefore contract-locking, not behavioural.
+This task has two test surfaces: a contract-locking check on the variant SKILL.md files, and
+genuine behavioural coverage for the one new `_status.py` helper.
 
-**TDD candidate — the one new check in `test-mill-go-variants.py`.**
+**TDD candidate 1 — `_status.append_fork_fallback_log` in `test-status.py`.**
+Write the cases first;
+the helper is small enough that its whole behaviour is specified before a line of it exists.
+Extend `plugins/mill/unit_tests/test-status.py`, which already imports the two analogous helpers and
+carries a six-case template for `append_inferred_success_log` at `:982-1090`.
+Mirror that template's case list exactly, since the new helper mirrors the implementation:
+
+- Creates the `## Fork-fallback log` section lazily on first call.
+- Appends a second row without disturbing the first.
+- The row carries the scope label and the round number.
+- **Does not disturb `## Timeline` or the yaml block's `phase:`** — this is the case that locks the
+  BLOCKING finding from discussion review round 1 and is the reason the helper exists at all.
+  It must assert `phase:` is byte-identical before and after.
+- Raises `ValueError` when the section heading is present but its fenced block is missing.
+- Raises `ValueError` when the fenced block is unterminated.
+
+Cover both scope shapes in the row-format case: a batch name (`batch-a`) and the literal `holistic`.
+Do not re-test the lazy-section-insert machinery itself beyond the above — it is
+`_find_inferred_success_log_block`'s already-covered pattern, and the new helper's own
+`_find_fork_fallback_log_block` is a direct copy.
+
+**TDD candidate 2 — the one new check in `test-mill-go-variants.py`.**
 Write the check first against the current `(none)` state, watch it fail, then write the override
 text and watch it pass.
 This is a genuine TDD candidate because the assertion is fully specified before the prose exists.
@@ -447,7 +525,12 @@ they simply must still pass.
 
 ```
 PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-mill-go-variants.py
+PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-status.py
 ```
+
+Both files are standalone runners printing a `PASS:`/`FAIL:` summary and exiting non-zero on
+failure, so a plan card may carry either line as its `verify:` depending on which file that card
+touches.
 
 Confirmed green against the pre-change tree during discussion.
 
@@ -501,6 +584,22 @@ instrument for that observation.
   be variant-wide machinery colliding with `no-base-edits` and the byte cap;
   and the implementer path forks far more often, so driver bloat would surface there first.
   Recorded as a Decision so the omission is legible as a choice.
+- **Q:** Discussion review r1 [BLOCKING]: `append_phase` with a `fork-fallback-fix-*` literal
+  overwrites `phase:` and breaks the entry gate's crash-resume table.
+  How is the fallback recorded instead?
+  **A:** [auto-pick] Via a new append-only `_status.append_fork_fallback_log` helper that writes its
+  own `## Fork-fallback log` section and never touches `phase:`.
+  **Why:** registering the literal in the base's widening table would require a `mill-go-base` edit,
+  conflicting with `no-base-edits`;
+  an audit section sidesteps the conflict and leaves `phase:` at `fixing-{scope}-r{N}`, which the
+  existing widening regex already routes correctly.
+  Accepted consequence: scope widens to include one production-code change.
+- **Q:** Discussion review r1 [NIT]: does anything actually depend on the envelope's `role` field,
+  given Override point A identifies the role by calling subsection?
+  **A:** [auto-pick] Nothing does — the decision was replaced with
+  `role-identification-is-structural`.
+  **Why:** the per-role `### fixer` subsection already performs the discrimination;
+  envelope-inspection prose would cost bytes and imply a step the base does not ask for.
 - **Q:** Is the "a fork notifies identically to a cold `Agent()` call" claim spike-confirmed?
   **A:** No — it is a mechanical inference;
   `harness-tool-contracts.md` spiked the Agent tool generally, not `subagent_type: "fork"`.
