@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-prior-blocking-digest-helper
+phase: approved-millpy-fix-prior-blocking-flag
 slug: mill-go-quality-gate-gaps
 branch: hanf/mill-go-quality-gate-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-08-11T04:33:37Z'
 planned  '2026-08-11T04:33:51Z'
 implementing  '2026-08-11T04:34:15Z'
 approved-prior-blocking-digest-helper  '2026-08-11T04:40:58Z'
+approved-millpy-fix-prior-blocking-flag  '2026-08-11T04:44:19Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ batches:
     commit_sha: b8b902d39621297b889955fcba0e98ae3b3424c2
     verify_baseline_failures: []
   - name: millpy-fix-prior-blocking-flag
-    state: running
+    state: approved
     implementer_session: 2cb38e0e-e7ce-4f64-9a4d-78fc1eaa9fb1
     start_sha: b1dbd20db0d9a03ec6213954d81bd924c91c5fdc
+    commit_sha: 35119e763ec0d17e754b974faabac1fcd235628f
     verify_baseline_failures: []
   - name: done-gate-lint-defaults
     state: pending
