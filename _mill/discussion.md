@@ -162,10 +162,14 @@ base skill that both orchestrators load.
 
 ### variant-label-in-logs
 
-- Decision: `VARIANT_LABEL` replaces the literal `mill-go` in the 20 SKILL-authored `commit -m`
-  messages and the 7 `_notify.notify(...)` event names inside the base. A mill-go2 run therefore
-  writes `mill-go2: approve batch <name>` and emits `mill-go2.done`; a mill-go run is unchanged from
-  today.
+- Decision: `VARIANT_LABEL` replaces the literal `mill-go` in **all three** literal families inside
+  the base — the SKILL-authored `commit -m "mill-go: …"` subjects, the `_notify.notify("mill-go.…")`
+  event names, and the `[mill-go]` operator-facing echo/halt prefixes. Counts and the exact grep
+  commands that regenerate the site list live in the "What is parameterized in the base" table under
+  Technical context; that table is the single source of truth for the inventory, and this Decision
+  deliberately restates no numbers of its own. A mill-go2 run therefore writes
+  `mill-go2: approve batch <name>`, emits `mill-go2.done`, and echoes `[mill-go2]`; a mill-go run is
+  unchanged from today.
 - Rationale: the operator wants git history and desktop notifications to record which variant did
   the work, so the fork experiment's runs are distinguishable after the fact.
 - Rejected: keeping `mill-go:` in both variants (no way to tell the runs apart). Also rejected:
