@@ -35,6 +35,8 @@ Public API:
     clear_module_verify_baseline(status_path) -> None
     append_recovery_log(status_path, timestamp, restored_paths) -> None
     append_inferred_success_log(status_path, batch_name, round, timestamp) -> None
+    append_fork_fallback_log(status_path, scope, round, timestamp) -> None
+    read_fork_fallback_log(status_path) -> list[dict]
 """
 from __future__ import annotations
 
@@ -504,6 +506,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 _BATCHES_HEADING = "## Batches"
 _RECOVERY_LOG_HEADING = "## Tracked-file recovery log"
 _INFERRED_SUCCESS_LOG_HEADING = "## Inferred-success log"
+_FORK_FALLBACK_LOG_HEADING = "## Fork-fallback log"
 _BATCH_ALLOWED_KEYS = {
     "state",
     "implementer_session",
@@ -1223,3 +1226,171 @@ def append_inferred_success_log(
         lines.insert(fence_close_idx, new_row)
 
     status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Fork-fallback log — control-flow state for the mill-go2 fixer override
+# ---------------------------------------------------------------------------
+
+_FORK_FALLBACK_ROW_RE = re.compile(
+    r"^\S+\s\s(?P<scope>.+?)\s\sround\s(?P<round>\d+)\s*$"
+)
+
+
+def _find_fork_fallback_log_block(lines: list[str]) -> tuple[int, int, int, int] | None:
+    r"""Locate the fork-fallback-log section's heading and fenced-text body.
+
+    Structurally identical to ``_find_inferred_success_log_block``, but scans for
+    ``_FORK_FALLBACK_LOG_HEADING`` instead of ``_INFERRED_SUCCESS_LOG_HEADING`` — this section is
+    a plain append-only text block, not a yaml list, matching the other two audit logs'
+    convention.
+
+    Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)`` where:
+    - ``heading_idx`` points at the ``## Fork-fallback log`` line,
+    - ``fence_open_idx`` points at the opening ``\`\`\`text``,
+    - ``fence_close_idx`` points at the closing ``\`\`\``,
+    - ``section_end_idx`` is the last-line-inclusive end of the section (the next ``## `` heading or
+    EOF).
+
+    Returns ``None`` if the heading is absent.
+    """
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == _FORK_FALLBACK_LOG_HEADING:
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+
+    # Fence discovery is scoped to the section (until next ## heading).
+    section_end_idx = len(lines) - 1
+    for j in range(heading_idx + 1, len(lines)):
+        if lines[j].startswith("## "):
+            section_end_idx = j - 1
+            break
+
+    fence_open_idx = None
+    for j in range(heading_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == _TIMELINE_FENCE:
+            fence_open_idx = j
+            break
+    if fence_open_idx is None:
+        raise ValueError(
+            f"{_FORK_FALLBACK_LOG_HEADING} section missing its {_TIMELINE_FENCE} block"
+        )
+    fence_close_idx = None
+    for j in range(fence_open_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```":
+            fence_close_idx = j
+            break
+    if fence_close_idx is None:
+        raise ValueError(
+            f"{_FORK_FALLBACK_LOG_HEADING} {_TIMELINE_FENCE} block is unterminated"
+        )
+    return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
+
+
+def append_fork_fallback_log(
+    status_path: Path, scope: str, round: int, timestamp: str
+) -> None:
+    """
+    Append one row recording a cold fork-fallback retry to ``status.md``.
+
+    The ``## Fork-fallback log`` section is created lazily on first call, mirroring
+    ``append_inferred_success_log``'s lazy-insert-if-absent pattern — each call adds one new row
+    inside the existing fenced block, never rewriting or dropping a prior row.
+
+    The row is committed *before* the cold retry itself is issued, so a session that dies during
+    or immediately after the retry still leaves the row behind — that ordering is what makes
+    ``read_fork_fallback_log``'s reconstruction available exactly when a resumed session needs it.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        scope: The fixer dispatch scope this fallback applies to — a batch name, or the literal
+            ``"holistic"`` for the holistic-review fixer pass.
+        round: The review round the fallback happened on.
+        timestamp: ISO-8601 UTC timestamp for the fallback event;
+            written through ``_yaml_writer.quote_scalar`` to match ``append_inferred_success_log``'s
+                quoted timestamp convention.
+
+    Raises:
+        ValueError: the fork-fallback-log heading is present but its fenced block is missing or
+        unterminated.
+    """
+    _require_path(status_path, "append_fork_fallback_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    new_row = f"{quote_scalar(timestamp)}  {scope}  round {round}"
+
+    located = _find_fork_fallback_log_block(lines)
+    if located is None:
+        # Append a new section at the end with leading blank separator, mirroring
+        # append_inferred_success_log's absent-section branch.
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend(
+            [_FORK_FALLBACK_LOG_HEADING, "", _TIMELINE_FENCE, new_row, "```"]
+        )
+    else:
+        # Insert into the existing fenced block — an append, never a whole-section replace.
+        _heading_idx, _fence_open, fence_close_idx, _section_end = located
+        lines.insert(fence_close_idx, new_row)
+
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_fork_fallback_log(status_path: Path) -> list[dict]:
+    """
+    Return every recorded fork-fallback row as ``{"scope": str, "round": int}`` dicts.
+
+    Unlike ``## Tracked-file recovery log`` and ``## Inferred-success log``, which are write-only
+    audit trails with no reader, this section is control-flow state: the mill-go2 fixer override
+    reads it to reconstruct its ``fork_attempted`` predicate before deciding whether to fork again
+    for a given scope and round.
+    The reader must not be removed as dead code just because it has no other caller in this
+    module — doing so would silently reintroduce a post-fallback double-fork.
+
+    The guarantee this reader provides is narrow: it keeps a recorded fallback cold across a
+    resume — once a row exists for a scope and round, later resumes skip re-forking for that same
+    scope and round.
+    It does **not** make forking idempotent across a crash that happens before any fallback is
+    recorded — a session that dies while a fork is still in flight, before any terminal failure is
+    classified, leaves no row, and a resumed session forks again for that scope and round.
+
+    Structural corruption (a missing or unterminated fenced block) still raises, matching the
+    append side's posture, but a single line inside the fence that does not match the row format
+    is skipped rather than raising — one hand-edited or corrupted row must not take the
+    orchestrator down mid-run.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Returns:
+        One dict per parsed row, each with keys ``scope`` (``str``) and ``round`` (``int``).
+        Returns ``[]`` when the ``## Fork-fallback log`` heading is absent — the common path every
+        non-fallback fixer round hits.
+        List ordering is not contractual.
+
+    Raises:
+        ValueError: the fork-fallback-log heading is present but its fenced block is missing or
+        unterminated.
+    """
+    _require_path(status_path, "read_fork_fallback_log")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    located = _find_fork_fallback_log_block(lines)
+    if located is None:
+        return []
+    _heading_idx, fence_open_idx, fence_close_idx, _section_end = located
+
+    entries: list[dict] = []
+    for line in lines[fence_open_idx + 1 : fence_close_idx]:
+        match = _FORK_FALLBACK_ROW_RE.match(line)
+        if match is None:
+            continue
+        entries.append(
+            {"scope": match.group("scope"), "round": int(match.group("round"))}
+        )
+    return entries
