@@ -37,4 +37,4 @@ Store the result in a variable when the same timestamp is needed in multiple pla
   See `plugins/mill/docs/harness-tool-contracts.md` for the confirmed `Agent`/`Monitor` notification-shape contract.
 - **`$CLAUDE_PLUGIN_ROOT` is a CC template token, not a Bash subshell variable.**
   CC substitutes it when loading SKILL.md, so the resolved literal path is visible in the loaded skill text.
-  Autonomous agents (mill-plan, mill-go) constructing new Bash commands must use the resolved path verbatim — never reconstruct `${CLAUDE_PLUGIN_ROOT}` as a shell variable in new Bash commands, because it is empty in the Bash subshell on Windows.
+  Autonomous agents (mill-plan, mill-go, mill-go2) constructing new Bash commands must use the resolved path verbatim — never reconstruct `${CLAUDE_PLUGIN_ROOT}` as a shell variable in new Bash commands, because it is empty in the Bash subshell on Windows.
