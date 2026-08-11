@@ -217,10 +217,14 @@ reviews day to day.
     - **Probe says no-longer-running, or the probe call itself errors:** `mill-go-base/SKILL.md`
       step 4(c) is explicit that this outcome "proceed[s] to the existing one-retry transient
       classification from (a) and re-dispatch exactly as today" — i.e. it triggers a second,
-      brand-new `Agent()` call, functionally identical to 4(a)'s re-dispatch (including the
-      reviewer-only `test -f output_path` shortcut, which still funnels into this same branch when
-      the file is absent). This outcome sums durations exactly like 4(a) — it is a real re-dispatch,
-      not a continuation of the same timer.
+      brand-new `Agent()` call, functionally identical to 4(a)'s re-dispatch. The reviewer-only
+      `test -f output_path` shortcut deterministically funnels into this same branch when
+      `output_path` **exists** (skips `TaskOutput` entirely, treats the reviewer as no-longer-running
+      immediately); when `output_path` is **absent**, the result is ambiguous and falls back to
+      `TaskOutput`, which can resolve to *either* this branch or the "still running" branch above —
+      no shortcut-specific claim applies to the absent case. This outcome (file exists, or
+      `TaskOutput` resolves to no-longer-running/errors) sums durations exactly like 4(a) — it is a
+      real re-dispatch, not a continuation of the same timer.
 - Rationale: consistent with the "true round cost" rationale already established for
   `NEED_CONTEXT`/fast-fail-retry summation — a round that needed a fresh re-dispatch genuinely cost
   the wall-clock of both attempts, whether that re-dispatch was triggered by 4(a)'s raw-API-error
@@ -562,6 +566,15 @@ _(none — no `CONSTRAINTS.md` present at hub root)_
   the cumulative `duration_s` that actually gets returned/persisted. **Why:** the gate needs a
   timing value that exists before the retry decision runs; the persisted duration needs one that
   exists after it — these are two different reads of the same `start`, not one relocatable
-  computation. **Why:** the two branches source duration from different places — a
+  computation.
+- **Q:** (Discussion review r6 gap) The 4(c) Decision's parenthetical claimed the reviewer-only
+  `test -f output_path` shortcut "funnels into this same [re-dispatch] branch when the file is
+  absent" — is that backwards relative to `mill-go-base/SKILL.md` step 4(c)'s actual text? **A:**
+  [auto-pick] Yes, backwards — the shortcut deterministically funnels into the re-dispatch branch
+  when `output_path` **exists** (skip `TaskOutput`, treat as no-longer-running immediately); when
+  absent, the result is ambiguous and falls back to `TaskOutput`, which can land in either outcome.
+  **Why:** SKILL.md step 4(c) states the file-exists case skips straight to "no longer running,"
+  and the file-absent case explicitly says "the result is ambiguous ... fall back to `TaskOutput`" —
+  the discussion had the two conditions swapped. **Why:** the two branches source duration from different places — a
   single "attach it to the exception" fix only worked for the branch that actually raises before
   ever getting a `ReviewerCallResult`.
