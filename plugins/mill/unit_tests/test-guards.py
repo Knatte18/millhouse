@@ -138,7 +138,7 @@ _WALK_ROOTS = [
 _WIKI_CWD_ALLOWLIST = {
     "plugins/mill/skills/mill-start/SKILL.md",
     "plugins/mill/skills/mill-plan/SKILL.md",
-    "plugins/mill/skills/mill-go/SKILL.md",
+    "plugins/mill/skills/mill-go-base/SKILL.md",
     "plugins/mill/skills/mill-merge/SKILL.md",
     "plugins/mill/skills/mill-wiki-push/SKILL.md",
     "plugins/mill/skills/mill-setup/SKILL.md",
