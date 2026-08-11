@@ -737,14 +737,24 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
      **Dispatch the NIT-fix pass whenever `nit_count > 0` — there is no exception to this for the Builder, even under time or performance pressure.
      'Non-blocking' does NOT mean optional: deferred nits re-surface as BLOCKING in later rounds and cost more total rounds.**
      The fixer, not the Builder, decides what to leave: within the pass, the fixer may leave a nit unfixed only when the reviewer explicitly marked it 'no action required' — that latitude governs the fixer's in-pass judgment, not the Builder's dispatch decision, and never excuses skipping the dispatch itself.
-   
-     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only`.
+
+     **Prior-blocking digest.**
+     ```bash
+     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+     import _prior_blocking, pathlib
+     digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='batch', batch_name='<batch_name>')
+     pathlib.Path('<briefs_dir>/prior-blocking-<batch_name>-r<N>.txt').write_text(digest, encoding='utf-8')
+     "
+     ```
+     Unlike the existing prior-notes digest above, this is called at every round with no `N > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
+
+     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt`.
      
      If `dispatch == subprocess` or `psmux`: via `millpy-bg`:
      ```bash
      PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
          --slug fix-<batch_name>-r<N>-nits -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only
+         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt
      ```
      Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
      ```bash
