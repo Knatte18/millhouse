@@ -35,8 +35,6 @@ directory tree.
   - `_mill/discussion.md`
   - `plugins/mill/unit_tests/test-guards.py`
   - `plugins/mill/skills/mill-go-base/SKILL.md`
-  - `plugins/mill/skills/mill-go/SKILL.md`
-  - `plugins/mill/skills/mill-go2/SKILL.md`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/unit_tests/test-mill-go-variants.py`
@@ -50,7 +48,12 @@ directory tree.
   in any `print()` string.
 
   Define `VARIANTS = ("mill-go", "mill-go2")` and `BASE = "mill-go-base"` as module constants, and
-  assert the following seven checks:
+  build every file path the test reads as `SKILLS / <name> / "SKILL.md"`. The two variant files do
+  not exist yet when this card runs — cards 7 and 8 create them — so the test is written against the
+  contract, not against file content the implementer can inspect. The base file does exist, having
+  been relocated in batch 1.
+
+  Assert the following seven checks:
 
   1. **Label binding.** Each variant file matches `^VARIANT_LABEL:\s*(\S+)\s*$` on some line
      (compile with `re.MULTILINE`). Exactly one match per file. The captured value equals that

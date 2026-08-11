@@ -82,8 +82,9 @@ perform these edits and should not load it.
   correct), and 720 (comment); `test-phase-wait.py` line 153 (comment).
 
   In `millpy-implement.py` this is a string- and comment-only edit. Do not change any control flow,
-  any function signature, or the literal prefix `mill-go: start batch` that
-  `_implementer_common.py` parses — see the `script-side-prefixes-unchanged` Shared Decision.
+  any function signature, or any script-authored commit-subject prefix — see the
+  `script-side-prefixes-unchanged` Shared Decision in the overview, which names the parser those
+  prefixes feed and why it must not be disturbed. Only the cited SKILL.md path changes.
 
   `harness-tool-contracts.md` line 34 additionally names mill-go's
   "### Entry-gate wait for upstream mill-plan" subsection; that subsection moved to the base intact,
