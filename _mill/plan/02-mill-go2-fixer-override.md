@@ -130,6 +130,11 @@ comes from the brief and finalize's `scope_violations` gate), and forfeits
 
   The block is written the way it is for reasons that must survive an edit:
 
+  - The block carries no `--nits-only` gate and names no individual dispatch site. It governs every
+    fixer dispatch — batch and holistic scope, NIT-only pass and `REQUEST_CHANGES` pass — per Shared
+    Decision `fork-covers-all-fixer-dispatch`. The task title's "(NIT-fix)" names the motivating case,
+    not the boundary;
+    do not narrow the override to match it.
   - `<VARIANT_LABEL>` appears in the notify event and the commit message rather than a literal
     variant name. A literal `mill-go2` would not trip the hardcoded-literal ban, but the placeholder
     matches how the base parameterizes the same three literal families and survives a future rename.

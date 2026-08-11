@@ -47,6 +47,22 @@ Batch-local decisions live in each batch file._
   reintroduce the double-fork-on-resume bug that discussion review round 3 raised.
 - **Applies to:** all batches
 
+### Decision: fork-covers-all-fixer-dispatch
+
+- **Decision:** the `### fixer` override governs **every** fixer dispatch — batch scope and holistic
+  scope, the post-`APPROVE` `nit_count > 0` NIT-only pass and the `REQUEST_CHANGES` pass alike.
+  It is deliberately broader than the task title's "(NIT-fix)" phrasing, which names the motivating
+  case rather than the boundary.
+  The override text must therefore carry no `--nits-only` gate and no per-call-site enumeration.
+- **Rationale:** Override point A in the base is role-scoped, not site-scoped — it resolves which
+  role is dispatching and nothing else. All four fixer dispatch sites route through the same shared
+  Agent-mode pattern, so all four consult the same `### fixer` subsection. A site-selective override
+  would have to re-state which sites it covers, which costs bytes against the 4096-byte variant cap
+  and drifts the moment the base adds or moves a fixer dispatch site.
+  This is discussion Decision `fork-all-four-fixer-dispatch-sites`, restated here because the plan
+  files are the artifact the implementer and reviewer read.
+- **Applies to:** batch 2
+
 ### Decision: read-helper-return-shape
 
 - **Decision:** `_status.read_fork_fallback_log(status_path)` returns `list[dict]`, one dict per
