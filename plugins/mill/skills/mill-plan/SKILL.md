@@ -204,7 +204,8 @@ The Handoff terminal gate auto-cleans common ephemeral artifacts (`coverage.out`
 
 **Done-gate reminder.**
 If the plan's batch-verify scopes do not cover the entire module tree (the common case for scoped plans), consider setting `pipeline.done_gate` in `mill-config.yaml` to a cheap repo-wide test command (e.g. `go test ./...` for Go repos, `dotnet test` for .NET solutions). mill-go runs this command from `git_root` before marking the task `done`, catching regressions in packages outside the batch-verify scope.
-Leave `done_gate: null` (the default) if a repo-wide test would be too slow or is not meaningful for the project.
+When the target language's build skill defines a lint command (Go: `golangci-lint run`; Python: `ruff check .`), default `done_gate` to include it — e.g. `go test ./... && golangci-lint run`. This applies even when a repo-wide *test* command is skipped as too slow: author `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`, since linters are fast, unlike full regression suites. `csharp-build` defines no lint command today, so C# projects are unaffected by this default.
+Leave `done_gate: null` only when the project has neither a meaningful repo-wide test nor a defined lint command.
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`.
 Any `PlanDAGError` → fix the plan files, then re-validate.
