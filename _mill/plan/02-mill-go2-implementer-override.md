@@ -62,6 +62,8 @@ Tests come first (card 3), then the variant override (card 4), then the base pro
 - **Requirements:**
   Replace the single line `(none)` under the `## Dispatch overrides` header with the override body below. Leave the `---` frontmatter, the `## Variant binding` block, the `## Driver preamble` section (which stays `(none)`), and the trailing `mill:mill-go-base` loading paragraph exactly as they are.
 
+  The override must assign fork-or-cold explicitly to **every** implementer `Agent()` call site in the base, not only the ones it names as forked. Override point A applies per-role to all of them, so an unassigned site is genuinely ambiguous. The six sites, and the assignment the text below encodes: the initial implement dispatch (fork); step 4(a)'s transient one-retry re-dispatch (fork); `### Stuck escalation`'s `verify`/`logic` first-occurrence self-resolve re-fire (fork); `### Stuck escalation`'s already-retried-`transient` fresh re-fire (cold — this is the one cold fallback per batch); step 6.5.2's `--resume-incomplete` re-dispatch (cold); and `## Resume`'s `running`-state re-dispatch (cold). Step 6.5.1's warm `SendMessage` and the `incomplete` branch's warm auto-resume are not fresh `Agent()` dispatches and need no assignment.
+
   Write this text, adjusting wording only where the byte budget forces it:
 
 ```markdown
@@ -69,25 +71,30 @@ Tests come first (card 3), then the variant override (card 4), then the base pro
 pattern with a fork. Fixer, reviewer, and merge-in are unclaimed: the default call
 applies to them unchanged.
 
-- **Forked dispatch points:** the initial implement dispatch and the transient
-  one-retry re-dispatch. Call `Agent(subagent_type: "fork", prompt: <de-briefing> +
-  "\n\nRead this file and follow the instructions exactly: <brief_path>")`. Do not
-  pass `model` — a fork ignores it — but retain the prepare envelope's
-  `subagent_type` and `model` for the cold fallback. Record the returned `agentId`
-  and follow every other step of the base's pattern unchanged.
-- **Step 6.5.2's `--resume-incomplete` re-dispatch stays cold** — it is the escape
-  hatch from a dispatch that already failed, so forking it would re-enter the failure
-  mode it exists to escape. Step 6.5.1's warm `SendMessage` resume is unaffected: it
-  addresses a live `agentId`, which works the same either way.
+- **Fork every dispatch that is a fresh attempt at this batch's implementation work:**
+  the initial implement dispatch, step 4(a)'s transient one-retry re-dispatch, and the
+  Stuck-escalation `verify`/`logic` first-occurrence self-resolve re-fire. Call
+  `Agent(subagent_type: "fork", prompt: <de-briefing> + "\n\nRead this file and follow
+  the instructions exactly: <brief_path>")`. Do not pass `model` — a fork ignores it —
+  but retain the prepare envelope's `subagent_type` and `model` for the cold fallback.
+  Record the returned `agentId` and follow every other step of the base's pattern
+  unchanged.
+- **Dispatch cold at every point that exists to escape a dispatch which already failed
+  to complete:** step 6.5.2's `--resume-incomplete` re-dispatch and Resume's
+  `running`-state re-dispatch. Forking either would re-enter the failure mode it exists
+  to escape. Step 6.5.1's warm `SendMessage` resume is unaffected either way: it
+  addresses a live `agentId`, which a fork returns just as a cold agent does.
 - **De-briefing (the prompt's opening).** State that you are the implementer for this
   batch and not the orchestrator; that every instruction inherited from the driver
   session belongs to the driver and not to you; that you must not drive the batch loop
   or invoke any mill orchestration CLI; that you must not dispatch further agents or
   workflows; and that the brief named below is your authoritative instruction set.
-- **Cold fallback, once per batch.** When a forked dispatch reaches a terminal-failure
-  re-dispatch under the base's step-4 classification (unchanged — no fork-specific
-  liveness machinery is added), re-dispatch cold with the envelope's `subagent_type`
-  and `model` rather than re-forking. Immediately before the cold retry, emit both
+- **Cold fallback, once per batch.** The Stuck-escalation already-retried-`transient`
+  fresh re-fire is that one cold fallback: by then the initial fork and its own
+  transient retry have both failed terminally, so re-dispatch cold with the envelope's
+  `subagent_type` and `model` rather than re-forking. The base's step-4 classification
+  is unchanged — no fork-specific liveness machinery is added. Immediately before the
+  cold retry, emit both
   `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"implementer {batch_name}", slug=slug)`
   and `_status.append_fork_fallback_log(status_path, batch_name, _timestamp.now_utc_iso())`
   (`signature: _status.append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str) -> None`),
@@ -136,7 +143,7 @@ The driver's own context growth across many batches is a known, unmeasured risk.
 
   1. **Replace disqualifier (3).** It currently reads that a fork has no on-disk brief, so a forked dispatch cannot be resumed after a crash the way `--resume-incomplete` resumes a briefed dispatch. That is factually wrong for this design: `millpy-implement.py --stage prepare` renders the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way. Replace it with a true third disqualifier that is still about **resume**, so that `mill-start/SKILL.md`'s enumeration of "no brief, no resume requirement, no per-role model tier, and no tool restriction to lose" keeps mapping onto the three: a forked dispatch's crash-resume path is unverified — the brief is written to disk regardless of dispatch shape, so `--resume-incomplete` has its input, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 4's liveness probe and step 6.5's warm resume depend on. Keep it numbered `(3)` and keep the three-disqualifier structure intact.
   2. **Add the mill-go2 cross-reference.** One sentence recording that mill-go2 accepts these trade-offs for the implementer role only, pointing at its `## Dispatch overrides`, and stating that every other role and every mill-go dispatch keeps the fresh-`Agent` default.
-  3. **Amend the closing "used only in mill-start's Explore phase" sentence** so it also names mill-go2's implementer override as an experimental second site. Leaving it unamended would make it false the moment card 4 lands.
+  3. **Amend the closing "used only in mill-start's Explore phase" sentence.** It is already stale before this task touches it: `plugins/mill/skills/mill-plan/SKILL.md`'s "Fork scope guardrail" section sanctions a second live fork-usage site — Phase: Plan research that genuinely depends on the parent's in-flight reasoning, under a narrow justification plus a git-status scope check. Rewrite the sentence to name all three sites rather than counting mill-go2 as the second: mill-start's Explore phase, mill-plan's Phase: Plan research dispatch, and, experimentally, mill-go2's implementer override. Do not assert an ordinal ("second site") anywhere — the count is what went stale the first time.
 
   Two literals must survive byte-for-byte because other skills cite them: the heading `**Why not fork?**`, cited by name from `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`; and disqualifier (2)'s claim that a fork inherits the **parent's tools**, cited specifically from `plugins/mill/skills/mill-plan/SKILL.md`. Card 3 asserts on both. Disqualifier (1)'s model-assignment claim is also unchanged.
 

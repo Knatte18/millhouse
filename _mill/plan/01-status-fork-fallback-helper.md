@@ -57,6 +57,8 @@ Tests come first (card 1), implementation second (card 2), per the overview's te
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
+  Add `append_fork_fallback_log(status_path, batch_name, timestamp) -> None` to the `Public API:` list in the module's top docstring, immediately after the existing `append_inferred_success_log(...)` entry and matching that list's argument-name-only signature style. Every public function in this module is listed there; omitting the new one would break the convention.
+
   Add the module-level constant `_FORK_FALLBACK_LOG_HEADING = "## Fork-fallback log"` to the existing constant block that already declares `_BATCHES_HEADING`, `_RECOVERY_LOG_HEADING`, and `_INFERRED_SUCCESS_LOG_HEADING`, placed immediately after `_INFERRED_SUCCESS_LOG_HEADING`.
 
   Add a new banner-comment section at the end of the module, after `append_inferred_success_log`, following the same `# ---------------------------------------------------------------------------` banner shape the two preceding sections use, with a one-line description naming it as the audit trail for mill-go2's cold-fallback-on-dead-fork path.
