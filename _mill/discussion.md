@@ -1,98 +1,107 @@
-# Discussion: mill-merge-in --recompute-baseline crashes uncaught on absent status.md
+# Discussion: mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)
 
 ```yaml
-task: mill-merge-in --recompute-baseline crashes uncaught on absent status.md
-slug: mill-merge-in-recompute-baseline-crash
+task: mill-go: quality-gate coverage gaps (NIT-fix regressions, missing lint gate)
+slug: mill-go-quality-gate-gaps
 status: discussing
-parent: main
+parent: hanf/mill-merge-in-recompute-baseline-crash
 ```
 
 ## Problem
 
-`mill-merge-in --recompute-baseline` crashes with an uncaught exception (exit 1) when `_mill/status.md` is entirely absent, instead of following its own documented fail-safe contract.
+This task is a narrowed remainder of a 4-issue cluster (GitHub #798-#801 originally); 2 of the 4 were already fixed directly and are out of scope here. Two confirmed gaps remain in mill-go/mill-plan's quality gates:
 
-This is the last of three related crash sites originally reported in GitHub issue #803 ("mill-merge/mill-merge-in: multiple call sites crash on the closed-PR re-entry path where status.md is already absent"). The other two have since been fixed and verified during this task's Explore phase:
+1. **NIT-fix passes can silently revert a just-fixed BLOCKING defect (#801).** Both the per-batch and holistic NIT-only fix passes in `mill-go/SKILL.md` are dispatched with "Do NOT re-review — the NIT fix is trusted", and the fixer brief (`fixer-batch-brief.md` / `fixer-holistic-brief.md`) gives the fixer only the current round's review file — no visibility into *why* prior rounds' BLOCKING findings were fixed the way they were. Reported incident: round 1's BLOCKING fix reworded a sentence to remove a banned bare-word reference; round 2's reviewer flagged the resulting phrasing as a NIT ("confusing sentence"); the NIT fixer reworded it back to the exact form containing the banned reference, reintroducing the BLOCKING defect. Nothing downstream (batch/holistic review, terminal cleanliness gates, the `done` gate's test run) caught it, because the regression was prose-only — no test exercises it.
+2. **Lint findings slip past every gate to PR-time (#800).** Batch `verify:` commands don't run the project's lint tool by default, and code-review's class taxonomy (`_review_common.RECOGNIZED_CLASSES` = `design`, `scope`, `decision`, `consistency`) has no lint/static-analysis class. Reported incident: a `golangci-lint` (ineffassign) finding in a newly-created Go file survived the batch's own `verify:`, holistic code review (including its own NIT pass), and the pre-`done` gate (`go test ./... && go test -tags integration ./...`) — it only surfaced when the orchestrator manually ran `golangci-lint run ./...` during `git-pr`'s ad-hoc Verify step, after the task was already marked `done`.
 
-- `mill-merge` Entry Step 4 now branches on `status_path.exists()` before calling `_parent_branch.resolve(...)`, falling back to `cfg.git.base_branch` when the file is absent (`mill-merge/SKILL.md` lines 78-80).
-- `_plan_dag.iter_batch_verifies` already returns `[]` gracefully when `plan_dir / "00-overview.md"` doesn't exist (`_plan_dag.py:534`).
-
-Only the third site remains: `_run_recompute_baseline()` in `millpy-merge-in-subagent.py:199`. Its docstring explicitly promises "Never raises -- every failure path ... prints a JSON line describing the outcome and returns 0 without blocking the merge-in." But the very first line of the function body, `status_path = _paths.require_status_path(project_root, cfg)` (line 224), calls a helper that raises `_paths.TaskHubError` when `status.md` doesn't exist, and this call sits outside any try/except — so the promised fail-safe is violated at the first possible opportunity.
-
-**Reproduction path:** `git.require_pr_to_base: true` → mill-finalize opens a PR and its cleanup commit `git rm -r`'s the whole `_mill/` directory (including `status.md`) before pushing → operator reviews and closes the PR without merging → operator re-runs `/mill-merge` → the `closed`-route re-invokes `mill-merge-in` with `--recompute-baseline` → crash.
+**Why now:** both are real regressions observed in production mill-go runs (`loomyard` repo, tasks `builder-retire` and `fabric-warp-binding-in-weft`), not hypothetical. Both slipped through every existing gate in the pipeline.
 
 ## Scope
 
 **In:**
-- Wrap the `_paths.require_status_path(project_root, cfg)` call at `millpy-merge-in-subagent.py:224` in a try/except so status.md absence follows the same fail-safe shape as the function's other two failure paths (parent-branch resolution failure, baseline computation failure).
-- One regression unit test in `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py` exercising `_run_recompute_baseline` (or the full `--recompute-baseline` CLI path) with status.md absent, asserting it returns 0 and prints `{"status": "success", "baseline": "error", ...}` without raising.
+- `mill-go/SKILL.md`: build a "prior-BLOCKING digest" (mirroring the existing prior-notes/NIT digest mechanism) and feed it to both the per-batch and holistic NIT-only fixer briefs, so a NIT-fix pass can see what BLOCKING findings earlier rounds already fixed at this scope and avoid undoing them.
+- `millpy-fix.py`: new `--prior-blocking <path>` CLI flag; threaded into `prepare`/`full` stage render tokens.
+- `fixer-batch-brief.md` / `fixer-holistic-brief.md`: new `<PRIOR_BLOCKING>` token/section presenting the digest to the fixer, with instruction not to reintroduce those problems.
+- New pure-Python helper (in `_fix`/`_review_common`-adjacent module, mill-plan's implementer to place) that extracts `### [BLOCKING...] <title>` headings + issue context from one or more review markdown files — reusing the existing extraction pattern already used for the NIT digest (`mill-go/SKILL.md` steps ~698 and ~1045).
+- `mill-plan/SKILL.md`: update the `pipeline.done_gate` guidance (~line 206-208) so that, whenever the target language's build skill defines a lint command (Go: `golangci-lint run`; Python: `ruff check .`), the recommended/authored `done_gate` command defaults to including it — even when a repo-wide *test* is skipped as too slow, `done_gate` should still default to at least the lint command rather than staying `null`.
+- `mill-config.yaml` template: update the `done_gate` comment (~line 122) to mention lint is expected to be folded in by default per language.
 
 **Out:**
-- The other two crash sites from issue #803 — already fixed, verified in Explore, not touched here.
-- Backfilling unit test coverage for `_run_recompute_baseline`'s other paths (no-module-wide-verify-configured "skipped" case, successful "computed" case) — currently untested but pre-existing gaps unrelated to this bug.
-- Rewording `_paths.TaskHubError`'s message or `require_status_path`'s contract — it's shared by other callers (e.g. `millpy-implement.py:561`, where the file's absence is a genuine startup error, not an expected state) and changing it is out of scope.
-- Any change to the PR-state gate / closed-route logic in `mill-merge/SKILL.md` itself — that flow already produces the expected re-entry state correctly; only the crash on the receiving end is being fixed.
+- No new reviewer class (`lint`/static-analysis) added to `_review_common.RECOGNIZED_CLASSES` / `DEFAULT_BLOCKING_CLASSES` — the incident showed the LLM reviewer's own NIT pass already missed the same lint bug, so reviewer-side classification would not have caught it; a deterministic gate is what closes the gap.
+- No change to per-batch `verify:` command defaults for lint — folding lint into `done_gate` (runs once, from `git_root`, before `done`) avoids the cost of running whole-project lint on every implementer/fixer round across every batch.
+- No re-review step added after NIT fixes (issue #801's option (a)) — would reintroduce the round-cost "Do NOT re-review" was designed to avoid; the digest approach (option (b)) is cheaper and targets the actual root cause (fixer blindness to prior rationale).
+- No task-defined-acceptance-sweep terminal re-run (issue #801's option (c)) — narrower than the digest approach and only covers tasks that happen to define an explicit zero-hit grep sweep.
+- No changes to `csharp-build` (it defines no lint command today) — the done_gate default only fires when a language skill defines a lint command; C# projects fall through to today's behavior unchanged.
+- Not reopening or touching the 2 already-fixed issues from the original 4-issue cluster.
 
 ## Decisions
 
-### wrap-require-status-path
+### prior-blocking-digest-for-nit-fixer
 
-- Decision: Wrap just the `require_status_path` call in `try/except Exception as e:`, printing `json.dumps({"status": "success", "baseline": "error", "reason": str(e)})` and `return 0` — the same shape as the two existing try/except blocks later in the function (parent-branch resolution at line 248, baseline computation at line 253).
-- Rationale: Matches the fail-safe output format already documented in the wiki task brief verbatim (`{"status":"success","baseline":"error",...}`, exit 0, no Rollback trigger). Using broad `Exception` (not narrowly `_paths.TaskHubError`) keeps this call site consistent in shape with its two siblings in the same function, which also catch bare `Exception`.
-- Rejected: Narrowing the catch to `_paths.TaskHubError` only — no functional difference today since that's the only exception `require_status_path` raises, but it breaks the established local pattern of the two sibling blocks for no benefit. Pre-checking `status_path.exists()` before calling `require_status_path` and reporting a distinct `baseline: "skipped"` value — rejected because the wiki brief already narrows the desired output to the `"error"` shape, and a `"skipped"` value would diverge from what's documented as expected without any consumer benefit (the JSON line is not currently branched on by `baseline` value anywhere in the caller).
+- Decision: Build a "prior-BLOCKING digest" analogous to the existing prior-NIT digest (`mill-go/SKILL.md` ~line 697-703 for batch, ~line 1045-1050 for holistic), but sourced from `### [BLOCKING...]` headings instead of `### [NIT...]` headings, and pass it to the NIT-only fixer via a new `--prior-blocking <path>` flag on `millpy-fix.py`, rendered into the fixer brief as a new `<PRIOR_BLOCKING>` token.
+- Rationale: The fixer currently has zero context on why prior BLOCKING-fixed prose/code reads the way it does, so a plausible-looking NIT fix can trivially undo it. Giving the fixer the prior findings' titles + issue context (not full review files — the `reviews/` read-ban stays intact, mirroring the existing NIT digest's curated-summary approach) closes this without adding a review round.
+- Rejected: re-review after NIT fix (cost); terminal acceptance-sweep re-run (too narrow — only covers tasks with an explicit zero-hit grep convention).
 
-### reuse-exception-message-verbatim
+### prior-blocking-digest-is-cumulative
 
-- Decision: The `reason` field reuses `str(e)` verbatim (i.e., `TaskHubError`'s own message, including its "run this CLI from the task hub dir" suggestion), rather than substituting a call-site-specific message.
-- Rationale: Consistent with the two sibling try/except blocks in the same function, both of which use `str(e)` verbatim. The JSON line is machine-consumed by `mill-merge-in`'s Verify step, not surfaced raw to the operator, so the suggestion's inaccuracy in this specific expected-absence case has no practical audience.
-- Rejected: A custom message like "status.md absent (expected on closed-PR re-entry after mill-finalize's cleanup commit)" — more accurate but inconsistent with the function's existing error-reporting style, and not worth the inconsistency for a string nothing currently reads.
+- Decision: The digest scans every review file from round 1 through round N-1 at this scope (batch or holistic), not just the immediately-preceding round N-1 (unlike the existing NIT digest, which is narrow-scoped to N-1 only).
+- Rationale: A NIT-fix pass three rounds later could just as easily undo a BLOCKING fix from round 1 as from round N-1. The scan is cheap text extraction (no LLM calls), so cumulative coverage costs nothing extra beyond reading a few more small files.
+- Rejected: narrow N-1-only scope (matches existing NIT-digest pattern exactly, but leaves a gap for delayed reintroduction more than one round later).
+
+### symmetric-batch-and-holistic-application
+
+- Decision: Apply the prior-blocking digest mechanism to both the per-batch NIT-fix dispatch (`mill-go/SKILL.md` ~line 749-770) and the holistic NIT-fix dispatch (~line 1170-1180) — both currently carry the identical "Do NOT re-review — the NIT fix is trusted" language and the identical blind-fixer gap.
+- Rationale: Per-hub config can enable batch-scope code review (`roles.code-review.batch.reviewer`, `null` by default) — the mechanism must exist at both sites so hubs that do enable batch review get the same protection the holistic scope gets.
+- Rejected: holistic-only (leaves batch-scope reviewers exposed to the identical failure mode when enabled).
+
+### done-gate-defaults-to-lint
+
+- Decision: `mill-plan/SKILL.md`'s `done_gate` authoring guidance changes from "consider setting `done_gate` to a cheap repo-wide test command" to: when the language build skill defines a lint command, default `done_gate` to include it, decoupled from whether a repo-wide *test* command is also included. A plan whose repo-wide test would be too slow may still set `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`.
+- Rationale: `done_gate` is the existing, already-wired mechanism (`_done_gate.py`, `mill-go/SKILL.md`'s pre-done gate step) for "cheap repo-wide check before marking done" — reusing it needs no new config key or script plumbing, just an authoring-guidance change. The reported incident had `done_gate` already set (`go test ./... && go test -tags integration ./...`) but lint-free — this decision directly closes that exact gap. Linters are typically fast (unlike full regression suites), so decoupling lint from the "too slow" carve-out is safe.
+- Rejected: adding lint to every batch `verify:` (expensive — runs on every implementer/fixer round, whole-project, per `golang-build`'s "whole-project lint stays whole-project" convention); adding a reviewer-side lint class (doesn't address the actual failure mode — the reviewer already missed the same bug in its own NIT pass).
+
+### no-new-reviewer-class
+
+- Decision: Do not add a `lint`/static-analysis entry to `_review_common.RECOGNIZED_CLASSES` or any `blocking_classes` list.
+- Rationale: YAGNI — the reported incident's own LLM reviewer NIT pass already missed the lint finding, so LLM-side classification is not the reliable layer for this; the deterministic `done_gate` fix (see above) is what actually catches it.
+- Rejected: adding the class as a "second line of defense" — no evidence it would catch anything the deterministic gate doesn't already catch, and it's unused machinery per this project's stated YAGNI principle.
 
 ## Technical context
 
-- **Crash site:** `plugins/mill/scripts/millpy-merge-in-subagent.py:224`, inside `_run_recompute_baseline(project_root, git_root, cfg)`. Currently:
-  ```python
-  status_path = _paths.require_status_path(project_root, cfg)
-  ```
-  with no surrounding try/except — the only unguarded call in an otherwise fully-guarded function.
-- **`_paths.require_status_path`** (`plugins/mill/scripts/_paths.py:608-628`): computes the status.md path via `status_path(project_root, cfg)` and raises `_paths.TaskHubError` if it doesn't exist. `_paths.TaskHubError` (`_paths.py:375`) is a plain `Exception` subclass.
-  Note the naming collision: the module-level helper `_paths.status_path(worktree_root, cfg)` (line 598) and the local variable `status_path` inside `_run_recompute_baseline` share a name — not a bug, just worth knowing when reading the function.
-- **`_paths` is already imported** in `millpy-merge-in-subagent.py` (line 47), so no new import is needed for either `require_status_path` or `TaskHubError`.
-- **Sibling error-handling shape already in the same function** (lines 247-260), to mirror exactly:
-  ```python
-  try:
-      parent_branch = _parent_branch.resolve(status_path, interactive=False)
-  except Exception as e:
-      print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-      return 0
-
-  try:
-      result = _verify_baseline.compute_baseline(
-          project_root, git_root, parent_branch, module_wide_verify_cmd
-      )
-  except Exception as e:
-      print(f"[millpy-merge-in-subagent] baseline recompute failed: {e}", file=sys.stderr)
-      print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-      return 0
-  ```
-  The fix for the require_status_path call should follow the same `except Exception as e: print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)})); return 0` shape. Whether to also add the `file=sys.stderr` diagnostic line (present on the second sibling block, absent on the first) is a minor style choice left to mill-plan/implementer judgment — either sibling is a legitimate precedent to match.
-- **Sibling call site for context (not touched by this task):** `millpy-implement.py`'s `main()` (not `_run_baseline_stage`, which only receives an already-resolved `status_path` as a parameter and never calls `require_status_path` itself) calls the same `_paths.require_status_path` (line 561) but *is* wrapped in `try/except _paths.TaskHubError as e: print(str(e), file=sys.stderr); return 1` — that's correct there because task-start pre-flight expects status.md to exist; its absence is a genuine startup error, not an expected post-merge-in state. Do not use that call site's handling as a model for this fix — the two call sites have opposite correctness requirements for the same exception.
-- **Caller / entry point:** `main()` dispatches `--recompute-baseline` to `_run_recompute_baseline` at line 359, independent of `--mode`.
-- **No existing test coverage** for `_run_recompute_baseline` at all — `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py` only tests the `--mode`/`--recompute-baseline` argparse mutual-requirement (`test_9_missing_mode`, line 363), not the function's actual behavior in any of its three outcome branches (skipped / computed / error).
+- `mill-go/SKILL.md`'s existing prior-notes digest (batch: ~line 696-703; holistic: ~line 1044-1050) is the direct template to mirror: same extraction pattern (`### [NIT...] <title>` heading regex, next non-empty line for Location/Issue context, ASCII-only digest text written to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`), same "round 1 passes nothing, digest defaults to `(none)`" convention. The new mechanism swaps the heading marker to `### [BLOCKING...]` and the output path prefix to `prior-blocking-`.
+- Class-suffixed headings matter: `### [BLOCKING:design] <title>` must match exactly like a bare `### [BLOCKING] <title>` (same rule already documented for the NIT scan).
+- A `**Demoted-from:** BLOCKING` marker line means the finding was demoted to NIT by the stage's `blocking_classes` ceiling (`_review_common.apply_blocking_ceiling`) and is rendered as `### [NIT...]`, not `### [BLOCKING...]` — so scanning for the literal `### [BLOCKING` heading text naturally excludes demoted findings without extra filtering. This is correct: a demoted finding was never presented to (or fixed by) anyone as BLOCKING, so it has nothing to protect against reintroduction.
+- `millpy-fix.py`'s `main()` (scripts/millpy-fix.py:214-313) currently accepts `--scope`, `--batch-name`, `--review-file`, `--round`, `--stage`, `--agent-output`, `--start-sha`, `--session-id`, `--nits-only` — `--prior-blocking` is a new, independent optional flag, parsed the same way, defaulting to `None`/omitted.
+- The render-token wiring for `--nits-only` (scripts/millpy-fix.py:449-454, `NITS_ONLY_CARVEOUT` computed once and passed into both the batch and holistic brief render calls at lines ~537 and ~601) is the pattern to follow for the new `PRIOR_BLOCKING` token — read the digest file content (or `(none)` if the flag is absent) once, pass into both render call sites.
+- Fixer briefs (`plugins/mill/templates/fixer-batch-brief.md`, `fixer-holistic-brief.md`) already document their full token list in a leading HTML comment (see `fixer-batch-brief.md:4-19`) — add `<PRIOR_BLOCKING>` there, and a new section (e.g. after "## Inputs", before "## Before reading any finding") presenting the digest with instruction not to reintroduce those problems.
+- `code-review`'s fixer flow, unlike discussion-review's, writes no structured `## Fixed` / `## Pushed Back` report — the fixer just commits code and emits the success/stuck JSON. The prior-blocking digest is therefore sourced purely from the review files' `### [BLOCKING...]` headings (which findings were *presented* as BLOCKING), not from a fix-outcome record — this is sufficient and consistent with how the existing NIT digest already works (also sourced from headings only, not from a fix-outcome record).
+- `mill-plan/SKILL.md`'s current `done_gate` guidance is at lines 206-208 (verify-command section). `mill-config.yaml` template's `done_gate` comment is at line 122. `_done_gate.py` and the "Pre-done gate" step in `mill-go/SKILL.md` (~line 1324-1336) already run whatever `done_gate` string is configured — no changes needed there; this task only changes what mill-plan *authors* into that string.
+- Per-language lint commands already documented in build skills: `golang-build` → `golangci-lint run` (SKILL.md, "Build Commands" + "Tool Installation" sections, including the `$GOPATH/bin` fallback detection pattern); `python-build` → `ruff check .`; `csharp-build` defines no lint command today (only a formatter note, explicitly absent) — the done_gate default is conditional on the language skill defining one, so C# is unaffected.
+- `_review_common.RECOGNIZED_CLASSES = ("design", "scope", "decision", "consistency")` (scripts/_review_common.py:309) and `DEFAULT_BLOCKING_CLASSES` (scripts/_review_common.py:2390-2396) are explicitly NOT touched by this task (see "no-new-reviewer-class" Decision).
 
 ## Constraints
 
-- Per repo `CLAUDE.md`: this is a Python project (`plugins/mill/` has `pyproject.toml`), so the plan's `verify:` command must start with `PYTHONPATH=` (literal, empty value) so the test subprocess doesn't load V2-cache modules instead of worktree code.
-- Per repo `CLAUDE.md`: unit tests run via `uv run --project plugins/mill` (the one CLAUDE.md-documented exception to the `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` cache-invocation form) — the plan's verify command for the new/existing unit test should use that form, not the cache form.
-- `_run_recompute_baseline` must continue to **never raise** under any internal failure — this fix must not narrow that guarantee, only extend it to cover the one remaining gap.
+- No `CONSTRAINTS.md` present at the hub root — none to enumerate beyond what's captured in Decisions/Scope above.
+- Digest files must stay ASCII-only per this repo's `print()`/`_log()` convention (Windows cp1252 crashes on non-ASCII stdout) — same rule the existing prior-notes digest already follows; the new prior-blocking digest must follow it identically.
+- The `reviews/` directory read-ban for fixers/implementers stays intact — only the curated digest file reaches the fixer, never a raw review file path.
+- `mill-config.yaml` hub file and the plugin template must stay in sync (existing repo convention) if the `done_gate` comment is edited in the template.
 
 ## Testing
 
-- **TDD candidate:** `_run_recompute_baseline` in `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`.
-- **New scenario to cover:** status.md absent (e.g. a `project_root` fixture with no `_mill/status.md` file, or `_mill/` entirely absent) → function returns `0`, printed JSON has `"status": "success"` and `"baseline": "error"`, and no exception propagates out of the call.
-- Existing tests in the same file (`test_1_conflicts_success` through `test_2x_marker_gate_*`) show the established fixture/mocking patterns (tmp project root, `_subprocess_util` stubbing, `capsys`/stdout capture for the JSON-line assertions) — follow those conventions rather than introducing a new test style.
-- Out of scope per the Scope section above: backfilling tests for the "skipped" (no module-wide verify configured) and "computed" (successful recompute) branches of the same function — pre-existing gaps, not part of this bug fix.
+- **Prior-blocking digest extraction (new pure-Python helper):** unit test with fixture review-markdown strings covering: a single BLOCKING finding, a BLOCKING finding with a class suffix (`### [BLOCKING:design]`), a demoted finding rendered as `### [NIT...]` with a `**Demoted-from:** BLOCKING` marker (must NOT appear in the digest), multiple review files across rounds 1..N-1 (cumulative aggregation), and zero prior BLOCKING findings (digest is empty/`(none)`). TDD candidate — write these fixtures before the extraction logic.
+- **`millpy-fix.py` flag/render-token threading:** unit test `--stage prepare` with `--prior-blocking <path>` pointing at a fixture digest file, asserting the rendered brief contains the digest text under the new token; a second test with the flag omitted, asserting the brief renders `(none)` (or equivalent) and not a raw `<PRIOR_BLOCKING>` placeholder.
+- **`mill-plan/SKILL.md` done_gate guidance change:** documentation-only — no automated test; verify by re-reading the edited section for internal self-consistency (matches the "Verify command scope" note's own stated rationale about per-round cost).
+- No test needed for the `RECOGNIZED_CLASSES` non-change (nothing is being added).
+- No integration test added — this task's runtime-observable surface (digest extraction, flag threading) is fully covered by unit tests with fixture data; the SKILL.md procedural changes (how mill-go sequences the new digest-build step) are not mechanically testable and are covered by careful self-review during plan-writing/review instead.
 
 ## Q&A log
 
-- **Q:** How should the crash site be fixed? **A:** [auto-pick] Wrap the `require_status_path` call in `try/except Exception as e:`, printing `{"status": "success", "baseline": "error", "reason": str(e)}` and returning 0 — mirrors the two existing try/except blocks later in the same function and matches the fail-safe output format already documented in the wiki task brief. **Why:** consistency with the function's own established local pattern and with the already-narrowed expected output from the wiki brief.
-- **Q:** How much test coverage should this task add? **A:** [auto-pick] One regression unit test scoped to this bug: `_run_recompute_baseline` returns 0 and prints `baseline: "error"` JSON when status.md is absent, without raising. **Why:** YAGNI — backfilling coverage for the function's other untested-but-unrelated paths is pre-existing debt outside this bug's scope.
-- **Q:** Should the `reason` field reuse `str(e)` verbatim or use a call-site-specific message, given `TaskHubError`'s message includes misleading "run this CLI from the task hub dir" advice for this expected-absence case? **A:** [auto-pick] Reuse `str(e)` verbatim, consistent with the two sibling try/except blocks in the same function. **Why:** the JSON line is machine-consumed, not operator-read raw, so the inaccuracy has no practical audience, and consistency with sibling blocks outweighs a marginal wording improvement nothing currently reads.
+- **Q:** For #801, which mitigation approach — feed the NIT-fixer prior BLOCKING context (b), add a re-review step (a), or a terminal acceptance-sweep re-run (c)? **A:** [auto-pick] Feed the NIT-fixer a digest of prior rounds' BLOCKING findings (option b). **Why:** Cheapest fix that directly targets the root cause (fixer blindness), no added review-round cost, mirrors an existing proven mechanism (the NIT digest).
+- **Q:** Should the fix apply to both batch-scope and holistic-scope NIT-fix dispatch? **A:** [auto-pick] Yes, symmetrically. **Why:** Both sites carry the identical "Do NOT re-review" gap in `mill-go/SKILL.md`; batch-scope code review can be enabled per-hub even though it's off by default.
+- **Q:** Should the prior-BLOCKING digest be cumulative (all rounds 1..N-1) or narrow (N-1 only)? **A:** [auto-pick] Cumulative. **Why:** Cheap text scan; protects against reintroduction more than one round removed from the original fix, which the reported incident's own 2-round scenario doesn't rule out as a broader risk.
+- **Q:** For #800, where should the lint command be enforced by default — `done_gate`, every batch `verify:`, or both? **A:** [auto-pick] `pipeline.done_gate` only. **Why:** Reuses existing wired machinery with no new config/script plumbing; runs once per task instead of on every implementer/fixer round; directly matches the reported incident where `done_gate` was already set but lint-free.
+- **Q:** Should the reviewer's class taxonomy also gain a `lint` class? **A:** [auto-pick] No. **Why:** The incident's own LLM reviewer NIT pass already missed the same lint bug, so reviewer-side classification isn't the layer that closes this gap; would be unused/YAGNI machinery.
+- **Q:** Should `done_gate` guidance shift from advisory ("consider setting") to defaulting-to-lint whenever a language lint command is known, even if a repo-wide test is skipped as too slow? **A:** [auto-pick] Yes, decouple lint from the test-suite-cost carve-out. **Why:** Linters are fast unlike full regression suites; this is the precise gap the incident exposed (test-only `done_gate`, no lint).
+- **Q:** Naming for the new plumbing — `--prior-blocking <path>` flag, `prior-blocking-<batch_name>-r<N>.txt` / `prior-blocking-holistic-r<H>.txt` file naming? **A:** [auto-pick] Yes, use this scheme. **Why:** Mirrors the existing `prior-nonblocking-*` naming exactly for auditability/consistency.
+- **Q:** Digest content when there's no prior round or zero prior BLOCKING findings? **A:** [auto-pick] Mirror existing `--prior-notes` convention — `(none)` default, flag omitted at round 1. **Why:** Consistency with the established pattern; no new convention to learn.
+- **Q:** Testing plan for these changes? **A:** [auto-pick] Unit test the digest-extraction helper and the flag/render-token threading; no test for the done_gate prose change (documentation-only); no integration test. **Why:** Matches this repo's unit_tests-for-pure-logic convention; the SKILL.md procedural sequencing isn't mechanically testable, and an integration test would add cost without covering anything the unit tests miss.
