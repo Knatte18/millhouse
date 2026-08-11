@@ -845,6 +845,26 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("--files is required for conflicts mode", stderr_buf.getvalue())
 
+    def test_20_recompute_baseline_missing_status_md(self):
+        """--recompute-baseline with status.md absent -> exit 0, baseline:error JSON, no raise.
+
+        setUp() never creates _mill/ under self.tmp_path, so status.md is already absent by
+        default here. load_config's mocked return_value must carry a realistic "paths" section
+        (mirroring real mill-config.yaml) so require_status_path raises the genuine TaskHubError
+        this bug is about, rather than an unrelated KeyError from a paths-less test fixture.
+        """
+        self.mock_load_config.return_value = {
+            "merge": {"verify_fix_rounds": 3},
+            "llm": {"implementer_timeout": 1800},
+            "paths": {"status_md": "_mill/status.md", "plan_dir": "_mill/plan/"},
+        }
+        rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["baseline"], "error")
+        self.assertIn("status.md", data["reason"])
+
 
 def _git(args, cwd, check=True):
     """Run a git subprocess against a real fixture repo, raising on unexpected failure."""

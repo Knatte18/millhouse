@@ -45,8 +45,9 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
   PUSH BACK is unavailable because no operator is present.
 - On `REQUEST_CHANGES`, the assistant auto-resolves each BLOCKING finding by adding the missing information to discussion.md using best judgment, commits, **pushes**, and re-runs the review.
 - On APPROVE, read the review file.
-  If zero `[NIT]` findings: break the loop and proceed to Handoff (auto-path identical to interactive 4a).
-  If one or more `[NIT]` findings: take the interactive 4b path verbatim — auto-resolve each NIT by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, then follow interactive step 4b's status-append calls and commit verbatim (see step 4b for the exact calls and commit), then push and break loop per 4b. The Q&A log is NOT touched for NITs — the fixer report is the audit trail.
+  If zero `[NIT]` findings: apply the Convergence gate exactly as interactive 4a does (see "Convergence gate" in Phase: Discussion Review) — break the loop and proceed to Handoff only when `converged` (or the round cap is reached), otherwise continue to round N+1.
+  If one or more `[NIT]` findings: take the interactive 4b path verbatim — auto-resolve each NIT by editing `<discussion_path>` using best judgment (per the `mill-receiving-review` decision tree, with PUSH BACK unavailable), write the same fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` with `## Fixed` / `## Pushed Back` sections, then follow interactive step 4b's status-append calls, convergence-gate check, and commit verbatim (see step 4b for the exact calls and commit), then push and break loop per 4b — only when `converged` (or the round cap is reached); otherwise continue to round N+1 per 4b's not-`converged` path. The Q&A log is NOT touched for NITs — the fixer report is the audit trail.
+  The convergence gate defined under Phase: Discussion Review is reused here verbatim, not redefined — it is orthogonal to `prev_blocking_titles`/`extension_used`: that machinery only reads BLOCKING-finding titles across REQUEST_CHANGES rounds, while the convergence gate only ever fires on an APPROVE round and never reads or writes `prev_blocking_titles`/`extension_used`.
 - At the end of each REQUEST_CHANGES round (after committing and pushing fixes): (1) read the round's `findings` list from the JSON envelope -- this list is post-ceiling, so a finding the ceiling demoted to NIT is not present as BLOCKING and correctly does not count toward non-progress -- and take the `title` of every entry whose `severity` is `BLOCKING` into `current_blocking_titles`;
   (2) if `round >= max_review_rounds` — non-progress check: if `current_blocking_titles.isdisjoint(prev_blocking_titles)` AND `not extension_used`: set `extension_used = True`, allow one more round (do NOT block), and continue the loop (`round += 1`);
   otherwise (overlap exists, or `extension_used` is already `True`): call `_status.set_blocked(status_path, f"auto: discussion review gaps unresolved after {N} rounds", timestamp=_timestamp.now_utc_iso())`, then `if [ -d <worktree>/_mill/briefs ]; then git -C <worktree> add _mill/briefs/; fi && git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: discussion review gaps unresolved) for <slug>" && git -C <worktree> push`, then halt — do NOT proceed to Handoff;
@@ -70,7 +71,8 @@ Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depe
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay).
-   Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`. `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
+   Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
+   Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
 
@@ -316,14 +318,33 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
    Do NOT auto-retry beyond the second pass.
    The two-pass cap mirrors mill-go's Step 4.5.
 
+**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (steps 4a/4b below), compute:
+
+```
+converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in envelope["findings"])
+```
+
+`envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
+
+- `converged is True`: proceed exactly as the branch's terminal actions describe below (no behavior change).
+- `converged is False` AND `round < max_review_rounds`: still apply any `[NIT]` fixes the branch describes (real, safe work), but do NOT execute the branch's terminal phase-transition / commit / loop-break actions. Instead continue the loop to round N+1 exactly as the REQUEST_CHANGES continuation path does — no operator gap-prompt (there are zero BLOCKING findings to present).
+- `converged is False` AND `round >= max_review_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to that round's commit message (4a's Handoff commit at `### Phase: Handoff`, or 4b's own commit, whichever fires) so the shortfall is auditable.
+- This gate never applies to a REQUEST_CHANGES round (step 5) — those already continue/exhaust by existing logic, untouched.
+- The gate is orthogonal to `--auto`'s `prev_blocking_titles`/`extension_used` non-progress-extension machinery — that machinery only reads BLOCKING-finding titles across REQUEST_CHANGES rounds; the convergence gate never reads or writes `prev_blocking_titles`/`extension_used`.
+
 4a. On APPROVE (verdict from JSON) with no NIT findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NIT]`-prefixed findings.
 The heading may carry a class suffix — `### [NIT:scope]` counts as a NIT exactly like a bare `### [NIT]` — so a classed heading is never missed.
-Break the loop and proceed to Handoff.
+Compute `converged` per the Convergence gate above.
+If `converged`: break the loop and proceed to Handoff.
 The review file is committed at Handoff (so the path is auditable) — see Phase: Handoff.
+If not `converged` and `round < max_review_rounds`: do not break the loop or proceed to Handoff (4a has no NITs to fix); continue to round N+1.
+If not `converged` and `round >= max_review_rounds`: proceed to Handoff exactly as if `converged` were `True`, appending the implicit-approve note to the Handoff commit message per the Convergence gate above.
 
 4b. On APPROVE with one or more `[NIT]` findings: apply each NIT fix per the `mill-receiving-review` decision tree by editing `<discussion_path>` directly.
 Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-discussion-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
-Call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`, then call `_status.append_phase(status_path, "discussed", _timestamp.now_utc_iso())`.
+This NIT-fix work and fixer-report write happen regardless of `converged` — real work, safe either way.
+Compute `converged` per the Convergence gate above.
+If `converged`: call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())`, then call `_status.append_phase(status_path, "discussed", _timestamp.now_utc_iso())`.
 Single git commit covering exactly four pathspecs — `<discussion_path>`, `<reviews_dir>/`, `<status_path>`, `_mill/briefs/` — with message `mill-start: discussion-fix round {N} for {slug}`.
 Push.
 Report the Handoff completion message directly (do not re-run Phase: Handoff's status-append/commit — this path already reached `phase: discussed` above): **"Discussion complete.
@@ -333,6 +354,8 @@ Break loop.
 Do NOT run round N+1.
 Do NOT advance the round counter;
 the fixer report's `discussion-fix-r<N>` reuses the just-completed review round's `N` value.
+If not `converged` and `round < max_review_rounds`: still call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())` and commit the NIT fixes (single git commit covering `<discussion_path>`, `<reviews_dir>/`, `<status_path>`, `_mill/briefs/`, message `mill-start: discussion-fix round {N} for {slug}`) and push — the fix genuinely happened — but skip the `"discussed"` phase append and the Handoff completion report, and continue to round N+1 instead of breaking.
+If not `converged` and `round >= max_review_rounds`: run the branch's full terminal actions above exactly as if `converged` were `True`, appending the implicit-approve note to the `discussion-fix round {N}` commit message per the Convergence gate above.
 
 5. On REQUEST_CHANGES: read the review file and enumerate each `[BLOCKING]` finding.
    The heading may carry a class suffix — `### [BLOCKING:design]` counts as a BLOCKING finding exactly like a bare `### [BLOCKING]` — so a classed heading is never missed.

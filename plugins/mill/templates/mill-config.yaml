@@ -136,6 +136,8 @@ roles:
   discussion-review:
     holistic:
       rounds: 4
+      # min_rounds -- floor: the review loop may not terminate on APPROVE before this round, regardless of verdict. Optional; defaults to 1 (today's unfloored behavior) when absent.
+      min_rounds: 1
       reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -153,6 +155,7 @@ roles:
       blocking_classes: [design, scope]
     holistic:
       rounds: 4
+      min_rounds: 1
       reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer and timeout for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -163,10 +166,12 @@ roles:
   code-review:
     batch:
       rounds: 0
+      min_rounds: 1
       reviewer: null
       blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 4
+      min_rounds: 1
       reviewer: sonnethigh
       fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
       fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback

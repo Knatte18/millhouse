@@ -2536,6 +2536,177 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 40 — per-batch scope: a Context:-only ref missing on disk AND confirmed git-ignored
+    # soft-fails prepare() instead of raising ReviewError (#808). Mirrors
+    # test-review-code-flow.py's test_context_only_gitignored_ref_soft_fails_prepare(), adapted to
+    # _review_plan.py's prepare() per-batch scope branch (Card 2's site).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py", ".scratch/probe.md"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs, skip_create={".scratch/probe.md"},
+        )
+        gitignore_path = project_root / ".gitignore"
+        gitignore_path.write_text(
+            gitignore_path.read_text(encoding="utf-8") + ".scratch/probe.md\n",
+            encoding="utf-8",
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_prepare(
+                cfg, SLUG, scope="01-alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            print("PASS test40: per-batch prepare() soft-skips a git-ignored missing Context: ref")
+        except AssertionError:
+            raise
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL test40: per-batch prepare() raised {type(exc).__name__} instead of"
+                f" soft-skipping: {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 41 — holistic scope: same fixture shape as Test 40, but exercising prepare()'s holistic
+    # scope branch (Card 3's site).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py", ".scratch/probe.md"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs, skip_create={".scratch/probe.md"},
+        )
+        gitignore_path = project_root / ".gitignore"
+        gitignore_path.write_text(
+            gitignore_path.read_text(encoding="utf-8") + ".scratch/probe.md\n",
+            encoding="utf-8",
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            print("PASS test41: holistic prepare() soft-skips a git-ignored missing Context: ref")
+        except AssertionError:
+            raise
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL test41: holistic prepare() raised {type(exc).__name__} instead of"
+                f" soft-skipping: {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 42 — regression: a Context:-only ref missing on disk and NOT covered by .gitignore
+    # still raises ReviewError, in both the per-batch and holistic prepare() branches. Soft-fail
+    # only fires on a confirmed git-ignore hit.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py", "not_ignored_missing.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(
+            tmpdir, batch_specs, skip_create={"not_ignored_missing.py"},
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            try:
+                plan_prepare(
+                    cfg, SLUG, scope="01-alpha", mill_dir=mill_dir, project_root=project_root,
+                    wiki_root=wiki_root, git_root=project_root,
+                )
+                errors += 1
+                print(
+                    "FAIL test42 (per-batch): expected ReviewError for a missing, non-ignored"
+                    " Context: ref",
+                    file=sys.stderr,
+                )
+            except ReviewError:
+                print("PASS test42 (per-batch): missing, non-ignored Context: ref still hard-fails")
+            except AssertionError:
+                raise
+            except Exception as exc:
+                errors += 1
+                print(f"FAIL test42 (per-batch, unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+
+            try:
+                plan_prepare(
+                    cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                    wiki_root=wiki_root, git_root=project_root,
+                )
+                errors += 1
+                print(
+                    "FAIL test42 (holistic): expected ReviewError for a missing, non-ignored"
+                    " Context: ref",
+                    file=sys.stderr,
+                )
+            except ReviewError:
+                print("PASS test42 (holistic): missing, non-ignored Context: ref still hard-fails")
+            except AssertionError:
+                raise
+            except Exception as exc:
+                errors += 1
+                print(f"FAIL test42 (holistic, unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 43 — design-boundary regression: an Edits:-only ref missing on disk AND covered by
+    # .gitignore still hard-fails with ReviewError. This is #808's literal repro, and per
+    # discussion.md's plan-review-context-soft-fail-parity Decision it is deliberately NOT fixed
+    # by this batch -- only Context: refs are eligible for the soft-fail path.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        gitignore_path = project_root / ".gitignore"
+        gitignore_path.write_text(
+            gitignore_path.read_text(encoding="utf-8") + ".scratch/edits-probe.md\n",
+            encoding="utf-8",
+        )
+        alpha_path = project_root / "plan" / "01-alpha.md"
+        alpha_path.write_text(
+            alpha_path.read_text(encoding="utf-8").replace(
+                "- **Edits:** none\n",
+                "- **Edits:** `.scratch/edits-probe.md`\n",
+            ),
+            encoding="utf-8",
+        )
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            plan_prepare(
+                cfg, SLUG, scope="01-alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            errors += 1
+            print(
+                "FAIL test43: expected ReviewError for a missing, git-ignored Edits: ref"
+                " -- Edits: is not eligible for the Context:-only soft-fail path",
+                file=sys.stderr,
+            )
+        except ReviewError:
+            print(
+                "PASS test43: missing, git-ignored Edits: ref still hard-fails"
+                " (#808's literal repro is deliberately unfixed by this batch)"
+            )
+        except AssertionError:
+            raise
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test43 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
