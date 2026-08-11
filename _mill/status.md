@@ -34,9 +34,14 @@ implementing  '2026-08-11T12:30:50Z'
 ```yaml
 batches:
   - name: extract-base
-    state: pending
+    state: running
+    implementer_session: 7923875b-d9e0-4b63-a4dc-716521797eb5
+    start_sha: 9bc54884ad633de2ab36c69bb15adec901c0a431
+    verify_baseline_failures: []
   - name: thin-variants
     state: pending
+    verify_baseline_failures: []
   - name: repoint-refs
     state: pending
+    verify_baseline_failures: []
 ```
