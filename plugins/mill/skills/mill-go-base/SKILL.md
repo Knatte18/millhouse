@@ -16,6 +16,22 @@ Keeping your context lean is the whole point — Builder cost is a rounding erro
 
 ## Entry
 
+**Variant binding and driver preamble.**
+This block runs before Step 0, because Step 0's halt string is itself one of the parameterized
+`[mill-go]` prefixes below, so `VARIANT_LABEL` must be bound before Step 0 is reached.
+
+This skill is never invoked directly. A variant skill loads it and binds `VARIANT_LABEL` in that
+variant's own `## Variant binding` block. Read the variant's `## Variant binding` block, bind
+`VARIANT_LABEL` to the value declared there, and substitute that value for every `<VARIANT_LABEL>`
+token in this file. If no variant loaded this skill, or the loading variant declares no
+`VARIANT_LABEL`, halt with the literal message
+`[mill-go-base] HALT: mill-go-base is not invocable directly -- run /mill-go or /mill-go2.`
+
+Override point B: treat your variant's `## Driver preamble` text as if written here, ahead of
+everything below; if your variant declared no such section, halt — this skill is not invocable
+directly. A variant whose `## Driver preamble` section contains only `(none)` has declared the
+section and contributes no text; that is not a halt.
+
 **Step 0: Verify `CLAUDE_PLUGIN_ROOT`.**
 
 ```bash
