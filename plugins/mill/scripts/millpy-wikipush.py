@@ -1,8 +1,9 @@
-"""millpy-wikipush — commit and push manual wiki edits.
+"""millpy-wikipush — commit, sync, and push the wiki (also doubles as a remote-sync script).
 
 Resolves the wiki repo from the current git root, commits every local change with an auto-generated
-message ``wiki: <file1>, <file2>``, and pushes.
-Pulls with ``--rebase`` if the push is rejected non-fast-forward.
+message ``wiki: <file1>, <file2>`` (if any), then always pulls with ``--rebase`` to bring in remote
+changes (even when there is nothing local to commit), then pushes.
+This makes the script safe to run purely to sync down remote wiki changes, with no local edits pending.
 
 Usage:
     millpy-wikipush.py [--leave-conflicts]
@@ -46,24 +47,17 @@ def _conflict_files(wiki: Path) -> list[str]:
 
 
 def _push_inner(wiki: Path, changed: list[str], *, leave_conflicts: bool) -> int:
-    if not changed:
-        print("no changes")
-        return 0
+    msg = f"wiki: {', '.join(changed)}" if changed else None
 
-    msg = f"wiki: {', '.join(changed)}"
-    add = _run(["git", "-C", str(wiki), "add", "--"] + changed)
-    if add.returncode != 0:
-        print(f"git add failed: {add.stderr.strip()}", file=sys.stderr)
-        return 1
-    commit = _run(["git", "-C", str(wiki), "commit", "-m", msg])
-    if commit.returncode != 0:
-        print(f"git commit failed: {commit.stderr.strip()}", file=sys.stderr)
-        return 1
-
-    push = _run(["git", "-C", str(wiki), "push"])
-    if push.returncode == 0:
-        print(f"pushed: {msg}")
-        return 0
+    if msg is not None:
+        add = _run(["git", "-C", str(wiki), "add", "--"] + changed)
+        if add.returncode != 0:
+            print(f"git add failed: {add.stderr.strip()}", file=sys.stderr)
+            return 1
+        commit = _run(["git", "-C", str(wiki), "commit", "-m", msg])
+        if commit.returncode != 0:
+            print(f"git commit failed: {commit.stderr.strip()}", file=sys.stderr)
+            return 1
 
     rebase = _run(["git", "-C", str(wiki), "pull", "--rebase"])
     if rebase.returncode != 0:
@@ -72,7 +66,8 @@ def _push_inner(wiki: Path, changed: list[str], *, leave_conflicts: bool) -> int
             print(f"conflict on: {', '.join(cf)}", file=sys.stderr)
             return 2
         _run(["git", "-C", str(wiki), "rebase", "--abort"])
-        _run(["git", "-C", str(wiki), "reset", "--mixed", "HEAD~1"])
+        if msg is not None:
+            _run(["git", "-C", str(wiki), "reset", "--mixed", "HEAD~1"])
         print(
             f"conflict on: {', '.join(cf)} — wiki reverted to working-tree state. "
             f"Run /mill-wiki-push to auto-resolve.",
@@ -80,16 +75,17 @@ def _push_inner(wiki: Path, changed: list[str], *, leave_conflicts: bool) -> int
         )
         return 2
 
-    push2 = _run(["git", "-C", str(wiki), "push"])
-    if push2.returncode != 0:
-        print(f"push failed: {push2.stderr.strip()}", file=sys.stderr)
+    push = _run(["git", "-C", str(wiki), "push"])
+    if push.returncode != 0:
+        print(f"push failed: {push.stderr.strip()}", file=sys.stderr)
         return 1
-    print(f"pushed: {msg}")
+
+    print(f"pushed: {msg}" if msg is not None else "synced (no local changes)")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="commit + push wiki edits")
+    parser = argparse.ArgumentParser(description="commit local wiki edits, sync (pull --rebase), and push")
     parser.add_argument(
         "--leave-conflicts",
         action="store_true",
@@ -100,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     git_root = _paths.resolve_git_root()
     wiki = _paths.resolve_wiki_path(git_root)
 
-    # Capture changed files BEFORE pushing
+    # Capture changed files BEFORE committing/pulling
     changed = _changed_files(wiki)
 
     return _push_inner(wiki, changed, leave_conflicts=args.leave_conflicts)

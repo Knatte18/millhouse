@@ -82,6 +82,13 @@ def _verdict_yaml(verdict: str = "REQUEST_CHANGES") -> str:
     return f"```yaml\nverdict: {verdict}\n```\n"
 
 
+def _verdict_section(verdict: str = "REQUEST_CHANGES") -> str:
+    """Build a `## Verdict` section body matching review-output.schema.md's two-line contract:
+    the verdict token, then a one-sentence summary.
+    """
+    return f"## Verdict\n\n{verdict}\n<summary>\n"
+
+
 # ---------------------------------------------------------------------------
 # Ceiling table: one finding per class, for each of the three stages.
 # ---------------------------------------------------------------------------
@@ -458,6 +465,101 @@ def test_parse_verdict_normalises_gaps_found() -> bool:
     return fenced == "REQUEST_CHANGES" and unfenced == "REQUEST_CHANGES"
 
 
+# ---------------------------------------------------------------------------
+# Persisted verdict-token rewrite: fires only when this call's ceiling demotion
+# actually flipped the recomputed verdict away from the reviewer's stated one.
+# ---------------------------------------------------------------------------
+
+
+def test_verdict_token_rewritten_on_ceiling_flip() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("BLOCKING", "scope", "missed call sites")
+        )
+        _, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            "verdict: APPROVE" in written_text
+            and "verdict: REQUEST_CHANGES" not in written_text
+            and "## Verdict\n\nAPPROVE\n<summary>\n" in written_text
+        )
+
+
+def test_verdict_token_unchanged_when_no_demotion() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("APPROVE")
+            + _verdict_section("APPROVE")
+            + _heading("NIT", "design", "cosmetic")
+        )
+        _, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            "verdict: APPROVE" in written_text
+            and "## Verdict\n\nAPPROVE\n<summary>\n" in written_text
+        )
+
+
+def test_verdict_token_unchanged_when_mismatched_without_demotion() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("APPROVE")
+            + _verdict_section("APPROVE")
+            + _heading("BLOCKING", "design", "genuinely blocking")
+        )
+        result, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            result["verdict"] == "REQUEST_CHANGES"
+            and "verdict: APPROVE" in written_text
+            and "verdict: REQUEST_CHANGES" not in written_text
+            and "## Verdict\n\nAPPROVE\n<summary>\n" in written_text
+        )
+
+
+def test_verdict_token_rewritten_for_plan_and_code_types() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_blocking_classes = resolve_blocking_classes({}, "plan", "holistic")
+        raw_plan = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("BLOCKING", "consistency", "excluded from plan ceiling")
+        )
+        _, written_plan = _finalize(
+            tmpdir, "plan", raw_plan, blocking_classes=plan_blocking_classes
+        )
+        plan_ok = (
+            "verdict: APPROVE" in written_plan
+            and "verdict: REQUEST_CHANGES" not in written_plan
+            and "## Verdict\n\nAPPROVE\n<summary>\n" in written_plan
+        )
+
+        code_blocking_classes = frozenset(RECOGNIZED_CLASSES) - {"consistency"}
+        raw_code = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("BLOCKING", "consistency", "excluded from custom code ceiling")
+        )
+        _, written_code = _finalize(
+            tmpdir, "code", raw_code, blocking_classes=code_blocking_classes
+        )
+        code_ok = (
+            "verdict: APPROVE" in written_code
+            and "verdict: REQUEST_CHANGES" not in written_code
+            and "## Verdict\n\nAPPROVE\n<summary>\n" in written_code
+        )
+
+        return plan_ok and code_ok
+
+
 TESTS = [
     ("ceiling table -- discussion (only design survives BLOCKING)", test_ceiling_table_discussion),
     ("ceiling table -- plan (design+scope survive BLOCKING)", test_ceiling_table_plan),
@@ -506,6 +608,22 @@ TESTS = [
         test_resolve_blocking_classes_unrecognized_review_type_falls_back_to_all,
     ),
     ("parse_verdict normalises GAPS_FOUND to REQUEST_CHANGES", test_parse_verdict_normalises_gaps_found),
+    (
+        "verdict token rewritten on ceiling flip",
+        test_verdict_token_rewritten_on_ceiling_flip,
+    ),
+    (
+        "verdict token unchanged when no demotion occurs",
+        test_verdict_token_unchanged_when_no_demotion,
+    ),
+    (
+        "verdict token unchanged when mismatched without demotion",
+        test_verdict_token_unchanged_when_mismatched_without_demotion,
+    ),
+    (
+        "verdict token rewritten for plan and code review types",
+        test_verdict_token_rewritten_for_plan_and_code_types,
+    ),
 ]
 
 
