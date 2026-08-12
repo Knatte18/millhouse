@@ -38,13 +38,19 @@ implementing  '2026-08-12T09:32:29Z'
 ```yaml
 batches:
   - name: regression-guard
-    state: pending
+    state: running
+    implementer_session: a2a61445-a24b-4dd5-8083-c4320c468313
+    start_sha: 42f5984d6f9da850500b3e9c23c133c74acbafce
   - name: strip-subprocess-dispatch
     state: pending
+    verify_baseline_failures: []
   - name: treeguard-dedup
     state: pending
+    verify_baseline_failures: []
   - name: extract-cold-path
     state: pending
+    verify_baseline_failures: []
   - name: renumber-and-siblings
     state: pending
+    verify_baseline_failures: []
 ```
