@@ -36,7 +36,9 @@ batches:
     commit_sha: 846a2ee82262ff811902a9556fe501a7e5a8fcc1
     verify_baseline_failures: []
   - name: yaml-injection
-    state: pending
+    state: running
+    implementer_session: 1b30fd1e-841a-427a-b15f-b01293719c73
+    start_sha: 7481eb9fc7fe01e5835ea40a321326e7ec426fa4
     verify_baseline_failures: []
   - name: dispatcher-flip
     state: pending
