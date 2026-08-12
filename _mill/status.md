@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-verify-logic
+phase: approved-regression-guard
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -32,6 +32,7 @@ plan-fix-r6  '2026-08-12T09:31:54Z'
 planned  '2026-08-12T09:32:03Z'
 implementing  '2026-08-12T09:32:29Z'
 self-resolved-verify-logic  '2026-08-12T09:35:25Z'
+approved-regression-guard  '2026-08-12T09:36:18Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ self-resolved-verify-logic  '2026-08-12T09:35:25Z'
 ```yaml
 batches:
   - name: regression-guard
-    state: running
+    state: approved
     implementer_session: a2a61445-a24b-4dd5-8083-c4320c468313
     start_sha: 42f5984d6f9da850500b3e9c23c133c74acbafce
+    commit_sha: 4e82ab8c0eddbcab1507cdca77c67034d5ccf8e8
   - name: strip-subprocess-dispatch
     state: pending
     verify_baseline_failures: []
