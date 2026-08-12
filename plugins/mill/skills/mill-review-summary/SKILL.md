@@ -1,6 +1,6 @@
 ---
 name: mill-review-summary
-description: print a per-task table of review rounds: verdict, model, effort, duration, tool-calls, cost.
+description: "print a per-task table of review rounds: verdict, model, effort, duration, tool-calls, cost."
 ---
 
 # mill-review-summary
