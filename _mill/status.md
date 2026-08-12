@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-context-completeness-gaps
 branch: hanf/plan-validate-context-completeness-gaps
 plan: _mill/plan
@@ -19,4 +19,15 @@ discussed  '2026-08-12T18:22:12Z'
 planning  '2026-08-12T18:29:19Z'
 plan-fix-r1  '2026-08-12T18:36:33Z'
 planned  '2026-08-12T18:36:51Z'
+implementing  '2026-08-12T18:37:20Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: prohibition-regex-generalization
+    state: pending
+  - name: regression-tests
+    state: pending
 ```
