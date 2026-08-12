@@ -67,9 +67,11 @@ call sites, and its unit tests are one cohesive unit with no natural split bound
       )
   ```
 
-  Also add one line to the module's own summary docstring at the top of `_config.py` (the
-  `Exports -------` block starting at line 3) noting the new export, following that block's
-  existing one-line-per-export convention.
+  Add `"resolve_plugin_root_from_syspath"` to the `__all__` list (lines 31-41), alongside the
+  existing `"resolve_plugin_template_path"` and `"resolve_repo_config_path"` entries. Do not touch
+  the module's top-of-file "Exports -------" docstring block (lines 1-19): that block already omits
+  both sibling functions `resolve_plugin_template_path` and `resolve_repo_config_path`, so it is not
+  an actively maintained convention to extend for this new helper.
 - **Commit:** `feat(config): add resolve_plugin_root_from_syspath helper`
 
 ### Card 2: Cover `resolve_plugin_root_from_syspath` with unit tests
@@ -108,6 +110,7 @@ call sites, and its unit tests are one cohesive unit with no natural split bound
 
 - **Context:**
   - `plugins/mill/scripts/_config.py`
+  - `plugins/mill/scripts/_claude_settings.py`
 - **Edits:**
   - `plugins/mill/skills/mill-setup/SKILL.md`
 - **Creates:** none
@@ -183,7 +186,7 @@ call sites, and its unit tests are one cohesive unit with no natural split bound
   `venv=_config.resolve_plugin_root_from_syspath(sys.path)/'.venv'`. Every other part of that
   inline command (the `expected=...`, `d=json.loads(...)`, `actual=...`, `assert ...`, `print(...)`
   segments, and the surrounding prose/backticks) is unchanged.
-- **Commit:** `fix(mill-setup): resolve plugin root via sys.path scan in Phase 4.8`
+- **Commit:** `fix(mill-setup): resolve plugin root via sys.path scan in Phase 4.8 write + Phase 8 verify`
 
 ## Batch Tests
 
