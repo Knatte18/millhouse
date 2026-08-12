@@ -3,7 +3,7 @@
 ```yaml
 task: "CLAUDE_PLUGIN_ROOT environment variable not exported to Bash tool"
 slug: "claude-plugin-root-env-setup"
-approved: false
+approved: true
 started: "20260812-180207"
 parent: "main"
 root: ""
