@@ -26,6 +26,7 @@ Cards 14 through 16 create the companion files; card 17 removes the extracted pr
 - **Context:**
   - `_mill/discussion.md`
   - `SKILLS.md`
+  - `plugins/mill/scripts/millpy-skills-index.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:**

@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -22,4 +22,6 @@ plan-review-r1  '2026-08-12T08:50:43Z'
 plan-fix-r1  '2026-08-12T08:50:43Z'
 plan-review-r2  '2026-08-12T08:57:33Z'
 plan-fix-r2  '2026-08-12T08:57:33Z'
+plan-review-r3  '2026-08-12T09:13:59Z'
+plan-fix-r3  '2026-08-12T09:13:59Z'
 ```

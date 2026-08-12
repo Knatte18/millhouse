@@ -73,9 +73,10 @@ batches:
 ### Decision: twelve-tree-guard-checkpoints-not-ten
 
 - **Decision:** the tree-guard de-duplication in batch 3 covers **12** checkpoint paragraphs, not the 10 the discussion's `deduplicate-tree-guard-checkpoint-paragraphs` Decision names.
-- **Rationale:** `SKILL.md` states its own count inline ("All 11 other tree-guard checkpoints in this file (5 more in this section, 7 in `## Holistic code review`)"), which totals 12 with the one that sentence is attached to.
-  A grep of `_treeguard.check_and_restore` confirms 12 occurrences.
-  The batch enumerates them by anchor rather than by count.
+- **Rationale:** a grep of `_treeguard.check_and_restore(` returns 12 checkpoint call sites — 5 in `### 3. Code Review loop` and 7 in `## Holistic code review` — which card 13's file-order enumeration lists individually.
+  `SKILL.md`'s own inline sentence ("All 11 other tree-guard checkpoints in this file (5 more in this section, 7 in `## Holistic code review`)") is itself off by one: attached to the first of the five in its own section, "5 more" should read "4 more".
+  Card 13 deletes that sentence, so the error does not survive.
+  The batch works from the grep and the enumeration, not from either count in prose.
 - **Applies to:** batch 3
 
 ### Decision: holistic-crash-recovery-loses-its-bg-log-branch

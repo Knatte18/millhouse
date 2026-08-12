@@ -33,7 +33,8 @@ The per-token counts recorded in the discussion were measured before batches 2 t
 - **Moves:** none
 - **Requirements:**
   In `## Agent-mode dispatch` only, renumber the step list itself — not references to it, which cards 21 and 22 own.
-  Batch 2 deleted step 1, so the list currently runs 2 through 7 with sub-labels `4(a)`, `4(b)`, `4(c)`, `6.5`, `6.5.1`, and `6.5.2`.
+  Batch 2 deleted step 1, so the list currently runs 2 through 7, with sub-labels `4(a)`, `4(b)`, `4(c)` on step 4 and a `6.5` step between 6 and 7.
+  Step 6.5's own sub-items are bare `1.`/`2.`/`3.` in this file — the dotted `6.5.1`/`6.5.2` form appears only in `mill-go2/SKILL.md`'s external citations of them, which card 23 handles.
   Apply this mapping to the list markers and to the bold step titles: step 2 becomes 1, 3 becomes 2, 4 becomes 3, 5 becomes 4, 6 becomes 5, 7 becomes 6; `4(a)`/`4(b)`/`4(c)` become `3(a)`/`3(b)`/`3(c)`; `6.5` becomes `5.5`, and its two numbered sub-items keep their `1.`/`2.`/`3.` local numbering.
   The section's own prose also refers to its steps by number dozens of times, and every one of those references is first-namespace and must shift with the list.
   Use the same enumerate-then-classify method card 21 applies to the rest of the file, not a spot fix against an example list: grep every occurrence of `step ` followed by a number **inside** `## Agent-mode dispatch` — list markers, bold step titles, and prose alike — and remap each.
@@ -109,6 +110,7 @@ The per-token counts recorded in the discussion were measured before batches 2 t
 
 - **Context:**
   - `plugins/mill/skills/mill-skills-index/SKILL.md`
+  - `plugins/mill/scripts/millpy-skills-index.py`
   - `plugins/mill/skills/mill-go/SKILL.md`
   - `plugins/mill/skills/mill-go2/SKILL.md`
   - `plugins/mill/skills/mill-go-base/resume.md`
