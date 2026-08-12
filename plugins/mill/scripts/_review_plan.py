@@ -729,6 +729,7 @@ return a review entry dict.
             "duration_s": duration_s,
             "tool_calls": tool_calls,
             "cost_usd": cost_usd,
+            "error_kind": "reviewer",
         }
 
     return {
