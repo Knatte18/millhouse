@@ -158,14 +158,14 @@ def main(argv: list[str] | None = None) -> int:
         wiki_root = resolve_wiki_path(project_root)
         cfg = load_config(project_root, mill_dir)
     except (ReviewError, ValueError, SystemExit) as exc:
-        print_error_envelope("code", str(exc))
+        print_error_envelope("code", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     try:
         registry = _reviewers.load(project_root)
         _reviewers.validate_role_refs(cfg, registry)
     except _reviewers.ReviewerError as exc:
-        print_error_envelope("code", str(exc))
+        print_error_envelope("code", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     extra_files: list[Path] = []
@@ -174,14 +174,14 @@ def main(argv: list[str] | None = None) -> int:
         if not p.is_absolute():
             p = (project_root / p).resolve()
         if not p.exists():
-            print_error_envelope("code", f"--extra-file not found: {p}")
+            print_error_envelope("code", f"--extra-file not found: {p}", round=args.round if args.round is not None else 0)
             return 1
         extra_files.append(p)
 
     try:
         slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
     except ReviewError as exc:
-        print_error_envelope("code", str(exc))
+        print_error_envelope("code", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     container_path = _paths.resolve_container_path(git_root)
@@ -231,14 +231,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
-            print_error_envelope("code", str(exc))
+            print_error_envelope("code", str(exc), round=args.round if args.round is not None else 0)
             return 1
     elif args.stage == "finalize":
         if not args.agent_output:
-            print_error_envelope("code", "--agent-output required for finalize stage")
+            print_error_envelope("code", "--agent-output required for finalize stage", round=args.round if args.round is not None else 0)
             return 1
         if args.round is None:
-            print_error_envelope("code", "--round is required for finalize stage")
+            print_error_envelope("code", "--round is required for finalize stage", round=args.round if args.round is not None else 0)
             return 1
         try:
             agent_output_path = Path(args.agent_output)
@@ -264,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:
-            print_error_envelope("code", str(exc))
+            print_error_envelope("code", str(exc), round=args.round)
             return 1
     else:  # full
         try:
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:
-            print_error_envelope("code", str(exc))
+            print_error_envelope("code", str(exc), round=args.round if args.round is not None else 0)
             return 1
 
 
