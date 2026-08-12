@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -21,4 +21,5 @@ discussed  '2026-08-12T18:31:27Z'
 planning  '2026-08-12T18:43:35Z'
 plan-review-r1  '2026-08-12T18:53:47Z'
 plan-fix-r1  '2026-08-12T18:54:09Z'
+plan-fix-r2  '2026-08-12T19:00:09Z'
 ```

@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-review-plan finalize: usage-error indistinguishability, flag issues, verdict rendering stale'
 slug: review-pipeline-consistency-bugs
-approved: false
+approved: true
 started: '20260812-183827'
 parent: main
 root: ""
