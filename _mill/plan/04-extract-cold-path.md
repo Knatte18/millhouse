@@ -101,11 +101,14 @@ Cards 14 through 16 create the companion files; card 17 removes the extracted pr
 ```markdown
 ## History
 
-Pre-strip version (1483 lines, with subprocess/psmux dispatch branches and the Resume /
+Pre-strip version (1483 lines, with the legacy non-agent dispatch branches and the Resume /
 Holistic / Handoff sections inline) is at commit `356da5e5`. Restore with:
 `git show 356da5e5:plugins/mill/skills/mill-go-base/SKILL.md`.
 ```
 
+  **Deviation from the discussion's literal note text:** the discussion's `git-history-is-the-backup` Decision writes this note as "with subprocess/psmux dispatch branches …", but `test-mill-go-base-agent-only.py`'s banned-literals check (written in batch 1) forbids the literal string `psmux` anywhere in `SKILL.md`, including this note — the two requirements are directly contradictory as recorded.
+  The wording above ("the legacy non-agent dispatch branches") preserves the note's meaning — a reader still learns what was removed and where to find it — while keeping the regression guard green, which is the higher-priority requirement per `_mill/discussion.md`'s Testing section ("Write this test first, watch it fail against the current file, then strip").
+  Use this reworded content, not the discussion's literal text, when writing the note.
   That SHA is verified: `git diff 356da5e5 HEAD -- plugins/` is empty at the time this plan was written, so the commit is a faithful pre-strip snapshot even though the branch has advanced past it.
   Before writing the note, re-derive the line count mechanically rather than trusting the literal above: run `git show 356da5e5:plugins/mill/skills/mill-go-base/SKILL.md | wc -l`.
   It returned `1483` when this plan was written, which is why the note says 1483; if it returns anything else at execution time, use that number instead and leave the rest of the wording untouched.
