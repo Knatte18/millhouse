@@ -2387,6 +2387,81 @@ def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
     return _inject_or_rewrite_yaml_field(raw_text, "reviewer_model", actual_model)
 
 
+def apply_cost_metadata(
+    raw_text: str,
+    *,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
+) -> str:
+    """
+    Inject or rewrite the `duration_s:`, `tool_calls:`, and `cost_usd:` lines in a reviewer's raw
+    yaml header, so the persisted review file records the round's wall-clock time, tool-call
+    count, and dollar cost alongside the reviewer's own output.
+
+    Returns `raw_text` unchanged when all three arguments are `None` -- there is nothing to
+    persist. Otherwise, calls `_inject_or_rewrite_yaml_field` once per non-`None` field, in the
+    order `cost_usd`, `tool_calls`, `duration_s` -- the reverse of the desired on-disk order,
+    because each injection lands immediately after the opening fence, so applying them in reverse
+    produces a header reading `duration_s:`, `tool_calls:`, `cost_usd:` top-to-bottom.
+
+    Per `_inject_or_rewrite_yaml_field`'s terminal fallback, a `raw_text` with no ` ```yaml `
+    fence to anchor on is returned unchanged -- this matters here because parse-failure branches
+    call this function on unparsed reviewer output, where a schema-conformant fence is not
+    guaranteed.
+
+    Value formatting: `duration_s` renders with one decimal place (`f"{duration_s:.1f}"`),
+    `tool_calls` renders as a plain integer, `cost_usd` renders with four decimal places.
+
+    Args:
+        raw_text: Raw review output text, prior to verdict parsing or disk write.
+        duration_s: Wall-clock seconds the round took, or None if unmeasured.
+        tool_calls: Number of tool calls the round made, or None if the provider does not report
+            this signal.
+        cost_usd: Dollar cost of the round, or None if the provider does not report this signal.
+
+    Returns:
+        The (possibly rewritten) raw text.
+    """
+    if duration_s is None and tool_calls is None and cost_usd is None:
+        return raw_text
+    if cost_usd is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "cost_usd", f"{cost_usd:.4f}")
+    if tool_calls is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "tool_calls", f"{tool_calls}")
+    if duration_s is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "duration_s", f"{duration_s:.1f}")
+    return raw_text
+
+
+def sum_optional(
+    a: float | int | None, b: float | int | None
+) -> float | int | None:
+    """
+    Sum two optional numeric values, treating `None` as "absent" rather than zero.
+
+    Implements the None-absorbing summation rule used to combine per-call metrics
+    (`duration_s`, `tool_calls`, `cost_usd`) across every reviewer call in a round: `None` when
+    both operands are `None`, the non-`None` operand unchanged when exactly one is set (never
+    coerced through `0`), and their arithmetic sum when both are set.
+
+    Lives in `_review_common.py` rather than in a single backend because more than one backend
+    needs it independently.
+
+    Args:
+        a: First operand, or None if absent.
+        b: Second operand, or None if absent.
+
+    Returns:
+        The None-absorbing sum of a and b.
+    """
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + b
+
+
 def finalize_scope(
     reviews_dir: Path,
     review_type: str,
@@ -2396,14 +2471,19 @@ def finalize_scope(
     scope: str | None = None,
     actual_model: str | None = None,
     blocking_classes: frozenset[str] | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> dict:
     """Finalize a single review scope by parsing verdict, extracting findings, applying the
     blocking-class ceiling, and writing the review file.
 
-    Runs, in order: apply_actual_model_override; parse_verdict(raw_text); extract_findings(raw_text);
-    when `blocking_classes` is not None, apply_blocking_ceiling on the extracted findings and then
-    rewrite_demoted_findings on raw_text, so the file on disk agrees with the (possibly demoted)
-    findings before it is written; write_review_file with the (possibly-rewritten) text.
+    Runs, in order: apply_actual_model_override; apply_cost_metadata; parse_verdict(raw_text);
+    extract_findings(raw_text); when `blocking_classes` is not None, apply_blocking_ceiling on the
+    extracted findings and then rewrite_demoted_findings on raw_text, so the file on disk agrees
+    with the (possibly demoted) findings before it is written; write_review_file with the
+    (possibly-rewritten) text. `apply_cost_metadata` runs before `parse_verdict` so the persisted
+    file and the parsed verdict see the same text.
     `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
     the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
     are no longer used on this path, per the single-pass-finding-extraction Shared Decision. When
@@ -2432,15 +2512,26 @@ def finalize_scope(
             resolve_blocking_classes). `None` means "apply no ceiling" -- every historical/test call
             site that does not pass it keeps today's counting behaviour untouched. Every production
             call site passes this explicitly.
+        duration_s: Wall-clock seconds the round took, injected into the persisted yaml header via
+            `apply_cost_metadata`; if None, no `duration_s:` line is written.
+        tool_calls: Number of tool calls the round made, injected the same way; if None, no
+            `tool_calls:` line is written.
+        cost_usd: Dollar cost of the round, injected the same way; if None, no `cost_usd:` line is
+            written.
 
     Returns:
         Dict with keys: scope, verdict, file, blocking_count, nit_count, findings (a list of
-        Finding.to_dict() dicts, in extract_findings' concatenation order).
+        Finding.to_dict() dicts, in extract_findings' concatenation order), duration_s, tool_calls,
+        cost_usd (the three cost-metadata arguments, passed straight through unformatted -- the
+        dict feeds the JSON envelope, which must carry numbers, not display strings).
 
     Raises:
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
+    raw_text = apply_cost_metadata(
+        raw_text, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+    )
     original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
     demoted_any = False
@@ -2474,6 +2565,9 @@ def finalize_scope(
         "blocking_count": blocking_count,
         "nit_count": nit_count,
         "findings": [f.to_dict() for f in findings],
+        "duration_s": duration_s,
+        "tool_calls": tool_calls,
+        "cost_usd": cost_usd,
     }
 
 
