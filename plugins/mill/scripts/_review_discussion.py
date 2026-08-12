@@ -287,6 +287,9 @@ def run(
                     "file": None,
                     "skipped": True,
                     "findings": [],
+                    "duration_s": None,
+                    "tool_calls": None,
+                    "cost_usd": None,
                 }],
             )
 
@@ -323,6 +326,9 @@ def run(
             res = _reviewer_single.run(spec, prompt_text)
             raw = extract_review_content(res.text)
             session_id = res.session_id
+            duration_s = res.duration_s
+            tool_calls = res.tool_calls
+            cost_usd = res.cost_usd
         except LLMError as exc:
             return ReviewResult(
                 type="discussion",
@@ -336,11 +342,18 @@ def run(
                     "error": str(exc),
                     "findings": [],
                     "session_id": None,
+                    "duration_s": getattr(exc, "duration_s", None),
+                    "tool_calls": None,
+                    "cost_usd": None,
                 }],
             )
 
         # Finalize
-        result = finalize(cfg, slug, raw, round_n=round_n, reviews_dir=reviews_dir, mill_dir=mill_dir, project_root=project_root, wiki_root=wiki_root)
+        result = finalize(
+            cfg, slug, raw, round_n=round_n, reviews_dir=reviews_dir, mill_dir=mill_dir,
+            project_root=project_root, wiki_root=wiki_root,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
+        )
         # Preserve session_id from reviewer call
         if result.reviews:
             result.reviews[0]["session_id"] = session_id
