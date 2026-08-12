@@ -5,6 +5,7 @@ The CLIs that mutate task state (`millpy-implement.py`, `millpy-review-code.py`)
 
 1. Read `_mill/status.md`;
    locate the current batch entry (the single entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`).
+   **Fallback — no non-terminal entry found.** If `_status.read_batches(status_path)` finds no entry with a non-terminal state, this is the narrow window between Prepare's bare `implementing` phase-append and Execute's dispatch of the first batch — every batch entry is still `state: pending`. Skip the rest of this Resume file entirely and fall through directly to `plugins/mill/skills/mill-go-base/SKILL.md`'s `## Execute — sequential loop`, starting at the first `pending` batch in `order`.
 2. Branch on the batch's `state`:
    - **`running`** — the implementer was mid-implementation.
      Re-invoke:
