@@ -101,26 +101,80 @@ paid on every mill-go and mill-go2 invocation.
 
 ### remove-psmux-cleanup-block
 
-- Decision: delete the per-batch psmux cleanup block (SKILL.md ~404–432, which calls
-  `_llm_claude.cleanup_session`) and all of its invocation points — after every implementer
-  `success`, at every review-loop terminus (APPROVE, max-rounds blocked, cleanliness-blocked,
-  stuck-blocked), and before every transient implementer re-dispatch. Also delete the
-  equivalent holistic-review cleanup call (~1004–1005).
+- Decision: delete **both** psmux cleanup blocks and **all** of their invocation sites.
+  - **Per-batch cleanup block** — definition at SKILL.md 403–421 (the `**Per-batch session
+    cleanup.**` prose at 403–406, the `The per-batch cleanup block:` lead-in at 408, and the
+    fenced Python block at 410–421 ending in `_llm_claude.cleanup_session(sid)` at line 419),
+    and its invocation sites at lines 404, 624, 628, 659, 662, 685, 807, 876, 883, 885, 886,
+    897, 902, 908.
+  - **Holistic cleanup block** — definition at SKILL.md 994–1007 (the `**Holistic session
+    cleanup.**` prose at 994–996, the `The holistic cleanup block:` lead-in at 998, and the
+    fenced Python block at 1000–1007 ending in
+    `_llm_claude.cleanup_session('${holistic_sid}')` at line 1005), and its twelve invocation
+    sites at lines 996, 1027, 1198, 1218, 1220, 1255, 1261, 1271, 1272, 1275, 1280, 1287. The
+    holistic block and every one of its call sites move into `holistic-review.md` as part of
+    the extraction, so they must be stripped *there*, not left behind in `SKILL.md`.
+  - The holistic block receives exactly the same treatment as the per-batch block: block and
+    call sites both deleted. Neither is left as an empty stub or a no-op call.
 - Rationale: `_llm_claude.cleanup_session` returns early when the resolved dispatch mode is
-  not `psmux`, so under `dispatch: agent` every one of these calls is a no-op. The Python
+  not `psmux`, so under `dispatch: agent` every one of these ~26 calls is a no-op. The Python
   function itself stays (see `keep-dispatch-config-and-resolver`); only the SKILL's
-  instructions to call it go away.
-- Rejected: keeping the block as a harmless no-op. It costs ~30 lines plus five call-site
-  references for zero effect.
+  instructions to call it go away. Symmetry between the two blocks matters: leaving the
+  holistic one while deleting the per-batch one would be an arbitrary inconsistency and would
+  keep `_llm_claude` imported in a file that otherwise no longer needs it.
+- Rejected: keeping either block as a harmless no-op (~40 lines plus ~26 call-site references
+  for zero effect); deleting the per-batch block but leaving the holistic one as a no-op stub
+  (inconsistent, and the stub would be the only surviving psmux reference in
+  `holistic-review.md`).
 
 ### remove-subprocess-poll-loop-maxwait
 
-- Decision: delete the `**Subprocess/psmux poll-loop max-wait.**` section (SKILL.md
-  395–432) in full.
+- Decision: delete the `**Subprocess/psmux poll-loop max-wait.**` section, SKILL.md
+  **395–422**, in full. The section starts at line 395 and ends at 422; `**Why not fork?**`
+  begins at 423 and is unrelated and retained. Note that this range *contains* the per-batch
+  cleanup block (402–421) covered by `remove-psmux-cleanup-block` above — the two decisions
+  overlap by design, they are not two separate ranges to delete twice.
 - Rationale: it governs only `[mill-bg] EXIT` poll loops, which exist only in the
   subprocess/psmux branches being deleted. With no poll loops left there is nothing to
   bound.
 - Rejected: nothing — this is unconditionally dead once the twelve branches are gone.
+
+### renumber-agent-mode-steps-with-namespace-scoped-sweep
+
+- Decision: deleting step 1 ("Resolve dispatch mode") from `## Agent-mode dispatch` renumbers
+  the remaining steps 2–7 down to 1–6 (and sub-labels with them: 4(a)/(b)/(c) -> 3(a)/(b)/(c),
+  6.5 -> 5.5). Every reference to an Agent-mode step is updated across all five affected files:
+  `SKILL.md`, the three new companion files (`resume.md`, `holistic-review.md`, `handoff.md`),
+  and `mill-go2/SKILL.md`.
+- **Critical hazard — the sweep must be namespace-scoped, never a blind find/replace.**
+  `SKILL.md` contains at least four independent numbered-step namespaces, and only the first
+  is being renumbered:
+  1. **Agent-mode dispatch steps 1–7** (plus 4(a)/(b)/(c), 6.5, 6.5.1/6.5.2) — *renumbered*.
+  2. **The batch loop's own sections** `### 0.`, `### 0.5`, `### 0.55`, `### 0.6`, `### 1.
+     Implement`, `### 2. Parse implementer report`, `### 2b. Cleanliness gate`, `### 3. Code
+     Review loop` — *untouched*.
+  3. **The Code Review loop's internal steps** 1, 1.5, 2, 3, 3.5, 4, 4.5, 5 — *untouched*.
+  4. **The Holistic loop's internal sub-steps** 3, 3.5, 3.6 — *untouched*.
+  Confirmed cross-namespace references that must NOT be shifted include: line 332's "see step 3
+  of \"Code Review loop\"" (namespace 3), line 404's "immediately after step 2 parse, before
+  step 2b cleanliness gate" (namespace 2), line 641's "Inline Python (in step 2b …)"
+  (namespace 2), line 662's "the cold-start fixer used in step 4 REQUEST_CHANGES" (namespace 3),
+  line 872's "mirrors mill-plan's existing step 4.5" (a *different SKILL's* namespace),
+  line 947's "continue at Execute step 2b" (namespace 2), and lines 1159/1197/1199/1205's
+  "sub-step 3.5"/"sub-step 3.6" (namespace 4).
+- **Reference inventory to work from** (counts in current `SKILL.md`, all namespaces combined,
+  so each occurrence must be classified before being changed): `step 4` ×23, `step 3` ×17,
+  `step 2` ×16, `step 6` ×13, `step 5` ×10, `step 1` ×6, `step 4(b)` ×5, `step 6.5` ×4,
+  `step 2b` ×3, `step 7` ×2, `step 3.6` ×2, `step 3.5` ×2, `step 4.5` ×1, `step 4(c)` ×1.
+  In `mill-go2/SKILL.md`: `step 4` ×2, `step 3` ×1, `step 4(a)` ×1, `step 6.5` ×1 — all four
+  are Agent-mode-namespace references and all four shift.
+- Rationale: the operator chose clean numbering over reference-stability. Within a single skill
+  this is a bounded mechanical edit, and the numbered list reading "2, 3, 4, 5, 6, 7" with no
+  step 1 would be a permanent readability wart in a file an orchestrator executes from.
+- Rejected: leaving the numbering at 2–7 with an explanatory note (zero edit risk, but ships a
+  list that starts at 2 forever); converting to named steps (`prepare`/`dispatch`/`recover`/
+  `capture`/`finalize`) — most robust against future shifts, but restructures the section well
+  beyond a deletion task.
 
 ### extract-cold-path-sections-to-companion-files
 
@@ -270,25 +324,42 @@ extraction via `grep '^{' <log> | tail -1`. All of it goes. Line numbers will sh
 deletions are applied top-down; anchor on the `If \`dispatch == subprocess\` or \`psmux\``
 literal text rather than on line numbers.
 
-**Also removed:**
+**Also removed** (none of these are inside the twelve branches above, so each must be deleted
+explicitly — this list and the table together are the complete deletion set):
 
-- `**Subprocess/psmux poll-loop max-wait.**` section, lines 395–432 (includes the psmux
-  per-batch cleanup block).
-- Line 275's subprocess `--stage full` fallback inside Agent-mode error recovery.
-- Lines 1004–1005's `_llm_claude.cleanup_session` call in Holistic review (which moves to
-  `holistic-review.md`, minus this call).
+- **Lines 555–559, the `### 1. Implement` preamble.** The `Background via millpy-bg:` heading
+  (557) and the `> **Before invoking millpy-bg**` cwd warning (559) sit *above* the
+  `If dispatch == agent` / `If dispatch == subprocess` split at 574/582, unlike every other
+  occurrence of that same warning (738, 819, 939, 957, 975, …), each of which sits *inside* its
+  subprocess branch and dies with it. Left alone, these two lines survive the strip and fail the
+  regression guard's "the literal string `millpy-bg` does not appear" assertion. Delete them;
+  the surviving Agent-mode branch at 574 needs neither, since Agent-mode dispatch does not
+  invoke `millpy-bg` and has no cwd sensitivity of this kind.
+- `**Subprocess/psmux poll-loop max-wait.**` section, lines **395–422** (this range contains
+  the per-batch cleanup block at 402–421 — see `remove-psmux-cleanup-block`, which covers the
+  same lines; do not treat them as two separate deletions).
+- Line 275's subprocess `--stage full` fallback inside Agent-mode error recovery ("read-only
+  reviewer dispatches (which write no review file) fall back to the subprocess `--stage full`
+  path via `millpy-bg` before escalating") — replaced by escalation per the
+  `### Stuck escalation` section, identical to the implementer/fixer treatment in the same
+  sentence.
+- The holistic cleanup block (996–1005) and its twelve invocation sites — see
+  `remove-psmux-cleanup-block`. These live in the extracted `holistic-review.md`, so they are
+  stripped there.
 - Line 224–225's dispatch-mode preamble in `## Agent-mode dispatch`: "This reads
   `cfg["llm"]["claude"]["dispatch"]` and returns one of `"subprocess"`, `"psmux"`, or
-  `"agent"`. If the mode is not `agent`, skip this entire section…". Step 1 of that section
-  ("Resolve dispatch mode") becomes unnecessary and the section's three-step pattern becomes a
-  two-step pattern; renumber accordingly, and check for stale "step 3"/"step 6"/"step 6.5"
-  cross-references elsewhere in the file after renumbering.
+  `"agent"`. If the mode is not `agent`, skip this entire section…", i.e. all of step 1
+  ("Resolve dispatch mode"). The seven-step pattern becomes six steps; renumber per
+  `renumber-agent-mode-steps-with-namespace-scoped-sweep`, which carries the full reference
+  inventory and the namespace-collision hazard.
+- Line 518's "see the Agent-mode and subprocess/psmux dispatch branches there" in
+  `### 0.6. Per-batch baseline recapture` — reword to name only the Agent-mode branch.
 - Line 255's parenthetical "`effort` remains present in the envelope for `subprocess`/`psmux`
   dispatch parity…" — reword to keep the audit-visibility rationale, drop the parity clause.
-- Line 627's `status: stuck, stuck_type: incomplete` (subprocess/psmux mode)` case in step 2,
-  and line 900's `millpy-implement.py <batch_name> --resume-incomplete` in-subprocess-mode
-  half of the warm-resume sentence.
-- Line 518's "see the Agent-mode and subprocess/psmux dispatch branches there".
+- Line 627's "`status: stuck, stuck_type: incomplete` (subprocess/psmux mode)" case in the
+  batch loop's `### 2. Parse implementer report`, and line 900's
+  "`millpy-implement.py <batch_name> --resume-incomplete` in subprocess/psmux mode" half of the
+  warm-resume sentence in `### Stuck escalation`.
 - Line 379's "branch identically to the existing `subprocess`/`psmux` flow" — reword; the
   verdict-branching description must survive on its own terms.
 
@@ -352,8 +423,20 @@ against the dead path being reintroduced later by a copy-paste from another SKIL
   must not be indexed as skills).
 - No dangling references: no surviving "see … above" pointing into an extracted section, and
   no reference in a companion file to a `SKILL.md` section by relative position alone.
-- Agent-mode step renumbering leaves no stale numeric cross-reference, in `SKILL.md`,
-  in the companion files, or in `mill-go2/SKILL.md`.
+- **Agent-mode step renumbering — the highest-risk scenario in this task.** Two distinct
+  failure modes must both be covered:
+  - *Under-shift:* an Agent-mode-namespace reference that still names its old number (e.g. a
+    surviving "step 6.5" that should now read "step 5.5"). Catch by enumerating every
+    `step N` occurrence in the five affected files after the edit and classifying each against
+    the four namespaces listed in
+    `renumber-agent-mode-steps-with-namespace-scoped-sweep`.
+  - *Over-shift:* a reference belonging to one of the three untouched namespaces that got
+    shifted anyway. The named collision sites (lines 332, 404, 641, 662, 872, 947, 1159, 1197,
+    1199, 1205 in the pre-edit file) are the specific ones to re-read by hand after the sweep —
+    each must still name the same number it names today.
+  - Neither failure mode is mechanically detectable by string matching alone, because the
+    namespaces share identical surface text. This check is a deliberate manual read-through,
+    not an assertion.
 
 **Verification sequence:**
 
@@ -381,3 +464,4 @@ restore note exists.
 - **Q:** How do we guarantee the orchestrator reads a companion file at the right moment? **A:** The operator's own reasoning settled it: if the essential information lives only in the .md file, the LLM cannot know what to do without reading it. Hence pointer-only reference sites with no summary.
 - **Q:** Stale references in sibling SKILLs? **A:** Fix only mill-go2's falsified line; leave mill-plan/mill-start/mill-merge-in for a follow-up.
 - **Q:** How do we verify the stripped SKILL still works? **A:** Unit tests + `/mill-skills-index`, then a real `/mill-go2` run as the live test.
+- **Q:** Removing Agent-mode step 1 shifts the step numbering — don't renumber (zero edit risk), renumber with an exhaustive sweep, or convert to named steps? **A:** Renumber with the exhaustive sweep — within a single skill this is not a large job. (Recorded hazard: the sweep must be namespace-scoped, since SKILL.md has four independent numbered-step namespaces that share identical surface text.)
