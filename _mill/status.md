@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: claude-plugin-root-env-setup
 branch: hanf/claude-plugin-root-env-setup
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-08-12T18:19:33Z'
 approved-plugin-root-resolution  '2026-08-12T18:23:33Z'
 holistic-reviewing  '2026-08-12T18:24:06Z'
 holistic-approved  '2026-08-12T18:25:58Z'
+done  '2026-08-12T18:26:31Z'
 ```
 
 ## Batches
