@@ -52,7 +52,9 @@ batches:
     commit_sha: d9cc532ce244f7efcf996589837d6ddda686af8b
     verify_baseline_failures: []
   - name: treeguard-dedup
-    state: pending
+    state: running
+    implementer_session: 89de920e-ce1b-4207-ba63-be51031ad2bb
+    start_sha: 479e1b4228aa8a36b0989b1832fcf4ff25b3493f
     verify_baseline_failures: []
   - name: extract-cold-path
     state: pending
