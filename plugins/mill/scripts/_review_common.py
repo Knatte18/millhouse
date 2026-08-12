@@ -2282,47 +2282,52 @@ def write_review_file(
     return out_path.resolve()
 
 
-# Horizontal whitespace only (`[ \t]`, not `\s`) between the colon and the value -- `\s` also matches `\n`, which would let this pattern bleed across a line boundary and swallow the line below when `reviewer_model:` has no value of its own (e.g.
-# a malformed `reviewer_model:\n` followed by a non-blank line such as a closing yaml fence).
-_RE_REVIEWER_MODEL_LINE = re.compile(r"^reviewer_model:[ \t]*\S.*$", re.MULTILINE)
+# Per-field compiled "well-formed line" patterns, keyed by field name, populated lazily by
+# _inject_or_rewrite_yaml_field the first time each field is requested. Caching avoids
+# recompiling the same four patterns (reviewer_model, duration_s, tool_calls, cost_usd) on
+# every review.
+_YAML_FIELD_LINE_PATTERNS: dict[str, re.Pattern[str]] = {}
 
 
-def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
+def _inject_or_rewrite_yaml_field(raw_text: str, field: str, value: str) -> str:
     """
-    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output so the persisted
-    review file records the model that actually ran the review, rather than the model the reviewer's
-    own prompt-echoed text claims it is (which is unreliable in agent-mode dispatch -- see #644).
+    Rewrite or inject a `<field>: <value>` line in a reviewer's raw yaml header, in place.
+
+    This is the shared mechanism behind every persisted-metadata field
+    (`reviewer_model`, `duration_s`, `tool_calls`, `cost_usd`): each caller supplies its own
+    field name and pre-formatted value string.
 
     Behavior:
-    1. If `actual_model` is None, the caller has no override to apply --
-    return `raw_text` completely unchanged (today's behavior).
-    2. Otherwise, search for a line matching `reviewer_model:[ \\t]*\\S.*` (the line the
-        review-prompt templates instruct the reviewer to echo, e.g. `<REVIEWER_MODEL>` in
-        review-code-batch.md).
-        If found, replace that line's value in place with `reviewer_model: {actual_model}`.
-    3. If no such line is found (the reviewer omitted or malformed it), inject a new
-        `reviewer_model: {actual_model}` line immediately after the opening ` ```yaml ` fence of the
-        fenced block that carries the reviewer's `verdict:` line (the YAML header block). If no
-        block carries a `verdict:` line, fall back to the first ` ```yaml ` fence in `raw_text`.
-        If there is no ` ```yaml ` fence at all, there is nowhere sensible to anchor the injection,
-            so `raw_text` is returned unchanged.
+    1. Search for a well-formed existing line matching `^<field>:[ \\t]*\\S.*$` (`re.MULTILINE`,
+        the field name regex-escaped). Horizontal whitespace only (`[ \\t]`, not `\\s`) between
+        the colon and the value -- `\\s` also matches `\\n`, which would let this pattern bleed
+        across a line boundary and swallow the line below when `<field>:` has no value of its
+        own (e.g. a malformed `<field>:\\n` followed by a non-blank line such as a closing yaml
+        fence). If found, replace that line's value in place with `<field>: <value>` (count=1).
+    2. Otherwise, inject a new `<field>: <value>` line immediately after the opening
+        ` ```yaml ` fence of the fenced block that carries the reviewer's `verdict:` line (the
+        YAML header block). If no block carries a `verdict:` line, fall back to the first
+        ` ```yaml ` fence in `raw_text`. If there is no ` ```yaml ` fence at all, there is
+        nowhere sensible to anchor the injection, so `raw_text` is returned unchanged.
 
     Args:
         raw_text: Raw review output text, prior to verdict parsing or disk write.
-        actual_model: The model that actually produced this review,
-            or None to leave `raw_text` untouched.
+        field: The yaml field name to inject or rewrite (e.g. `"reviewer_model"`).
+        value: The pre-formatted value string to write after the colon.
 
     Returns:
         The (possibly rewritten) raw text.
     """
-    if actual_model is None:
-        return raw_text
+    pattern = _YAML_FIELD_LINE_PATTERNS.get(field)
+    if pattern is None:
+        pattern = re.compile(rf"^{re.escape(field)}:[ \t]*\S.*$", re.MULTILINE)
+        _YAML_FIELD_LINE_PATTERNS[field] = pattern
 
-    replacement_line = f"reviewer_model: {actual_model}"
-    if _RE_REVIEWER_MODEL_LINE.search(raw_text):
-        return _RE_REVIEWER_MODEL_LINE.sub(replacement_line, raw_text, count=1)
+    replacement_line = f"{field}: {value}"
+    if pattern.search(raw_text):
+        return pattern.sub(replacement_line, raw_text, count=1)
 
-    # No well-formed reviewer_model line exists to rewrite.
+    # No well-formed line exists to rewrite.
     # Find the yaml fenced block that carries the reviewer's verdict -- that is the header block the new line belongs in -- and remember the first yaml fence encountered as a fallback anchor in case no block has a verdict.
     lines = raw_text.splitlines(keepends=True)
     first_fence_index: int | None = None
@@ -2357,6 +2362,106 @@ def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
     return "".join(lines)
 
 
+def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
+    """
+    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output so the persisted
+    review file records the model that actually ran the review, rather than the model the reviewer's
+    own prompt-echoed text claims it is (which is unreliable in agent-mode dispatch -- see #644).
+
+    Behavior:
+    1. If `actual_model` is None, the caller has no override to apply --
+    return `raw_text` completely unchanged (today's behavior).
+    2. Otherwise, delegate to `_inject_or_rewrite_yaml_field` for the `reviewer_model` field --
+        see that function's docstring for the rewrite-vs-inject mechanism.
+
+    Args:
+        raw_text: Raw review output text, prior to verdict parsing or disk write.
+        actual_model: The model that actually produced this review,
+            or None to leave `raw_text` untouched.
+
+    Returns:
+        The (possibly rewritten) raw text.
+    """
+    if actual_model is None:
+        return raw_text
+    return _inject_or_rewrite_yaml_field(raw_text, "reviewer_model", actual_model)
+
+
+def apply_cost_metadata(
+    raw_text: str,
+    *,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
+) -> str:
+    """
+    Inject or rewrite the `duration_s:`, `tool_calls:`, and `cost_usd:` lines in a reviewer's raw
+    yaml header, so the persisted review file records the round's wall-clock time, tool-call
+    count, and dollar cost alongside the reviewer's own output.
+
+    Returns `raw_text` unchanged when all three arguments are `None` -- there is nothing to
+    persist. Otherwise, calls `_inject_or_rewrite_yaml_field` once per non-`None` field, in the
+    order `cost_usd`, `tool_calls`, `duration_s` -- the reverse of the desired on-disk order,
+    because each injection lands immediately after the opening fence, so applying them in reverse
+    produces a header reading `duration_s:`, `tool_calls:`, `cost_usd:` top-to-bottom.
+
+    Per `_inject_or_rewrite_yaml_field`'s terminal fallback, a `raw_text` with no ` ```yaml `
+    fence to anchor on is returned unchanged -- this matters here because parse-failure branches
+    call this function on unparsed reviewer output, where a schema-conformant fence is not
+    guaranteed.
+
+    Value formatting: `duration_s` renders with one decimal place (`f"{duration_s:.1f}"`),
+    `tool_calls` renders as a plain integer, `cost_usd` renders with four decimal places.
+
+    Args:
+        raw_text: Raw review output text, prior to verdict parsing or disk write.
+        duration_s: Wall-clock seconds the round took, or None if unmeasured.
+        tool_calls: Number of tool calls the round made, or None if the provider does not report
+            this signal.
+        cost_usd: Dollar cost of the round, or None if the provider does not report this signal.
+
+    Returns:
+        The (possibly rewritten) raw text.
+    """
+    if duration_s is None and tool_calls is None and cost_usd is None:
+        return raw_text
+    if cost_usd is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "cost_usd", f"{cost_usd:.4f}")
+    if tool_calls is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "tool_calls", f"{tool_calls}")
+    if duration_s is not None:
+        raw_text = _inject_or_rewrite_yaml_field(raw_text, "duration_s", f"{duration_s:.1f}")
+    return raw_text
+
+
+def sum_optional(
+    a: float | int | None, b: float | int | None
+) -> float | int | None:
+    """
+    Sum two optional numeric values, treating `None` as "absent" rather than zero.
+
+    Implements the None-absorbing summation rule used to combine per-call metrics
+    (`duration_s`, `tool_calls`, `cost_usd`) across every reviewer call in a round: `None` when
+    both operands are `None`, the non-`None` operand unchanged when exactly one is set (never
+    coerced through `0`), and their arithmetic sum when both are set.
+
+    Lives in `_review_common.py` rather than in a single backend because more than one backend
+    needs it independently.
+
+    Args:
+        a: First operand, or None if absent.
+        b: Second operand, or None if absent.
+
+    Returns:
+        The None-absorbing sum of a and b.
+    """
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a + b
+
+
 def finalize_scope(
     reviews_dir: Path,
     review_type: str,
@@ -2366,14 +2471,19 @@ def finalize_scope(
     scope: str | None = None,
     actual_model: str | None = None,
     blocking_classes: frozenset[str] | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> dict:
     """Finalize a single review scope by parsing verdict, extracting findings, applying the
     blocking-class ceiling, and writing the review file.
 
-    Runs, in order: apply_actual_model_override; parse_verdict(raw_text); extract_findings(raw_text);
-    when `blocking_classes` is not None, apply_blocking_ceiling on the extracted findings and then
-    rewrite_demoted_findings on raw_text, so the file on disk agrees with the (possibly demoted)
-    findings before it is written; write_review_file with the (possibly-rewritten) text.
+    Runs, in order: apply_actual_model_override; apply_cost_metadata; parse_verdict(raw_text);
+    extract_findings(raw_text); when `blocking_classes` is not None, apply_blocking_ceiling on the
+    extracted findings and then rewrite_demoted_findings on raw_text, so the file on disk agrees
+    with the (possibly demoted) findings before it is written; write_review_file with the
+    (possibly-rewritten) text. `apply_cost_metadata` runs before `parse_verdict` so the persisted
+    file and the parsed verdict see the same text.
     `blocking_count` and `nit_count` are then derived by counting the post-ceiling findings list --
     the two independent regex sweeps (parse_blocking_count / count_unrecognized_severity_findings)
     are no longer used on this path, per the single-pass-finding-extraction Shared Decision. When
@@ -2402,15 +2512,26 @@ def finalize_scope(
             resolve_blocking_classes). `None` means "apply no ceiling" -- every historical/test call
             site that does not pass it keeps today's counting behaviour untouched. Every production
             call site passes this explicitly.
+        duration_s: Wall-clock seconds the round took, injected into the persisted yaml header via
+            `apply_cost_metadata`; if None, no `duration_s:` line is written.
+        tool_calls: Number of tool calls the round made, injected the same way; if None, no
+            `tool_calls:` line is written.
+        cost_usd: Dollar cost of the round, injected the same way; if None, no `cost_usd:` line is
+            written.
 
     Returns:
         Dict with keys: scope, verdict, file, blocking_count, nit_count, findings (a list of
-        Finding.to_dict() dicts, in extract_findings' concatenation order).
+        Finding.to_dict() dicts, in extract_findings' concatenation order), duration_s, tool_calls,
+        cost_usd (the three cost-metadata arguments, passed straight through unformatted -- the
+        dict feeds the JSON envelope, which must carry numbers, not display strings).
 
     Raises:
         ReviewError: from parse_verdict if verdict cannot be extracted.
     """
     raw_text = apply_actual_model_override(raw_text, actual_model)
+    raw_text = apply_cost_metadata(
+        raw_text, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+    )
     original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
     demoted_any = False
@@ -2444,6 +2565,9 @@ def finalize_scope(
         "blocking_count": blocking_count,
         "nit_count": nit_count,
         "findings": [f.to_dict() for f in findings],
+        "duration_s": duration_s,
+        "tool_calls": tool_calls,
+        "cost_usd": cost_usd,
     }
 
 

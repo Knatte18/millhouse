@@ -81,7 +81,7 @@ def test_bulk() -> int:
     print("TEST 1: run_bulk with inline file content", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     try:
-        text, sid = _llm_claude.run_bulk(
+        result = _llm_claude.run_bulk(
             PROMPT_BULK,
             model="claude-sonnet-4-5",
             timeout=120,
@@ -90,9 +90,14 @@ def test_bulk() -> int:
         print(f"FAIL: run_bulk raised {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
+    text, sid = result.text, result.session_id
     print("--- run_bulk returned ---", file=sys.stderr)
     print(text, file=sys.stderr)
     print(f"--- session_id: {sid} ---", file=sys.stderr)
+    print(
+        f"--- duration_s: {result.duration_s} tool_calls: {result.tool_calls} cost_usd: {result.cost_usd} ---",
+        file=sys.stderr,
+    )
     print("--- end run_bulk output ---", file=sys.stderr)
 
     if "verdict:" not in text.lower():
@@ -124,7 +129,7 @@ def test_tool_use() -> int:
 
         prompt = PROMPT_TOOL.format(path=test_file)
         try:
-            text, sid = _llm_claude.run_tool_use(
+            result = _llm_claude.run_tool_use(
                 prompt,
                 model="claude-sonnet-4-5",
                 timeout=180,
@@ -134,9 +139,14 @@ def test_tool_use() -> int:
             failed = True
             return 1
 
+        text, sid = result.text, result.session_id
         print("--- run_tool_use returned ---", file=sys.stderr)
         print(text, file=sys.stderr)
         print(f"--- session_id: {sid} ---", file=sys.stderr)
+        print(
+            f"--- duration_s: {result.duration_s} tool_calls: {result.tool_calls} cost_usd: {result.cost_usd} ---",
+            file=sys.stderr,
+        )
         print("--- end run_tool_use output ---", file=sys.stderr)
 
         if "verdict:" not in text.lower():
@@ -171,7 +181,7 @@ def test_session_reuse() -> int:
     # Seed turn: caller-supplied session id so we know what to resume.
     my_sid = str(uuid.uuid4())
     try:
-        seed_text, seed_sid = _llm_claude.run_bulk(
+        seed_result = _llm_claude.run_bulk(
             PROMPT_SESSION_SEED,
             model="claude-sonnet-4-5",
             timeout=120,
@@ -181,8 +191,14 @@ def test_session_reuse() -> int:
         print(f"FAIL: seed run_bulk raised {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
+    seed_text, seed_sid = seed_result.text, seed_result.session_id
     print(f"--- seed returned (sid={seed_sid}) ---", file=sys.stderr)
     print(seed_text, file=sys.stderr)
+    print(
+        f"--- duration_s: {seed_result.duration_s} tool_calls: {seed_result.tool_calls} "
+        f"cost_usd: {seed_result.cost_usd} ---",
+        file=sys.stderr,
+    )
 
     if seed_sid != my_sid:
         print(f"FAIL: server-assigned sid {seed_sid!r} != caller sid {my_sid!r}",
@@ -191,7 +207,7 @@ def test_session_reuse() -> int:
 
     # Recall turn: resume the same session, ask for the codeword.
     try:
-        recall_text, recall_sid = _llm_claude.run_bulk(
+        recall_result = _llm_claude.run_bulk(
             PROMPT_SESSION_RECALL,
             model="claude-sonnet-4-5",
             timeout=120,
@@ -206,8 +222,14 @@ def test_session_reuse() -> int:
               file=sys.stderr)
         return 1
 
+    recall_text, recall_sid = recall_result.text, recall_result.session_id
     print(f"--- recall returned (sid={recall_sid}) ---", file=sys.stderr)
     print(recall_text, file=sys.stderr)
+    print(
+        f"--- duration_s: {recall_result.duration_s} tool_calls: {recall_result.tool_calls} "
+        f"cost_usd: {recall_result.cost_usd} ---",
+        file=sys.stderr,
+    )
     print("--- end recall output ---", file=sys.stderr)
 
     if "ORANGUTAN-47" not in recall_text.upper():

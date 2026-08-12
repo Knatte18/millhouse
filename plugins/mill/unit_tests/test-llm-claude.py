@@ -13,6 +13,7 @@ import io
 import os
 import subprocess as _subprocess_mod
 import sys
+import time
 import unittest.mock as mock
 import uuid
 from pathlib import Path
@@ -91,9 +92,11 @@ def main() -> int:
         '{"type":"system","subtype":"init","session_id":"abc123"}\n'
         '{"type":"result","result":"APPROVE\\n\\nLooks good.","session_id":"abc123"}\n'
     )
-    text, sid = _parse_stream_json(raw)
+    text, sid, tool_calls, cost_usd = _parse_stream_json(raw)
     assert "APPROVE" in text
     assert sid == "abc123"
+    assert tool_calls == 0
+    assert cost_usd is None
     print("PASS: _parse_stream_json extracts result text + session_id")
 
     # _parse_stream_json: session_id from init only (no result sid)
@@ -101,12 +104,12 @@ def main() -> int:
         '{"type":"system","subtype":"init","session_id":"init-only"}\n'
         '{"type":"result","result":"OK"}\n'
     )
-    text, sid = _parse_stream_json(raw)
+    text, sid, tool_calls, cost_usd = _parse_stream_json(raw)
     assert text == "OK" and sid == "init-only"
     print("PASS: _parse_stream_json falls back to init session_id")
 
     # _parse_stream_json: no session_id at all (returns None)
-    text, sid = _parse_stream_json('{"type":"result","result":"OK"}\n')
+    text, sid, tool_calls, cost_usd = _parse_stream_json('{"type":"result","result":"OK"}\n')
     assert text == "OK" and sid is None
     print("PASS: _parse_stream_json returns None session_id when absent")
 
@@ -119,9 +122,61 @@ def main() -> int:
 
     # _parse_stream_json: bad JSON line is skipped
     mixed = 'not-json\n{"type":"result","result":"OK","session_id":"s1"}\n'
-    text, sid = _parse_stream_json(mixed)
+    text, sid, tool_calls, cost_usd = _parse_stream_json(mixed)
     assert text == "OK" and sid == "s1"
     print("PASS: _parse_stream_json skips bad JSON line")
+
+    # _parse_stream_json: no tool_use blocks anywhere -> tool_calls == 0
+    no_tools = (
+        '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]},"session_id":"s1"}\n'
+        '{"type":"result","result":"OK","session_id":"s1"}\n'
+    )
+    _, _, tool_calls, _ = _parse_stream_json(no_tools)
+    assert tool_calls == 0
+    print("PASS: _parse_stream_json no tool_use blocks -> tool_calls == 0")
+
+    # _parse_stream_json: several assistant events with mixed text and tool_use blocks -> total count
+    mixed_blocks = (
+        '{"type":"assistant","message":{"content":['
+        '{"type":"text","text":"a"},{"type":"tool_use","name":"Read"}]},"session_id":"s1"}\n'
+        '{"type":"assistant","message":{"content":['
+        '{"type":"tool_use","name":"Grep"},{"type":"tool_use","name":"Glob"}]},"session_id":"s1"}\n'
+        '{"type":"result","result":"OK","session_id":"s1"}\n'
+    )
+    _, _, tool_calls, _ = _parse_stream_json(mixed_blocks)
+    assert tool_calls == 3
+    print("PASS: _parse_stream_json counts tool_use blocks across all assistant events")
+
+    # _parse_stream_json: terminal result event carrying num_turns wins over block count
+    num_turns_wins = (
+        '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]},"session_id":"s1"}\n'
+        '{"type":"result","result":"OK","session_id":"s1","num_turns":7}\n'
+    )
+    _, _, tool_calls, _ = _parse_stream_json(num_turns_wins)
+    assert tool_calls == 7
+    print("PASS: _parse_stream_json num_turns wins over block count")
+
+    # _parse_stream_json: terminal result event without num_turns -> block count is used
+    no_num_turns = (
+        '{"type":"assistant","message":{"content":['
+        '{"type":"tool_use","name":"Read"},{"type":"tool_use","name":"Grep"}]},"session_id":"s1"}\n'
+        '{"type":"result","result":"OK","session_id":"s1"}\n'
+    )
+    _, _, tool_calls, _ = _parse_stream_json(no_num_turns)
+    assert tool_calls == 2
+    print("PASS: _parse_stream_json falls back to block count without num_turns")
+
+    # _parse_stream_json: result event carrying total_cost_usd -> cost_usd is that float
+    with_cost = '{"type":"result","result":"OK","session_id":"s1","total_cost_usd":0.0123}\n'
+    _, _, _, cost_usd = _parse_stream_json(with_cost)
+    assert cost_usd == 0.0123
+    print("PASS: _parse_stream_json extracts total_cost_usd")
+
+    # _parse_stream_json: result event without total_cost_usd -> cost_usd is None
+    without_cost = '{"type":"result","result":"OK","session_id":"s1"}\n'
+    _, _, _, cost_usd = _parse_stream_json(without_cost)
+    assert cost_usd is None
+    print("PASS: _parse_stream_json cost_usd is None when total_cost_usd absent")
 
     # _scan_rate_limit: rate_limit_event type -> True
     rl_event = '{"type":"rate_limit_event","limit_type":"requests"}\n'
@@ -251,14 +306,18 @@ def main() -> int:
         except LLMSessionError:
             errors += 1
             print("FAIL: got LLMSessionError but expected plain LLMError", file=sys.stderr)
-        except LLMError:
+        except LLMError as e:
+            assert e.duration_s is not None, "LLMError from non-zero exit must carry duration_s"
             print("PASS: _invoke raises plain LLMError (not LLMSessionError) on generic error with resume=False")
 
-        # zero exit -> (text, sid) tuple unchanged
+        # zero exit -> ReviewerCallResult with expected text/session_id
         _subprocess_util_mod.run = _fake_ok
-        result_tuple = run_bulk(prompt_text="x", model="m", session_id="sid-xyz", resume=False)
-        assert result_tuple == ("All good", "sid-xyz"), f"unexpected result: {result_tuple}"
-        print("PASS: _invoke zero-exit returns (text, sid) unchanged")
+        call_result = run_bulk(prompt_text="x", model="m", session_id="sid-xyz", resume=False)
+        assert (call_result.text, call_result.session_id) == ("All good", "sid-xyz"), (
+            f"unexpected result: {call_result}"
+        )
+        assert isinstance(call_result.duration_s, float) and call_result.duration_s >= 0
+        print("PASS: _invoke zero-exit returns ReviewerCallResult unchanged in text/session_id")
 
     finally:
         _subprocess_util_mod.run = _orig_run
@@ -403,11 +462,44 @@ def main() -> int:
     elif "fast-fail retry" not in _stderr_buf.getvalue():
         errors += 1
         print("FAIL: 'fast-fail retry' not found in stderr", file=sys.stderr)
-    elif _retry_result != ("ok", "abc"):
+    elif (_retry_result.text, _retry_result.session_id) != ("ok", "abc"):
         errors += 1
         print(f"FAIL: unexpected retry result: {_retry_result}", file=sys.stderr)
     else:
         print("PASS: _invoke retries on fast-fail then succeeds (2 calls, breadcrumb emitted)")
+
+    # test_invoke_retry_duration_is_cumulative: the reported duration must reflect the full
+    # elapsed time across both attempts, not just the fast first attempt's sub-2-second dt.
+    _cum_call_count = [0]
+    _cum_first_attempt_dt: list[float] = []
+
+    def _fast_fail_then_slow_ok(argv, **kwargs):
+        t_start = time.monotonic()
+        _cum_call_count[0] += 1
+        if _cum_call_count[0] == 1:
+            result = _subprocess_mod.CompletedProcess(args=argv, returncode=1, stdout="", stderr="shim fail")
+            _cum_first_attempt_dt.append(time.monotonic() - t_start)
+            return result
+        time.sleep(0.05)  # makes the second attempt measurably slower than the first
+        return _subprocess_mod.CompletedProcess(args=argv, returncode=0, stdout=_RETRY_OK_STDOUT, stderr="")
+
+    _cum_call_count[0] = 0
+    with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
+        with mock.patch.object(_subprocess_util_mod, "run", _fast_fail_then_slow_ok):
+            with contextlib.redirect_stderr(io.StringIO()):
+                _cum_result = run_bulk("prompt", model="m")
+    if _cum_call_count[0] != 2:
+        errors += 1
+        print(f"FAIL: expected 2 calls, got {_cum_call_count[0]}", file=sys.stderr)
+    elif _cum_result.duration_s is None or _cum_result.duration_s < _cum_first_attempt_dt[0]:
+        errors += 1
+        print(
+            f"FAIL: cumulative duration_s={_cum_result.duration_s} is not >= first attempt's "
+            f"dt={_cum_first_attempt_dt[0]}",
+            file=sys.stderr,
+        )
+    else:
+        print("PASS: _invoke fast-fail-retry duration_s reflects cumulative time across both attempts")
 
     # test_invoke_does_not_retry_on_slow_fail
     _slow_call_count = [0]
@@ -419,7 +511,7 @@ def main() -> int:
     _slow_call_count[0] = 0
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
         with mock.patch.object(_subprocess_util_mod, "run", _slow_fail):
-            with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 3.0]):
+            with mock.patch.object(_llm_claude_mod.time, "monotonic", side_effect=[0.0, 3.0, 3.0]):
                 try:
                     run_bulk("prompt", model="m")
                     errors += 1
@@ -534,7 +626,8 @@ def main() -> int:
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
         with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
             with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-                text, returned_sid = run_bulk("prompt", model="m", session_id=None)
+                _psmux_result_2 = run_bulk("prompt", model="m", session_id=None)
+                text, returned_sid = _psmux_result_2.text, _psmux_result_2.session_id
 
     # Verify argv structure
     if len(_psmux_captured_argv) < 5 or _psmux_captured_argv[0] != sys.executable:
@@ -600,7 +693,8 @@ def main() -> int:
     with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
         with mock.patch.object(_llm_claude_mod.shutil, "which", return_value="/usr/bin/psmux"):
             with mock.patch.object(_subprocess_util_mod, "run", _fake_psmux_run):
-                text, returned_sid = run_bulk("prompt", model="m", session_id="abc-explicit")
+                _psmux_result_5 = run_bulk("prompt", model="m", session_id="abc-explicit")
+                text, returned_sid = _psmux_result_5.text, _psmux_result_5.session_id
 
     if "abc-explicit" in _psmux_captured_argv and returned_sid == "abc-explicit":
         print("PASS: via_psmux=True preserves explicit session_id in argv and return value")
@@ -911,7 +1005,8 @@ def main() -> int:
                     _parse_called[0] = True
                     return _orig_parse(*args, **kwargs)
                 with mock.patch.object(_llm_claude_mod, "_parse_stream_json", _parse_track):
-                    text, sid = run_bulk("prompt", model="m", session_id="plain-text-sid")
+                    _plain_text_result = run_bulk("prompt", model="m", session_id="plain-text-sid")
+                    text, sid = _plain_text_result.text, _plain_text_result.session_id
 
     if text == "hello world" and not _parse_called[0]:
         print("PASS: via_psmux=True plain text uses rstrip, does not call _parse_stream_json")

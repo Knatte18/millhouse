@@ -16,10 +16,15 @@ Spec contract:
 
 Cluster specs are detected and raise ReviewerError immediately — cluster dispatch is deferred to
 task 13.
+
+`run()` returns the `ReviewerCallResult` produced by whichever provider it dispatches into,
+unmodified — `duration_s`, `tool_calls`, and `cost_usd` pass through for the caller to consume.
 """
 from __future__ import annotations
 
 import importlib
+
+from _llm_common import ReviewerCallResult
 
 
 def run(
@@ -29,7 +34,7 @@ def run(
     session_id: str | None = None,
     resume: bool = False,
     timeout: int | None = None,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Dispatch a single-reviewer call via spec.
 
     Reads spec["provider"] and spec["tooluse"] to select the LLM function.

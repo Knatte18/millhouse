@@ -69,7 +69,7 @@ def test_bulk() -> int:
     print("TEST 1: run_bulk with inline file content", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
     try:
-        text, sid = _llm_gemini.run_bulk(
+        result = _llm_gemini.run_bulk(
             PROMPT_BULK,
             model="gemini-2.5-flash",
             timeout=120,
@@ -78,9 +78,14 @@ def test_bulk() -> int:
         print(f"FAIL: run_bulk raised {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
 
+    text, sid = result.text, result.session_id
     print("--- run_bulk returned ---", file=sys.stderr)
     print(text, file=sys.stderr)
     print(f"--- session_id: {sid} ---", file=sys.stderr)
+    print(
+        f"--- duration_s: {result.duration_s} tool_calls: {result.tool_calls} cost_usd: {result.cost_usd} ---",
+        file=sys.stderr,
+    )
     print("--- end run_bulk output ---", file=sys.stderr)
 
     if "verdict:" not in text.lower():
@@ -111,7 +116,7 @@ def test_tool_use() -> int:
 
         prompt = PROMPT_TOOL.format(path=test_file)
         try:
-            text, sid = _llm_gemini.run_tool_use(
+            result = _llm_gemini.run_tool_use(
                 prompt,
                 model="gemini-2.5-flash",
                 timeout=180,
@@ -121,9 +126,14 @@ def test_tool_use() -> int:
             failed = True
             return 1
 
+        text, sid = result.text, result.session_id
         print("--- run_tool_use returned ---", file=sys.stderr)
         print(text, file=sys.stderr)
         print(f"--- session_id: {sid} ---", file=sys.stderr)
+        print(
+            f"--- duration_s: {result.duration_s} tool_calls: {result.tool_calls} cost_usd: {result.cost_usd} ---",
+            file=sys.stderr,
+        )
         print("--- end run_tool_use output ---", file=sys.stderr)
 
         if "verdict:" not in text.lower():

@@ -102,8 +102,8 @@ def main() -> None:
         + code_text
     )
 
-    header = "| Reviewer | Type | Time | Verdict | Findings | Fmt |"
-    sep = "|---|---|---|---|---|---|"
+    header = "| Reviewer | Type | Time | Tool Calls | Cost | Verdict | Findings | Fmt |"
+    sep = "|---|---|---|---|---|---|---|---|"
     print(header, flush=True)
     print(sep, flush=True)
 
@@ -163,11 +163,16 @@ def main() -> None:
 
             t0 = time.monotonic()
             text = ""
+            tool_calls_display = "n/a"
+            cost_display = "n/a"
             try:
-                text, _sid = _reviewer_single.run(
+                res = _reviewer_single.run(
                     spec, prompt_text, session_id=None, timeout=args.timeout
                 )
                 elapsed = time.monotonic() - t0
+                text = res.text
+                tool_calls_display = "n/a" if res.tool_calls is None else str(res.tool_calls)
+                cost_display = "n/a" if res.cost_usd is None else f"${res.cost_usd:.4f}"
 
                 try:
                     verdict = _review_common.parse_verdict(text)
@@ -200,7 +205,10 @@ def main() -> None:
             raw_path = scratch / f"bench-{timestamp}-{reviewer_name}-{review_type}.md"
             raw_path.write_text(text, encoding="utf-8")
 
-            row = f"| {reviewer_name} | {review_type} | {elapsed:.1f}s | {verdict} | {findings} | {format_ok} |"
+            row = (
+                f"| {reviewer_name} | {review_type} | {elapsed:.1f}s | {tool_calls_display} | "
+                f"{cost_display} | {verdict} | {findings} | {format_ok} |"
+            )
             print(row, flush=True)
             rows.append(row)
 

@@ -363,6 +363,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
+   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
    If `subprocess` or `psmux`: use the subprocess branch below.
 
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once.
@@ -396,6 +397,8 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
    Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
+   Print this round's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
+
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
@@ -413,7 +416,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
 
-   The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file}`.
+   The script discovers the slug and round from disk. It prints one JSON line: `{"type": "plan", "round": N, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": N, "reviews": [...]}` where each review entry has `{scope, verdict, file, duration_s, tool_calls, cost_usd}`.
 
 3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (`mill-receiving-review/SKILL.md`;
    it was already loaded unconditionally at the start of this phase — see the note immediately after the `### Phase: Plan Review` heading above).
@@ -453,6 +456,8 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
+
+   Print this retry's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
 

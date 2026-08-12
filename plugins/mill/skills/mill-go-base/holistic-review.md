@@ -103,6 +103,8 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    If the finalize envelope is absent, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+   Whenever a JSON envelope is present, print the cost line for this round per `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Review cost line", with `<type> = code` and `<scope> = holistic`, before dropping through to sub-step 3.5.
+   Printing the cost line does not relax the read-ban documented in `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch loop step 3: the Builder still never reads the findings, only the envelope fields the cost line names.
 
    Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after that Agent-mode dispatch pattern returns (prepare through finalize).
 
