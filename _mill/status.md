@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-extract-cold-path
+phase: approved-renumber-and-siblings
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -36,6 +36,7 @@ approved-regression-guard  '2026-08-12T09:36:18Z'
 approved-strip-subprocess-dispatch  '2026-08-12T09:49:31Z'
 approved-treeguard-dedup  '2026-08-12T09:52:43Z'
 approved-extract-cold-path  '2026-08-12T10:04:24Z'
+approved-renumber-and-siblings  '2026-08-12T10:11:08Z'
 ```
 
 ## Batches
@@ -66,8 +67,9 @@ batches:
     commit_sha: 1c7d2a7b6537672505ab5cd7ec7f82c60cf31b95
     verify_baseline_failures: []
   - name: renumber-and-siblings
-    state: running
+    state: approved
     implementer_session: a265be08-a115-400f-8cdf-ad9324ed2176
     start_sha: 4bb74b89ff9c30db2b3c6a6acd1feec78d5eedc5
+    commit_sha: 485cd15112fc235ef43482f18b277a006ba284fa
     verify_baseline_failures: []
 ```
