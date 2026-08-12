@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-error-envelope-contract
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r1  '2026-08-12T18:54:09Z'
 plan-fix-r2  '2026-08-12T19:00:09Z'
 planned  '2026-08-12T19:00:28Z'
 implementing  '2026-08-12T19:01:00Z'
+approved-error-envelope-contract  '2026-08-12T19:03:54Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-08-12T19:01:00Z'
 ```yaml
 batches:
   - name: error-envelope-contract
-    state: running
+    state: approved
     implementer_session: 4d0cad78-cd98-446f-958e-3b53e4ae645c
     start_sha: b3b4522034b151316543cb0965fb8b53eca18c30
+    commit_sha: 1ca7ef0b790659316a5349b666e21caa7ffcb007
     verify_baseline_failures: []
   - name: reviewer-kind-finalize-wrappers
     state: pending
