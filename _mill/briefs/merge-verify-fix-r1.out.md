@@ -1,5 +1,0 @@
-Verify command passes on the first fix attempt.
-
-{"status":"success","commit_sha":"f4a4ea7198333eb6a789283adb1492fe0958d641"}
-
-Summary: The failure was in `plugins/mill/skills/mill-go-base/SKILL.md`'s "Review cost line" section - a merge had reintroduced dual-dispatch-mode wording ("in both dispatch modes (agent, and subprocess/psmux)" and a "`roles.<review-type>.<scope>.reviewer` alias under subprocess/psmux dispatch" clause), which tripped `plugins/mill/unit_tests/test-mill-go-base-agent-only.py`'s banned-literal guard for this agent-dispatch-only variant. Fixed by rewriting both spots to describe agent-mode dispatch only, leaving all other content (which was already agent-mode-only) untouched. Full verify suite (`test-mill-go-base-agent-only.py`, `test-guards.py`, `test-mill-go-variants.py`, `test-skill-helper-drift.py`) now passes. Committed as `f4a4ea7198333eb6a789283adb1492fe0958d641`.
