@@ -37,7 +37,7 @@ the task remains in its current phase so the operator can inspect and re-run `/m
 **Manual recovery note.**
 The gate above requires a `nits-fixed-<scope>` row in status.md's timeline for each scope that has any `[NIT]` findings in its final code-review file — it does not inspect commits directly.
 A classed `[NIT:<class>]` heading counts identically to a bare `[NIT]` heading for this requirement.
-Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 6).
+Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 5).
 If an operator instead completes or verifies a NIT-fix pass manually, outside this documented flow (e.g. recovering from an orphaned or crashed fixer session), the gate still requires the marker to be appended by hand: `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`, where `scope` is the batch name or `"holistic"`.
 
 If the list is empty, proceed to terminal cleanliness gate.
@@ -118,7 +118,7 @@ if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
 "
 ```
 
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 6 for finalize-stage verify replays: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 5 for finalize-stage verify replays: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
 
 Parse stdout for a JSON line.
 If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`.
