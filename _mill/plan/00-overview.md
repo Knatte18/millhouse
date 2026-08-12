@@ -123,6 +123,14 @@ batches:
   A worked example: the discussion records `step 6.5` ×1 for `mill-go2/SKILL.md`, but that file actually names `step 6.5.2` and `6.5.1` and no bare `6.5`.
 - **Applies to:** batch 5
 
+### Decision: skills-index-regenerates-rather-than-asserting-an-empty-diff
+
+- **Decision:** batch 5's index card regenerates `SKILLS.md` and commits it, gating on three narrow invariants (no companion-file row, unchanged row count, every changed row matching its skill's current frontmatter) rather than on an empty diff.
+- **Rationale:** the committed index is already out of date — its `mill-go2` row still describes that skill as "Behaviourally identical to /mill-go today", while the skill's own frontmatter now describes the fixer-fork override.
+  That drift predates this task, so an empty-diff assertion would fail for a reason no card can fix and would leave the implementer with no correct remediation.
+  The discussion's actual requirement is that the three companion files must not be indexed as skills, which invariant 1 states directly.
+- **Applies to:** batch 5
+
 ### Decision: done-gate-stays-null
 
 - **Decision:** `pipeline.done_gate` is left at its current `null` and no `mill-config.yaml` edit is planned.
@@ -139,6 +147,7 @@ batches:
 
 ## All Files Touched
 
+- `SKILLS.md`
 - `plugins/mill/skills/mill-go-base/SKILL.md`
 - `plugins/mill/skills/mill-go-base/handoff.md`
 - `plugins/mill/skills/mill-go-base/holistic-review.md`

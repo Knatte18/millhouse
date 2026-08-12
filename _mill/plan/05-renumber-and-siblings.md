@@ -11,7 +11,7 @@ depends-on: [4]
 
 ## Batch Scope
 
-Closes the task: renumbers the `## Agent-mode dispatch` steps that batch 2 left starting at 2, sweeps every reference to them across the five affected files, corrects the two sibling SKILLs whose statements this task falsified, and confirms the generated skills index is unchanged.
+Closes the task: renumbers the `## Agent-mode dispatch` steps that batch 2 left starting at 2, sweeps every reference to them across the five affected files, corrects the two sibling SKILLs whose statements this task falsified, and regenerates the generated skills index under three explicit invariants.
 
 This is the highest-risk batch in the task and the risk is entirely in the sweep.
 `SKILL.md` carries four independent numbered-step namespaces whose surface text is identical, and only the first is being renumbered.
@@ -101,24 +101,34 @@ The per-token counts recorded in the discussion were measured before batches 2 t
      Both variant files must stay under 4096 bytes and must not gain any of the literals `## Agent-mode dispatch`, `## Holistic code review`, `## Execute`, or `You are the **Builder**`; `test-mill-go-variants.py` asserts both.
 - **Commit:** `docs(mill-go,mill-go2): correct sibling claims falsified by the base strip`
 
-### Card 24: Confirm the generated skills index is unchanged
+### Card 24: Regenerate the skills index and confirm no companion file was indexed
 
 - **Context:**
-  - `SKILLS.md`
   - `plugins/mill/skills/mill-skills-index/SKILL.md`
+  - `plugins/mill/skills/mill-go/SKILL.md`
+  - `plugins/mill/skills/mill-go2/SKILL.md`
   - `plugins/mill/skills/mill-go-base/resume.md`
   - `plugins/mill/skills/mill-go-base/holistic-review.md`
   - `plugins/mill/skills/mill-go-base/handoff.md`
-- **Edits:** none
+- **Edits:**
+  - `SKILLS.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Regenerate the skills index by invoking `/mill-skills-index`, then confirm `git status --porcelain -- SKILLS.md` is empty.
-  The generator scans `plugins/*/skills/**/SKILL.md` for frontmatter, so the three companion `*.md` files must not be indexed as skills; an empty diff is the confirmation.
-  A non-empty diff means either a companion file grew frontmatter (revert it — cards 14 through 16 forbid it) or `mill-go`/`mill-go2` frontmatter changed (card 23 edits their bodies only, so revert that too).
-  This card writes nothing and commits nothing; it is a verification gate whose only output is the confirmation or the discrepancy.
-- **Commit:** none
+  Regenerate the skills index by invoking `/mill-skills-index`, then inspect `git diff -- SKILLS.md` rather than asserting the diff is empty.
+  An empty diff is **not** the expected outcome: the committed index already carries a stale `mill-go2` row whose description reads "Behaviourally identical to /mill-go today; exists so fork-dispatch experiments never destabilise the production orchestrator", while that skill's frontmatter `description:` has since been rewritten to "Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator."
+  This drift predates the task and is unrelated to every edit in it; regenerating picks it up as an incidental true-up, which is exactly what a generated index is for.
+  The invariant this card actually gates is narrower — assert all three of:
+  1. No row exists for `resume.md`, `holistic-review.md`, or `handoff.md`.
+     The generator scans `plugins/*/skills/**/SKILL.md` for frontmatter, so a companion file can only appear if it grew a `name:`/`description:` block, which cards 14 through 16 forbid.
+     If one appears, that is a defect in the companion file: remove its frontmatter and regenerate, do not edit the index by hand.
+  2. The total row count is unchanged from the committed version.
+  3. Every changed row is a description true-up for an already-indexed skill whose text matches that skill's current frontmatter.
+     For the `mill-go` and `mill-go2` rows specifically, read both files' frontmatter and confirm the new row text matches it — card 23 edits their bodies only, so a *frontmatter* change there would be an accidental edit to fix in card 23's files before regenerating.
+  Commit the regenerated index once all three hold.
+  If any of the three fails, halt and report which one; the remedy always lives in the source file, never in `SKILLS.md`.
+- **Commit:** `docs(skills): regenerate the skills index after the mill-go-base strip`
 
 ## Batch Tests
 
@@ -129,5 +139,5 @@ Two of them carry real weight here.
 `test-mill-go-base-agent-only.py` guards cards 21 and 22 against collateral damage: a sweep that mangles one of the three mandatory-read directives or a companion path reference fails immediately.
 
 Neither failure mode of the renumbering sweep is mechanically detectable, because all four namespaces share identical surface text.
-The under-shift and over-shift checks named in cards 21 and 22 are a deliberate manual read-through, not an assertion, and card 24's index confirmation is likewise a gate rather than a test.
+The under-shift and over-shift checks named in cards 21 and 22 are a deliberate manual read-through, not an assertion, and card 24's three index invariants are likewise a gate rather than a test.
 This is the reason the discussion designates a real `/mill-go2` run on the next task as the live end-to-end verification, backed by the `## History` restore note card 17 added.

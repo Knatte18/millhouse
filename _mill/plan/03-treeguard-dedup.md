@@ -37,6 +37,8 @@ Batch-local decision: the named block is placed in `## Agent-mode dispatch`, in 
   Move the two `signature:` lines currently attached to the first checkpoint occurrence in `### 3. Code Review loop` into this block verbatim, so each helper's signature is still documented inline exactly once, per the file's own `**Helper signatures are documented inline.**` principle: `signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`, and `signature: _status.append_recovery_log(status_path: Path, timestamp: str, restored_paths: list[str]) -> None`.
   Carry over, once, the rationale sentence that currently appears at the post-dispatch occurrences: the post-dispatch form brackets the out-of-process execution window that `worktree_snapshot_guard` cannot see, and the block must not be invoked from inside the Agent-mode dispatch pattern's own numbered steps — it belongs at each call site, since that pattern also serves non-review dispatch.
   State that the block is referenced by name from this file and from the skill's companion files, and that a companion file names it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`.
+  Note for card 13's postcondition: because the `signature:` line is moved in here, the finished block contains the substring `_treeguard.check_and_restore(` twice — once as the executable call and once inside that signature line.
+  That is intended and is what card 13 counts against.
   Do not remove any existing checkpoint paragraph in this card; card 13 does that.
 - **Commit:** `docs(mill-go-base): define the named tree-guard checkpoint block`
 
@@ -57,7 +59,8 @@ Batch-local decision: the named block is placed in `## Agent-mode dispatch`, in 
   Two of the twelve are not dispatch-bracketing and fire before a phase-append-and-commit rather than around an agent call — the `### 3. Code Review loop` loop-header one and `## Holistic code review` step 2's.
   Use the pre-dispatch form for both and keep their existing "before the append_phase/commit below" positional wording so the call site stays unambiguous.
   Preserve, at their current sites, the two sentences that are site-specific rather than boilerplate: the `### 3. Code Review loop` loop-header note about closing the same-file modify-then-delete window, and sub-step 3.6's requirement that its pre-dispatch checkpoint fires before re-running sub-step 3 with the swapped reviewer.
-  After this card, `_treeguard.check_and_restore(` must appear exactly once in the file — inside the named block.
+  After this card, the file must contain exactly two occurrences of the substring `_treeguard.check_and_restore(`, both inside the named block: one executable call site, and one inside the `signature:` line card 12 moved there.
+  Count executable call sites, not raw substring matches — the signature line is documentation, not a thirteenth checkpoint.
 - **Commit:** `docs(mill-go-base): replace the twelve tree-guard paragraphs with block references`
 
 ## Batch Tests
