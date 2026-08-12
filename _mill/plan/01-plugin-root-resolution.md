@@ -89,12 +89,67 @@ call sites, and its unit tests are one cohesive unit with no natural split bound
   (which ends at line 654, directly before `def test_load_config_bare_roles_key`), following that
   function's existing style exactly: plain top-level function, `assert` statements, a trailing
   `print("PASS ...")` line, no pytest fixtures/decorators. Cover the five TDD candidates from
-  `_mill/discussion.md`'s Testing section:
-  1. `test_resolve_plugin_root_from_syspath_basic` -- a `sys.path`-shaped list `['', '/home/x/.claude/plugins/cache/millhouse/mill/2.0.0/scripts']` (the real observed shape: empty-string cwd entry at index 0, the PYTHONPATH-inserted entry at index 1) returns `Path('/home/x/.claude/plugins/cache/millhouse/mill/2.0.0')`.
-  2. `test_resolve_plugin_root_from_syspath_no_scripts_entry_raises` -- a list with no entry named `scripts` (e.g. `['', '/some/other/dir']`) raises `SystemExit` with a message containing `scripts`.
-  3. `test_resolve_plugin_root_from_syspath_not_at_index_one` -- a list with a third-party path prepended ahead of the `scripts` entry (e.g. `['', '/some/other/dir', '/home/x/.claude/plugins/cache/millhouse/mill/2.0.0/scripts']`) still returns the correct parent.
-  4. `test_resolve_plugin_root_from_syspath_trailing_slash` -- a `scripts` entry with a trailing slash (e.g. `'/home/x/.claude/plugins/cache/millhouse/mill/2.0.0/scripts/'`) still returns `Path('/home/x/.claude/plugins/cache/millhouse/mill/2.0.0')`.
-  5. `test_resolve_plugin_root_from_syspath_first_match_wins` -- a list containing two `scripts`-named entries at different paths returns the parent of the **first** one.
+  `_mill/discussion.md`'s Testing section. Build every fixture from a real `tempfile.TemporaryDirectory()`
+  (already imported at the top of the file as `tempfile`, same pattern
+  `test_resolve_plugin_template_path_stale_root` already uses) rather than hardcoded POSIX string
+  literals -- `resolve_plugin_root_from_syspath` calls `.resolve()` internally, and on Windows
+  resolving a drive-less POSIX-style literal (e.g. `'/home/x/...'`) fills in the current working
+  directory's drive letter, so a hardcoded drive-less `Path(...)` on the assertion's other side would
+  never compare equal. An OS-native tmp path resolves identically on both sides of the comparison on
+  every platform. `os` is already imported at the top of the file for the `os.sep` use in test 4.
+
+  ```python
+  def test_resolve_plugin_root_from_syspath_basic() -> None:
+      """resolve_plugin_root_from_syspath finds the scripts entry and returns its parent."""
+      with tempfile.TemporaryDirectory() as tmp:
+          tmp_path = Path(tmp).resolve()
+          scripts_dir = tmp_path / "scripts"
+          result = _config.resolve_plugin_root_from_syspath(["", str(scripts_dir)])
+          assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+      print("PASS resolve_plugin_root_from_syspath -- basic sys.path scan")
+
+
+  def test_resolve_plugin_root_from_syspath_no_scripts_entry_raises() -> None:
+      """resolve_plugin_root_from_syspath with no scripts-named entry raises SystemExit."""
+      try:
+          _config.resolve_plugin_root_from_syspath(["", "/some/other/dir"])
+          raise AssertionError("Expected SystemExit")
+      except SystemExit as exc:
+          assert "scripts" in str(exc), f"Expected 'scripts' in message, got {exc!r}"
+      print("PASS resolve_plugin_root_from_syspath -- no scripts entry raises SystemExit")
+
+
+  def test_resolve_plugin_root_from_syspath_not_at_index_one() -> None:
+      """resolve_plugin_root_from_syspath finds a scripts entry prepended ahead of it."""
+      with tempfile.TemporaryDirectory() as tmp:
+          tmp_path = Path(tmp).resolve()
+          scripts_dir = tmp_path / "scripts"
+          result = _config.resolve_plugin_root_from_syspath(["", "/some/other/dir", str(scripts_dir)])
+          assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+      print("PASS resolve_plugin_root_from_syspath -- scripts entry not at index 1 still found")
+
+
+  def test_resolve_plugin_root_from_syspath_trailing_slash() -> None:
+      """resolve_plugin_root_from_syspath normalizes a trailing slash on the scripts entry."""
+      with tempfile.TemporaryDirectory() as tmp:
+          tmp_path = Path(tmp).resolve()
+          scripts_dir_str = str(tmp_path / "scripts") + os.sep
+          result = _config.resolve_plugin_root_from_syspath(["", scripts_dir_str])
+          assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+      print("PASS resolve_plugin_root_from_syspath -- trailing slash normalizes")
+
+
+  def test_resolve_plugin_root_from_syspath_first_match_wins() -> None:
+      """resolve_plugin_root_from_syspath returns the first scripts entry when two exist."""
+      with tempfile.TemporaryDirectory() as tmp1, tempfile.TemporaryDirectory() as tmp2:
+          tmp1_path = Path(tmp1).resolve()
+          tmp2_path = Path(tmp2).resolve()
+          scripts1 = tmp1_path / "scripts"
+          scripts2 = tmp2_path / "scripts"
+          result = _config.resolve_plugin_root_from_syspath(["", str(scripts1), str(scripts2)])
+          assert result == tmp1_path, f"Expected first match {tmp1_path}, got {result}"
+      print("PASS resolve_plugin_root_from_syspath -- first match wins")
+  ```
 
   Import the function under test the same way the rest of the file does (module-level `import _config` at the top of the file, already present -- call as `_config.resolve_plugin_root_from_syspath(...)`, no new import needed).
 
@@ -190,11 +245,14 @@ call sites, and its unit tests are one cohesive unit with no natural split bound
 
 ## Batch Tests
 
-`verify:` runs the full `plugins/mill/unit_tests/test-config.py` file (not `--only`-scoped to the
-five new test functions) because this batch edits `_config.py` itself, a module every other
+`verify:` runs the whole `plugins/mill/unit_tests/test-config.py` file directly, rather than a
+narrower alternative, because this batch edits `_config.py` itself, a module every other
 `test-config.py` case already exercises -- running the whole file catches any regression in
 `resolve_plugin_template_path`'s existing coverage (same module, same env-var subject matter) in
-the same pass, at no extra scoping cost since both live in one file already.
+the same pass, at no extra scoping cost since both live in one file already. (`test-config.py` has
+no function-level selection mechanism of its own; `run-all.py --only <file>...`, used for other
+batches' narrower verify commands, scopes by file, not by function, so it offers no narrower option
+here than running this one file in full.)
 
 After this batch merges, the operator should manually re-run `/mill-setup` once in this repo (it
 is idempotent) to confirm end-to-end: (a) the Phase 4.8 output line reports the correct
