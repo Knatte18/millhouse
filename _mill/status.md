@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-provider-contract
+phase: approved-yaml-injection
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r2  '2026-08-12T06:43:18Z'
 planned  '2026-08-12T06:43:34Z'
 implementing  '2026-08-12T06:51:25Z'
 approved-provider-contract  '2026-08-12T07:03:06Z'
+approved-yaml-injection  '2026-08-12T07:06:57Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: 846a2ee82262ff811902a9556fe501a7e5a8fcc1
     verify_baseline_failures: []
   - name: yaml-injection
-    state: running
+    state: approved
     implementer_session: 1b30fd1e-841a-427a-b15f-b01293719c73
     start_sha: 7481eb9fc7fe01e5835ea40a321326e7ec426fa4
+    commit_sha: b5a27e30ffbc1cecf0dc19a31b131187d6785dfa
     verify_baseline_failures: []
   - name: dispatcher-flip
     state: pending
