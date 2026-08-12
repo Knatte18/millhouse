@@ -13,6 +13,18 @@ Flags:
         prepare=render prompt only, finalize=parse output only.
     --agent-output <path> For finalize stage only;
         read reviewer output from this path.
+    --duration-s <seconds> Finalize-stage only, orchestrator-supplied wall-clock seconds the
+        reviewer call took;
+        written into the review file's yaml header and the JSON envelope.
+        Omitted when the dispatch mode cannot supply it.
+    --tool-calls <N> Finalize-stage only, orchestrator-supplied count of tool calls the reviewer
+        made;
+        written into the review file's yaml header and the JSON envelope.
+        Omitted when the dispatch mode cannot supply it (e.g. agent-mode supplies duration only).
+    --cost-usd <dollars> Finalize-stage only, orchestrator-supplied dollar cost of the reviewer
+        call;
+        written into the review file's yaml header and the JSON envelope.
+        Omitted when the dispatch mode cannot supply it (e.g. agent-mode supplies duration only).
 
 Exit codes:
     0 — review complete;
@@ -75,6 +87,36 @@ def main(argv: list[str] | None = None) -> int:
             "an operator-directed override); threaded into the review file's "
             "`reviewer_model` field. Omit to leave today's config-derived value "
             "untouched."
+        ),
+    )
+    parser.add_argument(
+        "--duration-s",
+        type=float,
+        default=None,
+        help=(
+            "Finalize-stage only, orchestrator-supplied wall-clock seconds the reviewer call "
+            "took; written into the review file's yaml header and the JSON envelope. Omitted "
+            "when the dispatch mode cannot supply it."
+        ),
+    )
+    parser.add_argument(
+        "--tool-calls",
+        type=int,
+        default=None,
+        help=(
+            "Finalize-stage only, orchestrator-supplied count of tool calls the reviewer made; "
+            "written into the review file's yaml header and the JSON envelope. Omitted when the "
+            "dispatch mode cannot supply it (agent-mode supplies duration only)."
+        ),
+    )
+    parser.add_argument(
+        "--cost-usd",
+        type=float,
+        default=None,
+        help=(
+            "Finalize-stage only, orchestrator-supplied dollar cost of the reviewer call; "
+            "written into the review file's yaml header and the JSON envelope. Omitted when the "
+            "dispatch mode cannot supply it (agent-mode supplies duration only)."
         ),
     )
     args = parser.parse_args(argv)
@@ -194,6 +236,9 @@ def main(argv: list[str] | None = None) -> int:
                 project_root=project_root,
                 wiki_root=wiki_root,
                 actual_model=args.actual_model,
+                duration_s=args.duration_s,
+                tool_calls=args.tool_calls,
+                cost_usd=args.cost_usd,
             )
             print(json.dumps(result.to_dict()))
             return 0
