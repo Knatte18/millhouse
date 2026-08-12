@@ -26,6 +26,7 @@ from _llm_common import LLMError
 from _review_common import (
     ReviewError,
     ReviewResult,
+    apply_cost_metadata,
     build_tool_rule,
     discover_round,
     extract_review_content,
@@ -160,6 +161,9 @@ def finalize(
     project_root: Path,
     wiki_root: Path,
     actual_model: str | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> ReviewResult:
     """Finalize a discussion review by parsing verdict and writing the review file.
 
@@ -171,6 +175,13 @@ def finalize(
         actual_model: The model that actually produced this review, used to correct an unreliable
         self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
         to ``finalize_scope`` on the success path only.
+        duration_s: Orchestrator-supplied wall-clock seconds the reviewer call took; threaded to
+        ``finalize_scope`` on the success path, and injected into the raw parse-failure file on
+        the ``except ReviewError`` path.
+        tool_calls: Orchestrator-supplied tool-call count for the reviewer call; threaded the same
+        way as ``duration_s``.
+        cost_usd: Orchestrator-supplied dollar cost of the reviewer call; threaded the same way as
+        ``duration_s``.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -188,8 +199,14 @@ def finalize(
             scope="holistic",
             actual_model=actual_model,
             blocking_classes=blocking_classes,
+            duration_s=duration_s,
+            tool_calls=tool_calls,
+            cost_usd=cost_usd,
         )
     except ReviewError as exc:
+        raw_text = apply_cost_metadata(
+            raw_text, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+        )
         path = write_review_file(reviews_dir, "discussion", round_n, raw_text, scope="holistic")
         return ReviewResult(
             type="discussion",
@@ -203,6 +220,9 @@ def finalize(
                 "error": f"parse_verdict failed: {exc}",
                 "findings": [],
                 "session_id": None,
+                "duration_s": duration_s,
+                "tool_calls": tool_calls,
+                "cost_usd": cost_usd,
             }],
         )
 
@@ -219,6 +239,9 @@ def finalize(
             "file": review_entry["file"],
             "findings": review_entry["findings"],
             "session_id": None,
+            "duration_s": review_entry["duration_s"],
+            "tool_calls": review_entry["tool_calls"],
+            "cost_usd": review_entry["cost_usd"],
         }],
     )
 
