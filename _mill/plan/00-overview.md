@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-merge/merge-in: squash non-ff rejection, stale-worktree logic, parent-branch detection, conflict resolution'
 slug: mill-merge-and-merge-in-bugs
-approved: false
+approved: true
 started: '2026-08-12T18:30:03Z'
 parent: main
 root: ""

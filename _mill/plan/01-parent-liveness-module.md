@@ -41,7 +41,7 @@ Adds the #817 dead-parent-branch-detection primitives to `plugins/mill/scripts/_
     def check_liveness(branch: str, git_root: Path) -> bool:
     ```
     Body: run `_subprocess_util.run(["git", "-C", str(git_root), "ls-remote", "--exit-code", "origin", branch], check=False)` and return `result.returncode == 0`. Docstring: one line — "Return True if `branch` currently exists on `origin` (`git ls-remote --exit-code`)." Note in the docstring that `git branch -a` / local remote-tracking refs are deliberately not used as the liveness signal, because `mill-cleanup`'s remote-branch deletion never prunes them (a torn-down parent's stale local `origin/<branch>` ref would otherwise report as alive).
-  - Update the module docstring's `Public API` list (top of file) to add `check_liveness` and `resolve_dead_parent` (the latter added by Card 2) as new bullets, one line each, matching the existing bullet style for `resolve` / `resolve_for_codeguide`.
+  - Update the module docstring's `Public API` list (top of file) to add ONLY `check_liveness` as a new bullet, matching the existing bullet style for `resolve` / `resolve_for_codeguide`. Do NOT add a `resolve_dead_parent` bullet here — that function does not exist yet at this card's own commit; Card 2 adds its own bullet for it when it defines the function, so the docstring never documents a not-yet-existing function at any single commit.
 - **Commit:** `refactor(mill): extract _parse_parent_from_yaml_text; add _parent_branch.check_liveness`
 
 ### Card 2: Add `resolve_dead_parent` archive-tag chain-walk
@@ -62,6 +62,7 @@ Adds the #817 dead-parent-branch-detection primitives to `plugins/mill/scripts/_
     def resolve_dead_parent(dead_branch: str, git_root: Path, cfg: dict, *, max_hops: int = 10) -> dict:
     ```
   - Docstring documents the three possible return shapes verbatim: `{"outcome": "resolved", "branch": <live-branch>, "hops": [<slug>, ...]}`, `{"outcome": "fallback", "reason": "no-tag" | "chain-end", "branch": <base_branch>, "hops": [...]}`, `{"outcome": "cycle", "hops": [...]}` — matching the overview's `liveness-check-contract` Shared Decision exactly.
+  - Add a `resolve_dead_parent` bullet to the module docstring's `Public API` list (top of file), alongside the `check_liveness` bullet Card 1 already added — one line, matching the existing bullet style for `resolve` / `resolve_for_codeguide`.
   - Implementation, one hop per loop iteration, `for _ in range(max_hops):`:
     1. `prefix = cfg.get("spawn", {}).get("branch_prefix", "")` and `base_branch = cfg.get("git", {}).get("base_branch", "main")` — read once, before the loop, reusing the exact `removeprefix` pattern `_marker.py`'s `slug_from_branch` uses at its `slug = branch.removeprefix(prefix)` line.
     2. Inside the loop: `slug = branch.removeprefix(prefix)` (where `branch` starts as `dead_branch` and is reassigned to the resolved-but-still-dead parent on each subsequent iteration); append `slug` to a `hops: list[str]` accumulator declared before the loop.
