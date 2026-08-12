@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cli-round-threading
+phase: approved-skill-error-kind-retry-wiring
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-error-envelope-contract  '2026-08-12T19:03:54Z'
 approved-reviewer-kind-finalize-wrappers  '2026-08-12T19:08:30Z'
 approved-verdict-summary-demotion-note  '2026-08-12T19:11:55Z'
 approved-cli-round-threading  '2026-08-12T19:17:00Z'
+approved-skill-error-kind-retry-wiring  '2026-08-12T19:20:02Z'
 ```
 
 ## Batches
@@ -59,7 +60,8 @@ batches:
     commit_sha: caa33df0aad974051137575672d87dab51cfaae2
     verify_baseline_failures: []
   - name: skill-error-kind-retry-wiring
-    state: running
+    state: approved
     implementer_session: 524df278-1595-4caa-9bf3-6f884f90c03a
     start_sha: e1c58339f740e4194b7e258186007f8aacff77fd
+    commit_sha: 6cc7ab00980d94baa832038fd43a848f626d82db
 ```
