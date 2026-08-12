@@ -220,16 +220,16 @@ For each batch in `order`:
 
 This three-step pattern applies at every dispatch point:
 
-2. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation).
+1. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation).
    Parse the returned JSON line to extract:
    - `brief_path`: absolute file path to the rendered brief
    - `subagent_type`: `"mill:mill-implementer"` or `"mill:mill-reviewer"`, or one of their six `-medium`/`-high`/`-max` tier-suffixed variants (e.g. `"mill:mill-reviewer-high"`) when the resolved alias's `effort` field is `"medium"`, `"high"`, or `"max"` — computed by `_agent_dispatch.resolve_subagent_type`, the single site every envelope-construction call site (implement/fix/merge-in via `emit_prepare`, and each of the three review CLIs) routes through.
    - `model`: Agent-tool tier (`"sonnet"`, `"opus"`, or `"haiku"`)
 
    Also extract from the envelope: `session_id` (string or null), `round` (integer), `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs), `effort` (string or null -- present only when the resolved spec has a non-null effort tier, e.g. `"high"`), and `output_path` (absolute path string -- present only on the three review CLIs' envelopes;
-   used verbatim as `--agent-output` in step 6, never re-derived).
+   used verbatim as `--agent-output` in step 5, never re-derived).
 
-3. **Call Agent tool:**
+2. **Call Agent tool:**
 
    Override point A: consult your variant's `## Dispatch overrides` for this role; if it declares
    one, follow it instead of the default `Agent()` call below. The role for the current dispatch is
@@ -238,41 +238,41 @@ This three-step pattern applies at every dispatch point:
    and the default `Agent()` call below applies unchanged.
 
    Invoke the Agent tool with:
-   - `subagent_type`: the value from step 2
-   - `model`: the value from step 2
+   - `subagent_type`: the value from step 1
+   - `model`: the value from step 1
    - `prompt`: `"Read this file and follow the instructions exactly: <brief_path>"`
 
    The Agent tool launches a **background** subagent and returns immediately with a message such as "Async agent launched..." — the subagent's final output is NOT available at call time.
    **Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch** (a local Builder variable, e.g. `agent_id`).
-   Also **record the `model` value actually passed to this Agent tool call into a local Builder variable** — ordinarily identical to the envelope's `model` field from step 2, copied through unchanged;
+   Also **record the `model` value actually passed to this Agent tool call into a local Builder variable** — ordinarily identical to the envelope's `model` field from step 1, copied through unchanged;
    it only differs when the operator explicitly instructs a different tier for this specific dispatch.
    This recorded value is consumed by a later batch's step-6 edit.
-   The Agent tool call still takes only `subagent_type`, `model`, `prompt`, and optionally `isolation` — there is no separate `effort` parameter — but the envelope's `subagent_type` value (from step 2) already encodes the resolved alias's `effort` tier as a suffix, resolved once by `_agent_dispatch.resolve_subagent_type` at envelope-construction time.
+   The Agent tool call still takes only `subagent_type`, `model`, `prompt`, and optionally `isolation` — there is no separate `effort` parameter — but the envelope's `subagent_type` value (from step 1) already encodes the resolved alias's `effort` tier as a suffix, resolved once by `_agent_dispatch.resolve_subagent_type` at envelope-construction time.
    Forwarding an effort tier means dispatching to one of the six per-tier agent-definition files under `plugins/mill/agents/` (`mill-reviewer-medium.md`/`-high.md`/`-max.md`, `mill-implementer-medium.md`/`-high.md`/`-max.md`), each of which pins a fixed `effort:` in its own frontmatter — not passing effort as a call parameter. `effort` remains present in the envelope for audit visibility, in addition to now driving `subagent_type`.
-   This `agentId` is the harness runtime handle for the live subagent — it is what `SendMessage` addresses to warm-resume the same session (see the `incomplete` recovery in step 6).
+   This `agentId` is the harness runtime handle for the live subagent — it is what `SendMessage` addresses to warm-resume the same session (see the `incomplete` recovery in step 5).
    It is **distinct from** the brief `session_id` / `implementer_session` recorded in status.md: those identify the LLM conversation for finalize and cleanup, not the harness worker.
    Today's text treats dispatch as fire-and-forget;
    the `incomplete` recovery below depends on this handle still being in scope.
    The orchestrator must then **wait for the completion `<task-notification>`** from that background agent.
-   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 4's classification and step 5's capture, unchanged.
-   For a **reviewer** dispatch, step 5 is skipped (the reviewer already wrote its own output file — see step 5 below), so the payload feeds **step 4's classification only**.
+   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 3's classification and step 4's capture, unchanged.
+   For a **reviewer** dispatch, step 4 is skipped (the reviewer already wrote its own output file — see step 4 below), so the payload feeds **step 3's classification only**.
 
    A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator.
-   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 4's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
-   a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 4(b)).
+   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
+   a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 3(b)).
 
-4. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
+3. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
 
    **(a) Raw API/infrastructure errors — key on the error marker alone.**
    If the notification message contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
-   Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 5 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
+   Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 4 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
    This applies to implementer, reviewer, and fixer Agent dispatches.
    On a second consecutive raw API error: implementer, fixer, and reviewer dispatches all escalate per the "Stuck escalation" section.
    There is no live agent to probe in this case, so it is unaffected by the liveness probe in (c) below.
 
    **Deliberately no ack predicate.**
    This classification does not branch on whether a clean reviewer payload happens to be a `WROTE <path>` ack versus some other short text — do not add a prefix-match branch for it.
-   Ack and non-ack clean payloads both fall through to `finalize` (step 6), which distinguishes success from a missing report by the **presence of the `.out.md` file** — a stronger signal than parsing chat text, and one the orchestrator gets for free from the finalize CLI.
+   Ack and non-ack clean payloads both fall through to `finalize` (step 5), which distinguishes success from a missing report by the **presence of the `.out.md` file** — a stronger signal than parsing chat text, and one the orchestrator gets for free from the finalize CLI.
    The ack exists so a human reading the transcript can confirm the reviewer finished;
    it must not become a branch condition here.
 
@@ -281,7 +281,7 @@ This three-step pattern applies at every dispatch point:
    and they are no longer handled identically:
    - **Clean turn-exhaustion** (the notification is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
      The redundancy rationale still holds here: `--stage finalize`'s own completeness recount disambiguates partial-vs-dead by inspecting the actual commit count against the batch's card count, which is conclusive when the implementer had a full turn to make commits before stopping.
-   - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3.
+   - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2.
      If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as (c) already does for reviewer/fixer.
      If it reports the agent is no longer running,
      or the probe call itself errors: proceed to Clean mid-work stop below exactly as documented.
@@ -289,10 +289,10 @@ This three-step pattern applies at every dispatch point:
 
    **Clean mid-work stop (implementer only):** Reached either directly (clean turn-exhaustion, per (b) above) or after (b)'s stopped/interrupted probe branch determines the agent is no longer running.
    Do NOT re-dispatch fresh immediately.
-   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 6).
+   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
    Finalize inspects the commit count against the batch's card count and returns one of:
-   - **`status: success`** (all cards committed and the tree is clean) — when the finalize envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`) and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`) before proceeding — when `inferred` is absent or `false` (the implementer reported the JSON line normally), this call is skipped entirely and the existing success path is otherwise unchanged — proceed normally to step 7.
-   - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 6 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
+   - **`status: success`** (all cards committed and the tree is clean) — when the finalize envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`) and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`) before proceeding — when `inferred` is absent or `false` (the implementer reported the JSON line normally), this call is skipped entirely and the existing success path is otherwise unchanged — proceed normally to step 6.
+   - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 5 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
      Do **NOT** route this to the Stuck escalation transient `commits_made > 0` skip-to-cleanliness path: that path accepts the partial batch as done and is exactly the #574 false-success bug.
      The whole point of the `incomplete` classification (see Shared Decision `stuck_type: incomplete is a new first-class classification`) is that the remaining cards must be finished, never accepted as complete.
    - **`stuck_type: transient`** (genuine raw-API-error or interruption surfaced through finalize, e.g. a brief-write failure) — handle exactly as today via the one-retry transient path;
@@ -303,8 +303,8 @@ This three-step pattern applies at every dispatch point:
 
    **(c) Non-clean terminal notification for a reviewer or fixer dispatch — NEW liveness probe.**
    The widened trigger: the `<task-notification>`'s `<status>` tag is present and its value is not `completed` (observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>`), AND the message does not contain (a)'s literal API-error marker text.
-   Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
-   For the **reviewer sub-case only** (not fixer): before calling `TaskOutput`, first check whether `output_path` (the absolute path read verbatim from step 2's prepare envelope, per step 6's existing convention "For the three review CLIs, `<path>` is the `output_path` field read verbatim from step 2's prepare envelope") already exists on disk via a `test -f <output_path>` shell check.
+   Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
+   For the **reviewer sub-case only** (not fixer): before calling `TaskOutput`, first check whether `output_path` (the absolute path read verbatim from step 1's prepare envelope, per step 5's existing convention "For the three review CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope") already exists on disk via a `test -f <output_path>` shell check.
    If the file exists: treat the reviewer as no-longer-running and proceed straight to the existing "no longer running" branch below (skip the `TaskOutput` call entirely for this occurrence).
    If the file does not exist: the result is ambiguous (still-running or dead-before-writing) — fall back to `TaskOutput` exactly as today, unchanged.
    This `test -f` pre-check applies to the reviewer sub-case of (c) only;
@@ -319,15 +319,15 @@ This three-step pattern applies at every dispatch point:
 
    This probe exists because both `#587` and `#595` were live incidents where a "killed"/"stopped by user" notification was stale for an agent that was, in fact, still running to completion — see `_mill/discussion.md`'s `stopped/interrupted-notification liveness probe (#587, #595)` Decision for the full incident writeups and rationale.
 
-5. **Capture output — reviewer-skipped.**
+4. **Capture output — reviewer-skipped.**
    For an **implementer, fixer, or merge-in** dispatch, write **the message captured from the `<task-notification>`** to `<brief_path>.out.md` (utf-8), unchanged.
    The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
    For a **reviewer** dispatch, skip this step entirely — the reviewer holds its own `Write` grant and already wrote `.out.md` itself;
    the orchestrator does not write it a second time.
    The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" (see step 3 of "Code Review loop") and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
 
-6. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
-   For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 2's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
+5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
+   For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
    the envelope already names the exact file the reviewer wrote.
    For **implementer, fixer, and merge-in** CLIs, whose prepare envelopes carry no `output_path` field, keep deriving `<path>` as `<brief_path>.out.md` (the trailing `.md` replaced by `.out.md`), as before.
    Parse the returned JSON envelope.
@@ -345,17 +345,17 @@ This three-step pattern applies at every dispatch point:
    This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, both batch and holistic scope) and implementer-CLI;
    review-CLI finalize calls don't run verify commands and aren't affected.
 
-6.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 6 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
+5.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 5 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
 Recover the existing session rather than retrying from scratch (Shared Decision `resume must preserve the original start_sha`;
 discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 
    1. **Warm `SendMessage` resume (preferred).**
-      If the `agentId` recorded in step 3 is still retained, the original subagent session is still addressable.
+      If the `agentId` recorded in step 2 is still retained, the original subagent session is still addressable.
       Send it back to work in the same warm session:
       ```
       SendMessage(to: <agentId>, "Finish any remaining cards in this batch, run verify, then emit the required JSON report as your final line.")
       ```
-      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 5's naming rule), and re-run `--stage finalize` (step 6) with the same standard arguments.
+      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
       The warm-`SendMessage` path **bypasses prepare entirely**, so status.md's original `start_sha` and `implementer_session` are untouched — finalize's completeness recount runs from the original baseline and counts every content commit (the partial ones plus any new ones).
       Re-capturing `start_sha` here would under-count a now-finished batch and loop `incomplete` forever.
    2. **`--resume-incomplete` fallback (cold re-dispatch).**
@@ -365,26 +365,26 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       Re-dispatch the implementer once via the `--resume-incomplete` path — run the prepare stage as `--stage prepare <batch_name> --resume-incomplete`, then the Agent tool, then `--stage finalize` as usual. `--resume-incomplete` reads the original `start_sha` and `implementer_session` from status.md instead of re-capturing HEAD, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so **preserves the original `start_sha`** — never a fresh one.
       Record the new `agentId` this re-dispatch returns, in case a further resume is needed.
    3. **After recovery.**
-      Re-parse the finalize envelope and branch in step 7.
+      Re-parse the finalize envelope and branch in step 6.
       A `status: success` (or inferred success) means the batch finished — when the re-parsed envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name} (post-recovery)"`), before proceeding normally.
-      This is a structurally separate check from the step 4(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
+      This is a structurally separate check from the step 3(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
       When `inferred` is absent or `false`, skip this call entirely.
       If the envelope is **still** `stuck_type: incomplete` after one warm resume and one `--resume-incomplete` fallback, hand it to the `### Stuck escalation` `incomplete` branch (it does not silently loop).
 
-7. **Branch on verdict:** The envelope's `status`, `verdict`, and `stuck_type` fields are what the caller branches on.
-   The agent-mode `incomplete` recovery (step 6.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
+6. **Branch on verdict:** The envelope's `status`, `verdict`, and `stuck_type` fields are what the caller branches on.
+   The agent-mode `incomplete` recovery (step 5.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
 
 **Agent-mode properties:**
 - No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
 - A background agent IS a detached worker and CAN be stopped or interrupted.
-  ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 4(b)/(c) now test for — see step 4 above.)
-  A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 4's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 4(b);
-  reviewer/fixer: liveness-probe-then-one-retry-transient path per step 4(c)).
+  ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 3(b)/(c) now test for — see step 3 above.)
+  A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 3's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 3(b);
+  reviewer/fixer: liveness-probe-then-one-retry-transient path per step 3(c)).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
-- The one-retry transient policy applies immediately to raw API errors, and to stopped/interrupted reviewer/fixer agents once step 4's liveness probe confirms the agent is no longer running (see step 4).
-  Stopped/interrupted implementer agents are first checked by the same liveness probe (step 4(b));
-  once it confirms the agent is no longer running, they are routed to the existing clean-mid-work-stop / `incomplete` recovery (see step 4).
-- `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 6.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
+- The one-retry transient policy applies immediately to raw API errors, and to stopped/interrupted reviewer/fixer agents once step 3's liveness probe confirms the agent is no longer running (see step 3).
+  Stopped/interrupted implementer agents are first checked by the same liveness probe (step 3(b));
+  once it confirms the agent is no longer running, they are routed to the existing clean-mid-work-stop / `incomplete` recovery (see step 3).
+- `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 5.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
 - Waiting on a dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — every stuck/escalation path in this file now resolves by self-resolving once then halting via `_status.set_blocked`, never by prompting.
 
 **Tree-guard checkpoint block.** Referenced by name from every dispatch call site in this file and from the skill's companion files, which name it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`. Exactly two forms, both sharing the same body:
@@ -402,7 +402,7 @@ Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent
 A fork inherits the parent's context,
 but that inheritance costs three things every role above depends on: (1) a fork always runs on the **parent's model** and ignores a `model` override, breaking mill's per-role model assignment — implementer-class roles carry a literal `model:` key (`roles.implementer.model: sonnethigh`, `roles.fixer.model: haiku`, and merge-in's `model: haiku`, all in `plugins/mill/templates/mill-config.yaml`), while reviewer roles instead name a *reviewer* from `agents.yaml` (e.g. `roles.discussion-review.holistic.reviewer: sonnetmax` in the shipped template) whose model is resolved from that registry and mapped to an Agent tier by `_agent_dispatch.model_to_tier` — fork breaks both mechanisms, since it ignores the `model` argument either way;
 (2) a fork inherits the **parent's tools**, so a reviewer forked from mill-go would hold `Edit`, `Write`, and `Bash` beyond its briefs-scoped grant and lose its read-only guarantee;
-(3) a fork's **crash-resume path is unverified** — `millpy-implement.py --stage prepare` writes the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 4's liveness probe and step 6.5's warm resume depend on.
+(3) a fork's **crash-resume path is unverified** — `millpy-implement.py --stage prepare` writes the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 3's liveness probe and step 5.5's warm resume depend on.
 mill-go2 accepts these trade-offs for the implementer role only, as an experiment — see its `## Dispatch overrides`;
 every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
 Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
