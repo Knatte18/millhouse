@@ -109,13 +109,19 @@ fixed in code, except #838, addressed below).
 ### error_kind field, not a new verdict value
 
 - Decision: Add `error_kind: "usage" | "reviewer"` as an additive sub-field on each `reviews[]`
-  entry (mirrored at the top level for single-scope agent-mode calls), rather than introducing a
-  new top-level `verdict` value.
+  entry only — **not** mirrored at the envelope's top level — rather than introducing a new
+  top-level `verdict` value.
 - Rationale: `verdict: "ERROR"` already has meaning to consumers that only care "did this round
   produce a usable result" (e.g. `mill-receiving-review`, `review-summary`) — those must keep
-  working unmodified. An additive field lets only the ERROR-retry-logic consumers (mill-start,
-  mill-plan, mill-go-base) opt into the finer distinction without touching every other
-  `verdict == "ERROR"` check across the codebase.
+  working unmodified. An additive per-entry field lets only the ERROR-retry-logic consumers
+  (mill-start, mill-plan, mill-go-base, mill-go-base/holistic-review.md) opt into the finer
+  distinction without touching every other `verdict == "ERROR"` check across the codebase. No
+  top-level mirror is needed or added: `ReviewResult` (`_review_common.py:346-372`) has a fixed
+  field set with no room for it without a dataclass change, `to_dict()` hard-codes its output
+  keys, and `millpy-review-plan.py`'s finalize-stage `result_dict` (lines 296-304) copies only
+  specific named keys off `review_entry` — none of that needs touching, because the "Retry
+  semantics keyed on error_kind" decision already inspects `reviews[]` entries directly (per its
+  "any entry ... has `error_kind: 'usage'`" aggregation rule), never a top-level field.
 - Rejected: `verdict: "USAGE_ERROR"` (the issue author's own suggestion) — would require auditing
   and updating every existing `verdict == "ERROR"` check across the whole review subsystem to
   also treat the new value as an error, a much wider blast radius for the same outcome.
