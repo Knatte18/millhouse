@@ -71,7 +71,9 @@ batches:
     commit_sha: a7b0c8c5ac858af139b93915a705c1615b880eba
     verify_baseline_failures: []
   - name: plan-metadata
-    state: pending
+    state: running
+    implementer_session: 32447dc8-2704-4479-be14-0e644bac2868
+    start_sha: ebe1ad4e2e75c20e018728d9fc6442b68dddcf60
     verify_baseline_failures: []
   - name: cli-flags
     state: pending
