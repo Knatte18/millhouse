@@ -27,5 +27,8 @@ implementing  '2026-08-12T18:05:38Z'
 ```yaml
 batches:
   - name: routing-fixes
-    state: pending
+    state: running
+    implementer_session: b2ecbf0a-9119-4770-b2a1-7c7d3b05612a
+    start_sha: de5e52cd85e68c192f17e0171ed58dc8dd5eed96
+    verify_baseline_failures: []
 ```
