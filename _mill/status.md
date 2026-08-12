@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
-plan: null
+plan: _mill/plan
 parent: main
 task: Surface reviewer time/tool-call cost + a review-summary command
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-11T18:34:38Z'
 discussed  '2026-08-11T19:51:12Z'
+planning  '2026-08-12T06:29:29Z'
 ```
