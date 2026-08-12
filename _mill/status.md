@@ -66,6 +66,8 @@ batches:
     commit_sha: 1c7d2a7b6537672505ab5cd7ec7f82c60cf31b95
     verify_baseline_failures: []
   - name: renumber-and-siblings
-    state: pending
+    state: running
+    implementer_session: a265be08-a115-400f-8cdf-ad9324ed2176
+    start_sha: 4bb74b89ff9c30db2b3c6a6acd1feec78d5eedc5
     verify_baseline_failures: []
 ```
