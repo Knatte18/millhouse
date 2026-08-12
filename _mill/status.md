@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-orchestrator-shared
+phase: approved-orchestrator-callers
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-code-metadata  '2026-08-12T07:28:27Z'
 approved-plan-metadata  '2026-08-12T07:36:59Z'
 approved-cli-flags  '2026-08-12T07:41:37Z'
 approved-orchestrator-shared  '2026-08-12T07:45:55Z'
+approved-orchestrator-callers  '2026-08-12T07:48:12Z'
 ```
 
 ## Batches
@@ -91,7 +92,8 @@ batches:
     start_sha: 2656a6676fc98fe35d5f97c317db940e784fc385
     commit_sha: 34c1ac888bbf10651b4d72e1ce3c79822a381c2b
   - name: orchestrator-callers
-    state: running
+    state: approved
     implementer_session: 7a99a893-50e3-4664-a981-9778992e5ee3
     start_sha: 01f1ff699e258a80fb547400177bde3d97f9e1c9
+    commit_sha: 44867fef17a08338a3a164b2d0816a8506cf66f7
 ```
