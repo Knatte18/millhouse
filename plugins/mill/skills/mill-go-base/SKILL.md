@@ -807,23 +807,6 @@ The CLIs that mutate task state (`millpy-implement.py`, `millpy-review-code.py`)
 
 ## Holistic code review
 
-**Holistic session cleanup.**
-Whenever a `millpy-fix.py --scope holistic` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`.
-At any point where the holistic loop is about to dispatch a NEW `millpy-fix.py --scope holistic` round, AND at every loop terminus (APPROVE, blocked, max-rounds), invoke the *holistic cleanup block* defined below.
-
-The holistic cleanup block:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import sys
-sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
-import _llm_claude
-_llm_claude.cleanup_session('${holistic_sid}')
-"
-```
-
-If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a documented no-op — the implementer brief contract guarantees the id is emitted on the happy path.
-
 **Guard:** The skip semantics have two conditions: `reviewer: null` OR `rounds: 0` means "skip holistic".
 Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
 
@@ -840,7 +823,7 @@ converged = (H >= min_holistic_rounds) and not any(f.get("demoted") for f in env
 `envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
 
 - `converged is True`: proceed exactly as the `APPROVE` branch describes (no behavior change).
-- `converged is False` AND `H < max_holistic_rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, "holistic-approved", ...)`, the approve-commit, the holistic cleanup block, "Proceed to Handoff"). Instead continue the loop to round H+1.
+- `converged is False` AND `H < max_holistic_rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, "holistic-approved", ...)`, the approve-commit, "Proceed to Handoff"). Instead continue the loop to round H+1.
 - `converged is False` AND `H >= max_holistic_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: holistic approve {slug}"`) so the shortfall is auditable.
 - Step 7 (Rounds exhausted) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
@@ -868,7 +851,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    ```
 
 1. **Crash-recovery.**
-   Three-way branch based on what is on disk in `_mill/reviews/` and `.scratch/`:
+   Two-way branch based on what is on disk in `_mill/reviews/`:
    - **(a) Review file present.**
      Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring;
      per-batch files embed `{batch_name}` so the glob never collides).
@@ -877,39 +860,23 @@ For each round `H` from 1 to `max_holistic_rounds`:
      If freshness validation passes, skip the CLI and use that file's verdict directly.
      Proceed to step 4 (verdict branch);
      do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3.
-     If the file is stale or `ref_ts` is None, fall through to branch (b)/(c) handling (fire the CLI).
+     If the file is stale or `ref_ts` is None, fall through to branch (b) handling (fire the CLI).
      Provide the inline-Python comparison snippet as per the per-batch section above.
-   - **(b) No review file, no bg log for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire CLI via `millpy-bg`).
-   - **(c) No review file, bg log exists for round H** (matching glob `.scratch/bg-*-review-code-holistic-r{H}.log`).
-     Pick the most recent matching file and call `_bg.is_bg_worker_alive(log_path)`:
-      - **Alive** -> poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-        ```bash
-        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-        ```
-        Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed to step 4 (parse JSON, branch on verdict); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. Do NOT execute step 2; do NOT execute step 3.
-      - **Dead** -> log `[<VARIANT_LABEL>] previous holistic round H bg worker died (pid=N); re-firing CLI` to stderr, then jump directly to step 3 (fire fresh CLI via `millpy-bg`).
-        Do NOT execute step 2 (the phase entry was already appended on the original run).
+   - **(b) No review file for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire the CLI).
 
-   Inline Python helper for branches (a) and (c):
+   Inline Python helper for branch (a):
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    from pathlib import Path
-   import _paths, _bg, json, sys
+   import _paths, json, sys
    hub = _paths.resolve_hub_path()
    reviews_dir = hub / '_mill/reviews'
-   scratch_dir = _paths.resolve_git_root() / '.scratch'
    H = ${H}
    # (a) review file scan
    matches = sorted(reviews_dir.glob(f'*-code-review-r{H}.md')) if reviews_dir.exists() else []
    if matches:
        print(json.dumps({'branch': 'a', 'review_file': str(matches[-1])}))
-       sys.exit(0)
-   # (c) bg log liveness probe
-   bg_logs = sorted(scratch_dir.glob(f'bg-*-review-code-holistic-r{H}.log')) if scratch_dir.exists() else []
-   if bg_logs:
-       alive, pid = _bg.is_bg_worker_alive(bg_logs[-1])
-       print(json.dumps({'branch': 'c', 'log_path': str(bg_logs[-1]), 'alive': alive, 'pid': pid}))
        sys.exit(0)
    # (b) nothing on disk
    print(json.dumps({'branch': 'b'}))
@@ -921,7 +888,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    The helper is one-shot;
    do not poll it.
 
-2. **Skip this step when step 1 returned branch (a) or any sub-branch of (c).**
+2. **Skip this step when step 1 returned branch (a).**
    Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
    Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic reviewing round {H}"`.
 
@@ -1011,7 +978,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    The round counter `H` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
-   Before halting: `_status.set_blocked(status_path, f"holistic code review ERROR-only round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (ERROR-only round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: ERROR-only round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`).
+   Before halting: `_status.set_blocked(status_path, f"holistic code review ERROR-only round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (ERROR-only round {H})"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: ERROR-only round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`).
    If sub-step 3.6 does NOT apply, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user.
    Do NOT auto-retry beyond the second pass.
 
@@ -1031,9 +998,9 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
       The round counter `H` is **not** consumed.
 
       Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (fallback also failed at round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
+   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (fallback also failed at round {H})"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
       Do NOT cascade to a second fallback.
-   5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (rate-limited, no fallback)"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
+   5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (rate-limited, no fallback)"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
       The operator-visible message is intentional -- silent infinite fallback is wrong.
 
 4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
@@ -1068,14 +1035,13 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```
    Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
    After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Invoke the holistic cleanup block. Proceed to Handoff.
+   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff.
    If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer;
    the fixer loads `mill-receiving-review` (see Principles below).
    Builder does not load the skill.
-   Invoke the holistic cleanup block (reaps the previous round's session before the next one starts).
-   
+
    If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
    
    If `dispatch == subprocess` or `psmux`: Dispatch:
@@ -1084,23 +1050,22 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch).
    The CLI handles `holistic-fixing` phase + commit + push itself.
-   - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: invoke the holistic cleanup block, then re-invoke `millpy-fix.py --scope holistic` once (fresh).
-     If the re-fire also fails with `infrastructure`: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+   - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-invoke `millpy-fix.py --scope holistic` once (fresh).
+     If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
      The re-fire is fresh (killed session cannot be reattached).
    - `stuck_type: transient`: one-retry policy (re-invoke once) — this retry IS the one-shot self-resolve attempt.
-     If still transient after it: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+     If still transient after it: set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
    - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
      **Regardless of whether a plan edit was made**, append a `## Prior failure` section to `00-overview.md` (placed immediately after its frontmatter, before `## Batch Index` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text, regardless of whether the reason names a specific batch, spans several, or names none at all.
      Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck (holistic)"`.
      Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round.
-     If the retry produces the *same* `verify`/`logic` failure: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+     If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
    - On success: increment H and loop.
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
 
 7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
    commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push;
-   invoke the holistic cleanup block;
    halt with "Holistic review exhausted {max_holistic_rounds} round(s).
    Task left as [active] for manual review."
 
