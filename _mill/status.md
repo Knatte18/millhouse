@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: plan-validate-context-completeness-gaps
 branch: hanf/plan-validate-context-completeness-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ approved-prohibition-regex-generalization  '2026-08-12T18:41:06Z'
 approved-regression-tests  '2026-08-12T18:43:35Z'
 holistic-reviewing  '2026-08-12T18:44:12Z'
 holistic-approved  '2026-08-12T18:46:18Z'
+done  '2026-08-12T18:46:48Z'
 ```
 
 ## Batches
