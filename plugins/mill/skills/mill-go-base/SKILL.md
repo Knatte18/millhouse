@@ -45,7 +45,7 @@ the shell expands it at runtime.
 The full absolute path must never appear in a command string.
 
 **Step 0b: Load `mill:conversation`.**
-Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `## Holistic code review`);
+Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
@@ -54,14 +54,14 @@ this skill is loaded defensively in case a future addition needs its numbered-op
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
-   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
+   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at `plugins/mill/skills/mill-go-base/handoff.md` step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
      See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent).
    - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
-   - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `## Holistic code review` below.
+   - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
@@ -135,24 +135,24 @@ matched = _phase_wait.matches_wait_trigger(
 `matched` is always `True` here — the table row above is defined by this same predicate, so this call only distinguishes which branch fired.
 Route on the current `phase` value:
 
-- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to `## Resume`, unchanged from today.
-- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume`.
+- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`), unchanged from today.
+- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`).
   That batch's `state` in `## Batches` genuinely is `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches it unchanged.
-- `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and `## Resume`'s step 1 has nothing to match.
+- `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and Resume's (`plugins/mill/skills/mill-go-base/resume.md`) step 1 has nothing to match.
   Route instead to `## Execute — sequential loop`, continuing from the next `pending` batch in `order` — the same continuation the normal in-flow path already takes after a batch approves.
-  **Edge case:** if the just-approved batch was the last one in `order` (zero `pending` batches remain), route to `## Holistic code review` instead, mirroring the normal in-flow transition from the end of the Execute loop into that section.
+  **Edge case:** if the just-approved batch was the last one in `order` (zero `pending` batches remain), route to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`) instead, mirroring the normal in-flow transition from the end of the Execute loop into that section.
 - `holistic-reviewing` — fires *after all* batches are `approved`, entirely outside the per-batch `## Batches` state machine.
-  Route directly to `## Holistic code review`;
+  Route directly to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`);
   its own step 1 crash-recovery scan already handles resuming a specific round.
-  Do not route through `## Resume` at all.
+  Do not route through `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) at all.
 - `self-resolved-verify-logic` — this literal phase string is appended at two call sites with identical text: the per-batch Stuck escalation section's verify/logic branch,
-  and the Holistic code review section's own verify/logic branch.
+  and the verify/logic branch in `plugins/mill/skills/mill-go-base/holistic-review.md`.
   So `phase` alone cannot disambiguate which occurrence fired.
-  Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (the self-resolve step only edits plan/batch files and records an audit-trail phase;
+  Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`; the self-resolve step only edits plan/batch files and records an audit-trail phase;
   it never changes `state`, so Resume's step 1 still finds the batch).
-  If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review`, mirroring the `holistic-reviewing` row's routing.
+  If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`), mirroring the `holistic-reviewing` row's routing.
 - `holistic-approved` — fires immediately before "Proceed to Handoff", after all holistic-review/NIT-fix work is already complete.
-  Route directly to `## Handoff` — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas routing to `## Resume` would find no non-terminal batch to act on.
+  Route directly to `## Handoff` (`plugins/mill/skills/mill-go-base/handoff.md`) — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas routing to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) would find no non-terminal batch to act on.
 
 ### Entry-gate wait for upstream mill-plan
 
@@ -389,7 +389,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 
 **Tree-guard checkpoint block.** Referenced by name from every dispatch call site in this file and from the skill's companion files, which name it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`. Exactly two forms, both sharing the same body:
 - **Pre-dispatch form** — invoked immediately before a dispatch.
-- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retries at `### 3. Code Review loop` sub-step 4.5 and `## Holistic code review` sub-step 3.5 are separate dispatch points, each with its own pre/post pair — not sub-cycles of the dispatch that preceded them.
+- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retries at `### 3. Code Review loop` sub-step 4.5 and `plugins/mill/skills/mill-go-base/holistic-review.md` sub-step 3.5 are separate dispatch points, each with its own pre/post pair — not sub-cycles of the dispatch that preceded them.
 
 Body (both forms): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
 `signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
@@ -437,8 +437,8 @@ Baseline pre-flight," for the task's **FIRST batch only** (not on every batch �
 Baseline pre-flight" below), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`.
 If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "0.5.
 Baseline pre-flight."
-Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the Handoff-time "0.
-Pre-done gate" block):
+Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the "0.
+Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md`):
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -462,11 +462,11 @@ Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommen
 
 Parse stdout for a JSON line (absent when the flag/`done_gate` check above short-circuited via `SystemExit(0)` -- that is the normal skip path, not an error).
 If the JSON line's `result` is `blocked`, log the reason (ASCII-only) but do **NOT** halt — proceed to batch 1 regardless.
-This differs deliberately from the Handoff-time "0.
-Pre-done gate" gate, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable.
-This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the Handoff-time comparison).
-The Handoff-time "0.
-Pre-done gate" block (below, in the Handoff section) is unchanged and still halts on `blocked` there.
+This differs deliberately from the "0.
+Pre-done gate" gate in `plugins/mill/skills/mill-go-base/handoff.md`, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable.
+This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the comparison made at Handoff time).
+The "0.
+Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md` is unchanged and still halts on `blocked` there.
 Skip this step entirely for every batch after the first.
 
 ### 0.5. Baseline pre-flight (first batch of the task only)
@@ -696,7 +696,7 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
      If not `converged` and `N < roles.code-review.batch.rounds`: skip the terminal actions above and continue to round N+1 (re-dispatch code review for this batch).
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file.
      For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("<VARIANT_LABEL>.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`.
-     Record this gap for mill-self-report (see Handoff).
+     Record this gap for mill-self-report (see `plugins/mill/skills/mill-go-base/handoff.md`).
      Increment round and continue the loop.
      If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does. `signature: _notify.notify(event: str, detail: str, **context) -> None`
@@ -735,7 +735,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
 
 - **`infrastructure`** (the worker died, likely logout) — auto-retry ONCE: re-dispatch once with a fresh session (no `--resume` flag — the dead session cannot be reattached).
   If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
-  The re-fire matches the existing `running`-state Resume (fresh start;
+  The re-fire matches the existing `running`-state handling in `plugins/mill/skills/mill-go-base/resume.md` (fresh start;
   killed session cannot be reattached).
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2;
   the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session).
@@ -767,7 +767,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md.
   Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down."
-  Do not proceed to Handoff.
+  Do not proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`).
 
 ## Resume
 

@@ -54,7 +54,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
      Proceed to step 4 (verdict branch);
      do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3.
      If the file is stale or `ref_ts` is None, fall through to branch (b) handling (fire the CLI).
-     Provide the inline-Python comparison snippet as per the per-batch section above.
+     Provide the inline-Python comparison snippet as per `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch section (Execute step 3 sub-step 1, crash-recovery).
    - **(b) No review file for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire the CLI).
 
    Inline Python helper for branch (a):
@@ -82,7 +82,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    do not poll it.
 
 2. **Skip this step when step 1 returned branch (a).**
-   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
+   Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
    Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic reviewing round {H}"`.
 
 2.5.
@@ -94,28 +94,28 @@ Build a digest: one line per NIT finding, in format "- Title: issue context" (AS
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-3. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before the Agent-mode dispatch below.
+3. Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately before the Agent-mode dispatch below.
 
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
+   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
 
    **Exit handling.**
    If the finalize envelope is absent, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
-   Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+   Matches `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
 
-   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the Agent-mode dispatch pattern above returns (prepare through finalize).
+   Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after that Agent-mode dispatch pattern returns (prepare through finalize).
 
 3.5.
 **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
 
-   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
+   Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately before this retry's Agent-mode dispatch.
 
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
+   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after it returns.
+   Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after it returns.
 
    The round counter `H` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
@@ -131,12 +131,12 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    1. Emit `_notify.notify("<VARIANT_LABEL>.holistic-fallback", f"swap reviewer -> {fallback_name}", slug=slug, round=H)`.
    2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`.
       Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
-   3. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — its pre-dispatch checkpoint fires before re-running sub-step 3 with the swapped reviewer below.
+   3. Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — its pre-dispatch checkpoint fires before re-running sub-step 3 with the swapped reviewer below.
 
       Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer.
       The round counter `H` is **not** consumed.
 
-      Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the redispatch above returns.
+      Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after the redispatch above returns.
    4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (fallback also failed at round {H})"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
       Do NOT cascade to a second fallback.
    5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (rate-limited, no fallback)"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
@@ -160,18 +160,18 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```
    Unlike the existing prior-notes digest above, this is called at every round with no `H > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
 
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
+   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
    The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
    After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff.
+   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff.
    If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer;
-   the fixer loads `mill-receiving-review` (see Principles below).
+   the fixer loads `mill-receiving-review` (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Principles").
    Builder does not load the skill.
 
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
-   Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch).
+   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
+   Parse stdout JSON (same last-`{"status":...}`-line pattern as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling).
    The CLI handles `holistic-fixing` phase + commit + push itself.
    - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-dispatch once with a fresh session.
      If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
@@ -185,7 +185,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
      If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
    - On success: increment H and loop.
 
-6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
+6. On `NEED_CONTEXT`: apply the same extra-files / notify path as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling.
 
 7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
    commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push;

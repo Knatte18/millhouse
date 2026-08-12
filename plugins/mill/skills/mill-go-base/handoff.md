@@ -21,12 +21,12 @@ digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), sc
 pathlib.Path('<briefs_dir>/prior-blocking-<scope>-r<N>.txt').write_text(digest, encoding='utf-8')
 "
 ```
-Use `scope='batch', batch_name='<scope>'` when `<scope>` is a per-batch scope name, or `scope='holistic'` (no `batch_name`) when `<scope> == "holistic"`, writing to `<briefs_dir>/prior-blocking-<scope>-r<N>.txt` or `<briefs_dir>/prior-blocking-holistic-r<H>.txt` respectively (same naming convention as `## Execute` step 4 and `## Holistic code review` step 4).
+Use `scope='batch', batch_name='<scope>'` when `<scope>` is a per-batch scope name, or `scope='holistic'` (no `batch_name`) when `<scope> == "holistic"`, writing to `<briefs_dir>/prior-blocking-<scope>-r<N>.txt` or `<briefs_dir>/prior-blocking-holistic-r<H>.txt` respectively (same naming convention as `plugins/mill/skills/mill-go-base/SKILL.md`'s Execute step 4 and `plugins/mill/skills/mill-go-base/holistic-review.md` step 4).
 As with those two sites, this is called at every round with no round guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`.
 
-Dispatch the NIT-fix pass for that review file using the identical CLI and args already documented for the in-flow NIT-fix pass: see `## Execute` step 4's `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `## Holistic code review` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
+Dispatch the NIT-fix pass for that review file using the identical CLI and args already documented for the in-flow NIT-fix pass: see `plugins/mill/skills/mill-go-base/SKILL.md`'s Execute step 4 `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `plugins/mill/skills/mill-go-base/holistic-review.md` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
 `<N>`/`<H>` are read from the review filename.
-That identical shape now includes `--prior-blocking <digest-path>` too (per `## Execute` step 4's and `## Holistic code review` step 4's edits to those two sites), so this site's dispatch carries it automatically with no separate argument string of its own.
+That identical shape now includes `--prior-blocking <digest-path>` too (per `plugins/mill/skills/mill-go-base/SKILL.md`'s Execute step 4 and `plugins/mill/skills/mill-go-base/holistic-review.md` step 4's edits to those two sites), so this site's dispatch carries it automatically with no separate argument string of its own.
 This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-<scope>` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
 After the dispatch completes, re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`.
 
@@ -37,7 +37,7 @@ the task remains in its current phase so the operator can inspect and re-run `/m
 **Manual recovery note.**
 The gate above requires a `nits-fixed-<scope>` row in status.md's timeline for each scope that has any `[NIT]` findings in its final code-review file — it does not inspect commits directly.
 A classed `[NIT:<class>]` heading counts identically to a bare `[NIT]` heading for this requirement.
-Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see "## Agent-mode dispatch" step 6).
+Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 6).
 If an operator instead completes or verifies a NIT-fix pass manually, outside this documented flow (e.g. recovering from an orphaned or crashed fixer session), the gate still requires the marker to be appended by hand: `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`, where `scope` is the batch name or `"holistic"`.
 
 If the list is empty, proceed to terminal cleanliness gate.
@@ -51,7 +51,7 @@ in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, pare
 ```
 
 If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
-no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`).
+no push — matches every other Builder-owned Handoff-phase commit in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Board discipline").
 Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
 
 If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), halt with: `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.` where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt.
@@ -73,7 +73,7 @@ do not open any batch card body to do this classification, per mill-go's own "Le
 a path that clearly matches a known ephemeral/cruft pattern (build artifacts, editor swap files, and similar — the same category `clean_ephemeral_scope_violations` already auto-removes, just not caught by its fixed pattern list) and matches nothing in `All Files Touched`: remove it (`git -C <worktree> clean -f -- <path>`) and log the removal (ASCII-only) the same way as the auto-removed ephemeral artifacts above;
 a path that cannot be confidently classified either way: leave it untouched (neither `add` nor `clean`) so it correctly reappears in `blocking_paths` on the re-run below and is caught by the halt.
 After classifying every path in `blocking_paths`: `_status.append_phase(status_path, "self-resolved-scope-violation", _timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope files at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
-no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`;
+no push — matches every other Builder-owned Handoff-phase commit in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Board discipline";
 the cruft removals via `git clean` are untracked-file deletions and have nothing to stage).
 Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
 
@@ -118,7 +118,7 @@ if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
 "
 ```
 
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 6 for finalize-stage verify replays: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
 
 Parse stdout for a JSON line.
 If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`.
