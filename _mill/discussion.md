@@ -203,29 +203,39 @@ fixed in code, except #838, addressed below).
 
 ### round: 0 fix
 
-- Decision: `print_error_envelope` gains an optional `round` parameter, default `0`. Every call
-  site in each CLI's `main()` passes `round=args.round if args.round is not None else 0`
-  (equivalently `args.round or 0`, since a real round number is never `0` or falsy) uniformly —
-  no per-stage distinction between config/registry/slug-resolution sites, prepare-stage sites,
-  and the finalize-stage site. This is a single, uniform coalescing rule applied at every call
-  site alike, not different handling for "early" vs. "finalize" sites.
-- Rationale: `args.round` is parsed once at the very top of `main()`, before any try/except
-  block, so it is always in scope (commonly `None` for prepare-stage/pre-flight failures, since
-  `--round` is typically supplied by the caller only on finalize invocations; a real, non-`None`
-  value on any call when the caller did pass `--round`). Coalescing `None` to `0` at every site
-  uniformly preserves today's exact behavior for every call that doesn't have a round yet, while
-  reporting the real round wherever it was actually supplied — directly fixing the "round: 0 is
-  also wrong" complaint in both #830 and #820 without inventing a new `round: null` value that
-  would break `blocking_count`/`round`-typed consumers expecting an int.
-- Rejected: An earlier draft of this decision, corrected during Discussion Review round 2 after a
-  confirmed NIT finding that it contradicted itself — it said both "every call site passes
-  `args.round`" and, separately, "prepare-stage call sites keep `round=0`", without stating
-  whether that meant coalescing `None` or literally hardcoding `0` at those sites, leaving the
-  two sentences unreconciled. The uniform-coalescing rule above resolves that ambiguity
-  directly instead of special-casing any subset of call sites. Also rejected (unchanged from the
-  original draft): calling `discover_round()` from the error path to recover a round number even
-  when `--round` wasn't passed at all — adds filesystem I/O and complexity to an error path for a
-  case neither filed issue actually reproduced.
+- Decision: `print_error_envelope` gains an optional `round` parameter, default `0`. Two rules,
+  by whether a resolved round variable is already in scope at the call site:
+  - **Finalize-stage outer catch specifically** (`millpy-review-plan.py`'s and
+    `millpy-review-discussion.py`'s `except ReviewError` around the call into `finalize()`, e.g.
+    `millpy-review-plan.py:307-309`): pass the already-in-scope `round_n` local — the value
+    finalize-stage code computes *before* its try block as `args.round`, falling back to
+    `discover_round(reviews_dir, ...)` when `args.round` is `None` — never raw `args.round`.
+    `millpy-review-code.py`'s finalize stage requires `--round` explicitly (errors out before
+    reaching its try block if absent), so `args.round` is already the only value there; no
+    `round_n`-vs-`args.round` distinction applies to it.
+  - **Every other call site** (config/registry/slug resolution, prepare-stage errors, missing
+    `--agent-output`): no `round_n` variable exists yet at that point in the control flow: pass
+    `round=args.round if args.round is not None else 0` (equivalently `args.round or 0`).
+- Rationale: `args.round` is parsed once at the top of `main()`, so it's always in scope, but by
+  the time execution reaches the finalize-stage outer catch, `round_n` has *already* been
+  resolved (via `discover_round` when `--round` wasn't supplied) with zero extra I/O — using raw
+  `args.round` there instead would silently discard that already-known, disk-discovered value at
+  exactly the site named in the Problem section ("discoverable from disk exactly as the normal
+  path discovers it"). Every other call site genuinely has no such variable, so the coalescing
+  rule is the correct (and only available) fix there.
+- Rejected: A uniform "`args.round`-everywhere" draft of this decision, corrected during
+  Discussion Review round 4 after a confirmed BLOCKING finding that it discarded the
+  already-resolved `round_n` at the finalize-stage outer catch — the one site the "discoverable
+  from disk" case in the Problem section is most likely to actually fire, per the "error_kind
+  bucketing" Decision's own example (a `resolve_blocking_classes` failure on bad config, which
+  happens after `round_n` is already resolved). An even earlier draft (corrected in round 2) had
+  contradicted itself between "every site passes `args.round`" and "prepare-stage sites keep
+  `round=0`" without saying which; the current two-rule split resolves both problems at once by
+  keying strictly on whether `round_n` is already a resolved local, not on stage identity as
+  such. Also rejected (unchanged from the original draft): calling `discover_round()` freshly
+  from a call site that has no `round_n` in scope at all — adds filesystem I/O to a case neither
+  filed issue actually reproduced, and the finalize-stage sites already get this for free via the
+  pre-existing `round_n` computation, no new discovery call needed.
 
 ### Verdict-summary staleness: append, don't rewrite
 
@@ -262,7 +272,10 @@ fixed in code, except #838, addressed below).
   *not* caught by `_review_plan.finalize`'s own internal try/except, e.g. `resolve_blocking_
   classes` failing on bad config; not a reviewer-output site — see the corrected "error_kind
   bucketing" Decision), 354, 357. `args.round` is parsed at line 162, available at every one of
-  these sites.
+  these sites — but per the "round: 0 fix" Decision, site 308 specifically passes the
+  already-resolved `round_n` local (computed at lines 269-274 as `args.round`, falling back to
+  `discover_round` when `None`), not raw `args.round`; every other site here has no `round_n` and
+  uses the `args.round`-or-`0` coalescing instead.
 - `plugins/mill/scripts/_review_plan.py::finalize` (lines 662-746) — its own `except ReviewError`
   at lines 712-732 (around the call to `finalize_scope` at line 707) is the actual
   `error_kind: "reviewer"` site: it catches `parse_verdict` failures and *returns* an ERROR-shaped
@@ -400,3 +413,18 @@ _No `CONSTRAINTS.md` present at hub root._
   Also surfaced and explicitly left alone: the four consumer sites already disagree on their
   underlying ANY-vs-ALL trigger condition, independent of this fix — unifying that is out of
   scope, not motivated by any of the five filed issues.
+- **Q:** [Discussion Review round 3, NIT] Does `error_kind` need a top-level mirror on the
+  envelope, or only a per-`reviews[]`-entry field? **A:** [auto-pick] Per-entry only, no
+  top-level mirror. **Why:** `ReviewResult` has a fixed field set with no room for it without a
+  dataclass change, and `millpy-review-plan.py`'s `result_dict` copies only specific named keys —
+  neither needs touching because the retry-semantics decision already reads `reviews[]` entries
+  directly, never a top-level field.
+- **Q:** [Discussion Review round 4, BLOCKING] At the finalize-stage outer `except ReviewError`,
+  should the round-fix use raw `args.round` (per the uniform coalescing rule) or the
+  already-resolved `round_n` local? **A:** [auto-pick] The already-resolved `round_n` (which
+  falls back to `discover_round` when `--round` wasn't supplied) — the uniform-`args.round`
+  rule was wrong specifically at this site. **Why:** By the time execution reaches this catch,
+  `round_n` has already been computed (with zero extra I/O) and is in scope; using raw
+  `args.round` there instead would silently discard the disk-discovered round at exactly the
+  site the Problem section's "discoverable from disk" case is most likely to fire. Every other
+  call site genuinely has no `round_n` in scope, so the coalescing rule stays correct there.
