@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-dispatcher-flip
+phase: approved-summary-command
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-08-12T06:51:25Z'
 approved-provider-contract  '2026-08-12T07:03:06Z'
 approved-yaml-injection  '2026-08-12T07:06:57Z'
 approved-dispatcher-flip  '2026-08-12T07:12:04Z'
+approved-summary-command  '2026-08-12T07:17:46Z'
 ```
 
 ## Batches
@@ -50,9 +51,10 @@ batches:
     commit_sha: fd47850e2291e21a87905bbc6e6797b2a2c6b73d
     verify_baseline_failures: []
   - name: summary-command
-    state: running
+    state: approved
     implementer_session: 9d0d52c8-30c9-4ef5-8a13-9b7150fbac91
     start_sha: 3a3bcf73efa25375192c9c0bbeab48940c674a52
+    commit_sha: 80b840ecb28484fb26f38d3ede6528f1b9da5244
     verify_baseline_failures: []
   - name: discussion-metadata
     state: pending
