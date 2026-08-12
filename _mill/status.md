@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: claude-plugin-root-env-setup
 branch: hanf/claude-plugin-root-env-setup
 plan: _mill/plan
@@ -24,4 +24,13 @@ plan-review-r2  '2026-08-12T18:14:34Z'
 plan-fix-r2  '2026-08-12T18:14:50Z'
 plan-review-r3  '2026-08-12T18:18:41Z'
 planned  '2026-08-12T18:18:58Z'
+implementing  '2026-08-12T18:19:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plugin-root-resolution
+    state: pending
 ```
