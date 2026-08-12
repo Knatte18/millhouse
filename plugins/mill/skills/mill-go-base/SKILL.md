@@ -218,11 +218,7 @@ For each batch in `order`:
 
 > See `plugins/mill/docs/harness-tool-contracts.md` for the confirmed `Agent` tool notification/return-shape contract this section is built on.
 
-When `dispatch == agent`, follow this three-step pattern at each dispatch point:
-
-1. **Resolve dispatch mode:** `dispatch = _agent_dispatch.resolve_dispatch_mode(cfg)`.
-   This reads `cfg["llm"]["claude"]["dispatch"]` and returns one of `"subprocess"`, `"psmux"`, or `"agent"`.
-   If the mode is not `agent`, skip this entire section and use the existing `subprocess`/`psmux` flow unchanged (documented below in each dispatch subsection).
+This three-step pattern applies at every dispatch point:
 
 2. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation).
    Parse the returned JSON line to extract:
