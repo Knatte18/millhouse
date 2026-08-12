@@ -45,7 +45,9 @@ batches:
     start_sha: 42f5984d6f9da850500b3e9c23c133c74acbafce
     commit_sha: 4e82ab8c0eddbcab1507cdca77c67034d5ccf8e8
   - name: strip-subprocess-dispatch
-    state: pending
+    state: running
+    implementer_session: 90df0501-a8b8-45ab-8a0c-8365ace5e461
+    start_sha: 0cce02bf2115eafaec68fb618c2ee2e952ca2e4e
     verify_baseline_failures: []
   - name: treeguard-dedup
     state: pending
