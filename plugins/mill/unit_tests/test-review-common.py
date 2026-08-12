@@ -107,6 +107,7 @@ from _review_common import (  # noqa: E402
     _read_for_bulk,
     aggregate_verdict,
     apply_actual_model_override,
+    apply_cost_metadata,
     build_deletes_section,
     build_manifest_section,
     build_reattached_section,
@@ -134,6 +135,7 @@ from _review_common import (  # noqa: E402
     resolve_large_prompt_timeout,
     resolve_path,
     resolve_ref_paths,
+    sum_optional,
     write_review_file,
 )
 
@@ -741,6 +743,109 @@ def main() -> int:
         "reviewer_self_id: claude-sonnet-4-6 (self-reported)\n```\n"
     )
     print("PASS: apply_actual_model_override leaves reviewer_self_id line untouched")
+
+    # apply_cost_metadata: all-None returns the input unchanged (identity, not merely equal)
+    raw = "```yaml\nverdict: APPROVE\n```\n"
+    out = apply_cost_metadata(raw)
+    assert out is raw
+    print("PASS: apply_cost_metadata all-None returns input unchanged (identity)")
+
+    # apply_cost_metadata: injection into a header block with no such fields yields the three
+    # lines in the order duration_s, tool_calls, cost_usd directly after the opening fence
+    raw = "```yaml\nverdict: APPROVE\n```\n"
+    out = apply_cost_metadata(raw, duration_s=12.3, tool_calls=37, cost_usd=0.4212)
+    assert out == (
+        "```yaml\nduration_s: 12.3\ntool_calls: 37\ncost_usd: 0.4212\n"
+        "verdict: APPROVE\n```\n"
+    )
+    print("PASS: apply_cost_metadata injects duration_s/tool_calls/cost_usd in file order")
+
+    # apply_cost_metadata: a header that already carries the three fields has them rewritten in
+    # place with no duplication
+    raw = (
+        "```yaml\nduration_s: 1.0\ntool_calls: 1\ncost_usd: 0.0001\n"
+        "verdict: APPROVE\n```\n"
+    )
+    out = apply_cost_metadata(raw, duration_s=12.3, tool_calls=37, cost_usd=0.4212)
+    assert out == (
+        "```yaml\nduration_s: 12.3\ntool_calls: 37\ncost_usd: 0.4212\n"
+        "verdict: APPROVE\n```\n"
+    )
+    print("PASS: apply_cost_metadata rewrites existing fields in place with no duplication")
+
+    # apply_cost_metadata: a partial set (only duration_s) injects only that field
+    raw = "```yaml\nverdict: APPROVE\n```\n"
+    out = apply_cost_metadata(raw, duration_s=12.3)
+    assert out == "```yaml\nduration_s: 12.3\nverdict: APPROVE\n```\n"
+    print("PASS: apply_cost_metadata partial set injects only duration_s")
+
+    # apply_cost_metadata: text with no ```yaml``` fence at all is returned unchanged
+    raw = "no fence here at all\n"
+    out = apply_cost_metadata(raw, duration_s=12.3, tool_calls=37, cost_usd=0.4212)
+    assert out == raw
+    print("PASS: apply_cost_metadata with no yaml fence returns text unchanged")
+
+    # apply_cost_metadata: a first yaml fence without a verdict: line is skipped in favor of a
+    # later block that has one, matching apply_actual_model_override's anchor rule
+    raw = (
+        "```yaml\nreviewed_file: x\n```\n"
+        "some prose\n"
+        "```yaml\nverdict: APPROVE\n```\n"
+    )
+    out = apply_cost_metadata(raw, duration_s=12.3)
+    assert out == (
+        "```yaml\nreviewed_file: x\n```\n"
+        "some prose\n"
+        "```yaml\nduration_s: 12.3\nverdict: APPROVE\n```\n"
+    )
+    print("PASS: apply_cost_metadata anchors on the later block carrying verdict:")
+
+    # sum_optional: both None -> None
+    assert sum_optional(None, None) is None
+    print("PASS: sum_optional both None returns None")
+
+    # sum_optional: one None -> the other operand unchanged (not coerced to 0)
+    assert sum_optional(None, 5) == 5
+    assert sum_optional(3.5, None) == 3.5
+    print("PASS: sum_optional with one None returns the other operand unchanged")
+
+    # sum_optional: both set -> their sum
+    assert sum_optional(2, 3) == 5
+    assert sum_optional(1.5, 2.5) == 4.0
+    print("PASS: sum_optional with both set returns their sum")
+
+    # finalize_scope: duration_s/tool_calls/cost_usd land both in the returned dict and in the
+    # written file's yaml header
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews = tmpdir / "reviews"
+        raw = "```yaml\nverdict: APPROVE\n```\n"
+        result = finalize_scope(
+            reviews,
+            "code",
+            1,
+            raw,
+            scope="01-setup",
+            duration_s=12.3,
+            tool_calls=37,
+            cost_usd=0.4212,
+        )
+        assert result["duration_s"] == 12.3
+        assert result["tool_calls"] == 37
+        assert result["cost_usd"] == 0.4212
+        written = Path(result["file"]).read_text(encoding="utf-8")
+        assert "duration_s: 12.3\n" in written
+        assert "tool_calls: 37\n" in written
+        assert "cost_usd: 0.4212\n" in written
+        print("PASS: finalize_scope threads cost metadata into both dict and written file")
+
+        # Omitting all three leaves the written file byte-identical to today's output.
+        unmodified = finalize_scope(reviews, "code", 1, raw, scope="02-setup")
+        assert unmodified["duration_s"] is None
+        assert unmodified["tool_calls"] is None
+        assert unmodified["cost_usd"] is None
+        unmodified_content = Path(unmodified["file"]).read_text(encoding="utf-8")
+        assert unmodified_content == raw
+        print("PASS: finalize_scope without cost metadata reproduces unmodified output")
 
     # write_review_file: preserves a reviewer_self_id: line verbatim
     with _test_helpers.safe_temp_dir() as tmpdir:
