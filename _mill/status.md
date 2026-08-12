@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -30,4 +30,21 @@ plan-review-r5  '2026-08-12T09:25:17Z'
 plan-fix-r5  '2026-08-12T09:25:17Z'
 plan-fix-r6  '2026-08-12T09:31:54Z'
 planned  '2026-08-12T09:32:03Z'
+implementing  '2026-08-12T09:32:29Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: regression-guard
+    state: pending
+  - name: strip-subprocess-dispatch
+    state: pending
+  - name: treeguard-dedup
+    state: pending
+  - name: extract-cold-path
+    state: pending
+  - name: renumber-and-siblings
+    state: pending
 ```
