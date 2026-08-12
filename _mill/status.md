@@ -50,7 +50,9 @@ batches:
     commit_sha: fd47850e2291e21a87905bbc6e6797b2a2c6b73d
     verify_baseline_failures: []
   - name: summary-command
-    state: pending
+    state: running
+    implementer_session: 9d0d52c8-30c9-4ef5-8a13-9b7150fbac91
+    start_sha: 3a3bcf73efa25375192c9c0bbeab48940c674a52
     verify_baseline_failures: []
   - name: discussion-metadata
     state: pending
