@@ -34,6 +34,8 @@ batches:
     commit_sha: 7cea175238e2b6a135fcd9287ba8db1276cfcb1e
     verify_baseline_failures: []
   - name: regression-tests
-    state: pending
+    state: running
+    implementer_session: 6fd258af-f2a9-41e9-be5d-5a7bb6fb78ed
+    start_sha: b57f8177a1277cc299169a85d938198b0d5ab9b4
     verify_baseline_failures: []
 ```
