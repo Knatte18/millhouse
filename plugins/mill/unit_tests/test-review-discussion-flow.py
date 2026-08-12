@@ -26,6 +26,7 @@ import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_common import LLMError, ReviewerCallResult  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
+import _review_discussion  # noqa: E402
 from _review_discussion import prepare as discussion_prepare  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
 from _test_helpers import seed_wiki_config, write_local_overlay  # noqa: E402
@@ -1432,6 +1433,37 @@ def main() -> int:
     # project_root/hub_dir rebind: briefs_dir resolves under resolve_active_hub, not resolve_hub_path's decoy (#675)
     # ------------------------------------------------------------------
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
+
+    # ------------------------------------------------------------------
+    # finalize() direct call: parse_verdict failure tags error_kind: "reviewer"
+    # (reviewer-kind-finalize-wrappers Shared Decision).
+    # Calls finalize() directly (not via discussion_run/run()) so the assertion exercises
+    # exactly the except ReviewError entry this batch's Card 9 changed.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews_dir = tmpdir / "reviews"
+        try:
+            r = _review_discussion.finalize(
+                {},
+                "test-slug",
+                "# Raw prose without any yaml block\n\nNo verdict here.",
+                round_n=1,
+                reviews_dir=reviews_dir,
+                mill_dir=reviews_dir.parent,
+                project_root=reviews_dir.parent,
+                wiki_root=reviews_dir.parent,
+            )
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            assert r.reviews[0]["error_kind"] == "reviewer", (
+                f"expected error_kind 'reviewer', got {r.reviews[0].get('error_kind')!r}"
+            )
+            print("PASS finalize() parse_verdict failure tags error_kind: reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL finalize() error_kind: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL finalize() error_kind (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

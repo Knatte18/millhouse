@@ -27,6 +27,7 @@ import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
 from _llm_common import ReviewerCallResult  # noqa: E402
+import _review_plan  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_plan import prepare as plan_prepare  # noqa: E402
 from _review_plan import _scan_approved_batches  # noqa: E402
@@ -3077,6 +3078,39 @@ def main() -> int:
             print(f"FAIL test51 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 52 — finalize() direct call: parse_verdict failure tags error_kind: "reviewer"
+    # (reviewer-kind-finalize-wrappers Shared Decision).
+    # Calls finalize() directly (not via plan_run/run()) so the assertion exercises
+    # exactly the except ReviewError dict this batch's Card 8 changed.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews_dir = tmpdir / "reviews"
+        try:
+            result = _review_plan.finalize(
+                {},
+                "test-slug",
+                "# Raw prose without any yaml block\n\nNo verdict here.",
+                scope=None,
+                round_n=1,
+                reviews_dir=reviews_dir,
+                mill_dir=reviews_dir.parent,
+                project_root=reviews_dir.parent,
+                wiki_root=reviews_dir.parent,
+                git_root=reviews_dir.parent,
+            )
+            assert result["verdict"] == "ERROR", f"expected ERROR, got {result['verdict']}"
+            assert result["error_kind"] == "reviewer", (
+                f"expected error_kind 'reviewer', got {result.get('error_kind')!r}"
+            )
+            print("PASS test52: finalize() parse_verdict failure tags error_kind: reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test52: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test52 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
