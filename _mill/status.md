@@ -29,21 +29,31 @@ implementing  '2026-08-12T06:51:25Z'
 ```yaml
 batches:
   - name: provider-contract
-    state: pending
+    state: running
+    implementer_session: 08521e07-7892-49ad-994e-9437d22f51c0
+    start_sha: 8375d71b3c0f121366af151455ff8bb916024a4e
+    verify_baseline_failures: []
   - name: yaml-injection
     state: pending
+    verify_baseline_failures: []
   - name: dispatcher-flip
     state: pending
+    verify_baseline_failures: []
   - name: summary-command
     state: pending
+    verify_baseline_failures: []
   - name: discussion-metadata
     state: pending
+    verify_baseline_failures: []
   - name: code-metadata
     state: pending
+    verify_baseline_failures: []
   - name: plan-metadata
     state: pending
+    verify_baseline_failures: []
   - name: cli-flags
     state: pending
+    verify_baseline_failures: []
   - name: orchestrator-shared
     state: pending
   - name: orchestrator-callers
