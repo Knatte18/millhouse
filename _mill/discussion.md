@@ -49,10 +49,10 @@ fixed in code, except #838, addressed below).
   `print_error_envelope` call site (config/registry/slug resolution, prepare-stage errors,
   missing `--agent-output`, full-stage errors) stays `error_kind: "usage"` (the default).
 - `mill-start/SKILL.md` Step 3.5, `mill-plan/SKILL.md` Step 4.5, `mill-go-base/SKILL.md` Step
-  4.5 — update the ERROR-only-aggregate retry logic to read `error_kind`: `"usage"` halts
-  immediately (no round consumed, no two-pass wait) with a distinct halt message; `"reviewer"`
-  (or absent, for back-compat with envelopes that predate this field) keeps the existing
-  two-pass retry-then-halt behavior unchanged.
+  4.5, and `mill-go-base/holistic-review.md` sub-step 3.5 — update the ERROR-only-aggregate
+  retry logic to read `error_kind`: `"usage"` halts immediately (no round consumed, no two-pass
+  wait) with a distinct halt message; `"reviewer"` (or absent, for back-compat with envelopes
+  that predate this field) keeps the existing two-pass retry-then-halt behavior unchanged.
 - `_review_common.py::finalize_scope` — add a new helper (e.g. `append_demotion_note`) called
   unconditionally whenever `demoted_any` is `True`, appending a deterministic note to the
   `## Verdict` section's summary line stating the post-ceiling BLOCKING/NIT counts. Independent
@@ -129,11 +129,15 @@ fixed in code, except #838, addressed below).
   (`millpy-review-plan.py:307-309`). That is the only call site where the *reviewer's own output*
   is the cause of the error; every other site fails before or entirely outside reviewer-output
   processing (config, registry, slug, missing flags) and is therefore always non-retryable.
-- Rejected: Treating the full-stage (`--stage full`, non-agent-mode) `ReviewError` catch as
-  potentially either kind — it wraps an entire multi-round `run()` loop that could fail for many
-  reasons; since it's not used by the current Agent-mode dispatch path this task is scoped
-  around, defaulting it to `"usage"` (fail-fast, no wasted retry) is acceptable and simpler than
-  trying to unwrap the inner cause.
+- Rejected: Treating the full-stage (`--stage full`) `ReviewError` catch as potentially either
+  kind — it wraps an entire multi-round `run()` loop that could fail for many reasons (config,
+  registry, slug, or reviewer-output problems all funnel through the same catch), so unwrapping
+  the inner cause to pick a kind would need its own dedicated logic. Defaulting it to `"usage"`
+  (fail-fast, no wasted retry) is simpler and safe even though `--stage full` is not purely
+  vestigial — `mill-plan/SKILL.md:370` documents it as the second-consecutive-Agent-API-error
+  fallback path via `millpy-bg`, so this stage does still see real invocations; the multi-cause
+  rationale alone is what justifies the `"usage"` default here, independent of how often the
+  stage runs.
 
 ### Retry semantics keyed on error_kind
 
@@ -220,10 +224,12 @@ fixed in code, except #838, addressed below).
 - `plugins/mill/skills/mill-start/SKILL.md` Step 3.5 "ERROR-only-aggregate retry", ~line 200s of
   the rendered skill (Phase: Discussion Review) — this session's own consumer of the pattern
   being fixed.
-- `plugins/mill/skills/mill-plan/SKILL.md` Step 4.5 (line ~449) and
-  `plugins/mill/skills/mill-go-base/SKILL.md` Step 4.5 (line ~778) — the other two consumer
-  sites; grep confirms all three are the only skills referencing
-  `ERROR-only-aggregate`/`verdict.*ERROR`.
+- `plugins/mill/skills/mill-plan/SKILL.md` Step 4.5 (line ~449),
+  `plugins/mill/skills/mill-go-base/SKILL.md` Step 4.5 (line ~778), and
+  `plugins/mill/skills/mill-go-base/holistic-review.md` sub-step 3.5 (line ~112) — the other
+  three consumer sites; grep confirms these four files are the only ones referencing
+  `ERROR-only-aggregate` (`mill-go-base/SKILL.md:420` documents the `holistic-review.md` site as
+  a distinct dispatch point from its own per-batch Step 4.5, not a sub-cycle of it).
 - `plugins/mill/templates/review-output.schema.md` — documents the `## Verdict` section's
   two-line contract (verdict token, then one-sentence summary); the demotion-note addition is an
   appended third line within that section, so this schema doc needs a one-line update describing
@@ -256,10 +262,10 @@ _No `CONSTRAINTS.md` present at hub root._
 - **Regression test** (all three review CLIs): `--stage finalize --duration-s <float>` (and
   `--tool-calls`, `--cost-usd`) succeeds without an argparse error — locks in #838's
   already-resolved state so a future regression is caught.
-- **SKILL.md consumer changes** (mill-start Step 3.5, mill-plan Step 4.5, mill-go-base Step 4.5):
-  not unit-testable (prose/orchestration logic in markdown skill files) — verify by re-reading
-  all three files after editing to confirm identical `error_kind`-based halt behavior and
-  consistent halt-message wording.
+- **SKILL.md consumer changes** (mill-start Step 3.5, mill-plan Step 4.5, mill-go-base Step 4.5,
+  mill-go-base/holistic-review.md sub-step 3.5): not unit-testable (prose/orchestration logic in
+  markdown skill files) — verify by re-reading all four files after editing to confirm identical
+  `error_kind`-based halt behavior and consistent halt-message wording.
 - Follow existing project convention: `plugins/mill/unit_tests/test-<name>.py`, in-memory/tempfile
   fixtures, no real git or LLM calls (per `CLAUDE.md` repo layout notes).
 
