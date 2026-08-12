@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-summary-command
+phase: approved-discussion-metadata
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-provider-contract  '2026-08-12T07:03:06Z'
 approved-yaml-injection  '2026-08-12T07:06:57Z'
 approved-dispatcher-flip  '2026-08-12T07:12:04Z'
 approved-summary-command  '2026-08-12T07:17:46Z'
+approved-discussion-metadata  '2026-08-12T07:23:14Z'
 ```
 
 ## Batches
@@ -57,9 +58,10 @@ batches:
     commit_sha: 80b840ecb28484fb26f38d3ede6528f1b9da5244
     verify_baseline_failures: []
   - name: discussion-metadata
-    state: running
+    state: approved
     implementer_session: 6ddb5388-aa59-41b4-b4ba-1a7295f92c49
     start_sha: 3d7a8895c0fa72d40a8d3f6f520d44027ae80b53
+    commit_sha: 47240b2a129f924a297c93cd366ccfbee3d69d91
     verify_baseline_failures: []
   - name: code-metadata
     state: pending
