@@ -3,7 +3,7 @@
 ```yaml
 task: "Surface reviewer time/tool-call cost + a review-summary command"
 slug: "reviewer-cost-summary"
-approved: false
+approved: true
 started: "20260812-062111"
 parent: "main"
 root: ""

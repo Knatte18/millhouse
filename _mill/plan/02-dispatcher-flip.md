@@ -64,7 +64,7 @@ object is in scope under a local name (`res`, and `retry_res` on the `NEED_CONTE
   `_review_discussion`'s single site does too). On the `NEED_CONTEXT` resume-retry sites, name the
   local `retry_res` rather than reusing `res`, so batch 4/5/6 can sum both calls' metrics without
   re-deriving the first call's values.
-  The six sites are: `_review_discussion.run`; `_review_code.run` (initial call and the
+  The call sites, by function, are: `_review_discussion.run`; `_review_code.run` (initial call and the
   `NEED_CONTEXT` retry); `_review_plan._review_one_batch` (initial call and the `NEED_CONTEXT`
   retry); `_review_plan.run`'s holistic block (initial call and the `NEED_CONTEXT` retry) — seven
   call sites in total across the three files.
