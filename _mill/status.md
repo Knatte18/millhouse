@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-treeguard-dedup  '2026-08-12T09:52:43Z'
 approved-extract-cold-path  '2026-08-12T10:04:24Z'
 approved-renumber-and-siblings  '2026-08-12T10:11:08Z'
 holistic-reviewing  '2026-08-12T10:11:42Z'
+holistic-fixing  '2026-08-12T10:15:10Z'
 ```
 
 ## Batches
