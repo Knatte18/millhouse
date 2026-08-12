@@ -38,7 +38,9 @@ batches:
     commit_sha: 1ca7ef0b790659316a5349b666e21caa7ffcb007
     verify_baseline_failures: []
   - name: reviewer-kind-finalize-wrappers
-    state: pending
+    state: running
+    implementer_session: 2f270d4f-aa7d-4ba3-a861-dc51096cf174
+    start_sha: d815a14ca503a1eb77331ad71ae3149681c6c491
     verify_baseline_failures: []
   - name: verdict-summary-demotion-note
     state: pending
