@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plugin-root-resolution
 slug: claude-plugin-root-env-setup
 branch: hanf/claude-plugin-root-env-setup
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-08-12T18:14:50Z'
 plan-review-r3  '2026-08-12T18:18:41Z'
 planned  '2026-08-12T18:18:58Z'
 implementing  '2026-08-12T18:19:33Z'
+approved-plugin-root-resolution  '2026-08-12T18:23:33Z'
 ```
 
 ## Batches
@@ -32,8 +33,9 @@ implementing  '2026-08-12T18:19:33Z'
 ```yaml
 batches:
   - name: plugin-root-resolution
-    state: running
+    state: approved
     implementer_session: 429c8e3f-a4b1-4447-9a91-07211eb8a58d
     start_sha: 27ffc03d3d84fbbb2b87967a142857ed9a391f30
+    commit_sha: 9a64082567949c1bf75218f7b6ba63d986d34651
     verify_baseline_failures: []
 ```
