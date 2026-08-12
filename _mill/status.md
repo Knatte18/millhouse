@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -33,6 +33,7 @@ approved-cli-flags  '2026-08-12T07:41:37Z'
 approved-orchestrator-shared  '2026-08-12T07:45:55Z'
 approved-orchestrator-callers  '2026-08-12T07:48:12Z'
 holistic-reviewing  '2026-08-12T07:48:30Z'
+holistic-approved  '2026-08-12T07:54:24Z'
 ```
 
 ## Batches
