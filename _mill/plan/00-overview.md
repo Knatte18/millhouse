@@ -30,7 +30,7 @@ batches:
   - number: 3
     name: mill-merge-in-and-conflict-brief
     file: 03-mill-merge-in-and-conflict-brief.md
-    depends-on: [1]
+    depends-on: [1, 2]
     verify: null
   - number: 4
     name: integration-tests

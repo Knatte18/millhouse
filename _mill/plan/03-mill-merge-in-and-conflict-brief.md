@@ -6,7 +6,7 @@ batch: mill-merge-in-and-conflict-brief
 number: 3
 cards: 2
 verify: null
-depends-on: [1]
+depends-on: [1, 2]
 ```
 
 ## Rename mechanic
@@ -15,7 +15,7 @@ Not applicable — this batch has no `Moves:` entries.
 
 ## Batch Scope
 
-Wires #817's liveness check into `mill-merge-in/SKILL.md`'s own independent `_parent_branch.resolve()` call site (Card 7), and adds #816's required post-resolution self-verification instruction to `templates/merge-in-conflict-brief.md` (Card 8). Both cards live in this batch because they are the two remaining small, mutually-independent edits outside `mill-merge/SKILL.md` (batch 2) that this task's discussion requires, and neither shares meaningful `Context:` with the other beyond both belonging to the mill-merge-in workflow's surface area. Card 7 depends on batch 1's `_parent_branch.check_liveness` / `resolve_dead_parent`. `verify: null` — #817's wiring here is exercised by batch 4's integration tests (against the underlying `_parent_branch` functions, not this prose) and #816 has no automated test per `_mill/discussion.md`'s `testing-approach` Decision (prompt text, verified by reading the rendered template).
+Wires #817's liveness check into `mill-merge-in/SKILL.md`'s own independent `_parent_branch.resolve()` call site (Card 7), and adds #816's required post-resolution self-verification instruction to `templates/merge-in-conflict-brief.md` (Card 8). Both cards live in this batch because they are the two remaining small, mutually-independent edits outside `mill-merge/SKILL.md` (batch 2) that this task's discussion requires, and neither shares meaningful `Context:` with the other beyond both belonging to the mill-merge-in workflow's surface area. Card 7 depends on batch 1's `_parent_branch.check_liveness` / `resolve_dead_parent`, and on batch 2 having already landed its "Liveness check (#817)" paragraph in `mill-merge/SKILL.md` Entry Step 4 — Card 7 cross-references that paragraph's exact bash invocation and JSON shape rather than restating it, so this batch's `depends-on` is `[1, 2]`, not just `[1]`. `verify: null` — #817's wiring here is exercised by batch 4's integration tests (against the underlying `_parent_branch` functions, not this prose) and #816 has no automated test per `_mill/discussion.md`'s `testing-approach` Decision (prompt text, verified by reading the rendered template).
 
 ## Cards
 
