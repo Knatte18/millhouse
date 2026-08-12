@@ -442,8 +442,8 @@ This section is the single source of truth for the post-round cost print in ever
 mill-start and mill-plan reference this section rather than restating it.
 
 **When to print.**
-Once, immediately after each review round's JSON envelope is in hand, in both dispatch modes
-(agent, and subprocess/psmux), before branching on the verdict.
+Once, immediately after each review round's JSON envelope is in hand, under agent-mode dispatch,
+before branching on the verdict.
 Print it for `ERROR` rounds too — an expensive failed round is exactly what the operator most needs
 to see.
 
@@ -464,8 +464,7 @@ ASCII only.
 this scope.
 `model` comes from the prepare envelope's `model` field under agent-mode (or the recorded
 actually-dispatched tier when the operator overrode it — see "## Agent-mode dispatch" step 3's
-"record the `model` value actually passed" instruction), and from the round's configured
-`roles.<review-type>.<scope>.reviewer` alias under subprocess/psmux dispatch.
+"record the `model` value actually passed" instruction).
 
 **Not persisted.**
 This line is orchestrator chat output only — it is never written to a file.
