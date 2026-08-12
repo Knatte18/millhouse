@@ -55,6 +55,7 @@ from _review_common import (
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
+    apply_cost_metadata,
     build_deletes_section,
     build_manifest_section,
     build_reattached_section,
@@ -79,6 +80,7 @@ from _review_common import (
     resolve_existing_paths,
     resolve_path,
     resolve_ref_paths,
+    sum_optional,
     worktree_snapshot_guard,
     write_review_file,
 )
@@ -527,6 +529,9 @@ def finalize(
     wiki_root: Path,
     git_root: Path,
     actual_model: str | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> ReviewResult:
     """Finalize a code review by parsing verdict and writing the review file.
 
@@ -535,6 +540,8 @@ def finalize(
     The NIT check uses ``git diff --name-status --find-renames`` against the batch's ``start_sha``;
     it is skipped silently on any failure (no start_sha, git error, no Moves declared).
     NITs never change the verdict or blocking_count.
+    The splice runs before ``apply_cost_metadata`` in the ``except ReviewError`` branch's text flow,
+    so the written raw text still contains whatever the splice produced.
 
     Args:
         raw_text: Raw review output from the reviewer.
@@ -544,6 +551,13 @@ def finalize(
         actual_model: The model that actually produced this review, used to correct an unreliable
         self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
         to ``finalize_scope`` on the success path only.
+        duration_s: Orchestrator-supplied wall-clock seconds the round took (summed across every
+        reviewer call in the round by the caller); threaded to ``finalize_scope`` on the success
+        path, and injected into the raw parse-failure file on the ``except ReviewError`` path.
+        tool_calls: Orchestrator-supplied tool-call count for the round; threaded the same way as
+        ``duration_s``.
+        cost_usd: Orchestrator-supplied dollar cost of the round; threaded the same way as
+        ``duration_s``.
 
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
@@ -561,8 +575,12 @@ def finalize(
         review_entry = finalize_scope(
             reviews_dir, "code", round_n, raw_text, scope=scope, actual_model=actual_model,
             blocking_classes=blocking_classes,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
     except ReviewError as exc:
+        raw_text = apply_cost_metadata(
+            raw_text, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+        )
         path = write_review_file(
             reviews_dir,
             "code",
@@ -582,6 +600,9 @@ def finalize(
                 "error": f"parse_verdict failed: {exc}",
                 "findings": [],
                 "session_id": None,
+                "duration_s": duration_s,
+                "tool_calls": tool_calls,
+                "cost_usd": cost_usd,
             }],
         )
 
@@ -598,6 +619,9 @@ def finalize(
             "file": review_entry["file"],
             "findings": review_entry["findings"],
             "session_id": None,
+            "duration_s": review_entry["duration_s"],
+            "tool_calls": review_entry["tool_calls"],
+            "cost_usd": review_entry["cost_usd"],
         }],
     )
 
@@ -645,6 +669,9 @@ def run(
                     "file": None,
                     "skipped": True,
                     "findings": [],
+                    "duration_s": None,
+                    "tool_calls": None,
+                    "cost_usd": None,
                 }],
             )
 
@@ -676,6 +703,9 @@ def run(
             res = _reviewer_single.run(spec, prompt_text, timeout=timeout)
             raw = extract_review_content(res.text)
             session_id = res.session_id
+            duration_s = res.duration_s
+            tool_calls = res.tool_calls
+            cost_usd = res.cost_usd
         except LLMError as exc:
             return ReviewResult(
                 type="code",
@@ -689,6 +719,9 @@ def run(
                     "error": str(exc),
                     "findings": [],
                     "session_id": None,
+                    "duration_s": getattr(exc, "duration_s", None),
+                    "tool_calls": None,
+                    "cost_usd": None,
                 }],
             )
 
@@ -696,6 +729,9 @@ def run(
         try:
             verdict = parse_verdict(raw)
         except ReviewError as exc:
+            raw = apply_cost_metadata(
+                raw, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+            )
             path = write_review_file(
                 reviews_dir,
                 "code",
@@ -715,6 +751,9 @@ def run(
                     "error": f"parse_verdict failed: {exc}",
                     "findings": [],
                     "session_id": session_id,
+                    "duration_s": duration_s,
+                    "tool_calls": tool_calls,
+                    "cost_usd": cost_usd,
                 }],
             )
 
@@ -743,6 +782,11 @@ def run(
                     )
                     raw = extract_review_content(retry_res.text)
                     session_id = retry_res.session_id
+                    # The round genuinely cost both attempts -- fold the retry's metrics
+                    # into the running totals (None-absorbing sum) rather than replacing them.
+                    duration_s = sum_optional(duration_s, retry_res.duration_s)
+                    tool_calls = sum_optional(tool_calls, retry_res.tool_calls)
+                    cost_usd = sum_optional(cost_usd, retry_res.cost_usd)
                 except LLMError as exc:
                     return ReviewResult(
                         type="code",
@@ -756,11 +800,17 @@ def run(
                             "error": f"resume retry failed: {exc}",
                             "findings": [],
                             "session_id": None,
+                            "duration_s": sum_optional(duration_s, getattr(exc, "duration_s", None)),
+                            "tool_calls": tool_calls,
+                            "cost_usd": cost_usd,
                         }],
                     )
                 try:
                     verdict = parse_verdict(raw)
                 except ReviewError as exc:
+                    raw = apply_cost_metadata(
+                        raw, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+                    )
                     path = write_review_file(
                         reviews_dir,
                         "code",
@@ -780,13 +830,17 @@ def run(
                             "error": f"parse_verdict failed: {exc}",
                             "findings": [],
                             "session_id": session_id,
+                            "duration_s": duration_s,
+                            "tool_calls": tool_calls,
+                            "cost_usd": cost_usd,
                         }],
                     )
 
         # Finalize
         result = finalize(
             cfg, slug, raw, scope=batch_name, round_n=round_n, reviews_dir=reviews_dir,
-            mill_dir=mill_dir, project_root=project_root, wiki_root=wiki_root, git_root=git_root
+            mill_dir=mill_dir, project_root=project_root, wiki_root=wiki_root, git_root=git_root,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
         # Preserve session_id from reviewer call
         if result.reviews:
