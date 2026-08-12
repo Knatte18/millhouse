@@ -21,7 +21,8 @@ Adds the #817 dead-parent-branch-detection primitives to `plugins/mill/scripts/_
 
 ### Card 1: Extract reusable status.md parent-row parser; add `check_liveness`
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_subprocess_util.py`
 - **Edits:**
   - `plugins/mill/scripts/_parent_branch.py`
 - **Creates:** none
@@ -48,6 +49,7 @@ Adds the #817 dead-parent-branch-detection primitives to `plugins/mill/scripts/_
 - **Context:**
   - `plugins/mill/scripts/_archive_tag.py`
   - `plugins/mill/scripts/_marker.py`
+  - `plugins/mill/scripts/_subprocess_util.py`
 - **Edits:**
   - `plugins/mill/scripts/_parent_branch.py`
 - **Creates:** none
