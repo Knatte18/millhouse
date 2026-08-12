@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -21,4 +21,31 @@ plan-review-r1  '2026-08-12T06:37:07Z'
 plan-fix-r1  '2026-08-12T06:37:07Z'
 plan-fix-r2  '2026-08-12T06:43:18Z'
 planned  '2026-08-12T06:43:34Z'
+implementing  '2026-08-12T06:51:25Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: provider-contract
+    state: pending
+  - name: yaml-injection
+    state: pending
+  - name: dispatcher-flip
+    state: pending
+  - name: summary-command
+    state: pending
+  - name: discussion-metadata
+    state: pending
+  - name: code-metadata
+    state: pending
+  - name: plan-metadata
+    state: pending
+  - name: cli-flags
+    state: pending
+  - name: orchestrator-shared
+    state: pending
+  - name: orchestrator-callers
+    state: pending
 ```
