@@ -59,7 +59,9 @@ batches:
     commit_sha: ef7f7b5506f0b744b02366bc00d98456f413d0f7
     verify_baseline_failures: []
   - name: extract-cold-path
-    state: pending
+    state: running
+    implementer_session: 68ccc393-72df-44db-b5a0-3fdb037e7618
+    start_sha: 924ff16e93d36fe0e0293b0ad00c9873f659ae98
     verify_baseline_failures: []
   - name: renumber-and-siblings
     state: pending
