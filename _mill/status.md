@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: plan-validate-context-completeness-gaps
 branch: hanf/plan-validate-context-completeness-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: '_plan_validate: context-completeness fires on forbidding/explanatory file mentions'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-12T17:45:44Z'
 discussed  '2026-08-12T18:22:12Z'
+planning  '2026-08-12T18:29:19Z'
 ```
