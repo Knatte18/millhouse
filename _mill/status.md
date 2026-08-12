@@ -64,7 +64,9 @@ batches:
     commit_sha: 47240b2a129f924a297c93cd366ccfbee3d69d91
     verify_baseline_failures: []
   - name: code-metadata
-    state: pending
+    state: running
+    implementer_session: 3dd74c77-4dd6-401f-b93b-db5927391acf
+    start_sha: 41e8600dc5244f4b4f66a454967d61ef9bf838ec
     verify_baseline_failures: []
   - name: plan-metadata
     state: pending
