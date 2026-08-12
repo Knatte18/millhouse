@@ -60,46 +60,60 @@ mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
 
 ## Decisions
 
-### Resolve plugin root via `sys.path[0]`, not `os.environ`
+### Resolve plugin root by scanning `sys.path` for the PYTHONPATH-inserted `scripts` entry, not `os.environ`
 
-- Decision: Phase 4.8's inline `-c` script (and its verify snippet) derive the plugin root as
-  `Path(sys.path[0]).parent` instead of `Path(os.environ['CLAUDE_PLUGIN_ROOT'])`.
+- Decision: Phase 4.8's inline `-c` script (and its verify snippet) derive the plugin root by
+  scanning `sys.path` for the first entry whose directory name is `scripts` and taking its parent
+  — instead of `Path(os.environ['CLAUDE_PLUGIN_ROOT'])`.
 - Rationale: Phase 4.8's own command line already carries `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"`
   as a prefix — a value CC has already substituted textually into the SKILL.md content *before* the
   Bash tool ever executes it (confirmed this session: the literal token never survives to the Bash
-  subshell in SKILL.md-sourced text). Because `-c` scripts run with the `PYTHONPATH` entry prepended
-  to `sys.path`, `sys.path[0]` reliably equals `<plugin-root>/scripts` regardless of whether the
-  subprocess separately inherits a real `CLAUDE_PLUGIN_ROOT` env var — sidestepping the actual
-  failure mode instead of adding a fallback for a case that can still occur.
+  subshell in SKILL.md-sourced text). CPython's interpreter reads the `PYTHONPATH` **process env
+  var** natively at startup and inserts its entries into `sys.path` for every invocation mode,
+  including `-c` — this was re-verified empirically this session:
+  `PYTHONPATH=".../scripts" python -c "print(sys.path[:2])"` → `['', '.../scripts']`. Note `sys.path[0]`
+  is always `''` (cwd) for `-c` mode; the `scripts` entry lands at index 1, not 0. `import
+  _claude_settings` was independently confirmed to succeed via this auto-populated `sys.path`
+  with **no manual `sys.path.insert` at all**. This makes the resolution depend only on the
+  `PYTHONPATH=` prefix substitution (already proven reliable) and Python's own env-var handling
+  (a documented interpreter guarantee, not an OS-specific behavior) — never on whether the
+  subprocess separately inherits a real `CLAUDE_PLUGIN_ROOT` env var.
+- Rejected: `Path(sys.path[0]).parent` (the originally proposed approach) — **factually wrong**:
+  round-1 discussion review caught that `sys.path[0]` is always `''` for `-c` invocations, not the
+  PYTHONPATH-inserted directory (see Q&A log). Rejected in favor of scanning for the named entry.
+- Rejected: Hardcode `sys.path[1]` — works today (verified empirically) but is more fragile than a
+  name-based scan if a future invocation ever prepends another entry ahead of the PYTHONPATH one;
+  scanning for a `scripts`-named entry costs nothing extra and doesn't depend on position.
 - Rejected: Keep `os.environ.get('CLAUDE_PLUGIN_ROOT')` with a fallback (mirroring
   `_config.resolve_plugin_template_path`'s `Path(__file__)`-based fallback) — rejected because
   Phase 4.8 has no `__file__` to fall back to (it's inline `-c` code, not a `.py` module on disk),
-  and the `sys.path[0]` approach avoids depending on the unreliable env var at all rather than
+  and the `sys.path`-scan approach avoids depending on the unreliable env var at all rather than
   merely tolerating its absence.
 
 ### New helper: `_config.resolve_plugin_root_from_syspath()`
 
 - Decision: Add a small function to `_config.py`:
-  `resolve_plugin_root_from_syspath(sys_path_0: str) -> Path`. It takes `sys.path[0]` as an
-  explicit argument (not read internally — keeps the function pure and testable per CLAUDE.md's
-  "Helpers with path args must not consult cwd/ambient state for config" spirit), validates the
-  directory's name is `scripts` (guard below), and returns its parent.
+  `resolve_plugin_root_from_syspath(sys_path: list[str]) -> Path`. It takes the full `sys.path`
+  list as an explicit argument (not read internally — keeps the function pure and testable per
+  CLAUDE.md's "Helpers with path args must not consult cwd/ambient state for config" spirit),
+  scans for the first entry whose `Path(entry).name == "scripts"` (guard below), and returns that
+  entry's parent.
 - Rationale: `_config.py` already owns the analogous `resolve_plugin_template_path` fallback logic
   for the same env var, so this keeps plugin-root resolution logic in one module. A pure function
-  taking an explicit string argument is unit-testable without mocking `sys.path` or `os.environ`, and
+  taking an explicit list argument is unit-testable without mocking `sys.path` or `os.environ`, and
   both Phase 4.8 and its verify snippet call the same function — eliminating the class of bug where
   the two drift out of sync (the exact class CLAUDE.md already flags for mill-config.yaml/template).
-- Rejected: Keep the two-line resolution inline and duplicated in both SKILL.md snippets — rejected
+- Rejected: Keep the resolution inline and duplicated in both SKILL.md snippets — rejected
   because Phase 4.8 is the bootstrap-critical, hardest-to-debug-when-broken path in the whole
   skill (no `$MILL_PYTHON` yet to fall back to), which outweighs the usual YAGNI-favors-inline
-  default for a two-line snippet.
+  default for a short snippet.
 
-### Guard against a malformed `sys.path[0]`
+### Guard against no `scripts`-named entry in `sys.path`
 
 - Decision: `resolve_plugin_root_from_syspath` raises `SystemExit` with an actionable message
-  (e.g. "expected sys.path[0] to be a .../scripts directory from PYTHONPATH -- run this via the
-  documented mill-setup invocation, not standalone") when `Path(sys_path_0).name != "scripts"`,
-  rather than silently returning a wrong plugin root.
+  (e.g. "expected a .../scripts directory from PYTHONPATH somewhere in sys.path -- run this via
+  the documented mill-setup invocation, not standalone") when no entry's name is `scripts`,
+  rather than silently returning a wrong or `None` plugin root.
 - Rationale: mill-setup is the one skill an operator might hand-run a step of while debugging a
   broken bootstrap (per its own "Note: re-run /mill-setup..." guidance). A silently-wrong plugin
   root here would produce a `MILL_PYTHON` pointing at the wrong venv, which is a confusing failure
@@ -116,10 +130,13 @@ mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
   import sys; sys.path.insert(0, os.environ['CLAUDE_PLUGIN_ROOT'] + '/scripts'); import _claude_settings
   venv = Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv'
   ```
-  Note the `sys.path.insert(0, ...)` call is itself redundant with the outer
-  `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` prefix already on the command line — `sys.path[0]`
-  is already that directory before this line runs. The fix removes the `os.environ` reads and the
-  now-unnecessary `sys.path.insert` line, using `sys.path[0]` directly.
+  The `sys.path.insert(0, ...)` call is unnecessary: CPython's interpreter already inserts every
+  `PYTHONPATH` entry into `sys.path` at process startup for `-c` invocations (verified empirically
+  this session — `import _claude_settings` succeeds with no manual insert, since the outer
+  `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` prefix already put that directory at `sys.path[1]`;
+  `sys.path[0]` is always `''`/cwd for `-c` mode). The fix removes the `os.environ` reads, the
+  manual `sys.path.insert` line, and derives the plugin root via
+  `_config.resolve_plugin_root_from_syspath(sys.path)` instead.
 - The verify snippet lives in the same file at `mill-setup/SKILL.md:536`, inside the "Phase 4.8"
   section's verification block — same `os.environ['CLAUDE_PLUGIN_ROOT']` pattern, same fix.
 - `plugins/mill/scripts/_config.py:128-147` (`resolve_plugin_template_path`) is the existing sibling
@@ -133,16 +150,19 @@ mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
   behavior — read for context, not modified by this task (see Scope: Out).
 - `plugins/mill/unit_tests/test-config.py` already has an env-var-mocking pattern for
   `CLAUDE_PLUGIN_ROOT` at line ~636 (`resolve_plugin_template_path` tests) — follow this file's
-  existing fixture/mocking conventions for the new helper's tests, though the new function takes
-  `sys_path_0` as a direct argument so no env mocking should be needed.
+  existing fixture/mocking conventions for style, though the new function takes a `sys.path`-shaped
+  list as a direct argument so no env mocking should be needed.
 
 ## Testing
 
 - Unit test `resolve_plugin_root_from_syspath` in `plugins/mill/unit_tests/test-config.py`
   (co-located with `resolve_plugin_template_path`'s tests): TDD candidates —
-  (1) valid `.../mill/2.0.0/scripts` input returns `.../mill/2.0.0`;
-  (2) input whose basename isn't `scripts` raises `SystemExit` with an actionable message;
-  (3) trailing-slash / relative-path input still resolves correctly (`Path` normalization).
+  (1) a `sys.path`-shaped list with `''` at index 0 and `.../mill/2.0.0/scripts` at index 1 (the
+  real observed shape) returns `.../mill/2.0.0`;
+  (2) a list with no `scripts`-named entry raises `SystemExit` with an actionable message;
+  (3) a `scripts` entry that isn't at index 1 (e.g. a third-party path prepended ahead of it) is
+  still found by the scan;
+  (4) trailing-slash path in the matched entry still resolves correctly (`Path` normalization).
 - After the SKILL.md edits, manually re-run `/mill-setup` in this repo (idempotent per its own
   docs) and confirm: (a) the Phase 4.8 output line reports the correct `MILL_PYTHON` path, (b) the
   Phase 4.8 verify snippet at SKILL.md:536 passes with `OK: MILL_PYTHON=...`, (c) no `KeyError` or
@@ -178,13 +198,26 @@ mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
   4.8 and its verify snippet. **Why:** keeps the two call sites in sync by construction, and makes
   the logic unit-testable, matching the existing `unit_tests/` convention — outweighs the "just 2
   lines" YAGNI objection since it's the literal bootstrap-critical path.
-- **Q:** Edge case — what if `sys.path[0]` doesn't look like a `.../scripts` dir (e.g. someone runs
-  the snippet by hand)? **A:** [auto-pick] Guard with a clear `SystemExit` message telling the
-  operator to use the documented invocation, rather than silently computing a wrong root. **Why:**
-  this is the one skill operators might hand-run mid-bootstrap-debugging; a silent wrong path here
-  is hard to diagnose.
+- **Q:** Edge case — what if `sys.path` has no `.../scripts`-named entry (e.g. someone runs the
+  snippet by hand without the `PYTHONPATH=` prefix)? **A:** [auto-pick] Guard with a clear
+  `SystemExit` message telling the operator to use the documented invocation, rather than silently
+  computing a wrong root. **Why:** this is the one skill operators might hand-run
+  mid-bootstrap-debugging; a silent wrong path here is hard to diagnose.
 - **Q:** Testing approach? **A:** [auto-pick] Unit test the new helper in `unit_tests/` (pure
   function, matches existing fixture style) plus a manual `/mill-setup` re-run in this repo to
   confirm the real inline-`-c` invocation still works end-to-end. **Why:** the unit test covers
   logic; only a live re-run exercises CC's actual template substitution, which a unit test can't
   simulate.
+- **Q:** [round-1 discussion review, BLOCKING] Round-1 review found the `sys.path[0]` premise
+  factually wrong for `-c` invocations — CPython always sets `sys.path[0]` to `''` (cwd);
+  `PYTHONPATH` entries start at `sys.path[1]`, so the proposed `Path(sys.path[0]).parent` would
+  have resolved to cwd's parent, not the plugin root, on every single invocation. **A:** Verified
+  empirically (`PYTHONPATH=".../scripts" python -c "print(sys.path[:2])"` → `['', '.../scripts']`;
+  `import _claude_settings` succeeds via this auto-populated path with no manual `sys.path.insert`
+  at all). Fixed: switched the resolution strategy from a fixed `sys.path[0]` index read to scanning
+  `sys.path` for the first entry named `scripts` — more robust than hardcoding index 1 and no longer
+  dependent on a specific position. Updated the two `sys.path[0]`-based Decisions, the
+  `resolve_plugin_root_from_syspath` signature (now takes the full `sys.path` list, not a single
+  index), the Technical context code sample, and the Testing TDD candidates accordingly. **Why:**
+  factually-wrong premise, confirmed via live reproduction — no legitimate pushback available under
+  `mill-receiving-review`'s decision tree.
