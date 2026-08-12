@@ -459,6 +459,42 @@ every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
 Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
 Fork's advertised "the child's tool output stays out of the parent" is **not** a differentiator here either — an ordinary fresh Agent call already keeps a subagent's tool output out of the parent's context.
 
+## Review cost line
+
+This section is the single source of truth for the post-round cost print in every orchestrator.
+mill-start and mill-plan reference this section rather than restating it.
+
+**When to print.**
+Once, immediately after each review round's JSON envelope is in hand, in both dispatch modes
+(agent, and subprocess/psmux), before branching on the verdict.
+Print it for `ERROR` rounds too — an expensive failed round is exactly what the operator most needs
+to see.
+
+**Format.**
+
+```
+[review] <type> r<N> (<scope>): <verdict>, <model>, <duration>, <tool_calls> tool-calls
+```
+
+with `, $<cost_usd>` appended only when `cost_usd` is non-null.
+Render a null `duration_s`, `tool_calls`, or `model` as the literal `n/a`.
+Render duration as `<n>s` when under a minute, and `<m>m<ss>s` otherwise.
+ASCII only.
+
+**Where each field comes from.**
+`type`, `round`, and `verdict` come from the round's JSON envelope directly.
+`duration_s`, `tool_calls`, and `cost_usd` come from that envelope's `reviews[...]` entry matching
+this scope.
+`model` comes from the prepare envelope's `model` field under agent-mode (or the recorded
+actually-dispatched tier when the operator overrode it — see "## Agent-mode dispatch" step 3's
+"record the `model` value actually passed" instruction), and from the round's configured
+`roles.<review-type>.<scope>.reviewer` alias under subprocess/psmux dispatch.
+
+**Not persisted.**
+This line is orchestrator chat output only — it is never written to a file.
+The persisted copy of the same numbers lives in the review file's yaml header, readable later via
+`/mill-review-summary`.
+
 ### 0. Wiki health-check
 
 Before launching the implementer / reviewer for this batch, verify a config source is reachable.
