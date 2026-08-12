@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-base-skilldoc-and-logic-bugs-2
 branch: hanf/mill-go-base-skilldoc-and-logic-bugs-2
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-12T17:46:55Z'
+discussed  '2026-08-12T17:56:25Z'
 ```
