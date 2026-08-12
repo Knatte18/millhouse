@@ -673,8 +673,9 @@ def run(
 
         # Invoke reviewer
         try:
-            raw, session_id = _reviewer_single.run(spec, prompt_text, timeout=timeout)
-            raw = extract_review_content(raw)
+            res = _reviewer_single.run(spec, prompt_text, timeout=timeout)
+            raw = extract_review_content(res.text)
+            session_id = res.session_id
         except LLMError as exc:
             return ReviewResult(
                 type="code",
@@ -737,10 +738,11 @@ def run(
                     file=sys.stderr,
                 )
                 try:
-                    raw, session_id = _reviewer_single.run(
+                    retry_res = _reviewer_single.run(
                         spec, retry_prompt, session_id=session_id, resume=True, timeout=timeout
                     )
-                    raw = extract_review_content(raw)
+                    raw = extract_review_content(retry_res.text)
+                    session_id = retry_res.session_id
                 except LLMError as exc:
                     return ReviewResult(
                         type="code",

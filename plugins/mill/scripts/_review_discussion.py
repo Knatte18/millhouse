@@ -297,8 +297,9 @@ def run(
 
         # Invoke reviewer
         try:
-            raw, session_id = _reviewer_single.run(spec, prompt_text)
-            raw = extract_review_content(raw)
+            res = _reviewer_single.run(spec, prompt_text)
+            raw = extract_review_content(res.text)
+            session_id = res.session_id
         except LLMError as exc:
             return ReviewResult(
                 type="discussion",

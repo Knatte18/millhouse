@@ -256,8 +256,9 @@ Returns a reviews[] entry dict.
         )
 
         try:
-            raw, session_id = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
-            raw = extract_review_content(raw)
+            res = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
+            raw = extract_review_content(res.text)
+            session_id = res.session_id
         except LLMError as exc:
             return {
                 "scope": batch_path.stem,
@@ -291,10 +292,11 @@ Returns a reviews[] entry dict.
                     file=sys.stderr,
                 )
                 try:
-                    raw, session_id = _reviewer_single.run(
+                    retry_res = _reviewer_single.run(
                         batch_spec, retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
                     )
-                    raw = extract_review_content(raw)
+                    raw = extract_review_content(retry_res.text)
+                    session_id = retry_res.session_id
                 except LLMError as exc:
                     return {
                         "scope": batch_path.stem,
@@ -1027,8 +1029,9 @@ def run(
             )
 
             try:
-                raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=resolved_timeout)
-                raw = extract_review_content(raw)
+                res = _reviewer_single.run(holistic_spec, prompt_text, timeout=resolved_timeout)
+                raw = extract_review_content(res.text)
+                session_id = res.session_id
             except LLMError as exc:
                 reviews.append({
                     "scope": "holistic",
@@ -1063,10 +1066,11 @@ def run(
                                 file=sys.stderr,
                             )
                             try:
-                                raw, session_id = _reviewer_single.run(
+                                retry_res = _reviewer_single.run(
                                     holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=resolved_timeout
                                 )
-                                raw = extract_review_content(raw)
+                                raw = extract_review_content(retry_res.text)
+                                session_id = retry_res.session_id
                             except LLMError as exc:
                                 reviews.append({
                                     "scope": "holistic",
