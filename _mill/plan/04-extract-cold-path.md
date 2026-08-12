@@ -107,6 +107,9 @@ Holistic / Handoff sections inline) is at commit `356da5e5`. Restore with:
 ```
 
   That SHA is verified: `git diff 356da5e5 HEAD -- plugins/` is empty at the time this plan was written, so the commit is a faithful pre-strip snapshot even though the branch has advanced past it.
+  Before writing the note, re-derive the line count mechanically rather than trusting the literal above: run `git show 356da5e5:plugins/mill/skills/mill-go-base/SKILL.md | wc -l`.
+  It returned `1483` when this plan was written, which is why the note says 1483; if it returns anything else at execution time, use that number instead and leave the rest of the wording untouched.
+  Note that a line-counting tool that reports 1484 is counting the empty string after the file's single trailing newline — `wc -l` and `git show | wc -l` are the arbiters here.
 - **Commit:** `docs(mill-go-base): replace the three cold-path sections with mandatory-read pointers`
 
 ### Card 18: Repair cross-references in both directions
