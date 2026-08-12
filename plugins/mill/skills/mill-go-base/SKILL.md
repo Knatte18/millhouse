@@ -521,10 +521,6 @@ Never escalate to `stuck`/blocked over a recapture failure.
 
 ### 1. Implement
 
-Background via millpy-bg:
-
-> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
 Venv-check before per-batch invocation:
 
 ```bash
@@ -538,46 +534,16 @@ if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_
 fi
 ```
 
-If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
+Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
 
 For this dispatch instance only, immediately before step 6 of the pattern above (`--stage finalize`) runs, execute the "### 0.6.
 Per-batch baseline recapture (self-hosting only)" check.
 
-Immediately before this backgrounded dispatch is launched, execute the "### 0.6.
-Per-batch baseline recapture (self-hosting only)" check — this mode has no separate finalize call to hook before, so the check must run ahead of the dispatch itself.
-
-If `dispatch == subprocess` or `psmux`: background via millpy-bg:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-    --slug implement-<batch_name> -- \
-    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
-```
-
-Returns immediately with `pid=<N> log=<abs-path>`.
-Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir.
-Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check with a bounded max-wait (~3600s):
-```bash
-start_time=$(date +%s)
-max_wait=3600
-while true; do
-  current_time=$(date +%s)
-  elapsed=$((current_time - start_time))
-  if [ $elapsed -ge $max_wait ]; then
-    echo "[<VARIANT_LABEL>] HALT: subprocess poll loop timeout (max_wait=$max_wait exceeded) — worker died without writing [mill-bg] EXIT. Escalate to infrastructure stuck." >&2
-    exit 1
-  fi
-  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-  # parse JSON result and branch: "running" -> sleep; "exit"/"dead" -> exit loop
-done
-```
-Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation (worker died without EXIT).
-
 The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, and spawns the implementer.
-The Builder reads the JSON summary from the log file.
+The Builder reads the JSON summary from the finalize envelope.
 Note: the CLI exits 0 when the implementer produced JSON (success or stuck).
-On exit code 1 the JSON line in the log file still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation.
-Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the log file is absent.
+On exit code 1 the JSON line in the finalize envelope still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation.
+Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the finalize envelope is absent.
 
 ### 2. Parse implementer report
 
