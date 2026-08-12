@@ -31,13 +31,19 @@ implementing  '2026-08-12T19:01:00Z'
 ```yaml
 batches:
   - name: error-envelope-contract
-    state: pending
+    state: running
+    implementer_session: 4d0cad78-cd98-446f-958e-3b53e4ae645c
+    start_sha: b3b4522034b151316543cb0965fb8b53eca18c30
+    verify_baseline_failures: []
   - name: reviewer-kind-finalize-wrappers
     state: pending
+    verify_baseline_failures: []
   - name: verdict-summary-demotion-note
     state: pending
+    verify_baseline_failures: []
   - name: cli-round-threading
     state: pending
+    verify_baseline_failures: []
   - name: skill-error-kind-retry-wiring
     state: pending
 ```
