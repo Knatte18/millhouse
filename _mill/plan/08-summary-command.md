@@ -43,10 +43,15 @@ description of exactly the header this command parses.
   `--sort` with choices `round` (default) and `scope`.
   Structure the module around three testable units so the unit test never needs a worktree:
   - `parse_review_filename(name: str) -> dict | None` — returns `{"round": int, "type": str, "scope": str}`
-    for the two canonical patterns documented in `plugins/mill/templates/review-output.schema.md`
-    (`<ts>-<type>-review-r<N>.md` with scope `holistic`, and `<ts>-plan-review-<batch-name>-r<N>.md`
-    with the batch name as scope), and `None` for anything else — notably the `*-fix-r<N>.md` fixer
-    reports that share the reviews dir and must never appear as rows.
+    for the canonical patterns documented in `plugins/mill/templates/review-output.schema.md`
+    (`<ts>-<type>-review-r<N>.md` with scope `holistic`, and the batch-scoped
+    `<ts>-<type>-review-<batch-name>-r<N>.md` with the batch name as scope), and `None` for anything
+    else — notably the `*-fix-r<N>.md` fixer reports that share the reviews dir and must never appear
+    as rows. The batch-scoped form is emitted for **both** `plan` and `code` review types by
+    `write_review_file` (its filename branch is `review_type in ("plan", "code") and scope not in
+    (None, "holistic")`), so per-batch code reviews — the artifact mill-go produces for every batch —
+    must parse exactly like per-batch plan reviews. Mirror `_review_common`'s own `RE_BATCH`
+    `type=plan|code` alternation rather than hard-coding `plan`.
   - `build_rows(reviews_dir: Path, registry: dict | None = None) -> list[dict]` — walks
     `reviews_dir.rglob("*.md")` (rglob, so `revise-<N>/` subdirectories written by mill-plan's
     `--revise` mode are included), keeps files `parse_review_filename` accepts, and for each one
@@ -69,8 +74,10 @@ description of exactly the header this command parses.
   under 60 seconds as `"{n}s"` (integer seconds), and otherwise as `"{m}m{ss:02d}s"`. `cost_usd`
   renders as `$0.4212` (four decimals); `tool_calls` renders as a plain integer.
   `main()` resolves `git_root` via `_paths.resolve_git_root()`, the hub via
-  `_paths.resolve_hub_path()`, `cfg` via `_review_common.load_config`, the slug via `--slug` or
-  `_review_common.find_active_slug`, and `reviews_dir` via
+  `_paths.resolve_hub_path()`, `wiki_root` via `_paths.resolve_wiki_path(git_root)`, `cfg` via
+  `_review_common.load_config`, the slug via `--slug` or
+  `_review_common.find_active_slug(<hub>, wiki_root, cfg)` (which takes the wiki path as its second
+  positional argument — hence the `wiki_root` resolution), and `reviews_dir` via
   `_review_common.resolve_path(cfg["paths"]["reviews_dir"], slug)`; the registry via
   `_reviewers.load(<hub>)` wrapped so a registry failure degrades to `None` rather than aborting the
   table. When `reviews_dir` does not exist or `build_rows` returns nothing, print
@@ -98,8 +105,9 @@ description of exactly the header this command parses.
   Cases:
   - `parse_review_filename` accepts `20260418-001200-discussion-review-r1.md` (round 1, type
     discussion, scope holistic), `20260418-143300-plan-review-03-templates-r2.md` (round 2, type
-    plan, scope `03-templates`), `20260418-143300-code-review-r5.md`, and rejects
-    `20260418-143300-plan-fix-r2.md` and an arbitrary non-review filename.
+    plan, scope `03-templates`), `20260418-143300-code-review-05-cards-r3.md` (round 3, type code,
+    scope `05-cards` — the per-batch code review case), `20260418-143300-code-review-r5.md`, and
+    rejects `20260418-143300-plan-fix-r2.md` and an arbitrary non-review filename.
   - `build_rows` over a fixture dir mixing a new-format file (all three fields present), an
     old-format file (none present), a file whose yaml block is malformed, and a file with no yaml
     fence at all: all four produce rows, the missing cells are `None`, and nothing raises.
@@ -158,9 +166,11 @@ description of exactly the header this command parses.
   `cost_usd` are absent under agent-mode and psmux dispatch and for the gemini provider, and that
   files written before this feature carry none of the three — readers must treat all three as
   optional.
-  Regenerate `SKILLS.md` rather than hand-editing it (its header says so) by running:
-  `PYTHONPATH="plugins/mill/scripts" "$MILL_PYTHON" plugins/mill/scripts/millpy-skills-index.py`
-  from the worktree root, then confirm the diff contains exactly the one new
+  Regenerate `SKILLS.md` rather than hand-editing it (its header says so) by running the standard
+  cache-form invocation CLAUDE.md mandates for operational calls —
+  `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"`
+  — with cwd the worktree root so the script's own repo-root resolution still lands on the worktree.
+  Then confirm the diff contains exactly the one new
   `mill-review-summary` row and no unrelated churn.
 - **Commit:** `docs(review): document duration/tool-call/cost metadata fields`
 

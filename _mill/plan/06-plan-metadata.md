@@ -32,6 +32,11 @@ the `_review_plan.py` file/no-file inconsistency Shared Decision forbids unifyin
 - **Requirements:**
   Import `apply_cost_metadata` and `sum_optional` from `_review_common` alongside the existing
   imports.
+  As the very first statement inside `_review_one_batch`'s outer `try:` block — before the
+  `round_n = discover_round(...)` line — initialise `duration_s = tool_calls = cost_usd = None`.
+  That `try` wraps code which can raise `ReviewError` before any reviewer call runs (the
+  `round_n > max_rounds` guard and `resolve_ref_paths`' hard-fails), so without this the outer
+  handler's read of those names would be an `UnboundLocalError`.
   In `_review_one_batch`, capture the first call's `res.duration_s`/`res.tool_calls`/`res.cost_usd`,
   fold the `NEED_CONTEXT` retry's `retry_res` values in with `sum_optional`, pass the running totals
   to the `finalize_scope` call, and add the three keys to the returned success dict.
@@ -112,6 +117,10 @@ the `_review_plan.py` file/no-file inconsistency Shared Decision forbids unifyin
   (5) Per-batch outer `ReviewError` path: assert the entry still has `"file": None` and carries the
   metrics envelope-only — this case is the regression guard for the preserved-inconsistency Shared
   Decision, so it must assert no review file was written for that round.
+  (6) Per-batch pre-call `ReviewError`: trip the `round_n > max_rounds` guard (which raises before
+  any reviewer call) and assert the returned entry is the normal `ERROR` shape with the three metrics
+  `None` — the regression guard for card 23's initialisation requirement, which would otherwise
+  surface as an `UnboundLocalError`.
 - **Commit:** `test(review): cover plan review cost metadata across batch and holistic paths`
 
 ## Batch Tests

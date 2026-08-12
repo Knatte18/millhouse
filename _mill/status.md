@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -17,4 +17,6 @@ task_description: |
 discussing  '2026-08-11T18:34:38Z'
 discussed  '2026-08-11T19:51:12Z'
 planning  '2026-08-12T06:29:29Z'
+plan-review-r1  '2026-08-12T06:37:07Z'
+plan-fix-r1  '2026-08-12T06:37:07Z'
 ```

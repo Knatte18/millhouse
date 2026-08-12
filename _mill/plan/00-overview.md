@@ -105,7 +105,7 @@ _Cross-cutting decisions every batch inherits._
 
 ### Decision: `_review_plan.py`'s file/no-file `ReviewError` inconsistency is preserved as-is
 
-- **Decision:** Four of the five `ReviewError` (parse-failure) sites across the three backends call `write_review_file()` and get `duration_s`/`tool_calls`/`cost_usd` injected into that raw file's yaml header. `_review_plan._review_one_batch`'s outer `except ReviewError` site (which sets `"file": None`) stays file-less: it carries the metrics in its `reviews[...]` entry only. No batch may "fix" that site by making it write a file.
+- **Decision:** Six of the seven `except ReviewError` sites this plan touches across the three backends (`_review_discussion.finalize`, `_review_code.finalize`, `_review_code.run`'s two sites, `_review_plan.finalize`, and `_review_plan.run`'s holistic block) call `write_review_file()` and get `duration_s`/`tool_calls`/`cost_usd` injected into that raw file's yaml header. `_review_plan._review_one_batch`'s outer `except ReviewError` site (which sets `"file": None`) stays file-less: it carries the metrics in its `reviews[...]` entry only. No batch may "fix" that site by making it write a file. (discussion.md's own "four of five" phrasing counted a narrower set of sites; the seven enumerated here are the ones cards 17, 20, 21, 23, 24 and 25 actually specify.)
 - **Rationale:** discussion.md's "Duration on the exception/error path" Decision flags this as a pre-existing inconsistency explicitly out of this task's scope, and warns against unifying it as an incidental side effect of adding injection code.
 - **Applies to:** 06-plan-metadata
 
