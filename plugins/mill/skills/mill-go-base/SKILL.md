@@ -492,12 +492,12 @@ Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommen
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
 This is a shared check-and-invoke block, referenced (not duplicated) from the single insertion point in "### 1.
-Implement" below — immediately before step 6 (`--stage finalize`) of the Agent-mode dispatch pattern.
+Implement" below — immediately before step 5 (`--stage finalize`) of the Agent-mode dispatch pattern.
 It exists only to backfill a still-missing per-batch `verify_baseline_failures` baseline for a self-hosting task's own plan, using the task worktree's own copy of `millpy-implement.py` rather than the frozen `${CLAUDE_PLUGIN_ROOT}` cache — the cache is provably a no-op for this purpose since it never reflects this task's own in-progress commits.
 
 **Session-scoped cadence flag.**
 Before "## Execute — sequential loop" begins, initialize a local Builder variable `baseline_recapture_attempted = False`.
-This variable is never persisted to status.md or any file — it resets to `False` whenever a mill-go session (re)starts, matching the existing in-memory-only precedent of the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 3).
+This variable is never persisted to status.md or any file — it resets to `False` whenever a mill-go session (re)starts, matching the existing in-memory-only precedent of the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 2).
 
 **Trigger check.**
 At the hook point, run all of:
@@ -546,7 +546,7 @@ fi
 
 Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
 
-For this dispatch instance only, immediately before step 6 of the pattern above (`--stage finalize`) runs, execute the "### 0.6.
+For this dispatch instance only, immediately before step 5 of the pattern above (`--stage finalize`) runs, execute the "### 0.6.
 Per-batch baseline recapture (self-hosting only)" check.
 
 The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, and spawns the implementer.
@@ -748,7 +748,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
     If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 - **`incomplete`** (batch provably partial — some cards committed, not all;
   reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`;
-  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` first, `millpy-implement.py <batch_name> --resume-incomplete` as the fallback — see step 6.5's `incomplete` recovery).
+  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` first, `millpy-implement.py <batch_name> --resume-incomplete` as the fallback — see step 5.5's `incomplete` recovery).
   If the auto-resume yields `success`, continue normally.
   If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, and go to *Blocked*.
   Never re-fire with a fresh `start_sha`.
