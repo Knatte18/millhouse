@@ -481,8 +481,8 @@ Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommen
 
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
-This is a shared check-and-invoke block, referenced (not duplicated) from two different insertion points in "### 1.
-Implement" below — see the Agent-mode and subprocess/psmux dispatch branches there.
+This is a shared check-and-invoke block, referenced (not duplicated) from the single insertion point in "### 1.
+Implement" below — immediately before step 6 (`--stage finalize`) of the Agent-mode dispatch pattern.
 It exists only to backfill a still-missing per-batch `verify_baseline_failures` baseline for a self-hosting task's own plan, using the task worktree's own copy of `millpy-implement.py` rather than the frozen `${CLAUDE_PLUGIN_ROOT}` cache — the cache is provably a no-op for this purpose since it never reflects this task's own in-progress commits.
 
 **Session-scoped cadence flag.**
@@ -557,13 +557,6 @@ The implementer's last output line must be JSON:
 - `status: stuck, stuck_type: transient` → auto-retry ONCE: re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
   Record `review_round: 0`, do not change batch state.
   If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
-- `status: stuck, stuck_type: incomplete` (subprocess/psmux mode) → the batch is provably partial (some cards committed, not all).
-  Re-dispatch **once** preserving the original `start_sha`: re-invoke `millpy-implement.py <batch_name> --resume-incomplete`.
-  The `--resume-incomplete` flag reads the original `start_sha` and `implementer_session` from status.md, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so preserves the original baseline (Shared Decision `resume must preserve the original start_sha`).
-  Do **NOT** route this to the transient `commits_made > 0` skip-to-cleanliness branch (that accepts the partial batch as done — the #574 bug) and do **NOT** use today's plain running-state re-fire (`millpy-implement.py <batch_name>` with no flag, which re-captures HEAD as a fresh `start_sha` and loops `incomplete`).
-  Do not change batch state;
-  the CLI handles its own state.
-  If the re-dispatch still reports `stuck_type: incomplete` → escalate per *Stuck escalation* below. (Agent mode handles `incomplete` earlier, in the Agent-mode dispatch step 6.5 warm-resume path.)
 - `status: stuck, stuck_type: verify | logic` → route to *Stuck escalation*, which self-resolves once before escalating.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
@@ -735,8 +728,8 @@ For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastru
 Each stuck_type gets its own one-shot self-resolve or auto-retry step per the rules below;
 on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, and goes to *Blocked*.
 
-- **`infrastructure`** (bg worker died, likely logout) — auto-retry ONCE with a fresh re-fire: re-invoke `millpy-bg` with a fresh CLI (no `--resume` flag — the killed session is dead).
-  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
+- **`infrastructure`** (the worker died, likely logout) — auto-retry ONCE: re-dispatch once with a fresh session (no `--resume` flag — the dead session cannot be reattached).
+  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
   The re-fire matches the existing `running`-state Resume (fresh start;
   killed session cannot be reattached).
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2;
@@ -750,7 +743,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
     If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 - **`incomplete`** (batch provably partial — some cards committed, not all;
   reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`;
-  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` in agent mode, `millpy-implement.py <batch_name> --resume-incomplete` in subprocess/psmux mode).
+  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` first, `millpy-implement.py <batch_name> --resume-incomplete` as the fallback — see step 6.5's `incomplete` recovery).
   If the auto-resume yields `success`, continue normally.
   If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, and go to *Blocked*.
   Never re-fire with a fresh `start_sha`.
