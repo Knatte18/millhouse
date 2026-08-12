@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: claude-plugin-root-env-setup
 branch: hanf/claude-plugin-root-env-setup
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-12T17:45:35Z'
+discussion-fix-r2  '2026-08-12T17:58:43Z'
+discussed  '2026-08-12T17:58:43Z'
 ```

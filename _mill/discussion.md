@@ -21,12 +21,16 @@ warns against.
 This is already a partially-known failure mode: `plugins/mill/skills/cli/SKILL.md` (added
 2026-05-07, commit `c767b395`) documents that `$CLAUDE_PLUGIN_ROOT` is a CC template token
 substituted into SKILL.md text at load time, not a live Bash subshell variable — and specifically
-flags it as empty in the Bash subshell **on Windows**. Re-verified live in this discussion session
-(Linux, CC 2.1.221): the token *was* pre-substituted correctly in every SKILL.md-sourced command
-shown during Phase: Explore, and `env | grep -i claude` confirmed `CLAUDE_PLUGIN_ROOT` present as a
-real exported env var. So the harness-level behavior is environment/platform-dependent and outside
-mill's control to "fix" directly — this task narrows to hardening the one place in the mill
-codebase that doesn't defensively handle the documented failure mode.
+flags it as empty in the Bash subshell **on Windows**. Neither #811 nor #813's report states which
+OS the reporting session ran on — platform is unconfirmed for both. Re-verified live in this
+discussion session (Linux, CC 2.1.221): the token *was* pre-substituted correctly in every
+SKILL.md-sourced command shown during Phase: Explore, and `env | grep -i claude` confirmed
+`CLAUDE_PLUGIN_ROOT` present as a real exported env var. So the harness-level behavior is
+environment/platform-dependent and outside mill's control to "fix" directly — this task narrows to
+hardening the one place in the mill codebase that doesn't defensively handle the documented failure
+mode. (The chosen fix — see Decisions — is platform-agnostic regardless of which OS(es) the two
+reports came from, since it never depends on `CLAUDE_PLUGIN_ROOT` being exported as a real env var
+in the first place.)
 
 **Why now:** two independent reports within the same window, both from autonomous
 mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
@@ -162,7 +166,13 @@ mill-plan/mill-go sessions, both self-consolidated into this single wiki task.
   (2) a list with no `scripts`-named entry raises `SystemExit` with an actionable message;
   (3) a `scripts` entry that isn't at index 1 (e.g. a third-party path prepended ahead of it) is
   still found by the scan;
-  (4) trailing-slash path in the matched entry still resolves correctly (`Path` normalization).
+  (4) trailing-slash path in the matched entry still resolves correctly (`Path` normalization);
+  (5) a list containing two `scripts`-named entries returns the **first** match (first-match-wins
+  is the intended, documented semantics — not a collision to guard against). This can't
+  realistically occur for Phase 4.8's actual `-c` invocation, since its `PYTHONPATH=` prefix names
+  exactly one directory and nothing else on the command line adds another `scripts`-named entry
+  ahead of it, but the test pins the function's contract independent of that invocation-site
+  guarantee.
 - After the SKILL.md edits, manually re-run `/mill-setup` in this repo (idempotent per its own
   docs) and confirm: (a) the Phase 4.8 output line reports the correct `MILL_PYTHON` path, (b) the
   Phase 4.8 verify snippet at SKILL.md:536 passes with `OK: MILL_PYTHON=...`, (c) no `KeyError` or
