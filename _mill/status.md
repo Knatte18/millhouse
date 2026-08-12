@@ -91,5 +91,7 @@ batches:
     start_sha: 2656a6676fc98fe35d5f97c317db940e784fc385
     commit_sha: 34c1ac888bbf10651b4d72e1ce3c79822a381c2b
   - name: orchestrator-callers
-    state: pending
+    state: running
+    implementer_session: 7a99a893-50e3-4664-a981-9778992e5ee3
+    start_sha: 01f1ff699e258a80fb547400177bde3d97f9e1c9
 ```
