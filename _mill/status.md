@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -23,4 +23,21 @@ plan-review-r1  '2026-08-12T18:53:47Z'
 plan-fix-r1  '2026-08-12T18:54:09Z'
 plan-fix-r2  '2026-08-12T19:00:09Z'
 planned  '2026-08-12T19:00:28Z'
+implementing  '2026-08-12T19:01:00Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: error-envelope-contract
+    state: pending
+  - name: reviewer-kind-finalize-wrappers
+    state: pending
+  - name: verdict-summary-demotion-note
+    state: pending
+  - name: cli-round-threading
+    state: pending
+  - name: skill-error-kind-retry-wiring
+    state: pending
 ```
