@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go-base: remove subprocess/psmux dispatch branches'
 slug: 'mill-go-base-agent-dispatch-only'
-approved: false
+approved: true
 started: '20260812-083517'
 parent: 'main'
 root: ""
