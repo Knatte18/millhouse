@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: plan-validate-context-completeness-gaps
 branch: hanf/plan-validate-context-completeness-gaps
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-12T17:45:44Z'
 discussed  '2026-08-12T18:22:12Z'
 planning  '2026-08-12T18:29:19Z'
+plan-fix-r1  '2026-08-12T18:36:33Z'
 ```

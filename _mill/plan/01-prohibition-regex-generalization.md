@@ -30,6 +30,10 @@ Replace `_plan_validate.py`'s enumerated `_PROHIBITION_MARKERS` phrase-tuple lis
   # Negation words/phrases (lowercased, word-boundary matched): a Requirements: sentence needs at
   # least one of these AND at least one verb form from _PROHIBITION_VERB_FORMS to be
   # prohibition-exempt.
+  # Note: "do not", "does not", "must not", and "shall not" each contain the standalone word "not"
+  # and so are logically subsumed by the bare "not" entry below -- they are kept anyway, spelled
+  # out in full, purely for self-documentation (so this tuple reads as a list of real phrasings,
+  # not just an algebra of parts).
   _PROHIBITION_NEGATIONS = (
       "do not", "don't",
       "does not", "doesn't",

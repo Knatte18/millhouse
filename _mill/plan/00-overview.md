@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate: context-completeness fires on forbidding/explanatory file mentions'
 slug: plan-validate-context-completeness-gaps
-approved: false
+approved: true
 started: '2026-08-12T18:26:48Z'
 parent: main
 root: ""
