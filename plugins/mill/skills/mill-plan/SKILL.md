@@ -561,6 +561,10 @@ Never hand-write or guess a date.
   A rename-plus-extraction is the `Moves:` pair for the relocated file plus a separate `Creates:` for the newly extracted file.
   Include a `## Rename mechanic` section in any batch that has a non-empty `Moves:` field.
   Keep naming the specific surgical edits (package declaration, import lines, identifier retargets) in `Requirements:` using stable identifiers.
+- **Phrase Requirements: prohibitions on one line; avoid double negatives** — `_plan_validate.py`'s `context-completeness` check exempts a prohibition via a same-line, lexical word-set match (a negation word/phrase paired with a verb form, anywhere on one physical line), not a structural or semantic parse.
+  Write "Do not touch `foo.py`" on a single line (negation, verb, and path together) rather than a nested-bullet form (negation on a parent bullet, path on a child bullet) — the check never looks across bullet lines.
+  Avoid double-negative phrasing such as "do not skip touching `foo.py`" or "do not forget to read `bar.py`" — the check misreads these as prohibited (a false exemption) even though the path SHOULD be touched/read.
+  State prohibitions directly instead.
 
 ## Board discipline
 
