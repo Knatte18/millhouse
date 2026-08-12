@@ -387,34 +387,6 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 - `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 6.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
 - Waiting on a dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — every stuck/escalation path in this file now resolves by self-resolving once then halting via `_status.set_blocked`, never by prompting.
 
-**Subprocess/psmux poll-loop max-wait.**
-When `dispatch == subprocess` or `psmux`, all poll loops that wait for `[mill-bg] EXIT` must have a bounded max-wait (~3600s) to self-terminate if the worker dies without writing the exit marker.
-Exceedance of the max-wait is a fatal `infrastructure` stuck escalation.
-The explicit timeout guard prevents infinite polling when the worker session is killed (e.g., logout or crash).
-This applies to implementer, reviewer, and fixer dispatch in all scopes (per-batch and holistic), and to ERROR-only retries.
-See individual subsections for the loop structure;
-all follow the same time-bounded poll-until-EXIT pattern.
-
-**Per-batch session cleanup.**
-Every time the per-batch implementer reports `success` (immediately after step 2 parse, before step 2b cleanliness gate), AND on every loop terminus (APPROVE, max-rounds blocked, cleanliness-blocked, stuck-blocked), AND when the Builder is about to re-dispatch the implementer with a fresh session (transient-retry-once), invoke the *per-batch cleanup block* defined below — it reaps the psmux TUI session associated with the batch's `implementer_session`, idempotent and failure-swallowing.
-The post-success invocation is the primary cleanup point now that fix dispatch is cold-start;
-the terminal invocations remain for defence-in-depth and are idempotent no-ops when the session is already gone.
-
-The per-batch cleanup block:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import sys
-sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
-from pathlib import Path
-import _paths, _status, _llm_claude
-status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.md')
-batches = _status.read_batches(status_path)
-sid = next((b.get('implementer_session') for b in batches if b['name'] == '<batch_name>'), None)
-_llm_claude.cleanup_session(sid)
-"
-```
-
 **Why not fork?**
 Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent(subagent_type: "fork")`.
 A fork inherits the parent's context,
@@ -616,11 +588,11 @@ The implementer's last output line must be JSON:
 ```
 
 - `status: success` → continue to Code Review.
-- `status: stuck, stuck_type: transient` → auto-retry ONCE: invoke the per-batch cleanup block, then re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
+- `status: stuck, stuck_type: transient` → auto-retry ONCE: re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
   Record `review_round: 0`, do not change batch state.
   If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
 - `status: stuck, stuck_type: incomplete` (subprocess/psmux mode) → the batch is provably partial (some cards committed, not all).
-  Re-dispatch **once** preserving the original `start_sha`: invoke the per-batch cleanup block, then re-invoke `millpy-implement.py <batch_name> --resume-incomplete`.
+  Re-dispatch **once** preserving the original `start_sha`: re-invoke `millpy-implement.py <batch_name> --resume-incomplete`.
   The `--resume-incomplete` flag reads the original `start_sha` and `implementer_session` from status.md, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so preserves the original baseline (Shared Decision `resume must preserve the original start_sha`).
   Do **NOT** route this to the transient `commits_made > 0` skip-to-cleanliness branch (that accepts the partial batch as done — the #574 bug) and do **NOT** use today's plain running-state re-fire (`millpy-implement.py <batch_name>` with no flag, which re-captures HEAD as a fresh `start_sha` and loops `incomplete`).
   Do not change batch state;
@@ -651,11 +623,9 @@ If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — dirty tree"`
-- Invoke the per-batch cleanup block.
 - Go to *Blocked*.
 
-If `in_scope_dirt` is empty, invoke the per-batch cleanup block — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session.
-Record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
+If `in_scope_dirt` is empty, record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
 Then continue to "3.
 Code Review loop" as normal.
 
@@ -677,7 +647,7 @@ converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelo
 `envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
 
 - `converged is True`: proceed exactly as step 4's `APPROVE` branch describes (no behavior change).
-- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the per-batch cleanup block, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
+- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
 - `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: approve batch {batch_name}"`) so the shortfall is auditable.
 - Step 5 (Max-rounds exhaustion) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
@@ -799,7 +769,7 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
      ```
      Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path.
      After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Invoke the per-batch cleanup block. Break out of the loop → next batch.
+     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Break out of the loop → next batch.
      If not `converged` and `N < roles.code-review.batch.rounds`: skip the terminal actions above and continue to round N+1 (re-dispatch code review for this batch).
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file.
      For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("<VARIANT_LABEL>.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`.
@@ -868,17 +838,16 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 
 5. **Max-rounds exhaustion.**
    After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`.
-   Invoke the per-batch cleanup block.
    Go to *Blocked* below.
 
 ### Stuck escalation
 
 For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastructure`, `incomplete`): auto-handle according to the stuck_type rules below — mill-go never surfaces a numbered prompt and waits for an operator reply here.
 Each stuck_type gets its own one-shot self-resolve or auto-retry step per the rules below;
-on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, invokes the per-batch cleanup block, and goes to *Blocked*.
+on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, and goes to *Blocked*.
 
-- **`infrastructure`** (bg worker died, likely logout) — auto-retry ONCE with a fresh re-fire: invoke the per-batch cleanup block, then re-invoke `millpy-bg` with a fresh CLI (no `--resume` flag — the killed session is dead).
-  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+- **`infrastructure`** (bg worker died, likely logout) — auto-retry ONCE with a fresh re-fire: re-invoke `millpy-bg` with a fresh CLI (no `--resume` flag — the killed session is dead).
+  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
   The re-fire matches the existing `running`-state Resume (fresh start;
   killed session cannot be reattached).
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2;
@@ -889,18 +858,18 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
     proceed directly to the per-batch cleanliness gate (scope violations check) then code review as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
   - **Otherwise** (no commits made, the field is absent,
     or the timeout happened before any commit) → self-resolve once: re-fire the implementer fresh (no `--resume`) — a first-occurrence timeout with no commits is most often a transient LLM/network hiccup, so no plan edit is needed for this attempt.
-    If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+    If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 - **`incomplete`** (batch provably partial — some cards committed, not all;
   reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`;
   discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` in agent mode, `millpy-implement.py <batch_name> --resume-incomplete` in subprocess/psmux mode).
   If the auto-resume yields `success`, continue normally.
-  If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, invoke the per-batch cleanup block, and go to *Blocked*.
+  If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, and go to *Blocked*.
   Never re-fire with a fresh `start_sha`.
 - `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
   **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text.
   Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck ({batch_name})"`.
   Then re-fire the implementer fresh for this batch.
-  If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+  If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 
 ### Blocked
 
