@@ -387,6 +387,16 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 - `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 6.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
 - Waiting on a dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — every stuck/escalation path in this file now resolves by self-resolving once then halting via `_status.set_blocked`, never by prompting.
 
+**Tree-guard checkpoint block.** Referenced by name from every dispatch call site in this file and from the skill's companion files, which name it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`. Exactly two forms, both sharing the same body:
+- **Pre-dispatch form** — invoked immediately before a dispatch.
+- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retries at `### 3. Code Review loop` sub-step 4.5 and `## Holistic code review` sub-step 3.5 are separate dispatch points, each with its own pre/post pair — not sub-cycles of the dispatch that preceded them.
+
+Body (both forms): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+`signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
+`signature: _status.append_recovery_log(status_path: Path, timestamp: str, restored_paths: list[str]) -> None`.
+
+The post-dispatch form brackets the out-of-process execution window that `worktree_snapshot_guard` cannot see, and the block must not be invoked from inside the Agent-mode dispatch pattern's own numbered steps — it belongs at each call site, since that pattern also serves non-review dispatch.
+
 **Why not fork?**
 Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent(subagent_type: "fork")`.
 A fork inherits the parent's context,
