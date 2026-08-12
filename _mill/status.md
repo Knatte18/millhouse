@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-cli-round-threading  '2026-08-12T19:17:00Z'
 approved-skill-error-kind-retry-wiring  '2026-08-12T19:20:02Z'
 holistic-reviewing  '2026-08-12T19:20:31Z'
 holistic-approved  '2026-08-12T19:24:58Z'
+done  '2026-08-12T19:25:24Z'
 ```
 
 ## Batches
