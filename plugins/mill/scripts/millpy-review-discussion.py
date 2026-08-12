@@ -143,20 +143,20 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(hub_dir, mill_dir)
         project_root = hub_dir
     except (ReviewError, ValueError, SystemExit) as exc:
-        print_error_envelope("discussion", str(exc))
+        print_error_envelope("discussion", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     try:
         registry = _reviewers.load(project_root)
         _reviewers.validate_role_refs(cfg, registry)
     except _reviewers.ReviewerError as exc:
-        print_error_envelope("discussion", str(exc))
+        print_error_envelope("discussion", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     try:
         slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
     except ReviewError as exc:
-        print_error_envelope("discussion", str(exc))
+        print_error_envelope("discussion", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     container_path = _paths.resolve_container_path(git_root)
@@ -200,12 +200,13 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
-            print_error_envelope("discussion", str(exc))
+            print_error_envelope("discussion", str(exc), round=args.round if args.round is not None else 0)
             return 1
     elif args.stage == "finalize":
         if not args.agent_output:
             print_error_envelope(
-                "discussion", "--agent-output required for finalize stage"
+                "discussion", "--agent-output required for finalize stage",
+                round=args.round if args.round is not None else 0,
             )
             return 1
         round_n = args.round
@@ -243,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:
-            print_error_envelope("discussion", str(exc))
+            print_error_envelope("discussion", str(exc), round=round_n)
             return 1
     else:  # full
         try:
@@ -254,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:
-            print_error_envelope("discussion", str(exc))
+            print_error_envelope("discussion", str(exc), round=args.round if args.round is not None else 0)
             return 1
 
 

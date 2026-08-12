@@ -122,7 +122,7 @@ If there are no findings, write `(no findings)` under `## Findings`.
 ### `## Verdict`
 
 Required section.
-Contains exactly two lines:
+Contains exactly two lines, plus an optional third line when a ceiling demotion occurred (see below):
 
 ```
 APPROVE | REQUEST_CHANGES
@@ -130,6 +130,7 @@ APPROVE | REQUEST_CHANGES
 ```
 
 The verdict line must match the `verdict:` field in the yaml block exactly.
+When the stage's `blocking_classes` ceiling demotes one or more findings from BLOCKING to NIT, `finalize_scope` appends a third line directly after the summary: `_Note: N finding(s) demoted from BLOCKING to NIT by the stage's blocking-class ceiling; current blocking_count is M._` — present only when at least one finding was demoted this call, absent otherwise.
 
 ---
 

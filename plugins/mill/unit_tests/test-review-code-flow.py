@@ -2020,6 +2020,39 @@ def main() -> int:
     # ------------------------------------------------------------------
     errors += test_context_only_gitignored_ref_soft_fails_prepare()
 
+    # ------------------------------------------------------------------
+    # finalize() direct call: parse_verdict failure tags error_kind: "reviewer"
+    # (reviewer-kind-finalize-wrappers Shared Decision).
+    # Calls finalize() directly (not via code_run/run()) so the assertion exercises
+    # exactly the except ReviewError entry this batch's Card 10 changed.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        reviews_dir = tmpdir / "reviews"
+        try:
+            r = code_finalize(
+                {},
+                "test-slug",
+                "# Raw prose without any yaml block\n\nNo verdict here.",
+                scope=None,
+                round_n=1,
+                reviews_dir=reviews_dir,
+                mill_dir=reviews_dir.parent,
+                project_root=reviews_dir.parent,
+                wiki_root=reviews_dir.parent,
+                git_root=reviews_dir.parent,
+            )
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            assert r.reviews[0]["error_kind"] == "reviewer", (
+                f"expected error_kind 'reviewer', got {r.reviews[0].get('error_kind')!r}"
+            )
+            print("PASS finalize() parse_verdict failure tags error_kind: reviewer")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL finalize() error_kind: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL finalize() error_kind (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

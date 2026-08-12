@@ -448,7 +448,9 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
 4.5.
 **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
-   When the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
+   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains: call `_status.set_blocked(status_path, f"plan review usage error: <message>", timestamp=ts)` (where `<message>` is the offending entry's `error` field); commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan review usage error) for {slug}"` and push; halt with `BLOCKED: plan review usage error: <message>` — distinct wording from the existing `BLOCKED: review ERROR-only round {N}` halt below.
+
+   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one remaining entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
 
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.

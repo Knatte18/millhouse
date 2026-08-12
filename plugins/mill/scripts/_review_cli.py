@@ -21,7 +21,9 @@ def print_error(exc: ReviewError) -> None:
         )
 
 
-def print_error_envelope(review_type: str, msg: str) -> None:
+def print_error_envelope(
+    review_type: str, msg: str, *, error_kind: str = "usage", round: int = 0
+) -> None:
     """Emit ERROR-shaped JSON envelope on stdout and human-readable error on stderr.
 
     The envelope mirrors ReviewResult.to_dict()'s key set with zeroed counts and an empty
@@ -30,15 +32,27 @@ def print_error_envelope(review_type: str, msg: str) -> None:
     Args:
         review_type: One of "discussion", "plan", or "code".
         msg: Error message to include in both stderr and the JSON envelope.
+        error_kind: Bucket for the error's origin — "usage" (default) for a
+            pre-reviewer failure (bad args, missing config, load failure), or
+            "reviewer" for a failure inside the reviewer's own finalize step.
+        round: Review round number this error belongs to. Defaults to 0.
     """
     print(f"ERROR: {msg}", file=sys.stderr)
     envelope = {
         "type": review_type,
-        "round": 0,
+        "round": round,
         "verdict": "ERROR",
         "blocking_count": 0,
         "nit_count": 0,
         "findings": [],
-        "reviews": [{"scope": "holistic", "verdict": "ERROR", "error": msg, "findings": []}],
+        "reviews": [
+            {
+                "scope": "holistic",
+                "verdict": "ERROR",
+                "error": msg,
+                "error_kind": error_kind,
+                "findings": [],
+            }
+        ],
     }
     print(json.dumps(envelope))

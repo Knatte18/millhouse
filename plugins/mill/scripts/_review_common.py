@@ -2253,6 +2253,71 @@ def rewrite_verdict_token(raw_text: str, new_verdict: str) -> str:
     return "".join(lines)
 
 
+def append_demotion_note(raw_text: str, demoted_count: int, blocking_count: int) -> str:
+    """Append a one-line note directly after the `## Verdict` section's summary line, recording
+    how many findings the blocking-class ceiling demoted this call and the resulting
+    `blocking_count`.
+
+    `finalize_scope` calls this unconditionally whenever `demoted_any` is True -- independent of
+    `rewrite_verdict_token`'s own narrower gate (`demoted_any and verdict != original_verdict`),
+    which only ever covers the persisted verdict *token*. A ceiling demotion can leave the verdict
+    token unchanged (e.g. another surviving BLOCKING finding keeps `blocking_count` above zero)
+    while still stranding a stale one-sentence summary that no longer matches the demoted-finding
+    reality. This note closes that gap regardless of whether the token itself flipped.
+
+    Location strategy mirrors `rewrite_verdict_token`'s own `## Verdict` heading scan: split
+    `raw_text` into lines, find the line whose stripped content is exactly `## Verdict`, then walk
+    forward past blank lines twice -- first to the verdict token line, then again to the one-sentence
+    summary line that follows it. The note is inserted as a new line immediately after the summary
+    line.
+
+    Returns raw_text unchanged if the `## Verdict` heading, the verdict token line, or the summary
+    line cannot be found -- defensive only, since every template emits all three.
+    """
+    lines = raw_text.splitlines(keepends=True)
+
+    heading_index = None
+    for line_index, line in enumerate(lines):
+        if line.rstrip("\n") == "## Verdict":
+            heading_index = line_index
+            break
+    if heading_index is None:
+        return raw_text
+
+    # Walk forward past blank lines to the verdict token line, then again to the summary line
+    # that follows it.
+    token_index = None
+    for line_index in range(heading_index + 1, len(lines)):
+        if lines[line_index].strip() == "":
+            continue
+        token_index = line_index
+        break
+    if token_index is None:
+        return raw_text
+
+    summary_index = None
+    for line_index in range(token_index + 1, len(lines)):
+        if lines[line_index].strip() == "":
+            continue
+        summary_index = line_index
+        break
+    if summary_index is None:
+        return raw_text
+
+    note = (
+        f"_Note: {demoted_count} finding(s) demoted from BLOCKING to NIT by the stage's "
+        f"blocking-class ceiling; current blocking_count is {blocking_count}._\n"
+    )
+
+    # If the summary line is the last line in the file, it may lack a trailing newline -- add one
+    # so the inserted note starts on its own line.
+    if not lines[summary_index].endswith("\n"):
+        lines[summary_index] = f"{lines[summary_index]}\n"
+
+    lines.insert(summary_index + 1, note)
+    return "".join(lines)
+
+
 def write_review_file(
     reviews_dir: Path,
     review_type: str,
@@ -2490,7 +2555,11 @@ def finalize_scope(
     this call's ceiling demotion actually flipped the recomputed verdict away from the reviewer's
     original one, rewrite_verdict_token also rewrites the persisted file's fenced `verdict:` field
     and `## Verdict` section token to match, so the on-disk artifact never disagrees with the
-    returned envelope's `verdict` for a demotion this call performed.
+    returned envelope's `verdict` for a demotion this call performed. Independent of that, whenever
+    this call's ceiling demoted anything at all (`demoted_any`), append_demotion_note appends a
+    one-line note after the `## Verdict` summary recording the demoted-finding count and the
+    resulting `blocking_count` -- this runs even when the verdict token itself did not flip, so the
+    summary never goes stale silently.
 
     The returned `verdict` is recomputed from the post-ceiling findings, per the
     verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
@@ -2535,9 +2604,11 @@ def finalize_scope(
     original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
     demoted_any = False
+    demoted_count = 0
     if blocking_classes is not None:
         findings = apply_blocking_ceiling(findings, blocking_classes)
         demoted_any = any(f.demoted for f in findings)
+        demoted_count = sum(1 for f in findings if f.demoted)
         raw_text = rewrite_demoted_findings(raw_text, findings)
     blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
     nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
@@ -2551,6 +2622,13 @@ def finalize_scope(
     # mismatch unrelated to demotion (that mismatch is surfaced via the returned envelope only).
     if demoted_any and verdict != original_verdict:
         raw_text = rewrite_verdict_token(raw_text, verdict)
+
+    # Append a demotion note whenever the ceiling demoted anything this call, independent of
+    # whether that demotion also flipped the verdict token above -- a demotion can leave the
+    # token unchanged (another surviving BLOCKING finding) while still stranding a stale
+    # one-sentence summary.
+    if demoted_any:
+        raw_text = append_demotion_note(raw_text, demoted_count, blocking_count)
 
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
