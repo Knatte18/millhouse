@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go-base SKILL.md: resume phase branch, entry routing, and undocumented flags'
 slug: mill-go-base-skilldoc-and-logic-bugs-2
-approved: false
+approved: true
 started: '2026-08-12T17:57:32Z'
 parent: main
 root: ""
