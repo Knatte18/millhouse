@@ -43,7 +43,9 @@ batches:
     commit_sha: b5a27e30ffbc1cecf0dc19a31b131187d6785dfa
     verify_baseline_failures: []
   - name: dispatcher-flip
-    state: pending
+    state: running
+    implementer_session: 69f54917-8ed8-4173-a49d-0459bedddae4
+    start_sha: 6c51d56778b58f323cf945f33969568a2315cbc8
     verify_baseline_failures: []
   - name: summary-command
     state: pending
