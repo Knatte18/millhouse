@@ -45,7 +45,9 @@ batches:
     commit_sha: 534c0b4edb0b0bbcbbbb8eea5be1c11eec9b9e2f
     verify_baseline_failures: []
   - name: verdict-summary-demotion-note
-    state: pending
+    state: running
+    implementer_session: 2a133a9e-99f5-4860-b3fc-043ced07ac41
+    start_sha: 5439f97b7c12b6efb9334d6aaa0130f21dc51561
     verify_baseline_failures: []
   - name: cli-round-threading
     state: pending
