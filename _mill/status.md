@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-error-kind-retry-wiring
+phase: holistic-reviewing
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-reviewer-kind-finalize-wrappers  '2026-08-12T19:08:30Z'
 approved-verdict-summary-demotion-note  '2026-08-12T19:11:55Z'
 approved-cli-round-threading  '2026-08-12T19:17:00Z'
 approved-skill-error-kind-retry-wiring  '2026-08-12T19:20:02Z'
+holistic-reviewing  '2026-08-12T19:20:31Z'
 ```
 
 ## Batches
