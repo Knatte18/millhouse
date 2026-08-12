@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -41,6 +41,7 @@ holistic-reviewing  '2026-08-12T10:11:42Z'
 holistic-fixing  '2026-08-12T10:15:10Z'
 holistic-reviewing  '2026-08-12T10:17:02Z'
 holistic-approved  '2026-08-12T10:21:20Z'
+done  '2026-08-12T10:21:41Z'
 ```
 
 ## Batches
