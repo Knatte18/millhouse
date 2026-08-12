@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-routing-fixes
+phase: holistic-reviewing
 slug: mill-go-base-skilldoc-and-logic-bugs-2
 branch: hanf/mill-go-base-skilldoc-and-logic-bugs-2
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-review-r1  '2026-08-12T18:04:49Z'
 planned  '2026-08-12T18:05:12Z'
 implementing  '2026-08-12T18:05:38Z'
 approved-routing-fixes  '2026-08-12T18:08:08Z'
+holistic-reviewing  '2026-08-12T18:08:27Z'
 ```
 
 ## Batches
