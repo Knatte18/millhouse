@@ -777,7 +777,9 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
 4.5.
 **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
-   When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
+   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains. Reuse this same step's existing second-pass halt mechanics below (including whatever batch-state/commit mechanics that halt already implies via the shared *Blocked* section this SKILL.md defines), but halt with `BLOCKED: code review usage error: <message>` (where `<message>` is the offending entry's `error` field) and surface it to the user — distinct wording from the existing `ERROR-only round {N}` phrasing.
+
+   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every remaining entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
    Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
 
