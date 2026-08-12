@@ -715,6 +715,9 @@ def _run_finalize_stage(
     project_root: Path,
     *,
     actual_model: str | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> tuple[int, str]:
     """Run a review CLI's `--stage finalize` against a real backend.
 
@@ -727,6 +730,10 @@ def _run_finalize_stage(
     ``actual_model``, when given, is passed through as ``--actual-model`` so callers can exercise
     the audit-trail flag against a real backend and inspect the resulting review file's
     ``reviewer_model:`` line.
+
+    ``duration_s``, ``tool_calls``, and ``cost_usd``, when given, are passed through as
+    ``--duration-s``, ``--tool-calls``, and ``--cost-usd`` respectively, so callers can exercise the
+    finalize-stage cost flags against a real backend.
 
     Returns (return_code, captured_stdout).
     """
@@ -757,6 +764,12 @@ def _run_finalize_stage(
             ]
             if actual_model is not None:
                 argv += ["--actual-model", actual_model]
+            if duration_s is not None:
+                argv += ["--duration-s", str(duration_s)]
+            if tool_calls is not None:
+                argv += ["--tool-calls", str(tool_calls)]
+            if cost_usd is not None:
+                argv += ["--cost-usd", str(cost_usd)]
 
             buf = io.StringIO()
             with contextlib.redirect_stdout(buf):
@@ -949,6 +962,160 @@ def test_review_code_finalize_omitted_actual_model_leaves_reviewer_model_unchang
         "millpy_review_code_test_actual_model_omitted",
         actual_model=None,
         expected_line="reviewer_model: sonnetmax",
+    )
+
+
+# ---------------------------------------------------------------------------
+# --duration-s/--tool-calls/--cost-usd finalize flags (card 27): threaded from the CLI's argparse
+# flags through finalize() into both the printed JSON envelope's reviews[0] entry and the written
+# review file's yaml header, following the same real-backend shape as _actual_model_case above.
+# ---------------------------------------------------------------------------
+
+_COST_FLAGS_RAW_TEXT = (
+    "MILL_REVIEW_BEGIN\n"
+    "```yaml\n"
+    "verdict: APPROVE\n"
+    "```\n"
+    "MILL_REVIEW_END\n"
+)
+
+
+def _cost_flags_case(
+    cli_relpath: str,
+    unique_name: str,
+    *,
+    duration_s: float | None,
+    tool_calls: int | None,
+    cost_usd: float | None,
+) -> bool:
+    """Run --stage finalize with the given cost-flag combination and assert both the printed JSON
+    envelope's ``reviews[0]`` entry and the written review file's yaml header reflect it.
+
+    A flag left as ``None`` here is simply omitted from the CLI invocation (see
+    ``_run_finalize_stage``), exercising the three call shapes this batch's Requirements call out:
+    all three set, ``duration_s`` only (the agent-mode shape), and none set (the no-regression
+    guard for every pre-existing caller).
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        reviews_dir = project_root / "_mill" / "reviews"
+        agent_output_path = project_root / "agent-output.out.md"
+        agent_output_path.write_text(_COST_FLAGS_RAW_TEXT, encoding="utf-8")
+
+        rc, stdout_text = _run_finalize_stage(
+            cli_relpath, unique_name, agent_output_path, reviews_dir, project_root,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
+        )
+        if rc != 0:
+            return False
+        try:
+            envelope = json.loads(stdout_text)
+        except json.JSONDecodeError:
+            return False
+        if envelope.get("verdict") != "APPROVE":
+            return False
+        reviews = envelope.get("reviews", [])
+        if not reviews:
+            return False
+        entry = reviews[0]
+        if entry.get("duration_s") != duration_s:
+            return False
+        if entry.get("tool_calls") != tool_calls:
+            return False
+        if entry.get("cost_usd") != cost_usd:
+            return False
+
+        file_path = Path(entry["file"])
+        if not file_path.exists():
+            return False
+        written_content = file_path.read_text(encoding="utf-8")
+
+        # apply_cost_metadata's documented value formatting: duration_s to one decimal place,
+        # tool_calls as a plain integer, cost_usd to four decimal places.
+        if duration_s is not None and f"duration_s: {duration_s:.1f}" not in written_content:
+            return False
+        if duration_s is None and "duration_s:" in written_content:
+            return False
+        if tool_calls is not None and f"tool_calls: {tool_calls}" not in written_content:
+            return False
+        if tool_calls is None and "tool_calls:" in written_content:
+            return False
+        if cost_usd is not None and f"cost_usd: {cost_usd:.4f}" not in written_content:
+            return False
+        if cost_usd is None and "cost_usd:" in written_content:
+            return False
+        return True
+
+
+def test_review_discussion_finalize_all_cost_flags_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_cost_all",
+        duration_s=12.5, tool_calls=3, cost_usd=0.42,
+    )
+
+
+def test_review_discussion_finalize_duration_only_cost_flag_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_cost_duration_only",
+        duration_s=9.0, tool_calls=None, cost_usd=None,
+    )
+
+
+def test_review_discussion_finalize_no_cost_flags_no_regression() -> bool:
+    return _cost_flags_case(
+        "millpy-review-discussion.py",
+        "millpy_review_discussion_test_cost_none",
+        duration_s=None, tool_calls=None, cost_usd=None,
+    )
+
+
+def test_review_plan_finalize_all_cost_flags_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_cost_all",
+        duration_s=12.5, tool_calls=3, cost_usd=0.42,
+    )
+
+
+def test_review_plan_finalize_duration_only_cost_flag_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_cost_duration_only",
+        duration_s=9.0, tool_calls=None, cost_usd=None,
+    )
+
+
+def test_review_plan_finalize_no_cost_flags_no_regression() -> bool:
+    return _cost_flags_case(
+        "millpy-review-plan.py",
+        "millpy_review_plan_test_cost_none",
+        duration_s=None, tool_calls=None, cost_usd=None,
+    )
+
+
+def test_review_code_finalize_all_cost_flags_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-code.py",
+        "millpy_review_code_test_cost_all",
+        duration_s=12.5, tool_calls=3, cost_usd=0.42,
+    )
+
+
+def test_review_code_finalize_duration_only_cost_flag_written() -> bool:
+    return _cost_flags_case(
+        "millpy-review-code.py",
+        "millpy_review_code_test_cost_duration_only",
+        duration_s=9.0, tool_calls=None, cost_usd=None,
+    )
+
+
+def test_review_code_finalize_no_cost_flags_no_regression() -> bool:
+    return _cost_flags_case(
+        "millpy-review-code.py",
+        "millpy_review_code_test_cost_none",
+        duration_s=None, tool_calls=None, cost_usd=None,
     )
 
 
@@ -1161,6 +1328,28 @@ def main() -> int:
                 errors += 1
         except Exception as exc:
             print(f"FAIL: review-{review_type} finalize --actual-model {case_label} case ({exc})", file=sys.stderr)
+            errors += 1
+
+    cost_flags_cases = [
+        ("discussion", "all-set", test_review_discussion_finalize_all_cost_flags_written),
+        ("discussion", "duration-only", test_review_discussion_finalize_duration_only_cost_flag_written),
+        ("discussion", "none-set", test_review_discussion_finalize_no_cost_flags_no_regression),
+        ("plan", "all-set", test_review_plan_finalize_all_cost_flags_written),
+        ("plan", "duration-only", test_review_plan_finalize_duration_only_cost_flag_written),
+        ("plan", "none-set", test_review_plan_finalize_no_cost_flags_no_regression),
+        ("code", "all-set", test_review_code_finalize_all_cost_flags_written),
+        ("code", "duration-only", test_review_code_finalize_duration_only_cost_flag_written),
+        ("code", "none-set", test_review_code_finalize_no_cost_flags_no_regression),
+    ]
+    for review_type, case_label, test_fn in cost_flags_cases:
+        try:
+            if test_fn():
+                print(f"PASS: review-{review_type} finalize cost flags {case_label} case")
+            else:
+                print(f"FAIL: review-{review_type} finalize cost flags {case_label} case", file=sys.stderr)
+                errors += 1
+        except Exception as exc:
+            print(f"FAIL: review-{review_type} finalize cost flags {case_label} case ({exc})", file=sys.stderr)
             errors += 1
 
     missing_empty_whitespace_cases = [
