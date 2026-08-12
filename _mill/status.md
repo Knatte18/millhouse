@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-08-12T07:09:07Z'
+discussion-fix-r2  '2026-08-12T08:30:06Z'
+discussed  '2026-08-12T08:30:06Z'
 ```

@@ -53,8 +53,12 @@ paid on every mill-go and mill-go2 invocation.
   test covering them are untouched.
 - `mill-config.yaml` (hub and template). The `dispatch:` key and the `psmux:` block stay.
 - `mill-plan`, `mill-start`, `mill-merge-in` SKILLs. They still carry their own
-  subprocess/psmux branches (7, 6, and 2 references respectively). Stripping those is a
-  follow-up task, not this one.
+  subprocess/psmux dispatch prose — `grep -cE 'psmux|subprocess'` gives 10, 9, and 2 lines
+  respectively as of commit `356da5e5`. (These counts are cited only to convey that the
+  sibling surface is non-trivial; nothing in this task's plan depends on them, and none of the
+  three uses the `If \`dispatch == subprocess\`` branch form that `mill-go-base` does, so their
+  strip is shaped differently and is deliberately deferred.) Stripping those is a follow-up
+  task, not this one.
 - Any rewriting or compression of surviving Agent-mode operational prose. Content is
   deleted (dead path) or relocated (cold path) — never reworded to save lines.
 - The `## Agent-mode dispatch` section stays inline in SKILL.md. It is the hot path,
@@ -132,7 +136,7 @@ paid on every mill-go and mill-go2 invocation.
 - Decision: delete the `**Subprocess/psmux poll-loop max-wait.**` section, SKILL.md
   **395–422**, in full. The section starts at line 395 and ends at 422; `**Why not fork?**`
   begins at 423 and is unrelated and retained. Note that this range *contains* the per-batch
-  cleanup block (402–421) covered by `remove-psmux-cleanup-block` above — the two decisions
+  cleanup block (403–421) covered by `remove-psmux-cleanup-block` above — the two decisions
   overlap by design, they are not two separate ranges to delete twice.
 - Rationale: it governs only `[mill-bg] EXIT` poll loops, which exist only in the
   subprocess/psmux branches being deleted. With no poll loops left there is nothing to
