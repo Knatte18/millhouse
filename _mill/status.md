@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-reviewer-kind-finalize-wrappers
+phase: approved-verdict-summary-demotion-note
 slug: review-pipeline-consistency-bugs
 branch: hanf/review-pipeline-consistency-bugs
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-08-12T19:00:28Z'
 implementing  '2026-08-12T19:01:00Z'
 approved-error-envelope-contract  '2026-08-12T19:03:54Z'
 approved-reviewer-kind-finalize-wrappers  '2026-08-12T19:08:30Z'
+approved-verdict-summary-demotion-note  '2026-08-12T19:11:55Z'
 ```
 
 ## Batches
@@ -45,9 +46,10 @@ batches:
     commit_sha: 534c0b4edb0b0bbcbbbb8eea5be1c11eec9b9e2f
     verify_baseline_failures: []
   - name: verdict-summary-demotion-note
-    state: running
+    state: approved
     implementer_session: 2a133a9e-99f5-4860-b3fc-043ced07ac41
     start_sha: 5439f97b7c12b6efb9334d6aaa0130f21dc51561
+    commit_sha: 150a66130b57aff94ef6718580921652cd799bc8
     verify_baseline_failures: []
   - name: cli-round-threading
     state: pending
