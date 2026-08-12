@@ -239,6 +239,7 @@ Each round:
    If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above);
    omit `<args>` (no additional prepare arguments) on every other round.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (per the general Agent-mode dispatch pattern's step 2 in `mill-go-base/SKILL.md`) — `millpy-review-discussion.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
+   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `plugins/mill/skills/mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
    If `subprocess` or `psmux`: use the subprocess branch below.
 
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once.
@@ -269,11 +270,13 @@ Each round:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
    ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> surface a clear message to the operator: "discussion-review worker died (logout?); re-run the discussion-review step" and **halt** with no auto-refire. State explicitly that mill-start is always interactive and has no stuck_type / autonomous machinery, so it differs from mill-go's infrastructure one-retry path. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The script writes the review file under `_mill/reviews/` and emits a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": <int>, "nit_count": <int>, "findings": [{"severity": "BLOCKING" | "NIT", "class": "design" | "scope" | "decision" | "consistency" | null, "title": "<heading text>", "demoted": true | false}], "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>"}]}`.
+   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> surface a clear message to the operator: "discussion-review worker died (logout?); re-run the discussion-review step" and **halt** with no auto-refire. State explicitly that mill-start is always interactive and has no stuck_type / autonomous machinery, so it differs from mill-go's infrastructure one-retry path. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The script writes the review file under `_mill/reviews/` and emits a one-line JSON summary: `{"type": "discussion", "round": <int>, "verdict": "APPROVE" | "REQUEST_CHANGES", "blocking_count": <int>, "nit_count": <int>, "findings": [{"severity": "BLOCKING" | "NIT", "class": "design" | "scope" | "decision" | "consistency" | null, "title": "<heading text>", "demoted": true | false}], "reviews": [{"scope": "holistic", "verdict": ..., "file": "<abs-path>", "session_id": "<id>", "duration_s": <float | null>, "tool_calls": <int | null>, "cost_usd": <float | null>}]}`.
 
 Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize), and on trigger call _status.append_recovery_log the same way.
 This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
 Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+
+Print this round's cost line per the shared "## Review cost line" section in `plugins/mill/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
 
 3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`;
    it was already loaded unconditionally at the start of this phase — see the note immediately after the `### Phase: Discussion Review` heading above).
@@ -292,6 +295,8 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged, and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (per the general Agent-mode dispatch pattern's step 2 in `mill-go-base/SKILL.md`) — `millpy-review-discussion.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
+
+   Print this retry's cost line per the shared "## Review cost line" section in `plugins/mill/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
 

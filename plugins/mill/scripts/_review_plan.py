@@ -37,6 +37,7 @@ from _review_common import (
     ReviewResult,
     _load_root_from_overview,
     aggregate_verdict,
+    apply_cost_metadata,
     build_deletes_section,
     build_manifest_section,
     build_reattached_section,
@@ -64,6 +65,7 @@ from _review_common import (
     resolve_large_prompt_timeout,
     resolve_path,
     resolve_ref_paths,
+    sum_optional,
     worktree_snapshot_guard,
     write_review_file,
 )
@@ -168,6 +170,12 @@ Returns a reviews[] entry dict.
             `resolve_blocking_classes` itself). Passed straight through to `finalize_scope`.
     """
     try:
+        # Running per-round totals for the three cost-metadata fields; populated once the first
+        # reviewer call returns and folded with the NEED_CONTEXT retry's values via sum_optional.
+        # Initialised here -- before any reviewer call runs -- because the outer `except
+        # ReviewError` handler below reads these names even on a pre-call raise (e.g. the
+        # round_n > max_rounds guard just below, or a resolve_ref_paths hard-fail).
+        duration_s = tool_calls = cost_usd = None
         round_n = discover_round(reviews_dir, "plan", batch_path.stem)
         if round_n > max_rounds:
             raise ReviewError(
@@ -256,8 +264,12 @@ Returns a reviews[] entry dict.
         )
 
         try:
-            raw, session_id = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
-            raw = extract_review_content(raw)
+            res = _reviewer_single.run(batch_spec, prompt_text, timeout=bulk_timeout)
+            raw = extract_review_content(res.text)
+            session_id = res.session_id
+            duration_s = res.duration_s
+            tool_calls = res.tool_calls
+            cost_usd = res.cost_usd
         except LLMError as exc:
             return {
                 "scope": batch_path.stem,
@@ -269,6 +281,9 @@ Returns a reviews[] entry dict.
                 "error": str(exc),
                 "session_id": None,
                 "findings": [],
+                "duration_s": getattr(exc, "duration_s", None),
+                "tool_calls": None,
+                "cost_usd": None,
             }
 
         verdict = parse_verdict(raw)
@@ -291,10 +306,16 @@ Returns a reviews[] entry dict.
                     file=sys.stderr,
                 )
                 try:
-                    raw, session_id = _reviewer_single.run(
+                    retry_res = _reviewer_single.run(
                         batch_spec, retry_prompt, session_id=session_id, resume=True, timeout=bulk_timeout
                     )
-                    raw = extract_review_content(raw)
+                    raw = extract_review_content(retry_res.text)
+                    session_id = retry_res.session_id
+                    # The round genuinely cost both attempts -- fold the retry's metrics into the
+                    # running totals (None-absorbing sum) rather than replacing them.
+                    duration_s = sum_optional(duration_s, retry_res.duration_s)
+                    tool_calls = sum_optional(tool_calls, retry_res.tool_calls)
+                    cost_usd = sum_optional(cost_usd, retry_res.cost_usd)
                 except LLMError as exc:
                     return {
                         "scope": batch_path.stem,
@@ -306,12 +327,16 @@ Returns a reviews[] entry dict.
                         "error": f"resume retry failed: {exc}",
                         "session_id": None,
                         "findings": [],
+                        "duration_s": sum_optional(duration_s, getattr(exc, "duration_s", None)),
+                        "tool_calls": tool_calls,
+                        "cost_usd": cost_usd,
                     }
                 # Second NEED_CONTEXT propagates to caller untouched.
 
         review_entry = finalize_scope(
             reviews_dir, "plan", round_n, raw, scope=batch_path.stem,
             blocking_classes=blocking_classes,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
         print(
             f"[_review_plan] batch {batch_path.stem}: verdict={review_entry['verdict']} "
@@ -327,9 +352,17 @@ Returns a reviews[] entry dict.
             "file": review_entry["file"],
             "session_id": session_id,
             "findings": review_entry["findings"],
+            "duration_s": review_entry["duration_s"],
+            "tool_calls": review_entry["tool_calls"],
+            "cost_usd": review_entry["cost_usd"],
         }
     except ReviewError as exc:
         # ERROR shape verified 20250517 to match Shared Decisions (#338)
+        # This site stays file-less by design (the _review_plan.py file/no-file ReviewError
+        # inconsistency Shared Decision): unlike the other four ReviewError sites this plan
+        # touches, no review file is written here, so there is nothing for apply_cost_metadata
+        # to inject into -- the three metrics are carried in the returned envelope only, using
+        # whatever running totals were captured before the raise.
         return {
             "scope": batch_path.stem,
             "round": round_n,
@@ -340,6 +373,9 @@ Returns a reviews[] entry dict.
             "error": str(exc),
             "session_id": None,
             "findings": [],
+            "duration_s": duration_s,
+            "tool_calls": tool_calls,
+            "cost_usd": cost_usd,
         }
 
 
@@ -636,6 +672,9 @@ def finalize(
     wiki_root: Path,
     git_root: Path,
     actual_model: str | None = None,
+    duration_s: float | None = None,
+    tool_calls: int | None = None,
+    cost_usd: float | None = None,
 ) -> dict:
     """Finalize a plan review for a single scope;
 return a review entry dict.
@@ -648,6 +687,14 @@ return a review entry dict.
         actual_model: The model that actually produced this review, used to correct an unreliable
         self-reported ``reviewer_model:`` line before verdict parsing or disk write; passed through
         to ``finalize_scope`` on the success path only.
+        duration_s: Orchestrator-supplied wall-clock seconds the round took (summed across every
+            reviewer call in the round by the caller); threaded to ``finalize_scope`` on the
+            success path, and injected into the raw parse-failure file on the ``except
+            ReviewError`` path.
+        tool_calls: Orchestrator-supplied tool-call count for the round; threaded the same way as
+            ``duration_s``.
+        cost_usd: Orchestrator-supplied dollar cost of the round; threaded the same way as
+            ``duration_s``.
 
     Returns:
         Review entry dict for aggregation: {"scope", "round", "verdict", "blocking_count", "file",
@@ -660,8 +707,12 @@ return a review entry dict.
         review_entry = finalize_scope(
             reviews_dir, "plan", round_n, raw_text, scope=scope, actual_model=actual_model,
             blocking_classes=blocking_classes,
+            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
     except ReviewError as exc:
+        raw_text = apply_cost_metadata(
+            raw_text, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+        )
         path = write_review_file(
             reviews_dir, "plan", round_n, raw_text, scope=scope
         )
@@ -675,6 +726,9 @@ return a review entry dict.
             "error": f"parse_verdict failed: {exc}",
             "session_id": None,
             "findings": [],
+            "duration_s": duration_s,
+            "tool_calls": tool_calls,
+            "cost_usd": cost_usd,
         }
 
     return {
@@ -686,6 +740,9 @@ return a review entry dict.
         "file": review_entry["file"],
         "session_id": None,
         "findings": review_entry["findings"],
+        "duration_s": review_entry["duration_s"],
+        "tool_calls": review_entry["tool_calls"],
+        "cost_usd": review_entry["cost_usd"],
     }
 
 
@@ -1027,8 +1084,12 @@ def run(
             )
 
             try:
-                raw, session_id = _reviewer_single.run(holistic_spec, prompt_text, timeout=resolved_timeout)
-                raw = extract_review_content(raw)
+                res = _reviewer_single.run(holistic_spec, prompt_text, timeout=resolved_timeout)
+                raw = extract_review_content(res.text)
+                session_id = res.session_id
+                duration_s = res.duration_s
+                tool_calls = res.tool_calls
+                cost_usd = res.cost_usd
             except LLMError as exc:
                 reviews.append({
                     "scope": "holistic",
@@ -1040,6 +1101,9 @@ def run(
                     "error": str(exc),
                     "session_id": None,
                     "findings": [],
+                    "duration_s": getattr(exc, "duration_s", None),
+                    "tool_calls": None,
+                    "cost_usd": None,
                 })
             else:
                 try:
@@ -1063,10 +1127,17 @@ def run(
                                 file=sys.stderr,
                             )
                             try:
-                                raw, session_id = _reviewer_single.run(
+                                retry_res = _reviewer_single.run(
                                     holistic_spec, retry_prompt, session_id=session_id, resume=True, timeout=resolved_timeout
                                 )
-                                raw = extract_review_content(raw)
+                                raw = extract_review_content(retry_res.text)
+                                session_id = retry_res.session_id
+                                # The round genuinely cost both attempts -- fold the retry's
+                                # metrics into the running totals (None-absorbing sum) rather
+                                # than replacing them.
+                                duration_s = sum_optional(duration_s, retry_res.duration_s)
+                                tool_calls = sum_optional(tool_calls, retry_res.tool_calls)
+                                cost_usd = sum_optional(cost_usd, retry_res.cost_usd)
                             except LLMError as exc:
                                 reviews.append({
                                     "scope": "holistic",
@@ -1078,6 +1149,9 @@ def run(
                                     "error": f"resume retry failed: {exc}",
                                     "session_id": None,
                                     "findings": [],
+                                    "duration_s": sum_optional(duration_s, getattr(exc, "duration_s", None)),
+                                    "tool_calls": tool_calls,
+                                    "cost_usd": cost_usd,
                                 })
                                 # error entry appended above; else branch writes the review file on success
                             else:
@@ -1085,6 +1159,7 @@ def run(
                                 review_entry = finalize_scope(
                                     reviews_dir, "plan", round_n, raw, scope="holistic",
                                     blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                                    duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
                                 )
                                 print(
                                     f"[_review_plan] holistic: verdict={review_entry['verdict']} "
@@ -1100,12 +1175,16 @@ def run(
                                     "file": review_entry["file"],
                                     "session_id": session_id,
                                     "findings": review_entry["findings"],
+                                    "duration_s": review_entry["duration_s"],
+                                    "tool_calls": review_entry["tool_calls"],
+                                    "cost_usd": review_entry["cost_usd"],
                                 })
                         else:
                             # No resolvable paths to re-attach — propagate NEED_CONTEXT.
                             review_entry = finalize_scope(
                                 reviews_dir, "plan", round_n, raw, scope="holistic",
                                 blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                                duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
                             )
                             print(
                                 f"[_review_plan] holistic: verdict={review_entry['verdict']} "
@@ -1121,11 +1200,15 @@ def run(
                                 "file": review_entry["file"],
                                 "session_id": session_id,
                                 "findings": review_entry["findings"],
+                                "duration_s": review_entry["duration_s"],
+                                "tool_calls": review_entry["tool_calls"],
+                                "cost_usd": review_entry["cost_usd"],
                             })
                     else:
                         review_entry = finalize_scope(
                             reviews_dir, "plan", round_n, raw, scope="holistic",
                             blocking_classes=resolve_blocking_classes(cfg, "plan", "holistic"),
+                            duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
                         )
                         print(
                             f"[_review_plan] holistic: verdict={review_entry['verdict']} "
@@ -1141,8 +1224,14 @@ def run(
                             "file": review_entry["file"],
                             "session_id": session_id,
                             "findings": review_entry["findings"],
+                            "duration_s": review_entry["duration_s"],
+                            "tool_calls": review_entry["tool_calls"],
+                            "cost_usd": review_entry["cost_usd"],
                         })
                 except ReviewError as exc:
+                    raw = apply_cost_metadata(
+                        raw, duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd
+                    )
                     path = write_review_file(reviews_dir, "plan", round_n, raw, scope="holistic")
                     reviews.append({
                         "scope": "holistic",
@@ -1154,6 +1243,9 @@ def run(
                         "error": f"parse_verdict failed: {exc}",
                         "session_id": session_id,
                         "findings": [],
+                        "duration_s": duration_s,
+                        "tool_calls": tool_calls,
+                        "cost_usd": cost_usd,
                     })
 
         aggregate = aggregate_verdict([r["verdict"] for r in reviews])

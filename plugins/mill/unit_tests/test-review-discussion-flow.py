@@ -24,6 +24,7 @@ import _reviewer_test_stub as stub  # noqa: E402
 import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
+from _llm_common import LLMError, ReviewerCallResult  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _review_discussion import prepare as discussion_prepare  # noqa: E402
 from _review_discussion import run as discussion_run  # noqa: E402
@@ -1040,7 +1041,9 @@ def main() -> int:
             import _llm_gemini as llm_gemini
 
             original = llm_gemini.run_bulk
-            llm_gemini.run_bulk = lambda prompt_text, **kw: (APPROVE_TEXT, "sid-gemini")
+            llm_gemini.run_bulk = lambda prompt_text, **kw: ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-gemini"
+            )
             try:
                 r = discussion_run(
                     cfg, SLUG, mill_dir, project_root, wiki_root,
@@ -1146,6 +1149,278 @@ def main() -> int:
                 file=sys.stderr,
             )
         finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # cost metadata: happy path -- duration_s/tool_calls/cost_usd surface
+    # in reviews[0] and get written into the review file's yaml header
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-cost-happy")])
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            entry = r.reviews[0]
+            # The stub's ReviewerCallResult carries duration_s=0.0 (a real in-process call
+            # that took no measurable time) and tool_calls/cost_usd=None (unsupported signals).
+            assert entry["duration_s"] == 0.0, (
+                f"expected duration_s=0.0, got {entry['duration_s']!r}"
+            )
+            assert entry["tool_calls"] is None, (
+                f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            )
+            assert entry["cost_usd"] is None, (
+                f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            )
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s:" in file_text, (
+                f"expected 'duration_s:' line in written review file, got:\n{file_text}"
+            )
+            print(
+                "PASS cost metadata happy path: reviews[0] carries duration_s/tool_calls/"
+                "cost_usd and the written file's yaml header carries duration_s:"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL cost metadata happy path: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL cost metadata happy path (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # cost metadata: call-failure ERROR -- LLMError's duration_s surfaces
+    # on the synthetic ERROR entry; file stays None (call never returned)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+
+        def _raise_with_duration(prompt_text, **kw):
+            raise LLMError("seeded boom", duration_s=12.5)
+
+        stub.run = _raise_with_duration
+        stub.seed([])  # clear prompts log
+        try:
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 12.5, (
+                f"expected duration_s=12.5, got {entry['duration_s']!r}"
+            )
+            assert entry["tool_calls"] is None, (
+                f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            )
+            assert entry["cost_usd"] is None, (
+                f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            )
+            assert entry["file"] is None, f"expected file=None, got {entry['file']!r}"
+            print(
+                "PASS cost metadata call-failure ERROR: LLMError.duration_s surfaces on "
+                "the synthetic ERROR entry with file=None"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL cost metadata call-failure ERROR: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL cost metadata call-failure ERROR (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # cost metadata: parse-failure ERROR -- a real ReviewerCallResult's
+    # metrics survive into both the ERROR entry and the raw file's
+    # yaml header, injected via apply_cost_metadata (no guard needed)
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        unparseable_with_fence = (
+            "# Review\n\n```yaml\nnot_a_verdict: true\n```\n"
+        )
+
+        def _return_unparseable(prompt_text, **kw):
+            return ReviewerCallResult(
+                text=unparseable_with_fence,
+                session_id="sid-parse-fail",
+                duration_s=7.25,
+                tool_calls=3,
+                cost_usd=0.0123,
+            )
+
+        stub.run = _return_unparseable
+        stub.seed([])  # clear prompts log
+        try:
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 7.25, (
+                f"expected duration_s=7.25, got {entry['duration_s']!r}"
+            )
+            assert entry["tool_calls"] == 3, (
+                f"expected tool_calls=3, got {entry['tool_calls']!r}"
+            )
+            assert entry["cost_usd"] == 0.0123, (
+                f"expected cost_usd=0.0123, got {entry['cost_usd']!r}"
+            )
+            assert entry["file"] is not None, "expected a written raw file, got file=None"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s: 7.2" in file_text, (
+                f"expected injected 'duration_s:' line in raw file, got:\n{file_text}"
+            )
+            print(
+                "PASS cost metadata parse-failure ERROR: metrics survive into both the "
+                "ERROR entry and the raw file's injected yaml header"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL cost metadata parse-failure ERROR: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL cost metadata parse-failure ERROR (unexpected {type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # cost metadata: parse-failure ERROR variant with no yaml fence at all
+    # -- apply_cost_metadata's terminal fallback leaves the raw text
+    # unchanged, and the run does not raise
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, project_root, wiki_root = _make_fixture(tmpdir)
+        (project_root / "discussion.md").write_text(
+            "# Discussion\n\nTest.\n", encoding="utf-8"
+        )
+
+        cfg = {
+            "paths": {
+                "discussion_file": "discussion.md",
+                "plan_dir": "plan/",
+                "reviews_dir": "reviews/",
+            },
+            "roles": {
+                "discussion-review": {
+                    "holistic": {"rounds": 5, "reviewer": "test_stub"},
+                },
+            },
+        }
+
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        no_fence_text = "Raw prose with no yaml fence at all.\n"
+
+        def _return_no_fence(prompt_text, **kw):
+            return ReviewerCallResult(
+                text=no_fence_text,
+                session_id="sid-no-fence",
+                duration_s=3.0,
+                tool_calls=1,
+                cost_usd=0.001,
+            )
+
+        stub.run = _return_no_fence
+        stub.seed([])  # clear prompts log
+        try:
+            r = discussion_run(cfg, SLUG, mill_dir, project_root, wiki_root)
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["file"] is not None, "expected a written raw file, got file=None"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert file_text == no_fence_text, (
+                f"expected the raw file to be written unchanged (no fence to anchor "
+                f"on), got:\n{file_text!r}"
+            )
+            print(
+                "PASS cost metadata parse-failure ERROR (no yaml fence): raw file is "
+                "written unchanged and the run does not raise"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(
+                f"FAIL cost metadata parse-failure ERROR (no yaml fence): {exc}",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            errors += 1
+            print(
+                f"FAIL cost metadata parse-failure ERROR (no yaml fence) (unexpected "
+                f"{type(exc).__name__}): {exc}",
+                file=sys.stderr,
+            )
+        finally:
+            stub.run = original_run
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------

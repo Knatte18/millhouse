@@ -257,6 +257,15 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    It is **distinct from** the brief `session_id` / `implementer_session` recorded in status.md: those identify the LLM conversation for finalize and cleanup, not the harness worker.
    Today's text treats dispatch as fire-and-forget;
    the `incomplete` recovery below depends on this handle still being in scope.
+
+   **Reviewer-dispatch-only: record a wall-clock start stamp.**
+   This applies to reviewer dispatches only — implementer, fixer, and merge-in dispatches record
+   nothing here, since reviewer cost visibility is this feature's whole scope.
+   Immediately before this `Agent()` call, run `date +%s` in the Bash tool and hold the value in a
+   local variable, e.g. `review_start_epoch`.
+   Once the terminal `<task-notification>` for this `agentId` is accepted (see step 4 below), run
+   `date +%s` again and hold the difference as `review_elapsed_s = <second reading> - review_start_epoch`.
+
    The orchestrator must then **wait for the completion `<task-notification>`** from that background agent.
    For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 4's classification and step 5's capture, unchanged.
    For a **reviewer** dispatch, step 5 is skipped (the reviewer already wrote its own output file — see step 5 below), so the payload feeds **step 4's classification only**.
@@ -274,6 +283,12 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    On a second consecutive raw API error: implementer and fixer dispatches escalate per the "Stuck escalation" section;
    read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
    There is no live agent to probe in this case, so it is unaffected by the liveness probe in (c) below.
+
+   **Reviewer duration summation on re-dispatch.**
+   For a **reviewer** dispatch specifically, a transient re-dispatch under this branch keeps the
+   earlier attempt's `review_elapsed_s` and adds the fresh dispatch's own `review_elapsed_s` to it —
+   the round genuinely cost both attempts, so the value passed at step 6 is the sum, never just the
+   latest attempt's reading.
 
    **Deliberately no ack predicate.**
    This classification does not branch on whether a clean reviewer payload happens to be a `WROTE <path>` ack versus some other short text — do not add a prefix-match branch for it.
@@ -319,8 +334,11 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
      Do not re-dispatch, do not classify as `stuck_type: transient`.
      The harness will deliver the agent's own next `<task-notification>` for the same `agentId` when it actually finishes (matches the observed `#595` behavior — the "killed" agent later delivered a real `completed` notification unprompted).
      This wait is unbounded by design, matching every other Agent-mode dispatch's existing "no log-polling or liveness check required" contract (see "Agent-mode properties" below) — no bounded re-check loop is added for this probe.
+     For a **reviewer** dispatch: this is one continuous `Agent()` call and one continuous measurement — do NOT restart or reset `review_start_epoch`;
+     there is nothing to sum yet.
    - **If it reports the agent is no longer running,
      or the probe call itself errors** (the task_id is already gone): proceed to the existing one-retry transient classification from (a) and re-dispatch exactly as today, including the same second-consecutive-failure escalation rule.
+     For a **reviewer** dispatch, this includes the reviewer-only `test -f <output_path>` shortcut's file-exists outcome above — that outcome, too, routes into (a)'s re-dispatch and therefore sums `review_elapsed_s` across attempts exactly like (a), never resets it.
 
    This probe exists because both `#587` and `#595` were live incidents where a "killed"/"stopped by user" notification was stale for an agent that was, in fact, still running to completion — see `_mill/discussion.md`'s `stopped/interrupted-notification liveness probe (#587, #595)` Decision for the full incident writeups and rationale.
 
@@ -344,6 +362,16 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    For the three **review** CLIs specifically, additionally pass `--actual-model <value>` using the model value the `effort-tier-review-cli` batch's step-3 `mill-go-base/SKILL.md` edit recorded as actually passed to this round's Agent tool call — this keeps the finalized review file's `reviewer_model` field accurate even when the Builder dispatched a different tier than the prepare envelope's `model` field named (a manual override) or the prepare-stage's own large-prompt auto-switch already changed it before the envelope was read.
    Implement/fix/merge-in CLIs' finalize calls do not take this flag (no `reviewer_model`-equivalent field exists on their side, per this task's earlier confirmed-absent decision).
+
+   **Agent-mode duration forwarding — review CLIs only.**
+   Under agent-mode dispatch (`dispatch == agent`), for the three **review** CLIs only, additionally
+   pass `--duration-s <review_elapsed_s>` on this `--stage finalize` invocation, alongside the
+   existing `--agent-output`, using the value recorded/summed per step 3 and step 4 above.
+   Never pass `--tool-calls` or `--cost-usd` under agent-mode — the Agent tool notification contract
+   carries no such signal, so those cells are legitimately `n/a` in the finalized review file and the
+   JSON envelope.
+   Implementer, fixer, and merge-in finalize invocations are unchanged — they take no
+   `--duration-s`/`--tool-calls`/`--cost-usd` flags at all.
 
    For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope`, `--batch-name` (batch scope only), and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs.
    Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms (10 minutes) — whenever that CLI's finalize stage replays a batch's `verify:` command as a regression guard: this currently applies to both `millpy-fix.py --stage finalize` and `millpy-implement.py --stage finalize`, each of which replays every batch's `verify:` command sequentially, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites.
@@ -430,6 +458,42 @@ mill-go2 accepts these trade-offs for the implementer role only, as an experimen
 every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
 Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
 Fork's advertised "the child's tool output stays out of the parent" is **not** a differentiator here either — an ordinary fresh Agent call already keeps a subagent's tool output out of the parent's context.
+
+## Review cost line
+
+This section is the single source of truth for the post-round cost print in every orchestrator.
+mill-start and mill-plan reference this section rather than restating it.
+
+**When to print.**
+Once, immediately after each review round's JSON envelope is in hand, in both dispatch modes
+(agent, and subprocess/psmux), before branching on the verdict.
+Print it for `ERROR` rounds too — an expensive failed round is exactly what the operator most needs
+to see.
+
+**Format.**
+
+```
+[review] <type> r<N> (<scope>): <verdict>, <model>, <duration>, <tool_calls> tool-calls
+```
+
+with `, $<cost_usd>` appended only when `cost_usd` is non-null.
+Render a null `duration_s`, `tool_calls`, or `model` as the literal `n/a`.
+Render duration as `<n>s` when under a minute, and `<m>m<ss>s` otherwise.
+ASCII only.
+
+**Where each field comes from.**
+`type`, `round`, and `verdict` come from the round's JSON envelope directly.
+`duration_s`, `tool_calls`, and `cost_usd` come from that envelope's `reviews[...]` entry matching
+this scope.
+`model` comes from the prepare envelope's `model` field under agent-mode (or the recorded
+actually-dispatched tier when the operator overrode it — see "## Agent-mode dispatch" step 3's
+"record the `model` value actually passed" instruction), and from the round's configured
+`roles.<review-type>.<scope>.reviewer` alias under subprocess/psmux dispatch.
+
+**Not persisted.**
+This line is orchestrator chat output only — it is never written to a file.
+The persisted copy of the same numbers lives in the review file's yaml header, readable later via
+`/mill-review-summary`.
 
 ### 0. Wiki health-check
 
@@ -770,6 +834,10 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 3. **Builder reads only the JSON envelope verdict, never the findings.**
    Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below).
    Builder does not load the skill.
+   Before branching on the verdict, print the cost line for this round per "## Review cost line"
+   above, with `<type> = code` and `<scope> = <batch_name>`.
+   Printing the cost line does not relax the read-ban above: the Builder still never reads the
+   findings, only the envelope fields the cost line names.
 
 4. Branch on verdict:
    - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
@@ -1158,6 +1226,10 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    If `[mill-bg] EXIT` reports a non-zero exit AND no JSON summary line is present in the log, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line from the log to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+   Whenever a JSON envelope is present, print the cost line for this round per "## Review cost line"
+   above, with `<type> = code` and `<scope> = holistic`, before dropping through to sub-step 3.5.
+   Printing the cost line does not relax the read-ban documented in the per-batch loop's step 3: the
+   Builder still never reads the findings, only the envelope fields the cost line names.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
    This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).

@@ -10,8 +10,8 @@ Public API:
     seed() — load response queue and clear captured-prompts log
     set_prompt_observer() — attach callback fired per run call
     captured_prompts() — return all (prompt_text, kwargs) tuples captured
-    run() — pop next seeded response;
-    capture kwargs including timeout
+    run() — pop next seeded (text, session_id) response, capture kwargs including timeout, and
+    return it wrapped in a ReviewerCallResult with duration_s=0.0 and tool_calls/cost_usd=None
 
 Tests that need to simulate LLMError monkey-patch `run`;
 the stub itself only handles the seeded-queue path.
@@ -21,6 +21,8 @@ from __future__ import annotations
 import threading
 from collections import deque
 from typing import Callable
+
+from _llm_common import ReviewerCallResult
 
 # Module-level state — shared across threads so ThreadPoolExecutor workers spawned by `_review_plan.run` see the same seeded queue as the test thread. `deque.popleft()` is atomic under the GIL, so the hot path needs no lock;
 # mutations from `seed()` and `captured_prompts()` are guarded by `_lock` to avoid races during test setup/teardown.
@@ -66,7 +68,7 @@ def run(
     resume: bool = False,
     timeout: int | None = None,
     effort: str | None = None,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     kwargs = {"session_id": session_id, "resume": resume, "timeout": timeout, "effort": effort}
     with _lock:
         _prompts.append((prompt_text, kwargs))
@@ -74,8 +76,13 @@ def run(
     if observer is not None:
         observer(prompt_text, kwargs)
     try:
-        return _queue.popleft()  # GIL-atomic
+        text, popped_session_id = _queue.popleft()  # GIL-atomic
     except IndexError:
         raise RuntimeError(
             "_reviewer_test_stub queue empty — test did not seed enough responses"
         )
+    # duration_s is 0.0, not None: this is a real in-process call that genuinely took no
+    # measurable time, as opposed to a provider that cannot supply the metric at all.
+    return ReviewerCallResult(
+        text=text, session_id=popped_session_id, duration_s=0.0, tool_calls=None, cost_usd=None
+    )

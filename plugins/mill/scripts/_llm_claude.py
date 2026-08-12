@@ -40,7 +40,7 @@ from pathlib import Path
 
 import _agent_dispatch
 import _subprocess_util
-from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
+from _llm_common import LLMError, LLMSessionError, LLMRateLimitError, ReviewerCallResult
 
 
 def _claude_argv_prefix() -> list[str]:
@@ -225,13 +225,22 @@ def _scan_rate_limit(stdout: str) -> bool:
     return False
 
 
-def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
+def _parse_stream_json(stdout: str) -> tuple[str, str | None, int | None, float | None]:
     """Parse claude's stream-json output.
 
-    Returns (final_text, session_id).
+    Returns (final_text, session_id, tool_calls, cost_usd).
     session_id is extracted from any event that carries a top-level `session_id` field (the init
     "system" event always does; the final "result" event typically does too).
     The last one seen wins.
+
+    tool_calls counts every content block with type "tool_use" across every "assistant" event,
+    added up cumulatively as events are consumed.
+    If the terminal "result" event carries an integer "num_turns" field, that native count wins
+    over the accumulated block count;
+    otherwise the block count is used as-is.
+
+    cost_usd is read from the terminal "result" event's "total_cost_usd" field when present as an
+    int or float (bools excluded), else None.
 
     Stream-json emits one JSON object per line.
     Lines that fail JSON parsing emit a stderr warning and are skipped.
@@ -240,6 +249,9 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
     """
     final_text: str | None = None
     session_id: str | None = None
+    tool_use_blocks = 0
+    native_turns: int | None = None
+    cost_usd: float | None = None
 
     for line in stdout.splitlines():
         line = line.strip()
@@ -266,6 +278,15 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
             result_value = obj.get("result", "")
             if isinstance(result_value, str) and result_value.strip():
                 final_text = result_value
+            # num_turns, when present, is the CLI's own turn count and takes precedence over our
+            # block-counted fallback.
+            turns_value = obj.get("num_turns")
+            if isinstance(turns_value, int) and not isinstance(turns_value, bool):
+                native_turns = turns_value
+            # total_cost_usd is the CLI's own dollar-cost figure for the whole call.
+            cost_value = obj.get("total_cost_usd")
+            if isinstance(cost_value, (int, float)) and not isinstance(cost_value, bool):
+                cost_usd = float(cost_value)
         elif event_type == "assistant":
             # Some versions emit {"type":"assistant","message":{"content":[...]}}
             message = obj.get("message", {})
@@ -279,10 +300,18 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
                 combined = "".join(parts).strip()
                 if combined:
                     final_text = combined
+                # Count tool_use blocks across every assistant event, independent of whether the
+                # same event also carries text.
+                tool_use_blocks += sum(
+                    1
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "tool_use"
+                )
 
     if final_text is None:
         raise LLMError("claude returned no content")
-    return final_text, session_id
+    tool_calls = native_turns if native_turns is not None else tool_use_blocks
+    return final_text, session_id, tool_calls, cost_usd
 
 
 def _invoke(
@@ -295,8 +324,8 @@ def _invoke(
     session_id: str | None = None,
     resume: bool = False,
     cwd: Path | str | None = None,
-) -> tuple[str, str]:
-    """Core invocation: spawn claude, parse output, return (text, session_id).
+) -> ReviewerCallResult:
+    """Core invocation: spawn claude, parse output, return a ReviewerCallResult.
 
     Raises LLMError on failure.
     When resume=True and the subprocess exits non-zero, raises LLMSessionError instead so callers
@@ -306,6 +335,11 @@ def _invoke(
     and resume=False and no rate-limit was detected, the call is retried once with the same argv
     (see issue #153 — cmd /c claude shim flakes immediately after a prior session interrupt).
     The retry's outcome propagates as the final result.
+
+    Two distinct time.monotonic() reads are taken in the subprocess branch: the first-attempt `dt`
+    feeds only the fast-fail-retry gate above, while the cumulative `total_dt` — computed after the
+    retry (if any) ran — is what gets reported as duration_s, so a retried call's reported duration
+    reflects both attempts.
     """
     if _get_via_psmux_flag():
         if shutil.which("psmux") is None:
@@ -335,17 +369,17 @@ def _invoke(
             )
         except Exception as exc:
             if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
-                raise LLMError(f"psmux-claude timed out after {timeout}s") from exc
-            raise LLMError(f"Failed to spawn psmux-claude: {exc}") from exc
+                raise LLMError(f"psmux-claude timed out after {timeout}s", duration_s=time.monotonic() - start) from exc
+            raise LLMError(f"Failed to spawn psmux-claude: {exc}", duration_s=time.monotonic() - start) from exc
         dt = time.monotonic() - start
         if result.returncode != 0:
             error_detail = (result.stderr or result.stdout or "")[:500]
             if resume:
-                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}", duration_s=dt)
             else:
-                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}", duration_s=dt)
         text = result.stdout.rstrip()
-        return text, session_id
+        return ReviewerCallResult(text=text, session_id=session_id, duration_s=dt, tool_calls=None, cost_usd=None)
 
     start = time.monotonic()
     argv = _build_argv(model, effort, allowed_tools, session_id, resume)
@@ -361,8 +395,8 @@ def _invoke(
         )
     except Exception as exc:  # subprocess.TimeoutExpired or similar
         if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
-            raise LLMError(f"Claude CLI timed out after {timeout}s") from exc
-        raise LLMError(f"Failed to spawn claude: {exc}") from exc
+            raise LLMError(f"Claude CLI timed out after {timeout}s", duration_s=time.monotonic() - start) from exc
+        raise LLMError(f"Failed to spawn claude: {exc}", duration_s=time.monotonic() - start) from exc
 
     dt = time.monotonic() - start
     rate_limited = _scan_rate_limit(result.stdout or "")
@@ -381,23 +415,29 @@ def _invoke(
         result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout), cwd=cwd, env=child_env)
         rate_limited = _scan_rate_limit(result.stdout or "")
 
+    # Cumulative duration across both attempts (if a retry ran), computed before the error checks
+    # below so every raise in this branch can report the full elapsed time.
+    total_dt = time.monotonic() - start
+
     if result.returncode != 0:
         error_detail = (result.stderr or result.stdout or "")[:500]
         if rate_limited:
             raise LLMRateLimitError(
-                f"claude rate-limited (exit {result.returncode}): {error_detail}"
+                f"claude rate-limited (exit {result.returncode}): {error_detail}", duration_s=total_dt
             )
         if resume:
             raise LLMSessionError(
-                f"claude --resume {session_id} exited {result.returncode}: {error_detail}"
+                f"claude --resume {session_id} exited {result.returncode}: {error_detail}", duration_s=total_dt
             )
-        raise LLMError(f"claude exited {result.returncode}: {error_detail}")
+        raise LLMError(f"claude exited {result.returncode}: {error_detail}", duration_s=total_dt)
 
-    text, observed_sid = _parse_stream_json(result.stdout)
+    text, observed_sid, tool_calls, cost_usd = _parse_stream_json(result.stdout)
     effective_sid = observed_sid or session_id
     if not effective_sid:
-        raise LLMError("claude CLI did not emit a session_id in stream-json output")
-    return text, effective_sid
+        raise LLMError("claude CLI did not emit a session_id in stream-json output", duration_s=total_dt)
+    return ReviewerCallResult(
+        text=text, session_id=effective_sid, duration_s=total_dt, tool_calls=tool_calls, cost_usd=cost_usd
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -412,7 +452,7 @@ def run_bulk(
     timeout: int = 600,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke claude with no tool access (bulk mode).
 
     Spawns: claude -p --allowedTools "" --output-format stream-json --model <model> [--effort
@@ -420,7 +460,8 @@ def run_bulk(
 
     Stdin receives prompt_text.
     Stream-json is parsed;
-    the final assistant text and session_id are returned as a tuple.
+    a ReviewerCallResult carrying the final assistant text, session_id, and cost/timing metrics is
+    returned.
 
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
@@ -445,7 +486,7 @@ def run_tool_use(
     timeout: int = 900,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke claude with read-only tool access (tool-use mode).
 
     Spawns: claude -p --allowedTools Read,Grep,Glob --output-format stream-json --model <model>
@@ -455,6 +496,8 @@ def run_tool_use(
     reviewer returns (Decision 24 in discussion.md).
     Glob is included to aid file discovery.
     Longer default timeout (900s) for sessions that explore the codebase.
+    Returns a ReviewerCallResult carrying the final assistant text, session_id, and cost/timing
+    metrics.
 
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
@@ -501,7 +544,9 @@ def run_implementer(
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
     """
-    return _invoke(
+    # _invoke now returns a ReviewerCallResult; unwrap to a 2-tuple here solely to preserve
+    # run_implementer's existing (text, session_id) contract for its callers.
+    result = _invoke(
         prompt_text=prompt_text,
         model=model,
         effort=effort,
@@ -512,6 +557,7 @@ def run_implementer(
         resume=resume,
         cwd=cwd,
     )
+    return result.text, result.session_id
 
 
 def cleanup_session(session_id: str | None) -> None:

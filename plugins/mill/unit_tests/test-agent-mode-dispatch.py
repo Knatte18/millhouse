@@ -378,7 +378,12 @@ class TestReviewerModeParity(unittest.TestCase):
         self.assertEqual(brief_content, prepare_result["prompt_text"])
 
         # Step 3: Finalize stage with canned agent output Guard that _reviewer_single.run is not called during finalize
+        # duration_s is the one cost signal agent-mode dispatch can supply -- the orchestrating
+        # SKILL brackets the Agent() call with `date +%s` reads and passes the elapsed seconds
+        # here; tool_calls and cost_usd stay unset because the Agent tool contract carries no
+        # such signal.
         agent_output = APPROVE_TEXT
+        known_duration_s = 42.0
         with unittest.mock.patch.object(
             self._reviewer_single, "run"
         ) as mock_run:
@@ -390,7 +395,8 @@ class TestReviewerModeParity(unittest.TestCase):
                 reviews_dir=prepare_result["reviews_dir"],
                 mill_dir=self.mill_dir,
                 project_root=self.project_root,
-                wiki_root=self.wiki_root
+                wiki_root=self.wiki_root,
+                duration_s=known_duration_s,
             )
             # Ensure LLM was not called during finalize
             mock_run.assert_not_called()
@@ -401,6 +407,11 @@ class TestReviewerModeParity(unittest.TestCase):
         self.assertGreater(len(result.reviews), 0)
         self.assertEqual(result.reviews[0]["scope"], "holistic")
         self.assertEqual(result.reviews[0]["verdict"], "APPROVE")
+        # Agent-mode's reduced field set: duration is carried through, tool_calls/cost_usd are
+        # absent because agent-mode dispatch has no way to supply them.
+        self.assertEqual(result.reviews[0]["duration_s"], known_duration_s)
+        self.assertIsNone(result.reviews[0]["tool_calls"])
+        self.assertIsNone(result.reviews[0]["cost_usd"])
         # Verify review file was written
         review_file_path = Path(result.reviews[0]["file"])
         self.assertTrue(review_file_path.exists(), f"Review file not found: {review_file_path}")
