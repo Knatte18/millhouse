@@ -40,7 +40,7 @@ from pathlib import Path
 
 import _agent_dispatch
 import _subprocess_util
-from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
+from _llm_common import LLMError, LLMSessionError, LLMRateLimitError, ReviewerCallResult
 
 
 def _claude_argv_prefix() -> list[str]:
@@ -324,8 +324,8 @@ def _invoke(
     session_id: str | None = None,
     resume: bool = False,
     cwd: Path | str | None = None,
-) -> tuple[str, str]:
-    """Core invocation: spawn claude, parse output, return (text, session_id).
+) -> ReviewerCallResult:
+    """Core invocation: spawn claude, parse output, return a ReviewerCallResult.
 
     Raises LLMError on failure.
     When resume=True and the subprocess exits non-zero, raises LLMSessionError instead so callers
@@ -335,6 +335,11 @@ def _invoke(
     and resume=False and no rate-limit was detected, the call is retried once with the same argv
     (see issue #153 — cmd /c claude shim flakes immediately after a prior session interrupt).
     The retry's outcome propagates as the final result.
+
+    Two distinct time.monotonic() reads are taken in the subprocess branch: the first-attempt `dt`
+    feeds only the fast-fail-retry gate above, while the cumulative `total_dt` — computed after the
+    retry (if any) ran — is what gets reported as duration_s, so a retried call's reported duration
+    reflects both attempts.
     """
     if _get_via_psmux_flag():
         if shutil.which("psmux") is None:
@@ -364,17 +369,17 @@ def _invoke(
             )
         except Exception as exc:
             if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
-                raise LLMError(f"psmux-claude timed out after {timeout}s") from exc
-            raise LLMError(f"Failed to spawn psmux-claude: {exc}") from exc
+                raise LLMError(f"psmux-claude timed out after {timeout}s", duration_s=time.monotonic() - start) from exc
+            raise LLMError(f"Failed to spawn psmux-claude: {exc}", duration_s=time.monotonic() - start) from exc
         dt = time.monotonic() - start
         if result.returncode != 0:
             error_detail = (result.stderr or result.stdout or "")[:500]
             if resume:
-                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+                raise LLMSessionError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}", duration_s=dt)
             else:
-                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}")
+                raise LLMError(f"psmux-claude (session {session_id[:8]}...) exited {result.returncode}: {error_detail}", duration_s=dt)
         text = result.stdout.rstrip()
-        return text, session_id
+        return ReviewerCallResult(text=text, session_id=session_id, duration_s=dt, tool_calls=None, cost_usd=None)
 
     start = time.monotonic()
     argv = _build_argv(model, effort, allowed_tools, session_id, resume)
@@ -390,8 +395,8 @@ def _invoke(
         )
     except Exception as exc:  # subprocess.TimeoutExpired or similar
         if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
-            raise LLMError(f"Claude CLI timed out after {timeout}s") from exc
-        raise LLMError(f"Failed to spawn claude: {exc}") from exc
+            raise LLMError(f"Claude CLI timed out after {timeout}s", duration_s=time.monotonic() - start) from exc
+        raise LLMError(f"Failed to spawn claude: {exc}", duration_s=time.monotonic() - start) from exc
 
     dt = time.monotonic() - start
     rate_limited = _scan_rate_limit(result.stdout or "")
@@ -410,23 +415,29 @@ def _invoke(
         result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout), cwd=cwd, env=child_env)
         rate_limited = _scan_rate_limit(result.stdout or "")
 
+    # Cumulative duration across both attempts (if a retry ran), computed before the error checks
+    # below so every raise in this branch can report the full elapsed time.
+    total_dt = time.monotonic() - start
+
     if result.returncode != 0:
         error_detail = (result.stderr or result.stdout or "")[:500]
         if rate_limited:
             raise LLMRateLimitError(
-                f"claude rate-limited (exit {result.returncode}): {error_detail}"
+                f"claude rate-limited (exit {result.returncode}): {error_detail}", duration_s=total_dt
             )
         if resume:
             raise LLMSessionError(
-                f"claude --resume {session_id} exited {result.returncode}: {error_detail}"
+                f"claude --resume {session_id} exited {result.returncode}: {error_detail}", duration_s=total_dt
             )
-        raise LLMError(f"claude exited {result.returncode}: {error_detail}")
+        raise LLMError(f"claude exited {result.returncode}: {error_detail}", duration_s=total_dt)
 
-    text, observed_sid = _parse_stream_json(result.stdout)
+    text, observed_sid, tool_calls, cost_usd = _parse_stream_json(result.stdout)
     effective_sid = observed_sid or session_id
     if not effective_sid:
-        raise LLMError("claude CLI did not emit a session_id in stream-json output")
-    return text, effective_sid
+        raise LLMError("claude CLI did not emit a session_id in stream-json output", duration_s=total_dt)
+    return ReviewerCallResult(
+        text=text, session_id=effective_sid, duration_s=total_dt, tool_calls=tool_calls, cost_usd=cost_usd
+    )
 
 
 # ---------------------------------------------------------------------------
