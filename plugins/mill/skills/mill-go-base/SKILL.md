@@ -248,7 +248,7 @@ This three-step pattern applies at every dispatch point:
    it only differs when the operator explicitly instructs a different tier for this specific dispatch.
    This recorded value is consumed by a later batch's step-6 edit.
    The Agent tool call still takes only `subagent_type`, `model`, `prompt`, and optionally `isolation` — there is no separate `effort` parameter — but the envelope's `subagent_type` value (from step 2) already encodes the resolved alias's `effort` tier as a suffix, resolved once by `_agent_dispatch.resolve_subagent_type` at envelope-construction time.
-   Forwarding an effort tier means dispatching to one of the six per-tier agent-definition files under `plugins/mill/agents/` (`mill-reviewer-medium.md`/`-high.md`/`-max.md`, `mill-implementer-medium.md`/`-high.md`/`-max.md`), each of which pins a fixed `effort:` in its own frontmatter — not passing effort as a call parameter. `effort` remains present in the envelope for `subprocess`/`psmux` dispatch parity and audit visibility, in addition to now driving `subagent_type`.
+   Forwarding an effort tier means dispatching to one of the six per-tier agent-definition files under `plugins/mill/agents/` (`mill-reviewer-medium.md`/`-high.md`/`-max.md`, `mill-implementer-medium.md`/`-high.md`/`-max.md`), each of which pins a fixed `effort:` in its own frontmatter — not passing effort as a call parameter. `effort` remains present in the envelope for audit visibility, in addition to now driving `subagent_type`.
    This `agentId` is the harness runtime handle for the live subagent — it is what `SendMessage` addresses to warm-resume the same session (see the `incomplete` recovery in step 6).
    It is **distinct from** the brief `session_id` / `implementer_session` recorded in status.md: those identify the LLM conversation for finalize and cleanup, not the harness worker.
    Today's text treats dispatch as fire-and-forget;
@@ -371,7 +371,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       When `inferred` is absent or `false`, skip this call entirely.
       If the envelope is **still** `stuck_type: incomplete` after one warm resume and one `--resume-incomplete` fallback, hand it to the `### Stuck escalation` `incomplete` branch (it does not silently loop).
 
-7. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
+7. **Branch on verdict:** The envelope's `status`, `verdict`, and `stuck_type` fields are what the caller branches on.
    The agent-mode `incomplete` recovery (step 6.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
 
 **Agent-mode properties:**
@@ -381,7 +381,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
   A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 4's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 4(b);
   reviewer/fixer: liveness-probe-then-one-retry-transient path per step 4(c)).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
-- The one-retry transient policy applies to raw API errors immediately, and to stopped/interrupted reviewer/fixer agents once step 4's liveness probe confirms the agent is no longer running (see step 4).
+- The one-retry transient policy applies immediately to raw API errors, and to stopped/interrupted reviewer/fixer agents once step 4's liveness probe confirms the agent is no longer running (see step 4).
   Stopped/interrupted implementer agents are first checked by the same liveness probe (step 4(b));
   once it confirms the agent is no longer running, they are routed to the existing clean-mid-work-stop / `incomplete` recovery (see step 4).
 - `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 6.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
