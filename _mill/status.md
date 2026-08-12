@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-prohibition-regex-generalization
+phase: approved-regression-tests
 slug: plan-validate-context-completeness-gaps
 branch: hanf/plan-validate-context-completeness-gaps
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-08-12T18:36:33Z'
 planned  '2026-08-12T18:36:51Z'
 implementing  '2026-08-12T18:37:20Z'
 approved-prohibition-regex-generalization  '2026-08-12T18:41:06Z'
+approved-regression-tests  '2026-08-12T18:43:35Z'
 ```
 
 ## Batches
@@ -34,8 +35,9 @@ batches:
     commit_sha: 7cea175238e2b6a135fcd9287ba8db1276cfcb1e
     verify_baseline_failures: []
   - name: regression-tests
-    state: running
+    state: approved
     implementer_session: 6fd258af-f2a9-41e9-be5d-5a7bb6fb78ed
     start_sha: b57f8177a1277cc299169a85d938198b0d5ab9b4
+    commit_sha: fafd00e0719d430e41f316e897c372e698d5020b
     verify_baseline_failures: []
 ```
