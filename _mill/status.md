@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r4
+phase: discussed
 slug: mill-merge-and-merge-in-bugs
 branch: hanf/mill-merge-and-merge-in-bugs
 plan: null
@@ -16,4 +16,6 @@ task_description: |
 ```text
 discussing  '2026-08-12T17:47:04Z'
 discussion-fix-r4  '2026-08-12T18:14:59Z'
+discussion-fix-r6  '2026-08-12T18:23:25Z'
+discussed  '2026-08-12T18:23:25Z'
 ```
