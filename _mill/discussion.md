@@ -41,13 +41,23 @@ fixed in code, except #838, addressed below).
 ## Scope
 
 **In:**
-- `_review_cli.py::print_error_envelope` — add an `error_kind: "usage" | "reviewer"` field to
-  the JSON envelope, and thread through the correct round number instead of hardcoding `0`.
-- `millpy-review-plan.py`, `millpy-review-discussion.py`, `millpy-review-code.py` — the
-  finalize-stage `except ReviewError` block that catches a `parse_verdict` failure on the
-  reviewer's own raw text is reclassified `error_kind: "reviewer"`; every other
-  `print_error_envelope` call site (config/registry/slug resolution, prepare-stage errors,
-  missing `--agent-output`, full-stage errors) stays `error_kind: "usage"` (the default).
+- `_review_cli.py::print_error_envelope` — add an `error_kind: "usage"` default field to the
+  JSON envelope (every call site of this function stays `"usage"` — none of them involve
+  reviewer output), and thread through the correct round number instead of hardcoding `0`.
+- `_review_plan.py::finalize`, `_review_discussion.py::finalize`, `_review_code.py::finalize` —
+  each of these CLI-wrapper functions' own `except ReviewError` block (around their call to
+  `_review_common.finalize_scope`) constructs and *returns* an ERROR-shaped
+  dict/`ReviewResult` directly — this is the actual site where a `parse_verdict` failure on the
+  reviewer's own raw text lands (it never reaches `print_error_envelope` or any outer CLI-level
+  `except ReviewError`, since these functions return rather than re-raise). Add
+  `error_kind: "reviewer"` to the dict/`ReviewResult` constructed there.
+- `millpy-review-plan.py`, `millpy-review-discussion.py`, `millpy-review-code.py` — every
+  `print_error_envelope` call site in each CLI's `main()` (config/registry/slug resolution,
+  prepare-stage errors, missing `--agent-output`, the outer finalize-stage `except ReviewError`,
+  full-stage errors) stays `error_kind: "usage"` (the default) — none of these are reached by a
+  reviewer-output-caused failure.
+- `plugins/mill/templates/review-output.schema.md` — one-line update to the `## Verdict`
+  section's contract describing the new, conditionally-appended third line (the demotion note).
 - `mill-start/SKILL.md` Step 3.5, `mill-plan/SKILL.md` Step 4.5, `mill-go-base/SKILL.md` Step
   4.5, and `mill-go-base/holistic-review.md` sub-step 3.5 — update the ERROR-only-aggregate
   retry logic to read `error_kind`: `"usage"` halts immediately (no round consumed, no two-pass
@@ -115,20 +125,31 @@ fixed in code, except #838, addressed below).
 
 ### error_kind bucketing: pre-reviewer vs. reviewer-output-parsing
 
-- Decision: Every `print_error_envelope` call site defaults to `error_kind: "usage"` — this
-  covers config load failure, reviewer-registry validation, slug resolution, prepare-stage
-  `ReviewError`/unhandled exceptions, missing `--agent-output`, and full-stage `ReviewError`/
-  unhandled exceptions. The **sole** exception is the finalize-stage `except ReviewError` that
-  wraps the call into `finalize()` → `_review_common.finalize_scope()` → `parse_verdict()`: that
-  is reclassified `error_kind: "reviewer"`.
-- Rationale: Grounded in direct code reading (`millpy-review-plan.py:169-358`,
-  `_review_common.py:2465-2571,1569-1608`) — contrary to an earlier (incorrect) hypothesis that
-  `finalize_scope` internally catches parse failures and returns an ERROR-shaped dict with cost
-  metadata, it does **not**: `parse_verdict` raises `ReviewError` uncaught, which propagates to
-  the CLI's single `except ReviewError` block around the `finalize()` call
-  (`millpy-review-plan.py:307-309`). That is the only call site where the *reviewer's own output*
-  is the cause of the error; every other site fails before or entirely outside reviewer-output
-  processing (config, registry, slug, missing flags) and is therefore always non-retryable.
+- Decision: `error_kind: "usage"` is the default for every `print_error_envelope` call site in
+  each CLI's `main()` — config load failure, reviewer-registry validation, slug resolution,
+  prepare-stage `ReviewError`/unhandled exceptions, missing `--agent-output`, the outer
+  finalize-stage `except ReviewError`, and full-stage `ReviewError`/unhandled exceptions.
+  `error_kind: "reviewer"` is added instead to the ERROR-shaped dict/`ReviewResult` that each of
+  `_review_plan.py::finalize`, `_review_discussion.py::finalize`, `_review_code.py::finalize`
+  constructs and *returns* directly from their own `except ReviewError` block wrapping the call
+  to `_review_common.finalize_scope` — this is the actual, sole site where a `parse_verdict`
+  failure on the reviewer's own raw text lands.
+- Rationale: Corrected during Discussion Review round 2 by a **confirmed BLOCKING finding**
+  against an earlier draft of this decision. That earlier draft concluded the reviewer-kind site
+  was `millpy-review-plan.py:307-309`'s outer `except ReviewError` (reasoning: "contrary to an
+  earlier hypothesis that `finalize_scope` catches parse failures internally, it does not — it
+  raises uncaught to the CLI"). That conclusion was itself wrong: `finalize_scope` does raise
+  `ReviewError` uncaught, but the CLI's `main()` never sees it directly — each CLI-wrapper
+  `finalize()` function (`_review_plan.py:662-746`, `_review_discussion.py:153-227`,
+  `_review_code.py:519-607`, all independently confirmed by direct read) wraps that same call in
+  its **own** `try/except ReviewError`, and on catch builds and *returns* — never re-raises — an
+  ERROR-shaped dict/`ReviewResult` with `verdict: "ERROR"`, `error: f"parse_verdict failed:
+  {exc}"`, and the cost-metadata fields already applied. That returned value flows straight into
+  the CLI's success-path `print(json.dumps(...))`/`return 0` — it never reaches
+  `print_error_envelope` or the outer `except ReviewError` at all. The outer CLI-level catch is
+  therefore still correctly `"usage"`-bucketed (as before), just not for the reason originally
+  stated — it's reachable only for a `ReviewError` raised by something *other* than the
+  internally-caught `finalize_scope` call, e.g. `resolve_blocking_classes` failing on bad config.
 - Rejected: Treating the full-stage (`--stage full`) `ReviewError` catch as potentially either
   kind — it wraps an entire multi-round `run()` loop that could fail for many reasons (config,
   registry, slug, or reviewer-output problems all funnel through the same catch), so unwrapping
@@ -141,33 +162,64 @@ fixed in code, except #838, addressed below).
 
 ### Retry semantics keyed on error_kind
 
-- Decision: `mill-start/SKILL.md` Step 3.5, `mill-plan/SKILL.md` Step 4.5, and
-  `mill-go-base/SKILL.md` Step 4.5 change their ERROR-only-aggregate retry logic: when the
-  envelope's `error_kind` is `"usage"`, halt immediately on the first occurrence — no retry, no
-  round consumed — with a message that names it as a usage error (distinct wording from the
-  existing `BLOCKED: <type> review ERROR-only round N`, e.g.
-  `BLOCKED: <type> review usage error: <message>`). When `error_kind` is `"reviewer"` or absent
-  (older envelopes / any review type not yet touched by this fix), keep the existing two-pass
-  retry-then-halt behavior unchanged.
+- Decision: `mill-start/SKILL.md` Step 3.5, `mill-plan/SKILL.md` Step 4.5,
+  `mill-go-base/SKILL.md` Step 4.5, and `mill-go-base/holistic-review.md` sub-step 3.5 change
+  their ERROR-only-aggregate retry logic: **if any entry in the envelope's `reviews[]` has
+  `error_kind: "usage"`, halt immediately** on the first occurrence — no retry, no round consumed
+  — with a message that names it as a usage error (distinct wording from the existing
+  `BLOCKED: <type> review ERROR-only round N`, e.g. `BLOCKED: <type> review usage error:
+  <message>`), regardless of what any other entry in the same `reviews[]` list contains. Only
+  when **no** entry is `error_kind: "usage"` does each site's existing trigger condition and
+  two-pass retry-then-halt behavior apply unchanged to the `"reviewer"`/absent entries.
 - Rationale: A usage error is deterministic — the identical CLI invocation will fail identically
   on retry, so the existing two-pass wait only delays the operator-visible halt without any
-  chance of success. This is the exact complaint in #830/#820.
+  chance of success; this is the exact complaint in #830/#820. The "any entry" aggregation rule
+  is necessary because `error_kind` is defined per-`reviews[]`-entry and plan review can run
+  per-batch (multiple entries in one envelope): a partial usage failure alongside a successful or
+  reviewer-kind-failed entry elsewhere in the same round is still non-retryable for the failed
+  scope, so retrying the whole round cannot help it. "Any" was chosen over "all" specifically
+  because even one non-retryable entry makes the round un-completable via retry.
+- Note (found during Discussion Review round 2): the four consumer sites do **not** share one
+  trigger condition today, independent of this fix — `mill-start/SKILL.md`,
+  `mill-go-base/SKILL.md`, and `mill-go-base/holistic-review.md` trigger on "top-level `verdict`
+  is `ERROR`, or equivalently every `reviews[]` entry is `ERROR`" (an ALL-entries condition),
+  while `mill-plan/SKILL.md` Step 4.5 triggers on "at least one `reviews[]` entry is `ERROR`" (an
+  ANY-entry condition) — a materially different, pre-existing asymmetry unrelated to `error_kind`.
+  This task's `error_kind` aggregation rule (above) is additive on top of whichever trigger
+  condition already fires at each site; it does not require unifying the ALL-vs-ANY asymmetry
+  itself.
 - Rejected: Leaving retry behavior unchanged and treating `error_kind` as informational-only —
-  doesn't fix the actual behavioral bug the issues describe, only improves debuggability.
+  doesn't fix the actual behavioral bug the issues describe, only improves debuggability. Also
+  rejected: unifying the four sites' ALL-vs-ANY trigger-condition asymmetry as part of this task
+  — that's a larger, independent behavioral change to when a round is even considered
+  non-reviewable at all, not motivated by any of the five filed issues, and risks changing
+  mill-plan's per-batch retry behavior in ways this discussion has not scoped or tested.
 
 ### round: 0 fix
 
-- Decision: `print_error_envelope` gains an optional `round` parameter (default `0`, preserving
-  today's behavior for callers that don't pass it). Every call site in `millpy-review-plan.py`
-  passes `args.round` when available — which is every site, since `args = parser.parse_args(...)`
-  runs before any error branch. Prepare-stage call sites keep `round=0` (or omit the param)
-  since no round has been assigned yet at that point in a genuine failure.
+- Decision: `print_error_envelope` gains an optional `round` parameter, default `0`. Every call
+  site in each CLI's `main()` passes `round=args.round if args.round is not None else 0`
+  (equivalently `args.round or 0`, since a real round number is never `0` or falsy) uniformly —
+  no per-stage distinction between config/registry/slug-resolution sites, prepare-stage sites,
+  and the finalize-stage site. This is a single, uniform coalescing rule applied at every call
+  site alike, not different handling for "early" vs. "finalize" sites.
 - Rationale: `args.round` is parsed once at the very top of `main()`, before any try/except
-  block — it costs nothing to thread through, and directly fixes the "round: 0 is also wrong"
-  complaint in both #830 and #820.
-- Rejected: Calling `discover_round()` from the error path to recover a round number even when
-  `--round` wasn't passed — adds filesystem I/O and complexity to an error path for a case
-  (`--round` omitted entirely) that isn't what either filed issue actually reproduced.
+  block, so it is always in scope (commonly `None` for prepare-stage/pre-flight failures, since
+  `--round` is typically supplied by the caller only on finalize invocations; a real, non-`None`
+  value on any call when the caller did pass `--round`). Coalescing `None` to `0` at every site
+  uniformly preserves today's exact behavior for every call that doesn't have a round yet, while
+  reporting the real round wherever it was actually supplied — directly fixing the "round: 0 is
+  also wrong" complaint in both #830 and #820 without inventing a new `round: null` value that
+  would break `blocking_count`/`round`-typed consumers expecting an int.
+- Rejected: An earlier draft of this decision, corrected during Discussion Review round 2 after a
+  confirmed NIT finding that it contradicted itself — it said both "every call site passes
+  `args.round`" and, separately, "prepare-stage call sites keep `round=0`", without stating
+  whether that meant coalescing `None` or literally hardcoding `0` at those sites, leaving the
+  two sentences unreconciled. The uniform-coalescing rule above resolves that ambiguity
+  directly instead of special-casing any subset of call sites. Also rejected (unchanged from the
+  original draft): calling `discover_round()` from the error path to recover a round number even
+  when `--round` wasn't passed at all — adds filesystem I/O and complexity to an error path for a
+  case neither filed issue actually reproduced.
 
 ### Verdict-summary staleness: append, don't rewrite
 
@@ -199,12 +251,25 @@ fixed in code, except #838, addressed below).
 - `plugins/mill/scripts/_review_cli.py` — `print_error_envelope()` (lines 24-45), the single
   shared usage-error envelope emitter for all three review CLIs.
 - `plugins/mill/scripts/millpy-review-plan.py` — `main()` (lines ~150-358). All
-  `print_error_envelope` call sites: 180, 187, 193, 260, 263, 267 (`--agent-output` missing),
-  308 (finalize `ReviewError` — the one reviewer-kind site), 354, 357. `args.round` is parsed at
-  line 162, available at every one of these sites.
+  `print_error_envelope` call sites (all `error_kind: "usage"`): 180, 187, 193, 260, 263, 267
+  (`--agent-output` missing), 308 (finalize `ReviewError` — reachable only for a `ReviewError`
+  *not* caught by `_review_plan.finalize`'s own internal try/except, e.g. `resolve_blocking_
+  classes` failing on bad config; not a reviewer-output site — see the corrected "error_kind
+  bucketing" Decision), 354, 357. `args.round` is parsed at line 162, available at every one of
+  these sites.
+- `plugins/mill/scripts/_review_plan.py::finalize` (lines 662-746) — its own `except ReviewError`
+  at lines 712-732 (around the call to `finalize_scope` at line 707) is the actual
+  `error_kind: "reviewer"` site: it catches `parse_verdict` failures and *returns* an ERROR-shaped
+  dict (never re-raises), which flows straight into `main()`'s success-path
+  `print(json.dumps(result_dict))` at millpy-review-plan.py:305-306 — it never reaches
+  `print_error_envelope` or the line-308 outer catch. Identical pattern confirmed by direct read
+  in `_review_discussion.py::finalize` (lines 153-227, catch at 206-227) and
+  `_review_code.py::finalize` (lines 519-607, catch at 574-607).
 - `plugins/mill/scripts/_review_common.py`:
   - `parse_verdict()` (line 1569) — raises `ReviewError` when no valid verdict can be extracted
-    from reviewer raw text; this is the sole source of a genuine reviewer-kind error.
+    from reviewer raw text; this is the sole source of the exception each CLI-wrapper
+    `finalize()`'s own `except ReviewError` block (above) catches and reclassifies
+    `error_kind: "reviewer"`.
   - `finalize_scope()` (line 2465) — orchestrates `apply_actual_model_override` →
     `apply_cost_metadata` → `parse_verdict` → `extract_findings` → (if `blocking_classes` set)
     `apply_blocking_ceiling` + `rewrite_demoted_findings` → conditionally `rewrite_verdict_token`
@@ -218,9 +283,9 @@ fixed in code, except #838, addressed below).
   - `DEFAULT_BLOCKING_CLASSES` (line 2601) — per-role default ceilings; not directly relevant to
     the fix but explains why `blocking_classes` is non-`None` on every production call site.
 - `plugins/mill/scripts/millpy-review-discussion.py` and `millpy-review-code.py` — same
-  `print_error_envelope` usage pattern and same finalize-stage `ReviewError` catch shape as
-  `millpy-review-plan.py` (confirmed by grep for `--duration-s` and `print_error_envelope`
-  call-site structure); apply the identical `error_kind` bucketing to each.
+  `print_error_envelope` call-site structure in `main()` as `millpy-review-plan.py` (confirmed by
+  grep for `--duration-s` and `print_error_envelope`); their `finalize()` wrapper functions'
+  own `except ReviewError` sites are cited directly above, by direct read, not by analogy.
 - `plugins/mill/skills/mill-start/SKILL.md` Step 3.5 "ERROR-only-aggregate retry", ~line 200s of
   the rendered skill (Phase: Discussion Review) — this session's own consumer of the pattern
   being fixed.
@@ -250,9 +315,11 @@ _No `CONSTRAINTS.md` present at hub root._
   explicitly passed.
 - **`millpy-review-plan.py` finalize-stage error paths**: unit test (invoking `main()` or the
   relevant internal function with a fixture) confirming a missing-`--agent-output` invocation
-  produces `error_kind: "usage"` with the correct (non-zero) round when `--round` was supplied,
-  and a reviewer raw-text that fails `parse_verdict` produces `error_kind: "reviewer"`. Mirror
-  for `millpy-review-discussion.py` and `millpy-review-code.py`.
+  produces `error_kind: "usage"` with the correct (non-zero) round when `--round` was supplied.
+- **`_review_plan.py::finalize`, `_review_discussion.py::finalize`,
+  `_review_code.py::finalize`** (TDD candidates): unit test calling each `finalize()` wrapper
+  directly with a `raw_text` fixture that fails `parse_verdict` (e.g. no fenced `yaml` block),
+  asserting the returned dict/`ReviewResult` carries `error_kind: "reviewer"`.
 - **`_review_common.py::finalize_scope`** (TDD candidate): unit test with a fixture review whose
   `blocking_classes` ceiling demotes at least one finding but does **not** flip the aggregate
   verdict (covers #829 — count-only staleness) asserting the demotion note is appended and the
@@ -308,3 +375,22 @@ _No `CONSTRAINTS.md` present at hub root._
   verified by manual re-read, not unit tests. **Why:** Matches project testing conventions
   (in-memory/tempfile fixtures, no real git/LLM) and keeps fast, deterministic coverage on the
   pure-Python logic while treating markdown orchestration prose appropriately as non-unit-testable.
+- **Q:** [Discussion Review round 2, BLOCKING] Which code site actually constructs the
+  reviewer-kind ERROR result — the outer CLI's `except ReviewError`, or something else? **A:**
+  [auto-pick] Each CLI-wrapper `finalize()` function's own internal `except ReviewError` (around
+  its call to `finalize_scope`) — it returns the ERROR-shaped result directly and never reaches
+  the outer CLI-level catch at all. **Why:** A BLOCKING finding proved the discussion's earlier
+  conclusion wrong by direct read of `_review_plan.py::finalize` (lines 662-746, catch at
+  712-732) and the identical pattern in `_review_discussion.py::finalize` and
+  `_review_code.py::finalize` — all three independently confirmed. Reclassified the
+  `error_kind: "reviewer"` fix target accordingly; the outer CLI catch stays `"usage"`.
+- **Q:** [Discussion Review round 2, BLOCKING] How should `error_kind`-based retry logic handle
+  an envelope whose `reviews[]` mixes `"usage"` and `"reviewer"`/successful entries (e.g.
+  per-batch plan review)? **A:** [auto-pick] Any `"usage"` entry halts the round immediately,
+  regardless of other entries' kind; only when no entry is `"usage"` does each site's existing
+  trigger condition and two-pass retry apply to the rest. **Why:** `error_kind` is per-entry and
+  plan review can be per-batch (multiple `reviews[]` entries per round); one non-retryable entry
+  makes the whole round un-completable via retry regardless of what else succeeded or failed.
+  Also surfaced and explicitly left alone: the four consumer sites already disagree on their
+  underlying ANY-vs-ALL trigger condition, independent of this fix — unifying that is out of
+  scope, not motivated by any of the five filed issues.
