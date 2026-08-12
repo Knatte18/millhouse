@@ -285,7 +285,9 @@ Print this round's cost line per the shared "## Review cost line" section in `pl
 3.5.
 **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
-   When the JSON envelope from step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4a / 4b / 5 entirely and immediately re-run:
+   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains. Reuse the exact halt mechanics this same step's second-pass halt below already uses, but with the message text replaced: in plain mode, halt with `BLOCKED: discussion review usage error: <message>` (where `<message>` is the offending entry's `error` field) and surface it to the user; under `--auto` mode, call `_status.set_blocked(status_path, f"auto: discussion review usage error: <message>", timestamp=_timestamp.now_utc_iso())`, then `if [ -d <worktree>/_mill/briefs ]; then git -C <worktree> add _mill/briefs/; fi && git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: discussion review usage error) for <slug>" && git -C <worktree> push`.
+
+   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from step 2 has top-level `verdict: "ERROR"` (or, equivalently, every remaining entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4a / 4b / 5 entirely and immediately re-run:
 
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
