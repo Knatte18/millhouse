@@ -225,13 +225,22 @@ def _scan_rate_limit(stdout: str) -> bool:
     return False
 
 
-def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
+def _parse_stream_json(stdout: str) -> tuple[str, str | None, int | None, float | None]:
     """Parse claude's stream-json output.
 
-    Returns (final_text, session_id).
+    Returns (final_text, session_id, tool_calls, cost_usd).
     session_id is extracted from any event that carries a top-level `session_id` field (the init
     "system" event always does; the final "result" event typically does too).
     The last one seen wins.
+
+    tool_calls counts every content block with type "tool_use" across every "assistant" event,
+    added up cumulatively as events are consumed.
+    If the terminal "result" event carries an integer "num_turns" field, that native count wins
+    over the accumulated block count;
+    otherwise the block count is used as-is.
+
+    cost_usd is read from the terminal "result" event's "total_cost_usd" field when present as an
+    int or float (bools excluded), else None.
 
     Stream-json emits one JSON object per line.
     Lines that fail JSON parsing emit a stderr warning and are skipped.
@@ -240,6 +249,9 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
     """
     final_text: str | None = None
     session_id: str | None = None
+    tool_use_blocks = 0
+    native_turns: int | None = None
+    cost_usd: float | None = None
 
     for line in stdout.splitlines():
         line = line.strip()
@@ -266,6 +278,15 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
             result_value = obj.get("result", "")
             if isinstance(result_value, str) and result_value.strip():
                 final_text = result_value
+            # num_turns, when present, is the CLI's own turn count and takes precedence over our
+            # block-counted fallback.
+            turns_value = obj.get("num_turns")
+            if isinstance(turns_value, int) and not isinstance(turns_value, bool):
+                native_turns = turns_value
+            # total_cost_usd is the CLI's own dollar-cost figure for the whole call.
+            cost_value = obj.get("total_cost_usd")
+            if isinstance(cost_value, (int, float)) and not isinstance(cost_value, bool):
+                cost_usd = float(cost_value)
         elif event_type == "assistant":
             # Some versions emit {"type":"assistant","message":{"content":[...]}}
             message = obj.get("message", {})
@@ -279,10 +300,18 @@ def _parse_stream_json(stdout: str) -> tuple[str, str | None]:
                 combined = "".join(parts).strip()
                 if combined:
                     final_text = combined
+                # Count tool_use blocks across every assistant event, independent of whether the
+                # same event also carries text.
+                tool_use_blocks += sum(
+                    1
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "tool_use"
+                )
 
     if final_text is None:
         raise LLMError("claude returned no content")
-    return final_text, session_id
+    tool_calls = native_turns if native_turns is not None else tool_use_blocks
+    return final_text, session_id, tool_calls, cost_usd
 
 
 def _invoke(
