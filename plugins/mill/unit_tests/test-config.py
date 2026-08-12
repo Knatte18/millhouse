@@ -12,6 +12,7 @@ Covers:
   - deep_merge: scalar in overlay wins over scalar in base
   - deep_merge: nested dicts are merged recursively
   - deep_merge: empty overlay leaves base unchanged
+  - resolve_plugin_root_from_syspath: sys.path scan, no-match SystemExit, non-index-1 entry, trailing slash, first-match-wins
 """
 from __future__ import annotations
 
@@ -652,6 +653,58 @@ def test_resolve_plugin_template_path_stale_root() -> None:
             else:
                 os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
     print("PASS resolve_plugin_template_path -- stale CLAUDE_PLUGIN_ROOT falls back to source tree with warning")
+
+
+def test_resolve_plugin_root_from_syspath_basic() -> None:
+    """resolve_plugin_root_from_syspath finds the scripts entry and returns its parent."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp).resolve()
+        scripts_dir = tmp_path / "scripts"
+        result = _config.resolve_plugin_root_from_syspath(["", str(scripts_dir)])
+        assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+    print("PASS resolve_plugin_root_from_syspath -- basic sys.path scan")
+
+
+def test_resolve_plugin_root_from_syspath_no_scripts_entry_raises() -> None:
+    """resolve_plugin_root_from_syspath with no scripts-named entry raises SystemExit."""
+    try:
+        _config.resolve_plugin_root_from_syspath(["", "/some/other/dir"])
+        raise AssertionError("Expected SystemExit")
+    except SystemExit as exc:
+        assert "scripts" in str(exc), f"Expected 'scripts' in message, got {exc!r}"
+    print("PASS resolve_plugin_root_from_syspath -- no scripts entry raises SystemExit")
+
+
+def test_resolve_plugin_root_from_syspath_not_at_index_one() -> None:
+    """resolve_plugin_root_from_syspath finds a scripts entry prepended ahead of it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp).resolve()
+        scripts_dir = tmp_path / "scripts"
+        result = _config.resolve_plugin_root_from_syspath(["", "/some/other/dir", str(scripts_dir)])
+        assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+    print("PASS resolve_plugin_root_from_syspath -- scripts entry not at index 1 still found")
+
+
+def test_resolve_plugin_root_from_syspath_trailing_slash() -> None:
+    """resolve_plugin_root_from_syspath normalizes a trailing slash on the scripts entry."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp).resolve()
+        scripts_dir_str = str(tmp_path / "scripts") + os.sep
+        result = _config.resolve_plugin_root_from_syspath(["", scripts_dir_str])
+        assert result == tmp_path, f"Expected {tmp_path}, got {result}"
+    print("PASS resolve_plugin_root_from_syspath -- trailing slash normalizes")
+
+
+def test_resolve_plugin_root_from_syspath_first_match_wins() -> None:
+    """resolve_plugin_root_from_syspath returns the first scripts entry when two exist."""
+    with tempfile.TemporaryDirectory() as tmp1, tempfile.TemporaryDirectory() as tmp2:
+        tmp1_path = Path(tmp1).resolve()
+        tmp2_path = Path(tmp2).resolve()
+        scripts1 = tmp1_path / "scripts"
+        scripts2 = tmp2_path / "scripts"
+        result = _config.resolve_plugin_root_from_syspath(["", str(scripts1), str(scripts2)])
+        assert result == tmp1_path, f"Expected first match {tmp1_path}, got {result}"
+    print("PASS resolve_plugin_root_from_syspath -- first match wins")
 
 
 def test_load_config_bare_roles_key() -> None:
@@ -1573,6 +1626,11 @@ def main() -> int:
         test_deep_merge_none_overlay_dict_base,
         test_deep_merge_none_overlay_scalar_base,
         test_resolve_plugin_template_path_stale_root,
+        test_resolve_plugin_root_from_syspath_basic,
+        test_resolve_plugin_root_from_syspath_no_scripts_entry_raises,
+        test_resolve_plugin_root_from_syspath_not_at_index_one,
+        test_resolve_plugin_root_from_syspath_trailing_slash,
+        test_resolve_plugin_root_from_syspath_first_match_wins,
         test_load_config_bare_roles_key,
         test_load_config_hub_relative_path_no_warning,
         test_load_config_no_hub_overlay_returns_template,

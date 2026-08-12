@@ -37,6 +37,7 @@ __all__ = [
     "walk_unknown_keys",
     "warn_unknown_keys",
     "resolve_plugin_template_path",
+    "resolve_plugin_root_from_syspath",
     "resolve_repo_config_path",
 ]
 
@@ -145,6 +146,33 @@ def resolve_plugin_template_path(filename: str) -> Path:
             return Path(__file__).resolve().parent.parent / "templates" / filename
         return candidate
     return Path(__file__).resolve().parent.parent / "templates" / filename
+
+
+def resolve_plugin_root_from_syspath(sys_path: list[str]) -> Path:
+    """Resolve the plugin root by scanning sys.path for the PYTHONPATH-inserted scripts entry.
+
+    CPython inserts every PYTHONPATH entry into sys.path at interpreter startup, including for
+    -c invocations. Phase 4.8's command line always carries PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"
+    as a prefix -- a value CC has already substituted textually before the Bash tool executes it --
+    so this never depends on CLAUDE_PLUGIN_ROOT surviving as a real inherited env var.
+
+    Args:
+        sys_path: The full sys.path list. Passed explicitly (not read internally) so the function
+            stays pure and testable without mocking sys.path or os.environ.
+
+    Returns:
+        The parent directory of the first sys.path entry named "scripts" (first-match-wins).
+
+    Raises:
+        SystemExit: If no sys.path entry is named "scripts".
+    """
+    for entry in sys_path:
+        if Path(entry).name == "scripts":
+            return Path(entry).resolve().parent
+    raise SystemExit(
+        "resolve_plugin_root_from_syspath: expected a .../scripts directory from PYTHONPATH "
+        "somewhere in sys.path -- run this via the documented mill-setup invocation, not standalone"
+    )
 
 
 def resolve_repo_config_path(hub_root: Path, worktree_root: Path) -> Path | None:
