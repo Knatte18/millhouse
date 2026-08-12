@@ -45,7 +45,7 @@ the shell expands it at runtime.
 The full absolute path must never appear in a command string.
 
 **Step 0b: Load `mill:conversation`.**
-Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `## Holistic code review`);
+Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
@@ -54,14 +54,14 @@ this skill is loaded defensively in case a future addition needs its numbered-op
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
-   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at Handoff step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
+   - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at `plugins/mill/skills/mill-go-base/handoff.md` step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
      See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent).
    - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
-   - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `## Holistic code review` below.
+   - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
@@ -135,24 +135,24 @@ matched = _phase_wait.matches_wait_trigger(
 `matched` is always `True` here — the table row above is defined by this same predicate, so this call only distinguishes which branch fired.
 Route on the current `phase` value:
 
-- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to `## Resume`, unchanged from today.
-- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume`.
+- `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`), unchanged from today.
+- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`).
   That batch's `state` in `## Batches` genuinely is `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches it unchanged.
-- `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and `## Resume`'s step 1 has nothing to match.
+- `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and Resume's (`plugins/mill/skills/mill-go-base/resume.md`) step 1 has nothing to match.
   Route instead to `## Execute — sequential loop`, continuing from the next `pending` batch in `order` — the same continuation the normal in-flow path already takes after a batch approves.
-  **Edge case:** if the just-approved batch was the last one in `order` (zero `pending` batches remain), route to `## Holistic code review` instead, mirroring the normal in-flow transition from the end of the Execute loop into that section.
+  **Edge case:** if the just-approved batch was the last one in `order` (zero `pending` batches remain), route to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`) instead, mirroring the normal in-flow transition from the end of the Execute loop into that section.
 - `holistic-reviewing` — fires *after all* batches are `approved`, entirely outside the per-batch `## Batches` state machine.
-  Route directly to `## Holistic code review`;
+  Route directly to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`);
   its own step 1 crash-recovery scan already handles resuming a specific round.
-  Do not route through `## Resume` at all.
+  Do not route through `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) at all.
 - `self-resolved-verify-logic` — this literal phase string is appended at two call sites with identical text: the per-batch Stuck escalation section's verify/logic branch,
-  and the Holistic code review section's own verify/logic branch.
+  and the verify/logic branch in `plugins/mill/skills/mill-go-base/holistic-review.md`.
   So `phase` alone cannot disambiguate which occurrence fired.
-  Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (the self-resolve step only edits plan/batch files and records an audit-trail phase;
+  Read `_status.read_batches(status_path)`: if any entry's `state` is `running`, `reviewing`, or `fixing`, this is the per-batch occurrence — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`; the self-resolve step only edits plan/batch files and records an audit-trail phase;
   it never changes `state`, so Resume's step 1 still finds the batch).
-  If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review`, mirroring the `holistic-reviewing` row's routing.
+  If every entry's `state` is `approved`, this is the holistic occurrence (holistic self-resolve only happens after every batch is already approved) — route directly to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`), mirroring the `holistic-reviewing` row's routing.
 - `holistic-approved` — fires immediately before "Proceed to Handoff", after all holistic-review/NIT-fix work is already complete.
-  Route directly to `## Handoff` — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas routing to `## Resume` would find no non-terminal batch to act on.
+  Route directly to `## Handoff` (`plugins/mill/skills/mill-go-base/handoff.md`) — re-entering Handoff is idempotent (flip Home.md, invoke mill-finalize, invoke mill-self-report), whereas routing to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) would find no non-terminal batch to act on.
 
 ### Entry-gate wait for upstream mill-plan
 
@@ -218,22 +218,18 @@ For each batch in `order`:
 
 > See `plugins/mill/docs/harness-tool-contracts.md` for the confirmed `Agent` tool notification/return-shape contract this section is built on.
 
-When `dispatch == agent`, follow this three-step pattern at each dispatch point:
+This three-step pattern applies at every dispatch point:
 
-1. **Resolve dispatch mode:** `dispatch = _agent_dispatch.resolve_dispatch_mode(cfg)`.
-   This reads `cfg["llm"]["claude"]["dispatch"]` and returns one of `"subprocess"`, `"psmux"`, or `"agent"`.
-   If the mode is not `agent`, skip this entire section and use the existing `subprocess`/`psmux` flow unchanged (documented below in each dispatch subsection).
-
-2. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation).
+1. **Run prepare stage:** Invoke the CLI with `--stage prepare` and the standard arguments (see each subsection for the exact CLI invocation).
    Parse the returned JSON line to extract:
    - `brief_path`: absolute file path to the rendered brief
    - `subagent_type`: `"mill:mill-implementer"` or `"mill:mill-reviewer"`, or one of their six `-medium`/`-high`/`-max` tier-suffixed variants (e.g. `"mill:mill-reviewer-high"`) when the resolved alias's `effort` field is `"medium"`, `"high"`, or `"max"` — computed by `_agent_dispatch.resolve_subagent_type`, the single site every envelope-construction call site (implement/fix/merge-in via `emit_prepare`, and each of the three review CLIs) routes through.
    - `model`: Agent-tool tier (`"sonnet"`, `"opus"`, or `"haiku"`)
 
    Also extract from the envelope: `session_id` (string or null), `round` (integer), `start_sha` (string or null -- present only when the CLI emits it, e.g. fix and implementer CLIs), `effort` (string or null -- present only when the resolved spec has a non-null effort tier, e.g. `"high"`), and `output_path` (absolute path string -- present only on the three review CLIs' envelopes;
-   used verbatim as `--agent-output` in step 6, never re-derived).
+   used verbatim as `--agent-output` in step 5, never re-derived).
 
-3. **Call Agent tool:**
+2. **Call Agent tool:**
 
    Override point A: consult your variant's `## Dispatch overrides` for this role; if it declares
    one, follow it instead of the default `Agent()` call below. The role for the current dispatch is
@@ -242,18 +238,18 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    and the default `Agent()` call below applies unchanged.
 
    Invoke the Agent tool with:
-   - `subagent_type`: the value from step 2
-   - `model`: the value from step 2
+   - `subagent_type`: the value from step 1
+   - `model`: the value from step 1
    - `prompt`: `"Read this file and follow the instructions exactly: <brief_path>"`
 
    The Agent tool launches a **background** subagent and returns immediately with a message such as "Async agent launched..." — the subagent's final output is NOT available at call time.
    **Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch** (a local Builder variable, e.g. `agent_id`).
-   Also **record the `model` value actually passed to this Agent tool call into a local Builder variable** — ordinarily identical to the envelope's `model` field from step 2, copied through unchanged;
+   Also **record the `model` value actually passed to this Agent tool call into a local Builder variable** — ordinarily identical to the envelope's `model` field from step 1, copied through unchanged;
    it only differs when the operator explicitly instructs a different tier for this specific dispatch.
    This recorded value is consumed by a later batch's step-6 edit.
-   The Agent tool call still takes only `subagent_type`, `model`, `prompt`, and optionally `isolation` — there is no separate `effort` parameter — but the envelope's `subagent_type` value (from step 2) already encodes the resolved alias's `effort` tier as a suffix, resolved once by `_agent_dispatch.resolve_subagent_type` at envelope-construction time.
-   Forwarding an effort tier means dispatching to one of the six per-tier agent-definition files under `plugins/mill/agents/` (`mill-reviewer-medium.md`/`-high.md`/`-max.md`, `mill-implementer-medium.md`/`-high.md`/`-max.md`), each of which pins a fixed `effort:` in its own frontmatter — not passing effort as a call parameter. `effort` remains present in the envelope for `subprocess`/`psmux` dispatch parity and audit visibility, in addition to now driving `subagent_type`.
-   This `agentId` is the harness runtime handle for the live subagent — it is what `SendMessage` addresses to warm-resume the same session (see the `incomplete` recovery in step 6).
+   The Agent tool call still takes only `subagent_type`, `model`, `prompt`, and optionally `isolation` — there is no separate `effort` parameter — but the envelope's `subagent_type` value (from step 1) already encodes the resolved alias's `effort` tier as a suffix, resolved once by `_agent_dispatch.resolve_subagent_type` at envelope-construction time.
+   Forwarding an effort tier means dispatching to one of the six per-tier agent-definition files under `plugins/mill/agents/` (`mill-reviewer-medium.md`/`-high.md`/`-max.md`, `mill-implementer-medium.md`/`-high.md`/`-max.md`), each of which pins a fixed `effort:` in its own frontmatter — not passing effort as a call parameter. `effort` remains present in the envelope for audit visibility, in addition to now driving `subagent_type`.
+   This `agentId` is the harness runtime handle for the live subagent — it is what `SendMessage` addresses to warm-resume the same session (see the `incomplete` recovery in step 5).
    It is **distinct from** the brief `session_id` / `implementer_session` recorded in status.md: those identify the LLM conversation for finalize and cleanup, not the harness worker.
    Today's text treats dispatch as fire-and-forget;
    the `incomplete` recovery below depends on this handle still being in scope.
@@ -267,21 +263,20 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    `date +%s` again and hold the difference as `review_elapsed_s = <second reading> - review_start_epoch`.
 
    The orchestrator must then **wait for the completion `<task-notification>`** from that background agent.
-   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 4's classification and step 5's capture, unchanged.
-   For a **reviewer** dispatch, step 5 is skipped (the reviewer already wrote its own output file — see step 5 below), so the payload feeds **step 4's classification only**.
+   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 3's classification and step 4's capture, unchanged.
+   For a **reviewer** dispatch, step 4 is skipped (the reviewer already wrote its own output file — see step 4 below), so the payload feeds **step 3's classification only**.
 
    A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator.
-   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 4's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
-   a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 4(b)).
+   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
+   a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 3(b)).
 
-4. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
+3. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
 
    **(a) Raw API/infrastructure errors — key on the error marker alone.**
    If the notification message contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
-   Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 5 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
+   Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 4 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
    This applies to implementer, reviewer, and fixer Agent dispatches.
-   On a second consecutive raw API error: implementer and fixer dispatches escalate per the "Stuck escalation" section;
-   read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
+   On a second consecutive raw API error: implementer, fixer, and reviewer dispatches all escalate per the "Stuck escalation" section.
    There is no live agent to probe in this case, so it is unaffected by the liveness probe in (c) below.
 
    **Reviewer duration summation on re-dispatch.**
@@ -292,7 +287,7 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    **Deliberately no ack predicate.**
    This classification does not branch on whether a clean reviewer payload happens to be a `WROTE <path>` ack versus some other short text — do not add a prefix-match branch for it.
-   Ack and non-ack clean payloads both fall through to `finalize` (step 6), which distinguishes success from a missing report by the **presence of the `.out.md` file** — a stronger signal than parsing chat text, and one the orchestrator gets for free from the finalize CLI.
+   Ack and non-ack clean payloads both fall through to `finalize` (step 5), which distinguishes success from a missing report by the **presence of the `.out.md` file** — a stronger signal than parsing chat text, and one the orchestrator gets for free from the finalize CLI.
    The ack exists so a human reading the transcript can confirm the reviewer finished;
    it must not become a branch condition here.
 
@@ -301,7 +296,7 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    and they are no longer handled identically:
    - **Clean turn-exhaustion** (the notification is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
      The redundancy rationale still holds here: `--stage finalize`'s own completeness recount disambiguates partial-vs-dead by inspecting the actual commit count against the batch's card count, which is conclusive when the implementer had a full turn to make commits before stopping.
-   - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3.
+   - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2.
      If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as (c) already does for reviewer/fixer.
      If it reports the agent is no longer running,
      or the probe call itself errors: proceed to Clean mid-work stop below exactly as documented.
@@ -309,10 +304,10 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    **Clean mid-work stop (implementer only):** Reached either directly (clean turn-exhaustion, per (b) above) or after (b)'s stopped/interrupted probe branch determines the agent is no longer running.
    Do NOT re-dispatch fresh immediately.
-   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 6).
+   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
    Finalize inspects the commit count against the batch's card count and returns one of:
-   - **`status: success`** (all cards committed and the tree is clean) — when the finalize envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`) and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`) before proceeding — when `inferred` is absent or `false` (the implementer reported the JSON line normally), this call is skipped entirely and the existing success path is otherwise unchanged — proceed normally to step 7.
-   - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 6 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
+   - **`status: success`** (all cards committed and the tree is clean) — when the finalize envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`) and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`) before proceeding — when `inferred` is absent or `false` (the implementer reported the JSON line normally), this call is skipped entirely and the existing success path is otherwise unchanged — proceed normally to step 6.
+   - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 5 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
      Do **NOT** route this to the Stuck escalation transient `commits_made > 0` skip-to-cleanliness path: that path accepts the partial batch as done and is exactly the #574 false-success bug.
      The whole point of the `incomplete` classification (see Shared Decision `stuck_type: incomplete is a new first-class classification`) is that the remaining cards must be finished, never accepted as complete.
    - **`stuck_type: transient`** (genuine raw-API-error or interruption surfaced through finalize, e.g. a brief-write failure) — handle exactly as today via the one-retry transient path;
@@ -323,8 +318,8 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    **(c) Non-clean terminal notification for a reviewer or fixer dispatch — NEW liveness probe.**
    The widened trigger: the `<task-notification>`'s `<status>` tag is present and its value is not `completed` (observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>`), AND the message does not contain (a)'s literal API-error marker text.
-   Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 3 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
-   For the **reviewer sub-case only** (not fixer): before calling `TaskOutput`, first check whether `output_path` (the absolute path read verbatim from step 2's prepare envelope, per step 6's existing convention "For the three review CLIs, `<path>` is the `output_path` field read verbatim from step 2's prepare envelope") already exists on disk via a `test -f <output_path>` shell check.
+   Before classifying as `stuck_type: transient`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2 ("Record the `agentId` the Agent tool returns in that launch message and retain it for the duration of this batch").
+   For the **reviewer sub-case only** (not fixer): before calling `TaskOutput`, first check whether `output_path` (the absolute path read verbatim from step 1's prepare envelope, per step 5's existing convention "For the three review CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope") already exists on disk via a `test -f <output_path>` shell check.
    If the file exists: treat the reviewer as no-longer-running and proceed straight to the existing "no longer running" branch below (skip the `TaskOutput` call entirely for this occurrence).
    If the file does not exist: the result is ambiguous (still-running or dead-before-writing) — fall back to `TaskOutput` exactly as today, unchanged.
    This `test -f` pre-check applies to the reviewer sub-case of (c) only;
@@ -342,15 +337,15 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
 
    This probe exists because both `#587` and `#595` were live incidents where a "killed"/"stopped by user" notification was stale for an agent that was, in fact, still running to completion — see `_mill/discussion.md`'s `stopped/interrupted-notification liveness probe (#587, #595)` Decision for the full incident writeups and rationale.
 
-5. **Capture output — reviewer-skipped.**
+4. **Capture output — reviewer-skipped.**
    For an **implementer, fixer, or merge-in** dispatch, write **the message captured from the `<task-notification>`** to `<brief_path>.out.md` (utf-8), unchanged.
    The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
    For a **reviewer** dispatch, skip this step entirely — the reviewer holds its own `Write` grant and already wrote `.out.md` itself;
    the orchestrator does not write it a second time.
    The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" (see step 3 of "Code Review loop") and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
 
-6. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
-   For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 2's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
+5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
+   For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
    the envelope already names the exact file the reviewer wrote.
    For **implementer, fixer, and merge-in** CLIs, whose prepare envelopes carry no `output_path` field, keep deriving `<path>` as `<brief_path>.out.md` (the trailing `.md` replaced by `.out.md`), as before.
    Parse the returned JSON envelope.
@@ -378,17 +373,17 @@ When `dispatch == agent`, follow this three-step pattern at each dispatch point:
    This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, both batch and holistic scope) and implementer-CLI;
    review-CLI finalize calls don't run verify commands and aren't affected.
 
-6.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 6 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
+5.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 5 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
 Recover the existing session rather than retrying from scratch (Shared Decision `resume must preserve the original start_sha`;
 discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 
    1. **Warm `SendMessage` resume (preferred).**
-      If the `agentId` recorded in step 3 is still retained, the original subagent session is still addressable.
+      If the `agentId` recorded in step 2 is still retained, the original subagent session is still addressable.
       Send it back to work in the same warm session:
       ```
       SendMessage(to: <agentId>, "Finish any remaining cards in this batch, run verify, then emit the required JSON report as your final line.")
       ```
-      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 5's naming rule), and re-run `--stage finalize` (step 6) with the same standard arguments.
+      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
       The warm-`SendMessage` path **bypasses prepare entirely**, so status.md's original `start_sha` and `implementer_session` are untouched — finalize's completeness recount runs from the original baseline and counts every content commit (the partial ones plus any new ones).
       Re-capturing `start_sha` here would under-count a now-finished batch and loop `incomplete` forever.
    2. **`--resume-incomplete` fallback (cold re-dispatch).**
@@ -398,62 +393,44 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       Re-dispatch the implementer once via the `--resume-incomplete` path — run the prepare stage as `--stage prepare <batch_name> --resume-incomplete`, then the Agent tool, then `--stage finalize` as usual. `--resume-incomplete` reads the original `start_sha` and `implementer_session` from status.md instead of re-capturing HEAD, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so **preserves the original `start_sha`** — never a fresh one.
       Record the new `agentId` this re-dispatch returns, in case a further resume is needed.
    3. **After recovery.**
-      Re-parse the finalize envelope and branch in step 7.
+      Re-parse the finalize envelope and branch in step 6.
       A `status: success` (or inferred success) means the batch finished — when the re-parsed envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name} (post-recovery)"`), before proceeding normally.
-      This is a structurally separate check from the step 4(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
+      This is a structurally separate check from the step 3(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
       When `inferred` is absent or `false`, skip this call entirely.
       If the envelope is **still** `stuck_type: incomplete` after one warm resume and one `--resume-incomplete` fallback, hand it to the `### Stuck escalation` `incomplete` branch (it does not silently loop).
 
-7. **Branch on verdict:** Use the JSON envelope to branch identically to the existing `subprocess`/`psmux` flow — the `status`, `verdict`, `stuck_type` handling is identical.
-   The agent-mode `incomplete` recovery (step 6.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
+6. **Branch on verdict:** The envelope's `status`, `verdict`, and `stuck_type` fields are what the caller branches on.
+   The agent-mode `incomplete` recovery (step 5.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
 
 **Agent-mode properties:**
 - No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
 - A background agent IS a detached worker and CAN be stopped or interrupted.
-  ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 4(b)/(c) now test for — see step 4 above.)
-  A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 4's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 4(b);
-  reviewer/fixer: liveness-probe-then-one-retry-transient path per step 4(c)).
+  ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 3(b)/(c) now test for — see step 3 above.)
+  A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 3's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 3(b);
+  reviewer/fixer: liveness-probe-then-one-retry-transient path per step 3(c)).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
-- The one-retry transient policy applies to raw API errors immediately, and to stopped/interrupted reviewer/fixer agents once step 4's liveness probe confirms the agent is no longer running (see step 4).
-  Stopped/interrupted implementer agents are first checked by the same liveness probe (step 4(b));
-  once it confirms the agent is no longer running, they are routed to the existing clean-mid-work-stop / `incomplete` recovery (see step 4).
-- `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 6.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
+- The one-retry transient policy applies immediately to raw API errors, and to stopped/interrupted reviewer/fixer agents once step 3's liveness probe confirms the agent is no longer running (see step 3).
+  Stopped/interrupted implementer agents are first checked by the same liveness probe (step 3(b));
+  once it confirms the agent is no longer running, they are routed to the existing clean-mid-work-stop / `incomplete` recovery (see step 3).
+- `incomplete` stuck errors emitted by `finalize` are recovered in-session via the step 5.5 warm-`SendMessage` / `--resume-incomplete` path, NOT the transient retry-fresh path — they preserve the original `start_sha` so a finished batch is never re-counted as partial.
 - Waiting on a dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — every stuck/escalation path in this file now resolves by self-resolving once then halting via `_status.set_blocked`, never by prompting.
 
-**Subprocess/psmux poll-loop max-wait.**
-When `dispatch == subprocess` or `psmux`, all poll loops that wait for `[mill-bg] EXIT` must have a bounded max-wait (~3600s) to self-terminate if the worker dies without writing the exit marker.
-Exceedance of the max-wait is a fatal `infrastructure` stuck escalation.
-The explicit timeout guard prevents infinite polling when the worker session is killed (e.g., logout or crash).
-This applies to implementer, reviewer, and fixer dispatch in all scopes (per-batch and holistic), and to ERROR-only retries.
-See individual subsections for the loop structure;
-all follow the same time-bounded poll-until-EXIT pattern.
+**Tree-guard checkpoint block.** Referenced by name from every dispatch call site in this file and from the skill's companion files, which name it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`. Exactly two forms, both sharing the same body:
+- **Pre-dispatch form** — invoked immediately before a dispatch.
+- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retries at `### 3. Code Review loop` sub-step 4.5 and `plugins/mill/skills/mill-go-base/holistic-review.md` sub-step 3.5 are separate dispatch points, each with its own pre/post pair — not sub-cycles of the dispatch that preceded them.
 
-**Per-batch session cleanup.**
-Every time the per-batch implementer reports `success` (immediately after step 2 parse, before step 2b cleanliness gate), AND on every loop terminus (APPROVE, max-rounds blocked, cleanliness-blocked, stuck-blocked), AND when the Builder is about to re-dispatch the implementer with a fresh session (transient-retry-once), invoke the *per-batch cleanup block* defined below — it reaps the psmux TUI session associated with the batch's `implementer_session`, idempotent and failure-swallowing.
-The post-success invocation is the primary cleanup point now that fix dispatch is cold-start;
-the terminal invocations remain for defence-in-depth and are idempotent no-ops when the session is already gone.
+Body (both forms): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+`signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
+`signature: _status.append_recovery_log(status_path: Path, timestamp: str, restored_paths: list[str]) -> None`.
 
-The per-batch cleanup block:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import sys
-sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
-from pathlib import Path
-import _paths, _status, _llm_claude
-status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.md')
-batches = _status.read_batches(status_path)
-sid = next((b.get('implementer_session') for b in batches if b['name'] == '<batch_name>'), None)
-_llm_claude.cleanup_session(sid)
-"
-```
+The post-dispatch form brackets the out-of-process execution window that `worktree_snapshot_guard` cannot see, and the block must not be invoked from inside the Agent-mode dispatch pattern's own numbered steps — it belongs at each call site, since that pattern also serves non-review dispatch.
 
 **Why not fork?**
 Every dispatch above uses a fresh `Agent(subagent_type: ...)` call, never `Agent(subagent_type: "fork")`.
 A fork inherits the parent's context,
 but that inheritance costs three things every role above depends on: (1) a fork always runs on the **parent's model** and ignores a `model` override, breaking mill's per-role model assignment — implementer-class roles carry a literal `model:` key (`roles.implementer.model: sonnethigh`, `roles.fixer.model: haiku`, and merge-in's `model: haiku`, all in `plugins/mill/templates/mill-config.yaml`), while reviewer roles instead name a *reviewer* from `agents.yaml` (e.g. `roles.discussion-review.holistic.reviewer: sonnetmax` in the shipped template) whose model is resolved from that registry and mapped to an Agent tier by `_agent_dispatch.model_to_tier` — fork breaks both mechanisms, since it ignores the `model` argument either way;
 (2) a fork inherits the **parent's tools**, so a reviewer forked from mill-go would hold `Edit`, `Write`, and `Bash` beyond its briefs-scoped grant and lose its read-only guarantee;
-(3) a fork's **crash-resume path is unverified** — `millpy-implement.py --stage prepare` writes the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 4's liveness probe and step 6.5's warm resume depend on.
+(3) a fork's **crash-resume path is unverified** — `millpy-implement.py --stage prepare` writes the brief to disk via `_agent_dispatch.write_brief` regardless of dispatch shape, and `--resume-incomplete` re-runs prepare, so the brief is present either way, but nothing has confirmed that a fork returns the `agentId` and completion-notification shapes step 3's liveness probe and step 5.5's warm resume depend on.
 mill-go2 accepts these trade-offs for the implementer role only, as an experiment — see its `## Dispatch overrides`;
 every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
 Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
@@ -465,8 +442,8 @@ This section is the single source of truth for the post-round cost print in ever
 mill-start and mill-plan reference this section rather than restating it.
 
 **When to print.**
-Once, immediately after each review round's JSON envelope is in hand, in both dispatch modes
-(agent, and subprocess/psmux), before branching on the verdict.
+Once, immediately after each review round's JSON envelope is in hand, under agent-mode dispatch,
+before branching on the verdict.
 Print it for `ERROR` rounds too — an expensive failed round is exactly what the operator most needs
 to see.
 
@@ -487,8 +464,7 @@ ASCII only.
 this scope.
 `model` comes from the prepare envelope's `model` field under agent-mode (or the recorded
 actually-dispatched tier when the operator overrode it — see "## Agent-mode dispatch" step 3's
-"record the `model` value actually passed" instruction), and from the round's configured
-`roles.<review-type>.<scope>.reviewer` alias under subprocess/psmux dispatch.
+"record the `model` value actually passed" instruction).
 
 **Not persisted.**
 This line is orchestrator chat output only — it is never written to a file.
@@ -524,8 +500,8 @@ Baseline pre-flight," for the task's **FIRST batch only** (not on every batch �
 Baseline pre-flight" below), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`.
 If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "0.5.
 Baseline pre-flight."
-Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the Handoff-time "0.
-Pre-done gate" block):
+Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the "0.
+Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md`):
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -549,11 +525,11 @@ Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommen
 
 Parse stdout for a JSON line (absent when the flag/`done_gate` check above short-circuited via `SystemExit(0)` -- that is the normal skip path, not an error).
 If the JSON line's `result` is `blocked`, log the reason (ASCII-only) but do **NOT** halt — proceed to batch 1 regardless.
-This differs deliberately from the Handoff-time "0.
-Pre-done gate" gate, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable.
-This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the Handoff-time comparison).
-The Handoff-time "0.
-Pre-done gate" block (below, in the Handoff section) is unchanged and still halts on `blocked` there.
+This differs deliberately from the "0.
+Pre-done gate" gate in `plugins/mill/skills/mill-go-base/handoff.md`, which DOES halt on a `blocked` result: at this point in the flow a failing `done_gate` reflects the *parent* branch's own pre-implementation state, which is diagnostic information this task's batches cannot fix, and blocking Prepare on it would make an otherwise-startable task undispatchable.
+This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the comparison made at Handoff time).
+The "0.
+Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md` is unchanged and still halts on `blocked` there.
 Skip this step entirely for every batch after the first.
 
 ### 0.5. Baseline pre-flight (first batch of the task only)
@@ -578,13 +554,13 @@ Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommen
 
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
-This is a shared check-and-invoke block, referenced (not duplicated) from two different insertion points in "### 1.
-Implement" below — see the Agent-mode and subprocess/psmux dispatch branches there.
+This is a shared check-and-invoke block, referenced (not duplicated) from the single insertion point in "### 1.
+Implement" below — immediately before step 5 (`--stage finalize`) of the Agent-mode dispatch pattern.
 It exists only to backfill a still-missing per-batch `verify_baseline_failures` baseline for a self-hosting task's own plan, using the task worktree's own copy of `millpy-implement.py` rather than the frozen `${CLAUDE_PLUGIN_ROOT}` cache — the cache is provably a no-op for this purpose since it never reflects this task's own in-progress commits.
 
 **Session-scoped cadence flag.**
 Before "## Execute — sequential loop" begins, initialize a local Builder variable `baseline_recapture_attempted = False`.
-This variable is never persisted to status.md or any file — it resets to `False` whenever a mill-go session (re)starts, matching the existing in-memory-only precedent of the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 3).
+This variable is never persisted to status.md or any file — it resets to `False` whenever a mill-go session (re)starts, matching the existing in-memory-only precedent of the Agent-mode `agent_id` handle (see "## Agent-mode dispatch" step 2).
 
 **Trigger check.**
 At the hook point, run all of:
@@ -618,10 +594,6 @@ Never escalate to `stuck`/blocked over a recapture failure.
 
 ### 1. Implement
 
-Background via millpy-bg:
-
-> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
 Venv-check before per-batch invocation:
 
 ```bash
@@ -635,46 +607,16 @@ if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_
 fi
 ```
 
-If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
+Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
 
-For this dispatch instance only, immediately before step 6 of the pattern above (`--stage finalize`) runs, execute the "### 0.6.
+For this dispatch instance only, immediately before step 5 of the pattern above (`--stage finalize`) runs, execute the "### 0.6.
 Per-batch baseline recapture (self-hosting only)" check.
 
-Immediately before this backgrounded dispatch is launched, execute the "### 0.6.
-Per-batch baseline recapture (self-hosting only)" check — this mode has no separate finalize call to hook before, so the check must run ahead of the dispatch itself.
-
-If `dispatch == subprocess` or `psmux`: background via millpy-bg:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-    --slug implement-<batch_name> -- \
-    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name>
-```
-
-Returns immediately with `pid=<N> log=<abs-path>`.
-Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir.
-Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check with a bounded max-wait (~3600s):
-```bash
-start_time=$(date +%s)
-max_wait=3600
-while true; do
-  current_time=$(date +%s)
-  elapsed=$((current_time - start_time))
-  if [ $elapsed -ge $max_wait ]; then
-    echo "[<VARIANT_LABEL>] HALT: subprocess poll loop timeout (max_wait=$max_wait exceeded) — worker died without writing [mill-bg] EXIT. Escalate to infrastructure stuck." >&2
-    exit 1
-  fi
-  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-  # parse JSON result and branch: "running" -> sleep; "exit"/"dead" -> exit loop
-done
-```
-Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation (worker died without EXIT).
-
 The CLI atomically: resolves paths and config, renders the implementer brief, generates a `session_id`, sets batch state → `running`, records `start_sha` and `implementer_session` in status.md, commits and pushes on the task branch, and spawns the implementer.
-The Builder reads the JSON summary from the log file.
+The Builder reads the JSON summary from the finalize envelope.
 Note: the CLI exits 0 when the implementer produced JSON (success or stuck).
-On exit code 1 the JSON line in the log file still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation.
-Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the log file is absent.
+On exit code 1 the JSON line in the finalize envelope still carries a `{"status":"stuck","stuck_type":"transient",...}` line if an LLM-layer failure (timeout, dead session, etc.) occurred — parse it the same way and route through Stuck escalation.
+Only treat exit 1 as an unrecoverable pre-launch error when the JSON line in the finalize envelope is absent.
 
 ### 2. Parse implementer report
 
@@ -685,16 +627,9 @@ The implementer's last output line must be JSON:
 ```
 
 - `status: success` → continue to Code Review.
-- `status: stuck, stuck_type: transient` → auto-retry ONCE: invoke the per-batch cleanup block, then re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
+- `status: stuck, stuck_type: transient` → auto-retry ONCE: re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
   Record `review_round: 0`, do not change batch state.
   If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
-- `status: stuck, stuck_type: incomplete` (subprocess/psmux mode) → the batch is provably partial (some cards committed, not all).
-  Re-dispatch **once** preserving the original `start_sha`: invoke the per-batch cleanup block, then re-invoke `millpy-implement.py <batch_name> --resume-incomplete`.
-  The `--resume-incomplete` flag reads the original `start_sha` and `implementer_session` from status.md, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so preserves the original baseline (Shared Decision `resume must preserve the original start_sha`).
-  Do **NOT** route this to the transient `commits_made > 0` skip-to-cleanliness branch (that accepts the partial batch as done — the #574 bug) and do **NOT** use today's plain running-state re-fire (`millpy-implement.py <batch_name>` with no flag, which re-captures HEAD as a fresh `start_sha` and loops `incomplete`).
-  Do not change batch state;
-  the CLI handles its own state.
-  If the re-dispatch still reports `stuck_type: incomplete` → escalate per *Stuck escalation* below. (Agent mode handles `incomplete` earlier, in the Agent-mode dispatch step 6.5 warm-resume path.)
 - `status: stuck, stuck_type: verify | logic` → route to *Stuck escalation*, which self-resolves once before escalating.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
 
@@ -720,11 +655,9 @@ If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — dirty tree"`
-- Invoke the per-batch cleanup block.
 - Go to *Blocked*.
 
-If `in_scope_dirt` is empty, invoke the per-batch cleanup block — the cold-start fixer used in step 4 REQUEST_CHANGES does not need the warm session.
-Record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
+If `in_scope_dirt` is empty, record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
 Then continue to "3.
 Code Review loop" as normal.
 
@@ -746,16 +679,13 @@ converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelo
 `envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
 
 - `converged is True`: proceed exactly as step 4's `APPROVE` branch describes (no behavior change).
-- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the per-batch cleanup block, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
+- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
 - `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: approve batch {batch_name}"`) so the shortfall is auditable.
 - Step 5 (Max-rounds exhaustion) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
-- Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-  `signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
-  `signature: _status.append_recovery_log(status_path: Path, timestamp: str, restored_paths: list[str]) -> None`.
-  All 11 other tree-guard checkpoints in this file (5 more in this section, 7 in "## Holistic code review") share this identical signature and guard shape.
+- Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — before the append_phase/commit below.
 - `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`.
   Commit immediately: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: reviewing batch {batch_name} round {N}"` — mirrors the Holistic Review loop's own existing pattern at the same file (`_status.append_phase(status_path, "holistic-reviewing", ...)` immediately followed by an equivalent commit).
   This closes the window where an uncommitted phase-append could itself be the file a tree-guard restore later discards — see `_mill/discussion.md`'s "Closing the same-file modify-then-delete window in mill-go's per-batch loop" Decision.
@@ -792,44 +722,12 @@ Build a digest: one line per NIT finding, in format "- Title: issue context" (AS
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-2. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
-   This does not apply to the subprocess/psmux branch immediately following in this same step, which keeps its existing worktree_snapshot_guard coverage unchanged.
+2. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before the Agent-mode dispatch below.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
+   The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
 
-   If `dispatch == subprocess` or `psmux`: background via `millpy-bg`:
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-       --slug review-code-<batch_name>-r<N> -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-           --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]
-   ```
-
-   Returns immediately with `pid=<N> log=<abs-path>`.
-   Do **not** use `run_in_background: true`.
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears with a bounded max-wait (~3600s), but on each iteration also run a liveness check:
-   ```bash
-   start_time=$(date +%s)
-   max_wait=3600
-   while true; do
-     current_time=$(date +%s)
-     elapsed=$((current_time - start_time))
-     if [ $elapsed -ge $max_wait ]; then
-       echo "[<VARIANT_LABEL>] HALT: code-review poll loop timeout (max_wait=$max_wait exceeded) — worker died without writing [mill-bg] EXIT. Escalate to infrastructure stuck." >&2
-       exit 1
-     fi
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-     # parse JSON result and branch: "running" -> sleep; "exit"/"dead" -> exit loop
-   done
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> sleep briefly then continue polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. If max-wait is exceeded, halt with infrastructure escalation. The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
-
-Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the Agent-mode dispatch pattern above returns (prepare through finalize).
 
 3. **Builder reads only the JSON envelope verdict, never the findings.**
    Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below).
@@ -858,46 +756,18 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
      ```
      Unlike the existing prior-notes digest above, this is called at every round with no `N > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
 
-     If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt`.
-     
-     If `dispatch == subprocess` or `psmux`: via `millpy-bg`:
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-         --slug fix-<batch_name>-r<N>-nits -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt
-     ```
-     Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-     ```
-     Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path.
+     Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt`.
+     The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path.
      After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Invoke the per-batch cleanup block. Break out of the loop → next batch.
+     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Break out of the loop → next batch.
      If not `converged` and `N < roles.code-review.batch.rounds`: skip the terminal actions above and continue to round N+1 (re-dispatch code review for this batch).
    - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file.
      For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("<VARIANT_LABEL>.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`.
-     Record this gap for mill-self-report (see Handoff).
+     Record this gap for mill-self-report (see `plugins/mill/skills/mill-go-base/handoff.md`).
      Increment round and continue the loop.
      If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
      Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does. `signature: _notify.notify(event: str, detail: str, **context) -> None`
-   - `REQUEST_CHANGES` — If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
-
-     If `dispatch == subprocess` or `psmux`: background via millpy-bg:
-
-     > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-         --slug fix-<batch_name>-r<N> -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>
-     ```
-     Returns immediately with `pid=<N> log=<abs-path>`.
-     Do not use `run_in_background: true` on the Bash tool — that routes output to CC's temp dir.
-     Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-     ```
-     Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+   - `REQUEST_CHANGES` — Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
 
      The CLI atomically: resolves the batch plan, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and dispatches a cold-start fixer session with the fix prompt (which instructs the fixer to load `mill-receiving-review` and apply findings).
      Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1.
@@ -909,30 +779,11 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 
    When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
-   Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
-   Does not apply to the subprocess/psmux branch immediately below.
+   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-
-   If `dispatch == subprocess` or `psmux`:
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-       --slug review-code-<batch_name>-retry-r<N> -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-           --batch <batch_name> [--extra-file <p> ...]
-   ```
-
-   Returns immediately with `pid=<N> log=<abs-path>`.
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after it returns.
 
    The round counter `N` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user.
@@ -941,18 +792,17 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 
 5. **Max-rounds exhaustion.**
    After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`.
-   Invoke the per-batch cleanup block.
    Go to *Blocked* below.
 
 ### Stuck escalation
 
 For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastructure`, `incomplete`): auto-handle according to the stuck_type rules below — mill-go never surfaces a numbered prompt and waits for an operator reply here.
 Each stuck_type gets its own one-shot self-resolve or auto-retry step per the rules below;
-on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, invokes the per-batch cleanup block, and goes to *Blocked*.
+on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, and goes to *Blocked*.
 
-- **`infrastructure`** (bg worker died, likely logout) — auto-retry ONCE with a fresh re-fire: invoke the per-batch cleanup block, then re-invoke `millpy-bg` with a fresh CLI (no `--resume` flag — the killed session is dead).
-  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
-  The re-fire matches the existing `running`-state Resume (fresh start;
+- **`infrastructure`** (the worker died, likely logout) — auto-retry ONCE: re-dispatch once with a fresh session (no `--resume` flag — the dead session cannot be reattached).
+  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
+  The re-fire matches the existing `running`-state handling in `plugins/mill/skills/mill-go-base/resume.md` (fresh start;
   killed session cannot be reattached).
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2;
   the CLI exits 1 in that case but stdout carries the JSON) → apply the one-retry policy: re-invoke `millpy-implement.py <batch_name>` once with no `--resume` flag (a fresh session).
@@ -962,18 +812,18 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
     proceed directly to the per-batch cleanliness gate (scope violations check) then code review as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
   - **Otherwise** (no commits made, the field is absent,
     or the timeout happened before any commit) → self-resolve once: re-fire the implementer fresh (no `--resume`) — a first-occurrence timeout with no commits is most often a transient LLM/network hiccup, so no plan edit is needed for this attempt.
-    If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+    If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 - **`incomplete`** (batch provably partial — some cards committed, not all;
   reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`;
-  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` in agent mode, `millpy-implement.py <batch_name> --resume-incomplete` in subprocess/psmux mode).
+  discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` first, `millpy-implement.py <batch_name> --resume-incomplete` as the fallback — see step 5.5's `incomplete` recovery).
   If the auto-resume yields `success`, continue normally.
-  If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, invoke the per-batch cleanup block, and go to *Blocked*.
+  If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, and go to *Blocked*.
   Never re-fire with a fresh `start_sha`.
 - `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
   **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text.
   Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck ({batch_name})"`.
   Then re-fire the implementer fresh for this batch.
-  If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, invoke the per-batch cleanup block, and go to *Blocked*.
+  If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
 
 ### Blocked
 
@@ -984,535 +834,19 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   ```
 - Tell the user: "Batch X blocked with reason Y. Inspect reviews/ and status.md.
   Re-run `/mill-go` after resolving, or `/mill-abandon` to wind down."
-  Do not proceed to Handoff.
+  Do not proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`).
 
 ## Resume
 
-When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `reviewing`, or `fixing`), the previous run was interrupted mid-batch.
-The CLIs that mutate task state (`millpy-implement.py`, `millpy-review-code.py`) are atomic — they record state-mutation commits before the heavy work starts and after each transition — so the resume playbook is simple: read the current batch entry and re-invoke the CLI for the current state.
-
-1. Read `_mill/status.md`;
-   locate the current batch entry (the single entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`).
-2. Branch on the batch's `state`:
-   - **`running`** — the implementer was mid-implementation.
-     Re-invoke:
-
-     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state.
-     The prepare-stage pre-commit makes this idempotent;
-     the brief at `_mill/briefs/<role>-<scope>-r<round>.md` is reused/re-rendered.
-     Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-implement.py` and `<args> = <batch_name>`.
-
-     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-
-     > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-         --slug implement-<batch_name>-resume -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" <batch_name> --resume-incomplete
-     ```
-     The interrupted implementer session is dead and cannot be re-attached, so a fresh implementer dispatch is still the correct recovery — but `--resume-incomplete` preserves the original `start_sha`/`implementer_session` recorded by the interrupted run (reading them from `status.md` instead of re-capturing HEAD and minting a fresh UUID), so finalize's completeness recount and commit accounting reflect the batch's full history, not just the resumed dispatch's own commits — consistent with how agent-mode Resume already behaves via `_prepare_reuse_entry`.
-     After parsing the report, continue at Execute step 2b (cleanliness gate).
-   - **`reviewing`** — the implementer report was already consumed;
-     the reviewer was running.
-     Re-invoke the per-batch code-review CLI from the start of round `review_round` (read this field from the batch entry):
-
-     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state.
-     Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name>`.
-
-     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-
-     > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-         --slug review-code-<batch_name>-r<review_round>-resume -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" --batch <batch_name>
-     ```
-     The CLI's crash-recovery scan handles a written-but-uncommitted review file.
-     After parsing the JSON verdict, continue at Execute step 3 sub-step 3 (load `mill-receiving-review`) and step 4 (branch on verdict).
-   - **`fixing`** — the reviewer returned `REQUEST_CHANGES`;
-     the fix-implementer was running.
-     Re-invoke:
-
-     If `dispatch == agent`: in agent mode the SKILL re-runs the same prepare -> Agent -> finalize flow for the current on-disk state.
-     Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <review_round>`.
-
-     If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-
-     > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-         --slug fix-<batch_name>-r<review_round>-resume -- \
-         "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <review_round>
-     ```
-     The `<review-file-abs-path>` is the most recent `_mill/reviews/*-code-review-<batch_name>-r<review_round>.md` file.
-     After parsing the report, continue at Execute step 3 sub-step 5 (max-rounds check) or back to step 3 round N+1 if the fix produced an APPROVE-eligible state on next review.
-3. **No state mutation before resume.**
-   Do NOT pre-emptively flip `state` or call `_status.append_phase` before re-invoking the CLI.
-   The CLI handles state transitions atomically;
-   double-writes corrupt the timeline.
-4. **`mill-receiving-review` remains the fixer's responsibility.**
-   When resume re-dispatches the fixer (`millpy-fix.py --scope batch ...`), the fix-prompt itself instructs the fixer to load the skill before reading findings.
-   Builder still does not load it.
+**Read `plugins/mill/skills/mill-go-base/resume.md` now, before any other action in this phase.** All of this phase's behaviour lives in that file. Do not proceed from this heading without reading it.
 
 ## Holistic code review
 
-**Holistic session cleanup.**
-Whenever a `millpy-fix.py --scope holistic` invocation completes (success, stuck, or any error path), capture the `session_id` field from the parsed JSON envelope into a local Bash variable `holistic_sid`.
-At any point where the holistic loop is about to dispatch a NEW `millpy-fix.py --scope holistic` round, AND at every loop terminus (APPROVE, blocked, max-rounds), invoke the *holistic cleanup block* defined below.
-
-The holistic cleanup block:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import sys
-sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/scripts')
-import _llm_claude
-_llm_claude.cleanup_session('${holistic_sid}')
-"
-```
-
-If the captured `holistic_sid` is empty or the literal `unknown`, cleanup is a documented no-op — the implementer brief contract guarantees the id is emitted on the happy path.
-
-**Guard:** The skip semantics have two conditions: `reviewer: null` OR `rounds: 0` means "skip holistic".
-Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("reviewer") is not None`.
-
-`max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`.
-`min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`.
-Loop variable `H` starts at 1. `extra_files = []`.
-
-**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (the `APPROVE` branch below), compute:
-
-```
-converged = (H >= min_holistic_rounds) and not any(f.get("demoted") for f in envelope["findings"])
-```
-
-`envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
-
-- `converged is True`: proceed exactly as the `APPROVE` branch describes (no behavior change).
-- `converged is False` AND `H < max_holistic_rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, "holistic-approved", ...)`, the approve-commit, the holistic cleanup block, "Proceed to Handoff"). Instead continue the loop to round H+1.
-- `converged is False` AND `H >= max_holistic_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: holistic approve {slug}"`) so the shortfall is auditable.
-- Step 7 (Rounds exhausted) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
-
-For each round `H` from 1 to `max_holistic_rounds`:
-
-0. Wiki health-check
-
-   Before launching the implementer / reviewer for this batch, verify a config source is reachable.
-   If the check fails, release the builder lock and halt — a config source became unavailable mid-run and the implementer's downstream error would mask the root cause.
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   import sys
-   import _paths
-   from wiki import _client
-   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
-   if not _client.health_check(wiki_path):
-       print('[<VARIANT_LABEL>] wiki daemon health check failed', file=sys.stderr)
-       raise SystemExit(1)
-   " || {
-       PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
-       echo "[<VARIANT_LABEL>] HALT: wiki daemon unreachable or unhealthy -- see the reason printed above; re-run mill-setup only if mill-config.yaml is confirmed missing" >&2
-       exit 1
-   }
-   ```
-
-1. **Crash-recovery.**
-   Three-way branch based on what is on disk in `_mill/reviews/` and `.scratch/`:
-   - **(a) Review file present.**
-     Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring;
-     per-batch files embed `{batch_name}` so the glob never collides).
-     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", occurrence=H)` (the Hth occurrence corresponds to round H);
-     treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`.
-     If freshness validation passes, skip the CLI and use that file's verdict directly.
-     Proceed to step 4 (verdict branch);
-     do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3.
-     If the file is stale or `ref_ts` is None, fall through to branch (b)/(c) handling (fire the CLI).
-     Provide the inline-Python comparison snippet as per the per-batch section above.
-   - **(b) No review file, no bg log for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire CLI via `millpy-bg`).
-   - **(c) No review file, bg log exists for round H** (matching glob `.scratch/bg-*-review-code-holistic-r{H}.log`).
-     Pick the most recent matching file and call `_bg.is_bg_worker_alive(log_path)`:
-      - **Alive** -> poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-        ```bash
-        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-        ```
-        Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed to step 4 (parse JSON, branch on verdict); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. Do NOT execute step 2; do NOT execute step 3.
-      - **Dead** -> log `[<VARIANT_LABEL>] previous holistic round H bg worker died (pid=N); re-firing CLI` to stderr, then jump directly to step 3 (fire fresh CLI via `millpy-bg`).
-        Do NOT execute step 2 (the phase entry was already appended on the original run).
-
-   Inline Python helper for branches (a) and (c):
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   from pathlib import Path
-   import _paths, _bg, json, sys
-   hub = _paths.resolve_hub_path()
-   reviews_dir = hub / '_mill/reviews'
-   scratch_dir = _paths.resolve_git_root() / '.scratch'
-   H = ${H}
-   # (a) review file scan
-   matches = sorted(reviews_dir.glob(f'*-code-review-r{H}.md')) if reviews_dir.exists() else []
-   if matches:
-       print(json.dumps({'branch': 'a', 'review_file': str(matches[-1])}))
-       sys.exit(0)
-   # (c) bg log liveness probe
-   bg_logs = sorted(scratch_dir.glob(f'bg-*-review-code-holistic-r{H}.log')) if scratch_dir.exists() else []
-   if bg_logs:
-       alive, pid = _bg.is_bg_worker_alive(bg_logs[-1])
-       print(json.dumps({'branch': 'c', 'log_path': str(bg_logs[-1]), 'alive': alive, 'pid': pid}))
-       sys.exit(0)
-   # (b) nothing on disk
-   print(json.dumps({'branch': 'b'}))
-   "
-   ```
-
-   Parse the JSON line.
-   Branch dispatch is exactly as enumerated above.
-   The helper is one-shot;
-   do not poll it.
-
-2. **Skip this step when step 1 returned branch (a) or any sub-branch of (c).**
-   Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
-   Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic reviewing round {H}"`.
-
-2.5.
-**Prior-notes digest (round H > 1 only).**
-If `H > 1`: scan the prior round's review file (from round `H-1`, matching `*-code-review-r{H-1}.md` with no batch-name segment) for every line matching `### [NIT] <title>` (case-insensitive NIT marker); the heading may carry a class suffix, so `### [NIT:consistency] <title>` matches as well as `### [NIT] <title>`, and the title is the heading text after the closing bracket in either form.
-A heading carrying a `**Demoted-from:** BLOCKING` line on the line below it was demoted by the stage ceiling and is a genuine NIT for the purposes of this prior-non-blocking-items list, not a suppressed BLOCKING.
-Extract the title text and the next non-empty line (which should contain Location and Issue fields).
-Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-holistic-r{H}.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below.
-The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
-Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
-
-3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
-   This does not apply to the subprocess/psmux branch immediately following in this same step, which keeps its existing worktree_snapshot_guard coverage unchanged.
-
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
-   Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
-
-   If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   Venv-check before holistic review invocation:
-
-   ```bash
-   if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" ]; then
-       echo "[<VARIANT_LABEL>] venv missing -- attempting uv sync"
-       uv sync --project "${CLAUDE_PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
-       if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" ]; then
-           echo "HALT: venv not found after sync -- run 'uv sync --project \${CLAUDE_PLUGIN_ROOT}' manually."
-           exit 1
-       fi
-   fi
-   ```
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-     --slug review-code-holistic-r{H} -- \
-     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...] [--prior-notes <digest-path>]
-   ```
-   Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
-
-   **Exit handling.**
-   If `[mill-bg] EXIT` reports a non-zero exit AND no JSON summary line is present in the log, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line from the log to the user.
-   If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
-   Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
-   Whenever a JSON envelope is present, print the cost line for this round per "## Review cost line"
-   above, with `<type> = code` and `<scope> = holistic`, before dropping through to sub-step 3.5.
-   Printing the cost line does not relax the read-ban documented in the per-batch loop's step 3: the
-   Builder still never reads the findings, only the envelope fields the cost line names.
-
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-   This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
-
-3.5.
-**Step 3.5: ERROR-only-aggregate retry (no round consumed)**
-
-   When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
-
-   Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
-   Does not apply to the subprocess/psmux branch immediately below.
-
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
-
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-
-   If `dispatch == subprocess` or `psmux`:
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-     --slug review-code-holistic-retry-r<H> -- \
-     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...]
-   ```
-
-   Returns immediately with `pid=<N> log=<abs-path>`.
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
-
-   The round counter `H` is **not** consumed — the round produced no reviewable output.
-   On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
-   Before halting: `_status.set_blocked(status_path, f"holistic code review ERROR-only round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (ERROR-only round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: ERROR-only round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`).
-   If sub-step 3.6 does NOT apply, halt with `BLOCKED: holistic code review ERROR-only round {H}` and surface each entry's `error` string from `reviews[]` to the user.
-   Do NOT auto-retry beyond the second pass.
-
-3.6.
-**Rate-limit fallback (no round consumed)**
-
-   When sub-step 3.5's second pass returns `verdict: ERROR` AND `roles.code-review.holistic.fallback_reviewer` is not null AND any `reviews[*].error` string contains (case-insensitive) a substring listed in `roles.code-review.holistic.fallback_on` (default `["rate-limit"]`):
-
-   1. Emit `_notify.notify("<VARIANT_LABEL>.holistic-fallback", f"swap reviewer -> {fallback_name}", slug=slug, round=H)`.
-   2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`.
-      Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
-   3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before re-running sub-step 3 with the swapped reviewer below.
-      Applies only when dispatch == agent;
-      the subprocess/psmux path keeps its existing worktree_snapshot_guard coverage.
-
-      Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer.
-      The round counter `H` is **not** consumed.
-
-      Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-   4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (fallback also failed at round {H})"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
-      Do NOT cascade to a second fallback.
-   5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (rate-limited, no fallback)"` and push; invoke the holistic cleanup block; `_notify.notify("<VARIANT_LABEL>.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
-      The operator-visible message is intentional -- silent infinite fallback is wrong.
-
-4. On `APPROVE`: If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
-   
-   `nit_count` is derived from the envelope's post-ceiling `findings` list; the per-finding `title`, `severity`, and `class` are available there too, if the fixer brief needs them.
-
-   **Dispatch the NIT-fix pass whenever `nit_count > 0` — there is no exception to this for the Builder, even under time or performance pressure.
-   'Non-blocking' does NOT mean optional: deferred nits re-surface as BLOCKING in later rounds and cost more total rounds.**
-   The fixer, not the Builder, decides what to leave: within the pass, the fixer may leave a nit unfixed only when the reviewer explicitly marked it 'no action required' — that latitude governs the fixer's in-pass judgment, not the Builder's dispatch decision, and never excuses skipping the dispatch itself.
-
-   **Prior-blocking digest.**
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   import _prior_blocking, pathlib
-   digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='holistic')
-   pathlib.Path('<briefs_dir>/prior-blocking-holistic-r{H}.txt').write_text(digest, encoding='utf-8')
-   "
-   ```
-   Unlike the existing prior-notes digest above, this is called at every round with no `H > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
-
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
-   
-   If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-       --slug fix-holistic-r{H}-nits -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt
-   ```
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
-   After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Invoke the holistic cleanup block. Proceed to Handoff.
-   If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
-
-5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer;
-   the fixer loads `mill-receiving-review` (see Principles below).
-   Builder does not load the skill.
-   Invoke the holistic cleanup block (reaps the previous round's session before the next one starts).
-   
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
-   
-   If `dispatch == subprocess` or `psmux`: Dispatch:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}
-   ```
-   Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch).
-   The CLI handles `holistic-fixing` phase + commit + push itself.
-   - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: invoke the holistic cleanup block, then re-invoke `millpy-fix.py --scope holistic` once (fresh).
-     If the re-fire also fails with `infrastructure`: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
-     The re-fire is fresh (killed session cannot be reattached).
-   - `stuck_type: transient`: one-retry policy (re-invoke once) — this retry IS the one-shot self-resolve attempt.
-     If still transient after it: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
-   - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
-     **Regardless of whether a plan edit was made**, append a `## Prior failure` section to `00-overview.md` (placed immediately after its frontmatter, before `## Batch Index` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text, regardless of whether the reason names a specific batch, spans several, or names none at all.
-     Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck (holistic)"`.
-     Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round.
-     If the retry produces the *same* `verify`/`logic` failure: invoke the holistic cleanup block, set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
-   - On success: increment H and loop.
-
-6. On `NEED_CONTEXT`: apply the same extra-files / notify path as per-batch.
-
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
-   commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push;
-   invoke the holistic cleanup block;
-   halt with "Holistic review exhausted {max_holistic_rounds} round(s).
-   Task left as [active] for manual review."
+**Read `plugins/mill/skills/mill-go-base/holistic-review.md` now, before any other action in this phase.** All of this phase's behaviour lives in that file. Do not proceed from this heading without reading it.
 
 ## Handoff
 
-**Nit-enforcement gate.**
-Check for approved scopes with unfixed nits:
-
-```python
-from pathlib import Path
-import _nit_gate
-unfixed_nits = _nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)
-```
-
-If `unfixed_nits` is non-empty, self-resolve once: for each `scope` in `unfixed_nits`, locate that scope's latest code-review file by mirroring `_nit_gate._find_final_code_review`'s own matching exactly (`_review_common.RE_SIMPLE`/`RE_BATCH`, both anchored at the filename start): for `holistic`, a match is a filename where the leading `<timestamp>-` is immediately followed by `code-review-r<digits>.md` with nothing else in between (RE_SIMPLE, type `code`) — do NOT use an unanchored glob like `*-code-review-r*.md` for this, since a per-batch scope whose name itself starts with `r` (e.g. `retry-fix` -> `...-code-review-retry-fix-r1.md`) contains that substring and would be wrongly picked up;
-for a per-batch scope, a match is a filename where the leading `<timestamp>-` is immediately followed by `code-review-{scope}-r<digits>.md` with `{scope}` matching this batch's exact name (RE_BATCH, type `code`, batch `{scope}`).
-Among matching files, sort by filename descending (the leading timestamp makes this chronological) and take the first.
-
-**Prior-blocking digest.**
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import _prior_blocking, pathlib
-digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='batch', batch_name='<scope>')
-pathlib.Path('<briefs_dir>/prior-blocking-<scope>-r<N>.txt').write_text(digest, encoding='utf-8')
-"
-```
-Use `scope='batch', batch_name='<scope>'` when `<scope>` is a per-batch scope name, or `scope='holistic'` (no `batch_name`) when `<scope> == "holistic"`, writing to `<briefs_dir>/prior-blocking-<scope>-r<N>.txt` or `<briefs_dir>/prior-blocking-holistic-r<H>.txt` respectively (same naming convention as `## Execute` step 4 and `## Holistic code review` step 4).
-As with those two sites, this is called at every round with no round guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`.
-
-Dispatch the NIT-fix pass for that review file using the identical CLI, args, and dispatch-mode handling already documented for the in-flow NIT-fix pass: see `## Execute` step 4's `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `## Holistic code review` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
-`<N>`/`<H>` are read from the review filename.
-That identical shape now includes `--prior-blocking <digest-path>` too (per `## Execute` step 4's and `## Holistic code review` step 4's edits to those two sites), so this site's dispatch carries it automatically with no separate argument string of its own.
-This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-<scope>` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
-After the dispatch completes, re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`.
-
-If it is STILL non-empty, halt with: `BLOCKED: unfixed nits in scope(s): <scope-list> -- NIT-fix pass did not clear them` where `<scope-list>` is the joined list of scope names.
-Do NOT set `phase: done` when the gate fires;
-the task remains in its current phase so the operator can inspect and re-run `/mill-go`.
-
-**Manual recovery note.**
-The gate above requires a `nits-fixed-<scope>` row in status.md's timeline for each scope that has any `[NIT]` findings in its final code-review file — it does not inspect commits directly.
-A classed `[NIT:<class>]` heading counts identically to a bare `[NIT]` heading for this requirement.
-Under Agent-mode dispatch this marker is written automatically by the NIT-fix pass's `--stage finalize` call (see "## Agent-mode dispatch" step 6).
-If an operator instead completes or verifies a NIT-fix pass manually, outside this documented flow (e.g. recovering from an orphaned or crashed fixer session), the gate still requires the marker to be appended by hand: `_status.append_phase(status_path, f"nits-fixed-{scope}", _timestamp.now_utc_iso())`, where `scope` is the batch name or `"holistic"`.
-
-If the list is empty, proceed to terminal cleanliness gate.
-
-**Terminal cleanliness gate.**
-Resolve the parent branch and check for in-scope uncommitted changes:
-
-```python
-parent_branch = _parent_branch.resolve(status_path, interactive=False)
-in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
-```
-
-If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
-no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`).
-Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
-
-If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), halt with: `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.` where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt.
-Do NOT set `phase: done` when the gate fires;
-the task remains in its current phase so the operator can inspect and fix.
-
-If the list is empty, proceed to scope violations cleanup.
-
-**Scope violations cleanup gate.**
-Clean up ephemeral build artifacts that may have been left by verify runs:
-
-```python
-removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)
-```
-
-Log the removed artifacts (ASCII-only).
-If `blocking_paths` is non-empty, self-resolve once: for each path in `blocking_paths`, classify it against the plan's `All Files Touched` list (in `00-overview.md` — this is the only list checked;
-do not open any batch card body to do this classification, per mill-go's own "Lean Builder" principle) — a path that matches an entry in `All Files Touched` is in-scope work: `git -C <worktree> add <path>` and commit it as part of the single audit-trail commit below;
-a path that clearly matches a known ephemeral/cruft pattern (build artifacts, editor swap files, and similar — the same category `clean_ephemeral_scope_violations` already auto-removes, just not caught by its fixed pattern list) and matches nothing in `All Files Touched`: remove it (`git -C <worktree> clean -f -- <path>`) and log the removal (ASCII-only) the same way as the auto-removed ephemeral artifacts above;
-a path that cannot be confidently classified either way: leave it untouched (neither `add` nor `clean`) so it correctly reappears in `blocking_paths` on the re-run below and is caught by the halt.
-After classifying every path in `blocking_paths`: `_status.append_phase(status_path, "self-resolved-scope-violation", _timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope files at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
-no push — matches every other Builder-owned Handoff-phase commit in `## Board discipline`;
-the cruft removals via `git clean` are untracked-file deletions and have nothing to stage).
-Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
-
-If `blocking_paths` is STILL non-empty (a path could not be classified with confidence against the plan), halt with: `BLOCKED: out-of-scope untracked file(s): <file-list>` where `<file-list>` is the comma-separated list of blocking paths.
-Do NOT set `phase: done` when the gate fires;
-the task remains in its current phase so the operator can inspect and manually remove the files.
-
-If the list is empty, proceed normally.
-
-**Scope violations handling note.**
-The `scope_violations` field in the fixer JSON envelope (present when a fixer detects untracked out-of-scope files) is read and surfaced to the orchestrator.
-It is folded into the generic `stuck_type: logic` envelope;
-the terminal gate (above) is the authoritative cleanup point for common artifacts like coverage profiling outputs.
-
-**0.
-Pre-done gate.**
-Read `(cfg.get("pipeline") or {}).get("done_gate")` (deep-merged config;
-the `or {}` guard handles the case where `pipeline:` is present but null).
-If the value is `None` or absent, skip.
-If it is a non-null string, run the command from `git_root` (not hub dir) as a best-effort verify:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import json, sys, subprocess, platform
-import _paths, _config
-git_root = _paths.resolve_git_root()
-hub_root = _paths.resolve_hub_path()
-cfg = _config.load_config(hub_root, git_root)
-gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
-if not gate_cmd:
-    sys.exit(0)
-result = subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)
-if result.returncode != 0:
-    out = (result.stdout + result.stderr).strip()
-    reason = out[-2000:] if len(out) > 2000 else out
-    print(json.dumps({'status': 'blocked', 'reason': f'done gate failed: {reason}'}))
-    sys.exit(1)
-# dotnet cleanup: if gate command contains 'dotnet' and we are on Windows,
-# run build-server shutdown to release process locks before mill-finalize runs.
-if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
-    subprocess.run(['dotnet', 'build-server', 'shutdown'], capture_output=True, timeout=30)
-"
-```
-
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
-
-Parse stdout for a JSON line.
-If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`.
-Do NOT set `phase: done` when the gate fires;
-the task remains in its current phase so the operator can investigate the failure. `subprocess.run` with `capture_output=True` does not raise on non-zero exit code — check `result.returncode`.
-
-1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`.
-   Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: done {slug}"`.
-
-2. Flip Home.md's task line to `[ready-to-merge]` — the new intermediate state signalling 'mill-go done, mill-merge pending':
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-   from pathlib import Path; import _paths
-   from wiki import _client
-   wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())
-   _client.set_phase(wiki_path, '<slug>', 'ready-to-merge')
-   "
-   ```
-3. `_notify.notify("<VARIANT_LABEL>.done", f"task {slug} complete", slug=slug)`.
-4. **Release the builder lock immediately:**
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release
-   ```
-5. If `pipeline.auto_merge: true` → invoke `/mill-finalize`.
-   Otherwise tell the user: "Task complete.
-   Run `/mill-finalize` to finalize the task (creates a PR or squashes directly, depending on config)." mill-finalize may halt on `pr-pending` in PR mode — that is expected;
-   treat it as completion of step 5 and continue to step 6.
-6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`.
-   **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination.
-   The skill checks `gh auth` itself and bails cleanly if absent.
-   Cross-thread merges and post-PR teardowns are not auto-reflected;
-   user can run `/mill-self-report` manually if wanted.
+**Read `plugins/mill/skills/mill-go-base/handoff.md` now, before any other action in this phase.** All of this phase's behaviour lives in that file. Do not proceed from this heading without reading it.
 
 ## Principles
 
@@ -1553,3 +887,9 @@ the task remains in its current phase so the operator can investigate the failur
   batch-state mutations via `_status.set_batch_field`.
   Hand-editing either yaml block is banned.
 - The path-invariant rule from CLAUDE.md is load-bearing: working state never goes to the wiki — only Home.md / _Sidebar.md do.
+
+## History
+
+Pre-strip version (1483 lines, with the legacy non-agent dispatch branches and the Resume /
+Holistic / Handoff sections inline) is at commit `356da5e5`. Restore with:
+`git show 356da5e5:plugins/mill/skills/mill-go-base/SKILL.md`.

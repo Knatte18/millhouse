@@ -22,7 +22,8 @@ VARIANT_LABEL: mill-go
 Load the `mill:mill-go-base` skill via the Skill tool, unconditionally and
 immediately, before any other action.
 All of this skill's behaviour — the Builder role, the entry phase gate, Prepare,
-the sequential batch loop, Agent-mode dispatch, Resume, holistic code review, and
-Handoff — lives in that skill.
+the sequential batch loop, and Agent-mode dispatch — lives in that skill; Resume,
+holistic code review, and Handoff are reached through its own mandatory-read
+pointers.
 Follow `mill-go-base` from its `## Entry` onward with `VARIANT_LABEL` bound to the
 value declared above.

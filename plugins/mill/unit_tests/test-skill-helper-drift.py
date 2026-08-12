@@ -3,10 +3,14 @@
 Batch: drift-guard-and-regression-locks
 
 Card 1: Drift-guard scan Every mill-SKILL.md helper reference (pattern `_<module>.<fn>(`) resolves
-to a real shipped function in plugins/mill/scripts.
+to a real shipped function in plugins/mill/scripts. The scan also covers the
+plugins/mill/skills/mill-go-base companion files (resume.md, holistic-review.md, handoff.md),
+since the mill-go-base: remove subprocess/psmux dispatch branches task relocated helper
+references out of SKILL.md into those files.
 
 Card 2: Regression locks #495: millpy-review-plan.py resolves project_root via
-_paths.resolve_hub_path() #496: mill-go SKILL.md resolves reviews_dir = hub / '_mill/reviews'
+_paths.resolve_hub_path() #496: mill-go-base SKILL.md or one of its companion files resolves
+reviews_dir = hub / '_mill/reviews'
 #504/#505: drift guard asserts _cleanliness.revert_out_of_scope_drift resolves
 
 Card 3: Extract-unit checks and mill-start body/brief lock Directly asserts
@@ -98,6 +102,11 @@ def _run_drift_guard() -> list[str]:
     """
     Scan all mill SKILLs and assert every _<module>.<fn>( reference resolves.
 
+    The scan covers every SKILL.md plus the mill-go-base companion files
+    (resume.md, holistic-review.md, handoff.md), since the extract-cold-path batch
+    relocated helper references for the Resume, Holistic code review, and Handoff
+    phases out of SKILL.md into those sibling files.
+
     Returns list of failure messages (empty list = all passed).
     """
     failures: list[str] = []
@@ -108,8 +117,12 @@ def _run_drift_guard() -> list[str]:
         failures.append("FAIL: could not parse any helper modules")
         return failures
 
-    # Scan every SKILL.md in plugins/mill/skills/
-    skill_files = sorted(SKILLS.rglob("SKILL.md"))
+    # Scan every SKILL.md in plugins/mill/skills/, unioned with the mill-go-base
+    # companion files -- the extract-cold-path batch moved helper references for the
+    # Resume, Holistic code review, and Handoff phases out of SKILL.md into these
+    # sibling files, so the drift guard must follow them there.
+    mill_go_base_companions = sorted((SKILLS / "mill-go-base").glob("*.md"))
+    skill_files = sorted(set(SKILLS.rglob("SKILL.md")) | set(mill_go_base_companions))
     for skill_file in skill_files:
         try:
             skill_text = skill_file.read_text(encoding="utf-8")
@@ -143,8 +156,8 @@ def _run_regression_locks() -> list[str]:
     """
     Assert the already-fixed #495/#496 source state against regression.
 
-    #495: millpy-review-plan.py uses _paths.resolve_hub_path() for project_root #496: mill-go
-    SKILL.md resolves reviews_dir = hub / '_mill/reviews'
+    #495: millpy-review-plan.py uses _paths.resolve_hub_path() for project_root #496: mill-go-base
+    SKILL.md or one of its companion files resolves reviews_dir = hub / '_mill/reviews'
 
     Note: #504/#505 (SKILL.md helper reference mismatches) are already covered by Card 1's
     drift-guard scan, which asserts _cleanliness.revert_out_of_scope_drift (referenced by mill-go
@@ -174,17 +187,31 @@ def _run_regression_locks() -> list[str]:
             f"which is not cwd-independent (should use _paths.resolve_hub_path())"
         )
 
-    # #496 lock: check mill-go SKILL.md
-    mill_go_skill_path = SKILLS / "mill-go-base" / "SKILL.md"
-    try:
-        mill_go_skill_text = mill_go_skill_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError) as e:
-        failures.append(f"FAIL: {mill_go_skill_path}: could not read {e}")
+    # #496 lock: check mill-go-base SKILL.md and its companion files.
+    # The holistic crash-recovery helper carrying this literal moved from SKILL.md
+    # into holistic-review.md as part of the extract-cold-path batch, so the lock
+    # passes when the literal is found in any one of the mill-go-base files rather
+    # than requiring it in SKILL.md specifically.
+    mill_go_base_dir = SKILLS / "mill-go-base"
+    mill_go_base_files = sorted(mill_go_base_dir.glob("*.md"))
+    if not mill_go_base_files:
+        failures.append(f"FAIL: #496 regression: {mill_go_base_dir} contains no *.md files")
         return failures
 
-    if "reviews_dir = hub / '_mill/reviews'" not in mill_go_skill_text:
+    reviews_dir_literal_found = False
+    for candidate_path in mill_go_base_files:
+        try:
+            candidate_text = candidate_path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError) as e:
+            failures.append(f"FAIL: {candidate_path}: could not read {e}")
+            return failures
+        if "reviews_dir = hub / '_mill/reviews'" in candidate_text:
+            reviews_dir_literal_found = True
+            break
+
+    if not reviews_dir_literal_found:
         failures.append(
-            f"FAIL: #496 regression: {mill_go_skill_path} does not use "
+            f"FAIL: #496 regression: none of {[str(p) for p in mill_go_base_files]} use "
             f"'reviews_dir = hub / '_mill/reviews'' for holistic crash-recovery"
         )
 
