@@ -28,6 +28,7 @@ import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
+from _llm_common import ReviewerCallResult  # noqa: E402
 from _review_code import run as code_run, finalize as code_finalize, prepare  # noqa: E402
 from _review_common import ReviewError  # noqa: E402
 from _test_helpers import seed_wiki_config  # noqa: E402
@@ -1740,6 +1741,273 @@ def main() -> int:
             errors += 1
             print(f"FAIL test25 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 26 — cost metadata happy path: reviews[0] carries duration_s/tool_calls/cost_usd
+    # and the written file's yaml header has an injected duration_s: line.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-cost-happy")])
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            entry = r.reviews[0]
+            # The stub's ReviewerCallResult carries duration_s=0.0 (a real in-process call
+            # that took no measurable time) and tool_calls/cost_usd=None (unsupported signals).
+            assert entry["duration_s"] == 0.0, f"expected duration_s=0.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s:" in file_text, (
+                f"expected 'duration_s:' line in written review file, got:\n{file_text}"
+            )
+            print(
+                "PASS test26: cost metadata happy path -- reviews[0] carries duration_s/"
+                "tool_calls/cost_usd and the written file's yaml header carries duration_s:"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test26: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test26 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 27 — cost metadata summation: NEED_CONTEXT retry -> final entry carries the sum
+    # of both calls' duration_s/tool_calls/cost_usd, not just the retry's values.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+
+        def _seq_summation(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ReviewerCallResult(
+                    text=NEED_CONTEXT_TEXT, session_id="sid-1",
+                    duration_s=10.0, tool_calls=2, cost_usd=0.01,
+                )
+            return ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-2",
+                duration_s=5.0, tool_calls=3, cost_usd=0.02,
+            )
+
+        stub.run = _seq_summation
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 5, f"expected summed tool_calls=5, got {entry['tool_calls']!r}"
+            assert abs(entry["cost_usd"] - 0.03) < 1e-9, (
+                f"expected summed cost_usd~=0.03, got {entry['cost_usd']!r}"
+            )
+            print(
+                "PASS test27: NEED_CONTEXT retry summation -- final entry carries the sum "
+                "of both calls, not just the retry's values"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test27: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test27 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 28 — cost metadata None-absorbing: retry's tool_calls/cost_usd are None ->
+    # the first call's values survive rather than being zeroed or dropped.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+
+        def _seq_none_absorbing(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ReviewerCallResult(
+                    text=NEED_CONTEXT_TEXT, session_id="sid-1",
+                    duration_s=10.0, tool_calls=2, cost_usd=0.01,
+                )
+            return ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-2",
+                duration_s=5.0, tool_calls=None, cost_usd=None,
+            )
+
+        stub.run = _seq_none_absorbing
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 2, (
+                f"expected first call's tool_calls=2 to survive the None-absorbing sum, "
+                f"got {entry['tool_calls']!r}"
+            )
+            assert entry["cost_usd"] == 0.01, (
+                f"expected first call's cost_usd=0.01 to survive the None-absorbing sum, "
+                f"got {entry['cost_usd']!r}"
+            )
+            print(
+                "PASS test28: None-absorbing summation -- first call's tool_calls/cost_usd "
+                "survive a retry that reports None for those signals"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test28: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test28 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 29 — cost metadata call-failure ERROR: LLMError's duration_s surfaces on the
+    # initial call, file stays None (call never returned).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+
+        def _raise_with_duration(prompt_text, **kw):
+            raise LLMError("seeded boom", duration_s=12.5)
+
+        stub.run = _raise_with_duration
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 12.5, f"expected duration_s=12.5, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            assert entry["file"] is None, f"expected file=None, got {entry['file']!r}"
+            print(
+                "PASS test29: cost metadata call-failure ERROR -- LLMError.duration_s "
+                "surfaces on the synthetic ERROR entry with file=None"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test29: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test29 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 30 — cost metadata retry call-failure ERROR: a successful first call plus an
+    # LLMError on the retry -> the entry's duration_s is the sum of both.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+
+        def _seq_retry_failure(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ReviewerCallResult(
+                    text=NEED_CONTEXT_TEXT, session_id="sid-1",
+                    duration_s=10.0, tool_calls=2, cost_usd=0.01,
+                )
+            raise LLMError("retry boom", duration_s=4.0)
+
+        stub.run = _seq_retry_failure
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 14.0, (
+                f"expected duration_s=14.0 (10.0 first call + 4.0 retry), got {entry['duration_s']!r}"
+            )
+            assert entry["tool_calls"] == 2, f"expected first call's tool_calls=2, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] == 0.01, f"expected first call's cost_usd=0.01, got {entry['cost_usd']!r}"
+            assert entry["file"] is None, f"expected file=None, got {entry['file']!r}"
+            print(
+                "PASS test30: retry call-failure ERROR -- duration_s is the sum of the "
+                "first call and the failed retry"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test30: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test30 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 31 — cost metadata parse-failure ERROR: parse_verdict rejects the text -> the
+    # entry carries the call's metrics AND the raw file written by that branch has
+    # duration_s: injected into its header.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        unparseable_with_fence = "# Review\n\n```yaml\nnot_a_verdict: true\n```\n"
+
+        def _return_unparseable(prompt_text, **kw):
+            return ReviewerCallResult(
+                text=unparseable_with_fence, session_id="sid-parse-fail",
+                duration_s=7.25, tool_calls=3, cost_usd=0.0123,
+            )
+
+        stub.run = _return_unparseable
+        stub.seed([])  # clear prompts log
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 7.25, f"expected duration_s=7.25, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 3, f"expected tool_calls=3, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] == 0.0123, f"expected cost_usd=0.0123, got {entry['cost_usd']!r}"
+            assert entry["file"] is not None, "expected a written raw file, got file=None"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s: 7.2" in file_text, (
+                f"expected injected 'duration_s:' line in raw file, got:\n{file_text}"
+            )
+            print(
+                "PASS test31: parse-failure ERROR -- metrics survive into both the ERROR "
+                "entry and the raw file's injected yaml header"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test31: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test31 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
