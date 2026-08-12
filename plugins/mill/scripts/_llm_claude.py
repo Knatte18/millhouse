@@ -452,7 +452,7 @@ def run_bulk(
     timeout: int = 600,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke claude with no tool access (bulk mode).
 
     Spawns: claude -p --allowedTools "" --output-format stream-json --model <model> [--effort
@@ -460,7 +460,8 @@ def run_bulk(
 
     Stdin receives prompt_text.
     Stream-json is parsed;
-    the final assistant text and session_id are returned as a tuple.
+    a ReviewerCallResult carrying the final assistant text, session_id, and cost/timing metrics is
+    returned.
 
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
@@ -485,7 +486,7 @@ def run_tool_use(
     timeout: int = 900,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke claude with read-only tool access (tool-use mode).
 
     Spawns: claude -p --allowedTools Read,Grep,Glob --output-format stream-json --model <model>
@@ -495,6 +496,8 @@ def run_tool_use(
     reviewer returns (Decision 24 in discussion.md).
     Glob is included to aid file discovery.
     Longer default timeout (900s) for sessions that explore the codebase.
+    Returns a ReviewerCallResult carrying the final assistant text, session_id, and cost/timing
+    metrics.
 
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
@@ -541,7 +544,9 @@ def run_implementer(
     Raises LLMError on timeout, non-zero exit, or empty response.
     Raises LLMSessionError when resume=True and the subprocess fails.
     """
-    return _invoke(
+    # _invoke now returns a ReviewerCallResult; unwrap to a 2-tuple here solely to preserve
+    # run_implementer's existing (text, session_id) contract for its callers.
+    result = _invoke(
         prompt_text=prompt_text,
         model=model,
         effort=effort,
@@ -552,6 +557,7 @@ def run_implementer(
         resume=resume,
         cwd=cwd,
     )
+    return result.text, result.session_id
 
 
 def cleanup_session(session_id: str | None) -> None:
