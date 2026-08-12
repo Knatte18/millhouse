@@ -25,7 +25,7 @@ import uuid
 
 import _subprocess_util
 
-from _llm_common import LLMError, LLMSessionError, LLMRateLimitError
+from _llm_common import LLMError, LLMSessionError, LLMRateLimitError, ReviewerCallResult
 
 
 def _gemini_argv_prefix() -> list[str]:
@@ -192,16 +192,20 @@ def _invoke(
     tooluse: bool,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
-    """Core invocation: spawn gemini, parse output, return (text, session_id).
+) -> ReviewerCallResult:
+    """Core invocation: spawn gemini, parse output, return a ReviewerCallResult.
 
     Raises LLMSessionError immediately when ``resume=True`` — gemini-cli does not support session
     resumption.
     Raises LLMError on timeout or non-zero exit.
     Raises LLMRateLimitError when the exit is non-zero AND rate-limit signals are detected in the
     output.
+
+    ``tool_calls`` and ``cost_usd`` are always None — gemini-cli exposes no tool-call or cost signal
+    this task is willing to guess at.
     """
     if resume:
+        # No timer has started yet, so there is no elapsed time to report.
         raise LLMSessionError("gemini session reuse not supported")
 
     print(f"[_llm_gemini] gemini {model} ({mode_label}) starting...", file=sys.stderr)
@@ -213,8 +217,8 @@ def _invoke(
         result = _subprocess_util.run(argv, input=prompt_text, timeout=float(timeout))
     except Exception as exc:
         if "TimeoutExpired" in type(exc).__name__ or "Timeout" in type(exc).__name__:
-            raise LLMError(f"Gemini CLI timed out after {timeout}s") from exc
-        raise LLMError(f"Failed to spawn gemini: {exc}") from exc
+            raise LLMError(f"Gemini CLI timed out after {timeout}s", duration_s=time.monotonic() - start) from exc
+        raise LLMError(f"Failed to spawn gemini: {exc}", duration_s=time.monotonic() - start) from exc
 
     dt = time.monotonic() - start
     rate_limited = _scan_gemini_rate_limit(result.stdout or "", result.stderr or "")
@@ -223,9 +227,9 @@ def _invoke(
         error_detail = (result.stderr or result.stdout or "")[:500]
         if rate_limited:
             raise LLMRateLimitError(
-                f"gemini rate-limited (exit {result.returncode}): {error_detail}"
+                f"gemini rate-limited (exit {result.returncode}): {error_detail}", duration_s=dt
             )
-        raise LLMError(f"gemini exited {result.returncode}: {error_detail}")
+        raise LLMError(f"gemini exited {result.returncode}: {error_detail}", duration_s=dt)
 
     text, observed_sid = _parse_gemini_stream_json(result.stdout or "")
     effective_sid = observed_sid or f"gemini-{uuid.uuid4()}"
@@ -234,7 +238,7 @@ def _invoke(
         f" session={effective_sid[:8]}",
         file=sys.stderr,
     )
-    return text, effective_sid
+    return ReviewerCallResult(text=text, session_id=effective_sid, duration_s=dt, tool_calls=None, cost_usd=None)
 
 
 # ---------------------------------------------------------------------------
@@ -249,14 +253,15 @@ def run_bulk(
     timeout: int = 600,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke gemini with no extensions in read-only mode (bulk mode).
 
     Spawns: gemini -p -o stream-json -m <model> --approval-mode plan -e ""
 
     Stdin receives prompt_text.
     Stream-json is parsed;
-    the final assistant text and session_id are returned as a tuple.
+    a ReviewerCallResult carrying the final assistant text, session_id, and duration is returned
+    (tool_calls and cost_usd are always None).
 
     ``effort`` is accepted for API parity with ``_llm_claude.run_bulk`` but is silently ignored —
     gemini-cli exposes no thinking-budget flag in headless mode.
@@ -287,7 +292,7 @@ def run_tool_use(
     timeout: int = 900,
     session_id: str | None = None,
     resume: bool = False,
-) -> tuple[str, str]:
+) -> ReviewerCallResult:
     """Invoke gemini with default extensions in read-only mode (tool-use mode).
 
     Spawns: gemini -p -o stream-json -m <model> --approval-mode plan
@@ -295,6 +300,8 @@ def run_tool_use(
     File inspection is allowed;
     writes are denied by the policy layer (``--approval-mode plan`` requires human approval for any
     file writes).
+    Returns a ReviewerCallResult carrying the final assistant text, session_id, and duration
+    (tool_calls and cost_usd are always None).
 
     ``effort`` is accepted for API parity with ``_llm_claude.run_tool_use`` but is silently ignored
     — gemini-cli exposes no thinking-budget flag in headless mode.
