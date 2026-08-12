@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-regression-guard
+phase: approved-strip-subprocess-dispatch
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -33,6 +33,7 @@ planned  '2026-08-12T09:32:03Z'
 implementing  '2026-08-12T09:32:29Z'
 self-resolved-verify-logic  '2026-08-12T09:35:25Z'
 approved-regression-guard  '2026-08-12T09:36:18Z'
+approved-strip-subprocess-dispatch  '2026-08-12T09:49:31Z'
 ```
 
 ## Batches
@@ -45,9 +46,10 @@ batches:
     start_sha: 42f5984d6f9da850500b3e9c23c133c74acbafce
     commit_sha: 4e82ab8c0eddbcab1507cdca77c67034d5ccf8e8
   - name: strip-subprocess-dispatch
-    state: running
+    state: approved
     implementer_session: 90df0501-a8b8-45ab-8a0c-8365ace5e461
     start_sha: 0cce02bf2115eafaec68fb618c2ee2e952ca2e4e
+    commit_sha: d9cc532ce244f7efcf996589837d6ddda686af8b
     verify_baseline_failures: []
   - name: treeguard-dedup
     state: pending
