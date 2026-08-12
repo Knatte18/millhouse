@@ -59,5 +59,7 @@ batches:
     commit_sha: caa33df0aad974051137575672d87dab51cfaae2
     verify_baseline_failures: []
   - name: skill-error-kind-retry-wiring
-    state: pending
+    state: running
+    implementer_session: 524df278-1595-4caa-9bf3-6f884f90c03a
+    start_sha: e1c58339f740e4194b7e258186007f8aacff77fd
 ```
