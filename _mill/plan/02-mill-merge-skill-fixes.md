@@ -110,7 +110,9 @@ Applies all four `mill-merge/SKILL.md` prose/logic fixes that live in this one f
 ### Card 6: #817 — liveness check wiring in mill-merge Entry Step 4
 
 - **Context:**
+  - `plugins/mill/scripts/_config.py`
   - `plugins/mill/scripts/_parent_branch.py`
+  - `plugins/mill/scripts/_paths.py`
   - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/skills/mill-merge/SKILL.md`
