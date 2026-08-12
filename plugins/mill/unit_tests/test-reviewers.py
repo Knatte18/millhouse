@@ -16,6 +16,7 @@ import _paths  # noqa: E402
 import _reviewers  # noqa: E402
 import _reviewer_single  # noqa: E402
 import _reviewer_test_stub as stub  # noqa: E402
+from _llm_common import ReviewerCallResult  # noqa: E402
 from _reviewers import ReviewerError  # noqa: E402
 from _test_cfg import make_minimal_cfg  # noqa: E402
 from _test_registry import make_minimal_registry, write_to  # noqa: E402
@@ -1283,10 +1284,16 @@ def test_single_cluster_spec_raises() -> None:
 
 
 def test_single_test_stub_forwards_prompt() -> None:
-    stub.seed([("# Review\n\n```yaml\nverdict: APPROVE\n```\n", "sid-001")])
+    seeded_text = "# Review\n\n```yaml\nverdict: APPROVE\n```\n"
+    seeded_session_id = "sid-001"
+    stub.seed([(seeded_text, seeded_session_id)])
     spec = {"type": "single", "provider": "test_stub", "tooluse": False}
     text, session_id = _reviewer_single.run(spec, "hello prompt", session_id="sid-001")
     assert "APPROVE" in text
+    # The stub wraps its (text, session_id) response in a ReviewerCallResult before returning; the
+    # temporary adapter in _reviewer_single.run must unwrap it back to the same values unchanged.
+    assert text == seeded_text
+    assert session_id == seeded_session_id
     captured = stub.captured_prompts()
     assert len(captured) == 1
     assert captured[0][0] == "hello prompt"
@@ -1297,9 +1304,9 @@ def test_single_claude_bulk_mode() -> None:
     import _llm_claude as llm_claude
     calls: list[dict] = []
 
-    def fake_run_bulk(prompt_text: str, **kwargs) -> tuple[str, str]:
+    def fake_run_bulk(prompt_text: str, **kwargs) -> ReviewerCallResult:
         calls.append({"prompt_text": prompt_text, **kwargs})
-        return ("bulk response", "sid-bulk")
+        return ReviewerCallResult(text="bulk response", session_id="sid-bulk")
 
     original = llm_claude.run_bulk
     llm_claude.run_bulk = fake_run_bulk
@@ -1323,9 +1330,9 @@ def test_single_claude_tool_use_mode() -> None:
     import _llm_claude as llm_claude
     calls: list[dict] = []
 
-    def fake_run_tool_use(prompt_text: str, **kwargs) -> tuple[str, str]:
+    def fake_run_tool_use(prompt_text: str, **kwargs) -> ReviewerCallResult:
         calls.append({"prompt_text": prompt_text, **kwargs})
-        return ("tool response", "sid-tool")
+        return ReviewerCallResult(text="tool response", session_id="sid-tool")
 
     original = llm_claude.run_tool_use
     llm_claude.run_tool_use = fake_run_tool_use
@@ -1349,9 +1356,9 @@ def test_single_gemini_bulk_mode() -> None:
     import _llm_gemini as llm_gemini
     calls: list[dict] = []
 
-    def fake_run_bulk(prompt_text: str, **kwargs) -> tuple[str, str]:
+    def fake_run_bulk(prompt_text: str, **kwargs) -> ReviewerCallResult:
         calls.append({"prompt_text": prompt_text, **kwargs})
-        return ("gemini bulk response", "sid-gemini-bulk")
+        return ReviewerCallResult(text="gemini bulk response", session_id="sid-gemini-bulk")
 
     original = llm_gemini.run_bulk
     llm_gemini.run_bulk = fake_run_bulk
