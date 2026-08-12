@@ -23,6 +23,7 @@ Wires #817's liveness check into `mill-merge-in/SKILL.md`'s own independent `_pa
 
 - **Context:**
   - `plugins/mill/scripts/_parent_branch.py`
+  - `plugins/mill/scripts/_status.py`
   - `plugins/mill/skills/mill-merge/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`

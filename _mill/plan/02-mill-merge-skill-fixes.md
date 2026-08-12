@@ -46,7 +46,7 @@ Applies all four `mill-merge/SKILL.md` prose/logic fixes that live in this one f
 
     > "The parent worktree's local branch has diverged from `origin/<parent_branch>` — it has local commits not present on the remote. Reconcile manually (commit/push, or investigate the divergence), then re-run `/mill-merge`."
 
-    **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" paragraph (Card 4 of this batch renames that paragraph to cover both halts).
+    **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt (Step 5)" paragraph — at this card's own commit that is still its title verbatim; Card 4 of this batch (which must land in the same session, before this plan's implementation is considered complete) renames it to "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" and extends it to cover this new halt too.
 
     `reset --hard origin/<parent_branch>` is deliberately never used as the fast-forward mechanism here — it would silently discard any local-only commits on the parent worktree's branch, exactly the class of silent parent-state destruction the sibling rollback-target fix (Card 4) treats as a bug. `merge --ff-only` fails loudly instead.
     ```
@@ -111,6 +111,7 @@ Applies all four `mill-merge/SKILL.md` prose/logic fixes that live in this one f
 
 - **Context:**
   - `plugins/mill/scripts/_parent_branch.py`
+  - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/skills/mill-merge/SKILL.md`
 - **Creates:** none

@@ -45,6 +45,7 @@ Extends `plugins/mill/integration_tests/test-merge.py` with integration coverage
     4. Run `git -C parent_ff_halt fetch origin main` (exits 0 — divergence is between local refs, not the fetch itself) then `git -C parent_ff_halt merge --ff-only origin/main`. Assert this second command exits non-zero (git refuses non-fast-forward `--ff-only`).
     5. Assert nothing was mutated: `git -C parent_ff_halt rev-parse main` still equals `local_before`, and `git -C parent_ff_halt status --porcelain` is empty — proving the halt leaves the parent worktree exactly as it was (matching the "nothing has been mutated yet at this halt point" rollback-exemption rationale in batch 2 Card 4).
     - `print("PASS: #824 parent fast-forward halts (does not reset --hard) when the parent worktree has diverged local commits")`.
+  - **Register both new containers in `main()`'s existing `finally:` block**, matching the established pattern already used there for `container_dirty`/`container_retry`/`container_untracked`/`container_step5_guard` (one `if "X" in locals():` entry per container in EACH of the two branches): add `if "container_ff" in locals(): print(f"Scratch preserved: {container_ff}", file=sys.stderr)` and the equivalent `container_ff_halt` line to the `if failed:` branch, and add the matching `if "container_ff" in locals(): _safe_rmtree.safe_rmtree(container_ff, allowed_root=container_ff, ignore_errors=True)` and the equivalent `container_ff_halt` block to the `else:` (success-cleanup) branch. Without this, every test run leaks these two directories under `.scratch/` unboundedly.
 - **Commit:** `test(mill): integration coverage for #824 pre-squash parent fast-forward`
 
 ### Card 10: #824 — rollback resets to origin, not checkpoint
@@ -67,9 +68,10 @@ Extends `plugins/mill/integration_tests/test-merge.py` with integration coverage
     5. Reset `parent_rb` back to `local_sha` (`git -C parent_rb reset --hard <local_sha>`) to undo the repro step before proving the fix.
     6. **Fix:** run the NEW rollback command Card 4 of batch 2 documents, `git -C parent_rb reset --hard origin/main`. Assert `git -C parent_rb rev-parse HEAD` now equals `origin_sha` (`git -C origin_rb rev-parse main`) — proving the fix lands the parent worktree on the correct, live parent state regardless of which Steps 1-5 failure triggered the rollback.
        `print("PASS: fix -- rollback resets parent worktree to origin/<parent_branch> (#824)")`.
+  - **Register `container_rb` in `main()`'s existing `finally:` block**, same pattern as Card 9's registration requirement: an `if "container_rb" in locals():` entry with the preserve-print in the `if failed:` branch, and the matching `_safe_rmtree.safe_rmtree(container_rb, allowed_root=container_rb, ignore_errors=True)` entry in the `else:` branch.
 - **Commit:** `test(mill): integration coverage for #824 rollback-target fix`
 
-### Card 11: #817 — torn-down-parent chain resolves; never-pushed falls back
+### Card 11: #817 — torn-down-parent chain resolves; never-pushed and no-status-file both fall back
 
 - **Context:**
   - `plugins/mill/integration_tests/test-merge.py`
@@ -93,7 +95,12 @@ Extends `plugins/mill/integration_tests/test-merge.py` with integration coverage
     1. On `repo_dead`, create `test/never-pushed` LOCALLY off `main` (no push to `origin_dead` at all — reproducing the "never pushed" shape). Do not tag it.
     2. Call `_parent_branch.resolve_dead_parent("test/never-pushed", repo_dead, cfg_dead)`. Assert the result equals `{"outcome": "fallback", "reason": "no-tag", "branch": "main", "hops": ["never-pushed"]}`.
        `print("PASS: #817 chain-walk falls back to base_branch when no archive tag exists (never-pushed parent)")`.
-- **Commit:** `test(mill): integration coverage for #817 dead-parent detection (torn-down + never-pushed)`
+  - **Sub-scenario (c): archived parent whose pre-cleanup tree has no status.md at either layout (the other fallback-(b) sub-case Batch 1 Card 2 step 4 and step 5 document, distinct from sub-scenario (a)'s "no `parent:` row" and Card 14's "legacy `task/` layout" cases).**
+    1. On `repo_dead`, create `test/no-status-file` off `main`, add an UNRELATED file (e.g. `feature.txt`, no status.md at any path), commit, add one more trivial commit on top, tag `archive/no-status-file` at the tip. Do not push.
+    2. Call `_parent_branch.resolve_dead_parent("test/no-status-file", repo_dead, cfg_dead)`. Assert the result equals `{"outcome": "fallback", "reason": "chain-end", "branch": "main", "hops": ["no-status-file"]}` — proving the function correctly falls back when both the `git show archive/no-status-file~1:_mill/status.md` and `git show archive/no-status-file~1:task/status.md` attempts fail (neither path exists in that tree at all), rather than raising or misclassifying this as `no-tag`.
+       `print("PASS: #817 chain-walk falls back to chain-end when neither _mill/status.md nor task/status.md exists in the archived tree")`.
+  - **Register `container_dead` in `main()`'s existing `finally:` block**, same pattern as Cards 9/10's registration requirement: an `if "container_dead" in locals():` entry with the preserve-print in the `if failed:` branch, and the matching `_safe_rmtree.safe_rmtree(container_dead, allowed_root=container_dead, ignore_errors=True)` entry in the `else:` branch. `container_dead` is reused unchanged by Cards 12, 13, and 14 (same container, same registration — those cards do not need a second registration).
+- **Commit:** `test(mill): integration coverage for #817 dead-parent detection (torn-down + never-pushed + no-status-file)`
 
 ### Card 12: #817 — two chained dead-parent hops resolve through both to a live branch
 
