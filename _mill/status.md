@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-metadata
+phase: approved-cli-flags
 slug: reviewer-cost-summary
 branch: hanf/reviewer-cost-summary
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-summary-command  '2026-08-12T07:17:46Z'
 approved-discussion-metadata  '2026-08-12T07:23:14Z'
 approved-code-metadata  '2026-08-12T07:28:27Z'
 approved-plan-metadata  '2026-08-12T07:36:59Z'
+approved-cli-flags  '2026-08-12T07:41:37Z'
 ```
 
 ## Batches
@@ -78,9 +79,10 @@ batches:
     commit_sha: 0f2bbc6bcd9027b655755967547ca9280718b2ec
     verify_baseline_failures: []
   - name: cli-flags
-    state: running
+    state: approved
     implementer_session: c89e3de4-0f11-4a70-ab46-4fef54f6cc23
     start_sha: 0306a4e9cd8cd686fad1b3972416e42d0311026b
+    commit_sha: 9e309b5058a26d41458e123ee7d0b2ee7808ab7d
     verify_baseline_failures: []
   - name: orchestrator-shared
     state: pending
