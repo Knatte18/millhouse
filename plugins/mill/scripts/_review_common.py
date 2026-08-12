@@ -2282,47 +2282,52 @@ def write_review_file(
     return out_path.resolve()
 
 
-# Horizontal whitespace only (`[ \t]`, not `\s`) between the colon and the value -- `\s` also matches `\n`, which would let this pattern bleed across a line boundary and swallow the line below when `reviewer_model:` has no value of its own (e.g.
-# a malformed `reviewer_model:\n` followed by a non-blank line such as a closing yaml fence).
-_RE_REVIEWER_MODEL_LINE = re.compile(r"^reviewer_model:[ \t]*\S.*$", re.MULTILINE)
+# Per-field compiled "well-formed line" patterns, keyed by field name, populated lazily by
+# _inject_or_rewrite_yaml_field the first time each field is requested. Caching avoids
+# recompiling the same four patterns (reviewer_model, duration_s, tool_calls, cost_usd) on
+# every review.
+_YAML_FIELD_LINE_PATTERNS: dict[str, re.Pattern[str]] = {}
 
 
-def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
+def _inject_or_rewrite_yaml_field(raw_text: str, field: str, value: str) -> str:
     """
-    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output so the persisted
-    review file records the model that actually ran the review, rather than the model the reviewer's
-    own prompt-echoed text claims it is (which is unreliable in agent-mode dispatch -- see #644).
+    Rewrite or inject a `<field>: <value>` line in a reviewer's raw yaml header, in place.
+
+    This is the shared mechanism behind every persisted-metadata field
+    (`reviewer_model`, `duration_s`, `tool_calls`, `cost_usd`): each caller supplies its own
+    field name and pre-formatted value string.
 
     Behavior:
-    1. If `actual_model` is None, the caller has no override to apply --
-    return `raw_text` completely unchanged (today's behavior).
-    2. Otherwise, search for a line matching `reviewer_model:[ \\t]*\\S.*` (the line the
-        review-prompt templates instruct the reviewer to echo, e.g. `<REVIEWER_MODEL>` in
-        review-code-batch.md).
-        If found, replace that line's value in place with `reviewer_model: {actual_model}`.
-    3. If no such line is found (the reviewer omitted or malformed it), inject a new
-        `reviewer_model: {actual_model}` line immediately after the opening ` ```yaml ` fence of the
-        fenced block that carries the reviewer's `verdict:` line (the YAML header block). If no
-        block carries a `verdict:` line, fall back to the first ` ```yaml ` fence in `raw_text`.
-        If there is no ` ```yaml ` fence at all, there is nowhere sensible to anchor the injection,
-            so `raw_text` is returned unchanged.
+    1. Search for a well-formed existing line matching `^<field>:[ \\t]*\\S.*$` (`re.MULTILINE`,
+        the field name regex-escaped). Horizontal whitespace only (`[ \\t]`, not `\\s`) between
+        the colon and the value -- `\\s` also matches `\\n`, which would let this pattern bleed
+        across a line boundary and swallow the line below when `<field>:` has no value of its
+        own (e.g. a malformed `<field>:\\n` followed by a non-blank line such as a closing yaml
+        fence). If found, replace that line's value in place with `<field>: <value>` (count=1).
+    2. Otherwise, inject a new `<field>: <value>` line immediately after the opening
+        ` ```yaml ` fence of the fenced block that carries the reviewer's `verdict:` line (the
+        YAML header block). If no block carries a `verdict:` line, fall back to the first
+        ` ```yaml ` fence in `raw_text`. If there is no ` ```yaml ` fence at all, there is
+        nowhere sensible to anchor the injection, so `raw_text` is returned unchanged.
 
     Args:
         raw_text: Raw review output text, prior to verdict parsing or disk write.
-        actual_model: The model that actually produced this review,
-            or None to leave `raw_text` untouched.
+        field: The yaml field name to inject or rewrite (e.g. `"reviewer_model"`).
+        value: The pre-formatted value string to write after the colon.
 
     Returns:
         The (possibly rewritten) raw text.
     """
-    if actual_model is None:
-        return raw_text
+    pattern = _YAML_FIELD_LINE_PATTERNS.get(field)
+    if pattern is None:
+        pattern = re.compile(rf"^{re.escape(field)}:[ \t]*\S.*$", re.MULTILINE)
+        _YAML_FIELD_LINE_PATTERNS[field] = pattern
 
-    replacement_line = f"reviewer_model: {actual_model}"
-    if _RE_REVIEWER_MODEL_LINE.search(raw_text):
-        return _RE_REVIEWER_MODEL_LINE.sub(replacement_line, raw_text, count=1)
+    replacement_line = f"{field}: {value}"
+    if pattern.search(raw_text):
+        return pattern.sub(replacement_line, raw_text, count=1)
 
-    # No well-formed reviewer_model line exists to rewrite.
+    # No well-formed line exists to rewrite.
     # Find the yaml fenced block that carries the reviewer's verdict -- that is the header block the new line belongs in -- and remember the first yaml fence encountered as a fallback anchor in case no block has a verdict.
     lines = raw_text.splitlines(keepends=True)
     first_fence_index: int | None = None
@@ -2355,6 +2360,31 @@ def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
         lines[fence_index] = lines[fence_index] + "\n"
     lines.insert(fence_index + 1, f"{replacement_line}\n")
     return "".join(lines)
+
+
+def apply_actual_model_override(raw_text: str, actual_model: str | None) -> str:
+    """
+    Rewrite or inject the ``reviewer_model:`` line in a reviewer's raw output so the persisted
+    review file records the model that actually ran the review, rather than the model the reviewer's
+    own prompt-echoed text claims it is (which is unreliable in agent-mode dispatch -- see #644).
+
+    Behavior:
+    1. If `actual_model` is None, the caller has no override to apply --
+    return `raw_text` completely unchanged (today's behavior).
+    2. Otherwise, delegate to `_inject_or_rewrite_yaml_field` for the `reviewer_model` field --
+        see that function's docstring for the rewrite-vs-inject mechanism.
+
+    Args:
+        raw_text: Raw review output text, prior to verdict parsing or disk write.
+        actual_model: The model that actually produced this review,
+            or None to leave `raw_text` untouched.
+
+    Returns:
+        The (possibly rewritten) raw text.
+    """
+    if actual_model is None:
+        return raw_text
+    return _inject_or_rewrite_yaml_field(raw_text, "reviewer_model", actual_model)
 
 
 def finalize_scope(
