@@ -2253,6 +2253,71 @@ def rewrite_verdict_token(raw_text: str, new_verdict: str) -> str:
     return "".join(lines)
 
 
+def append_demotion_note(raw_text: str, demoted_count: int, blocking_count: int) -> str:
+    """Append a one-line note directly after the `## Verdict` section's summary line, recording
+    how many findings the blocking-class ceiling demoted this call and the resulting
+    `blocking_count`.
+
+    `finalize_scope` calls this unconditionally whenever `demoted_any` is True -- independent of
+    `rewrite_verdict_token`'s own narrower gate (`demoted_any and verdict != original_verdict`),
+    which only ever covers the persisted verdict *token*. A ceiling demotion can leave the verdict
+    token unchanged (e.g. another surviving BLOCKING finding keeps `blocking_count` above zero)
+    while still stranding a stale one-sentence summary that no longer matches the demoted-finding
+    reality. This note closes that gap regardless of whether the token itself flipped.
+
+    Location strategy mirrors `rewrite_verdict_token`'s own `## Verdict` heading scan: split
+    `raw_text` into lines, find the line whose stripped content is exactly `## Verdict`, then walk
+    forward past blank lines twice -- first to the verdict token line, then again to the one-sentence
+    summary line that follows it. The note is inserted as a new line immediately after the summary
+    line.
+
+    Returns raw_text unchanged if the `## Verdict` heading, the verdict token line, or the summary
+    line cannot be found -- defensive only, since every template emits all three.
+    """
+    lines = raw_text.splitlines(keepends=True)
+
+    heading_index = None
+    for line_index, line in enumerate(lines):
+        if line.rstrip("\n") == "## Verdict":
+            heading_index = line_index
+            break
+    if heading_index is None:
+        return raw_text
+
+    # Walk forward past blank lines to the verdict token line, then again to the summary line
+    # that follows it.
+    token_index = None
+    for line_index in range(heading_index + 1, len(lines)):
+        if lines[line_index].strip() == "":
+            continue
+        token_index = line_index
+        break
+    if token_index is None:
+        return raw_text
+
+    summary_index = None
+    for line_index in range(token_index + 1, len(lines)):
+        if lines[line_index].strip() == "":
+            continue
+        summary_index = line_index
+        break
+    if summary_index is None:
+        return raw_text
+
+    note = (
+        f"_Note: {demoted_count} finding(s) demoted from BLOCKING to NIT by the stage's "
+        f"blocking-class ceiling; current blocking_count is {blocking_count}._\n"
+    )
+
+    # If the summary line is the last line in the file, it may lack a trailing newline -- add one
+    # so the inserted note starts on its own line.
+    if not lines[summary_index].endswith("\n"):
+        lines[summary_index] = f"{lines[summary_index]}\n"
+
+    lines.insert(summary_index + 1, note)
+    return "".join(lines)
+
+
 def write_review_file(
     reviews_dir: Path,
     review_type: str,
