@@ -1,0 +1,28 @@
+MILL_REVIEW_BEGIN
+# Review: millpy-review-plan finalize: usage-error indistinguishability, flag issues, verdict rendering stale — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: claude-sonnet-5
+reviewed_file: plan/
+date: 2026-08-12
+```
+
+## Findings
+
+### [BLOCKING:design] Batch 3's "sole site" premise is false; Card 11's test additions will fail
+**Location:** Batch 3 (Cards 8, 10, 11), verified against `_review_plan.py`/`_review_code.py`.
+**Issue:** Batch 3's Scope claims `finalize()`'s `except ReviewError` block is "the actual, sole site where a parse_verdict failure on the reviewer's own raw text lands." False for `_review_plan.py` and `_review_code.py`: their legacy `run()` functions duplicate `parse_verdict`/`finalize_scope` inline (`_review_plan.py::_review_one_batch` lines ~359-379, `run()`'s holistic `except ReviewError` ~1231-1249; `_review_code.py::run()`'s two inline `except ReviewError` blocks ~731-758 and ~810-837) and never call `finalize()`. Card 8/10 only patch `finalize()`'s dict, so these `run()`-built ERROR dicts never gain `error_kind`. Card 11 then adds `assert rv_hol.get("error_kind") == "reviewer"` to test-review-plan-flow.py's "Test 20" (which calls `plan_run` = `_review_plan.run()`, not `finalize()`) and equivalent assertions to test-review-code-flow.py's "Test 15" (`code_run` for both `r_hol`/`r_batch`, both via `run()`'s inline paths) — both assertions will fail against unmodified code, breaking Batch 3's own `verify:` (`run-all.py --only test-review-plan-flow.py ... test-review-code-flow.py`). (Discussion is unaffected: `_review_discussion.py::run()` correctly delegates to `finalize()`.)
+**Fix:** Either add `"error_kind": "reviewer"` to the three additional dict-literal sites in `_review_plan.py`/`_review_code.py`'s `run()`, or scope Card 11's plan/code assertions to only the CLI-finalize-stage-reachable dict shape and drop/adjust the Test 20 / Test 15 additions.
+
+### [NIT:consistency] Card 7 wrongly claims `ReviewError` is already imported in test-review-plan-finalize-round.py
+**Location:** Batch 2, Card 7.
+**Issue:** Card 7 says "import `ReviewError` from `_review_common`, already imported at module scope in this file" — but the file's only `_review_common` import (line 19) is `from _review_common import discover_round`; `ReviewError` is not present.
+**Fix:** Correct the card to instruct adding `ReviewError` to that import line (or a new import) rather than asserting it already exists.
+
+## Verdict
+
+REQUEST_CHANGES
+Batch 3's false "sole site" premise leaves `_review_plan.py`/`_review_code.py`'s legacy `run()` ERROR paths unpatched, breaking Card 11's own new test assertions.
+MILL_REVIEW_END
