@@ -35,7 +35,9 @@ Cards 14 through 16 create the companion files; card 17 removes the extracted pr
 - **Requirements:**
   Create the file with an H1 `# mill-go-base: Resume` and, beneath it, the full body of `SKILL.md`'s `## Resume` section exactly as batch 2 and batch 3 left it — the opening paragraph beginning "When mill-go's Entry-step 5 phase gate routes here", numbered steps 1 through 4, and every sub-branch of step 2.
   Copy the prose verbatim; this card relocates content and does not reword, compress, or re-order it.
-  Do not add YAML frontmatter — the file must not be picked up by the `plugins/*/skills/**/SKILL.md` scan that generates `SKILLS.md`, and a `name:`/`description:` block would make that ambiguous.
+  Do not add YAML frontmatter.
+  The skills-index generator collects its inputs with `skills_dir.rglob("SKILL.md")`, an exact-filename match, so this file is excluded from `SKILLS.md` by its filename alone and frontmatter would not change that.
+  The rule stands anyway for a different reason: a `name:`/`description:` block is the marker of an invocable skill, and this file is a fragment of one.
   Do not add the `> Wiki access: never cd .wiki/ …` banner line.
   Keep `<VARIANT_LABEL>` tokens as literal `<VARIANT_LABEL>` — the variant binding substitutes them at read time in the companion file exactly as it does in `SKILL.md`.
   Edit `SKILL.md` in this card only to the extent of reading it as the source; leave its `## Resume` section in place for card 17 to remove, so that a failure between these two cards leaves the content present rather than lost.

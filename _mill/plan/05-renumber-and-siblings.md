@@ -35,8 +35,12 @@ The per-token counts recorded in the discussion were measured before batches 2 t
   In `## Agent-mode dispatch` only, renumber the step list itself — not references to it, which cards 21 and 22 own.
   Batch 2 deleted step 1, so the list currently runs 2 through 7 with sub-labels `4(a)`, `4(b)`, `4(c)`, `6.5`, `6.5.1`, and `6.5.2`.
   Apply this mapping to the list markers and to the bold step titles: step 2 becomes 1, 3 becomes 2, 4 becomes 3, 5 becomes 4, 6 becomes 5, 7 becomes 6; `4(a)`/`4(b)`/`4(c)` become `3(a)`/`3(b)`/`3(c)`; `6.5` becomes `5.5`, and its two numbered sub-items keep their `1.`/`2.`/`3.` local numbering.
-  Where the section's own prose refers to its own steps by number — for example step 3's "the value from step 2", step 4's "using the `agentId` retained per step 3", the Clean mid-work stop paragraph's "invoke the `--stage finalize` step (step 6)", step 5's "see step 5 below", step 6.5's "re-run `--stage finalize` (step 6)" and "branch in step 7" — apply the same mapping, because these are all first-namespace references and are inside the section being renumbered.
-  Verify afterwards that the numbered list reads 1 through 6 with no gap and no duplicate.
+  The section's own prose also refers to its steps by number dozens of times, and every one of those references is first-namespace and must shift with the list.
+  Use the same enumerate-then-classify method card 21 applies to the rest of the file, not a spot fix against an example list: grep every occurrence of `step ` followed by a number **inside** `## Agent-mode dispatch` — list markers, bold step titles, and prose alike — and remap each.
+  Do not treat any subset as illustrative; card 21 explicitly scopes itself to text *outside* this section, so a reference missed here is caught by no later card.
+  Representative sites, named to show the shapes involved rather than to bound the work: step 3's "the value from step 2", step 4's "using the `agentId` retained per step 3", the Clean mid-work stop paragraph's "invoke the `--stage finalize` step (step 6)", step 5's "see step 5 below", step 6.5's "re-run `--stage finalize` (step 6)" and "branch in step 7", step 6's "read verbatim from step 2's prepare envelope", 4(c)'s cross-references to 4(b), and the `**Agent-mode properties:**` bullets' several "see step 4" / "per step 4(b)" / "step 4(c)" citations.
+  The one class of reference inside the section that must **not** shift is a citation into another skill's numbering; re-read each match for that before editing it.
+  Verify afterwards both that the numbered list reads 1 through 6 with no gap or duplicate, and that no `step 7`, `step 6.5`, or `step 4(` remains anywhere in the section.
 - **Commit:** `docs(mill-go-base): renumber Agent-mode dispatch steps after the step-1 deletion`
 
 ### Card 21: Namespace-scoped reference sweep across SKILL.md
@@ -121,8 +125,9 @@ The per-token counts recorded in the discussion were measured before batches 2 t
   This drift predates the task and is unrelated to every edit in it; regenerating picks it up as an incidental true-up, which is exactly what a generated index is for.
   The invariant this card actually gates is narrower — assert all three of:
   1. No row exists for `resume.md`, `holistic-review.md`, or `handoff.md`.
-     The generator scans `plugins/*/skills/**/SKILL.md` for frontmatter, so a companion file can only appear if it grew a `name:`/`description:` block, which cards 14 through 16 forbid.
-     If one appears, that is a defect in the companion file: remove its frontmatter and regenerate, do not edit the index by hand.
+     The generator collects its inputs with `skills_dir.rglob("SKILL.md")` — an exact-filename match — so the companion files are excluded by their filenames alone, whatever they contain.
+     This invariant is therefore a cheap confirmation that the generator still behaves that way, not a live risk being managed.
+     If a row does appear, the generator's own file-collection changed; fix that, and never hand-edit the index.
   2. The total row count is unchanged from the committed version.
   3. Every changed row is a description true-up for an already-indexed skill whose text matches that skill's current frontmatter.
      For the `mill-go` and `mill-go2` rows specifically, read both files' frontmatter and confirm the new row text matches it — card 23 edits their bodies only, so a *frontmatter* change there would be an accidental edit to fix in card 23's files before regenerating.
