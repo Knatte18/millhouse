@@ -85,7 +85,9 @@ batches:
     commit_sha: 9e309b5058a26d41458e123ee7d0b2ee7808ab7d
     verify_baseline_failures: []
   - name: orchestrator-shared
-    state: pending
+    state: running
+    implementer_session: 59c3076a-3470-4377-a593-b2fe3c3f9213
+    start_sha: 2656a6676fc98fe35d5f97c317db940e784fc385
   - name: orchestrator-callers
     state: pending
 ```
