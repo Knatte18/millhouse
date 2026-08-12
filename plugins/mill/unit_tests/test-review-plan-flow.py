@@ -2710,6 +2710,374 @@ def main() -> int:
         finally:
             os.chdir(orig_dir)
 
+    # ------------------------------------------------------------------
+    # Test 44 — holistic cost metadata happy path: reviews[0] carries duration_s/tool_calls/
+    # cost_usd and the written file's yaml header has an injected duration_s: line
+    # (Card 26, case 1).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-cost-happy")])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            entry = r.reviews[0]
+            # The stub's ReviewerCallResult carries duration_s=0.0 (a real in-process call
+            # that took no measurable time) and tool_calls/cost_usd=None (unsupported signals).
+            assert entry["duration_s"] == 0.0, f"expected duration_s=0.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s:" in file_text, (
+                f"expected 'duration_s:' line in written review file, got:\n{file_text}"
+            )
+            print(
+                "PASS test44: holistic cost metadata happy path -- reviews[0] carries "
+                "duration_s/tool_calls/cost_usd and the written file's yaml header carries "
+                "duration_s:"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test44: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test44 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 45 — holistic cost metadata summation across a NEED_CONTEXT retry: reviews[0] carries
+    # the sum of both calls' duration_s/tool_calls/cost_usd, not just the retry's values
+    # (Card 26, case 2).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+
+        def _seq_summation(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ReviewerCallResult(
+                    text=NEED_CONTEXT_TEXT, session_id="sid-1",
+                    duration_s=10.0, tool_calls=2, cost_usd=0.01,
+                )
+            return ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-2",
+                duration_s=5.0, tool_calls=3, cost_usd=0.02,
+            )
+
+        stub.run = _seq_summation
+        stub.seed([])  # clear prompts log
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 5, f"expected summed tool_calls=5, got {entry['tool_calls']!r}"
+            assert abs(entry["cost_usd"] - 0.03) < 1e-9, (
+                f"expected summed cost_usd~=0.03, got {entry['cost_usd']!r}"
+            )
+            print(
+                "PASS test45: holistic NEED_CONTEXT retry summation -- reviews[0] carries the "
+                "sum of both calls, not just the retry's values"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test45: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test45 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 46 — holistic cost metadata None-absorbing summation: the retry reports no
+    # tool_calls/cost_usd -> the first call's values survive rather than being zeroed or
+    # dropped (Card 26, case 2).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        call_count = 0
+
+        def _seq_none_absorbing(prompt_text, **kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return ReviewerCallResult(
+                    text=NEED_CONTEXT_TEXT, session_id="sid-1",
+                    duration_s=10.0, tool_calls=2, cost_usd=0.01,
+                )
+            return ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-2",
+                duration_s=5.0, tool_calls=None, cost_usd=None,
+            )
+
+        stub.run = _seq_none_absorbing
+        stub.seed([])  # clear prompts log
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 2, (
+                f"expected first call's tool_calls=2 to survive the None-absorbing sum, "
+                f"got {entry['tool_calls']!r}"
+            )
+            assert entry["cost_usd"] == 0.01, (
+                f"expected first call's cost_usd=0.01 to survive the None-absorbing sum, "
+                f"got {entry['cost_usd']!r}"
+            )
+            print(
+                "PASS test46: holistic None-absorbing summation -- first call's tool_calls/"
+                "cost_usd survive a retry that reports None for those signals"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test46: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test46 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 47 — holistic cost metadata call-failure ERROR: LLMError's duration_s surfaces on
+    # the initial call, file stays None (call never returned) (Card 26, case 3).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+
+        def _raise_with_duration(prompt_text, **kw):
+            raise LLMError("seeded boom", duration_s=12.5)
+
+        stub.run = _raise_with_duration
+        stub.seed([])  # clear prompts log
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 12.5, f"expected duration_s=12.5, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            assert entry["file"] is None, f"expected file=None, got {entry['file']!r}"
+            print(
+                "PASS test47: holistic cost metadata call-failure ERROR -- LLMError.duration_s "
+                "surfaces on the synthetic ERROR entry with file=None"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test47: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test47 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 48 — holistic cost metadata parse-failure ERROR: parse_verdict rejects the text ->
+    # the ERROR entry carries the call's metrics AND the raw file written by the holistic
+    # block's trailing except ReviewError handler has duration_s: injected into its header
+    # (Card 26, case 3).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = None  # holistic only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        original_run = stub.run
+        unparseable_with_fence = "# Review\n\n```yaml\nnot_a_verdict: true\n```\n"
+
+        def _return_unparseable(prompt_text, **kw):
+            return ReviewerCallResult(
+                text=unparseable_with_fence, session_id="sid-parse-fail",
+                duration_s=7.25, tool_calls=3, cost_usd=0.0123,
+            )
+
+        stub.run = _return_unparseable
+        stub.seed([])  # clear prompts log
+        try:
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
+            entry = r.reviews[0]
+            assert entry["duration_s"] == 7.25, f"expected duration_s=7.25, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] == 3, f"expected tool_calls=3, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] == 0.0123, f"expected cost_usd=0.0123, got {entry['cost_usd']!r}"
+            assert entry["file"] is not None, "expected a written raw file, got file=None"
+            file_text = Path(entry["file"]).read_text(encoding="utf-8")
+            assert "duration_s: 7.2" in file_text, (
+                f"expected injected 'duration_s:' line in raw file, got:\n{file_text}"
+            )
+            print(
+                "PASS test48: holistic parse-failure ERROR -- metrics survive into both the "
+                "ERROR entry and the raw file's injected yaml header"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test48: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test48 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 49 — per-batch cost metadata: a _review_one_batch round's entry (the
+    # finalize_scope-backed success path) carries duration_s/tool_calls/cost_usd
+    # (Card 26, case 4).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([(APPROVE_TEXT, "sid-batch-cost")])
+            r = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                no_holistic=True,
+            )
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            entry = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
+            assert entry["duration_s"] == 0.0, f"expected duration_s=0.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            print(
+                "PASS test49: per-batch cost metadata -- the finalize_scope-backed entry "
+                "carries duration_s/tool_calls/cost_usd"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test49: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test49 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 50 — per-batch outer ReviewError path stays file-less: a post-call parse_verdict
+    # failure inside _review_one_batch surfaces via the outer `except ReviewError` handler,
+    # which carries the three cost-metadata keys in the returned envelope only -- no review
+    # file is written for that round, preserving the file/no-file inconsistency Shared Decision
+    # (Card 26, case 5).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            stub.seed([
+                ("# Raw prose without yaml block\n\nPlan looks good.", "sid-batch-unparseable"),
+            ])
+            r = plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
+                no_holistic=True,
+            )
+            entry = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
+            assert entry["verdict"] == "ERROR", f"expected ERROR, got {entry['verdict']}"
+            assert entry["file"] is None, (
+                f"the outer ReviewError handler must stay file-less, got file={entry['file']!r}"
+            )
+            assert entry["duration_s"] == 0.0, f"expected duration_s=0.0, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            reviews_dir = project_root / "reviews"
+            written_files = list(reviews_dir.glob("*")) if reviews_dir.exists() else []
+            assert written_files == [], (
+                f"expected no review file written for the file-less ReviewError round, "
+                f"got {written_files}"
+            )
+            print(
+                "PASS test50: per-batch outer ReviewError path stays file-less -- metrics "
+                "carried envelope-only, no review file written (regression guard)"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test50: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test50 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 51 — per-batch pre-call ReviewError: the round_n > max_rounds guard raises before
+    # any reviewer call runs; the returned ERROR entry must carry the three metrics as None
+    # rather than raising UnboundLocalError (regression guard for Card 23's initialisation
+    # requirement) (Card 26, case 6).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = None  # batch only
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            reviews_dir = project_root / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            # Pre-populate 3 rounds of REQUEST_CHANGES alpha reviews so the batch is not
+            # carried forward (only APPROVE verdicts are skip-approved) and the next round is
+            # 4, exceeding cfg's default max=3. Matching holistic-round files are also
+            # pre-populated so detect_resume_round finds no batch-without-holistic candidate
+            # and the normal (non-resume) per-batch path runs, reaching _review_one_batch's
+            # own round_n > max_rounds guard.
+            for i in (1, 2, 3):
+                (reviews_dir / f"2026042{i}-000001-plan-review-01-alpha-r{i}.md").write_text(
+                    "# Review: test\n\n```yaml\nverdict: REQUEST_CHANGES\n```\n", encoding="utf-8"
+                )
+                (reviews_dir / f"2026042{i}-000000-plan-review-r{i}.md").write_text(
+                    APPROVE_TEXT, encoding="utf-8"
+                )
+            stub.seed([])  # no reviewer call is expected to fire
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            entry = next(rv for rv in r.reviews if rv["scope"] == "01-alpha")
+            assert entry["verdict"] == "ERROR", f"expected ERROR, got {entry['verdict']}"
+            assert "exceeds max" in entry.get("error", ""), (
+                f"expected 'exceeds max' in error, got {entry.get('error')!r}"
+            )
+            assert entry["file"] is None, f"expected file=None, got {entry['file']!r}"
+            assert entry["duration_s"] is None, f"expected duration_s=None, got {entry['duration_s']!r}"
+            assert entry["tool_calls"] is None, f"expected tool_calls=None, got {entry['tool_calls']!r}"
+            assert entry["cost_usd"] is None, f"expected cost_usd=None, got {entry['cost_usd']!r}"
+            print(
+                "PASS test51: per-batch pre-call ReviewError (round_n > max_rounds) -- the "
+                "three metrics are None rather than raising UnboundLocalError"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test51: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test51 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
