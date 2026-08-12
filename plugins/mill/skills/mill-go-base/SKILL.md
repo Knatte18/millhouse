@@ -902,43 +902,12 @@ The `reviews/` read-ban is unchanged — only the curated digest reaches the rev
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
-   This does not apply to the subprocess/psmux branch immediately following in this same step, which keeps its existing worktree_snapshot_guard coverage unchanged.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
-
-   If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   Venv-check before holistic review invocation:
-
-   ```bash
-   if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" ]; then
-       echo "[<VARIANT_LABEL>] venv missing -- attempting uv sync"
-       uv sync --project "${CLAUDE_PLUGIN_ROOT}" || { echo "HALT: uv sync failed"; exit 1; }
-       if [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" ] && [ ! -f "${CLAUDE_PLUGIN_ROOT}/.venv/Scripts/python.exe" ]; then
-           echo "HALT: venv not found after sync -- run 'uv sync --project \${CLAUDE_PLUGIN_ROOT}' manually."
-           exit 1
-       fi
-   fi
-   ```
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-     --slug review-code-holistic-r{H} -- \
-     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...] [--prior-notes <digest-path>]
-   ```
-   Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
 
    **Exit handling.**
-   If `[mill-bg] EXIT` reports a non-zero exit AND no JSON summary line is present in the log, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line from the log to the user.
+   If the finalize envelope is absent, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
 
@@ -952,29 +921,10 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
 
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
-   Does not apply to the subprocess/psmux branch immediately below.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-
-   If `dispatch == subprocess` or `psmux`:
-
-   > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-     --slug review-code-holistic-retry-r<H> -- \
-     "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-code.py" \
-       [--extra-file <p> ...]
-   ```
-
-   Returns immediately with `pid=<N> log=<abs-path>`.
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+   Tree-guard checkpoint (Agent-mode only, post-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
 
    The round counter `H` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
@@ -991,8 +941,6 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`.
       Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
    3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before re-running sub-step 3 with the swapped reviewer below.
-      Applies only when dispatch == agent;
-      the subprocess/psmux path keeps its existing worktree_snapshot_guard coverage.
 
       Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer.
       The round counter `H` is **not** consumed.
@@ -1021,19 +969,8 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```
    Unlike the existing prior-notes digest above, this is called at every round with no `H > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
-   
-   If `dispatch == subprocess` or `psmux` (via `millpy-bg`):
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-       --slug fix-holistic-r{H}-nits -- \
-       "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt
-   ```
-   Poll `cat <log-path>` until `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-   ```
-   Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed as today (extract JSON); `"dead"` -> classify as `stuck_type: infrastructure` and route to Stuck escalation. Note: `"dead"` only fires when the log has no parseable JSON result line — if EXIT was missing but the worker wrote a valid JSON line, `check_bg_status` returns `("exit", 0)` instead (see `_bg.py` JSON fallback). Once `[mill-bg] EXIT` appears or dead status is detected, run `grep '^{' <log-path> | tail -1` to extract the JSON summary line. The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
+   The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
    After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
    If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors the per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff.
    If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
@@ -1042,16 +979,11 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    the fixer loads `mill-receiving-review` (see Principles below).
    Builder does not load the skill.
 
-   If `dispatch == agent`: follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
-   
-   If `dispatch == subprocess` or `psmux`: Dispatch:
-   ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-fix.py" --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}
-   ```
+   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
    Parse stdout JSON (same last-`{"status":...}`-line pattern as per-batch).
    The CLI handles `holistic-fixing` phase + commit + push itself.
-   - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-invoke `millpy-fix.py --scope holistic` once (fresh).
-     If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: bg worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+   - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-dispatch once with a fresh session.
+     If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
      The re-fire is fresh (killed session cannot be reattached).
    - `stuck_type: transient`: one-retry policy (re-invoke once) — this retry IS the one-shot self-resolve attempt.
      If still transient after it: set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
@@ -1095,7 +1027,7 @@ pathlib.Path('<briefs_dir>/prior-blocking-<scope>-r<N>.txt').write_text(digest, 
 Use `scope='batch', batch_name='<scope>'` when `<scope>` is a per-batch scope name, or `scope='holistic'` (no `batch_name`) when `<scope> == "holistic"`, writing to `<briefs_dir>/prior-blocking-<scope>-r<N>.txt` or `<briefs_dir>/prior-blocking-holistic-r<H>.txt` respectively (same naming convention as `## Execute` step 4 and `## Holistic code review` step 4).
 As with those two sites, this is called at every round with no round guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`.
 
-Dispatch the NIT-fix pass for that review file using the identical CLI, args, and dispatch-mode handling already documented for the in-flow NIT-fix pass: see `## Execute` step 4's `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `## Holistic code review` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
+Dispatch the NIT-fix pass for that review file using the identical CLI and args already documented for the in-flow NIT-fix pass: see `## Execute` step 4's `APPROVE` branch for the per-batch shape (`<cli> = millpy-fix.py`, `<args> = --scope batch --batch-name <scope> --review-file <review-file-abs-path> --round <N> --nits-only`) or `## Holistic code review` step 4 for the holistic shape (`--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only`);
 `<N>`/`<H>` are read from the review filename.
 That identical shape now includes `--prior-blocking <digest-path>` too (per `## Execute` step 4's and `## Holistic code review` step 4's edits to those two sites), so this site's dispatch carries it automatically with no separate argument string of its own.
 This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-<scope>` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
