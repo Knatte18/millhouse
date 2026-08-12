@@ -622,10 +622,7 @@ converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelo
 
 For each round `N` from 1 to `roles.code-review.batch.rounds`:
 
-- Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-  `signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
-  `signature: _status.append_recovery_log(status_path: Path, timestamp: str, restored_paths: list[str]) -> None`.
-  All 11 other tree-guard checkpoints in this file (5 more in this section, 7 in "## Holistic code review") share this identical signature and guard shape.
+- Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — before the append_phase/commit below.
 - `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`.
   Commit immediately: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: reviewing batch {batch_name} round {N}"` — mirrors the Holistic Review loop's own existing pattern at the same file (`_status.append_phase(status_path, "holistic-reviewing", ...)` immediately followed by an equivalent commit).
   This closes the window where an uncommitted phase-append could itself be the file a tree-guard restore later discards — see `_mill/discussion.md`'s "Closing the same-file modify-then-delete window in mill-go's per-batch loop" Decision.
@@ -662,14 +659,12 @@ Build a digest: one line per NIT finding, in format "- Title: issue context" (AS
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-2. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
+2. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before the Agent-mode dispatch below.
 
    Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
    The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
 
-Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the Agent-mode dispatch pattern above returns (prepare through finalize).
 
 3. **Builder reads only the JSON envelope verdict, never the findings.**
    Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below).
@@ -717,11 +712,11 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 
    When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
-   Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
+   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
 
    Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after it returns.
 
    The round counter `N` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user.
@@ -899,7 +894,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    do not poll it.
 
 2. **Skip this step when step 1 returned branch (a).**
-   Tree-guard checkpoint: `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
+   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — before the append_phase/commit below. `_status.append_phase(status_path, "holistic-reviewing", _timestamp.now_utc_iso())`.
    Commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic reviewing round {H}"`.
 
 2.5.
@@ -911,7 +906,7 @@ Build a digest: one line per NIT finding, in format "- Title: issue context" (AS
 The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
 Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
-3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before the Agent-mode dispatch below.
+3. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before the Agent-mode dispatch below.
 
    Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
@@ -921,20 +916,18 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
-   This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself — it belongs at this call site only, since that section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the Agent-mode dispatch pattern above returns (prepare through finalize).
 
 3.5.
 **Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
    When the JSON envelope from step 3 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip steps 4 and 5 entirely and immediately re-run:
 
-   Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before this retry's Agent-mode dispatch.
+   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
 
    Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
 
-   Tree-guard checkpoint (Agent-mode only, post-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after it returns.
 
    The round counter `H` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, **first check rate-limit fallback** (see sub-step 3.6 below).
@@ -950,12 +943,12 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    1. Emit `_notify.notify("<VARIANT_LABEL>.holistic-fallback", f"swap reviewer -> {fallback_name}", slug=slug, round=H)`.
    2. In-memory mutation: `cfg["roles"]["code-review"]["holistic"]["reviewer"] = cfg["roles"]["code-review"]["holistic"]["fallback_reviewer"]`.
       Do NOT write back to disk -- the swap lasts only for the current mill-go invocation.
-   3. Tree-guard checkpoint (Agent-mode only, pre-dispatch): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` — immediately before re-running sub-step 3 with the swapped reviewer below.
+   3. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — its pre-dispatch checkpoint fires before re-running sub-step 3 with the swapped reviewer below.
 
       Re-run sub-step 3 (the holistic review CLI) with the swapped reviewer.
       The round counter `H` is **not** consumed.
 
-      Tree-guard checkpoint (Agent-mode only, post-dispatch): when the redispatch above used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after it returns; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
+      Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the redispatch above returns.
    4. If the fallback reviewer ALSO returns `verdict: ERROR` on its first pass: before halting, `_status.set_blocked(status_path, f"holistic code review fallback also failed at round {H}", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (fallback also failed at round {H})"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", f"holistic review: fallback also failed at round {H}", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic code review fallback also failed at round {H}` and surface every `reviews[*].error` from BOTH the original and fallback attempts.
       Do NOT cascade to a second fallback.
    5. If `fallback_reviewer is None` AND a rate-limit was detected on both 3.5 passes: before halting, `_status.set_blocked(status_path, "holistic rate-limited, no fallback_reviewer configured", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review (rate-limited, no fallback)"` and push; `_notify.notify("<VARIANT_LABEL>.blocked", "holistic review: rate-limited, no fallback_reviewer configured", slug=slug)`; release the builder lock (`PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`); then halt with `BLOCKED: holistic rate-limited, no fallback_reviewer configured`.
