@@ -26,6 +26,7 @@ import _test_registry  # noqa: E402
 import _test_helpers  # noqa: E402
 from wiki import _client as wiki  # noqa: E402
 from _llm_claude import LLMError  # noqa: E402
+from _llm_common import ReviewerCallResult  # noqa: E402
 from _review_plan import run as plan_run  # noqa: E402
 from _review_plan import prepare as plan_prepare  # noqa: E402
 from _review_plan import _scan_approved_batches  # noqa: E402
@@ -1405,7 +1406,7 @@ def main() -> int:
                 nonlocal captured_timeout
                 captured_timeout = timeout
                 # Return APPROVE_TEXT and a session_id like the test stub does
-                return (APPROVE_TEXT, "test-session-id")
+                return ReviewerCallResult(text=APPROVE_TEXT, session_id="test-session-id")
 
             _seed_approve(1)  # seed the test_stub just in case
             with patch("_review_plan._reviewer_single.run", side_effect=mock_run):
@@ -2116,7 +2117,9 @@ def main() -> int:
             )
             import _llm_gemini as llm_gemini
             original = llm_gemini.run_bulk
-            llm_gemini.run_bulk = lambda prompt_text, **kw: (APPROVE_TEXT, "sid-gemini")
+            llm_gemini.run_bulk = lambda prompt_text, **kw: ReviewerCallResult(
+                text=APPROVE_TEXT, session_id="sid-gemini"
+            )
             try:
                 r = plan_run(
                     cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
