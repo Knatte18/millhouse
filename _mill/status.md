@@ -32,5 +32,8 @@ implementing  '2026-08-12T18:19:33Z'
 ```yaml
 batches:
   - name: plugin-root-resolution
-    state: pending
+    state: running
+    implementer_session: 429c8e3f-a4b1-4447-9a91-07211eb8a58d
+    start_sha: 27ffc03d3d84fbbb2b87967a142857ed9a391f30
+    verify_baseline_failures: []
 ```
