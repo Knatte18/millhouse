@@ -52,7 +52,9 @@ batches:
     commit_sha: 150a66130b57aff94ef6718580921652cd799bc8
     verify_baseline_failures: []
   - name: cli-round-threading
-    state: pending
+    state: running
+    implementer_session: 2042a607-079a-4769-aeda-7e7dd83e1615
+    start_sha: 11db957dedfc2567a7455df91105729673c2527a
     verify_baseline_failures: []
   - name: skill-error-kind-retry-wiring
     state: pending
