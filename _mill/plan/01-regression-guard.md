@@ -9,6 +9,10 @@ verify: null
 depends-on: []
 ```
 
+## Prior failure
+
+- Round 1: stuck_type=logic, reason: "success reported but in-scope working tree dirty: [' M plugins/mill/unit_tests/test-mill-go-base-agent-only.py']"
+
 ## Batch Scope
 
 Writes the single new test this task adds: a content-assertion guard over `mill-go-base`'s SKILL and its three future companion files.

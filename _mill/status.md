@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: self-resolved-verify-logic
 slug: mill-go-base-agent-dispatch-only
 branch: hanf/mill-go-base-agent-dispatch-only
 plan: _mill/plan
@@ -31,6 +31,7 @@ plan-fix-r5  '2026-08-12T09:25:17Z'
 plan-fix-r6  '2026-08-12T09:31:54Z'
 planned  '2026-08-12T09:32:03Z'
 implementing  '2026-08-12T09:32:29Z'
+self-resolved-verify-logic  '2026-08-12T09:35:25Z'
 ```
 
 ## Batches
