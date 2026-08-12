@@ -27,7 +27,11 @@ implementing  '2026-08-12T18:37:20Z'
 ```yaml
 batches:
   - name: prohibition-regex-generalization
-    state: pending
+    state: running
+    implementer_session: 848f0815-55a6-4167-b87a-53e9776e5f8c
+    start_sha: 23b7efc7d4801d3afff7251c324de472ead3d382
+    verify_baseline_failures: []
   - name: regression-tests
     state: pending
+    verify_baseline_failures: []
 ```
