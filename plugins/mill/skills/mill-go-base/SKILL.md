@@ -834,6 +834,10 @@ Do not add this checkpoint inside the shared "## Agent-mode dispatch" section it
 3. **Builder reads only the JSON envelope verdict, never the findings.**
    Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below).
    Builder does not load the skill.
+   Before branching on the verdict, print the cost line for this round per "## Review cost line"
+   above, with `<type> = code` and `<scope> = <batch_name>`.
+   Printing the cost line does not relax the read-ban above: the Builder still never reads the
+   findings, only the envelope fields the cost line names.
 
 4. Branch on verdict:
    - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
@@ -1222,6 +1226,10 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    If `[mill-bg] EXIT` reports a non-zero exit AND no JSON summary line is present in the log, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line from the log to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
    Matches the per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+   Whenever a JSON envelope is present, print the cost line for this round per "## Review cost line"
+   above, with `<type> = code` and `<scope> = holistic`, before dropping through to sub-step 3.5.
+   Printing the cost line does not relax the read-ban documented in the per-batch loop's step 3: the
+   Builder still never reads the findings, only the envelope fields the cost line names.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)` again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize); `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
    This brackets the out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
