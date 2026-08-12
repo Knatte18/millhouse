@@ -267,8 +267,7 @@ This three-step pattern applies at every dispatch point:
    If the notification message contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
    Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 5 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
    This applies to implementer, reviewer, and fixer Agent dispatches.
-   On a second consecutive raw API error: implementer and fixer dispatches escalate per the "Stuck escalation" section;
-   read-only reviewer dispatches (which write no review file) fall back to the subprocess `--stage full` path via `millpy-bg` before escalating.
+   On a second consecutive raw API error: implementer, fixer, and reviewer dispatches all escalate per the "Stuck escalation" section.
    There is no live agent to probe in this case, so it is unaffected by the liveness probe in (c) below.
 
    **Deliberately no ack predicate.**
