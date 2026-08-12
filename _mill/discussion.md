@@ -146,16 +146,28 @@ fixed in code, except #838, addressed below).
   earlier hypothesis that `finalize_scope` catches parse failures internally, it does not — it
   raises uncaught to the CLI"). That conclusion was itself wrong: `finalize_scope` does raise
   `ReviewError` uncaught, but the CLI's `main()` never sees it directly — each CLI-wrapper
-  `finalize()` function (`_review_plan.py:662-746`, `_review_discussion.py:153-227`,
-  `_review_code.py:519-607`, all independently confirmed by direct read) wraps that same call in
+  `finalize()` function (`_review_plan.py:662-746`, `_review_discussion.py:153-246`,
+  `_review_code.py:519-626`, all independently confirmed by direct read) wraps that same call in
   its **own** `try/except ReviewError`, and on catch builds and *returns* — never re-raises — an
   ERROR-shaped dict/`ReviewResult` with `verdict: "ERROR"`, `error: f"parse_verdict failed:
   {exc}"`, and the cost-metadata fields already applied. That returned value flows straight into
   the CLI's success-path `print(json.dumps(...))`/`return 0` — it never reaches
   `print_error_envelope` or the outer `except ReviewError` at all. The outer CLI-level catch is
   therefore still correctly `"usage"`-bucketed (as before), just not for the reason originally
-  stated — it's reachable only for a `ReviewError` raised by something *other* than the
-  internally-caught `finalize_scope` call, e.g. `resolve_blocking_classes` failing on bad config.
+  stated. **Correction (Discussion Review round 5):** the only statement between each
+  `finalize()` wrapper's entry and its internal `try/except` around `finalize_scope` is a call to
+  `resolve_blocking_classes` (`_review_plan.py:704`, `_review_discussion.py:192`,
+  `_review_code.py:573`) — and direct read of `resolve_blocking_classes`
+  (`_review_common.py:2614-2645`) confirms its docstring ("Never raises") and every code branch:
+  it always falls back to `DEFAULT_BLOCKING_CLASSES[role]` rather than raising, for any
+  missing/malformed config or unrecognised `review_type`. So under the code as it exists today,
+  the outer CLI-level `except ReviewError` at the finalize stage is **not reachable by any known
+  live path** — no statement between a `finalize()` wrapper's entry and its own internal catch
+  can raise `ReviewError`, and `finalize_scope`'s own `ReviewError` is fully absorbed internally.
+  It is kept as defensive code (forward-compatible with a future change to `finalize()` that adds
+  a genuine raise site before its internal try block) and still correctly defaults to
+  `error_kind: "usage"` if it is ever exercised, but no currently-live scenario reaches it — see
+  the Testing section for how its `round_n`-threading (below) is verified without a real trigger.
 - Rejected: Treating the full-stage (`--stage full`) `ReviewError` catch as potentially either
   kind — it wraps an entire multi-round `run()` loop that could fail for many reasons (config,
   registry, slug, or reviewer-output problems all funnel through the same catch), so unwrapping
@@ -225,16 +237,20 @@ fixed in code, except #838, addressed below).
   rule is the correct (and only available) fix there.
 - Rejected: A uniform "`args.round`-everywhere" draft of this decision, corrected during
   Discussion Review round 4 after a confirmed BLOCKING finding that it discarded the
-  already-resolved `round_n` at the finalize-stage outer catch — the one site the "discoverable
-  from disk" case in the Problem section is most likely to actually fire, per the "error_kind
-  bucketing" Decision's own example (a `resolve_blocking_classes` failure on bad config, which
-  happens after `round_n` is already resolved). An even earlier draft (corrected in round 2) had
-  contradicted itself between "every site passes `args.round`" and "prepare-stage sites keep
-  `round=0`" without saying which; the current two-rule split resolves both problems at once by
-  keying strictly on whether `round_n` is already a resolved local, not on stage identity as
-  such. Also rejected (unchanged from the original draft): calling `discover_round()` freshly
-  from a call site that has no `round_n` in scope at all — adds filesystem I/O to a case neither
-  filed issue actually reproduced, and the finalize-stage sites already get this for free via the
+  already-resolved `round_n` at the finalize-stage outer catch. **Correction (Discussion Review
+  round 5):** round 4's own justification — that this is "the one site... most likely to actually
+  fire" — was itself wrong; per the "error_kind bucketing" Decision's round-5 correction, the
+  finalize-stage outer catch is not reachable by any known live path today (its sole example,
+  `resolve_blocking_classes` failing, never raises). The `round_n`-threading fix at that site is
+  kept anyway, but as cheap, correct, forward-compatible defensive code, not because it is
+  expected to fire under current call graphs — see Testing for how it's verified without a real
+  trigger. An even earlier draft (corrected in round 2) had contradicted itself between "every
+  site passes `args.round`" and "prepare-stage sites keep `round=0`" without saying which; the
+  current two-rule split resolves that ambiguity regardless of reachability, by keying strictly
+  on whether `round_n` is already a resolved local, not on stage identity or live-path status.
+  Also rejected (unchanged from the original draft): calling `discover_round()` freshly from a
+  call site that has no `round_n` in scope at all — adds filesystem I/O to a case neither filed
+  issue actually reproduced, and the finalize-stage sites already get this for free via the
   pre-existing `round_n` computation, no new discovery call needed.
 
 ### Verdict-summary staleness: append, don't rewrite
@@ -268,22 +284,24 @@ fixed in code, except #838, addressed below).
   shared usage-error envelope emitter for all three review CLIs.
 - `plugins/mill/scripts/millpy-review-plan.py` — `main()` (lines ~150-358). All
   `print_error_envelope` call sites (all `error_kind: "usage"`): 180, 187, 193, 260, 263, 267
-  (`--agent-output` missing), 308 (finalize `ReviewError` — reachable only for a `ReviewError`
-  *not* caught by `_review_plan.finalize`'s own internal try/except, e.g. `resolve_blocking_
-  classes` failing on bad config; not a reviewer-output site — see the corrected "error_kind
-  bucketing" Decision), 354, 357. `args.round` is parsed at line 162, available at every one of
-  these sites — but per the "round: 0 fix" Decision, site 308 specifically passes the
-  already-resolved `round_n` local (computed at lines 269-274 as `args.round`, falling back to
-  `discover_round` when `None`), not raw `args.round`; every other site here has no `round_n` and
-  uses the `args.round`-or-`0` coalescing instead.
+  (`--agent-output` missing), 308 (finalize `ReviewError` — defensive-only, not reachable by any
+  known live path: the only statement before `_review_plan.finalize`'s internal try/except is
+  `resolve_blocking_classes` (`_review_plan.py:704`), which per `_review_common.py:2614-2645`
+  never raises; not a reviewer-output site either way — see the corrected "error_kind bucketing"
+  Decision), 354, 357. `args.round` is parsed at line 162, available at every one of these sites
+  — but per the "round: 0 fix" Decision, site 308 specifically passes the already-resolved
+  `round_n` local (computed at lines 269-274 as `args.round`, falling back to `discover_round`
+  when `None`), not raw `args.round`, as cheap defensive-code correctness even though this site
+  isn't currently exercised; every other site here has no `round_n` and uses the
+  `args.round`-or-`0` coalescing instead.
 - `plugins/mill/scripts/_review_plan.py::finalize` (lines 662-746) — its own `except ReviewError`
   at lines 712-732 (around the call to `finalize_scope` at line 707) is the actual
   `error_kind: "reviewer"` site: it catches `parse_verdict` failures and *returns* an ERROR-shaped
   dict (never re-raises), which flows straight into `main()`'s success-path
   `print(json.dumps(result_dict))` at millpy-review-plan.py:305-306 — it never reaches
   `print_error_envelope` or the line-308 outer catch. Identical pattern confirmed by direct read
-  in `_review_discussion.py::finalize` (lines 153-227, catch at 206-227) and
-  `_review_code.py::finalize` (lines 519-607, catch at 574-607).
+  in `_review_discussion.py::finalize` (lines 153-246, catch at 206-227) and
+  `_review_code.py::finalize` (lines 519-626, catch at 580-607).
 - `plugins/mill/scripts/_review_common.py`:
   - `parse_verdict()` (line 1569) — raises `ReviewError` when no valid verdict can be extracted
     from reviewer raw text; this is the sole source of the exception each CLI-wrapper
@@ -335,6 +353,14 @@ _No `CONSTRAINTS.md` present at hub root._
 - **`millpy-review-plan.py` finalize-stage error paths**: unit test (invoking `main()` or the
   relevant internal function with a fixture) confirming a missing-`--agent-output` invocation
   produces `error_kind: "usage"` with the correct (non-zero) round when `--round` was supplied.
+- **Finalize-stage outer `except ReviewError` (`millpy-review-plan.py:307-309` and its
+  `millpy-review-discussion.py`/`millpy-review-code.py` equivalents) — dead-path-only, per the
+  "error_kind bucketing" and "round: 0 fix" Decisions' round-5 correction: no known live call
+  raises `ReviewError` there today, so this cannot be verified via a natural end-to-end repro.
+  Verify instead with a direct, artificial unit test: monkeypatch/mock the CLI-wrapper
+  `finalize()` call to raise `ReviewError` and assert the CLI's outer catch produces
+  `error_kind: "usage"` with the correctly-threaded `round_n` (not `0` and not raw `args.round`)
+  — a test of the wiring itself, not of a scenario expected to occur in production.
 - **`_review_plan.py::finalize`, `_review_discussion.py::finalize`,
   `_review_code.py::finalize`** (TDD candidates): unit test calling each `finalize()` wrapper
   directly with a `raw_text` fixture that fails `parse_verdict` (e.g. no fenced `yaml` block),
@@ -428,3 +454,16 @@ _No `CONSTRAINTS.md` present at hub root._
   `args.round` there instead would silently discard the disk-discovered round at exactly the
   site the Problem section's "discoverable from disk" case is most likely to fire. Every other
   call site genuinely has no `round_n` in scope, so the coalescing rule stays correct there.
+- **Q:** [Discussion Review round 5, BLOCKING] Is the finalize-stage outer `except ReviewError`
+  (the site round 4's fix carefully hand-tuned) actually reachable by any live code path, given
+  its only justifying example was `resolve_blocking_classes` failing on bad config? **A:**
+  [auto-pick] No — `resolve_blocking_classes` never raises (confirmed by its own docstring and
+  every code branch), and it's the only statement before each `finalize()` wrapper's internal
+  try/except, so the outer catch is unreachable by any known live path today. Keep the round_n
+  fix there anyway, as defensive/forward-compatible code, and verify it with a direct unit test
+  of the wiring rather than an end-to-end repro. **Why:** A BLOCKING finding disproved the
+  load-bearing example two prior Decisions (`error_kind bucketing`, `round: 0 fix`) both relied
+  on; direct read of `resolve_blocking_classes` (`_review_common.py:2614-2645`) confirms "Never
+  raises" in both docstring and implementation. The fix itself stays (it's cheap and correct even
+  if dormant), but the rationale and Testing section now say so honestly instead of claiming a
+  live trigger that doesn't exist.
