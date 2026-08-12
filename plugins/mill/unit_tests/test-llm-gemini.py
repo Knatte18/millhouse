@@ -190,8 +190,13 @@ def main() -> int:
             args=argv, returncode=0, stdout=_GOOD_STDOUT, stderr=""
         )
         result = run_bulk("p", model="gemini-2.5-flash")
-        assert result == ("OK", "sid-z"), f"zero-exit: {result!r}"
-        print("PASS: _invoke zero-exit returns (text, session_id)")
+        assert (result.text, result.session_id) == ("OK", "sid-z"), f"zero-exit: {result!r}"
+        assert result.tool_calls is None, f"tool_calls should be None: {result.tool_calls!r}"
+        assert result.cost_usd is None, f"cost_usd should be None: {result.cost_usd!r}"
+        assert isinstance(result.duration_s, float) and result.duration_s >= 0, (
+            f"duration_s should be a non-negative float: {result.duration_s!r}"
+        )
+        print("PASS: _invoke zero-exit returns ReviewerCallResult with tool_calls/cost_usd None and duration_s set")
     finally:
         _subprocess_util_mod.run = _orig_run
 
@@ -204,7 +209,8 @@ def main() -> int:
         _subprocess_util_mod.run = lambda argv, **kw: _subprocess_mod.CompletedProcess(
             args=argv, returncode=0, stdout=_NO_SID_STDOUT, stderr=""
         )
-        text, sid = run_bulk("p", model="gemini-2.5-flash")
+        _no_sid_result = run_bulk("p", model="gemini-2.5-flash")
+        text, sid = _no_sid_result.text, _no_sid_result.session_id
         assert text == "hello", f"text mismatch: {text!r}"
         assert sid.startswith("gemini-"), f"synthetic sid should start with 'gemini-': {sid!r}"
         print("PASS: _invoke synthesizes session_id prefixed 'gemini-' when CLI emits none")
