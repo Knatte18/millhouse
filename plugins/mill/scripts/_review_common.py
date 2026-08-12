@@ -2555,7 +2555,11 @@ def finalize_scope(
     this call's ceiling demotion actually flipped the recomputed verdict away from the reviewer's
     original one, rewrite_verdict_token also rewrites the persisted file's fenced `verdict:` field
     and `## Verdict` section token to match, so the on-disk artifact never disagrees with the
-    returned envelope's `verdict` for a demotion this call performed.
+    returned envelope's `verdict` for a demotion this call performed. Independent of that, whenever
+    this call's ceiling demoted anything at all (`demoted_any`), append_demotion_note appends a
+    one-line note after the `## Verdict` summary recording the demoted-finding count and the
+    resulting `blocking_count` -- this runs even when the verdict token itself did not flip, so the
+    summary never goes stale silently.
 
     The returned `verdict` is recomputed from the post-ceiling findings, per the
     verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
@@ -2600,9 +2604,11 @@ def finalize_scope(
     original_verdict = parse_verdict(raw_text)
     findings = extract_findings(raw_text)
     demoted_any = False
+    demoted_count = 0
     if blocking_classes is not None:
         findings = apply_blocking_ceiling(findings, blocking_classes)
         demoted_any = any(f.demoted for f in findings)
+        demoted_count = sum(1 for f in findings if f.demoted)
         raw_text = rewrite_demoted_findings(raw_text, findings)
     blocking_count = sum(1 for f in findings if f.severity == BLOCKING_SEVERITY)
     nit_count = sum(1 for f in findings if f.severity == NIT_SEVERITY)
@@ -2616,6 +2622,13 @@ def finalize_scope(
     # mismatch unrelated to demotion (that mismatch is surfaced via the returned envelope only).
     if demoted_any and verdict != original_verdict:
         raw_text = rewrite_verdict_token(raw_text, verdict)
+
+    # Append a demotion note whenever the ceiling demoted anything this call, independent of
+    # whether that demotion also flipped the verdict token above -- a demotion can leave the
+    # token unchanged (another surviving BLOCKING finding) while still stranding a stale
+    # one-sentence summary.
+    if demoted_any:
+        raw_text = append_demotion_note(raw_text, demoted_count, blocking_count)
 
     review_path = write_review_file(
         reviews_dir, review_type, round_n, raw_text, scope=scope
