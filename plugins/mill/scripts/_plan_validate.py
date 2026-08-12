@@ -1362,18 +1362,82 @@ def _check_plugin_manifest_context_missing(batch_files: list[Path]) -> list[dict
 # context-completeness check (#742)
 # ---------------------------------------------------------------------------
 
-# Prohibition-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file the card must NOT act on, not an unlisted read dependency, so a backtick token on that line is exempt from flagging.
-_PROHIBITION_MARKERS = (
-    "forbid",
-    "never touch",
-    "must not touch",
-    "do not touch",
-    "not touch",
-    "never change",
-    "not change",
-    "never modify",
-    "not modify",
+# Negation words/phrases (lowercased, word-boundary matched): a Requirements: sentence needs at
+# least one of these AND at least one verb form from _PROHIBITION_VERB_FORMS to be
+# prohibition-exempt.
+# Note: "do not", "does not", "must not", and "shall not" each contain the standalone word "not"
+# and so are logically subsumed by the bare "not" entry below -- they are kept anyway, spelled
+# out in full, purely for self-documentation (so this tuple reads as a list of real phrasings,
+# not just an algebra of parts).
+_PROHIBITION_NEGATIONS = (
+    "do not", "don't",
+    "does not", "doesn't",
+    "never",
+    "must not",
+    "cannot", "can't",
+    "shall not",
+    "won't",
+    "forbid", "forbids", "forbidden",
+    "not",
 )
+
+# Verb base forms mapped to their full inflected-form set (base, third-person, past, gerund, plus
+# hand-added irregulars) -- a Requirements: sentence pairs one of these forms with a negation from
+# _PROHIBITION_NEGATIONS to be prohibition-exempt. Silent-e-drop (change/use/reference/include/
+# update/remove/delete/rename/move/create/cite), y->i (modify), sibilant -es (touch), and write's
+# fully suppletive forms (wrote/written) are derived by hand per standard English orthography, not
+# by naive suffix concatenation. "read" collapses to 3 forms (base/-s/-ing) since its past tense is
+# spelled identically to its base form -- "readed" is not a word.
+_PROHIBITION_VERB_FORMS = {
+    "touch": ("touch", "touches", "touched", "touching"),
+    "change": ("change", "changes", "changed", "changing"),
+    "modify": ("modify", "modifies", "modified", "modifying"),
+    "edit": ("edit", "edits", "edited", "editing"),
+    "add": ("add", "adds", "added", "adding"),
+    "link": ("link", "links", "linked", "linking"),
+    "read": ("read", "reads", "reading"),
+    "use": ("use", "uses", "used", "using"),
+    "reference": ("reference", "references", "referenced", "referencing"),
+    "include": ("include", "includes", "included", "including"),
+    "update": ("update", "updates", "updated", "updating"),
+    "remove": ("remove", "removes", "removed", "removing"),
+    "delete": ("delete", "deletes", "deleted", "deleting"),
+    "alter": ("alter", "alters", "altered", "altering"),
+    "rename": ("rename", "renames", "renamed", "renaming"),
+    "move": ("move", "moves", "moved", "moving"),
+    "create": ("create", "creates", "created", "creating"),
+    "write": ("write", "writes", "wrote", "writing", "written"),
+    "mention": ("mention", "mentions", "mentioned", "mentioning"),
+    "cite": ("cite", "cites", "cited", "citing"),
+}
+
+_PROHIBITION_NEGATION_RE = re.compile(
+    "|".join(r"\b" + re.escape(w) + r"\b" for w in _PROHIBITION_NEGATIONS)
+)
+_PROHIBITION_VERB_RE = re.compile(
+    "|".join(
+        r"\b" + re.escape(form) + r"\b"
+        for forms in _PROHIBITION_VERB_FORMS.values()
+        for form in forms
+    )
+)
+
+
+def _is_prohibition_exempt(lowered_line: str) -> bool:
+    """Return True when ``lowered_line`` (already lowercased) pairs a negation word/phrase from
+    _PROHIBITION_NEGATIONS with a verb form from _PROHIBITION_VERB_FORMS anywhere on the line
+    (line-wide match, not positionally adjacent -- same granularity as the citation-marker check).
+
+    Known limitations (not handled -- see _mill/discussion.md):
+    - Nested-bullet/multi-line prohibitions (negation on a parent bullet, path on a child bullet)
+      are not detected -- this check is scoped to a single physical line.
+    - Double-negative phrasing ("do not skip touching `foo.py`", "do not forget to read `bar.py`")
+      is misdetected as exempt even though the path SHOULD be touched/read -- this is a lexical
+      word-set match, not a semantic parse.
+    """
+    return bool(_PROHIBITION_NEGATION_RE.search(lowered_line)) and bool(
+        _PROHIBITION_VERB_RE.search(lowered_line)
+    )
 
 # Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging.
 _CITATION_MARKERS = (
@@ -1545,7 +1609,7 @@ def _check_context_completeness(
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
                     lowered_line = line.lower()
-                    if any(marker in lowered_line for marker in _PROHIBITION_MARKERS):
+                    if _is_prohibition_exempt(lowered_line):
                         continue
 
                     # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
