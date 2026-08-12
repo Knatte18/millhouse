@@ -16,6 +16,12 @@ Spec contract:
 
 Cluster specs are detected and raise ReviewerError immediately — cluster dispatch is deferred to
 task 13.
+
+`run()` still returns today's `(text, session_id)` 2-tuple even though every provider it dispatches
+into now returns a `ReviewerCallResult`.
+The two-line unwrap at each dispatch site is a deliberately temporary adapter, removed in the
+dispatcher-flip batch once the three review backends are updated to consume `ReviewerCallResult`
+directly.
 """
 from __future__ import annotations
 
@@ -47,13 +53,16 @@ def run(
 
     if provider == "test_stub":
         import _reviewer_test_stub as stub
-        return stub.run(
+        # Temporary unwrap: removed once _reviewer_single.run itself returns ReviewerCallResult in
+        # the dispatcher-flip batch.
+        result = stub.run(
             prompt_text,
             session_id=session_id,
             resume=resume,
             timeout=timeout,
             effort=spec.get("effort"),
         )
+        return result.text, result.session_id
 
     try:
         llm = importlib.import_module(f"_llm_{provider}")
@@ -72,4 +81,7 @@ def run(
     if timeout is not None:
         kwargs["timeout"] = timeout
 
-    return fn(prompt_text, **kwargs)
+    # Temporary unwrap: removed once _reviewer_single.run itself returns ReviewerCallResult in the
+    # dispatcher-flip batch.
+    result = fn(prompt_text, **kwargs)
+    return result.text, result.session_id
