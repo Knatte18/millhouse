@@ -78,7 +78,9 @@ batches:
     commit_sha: 0f2bbc6bcd9027b655755967547ca9280718b2ec
     verify_baseline_failures: []
   - name: cli-flags
-    state: pending
+    state: running
+    implementer_session: c89e3de4-0f11-4a70-ab46-4fef54f6cc23
+    start_sha: 0306a4e9cd8cd686fad1b3972416e42d0311026b
     verify_baseline_failures: []
   - name: orchestrator-shared
     state: pending
