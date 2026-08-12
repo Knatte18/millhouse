@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r3
+phase: planned
 slug: claude-plugin-root-env-setup
 branch: hanf/claude-plugin-root-env-setup
 plan: _mill/plan
@@ -23,4 +23,5 @@ plan-fix-r1  '2026-08-12T18:08:57Z'
 plan-review-r2  '2026-08-12T18:14:34Z'
 plan-fix-r2  '2026-08-12T18:14:50Z'
 plan-review-r3  '2026-08-12T18:18:41Z'
+planned  '2026-08-12T18:18:58Z'
 ```
