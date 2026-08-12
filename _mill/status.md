@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-go-base-skilldoc-and-logic-bugs-2
 branch: hanf/mill-go-base-skilldoc-and-logic-bugs-2
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-08-12T17:46:55Z'
 discussed  '2026-08-12T17:56:25Z'
 planning  '2026-08-12T18:00:25Z'
 plan-review-r1  '2026-08-12T18:04:49Z'
+planned  '2026-08-12T18:05:12Z'
 ```
