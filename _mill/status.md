@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-and-merge-in-bugs
 branch: hanf/mill-merge-and-merge-in-bugs
 plan: _mill/plan
@@ -31,4 +31,19 @@ plan-review-r5  '2026-08-12T19:09:21Z'
 plan-fix-r5  '2026-08-12T19:09:21Z'
 plan-fix-r6  '2026-08-12T19:17:17Z'
 planned  '2026-08-12T19:17:43Z'
+implementing  '2026-08-13T06:06:13Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: parent-liveness-module
+    state: pending
+  - name: mill-merge-skill-fixes
+    state: pending
+  - name: mill-merge-in-and-conflict-brief
+    state: pending
+  - name: integration-tests
+    state: pending
 ```
