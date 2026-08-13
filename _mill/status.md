@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-plan-skilldoc-and-logic-bugs
 branch: hanf/mill-plan-skilldoc-and-logic-bugs
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-plan SKILL.md: entry, phase-gate, finalize, and re-entry path gaps'
 task_description: |
@@ -19,4 +19,5 @@ discussion-fix-r3  '2026-08-13T07:43:42Z'
 discussion-fix-r4  '2026-08-13T07:47:54Z'
 discussion-fix-r7  '2026-08-13T08:05:49Z'
 discussed  '2026-08-13T08:19:14Z'
+planning  '2026-08-13T08:32:15Z'
 ```
