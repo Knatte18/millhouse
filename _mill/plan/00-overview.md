@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan SKILL.md: entry, phase-gate, finalize, and re-entry path gaps'
 slug: mill-plan-skilldoc-and-logic-bugs
-approved: false
+approved: true
 started: '20260813-082237'
 parent: main
 root: ""
