@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-merge-and-merge-in-bugs
 branch: hanf/mill-merge-and-merge-in-bugs
 plan: _mill/plan
@@ -39,6 +39,7 @@ approved-integration-tests  '2026-08-13T06:25:35Z'
 holistic-reviewing  '2026-08-13T06:26:14Z'
 holistic-fixing  '2026-08-13T06:29:45Z'
 holistic-reviewing  '2026-08-13T06:33:29Z'
+holistic-fixing  '2026-08-13T06:36:31Z'
 ```
 
 ## Batches
