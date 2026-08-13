@@ -98,6 +98,34 @@ def test_print_error_envelope_shape() -> int:
         print(f"FAIL envelope shape (code/type): expected 'code', got {envelope.get('type')!r}", file=sys.stderr)
         failures += 1
 
+    # Test default error_kind/round — the "plan" envelope parsed above was called with no
+    # explicit error_kind/round args, so it already locks in the defaults.
+    if reviews[0].get("error_kind") != "usage":
+        print(
+            f"FAIL envelope shape (plan/error_kind default): expected 'usage', got {reviews[0].get('error_kind')!r}",
+            file=sys.stderr,
+        )
+        failures += 1
+
+    # Test with explicit error_kind and round overrides
+    stdout_buf = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buf):
+        print_error_envelope("plan", "explicit error", error_kind="reviewer", round=7)
+    explicit_envelope = json.loads(stdout_buf.getvalue().strip())
+    if explicit_envelope.get("round") != 7:
+        print(
+            f"FAIL envelope shape (explicit/round): expected 7, got {explicit_envelope.get('round')!r}",
+            file=sys.stderr,
+        )
+        failures += 1
+    if explicit_envelope.get("reviews", [{}])[0].get("error_kind") != "reviewer":
+        print(
+            f"FAIL envelope shape (explicit/error_kind): expected 'reviewer', got "
+            f"{explicit_envelope.get('reviews', [{}])[0].get('error_kind')!r}",
+            file=sys.stderr,
+        )
+        failures += 1
+
     return failures
 
 

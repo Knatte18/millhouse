@@ -8,6 +8,8 @@ on existing review files.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import sys
 import tempfile
 import unittest.mock
@@ -16,7 +18,7 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _review_common import discover_round  # noqa: E402
+from _review_common import ReviewError, discover_round  # noqa: E402
 
 # Load millpy_review_plan via importlib (name contains hyphens)
 _plan_path = Path(__file__).resolve().parent.parent / "scripts" / "millpy-review-plan.py"
@@ -29,6 +31,12 @@ _disc_path = Path(__file__).resolve().parent.parent / "scripts" / "millpy-review
 _disc_spec = importlib.util.spec_from_file_location("millpy_review_discussion", _disc_path)
 millpy_review_discussion = importlib.util.module_from_spec(_disc_spec)
 _disc_spec.loader.exec_module(millpy_review_discussion)
+
+# Load millpy_review_code via importlib (name contains hyphens)
+_code_path = Path(__file__).resolve().parent.parent / "scripts" / "millpy-review-code.py"
+_code_spec = importlib.util.spec_from_file_location("millpy_review_code", _code_path)
+millpy_review_code = importlib.util.module_from_spec(_code_spec)
+_code_spec.loader.exec_module(millpy_review_code)
 
 
 def _make_fixture(tmp: Path) -> tuple[Path, Path]:
@@ -284,6 +292,150 @@ def main() -> int:
                                                         pass_count += 1
     except Exception as exc:
         print(f"[fail] review-discussion-finalize-round-with-existing: {exc}", file=sys.stderr)
+        fail_count += 1
+
+    # Test case 5: review-plan-finalize-outer-catch-error-kind-usage
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            reviews_dir, stub_out = _make_fixture(tmp)
+
+            with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
+                with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
+                    with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_plan.finalize") as mock_finalize:
+                                                        mock_hub.return_value = tmp
+                                                        mock_git.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.side_effect = ReviewError("boom")
+
+                                                        captured_stdout = io.StringIO()
+                                                        with unittest.mock.patch("sys.stdout", captured_stdout):
+                                                            rc = millpy_review_plan.main([
+                                                                "--stage", "finalize",
+                                                                "--agent-output", str(stub_out),
+                                                                "--round", "3",
+                                                            ])
+
+                                                        assert rc == 1, f"expected rc=1, got {rc}"
+                                                        envelope = json.loads(captured_stdout.getvalue())
+                                                        assert envelope["round"] == 3, \
+                                                            f"expected round=3, got {envelope['round']}"
+                                                        assert envelope["reviews"][0]["error_kind"] == "usage", \
+                                                            f"expected error_kind=usage, got {envelope['reviews'][0]['error_kind']}"
+                                                        print("[case] (e) review-plan-finalize-outer-catch-error-kind-usage")
+                                                        pass_count += 1
+    except Exception as exc:
+        print(f"[fail] review-plan-finalize-outer-catch-error-kind-usage: {exc}", file=sys.stderr)
+        fail_count += 1
+
+    # Test case 6: review-discussion-finalize-outer-catch-error-kind-usage
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            reviews_dir, stub_out = _make_fixture(tmp)
+
+            with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
+                with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
+                    with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_discussion.finalize") as mock_finalize:
+                                                        mock_git.return_value = tmp
+                                                        mock_hub.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.side_effect = ReviewError("boom")
+
+                                                        captured_stdout = io.StringIO()
+                                                        with unittest.mock.patch("sys.stdout", captured_stdout):
+                                                            rc = millpy_review_discussion.main([
+                                                                "--stage", "finalize",
+                                                                "--agent-output", str(stub_out),
+                                                                "--round", "3",
+                                                            ])
+
+                                                        assert rc == 1, f"expected rc=1, got {rc}"
+                                                        envelope = json.loads(captured_stdout.getvalue())
+                                                        assert envelope["round"] == 3, \
+                                                            f"expected round=3, got {envelope['round']}"
+                                                        assert envelope["reviews"][0]["error_kind"] == "usage", \
+                                                            f"expected error_kind=usage, got {envelope['reviews'][0]['error_kind']}"
+                                                        print("[case] (f) review-discussion-finalize-outer-catch-error-kind-usage")
+                                                        pass_count += 1
+    except Exception as exc:
+        print(f"[fail] review-discussion-finalize-outer-catch-error-kind-usage: {exc}", file=sys.stderr)
+        fail_count += 1
+
+    # Test case 7: review-code-finalize-outer-catch-error-kind-usage
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            reviews_dir, stub_out = _make_fixture(tmp)
+
+            with unittest.mock.patch("_paths.resolve_hub_path") as mock_hub:
+                with unittest.mock.patch("_paths.resolve_git_root") as mock_git:
+                    with unittest.mock.patch("_paths.resolve_wiki_path") as mock_wiki:
+                        with unittest.mock.patch("_paths.resolve_container_path") as mock_container:
+                            with unittest.mock.patch("_paths.resolve_active_hub") as mock_active_hub:
+                                with unittest.mock.patch("_review_common.load_config") as mock_cfg:
+                                    with unittest.mock.patch("_review_common.find_active_slug") as mock_slug:
+                                        with unittest.mock.patch("_reviewers.load") as mock_reviewers_load:
+                                            with unittest.mock.patch("_reviewers.validate_role_refs"):
+                                                with unittest.mock.patch("_review_common.resolve_path") as mock_resolve:
+                                                    with unittest.mock.patch("_review_code.finalize") as mock_finalize:
+                                                        mock_hub.return_value = tmp
+                                                        mock_git.return_value = tmp
+                                                        mock_wiki.return_value = tmp
+                                                        mock_container.return_value = tmp
+                                                        mock_active_hub.return_value = tmp
+                                                        mock_cfg.return_value = _stub_cfg(reviews_dir)
+                                                        mock_slug.return_value = "test-slug"
+                                                        mock_reviewers_load.return_value = {}
+                                                        mock_resolve.return_value = reviews_dir
+                                                        mock_finalize.side_effect = ReviewError("boom")
+
+                                                        captured_stdout = io.StringIO()
+                                                        with unittest.mock.patch("sys.stdout", captured_stdout):
+                                                            rc = millpy_review_code.main([
+                                                                "--stage", "finalize",
+                                                                "--agent-output", str(stub_out),
+                                                                "--round", "3",
+                                                            ])
+
+                                                        assert rc == 1, f"expected rc=1, got {rc}"
+                                                        envelope = json.loads(captured_stdout.getvalue())
+                                                        assert envelope["round"] == 3, \
+                                                            f"expected round=3, got {envelope['round']}"
+                                                        assert envelope["reviews"][0]["error_kind"] == "usage", \
+                                                            f"expected error_kind=usage, got {envelope['reviews'][0]['error_kind']}"
+                                                        print("[case] (g) review-code-finalize-outer-catch-error-kind-usage")
+                                                        pass_count += 1
+    except Exception as exc:
+        print(f"[fail] review-code-finalize-outer-catch-error-kind-usage: {exc}", file=sys.stderr)
         fail_count += 1
 
     # Report results

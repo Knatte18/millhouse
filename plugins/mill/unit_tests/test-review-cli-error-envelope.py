@@ -57,6 +57,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         backend_return: dict | None = None,
         raise_find_slug: bool = False,
         skip_validate_flag: bool = True,
+        round_arg: int | None = None,
     ) -> tuple[int, str, str]:
         """Run a CLI module and capture exit code + stdout + stderr.
 
@@ -65,6 +66,8 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
             backend.run() (mocked), or None to skip mocking raise_find_slug: if True, make
             find_active_slug raise ReviewError skip_validate_flag: for plan CLI, whether to use
             --skip-validate
+            round_arg: when not None, appends "--round <round_arg>" to argv for all three
+                cli_name values (not just "plan").
 
         Returns:
             (exit_code, stdout, stderr)
@@ -79,6 +82,8 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         argv = []
         if cli_name == "plan" and skip_validate_flag:
             argv.append("--skip-validate")
+        if round_arg is not None:
+            argv.extend(["--round", str(round_arg)])
 
         # Capture stdout/stderr
         captured_stdout = io.StringIO()
@@ -161,6 +166,17 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         self.assertEqual(result["findings"], [])
         self.assertEqual(result["reviews"][0]["findings"], [])
 
+    def test_discussion_pre_launch_error_includes_round(self):
+        """Discussion CLI: pre-launch error envelope carries --round's value."""
+        exit_code, stdout, stderr = self._run_cli_test(
+            "discussion",
+            raise_find_slug=True,
+            round_arg=7,
+        )
+
+        result = json.loads(stdout)
+        self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
+
     def test_discussion_success(self):
         """Discussion CLI: success returns exit 0 with APPROVE envelope."""
         from _review_common import ReviewResult
@@ -229,6 +245,17 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         self.assertEqual(result["nit_count"], 0)
         self.assertEqual(result["findings"], [])
         self.assertEqual(result["reviews"][0]["findings"], [])
+
+    def test_code_pre_launch_error_includes_round(self):
+        """Code CLI: pre-launch error envelope carries --round's value."""
+        exit_code, stdout, stderr = self._run_cli_test(
+            "code",
+            raise_find_slug=True,
+            round_arg=7,
+        )
+
+        result = json.loads(stdout)
+        self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
 
     def test_code_success(self):
         """Code CLI: success returns exit 0 with APPROVE envelope."""
@@ -302,6 +329,18 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         self.assertEqual(result["nit_count"], 0)
         self.assertEqual(result["findings"], [])
         self.assertEqual(result["reviews"][0]["findings"], [])
+
+    def test_plan_pre_launch_error_includes_round(self):
+        """Plan CLI: pre-launch error envelope carries --round's value."""
+        exit_code, stdout, stderr = self._run_cli_test(
+            "plan",
+            raise_find_slug=True,
+            skip_validate_flag=True,
+            round_arg=7,
+        )
+
+        result = json.loads(stdout)
+        self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
 
     def test_plan_success(self):
         """Plan CLI: success returns exit 0 with APPROVE envelope."""

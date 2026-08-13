@@ -139,6 +139,8 @@ Route on the current `phase` value:
 - `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`).
   That batch's `state` in `## Batches` genuinely is `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches it unchanged.
 - `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and Resume's (`plugins/mill/skills/mill-go-base/resume.md`) step 1 has nothing to match.
+  **Liveness check first.** Starting a batch's implementer (dispatching, setting `state: running`, recording `start_sha`/`implementer_session`) does not call `_status.append_phase`, so an interruption right after dispatching the next batch can leave `phase:` on-disk still reading `approved-{batch_name}` even though the next batch is genuinely mid-implementation. Before applying the assumption above, call `_status.read_batches(status_path)` and check whether any entry's `state` is `running`, `reviewing`, or `fixing`. If one is found, route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) instead — its step 1 will correctly locate and resume that batch.
+  Only when no entry is non-terminal does the following apply, unchanged:
   Route instead to `## Execute — sequential loop`, continuing from the next `pending` batch in `order` — the same continuation the normal in-flow path already takes after a batch approves.
   **Edge case:** if the just-approved batch was the last one in `order` (zero `pending` batches remain), route to `## Holistic code review` (`plugins/mill/skills/mill-go-base/holistic-review.md`) instead, mirroring the normal in-flow transition from the end of the Execute loop into that section.
 - `holistic-reviewing` — fires *after all* batches are `approved`, entirely outside the per-batch `## Batches` state machine.
@@ -777,7 +779,9 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
 4.5.
 **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
-   When the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
+   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains. Reuse this same step's existing second-pass halt mechanics below (including whatever batch-state/commit mechanics that halt already implies via the shared *Blocked* section this SKILL.md defines), but halt with `BLOCKED: code review usage error: <message>` (where `<message>` is the offending entry's `error` field) and surface it to the user — distinct wording from the existing `ERROR-only round {N}` phrasing.
+
+   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every remaining entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
 
    Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
 

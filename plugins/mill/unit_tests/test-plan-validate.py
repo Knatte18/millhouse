@@ -2448,6 +2448,226 @@ def test_check_context_completeness_clean_prohibition_marker_change_modify() -> 
             return 1
 
 
+def test_check_context_completeness_clean_prohibition_marker_untested_existing() -> int:
+    """Requirements: lines using the 6 previously-untested existing prohibition markers -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m1.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m2.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m3.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m4.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m5.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "m6.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  Implementers must never touch `src/m1.py` as part of this card.\n"
+                "  Implementers must not touch `src/m2.py` as part of this card.\n"
+                "  Implementers do not touch `src/m3.py` as part of this card.\n"
+                "  Reviewers should not touch `src/m4.py` for this card.\n"
+                "  This card must never change `src/m5.py`.\n"
+                "  This card must never modify `src/m6.py`.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_prohibition_marker_untested_existing")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_prohibition_marker_untested_existing: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_prohibition_marker_new_verbs() -> int:
+    """Requirements: lines using the new verb/negation combinations -> zero errors (prohibition exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "n1.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "n2.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "n3.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "n4.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "n5.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  Implementers do not edit `src/n1.py` as part of this card.\n"
+                "  Implementers do not add `src/n2.py` as part of this card.\n"
+                "  Implementers do not link `src/n3.py` as part of this card.\n"
+                "  Implementers do not read `src/n4.py` as part of this card.\n"
+                "  Implementers don't touch `src/n5.py` as part of this card.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_prohibition_marker_new_verbs")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_prohibition_marker_new_verbs: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_prohibition_marker_write_irregular() -> int:
+    """Requirements: lines using write's irregular inflected forms (write/written) -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "w1.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "w2.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  Implementers do not write to `src/w1.py` as part of this card.\n"
+                "  Implementers must not have written `src/w2.py` as part of this card.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_prohibition_marker_write_irregular")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_prohibition_marker_write_irregular: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_prohibition_marker_unrelated_negation_not_exempted() -> int:
+    """A negation word with no verb-form match on the line does not exempt a genuine dependency."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "dep.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  The parser doesn't stop early; consult `src/dep.py` for the shared logic.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "src/dep.py", (
+                f"expected path 'src/dep.py', got: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_prohibition_marker_unrelated_negation_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_prohibition_marker_unrelated_negation_not_exempted: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted() -> int:
+    """A verb-form match with no negation word on the line does not exempt a genuine dependency."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "dep2.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=(
+                "  Read `src/dep2.py` to understand the shared helper.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "src/dep2.py", (
+                f"expected path 'src/dep2.py', got: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_requirements_quote_indent_drift_clean_exact_match() -> int:
     """Fence content is already a byte-exact substring of the target Edits: file -> no error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -6290,6 +6510,11 @@ def main() -> int:
         test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged,
         test_check_context_completeness_message_includes_moves_source_qualifier,
         test_check_context_completeness_clean_prohibition_marker_change_modify,
+        test_check_context_completeness_clean_prohibition_marker_untested_existing,
+        test_check_context_completeness_clean_prohibition_marker_new_verbs,
+        test_check_context_completeness_clean_prohibition_marker_write_irregular,
+        test_check_context_completeness_dirty_prohibition_marker_unrelated_negation_not_exempted,
+        test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,

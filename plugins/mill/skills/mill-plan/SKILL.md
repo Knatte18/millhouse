@@ -448,7 +448,9 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
 4.5.
 **Step 4.5: ERROR-only-aggregate retry (no round consumed)**
 
-   When the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
+   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains: call `_status.set_blocked(status_path, f"plan review usage error: <message>", timestamp=ts)` (where `<message>` is the offending entry's `error` field); commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan review usage error) for {slug}"` and push; halt with `BLOCKED: plan review usage error: <message>` — distinct wording from the existing `BLOCKED: review ERROR-only round {N}` halt below.
+
+   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one remaining entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
 
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
@@ -561,6 +563,10 @@ Never hand-write or guess a date.
   A rename-plus-extraction is the `Moves:` pair for the relocated file plus a separate `Creates:` for the newly extracted file.
   Include a `## Rename mechanic` section in any batch that has a non-empty `Moves:` field.
   Keep naming the specific surgical edits (package declaration, import lines, identifier retargets) in `Requirements:` using stable identifiers.
+- **Phrase Requirements: prohibitions on one line; avoid double negatives** — `_plan_validate.py`'s `context-completeness` check exempts a prohibition via a same-line, lexical word-set match (a negation word/phrase paired with a verb form, anywhere on one physical line), not a structural or semantic parse.
+  Write "Do not touch `foo.py`" on a single line (negation, verb, and path together) rather than a nested-bullet form (negation on a parent bullet, path on a child bullet) — the check never looks across bullet lines.
+  Avoid double-negative phrasing such as "do not skip touching `foo.py`" or "do not forget to read `bar.py`" — the check misreads these as prohibited (a false exemption) even though the path SHOULD be touched/read.
+  State prohibitions directly instead.
 
 ## Board discipline
 

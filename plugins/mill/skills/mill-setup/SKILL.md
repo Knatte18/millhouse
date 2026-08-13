@@ -407,11 +407,12 @@ Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** 
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
-import json, os
+import json, os, sys
 from pathlib import Path
-import sys; sys.path.insert(0, os.environ['CLAUDE_PLUGIN_ROOT'] + '/scripts'); import _claude_settings
+import _claude_settings, _config
 
-venv = Path(os.environ['CLAUDE_PLUGIN_ROOT']) / '.venv'
+plugin_root = _config.resolve_plugin_root_from_syspath(sys.path)
+venv = plugin_root / '.venv'
 mill_python = str(venv / 'Scripts' / 'python.exe') if os.name == 'nt' else str(venv / 'bin' / 'python')
 settings_path = Path.home() / '.claude' / 'settings.json'
 
@@ -533,7 +534,7 @@ halt with a specific error if any fails:
 - **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`).
   Skip this check entirely on POSIX.
 - `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree);
-  verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os; from pathlib import Path; venv=Path(os.environ['CLAUDE_PLUGIN_ROOT'])/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
+  verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os, sys; from pathlib import Path; import _config; venv=_config.resolve_plugin_root_from_syspath(sys.path)/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`

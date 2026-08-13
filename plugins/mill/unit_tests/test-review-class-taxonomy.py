@@ -560,6 +560,64 @@ def test_verdict_token_rewritten_for_plan_and_code_types() -> bool:
         return plan_ok and code_ok
 
 
+# ---------------------------------------------------------------------------
+# Demotion note: appended after the ## Verdict summary whenever demoted_any is True,
+# independent of whether the verdict token itself flipped (covers #822 and #829).
+# ---------------------------------------------------------------------------
+
+
+def test_demotion_note_appended_when_verdict_flips() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("BLOCKING", "scope", "missed call sites")
+        )
+        _, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            "verdict: APPROVE" in written_text
+            and "_Note: 1 finding(s) demoted from BLOCKING to NIT by the stage's "
+            "blocking-class ceiling; current blocking_count is 0._" in written_text
+        )
+
+
+def test_demotion_note_appended_without_verdict_flip() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("BLOCKING", "design", "survives the ceiling")
+            + _heading("BLOCKING", "scope", "demoted by the ceiling")
+        )
+        result, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            result["verdict"] == "REQUEST_CHANGES"
+            and "verdict: REQUEST_CHANGES" in written_text
+            and "_Note: 1 finding(s) demoted from BLOCKING to NIT by the stage's "
+            "blocking-class ceiling; current blocking_count is 1._" in written_text
+        )
+
+
+def test_demotion_note_absent_when_no_demotion() -> bool:
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("APPROVE")
+            + _verdict_section("APPROVE")
+            + _heading("NIT", "design", "cosmetic")
+        )
+        _, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return "_Note:" not in written_text
+
+
 TESTS = [
     ("ceiling table -- discussion (only design survives BLOCKING)", test_ceiling_table_discussion),
     ("ceiling table -- plan (design+scope survive BLOCKING)", test_ceiling_table_plan),
@@ -623,6 +681,18 @@ TESTS = [
     (
         "verdict token rewritten for plan and code review types",
         test_verdict_token_rewritten_for_plan_and_code_types,
+    ),
+    (
+        "demotion note appended when verdict flips",
+        test_demotion_note_appended_when_verdict_flips,
+    ),
+    (
+        "demotion note appended without verdict flip",
+        test_demotion_note_appended_without_verdict_flip,
+    ),
+    (
+        "demotion note absent when no demotion occurs",
+        test_demotion_note_absent_when_no_demotion,
     ),
 ]
 

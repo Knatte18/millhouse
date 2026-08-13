@@ -177,20 +177,20 @@ def main(argv: list[str] | None = None) -> int:
         wiki_root = resolve_wiki_path(project_root)
         cfg = load_config(project_root, mill_dir)
     except (ReviewError, ValueError, SystemExit) as exc:
-        print_error_envelope("plan", str(exc))
+        print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     try:
         registry = _reviewers.load(project_root)
         _reviewers.validate_role_refs(cfg, registry)
     except _reviewers.ReviewerError as exc:
-        print_error_envelope("plan", str(exc))
+        print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     try:
         slug = args.slug or find_active_slug(project_root, wiki_root, cfg)
     except ReviewError as exc:
-        print_error_envelope("plan", str(exc))
+        print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
         return 1
 
     container_path = _paths.resolve_container_path(git_root)
@@ -257,14 +257,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(envelope))
             return 0
         except ReviewError as exc:
-            print_error_envelope("plan", str(exc))
+            print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
             return 1
         except Exception as exc:
-            print_error_envelope("plan", f"unhandled review error: {exc}")
+            print_error_envelope("plan", f"unhandled review error: {exc}", round=args.round if args.round is not None else 0)
             return 1
     elif args.stage == "finalize":
         if not args.agent_output:
-            print_error_envelope("plan", "--agent-output required for finalize stage")
+            print_error_envelope("plan", "--agent-output required for finalize stage", round=args.round if args.round is not None else 0)
             return 1
         round_n = args.round
         reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
@@ -305,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result_dict))
             return 0
         except ReviewError as exc:
-            print_error_envelope("plan", str(exc))
+            print_error_envelope("plan", str(exc), round=round_n)
             return 1
     else:  # full
         try:
@@ -351,10 +351,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result.to_dict()))
             return 0
         except ReviewError as exc:
-            print_error_envelope("plan", str(exc))
+            print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
             return 1
         except Exception as exc:
-            print_error_envelope("plan", f"unhandled review error: {exc}")
+            print_error_envelope("plan", f"unhandled review error: {exc}", round=args.round if args.round is not None else 0)
             return 1
 
 
