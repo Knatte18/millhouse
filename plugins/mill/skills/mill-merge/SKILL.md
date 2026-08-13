@@ -29,16 +29,15 @@ Always run from the child worktree — never from the parent.
    On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(slug, git_root, cfg)`.
    Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
-   Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, investigate the ambiguity directly instead of prompting: run `git worktree list --porcelain` and inspect the entry for `<worktrees-dir>/<slug>/`.
-   If that entry is absent from the output,
-   or its recorded branch no longer matches the active task branch (a stale registration), treat the directory as in-place cruft: `mode = 'inplace'`.
-   If the entry is present, current,
-   and its branch matches the active task branch, treat it as a genuine live worktree: `mode = 'worktree'`.
+   Stale-worktree edge: this disambiguation procedure — including its `status.md` write/commit/push side effects below — fires only when a genuine ambiguity exists.
+   Run `git worktree list --porcelain` unconditionally first (cheap, read-only, no side effects) and inspect the entry for `<worktrees-dir>/<slug>/`.
+   If that entry is present, current, and its branch matches the active task branch: no ambiguity — the `mode` already set above (from `_inplace.is_inplace()`) is trustworthy as-is.
+   Skip the rest of this Stale-worktree edge block and continue to Step 1.5.
+   If that entry is absent from the output, or its recorded branch no longer matches the active task branch (a stale registration): genuine ambiguity — treat the directory as in-place cruft, `mode = 'inplace'`, and run the disambiguation procedure below.
    Before appending the timeline row below, derive the path variables inline (Path Setup in Step 1.5 has not run yet at this point): `worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)` and `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`.
-   Either way, capture `original_phase = _status.read_full(status_path)["yaml"].get("phase")` before mutating anything, then `_status.append_phase(status_path, f"self-resolved-stale-worktree-{mode}", _timestamp.now_utc_iso())`. `append_phase` overwrites the top-level `phase:` field as well as appending the timeline row — since Step 5 immediately below reads that same `phase:` field and expects exactly `done` or `pr-pending`, restore it before continuing: `_status.append_phase(status_path, original_phase, _timestamp.now_utc_iso())`.
+   Capture `original_phase = _status.read_full(status_path)["yaml"].get("phase")` before mutating anything, then `_status.append_phase(status_path, f"self-resolved-stale-worktree-{mode}", _timestamp.now_utc_iso())`. `append_phase` overwrites the top-level `phase:` field as well as appending the timeline row — since Step 5 immediately below reads that same `phase:` field and expects exactly `done` or `pr-pending`, restore it before continuing: `_status.append_phase(status_path, original_phase, _timestamp.now_utc_iso())`.
    Commit both mutations together: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: self-resolved stale-worktree ambiguity ({mode})"` and push before continuing.
-   Only when `git worktree list --porcelain` output does not disambiguate the two cases, fall back to the existing safe default and halt: report to the operator that the branch matches the current cwd AND `<worktree_path>` exists, that `git worktree list --porcelain` output was inconclusive,
-   and that the run is stopping rather than guessing.
+   If the entry is present but its state does not cleanly resolve to either "current and matching" or "stale/absent/mismatched" above (an inconclusive `git worktree list --porcelain` read), fall back to the existing safe default and halt: report to the operator that the branch matches the current cwd AND `<worktree_path>` exists, that `git worktree list --porcelain` output was inconclusive, and that the run is stopping rather than guessing.
 
    If `mode == 'worktree'` AND `git worktree list --porcelain` shows the cwd is the main worktree:
 
