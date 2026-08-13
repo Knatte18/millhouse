@@ -38,7 +38,9 @@ batches:
     commit_sha: 4a22b9af71e4a8eb23666306f1e783ea667a61bb
     verify_baseline_failures: []
   - name: spawn-config-local-yaml-defensive-write
-    state: pending
+    state: running
+    implementer_session: 2aab8a9d-859a-46ae-bd7b-be08ec0cb4e6
+    start_sha: 23732bc284d45b006c4d3f38b55002ed9fb672ed
     verify_baseline_failures: []
   - name: finalize-batch-scoped-dirty-check
     state: pending
