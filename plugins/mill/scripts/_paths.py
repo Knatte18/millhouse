@@ -167,7 +167,8 @@ def resolve_git_root(start: Path | None = None) -> Path:
 
 
 def resolve_hub_path(cwd: Path | None = None) -> Path:
-    """Return the hub directory (the main worktree, where mill-config.yaml lives).
+    """Return the hub directory (the task worktree root where mill-config.yaml lives,
+    not the git checkout's main worktree — see resolve_main_worktree_root for that).
 
     Primary strategy — cwd walk: Walk upward from the actual cwd toward the git root, checking each
         directory for ``.millhouse/config.local.yaml``.
