@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-discussion-review-tooling-claim-consistency-check
+phase: holistic-reviewing
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-spawn-config-local-yaml-defensive-write  '2026-08-13T08:31:41Z'
 approved-finalize-batch-scoped-dirty-check  '2026-08-13T08:36:33Z'
 approved-cleanliness-unresolvable-parent-diff  '2026-08-13T08:42:54Z'
 approved-discussion-review-tooling-claim-consistency-check  '2026-08-13T08:48:20Z'
+holistic-reviewing  '2026-08-13T08:48:47Z'
 ```
 
 ## Batches
