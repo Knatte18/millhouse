@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -23,4 +23,21 @@ plan-review-r1  '2026-08-13T08:17:10Z'
 plan-fix-r1  '2026-08-13T08:17:10Z'
 plan-fix-r2  '2026-08-13T08:23:29Z'
 planned  '2026-08-13T08:23:48Z'
+implementing  '2026-08-13T08:24:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: hub-path-terminal-fallback
+    state: pending
+  - name: spawn-config-local-yaml-defensive-write
+    state: pending
+  - name: finalize-batch-scoped-dirty-check
+    state: pending
+  - name: cleanliness-unresolvable-parent-diff
+    state: pending
+  - name: discussion-review-tooling-claim-consistency-check
+    state: pending
 ```
