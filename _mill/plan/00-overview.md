@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-spawn, millpy-implement, _cleanliness, discussion-review: small bugs and inconsistencies'
 slug: misc-small-bugs-spawn-implement-cleanliness
-approved: false
+approved: true
 started: '2026-08-13T07:53:54Z'
 parent: main
 root: ""
