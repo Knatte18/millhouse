@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -19,4 +19,6 @@ discussion-fix-r3  '2026-08-13T07:42:58Z'
 discussion-fix-r4  '2026-08-13T07:47:44Z'
 discussed  '2026-08-13T07:47:44Z'
 planning  '2026-08-13T08:00:01Z'
+plan-review-r1  '2026-08-13T08:17:10Z'
+plan-fix-r1  '2026-08-13T08:17:10Z'
 ```
