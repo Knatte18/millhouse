@@ -250,6 +250,27 @@ This step is direct path only.
   **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt (Step 5)" carve-out.
   Nothing has been mutated yet at this halt point, so there is nothing to roll back.
 
+  **Pre-squash parent fast-forward (`mode == 'worktree'` only):** immediately after the dirty-parent-worktree check above confirms the parent worktree is clean, fast-forward the parent worktree's local branch to `origin/<parent_branch>`:
+
+  ```bash
+  git -C <parent-path> fetch origin "<parent_branch>"
+  git -C <parent-path> merge --ff-only "origin/<parent_branch>"
+  ```
+
+  This step also applies only when `mode == 'worktree'` — skip it entirely in in-place mode, same gate as the dirty-parent-worktree check immediately above it.
+
+  **Why:** `mill-merge-in` only advances the *child* branch to `origin/<parent_branch>`; it never touches the parent worktree's own local ref. Whenever `origin/<parent_branch>` has moved since the parent worktree last synced (a race, not specifically "non-linear history" — a plain fast-forward advance on origin triggers it just as easily as a merge commit), Step 5's squash-then-push below would otherwise run against a stale parent ref and get rejected as a non-fast-forward push.
+
+  **Not a conflict with the `merged` PR-state route's own "do not ff-sync" note:** the `### PR-state gate`'s `merged` route (`## Entry`) documents that the local parent branch is intentionally NOT fast-forwarded there, and says not to add a parent ff-sync step. That note is about the `merged` route specifically, which skips Step 5 entirely (it only runs Steps 4, 5.5, 6, 7, 8, 9). This card's fast-forward step lives inside `### 5. Direct squash` itself, which the `merged` route never reaches — so the two notes describe disjoint code paths, not a contradiction.
+
+  `merge --ff-only` fails only when the parent worktree's local branch and `origin/<parent_branch>` have genuinely diverged — the parent has local commits not present on `origin/<parent_branch>` AND `origin/<parent_branch>` has independently advanced past the parent's own last-synced point (neither ref is a fast-forward of the other). A parent with local-only commits whose `origin/<parent_branch>` has NOT independently moved is not a failure case — `--ff-only` reports "Already up to date" and exits 0 in that case, since a fast-forward trivially exists. If `merge --ff-only` fails (a genuine two-sided divergence — an out-of-band state this task does not otherwise expect), halt Step 5 — do NOT run `merge --squash` below — and report to the operator:
+
+  > "The parent worktree's local branch has diverged from `origin/<parent_branch>` — it has local commits not present on the remote. Reconcile manually (commit/push, or investigate the divergence), then re-run `/mill-merge`."
+
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt (Step 5)" paragraph — at this card's own commit that is still its title verbatim; Card 4 of this batch (which must land in the same session, before this plan's implementation is considered complete) renames it to "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" and extends it to cover this new halt too.
+
+  `reset --hard origin/<parent_branch>` is deliberately never used as the fast-forward mechanism here — it would silently discard any local-only commits on the parent worktree's branch, exactly the class of silent parent-state destruction the sibling rollback-target fix (Card 4) treats as a bug. `merge --ff-only` fails loudly instead.
+
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
   git -C <parent-path> reset -q HEAD -- "$TASK_DIR_REL"
