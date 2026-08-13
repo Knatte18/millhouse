@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r3
 slug: mill-plan-skilldoc-and-logic-bugs
 branch: hanf/mill-plan-skilldoc-and-logic-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-13T07:04:15Z'
+discussion-fix-r3  '2026-08-13T07:43:42Z'
 ```
