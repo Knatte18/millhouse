@@ -28,7 +28,7 @@ batches:
 
 ### Decision: Single batch, file-position card ordering
 
-- **Decision:** All eight fixes land in one batch (`01-skill-doc-and-logic-fixes`), with cards ordered by their first-touched line position in `mill-plan/SKILL.md` (Entry section fixes first, then Phase: Plan, then Phase: Plan Review, then `## Principles`) — except the standalone `_paths.py` docstring card (card 2), which is sequenced immediately after its companion `hub_root`/`worktree_root` binding card (card 1) since both resolve GitHub issues #839/#826 together.
+- **Decision:** All eight fixes land in one batch (`01-skill-doc-and-logic-fixes`), with cards ordered by their first-touched line position in `mill-plan/SKILL.md` (Entry section fixes first, then Phase: Plan, then Phase: Plan Review, then `## Principles`) — except the standalone `_paths.py` docstring card (card 2), which is sequenced immediately after its companion `worktree_root` binding card (card 1) since both resolve GitHub issues #839/#826 together.
 - **Rationale:** Every fix is scoped to prose/logic inside a single ~580-line skill doc (plus one docstring line in `_paths.py`) — no shared subsystem boundary to split on, and per mill-plan's own "Batch sizing" guidance a batch is a smart unit a Sonnet builder can hold in its head; eight small, mostly non-overlapping textual edits to one file is exactly that unit. File-position ordering minimizes the chance of two cards' edits colliding on adjacent lines when applied in sequence, and keeps the implementer's mental model of "where am I in the file" monotonic.
 - **Applies to:** all batches (there is only one).
 

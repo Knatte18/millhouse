@@ -15,7 +15,7 @@ This batch fixes all seven GitHub issues named in `_mill/discussion.md` (#839, #
 
 ## Cards
 
-### Card 1: Entry: bind `hub_root` and `worktree_root` before their first use (#839, #826)
+### Card 1: Entry: bind `worktree_root` before its first use; fix its stray "hub root" label (#839, #826)
 
 - **Context:** none
 - **Edits:**
@@ -31,13 +31,12 @@ This batch fixes all seven GitHub issues named in `_mill/discussion.md` (#839, #
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
   ```
-  Add two new bullets immediately after the `wiki_path` bullet and before the `signature:` lines:
-  - `` `hub_root = _paths.resolve_main_worktree_root(git_root)` ``
+  Add one new bullet immediately after the `wiki_path` bullet and before the `signature:` lines:
   - `` `worktree_root = _paths.resolve_hub_path()` `` (the task worktree root; used to anchor `_mill/` paths in nested layouts)
 
-  Add a third signature line immediately after the existing two: `` `signature: _paths.resolve_main_worktree_root(git_root: Path) -> Path` ``.
+  Do not add a `signature:` line for `resolve_hub_path` here — the file does not document signatures for helpers it already calls elsewhere without one (`resolve_hub_path` is already called in `## Phases`), and no new helper is being introduced by this card.
 
-  In Entry step 2 ("2. Load config — deep-merge..."), the paragraph currently ends with the `` `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict` `` sentence (unchanged — it already documents the correct 2-argument order per `_config.py`'s `load_config(hub_root: Path, worktree_root: Path) -> dict` signature). Insert a new sentence immediately before that signature sentence: "Call `cfg = _config.load_config(hub_root, worktree_root)`." — this makes explicit that step 2's `load_config` call now has both of its arguments already bound by step 1 above, closing the "referenced before bound" gap on both parameters (not just `hub_root`).
+  In Entry step 2 ("2. Load config — deep-merge..."), the paragraph currently ends with the `` `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict` `` sentence. Insert a new sentence immediately before that signature sentence: "Call `cfg = _config.load_config(worktree_root, git_root)`." — matching the established call-site convention used by every other skill that calls this helper (`mill-go-base/SKILL.md`: `hub_root = _paths.resolve_hub_path(); cfg = _config.load_config(hub_root, git_root)`; `git-commit/SKILL.md`: identical shape; `mill-quick/SKILL.md`: `worktree_root = _paths.resolve_hub_path(); cfg = _config.load_config(worktree_root, git_root)` — the same local variable name this card uses). `_config.load_config`'s own first parameter is named `hub_root` in its signature but means "the directory where `mill-config.yaml` lives," i.e. `resolve_hub_path()`'s result — which this file's own Entry step 2 prose already calls "the hub root" ("deep-merge `<hub_root>/mill-config.yaml`"). Do not introduce a second, separately-bound `hub_root` variable to mirror `_config.load_config`'s parameter name; feeding `resolve_hub_path()`'s result as the first positional argument (regardless of its local variable name in this file) and `git_root` as the second is what makes the call correct — this makes explicit that step 2's `load_config` call now has its `worktree_root` argument already bound by step 1 above, closing the "referenced before bound" gap.
 
   In the **Path Setup.** section, the current bullet list is:
   ```
@@ -47,10 +46,10 @@ Derive:
   used to anchor `_mill/` paths in nested layouts)
 - `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the hub root)
   ```
-  Remove the `worktree_root` bullet entirely (it is now bound at Entry step 1, not re-derived here). Keep the `git_root` bullet unchanged. Change the `status_path` bullet's trailing parenthetical from `(resolves against the hub root)` to `(resolves against the task worktree root; `worktree_root` is already bound at Entry step 1 above)` — dropping the stray "hub root" label on `worktree_root`'s result is required now that a second, correctly-named `hub_root` variable exists in the same file: leaving both labeled "hub root" would reintroduce the exact naming collision GitHub issue #839 warns about ("`resolve_hub_path()` returns the worktree, not the hub").
+  Remove the `worktree_root` bullet entirely (it is now bound at Entry step 1, not re-derived here). Keep the `git_root` bullet unchanged. Change the `status_path` bullet's trailing parenthetical from `(resolves against the hub root)` to `(resolves against the task worktree root; `worktree_root` is already bound at Entry step 1 above)` — dropping the stray "hub root" label on `worktree_root`'s result directly resolves the naming confusion GitHub issue #839 warns about ("note the naming collision that makes this easy to get wrong: `resolve_hub_path()` returns the worktree, not the hub"): the file's prose should call this variable what it is (the task worktree root), not "the hub root," even though `_config.load_config`'s own parameter name for the conceptually equivalent argument happens to be `hub_root`.
 
   Do not change any other Entry-section or Path Setup text in this card (the sentence beginning "`plan_dir` and `reviews_dir` will be derived..." stays as-is).
-- **Commit:** `docs(mill-plan): bind hub_root and worktree_root before their first use in Entry`
+- **Commit:** `docs(mill-plan): bind worktree_root before its first use; fix load_config argument order`
 
 ### Card 2: `_paths.py`: correct `resolve_hub_path`'s "main worktree" docstring mislabel (#839, #826)
 
@@ -207,11 +206,11 @@ Derive:
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Add the following sentence, verbatim except for the CLI filename, at two locations in `### Phase: Plan Review`:
+  Add the following sentence, verbatim, at two locations in `### Phase: Plan Review`:
   ```
-  Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (per the general Agent-mode dispatch pattern's step 2 in `mill-go-base/SKILL.md`) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
+  Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
   ```
-  This mirrors `mill-start/SKILL.md`'s existing sentence at its own two Agent-mode finalize call sites (which document the identical requirement for `millpy-review-discussion.py`), adapted for `millpy-review-plan.py`.
+  This documents the same requirement `mill-start/SKILL.md`'s existing sentence documents at its own two Agent-mode finalize call sites (for `millpy-review-discussion.py`), adapted for `millpy-review-plan.py` — with one deliberate improvement over copying it verbatim: `mill-start/SKILL.md`'s own sentence cites "step 2" of the general Agent-mode dispatch pattern for where `output_path` comes from, but in `mill-go-base/SKILL.md` `output_path` is extracted at step 1 ("Run prepare stage") and used at step 5 ("Run finalize stage"), never mentioned at step 2 ("Call Agent tool") — so this card's sentence cites the pattern's actual step numbers instead of reproducing that pre-existing inaccuracy. Do not edit `mill-start/SKILL.md` itself in this card; its own citation is out of this plan's scope.
 
   Location 1: step 2's Agent-mode dispatch paragraph — immediately after the sentence "If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`."
 
@@ -237,4 +236,4 @@ Derive:
 
 ## Batch Tests
 
-`verify:` runs `plugins/mill/unit_tests/test-skill-helper-drift.py`, which scans every `SKILL.md` file (including `mill-plan/SKILL.md`, edited by cards 1, 3, 4, 5, 6, 7, and 8) for `_<module>.<fn>(`-shaped prose references and asserts each resolves to a real, currently-shipped function signature. This batch's edits add three such references that don't already appear in the file (`_paths.resolve_main_worktree_root(`, `_status.append_phase(` already appears elsewhere but is added at a new call site, `_review_common.discover_round(`) plus reuse existing ones (`_phase_wait.matches_wait_trigger(`, `_status.read_full(`, `_status.set_blocked(`) — the drift test catches a typo'd or renamed helper reference, or a reference to a module/function that no longer exists. It does not check argument count or order, so `_config.load_config(hub_root, worktree_root)`'s exact 2-argument order (card 1) was verified manually against `_config.py`'s actual signature during planning, not by this test. Card 2 (`_paths.py` docstring) has no runnable surface of its own — no signature or behavior changes — so it rides along on the same single-file verify command rather than needing a second one.
+`verify:` runs `plugins/mill/unit_tests/test-skill-helper-drift.py`, which scans every `SKILL.md` file (including `mill-plan/SKILL.md`, edited by cards 1, 3, 4, 5, 6, 7, and 8) for `_<module>.<fn>(`-shaped prose references and asserts each resolves to a real, currently-shipped function signature. This batch's edits add one such reference that doesn't already appear in the file (`_review_common.discover_round(`, card 4) plus reuse existing ones (`_status.append_phase(` at a new call site, `_phase_wait.matches_wait_trigger(`, `_status.read_full(`, `_status.set_blocked(`) — the drift test catches a typo'd or renamed helper reference, or a reference to a module/function that no longer exists. It does not check argument count or order, so `_config.load_config(worktree_root, git_root)`'s exact 2-argument order (card 1) was verified manually against `_config.py`'s actual signature and every existing call site's established convention (`mill-go-base`, `git-commit`, `mill-quick`) during planning, not by this test. Card 2 (`_paths.py` docstring) has no runnable surface of its own — no signature or behavior changes — so it rides along on the same single-file verify command rather than needing a second one.
