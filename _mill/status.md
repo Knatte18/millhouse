@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-finalize-batch-scoped-dirty-check
+phase: approved-cleanliness-unresolvable-parent-diff
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-08-13T08:24:26Z'
 approved-hub-path-terminal-fallback  '2026-08-13T08:28:32Z'
 approved-spawn-config-local-yaml-defensive-write  '2026-08-13T08:31:41Z'
 approved-finalize-batch-scoped-dirty-check  '2026-08-13T08:36:33Z'
+approved-cleanliness-unresolvable-parent-diff  '2026-08-13T08:42:54Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     commit_sha: f3c35d10be466d856751b0f13c45e84a31e64b13
     verify_baseline_failures: []
   - name: cleanliness-unresolvable-parent-diff
-    state: running
+    state: approved
     implementer_session: 23b81438-a7dd-43a2-88cf-11bc029f210d
     start_sha: 3d0d3eaa482ad9062906b25e9964d68583d865fb
+    commit_sha: f23f3c94b693105ac2dc28734e553ad3e89faa33
     verify_baseline_failures: []
   - name: discussion-review-tooling-claim-consistency-check
     state: pending

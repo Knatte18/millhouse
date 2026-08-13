@@ -1,0 +1,3 @@
+Batch 4 (cleanliness-unresolvable-parent-diff): implemented cards 7-10. `_cleanliness._parent_diff_names` now returns `None` (not `[]`) on an unresolvable parent diff, propagated through `compute_terminal_dirt` and `revert_out_of_scope_drift`; `handoff.md`'s Terminal cleanliness gate and `SKILL.md` step 2b both gained explicit `is None` halt/blocked branches; regression tests added (CTD-6, ROOD-7, PDN-1 updated). 4 of 4 cards committed (`a269aa9e`, `1858b925`, `d9296b31`, `f23f3c94`), `verify:` passes (all `_cleanliness` unit tests green), tree clean.
+
+{"status":"success","commit_sha":"f23f3c94b693105ac2dc28734e553ad3e89faa33","session_id":"23b81438-a7dd-43a2-88cf-11bc029f210d","cards_done":[7,8,9,10]}
