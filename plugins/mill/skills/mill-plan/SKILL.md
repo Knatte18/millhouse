@@ -307,6 +307,9 @@ The skip is recorded in commit history;
 no `status.md` phase flip beyond the existing Handoff `planned` row.
 
 Loop up to `max_review_rounds` rounds.
+
+**Resumed-loop round-cap substitution.** When this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), `local_max_review_rounds` substitutes for `max_review_rounds` at every site in this phase that compares against it, for the remainder of that resumed loop only: the loop-length cap just stated above, the step 1 round-report line ("Plan Review — round N/max_review_rounds" prints as "round N/local_max_review_rounds" instead), the Convergence gate's two `round >= max_review_rounds` / `round < max_review_rounds` bullets, every 4a/4b/4c inline `round >= max_review_rounds` (implicit-approve-at-cap) / `round < max_review_rounds` restatement, and step 6's `{N} rounds` in its halt message. The config-derived `max_review_rounds` value itself is never mutated by this substitution — a subsequent fresh `/mill-plan` invocation (no `blocked` re-entry involved) uses the unmodified config value everywhere, as always.
+
 Each round:
 
 1. Report: **"Plan Review — round N/max_review_rounds"**.
@@ -426,6 +429,8 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
+
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug plan-review-r<N> -- \
@@ -488,6 +493,8 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
+
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug plan-review-retry-r<N> -- \
@@ -537,8 +544,9 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
 
 6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): `_status.set_blocked(status_path, f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain", timestamp=ts)`;
    commit and push;
-   halt with "Plan blocked after {N} rounds, {M} BLOCKINGs remain.
+   halt with "Plan blocked after {N} rounds, the last round's {M} BLOCKING finding(s) were acted on (fixed or pushed back) but not yet re-reviewed.
    Task left as [active] for manual review." `{M}` is `result["blocking_count"]` from the most recent CLI invocation — do not re-count manually.
+   Step 4d's fixer pass already ran on those exact findings before this round-cap check fires, so "BLOCKINGs remain" would be misleading at the moment this halt prints — this operator-facing halt text is reworded accordingly; `_status.set_blocked`'s own `blocked_reason` argument keeps its existing, unreworded text (a machine field consumed only by the Entry `blocked` re-entry row's `.startswith("max-rounds exhausted")` prefix check, never read verbatim by a human at that point).
    If `blocking_count` was 0 in the latest round, this halt should not have fired — verify step 4c logic before proceeding.
 
 ### Phase: Handoff
