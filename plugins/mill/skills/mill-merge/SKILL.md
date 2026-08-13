@@ -297,7 +297,7 @@ This step is direct path only.
 
   > "The parent worktree is not clean — either (a) this is independent uncommitted work in the parent worktree: commit or stash it, then re-run `/mill-merge`; or (b) this is a partially-applied squash left over from a Step 5 that failed after `merge --squash`/`reset`/`checkout` already staged changes but before `commit` landed: run `git -C <parent-path> commit` to complete it, or `git -C <parent-path> reset --hard` to discard it, then re-run."
 
-  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt (Step 5)" carve-out.
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" carve-out.
   Nothing has been mutated yet at this halt point, so there is nothing to roll back.
 
   **Pre-squash parent fast-forward (`mode == 'worktree'` only):** immediately after the dirty-parent-worktree check above confirms the parent worktree is clean, fast-forward the parent worktree's local branch to `origin/<parent_branch>`:
@@ -317,7 +317,7 @@ This step is direct path only.
 
   > "The parent worktree's local branch has diverged from `origin/<parent_branch>` — it has local commits not present on the remote. Reconcile manually (commit/push, or investigate the divergence), then re-run `/mill-merge`."
 
-  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt (Step 5)" paragraph — at this card's own commit that is still its title verbatim; Card 4 of this batch (which must land in the same session, before this plan's implementation is considered complete) renames it to "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" and extends it to cover this new halt too.
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" paragraph, which covers both halts.
 
   `reset --hard origin/<parent_branch>` is deliberately never used as the fast-forward mechanism here — it would silently discard any local-only commits on the parent worktree's branch, exactly the class of silent parent-state destruction the sibling rollback-target fix (Card 4) treats as a bug. `merge --ff-only` fails loudly instead.
 
