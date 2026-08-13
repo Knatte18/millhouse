@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-doc-and-logic-fixes
+phase: holistic-reviewing
 slug: mill-plan-skilldoc-and-logic-bugs
 branch: hanf/mill-plan-skilldoc-and-logic-bugs
 plan: _mill/plan
@@ -30,6 +30,7 @@ plan-review-r4  '2026-08-13T09:10:21Z'
 planned  '2026-08-13T09:10:38Z'
 implementing  '2026-08-13T09:11:02Z'
 approved-skill-doc-and-logic-fixes  '2026-08-13T09:19:44Z'
+holistic-reviewing  '2026-08-13T09:20:04Z'
 ```
 
 ## Batches
