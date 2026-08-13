@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-parent-liveness-module
+phase: approved-mill-merge-skill-fixes
 slug: mill-merge-and-merge-in-bugs
 branch: hanf/mill-merge-and-merge-in-bugs
 plan: _mill/plan
@@ -33,6 +33,7 @@ plan-fix-r6  '2026-08-12T19:17:17Z'
 planned  '2026-08-12T19:17:43Z'
 implementing  '2026-08-13T06:06:13Z'
 approved-parent-liveness-module  '2026-08-13T06:10:50Z'
+approved-mill-merge-skill-fixes  '2026-08-13T06:15:04Z'
 ```
 
 ## Batches
@@ -46,9 +47,10 @@ batches:
     commit_sha: d96b156acef52c01fa08978b3e99f2d92ee664f2
     verify_baseline_failures: []
   - name: mill-merge-skill-fixes
-    state: running
+    state: approved
     implementer_session: 6314c165-c614-4d50-a9c2-e33d6d4926c2
     start_sha: 2022d2a1f8e07aa105824dab3c57a620b06abfe1
+    commit_sha: 7a534f97dec45cac442d83e7136771dcad89081a
   - name: mill-merge-in-and-conflict-brief
     state: pending
   - name: integration-tests
