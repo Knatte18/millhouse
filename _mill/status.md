@@ -45,7 +45,9 @@ batches:
     commit_sha: b5b02ffa7206d68a22756776e89f96260836c6ba
     verify_baseline_failures: []
   - name: finalize-batch-scoped-dirty-check
-    state: pending
+    state: running
+    implementer_session: 26d960fc-e436-4589-8d4e-8acb687bc55c
+    start_sha: 24869d7e59f8e3bb5d529677973ff532fcf4d538
     verify_baseline_failures: []
   - name: cleanliness-unresolvable-parent-diff
     state: pending
