@@ -1,1 +1,0 @@
-- mill-merge-in's rebind reuses a status_path derivation batch 2 explicitly calls an anti-pattern: **Location:** `plugins/mill/skills/mill-merge-in/SKILL.md:17` vs `plugins/mill/skills/mill-merge/SKILL.md:111`
