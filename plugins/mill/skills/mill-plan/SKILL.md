@@ -64,7 +64,7 @@ Derive:
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
-   | `phase: discussing` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
 ### Entry-gate wait for upstream mill-start
@@ -73,12 +73,11 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
 
 - Compute the match:
   ```python
-  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [])
+  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [r"^discussion-fix-r\d+$"])
   ```
-  No regex widening on this side.
-  This is deliberate, not an oversight: mill-start's `discussion-fix-r{N}` phase value (written mid-loop during its own Discussion Review, per `mill-start/SKILL.md`'s step 4b) is always folded into the same commit as the immediately following `discussed` write and is never itself pushed as a standalone, externally observable phase;
-  and mill-start's REQUEST_CHANGES loop makes no `_status.append_phase` call at all.
-  The entire span of mill-start's active work — including every round of its own review loop, in both branches — is therefore already fully covered by the single exact value `discussing`, unlike mill-go's side, where mill-plan's own Plan Review loop commits its approve-phase and its Handoff-phase as separate, independently observable commits.
+  The trigger is now widened to also match `discussion-fix-r{N}`.
+  This closes a real gap: GitHub issue #821 has a concrete repro (commit `ab1786d6`) showing mill-start's own convergence-gate not-converged branch (Phase: Discussion Review step 4b, per `mill-start/SKILL.md`) appends+commits+pushes `discussion-fix-r{N}` and continues to the next round *without* the `discussed` phase following in the same commit — so `discussion-fix-r{N}` genuinely is pushed as a standalone, externally observable phase, not always folded into the same commit as the following `discussed` write.
+  This mirrors mill-go's own copy of this exact wait pattern for mill-plan's own phases (`mill-go-base/SKILL.md`: `{"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]`) — same mechanism, same file family.
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
   - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 120)` and compute `giveup_s = timeout_minutes * 60`.
