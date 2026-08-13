@@ -52,7 +52,9 @@ batches:
     commit_sha: f3c35d10be466d856751b0f13c45e84a31e64b13
     verify_baseline_failures: []
   - name: cleanliness-unresolvable-parent-diff
-    state: pending
+    state: running
+    implementer_session: 23b81438-a7dd-43a2-88cf-11bc029f210d
+    start_sha: 3d0d3eaa482ad9062906b25e9964d68583d865fb
     verify_baseline_failures: []
   - name: discussion-review-tooling-claim-consistency-check
     state: pending
