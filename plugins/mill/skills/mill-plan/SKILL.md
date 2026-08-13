@@ -65,6 +65,7 @@ Derive:
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
    | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | `phase: blocked` | see "Entry: resuming after a max-rounds block" below |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
 ### Entry-gate wait for upstream mill-start
@@ -103,6 +104,29 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
 - **If `matched` is `True` but `entry_wait` is `False`:** fall back to the original catch-all action for this phase — tell the user what phase is set (`discussing`) and which skill should run instead (mill-start), and halt.
 - **If `matched` is `False`:** the phase is not `discussing`;
   fall through to the narrowed catch-all row above.
+
+### Entry: resuming after a max-rounds block
+
+Whenever the phase-table lookup above lands on the `phase: blocked` row, run this procedure instead of jumping straight to its listed action:
+
+- Read `blocked_reason = _status.read_full(status_path)["yaml"].get("blocked_reason")`.
+- **If `blocked_reason` does not start with `"max-rounds exhausted"`:** this is a hard stop exactly as today — surface `blocked_reason` to the operator and halt.
+  Manual `status.md` intervention is required (matches this file's own "## Board discipline" ban on hand-editing the status.md yaml block — the operator investigates and clears `blocked_reason` themselves, mill-plan does not).
+- **If `blocked_reason` starts with `"max-rounds exhausted"`:** this is a resource-exhaustion block, safe to resume automatically now that the operator has explicitly re-invoked `/mill-plan`.
+  - Derive `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])` (the same expression Phase: Plan Review's own "**Path Setup (Plan Review).**" section uses — `worktree_root` and `cfg` are already bound by this point in Entry step 4).
+  - **`--revise` mid-block detection (check before deriving `N`):** list any `reviews_dir/revise-*` subdirectories.
+    If the most-recently-modified review file across all of them is newer than the most-recently-modified review file directly in the plain `reviews_dir` (or the plain directory has no review files at all), the block occurred mid-`--revise`.
+    Halt: state the block occurred during a `--revise` session and that resuming it is unsupported (the ordinary `--revise` pre-check cannot be re-supplied to recover the namespace, since it requires `phase == "planned"`, which is false once `phase: blocked`).
+    Do not derive `N` or proceed below when this fires.
+  - Otherwise, derive `N = _review_common.discover_round(reviews_dir, "plan", "holistic")` (the file's own established round-discovery helper — scans `reviews_dir` for existing review files and returns `max(found) + 1`, or `1` if none exist).
+  - Compute `local_max_review_rounds = N + max_review_rounds - 1` (a fresh, full `max_review_rounds`-sized budget starting at round `N`).
+    Because `set_blocked`'s `"max-rounds exhausted"` reason is only ever written when `round == max_review_rounds`, `N` will typically equal `max_review_rounds + 1` — without this extension, every one of Phase: Plan Review's existing `round >= max_review_rounds` checks would already be satisfied on the very first resumed iteration, immediately re-triggering an implicit-approve-at-cap or a fresh max-rounds halt without ever running a real review round.
+    `local_max_review_rounds` substitutes for `max_review_rounds` at every site named in Phase: Plan Review's "Resumed-loop round-cap substitution" paragraph, for the remainder of this resumed loop only — the config-derived `max_review_rounds` value itself is never mutated, and a subsequent fresh `/mill-plan` invocation (no `blocked` re-entry involved) uses the unmodified config value as always.
+  - Call `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())` — **not** `f"plan-review-r{N}"`, since round `N` has not run yet; `_status.append_phase` never dedupes against an existing identical Timeline row, so pre-writing round N's own completion marker before round N has even run would leave two identical `plan-review-r{N}` entries with different timestamps once the round actually completes and 4a/4d append it again for real.
+    `"planning"` is already one of the phase values the Entry step-4 table's ordinary re-entry row matches, so it correctly signals "resume the review loop" without claiming a round completed.
+    This call also auto-clears `blocked_reason` per `_status.append_phase`'s existing transition-away-from-blocked behavior — no separate clearing step is needed.
+  - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: resume plan review after max-rounds block for {slug}"`. Push.
+  - Fall through into Phase: Plan Review, entering the loop at round `N` with `local_max_review_rounds` in effect.
 
 ## Phases
 
