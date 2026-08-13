@@ -52,7 +52,9 @@ batches:
     start_sha: 2022d2a1f8e07aa105824dab3c57a620b06abfe1
     commit_sha: 7a534f97dec45cac442d83e7136771dcad89081a
   - name: mill-merge-in-and-conflict-brief
-    state: pending
+    state: running
+    implementer_session: 3b739604-6727-4fe2-a734-e21f76103611
+    start_sha: fbd0096a706fe88f438496bbbf1aa73779f296d3
   - name: integration-tests
     state: pending
     verify_baseline_failures: []
