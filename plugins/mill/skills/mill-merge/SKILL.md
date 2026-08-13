@@ -77,6 +77,57 @@ Derive:
    Branch on `status_path.exists()` before calling `_parent_branch.resolve(...)` at all — the "file entirely absent" case (typical in the closed-PR re-entry path, where an earlier `mill-merge` invocation's own Step 4 cleanup commit already removed `task_dir`) has a resolvable fallback that the "file exists but the `parent:` row is missing" case does not.
    If `status_path.exists()` is `False`: skip the `_parent_branch.resolve(...)` call entirely for this run, set `parent_branch = cfg.git.base_branch` directly (already loaded in Entry Step 1, "Config keys to read," with its own documented `"main"` fallback when absent), and report the one-line operator-facing notice "status.md absent; assuming parent branch is `<base_branch>` (config `base_branch`) -- if this task's true parent differs (e.g. a stacked branch merging into something other than `base_branch`), abort and resolve manually."
    If `status_path.exists()` is `True`: call `_parent_branch.resolve(status_path, interactive=False, expected_slug=slug)` exactly as before.
+
+   **Liveness check (#817):** when `_parent_branch.resolve(...)` above returns successfully, verify the returned `parent_branch` is still live:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _parent_branch, _paths
+   git_root = _paths.resolve_git_root()
+   print(json.dumps({'alive': _parent_branch.check_liveness('<parent_branch>', git_root)}))
+   "
+   ```
+
+   If `alive` is `true`, continue as before — no further action.
+
+   If `alive` is `false`, resolve a successor:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _parent_branch, _paths, _config
+   git_root = _paths.resolve_git_root()
+   cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+   print(json.dumps(_parent_branch.resolve_dead_parent('<parent_branch>', git_root, cfg)))
+   "
+   ```
+
+   Report the result to the operator and require confirmation before mill-merge proceeds, except in the `cycle` case, which always halts outright with no confirmation prompt (there is no candidate branch to confirm):
+   - `outcome: "resolved"` — "Parent branch `<parent_branch>` no longer exists on origin. It appears to have been merged and archived (chain: `<hops, joined by ' -> '>`). The resolved successor parent is `<branch>`. Confirm before mill-merge proceeds against `<branch>`."
+   - `outcome: "fallback"` — "Parent branch `<parent_branch>` no longer exists on origin. No archive-tag chain could resolve a successor (`<reason>`). Falling back to the repo's base branch `<branch>`. Confirm before mill-merge proceeds against `<branch>`."
+   - `outcome: "cycle"` — halt outright, no confirmation prompt: "Archive-tag chain walk for `<parent_branch>` hit its 10-hop cap without resolving a live parent (chain: `<hops, joined by ' -> '>`). Investigate manually."
+
+   On operator confirmation (the `resolved` and `fallback` cases only), rebind `status.md`'s `parent:` row to the new branch and use it for the remainder of this run. Derive `status_path` the same way the rest of this Entry Step 4 already does (Path Setup 1.5's `worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)` then `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`) — never a fresh `_paths.resolve_hub_path()` + literal `'_mill/status.md'` derivation, which walks from cwd instead of the already-resolved `worktree_root` and bypasses the config-driven `cfg['paths']['status_md']` the rest of the file always reads:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import _status, _paths, _config
+   git_root = _paths.resolve_git_root()
+   container_path = _paths.resolve_container_path(git_root)
+   cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+   worktree_root = _paths.resolve_active_hub(container_path, '<slug>', cfg=cfg, git_root=git_root)
+   status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
+   _status.update_field(status_path, 'parent', '<resolved_branch>')
+   "
+   git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: rebind dead parent branch for {slug}"
+   git -C <worktree> push
+   ```
+
+   `parent_branch` for the remainder of this run is now `<resolved_branch>`.
+
+   This liveness check applies only to the `status_path.exists()` True branch (the actual `_parent_branch.resolve(...)` call) — it does not apply to the `status_path.exists()` False fallback branch above it, which already sets `parent_branch = cfg.git.base_branch` directly and has its own separate operator-facing notice.
+
    On `_parent_branch.ParentBranchError` (status.md is missing the `parent:` row): `_status.set_blocked(status_path, f"missing parent: row for {slug}", timestamp=_timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: blocked (missing parent: row) for {slug}"` and push, then halt with `BLOCKED: status.md is missing the parent: row for <slug> -- mill-spawn should have written it; set it manually and re-run /mill-merge.`
 5. **Phase gate — also the re-entry point for PR-path recovery.**
 
