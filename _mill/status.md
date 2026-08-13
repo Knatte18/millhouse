@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-hub-path-terminal-fallback
+phase: approved-spawn-config-local-yaml-defensive-write
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r2  '2026-08-13T08:23:29Z'
 planned  '2026-08-13T08:23:48Z'
 implementing  '2026-08-13T08:24:26Z'
 approved-hub-path-terminal-fallback  '2026-08-13T08:28:32Z'
+approved-spawn-config-local-yaml-defensive-write  '2026-08-13T08:31:41Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     commit_sha: 4a22b9af71e4a8eb23666306f1e783ea667a61bb
     verify_baseline_failures: []
   - name: spawn-config-local-yaml-defensive-write
-    state: running
+    state: approved
     implementer_session: 2aab8a9d-859a-46ae-bd7b-be08ec0cb4e6
     start_sha: 23732bc284d45b006c4d3f38b55002ed9fb672ed
+    commit_sha: b5b02ffa7206d68a22756776e89f96260836c6ba
     verify_baseline_failures: []
   - name: finalize-batch-scoped-dirty-check
     state: pending
