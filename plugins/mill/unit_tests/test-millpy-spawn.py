@@ -752,6 +752,7 @@ def _run_spawn_real_fs(
     hub_subpath: str,
     slug: str = "test-task",
     title: str = "Test Task",
+    omit_source_config: bool = False,
 ) -> tuple[int, Path, MagicMock, MagicMock]:
     """
     Run spawn main() with ``tmpdir`` as the root filesystem.
@@ -766,13 +767,14 @@ def _run_spawn_real_fs(
     # Source hub filesystem
     hub = tmpdir / "hub"
     (hub / ".millhouse").mkdir(parents=True)
-    src_config: dict = {}
-    if hub_subpath != ".":
-        src_config["hub_relative_path"] = hub_subpath
-    (hub / ".millhouse" / "config.local.yaml").write_text(
-        yaml.safe_dump(src_config) if src_config else "",
-        encoding="utf-8",
-    )
+    if not omit_source_config:
+        src_config: dict = {}
+        if hub_subpath != ".":
+            src_config["hub_relative_path"] = hub_subpath
+        (hub / ".millhouse" / "config.local.yaml").write_text(
+            yaml.safe_dump(src_config) if src_config else "",
+            encoding="utf-8",
+        )
 
     wiki = tmpdir / "wiki"
     wiki.mkdir()
@@ -966,6 +968,72 @@ def test_spawn_subfolder_install_destination_layout() -> None:
             )
 
     print("PASS: test_spawn_subfolder_install_destination_layout")
+
+
+# ---------------------------------------------------------------------------
+# Self-heal tests for missing dest_hub config.local.yaml (Card 4, #834)
+# ---------------------------------------------------------------------------
+
+
+def test_spawn_self_heals_missing_config_local_yaml_standard_layout() -> None:
+    """Standard layout: copy_millhouse finds no config.local.yaml to copy -- self-heal writes one at dest_hub == wt."""
+    import yaml
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+            tmpdir, ".", omit_source_config=True
+        )
+
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+
+        config_path = wt / ".millhouse" / "config.local.yaml"
+        if not config_path.exists():
+            raise AssertionError(f"self-healed config.local.yaml not found at {config_path}")
+
+        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if cfg != {"hub_relative_path": "."}:
+            raise AssertionError(
+                f"self-healed config.local.yaml should be exactly {{hub_relative_path: '.'}}, got {cfg!r}"
+            )
+
+    print("PASS: test_spawn_self_heals_missing_config_local_yaml_standard_layout")
+
+
+def test_spawn_self_heals_missing_config_local_yaml_subfolder_layout() -> None:
+    """Subfolder layout: copy_millhouse finds no config.local.yaml to copy -- self-heal writes one at dest_hub, worktree-root stub still written."""
+    import yaml
+
+    hub_subpath = "src/Models"
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+            tmpdir,
+            hub_subpath,
+            slug="subfolder-self-heal",
+            title="Subfolder Self Heal",
+            omit_source_config=True,
+        )
+
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+
+        dest_hub = wt / hub_subpath
+        config_path = dest_hub / ".millhouse" / "config.local.yaml"
+        if not config_path.exists():
+            raise AssertionError(f"self-healed config.local.yaml not found at {config_path}")
+
+        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if cfg != {"hub_relative_path": hub_subpath}:
+            raise AssertionError(
+                f"self-healed config.local.yaml should be exactly {{hub_relative_path: {hub_subpath!r}}}, got {cfg!r}"
+            )
+
+        # The unrelated worktree-root bootstrap stub (existing gated block) must still be written.
+        stub_path = wt / ".millhouse" / "config.local.yaml"
+        if not stub_path.exists():
+            raise AssertionError(f"worktree-root bootstrap stub not found at {stub_path}")
+
+    print("PASS: test_spawn_self_heals_missing_config_local_yaml_subfolder_layout")
 
 
 # ---------------------------------------------------------------------------
@@ -1458,6 +1526,8 @@ def main() -> int:
         test_main_dry_run_prints_worktree_status_path,
         test_spawn_standard_layout_regression,
         test_spawn_subfolder_install_destination_layout,
+        test_spawn_self_heals_missing_config_local_yaml_standard_layout,
+        test_spawn_self_heals_missing_config_local_yaml_subfolder_layout,
         test_spawn_discovery_round_trip_subfolder,
         test_single_selection_does_not_call_multi_select_groom_then_claim,
         test_spawn_slug_help_text_has_no_s_marker,

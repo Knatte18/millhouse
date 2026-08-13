@@ -1435,6 +1435,11 @@ def main() -> int:
     errors += test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path()
 
     # ------------------------------------------------------------------
+    # Criteria section carries the tooling/validator claim cross-check bullet (#812)
+    # ------------------------------------------------------------------
+    errors += test_criteria_section_has_tooling_claim_consistency_bullet()
+
+    # ------------------------------------------------------------------
     # finalize() direct call: parse_verdict failure tags error_kind: "reviewer"
     # (reviewer-kind-finalize-wrappers Shared Decision).
     # Calls finalize() directly (not via discussion_run/run()) so the assertion exercises
@@ -1769,6 +1774,44 @@ def test_project_root_rebind_uses_resolve_active_hub_not_resolve_hub_path() -> i
             " not resolve_hub_path's decoy"
         )
         return 0
+
+
+def test_criteria_section_has_tooling_claim_consistency_bullet() -> int:
+    """Criteria section carries the tooling/validator claim cross-check bullet (#812).
+
+    Direct template-file read-and-string-assertion, independent of this file's
+    prepare/run fixture-based tests -- no wiki/worktree fixture, no LLM invocation.
+    """
+    template_path = HUB / "plugins" / "mill" / "templates" / "review-discussion.md"
+    text = template_path.read_text(encoding="utf-8")
+
+    if "**Tooling/validator claims**" not in text:
+        print(
+            "FAIL: test_criteria_section_has_tooling_claim_consistency_bullet:"
+            " '**Tooling/validator claims**' bullet not found in review-discussion.md",
+            file=sys.stderr,
+        )
+        return 1
+
+    bullet_line = None
+    for line in text.splitlines():
+        if line.strip().startswith("- **Tooling/validator claims**"):
+            bullet_line = line
+            break
+
+    if bullet_line is None or "PYTHONPATH=" not in bullet_line:
+        print(
+            "FAIL: test_criteria_section_has_tooling_claim_consistency_bullet:"
+            " 'PYTHONPATH=' not found on the Tooling/validator claims bullet line",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        "PASS: review-discussion.md Criteria section has tooling/validator claim"
+        " consistency bullet"
+    )
+    return 0
 
 
 if __name__ == "__main__":
