@@ -32,9 +32,11 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
    - `wiki_path = _paths.resolve_wiki_path(git_root)`
+   - `worktree_root = _paths.resolve_hub_path()` (the task worktree root; used to anchor `_mill/` paths in nested layouts)
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`.
+   Call `cfg = _config.load_config(worktree_root, git_root)`.
    Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    Read `roles.plan-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Plan Review below).
    Entry step 4's `phase: discussing` row additionally reads two `pipeline.*` keys at the point of use (see "Entry-gate wait for upstream mill-start" below): `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent) — and `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
@@ -44,9 +46,7 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
 **Path Setup.**
 Derive:
 - `git_root = _paths.resolve_git_root()`
-- `worktree_root = _paths.resolve_hub_path()` (the hub root;
-  used to anchor `_mill/` paths in nested layouts)
-- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the hub root)
+- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the task worktree root; `worktree_root` is already bound at Entry step 1 above)
 
 `plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
 
