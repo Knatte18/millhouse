@@ -59,6 +59,8 @@ batches:
     commit_sha: f23f3c94b693105ac2dc28734e553ad3e89faa33
     verify_baseline_failures: []
   - name: discussion-review-tooling-claim-consistency-check
-    state: pending
+    state: running
+    implementer_session: 44da21ce-be75-4d93-ae0d-1ba77978180a
+    start_sha: 506e7cbe0fdb883e4375d4034f760977385dc59b
     verify_baseline_failures: []
 ```
