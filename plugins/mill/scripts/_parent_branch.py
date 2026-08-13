@@ -21,6 +21,10 @@ Public API:
     git-commit) that must never block on a missing parent.
     check_liveness(branch, git_root) -> bool Return True if branch currently exists on origin
     (``git ls-remote --exit-code``).
+    resolve_dead_parent(dead_branch, git_root, cfg, *, max_hops=10) -> dict Walk the
+    ``archive/<slug>`` tag chain to find a live successor for a dead parent branch, falling back
+    to the configured base branch or reporting a cycle -- see the function's own docstring for the
+    three exact return shapes.
 
 The status.md yaml-block parser lives in ``_status`` but is internal;
 here we reuse the same ```yaml fence convention and hand-parse the single row we care about. Keeps
@@ -106,6 +110,68 @@ def check_liveness(branch: str, git_root: Path) -> bool:
         check=False,
     )
     return result.returncode == 0
+
+
+def resolve_dead_parent(
+    dead_branch: str, git_root: Path, cfg: dict, *, max_hops: int = 10
+) -> dict:
+    """
+    Walk the ``archive/<slug>`` tag chain to find a live successor for a dead parent branch.
+
+    Each hop reads the pre-cleanup-commit status.md at ``archive/<slug>~1`` (checking the
+    ``_mill/status.md`` layout first, then the legacy ``task/status.md`` layout) to recover that
+    ancestor's own recorded ``parent:`` row, then checks whether that parent is alive via
+    ``check_liveness``.
+    A dead parent becomes the next hop's branch to resolve;
+    the walk is capped at ``max_hops`` iterations to guard against a pathological cycle.
+
+    Returns exactly one of three outcome shapes:
+        ``{"outcome": "resolved", "branch": <live-branch>, "hops": [<slug>, ...]}``
+        ``{"outcome": "fallback", "reason": "no-tag" | "chain-end", "branch": <base_branch>, "hops": [...]}``
+        ``{"outcome": "cycle", "hops": [...]}`` -- every hop up to ``max_hops`` stayed dead.
+
+    Args:
+        dead_branch: The branch confirmed dead by ``check_liveness`` before this call.
+        cfg: Deep-merged config dict;
+            reads ``spawn.branch_prefix`` (to derive each hop's slug) and
+            ``git.base_branch`` (the fallback target, default ``"main"``).
+    """
+    prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+    base_branch = cfg.get("git", {}).get("base_branch", "main")
+    branch = dead_branch
+    hops: list[str] = []
+    for _ in range(max_hops):
+        slug = branch.removeprefix(prefix)
+        hops.append(slug)
+
+        tag_check = _subprocess_util.run(
+            ["git", "-C", str(git_root), "rev-parse", "--verify", "--quiet", f"refs/tags/archive/{slug}"],
+            check=False,
+        )
+        if tag_check.returncode != 0:
+            return {"outcome": "fallback", "reason": "no-tag", "branch": base_branch, "hops": hops}
+
+        show_result = _subprocess_util.run(
+            ["git", "-C", str(git_root), "show", f"archive/{slug}~1:_mill/status.md"],
+            check=False,
+        )
+        if show_result.returncode != 0:
+            show_result = _subprocess_util.run(
+                ["git", "-C", str(git_root), "show", f"archive/{slug}~1:task/status.md"],
+                check=False,
+            )
+        if show_result.returncode != 0:
+            return {"outcome": "fallback", "reason": "chain-end", "branch": base_branch, "hops": hops}
+
+        parent = _parse_parent_from_yaml_text(show_result.stdout)
+        if parent is None:
+            return {"outcome": "fallback", "reason": "chain-end", "branch": base_branch, "hops": hops}
+
+        if check_liveness(parent, git_root):
+            return {"outcome": "resolved", "branch": parent, "hops": hops}
+        branch = parent
+
+    return {"outcome": "cycle", "hops": hops}
 
 
 def resolve(
