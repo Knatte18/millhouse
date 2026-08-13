@@ -58,6 +58,8 @@ batches:
     start_sha: fbd0096a706fe88f438496bbbf1aa73779f296d3
     commit_sha: 0c146bbcf35e532c25826a01bfaa843c08f68d20
   - name: integration-tests
-    state: pending
+    state: running
+    implementer_session: f0b623b5-70d9-446a-87f8-aa6fa64c63ed
+    start_sha: 6700391de0a8d7b3bc907c07f98f4cc42d13a35e
     verify_baseline_failures: []
 ```
