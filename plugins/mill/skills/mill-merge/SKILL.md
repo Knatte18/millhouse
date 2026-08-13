@@ -439,15 +439,17 @@ All merged/open/closed/none routing is defined there.
 
 ## Rollback (Steps 1–5 only)
 
-Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back via the checkpoint `mill-merge-in` created:
+Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back the parent worktree to `origin/<parent_branch>`:
 
 ```bash
-git -C <parent-path> reset --hard mill-checkpoint-<name>
+git -C <parent-path> reset --hard origin/<parent_branch>
 ```
 
 Release the merge lock.
 Preserve the checkpoint branch.
 Report the failure with the step name.
+
+**Why `origin/<parent_branch>`, not the checkpoint:** `mill-checkpoint-<name>` is created in the *child* worktree by `mill-merge-in` and points at the child's own pre-merge-in history — resetting the parent worktree to it checks the parent out to unrelated child commits, regardless of which Steps 1-5 failure triggered the rollback. `origin/<parent_branch>` is the correct rollback target for the parent worktree in every case.
 
 **Cleanup-commit rollback (Step 4):** if the cleanup commit fails mid-way (e.g. `git rm` succeeded but `git commit` failed), reset the task branch:
 
@@ -455,8 +457,8 @@ Report the failure with the step name.
 git reset --hard HEAD
 ```
 
-**Dirty-parent-worktree halt (Step 5):** the pre-squash dirty-parent-worktree check (`mode == 'worktree'` only) that halts Step 5 before `merge --squash` runs is exempt from this rollback — no checkpoint reset applies, and there is no `git reset --hard` at all.
-Nothing has been mutated yet at that halt point: running `git -C <parent-path> reset --hard mill-checkpoint-<name>` there would destroy exactly the independent uncommitted parent-worktree work the halt message's scenario (a) tells the operator to commit or stash.
+**Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5):** the pre-squash dirty-parent-worktree check and the pre-squash parent-fast-forward check (both `mode == 'worktree'` only) that halt Step 5 before `merge --squash` runs are exempt from this rollback — no reset applies, and there is no `git reset --hard` at all.
+Nothing has been mutated yet at either halt point: running `git -C <parent-path> reset --hard origin/<parent_branch>` there would destroy exactly the independent uncommitted (or unpushed local-commit) parent-worktree work each halt message tells the operator to reconcile manually.
 
 Post-Step-5 failures (archive tag, Home.md, sidebar) are **not** rolled back — the merge on parent is production state and un-doing it would waste the squash that the PR or direct merge already committed to origin.
 
