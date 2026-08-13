@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: misc-small-bugs-spawn-implement-cleanliness
 branch: hanf/misc-small-bugs-spawn-implement-cleanliness
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-cleanliness-unresolvable-parent-diff  '2026-08-13T08:42:54Z'
 approved-discussion-review-tooling-claim-consistency-check  '2026-08-13T08:48:20Z'
 holistic-reviewing  '2026-08-13T08:48:47Z'
 holistic-approved  '2026-08-13T08:51:51Z'
+done  '2026-08-13T08:52:25Z'
 ```
 
 ## Batches
