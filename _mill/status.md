@@ -39,11 +39,15 @@ implementing  '2026-08-13T06:06:13Z'
 ```yaml
 batches:
   - name: parent-liveness-module
-    state: pending
+    state: running
+    implementer_session: 2d7713c2-6fa9-4c56-aad5-a0f395cb0c50
+    start_sha: f86f49eccb0cbc14deeede8075c12b9bee9e60e7
+    verify_baseline_failures: []
   - name: mill-merge-skill-fixes
     state: pending
   - name: mill-merge-in-and-conflict-brief
     state: pending
   - name: integration-tests
     state: pending
+    verify_baseline_failures: []
 ```
