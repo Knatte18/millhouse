@@ -46,7 +46,9 @@ batches:
     commit_sha: d96b156acef52c01fa08978b3e99f2d92ee664f2
     verify_baseline_failures: []
   - name: mill-merge-skill-fixes
-    state: pending
+    state: running
+    implementer_session: 6314c165-c614-4d50-a9c2-e33d6d4926c2
+    start_sha: 2022d2a1f8e07aa105824dab3c57a620b06abfe1
   - name: mill-merge-in-and-conflict-brief
     state: pending
   - name: integration-tests
