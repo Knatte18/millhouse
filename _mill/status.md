@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r4
+phase: planned
 slug: mill-plan-skilldoc-and-logic-bugs
 branch: hanf/mill-plan-skilldoc-and-logic-bugs
 plan: _mill/plan
@@ -27,4 +27,5 @@ plan-fix-r2  '2026-08-13T08:55:34Z'
 plan-review-r3  '2026-08-13T09:03:45Z'
 plan-fix-r3  '2026-08-13T09:03:45Z'
 plan-review-r4  '2026-08-13T09:10:21Z'
+planned  '2026-08-13T09:10:38Z'
 ```
