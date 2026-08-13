@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-skill-doc-and-logic-fixes
 slug: mill-plan-skilldoc-and-logic-bugs
 branch: hanf/mill-plan-skilldoc-and-logic-bugs
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r3  '2026-08-13T09:03:45Z'
 plan-review-r4  '2026-08-13T09:10:21Z'
 planned  '2026-08-13T09:10:38Z'
 implementing  '2026-08-13T09:11:02Z'
+approved-skill-doc-and-logic-fixes  '2026-08-13T09:19:44Z'
 ```
 
 ## Batches
@@ -36,8 +37,9 @@ implementing  '2026-08-13T09:11:02Z'
 ```yaml
 batches:
   - name: skill-doc-and-logic-fixes
-    state: running
+    state: approved
     implementer_session: 5ced2794-0e3a-42f8-b500-cbe93ff0a0ab
     start_sha: 46a76c525bc45adba28d7e3f8973729a38ca7052
+    commit_sha: 75558eb43bad7e4b7d894d97b78606c589e5ba9c
     verify_baseline_failures: []
 ```
