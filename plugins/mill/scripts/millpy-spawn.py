@@ -215,6 +215,17 @@ def main(argv: list[str] | None = None) -> int:
             exclude={"wiki", "active"},
         )
 
+        # Defensive self-heal: copy_millhouse should have copied config.local.yaml from the hub,
+        # but if it didn't (cause unconfirmed -- copy_millhouse has no swallowed exceptions),
+        # write it directly so the new worktree is never left without one.
+        config_local_path = dest_hub / ".millhouse" / "config.local.yaml"
+        if not config_local_path.exists():
+            config_local_path.parent.mkdir(parents=True, exist_ok=True)
+            config_local_path.write_text(
+                yaml.safe_dump({"hub_relative_path": hub_subpath}),
+                encoding="utf-8",
+            )
+
         # Timestamp used for write_initial_status.
         ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

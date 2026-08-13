@@ -110,11 +110,16 @@ def compute_scope_violations(hub_root: Path, git_root: Path | None) -> list[str]
     return sorted(violations)
 
 
-def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str]:
+def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str] | None:
     """Return file paths changed by the task vs the parent branch.
 
     Runs `git diff --name-only <parent_branch>...HEAD` and returns the parsed output as a list of
     relative paths.
+
+    Returns:
+        The parsed list of relative paths, or None when the diff itself could not be resolved
+        (e.g. the parent branch ref no longer exists) -- distinct from a genuinely empty `[]`
+        result.
     """
     result = _subprocess_util.run(
         ["git", "diff", "--name-only", f"{parent_branch}...HEAD"],
@@ -123,10 +128,10 @@ def _parent_diff_names(worktree: Path, parent_branch: str) -> list[str]:
     if result.returncode != 0:
         print(
             f"[cleanliness] warning: git diff --name-only {parent_branch}...HEAD"
-            f" exited {result.returncode} -- treating parent diff as empty",
+            f" exited {result.returncode} -- parent diff is unresolvable (unknown, not empty)",
             file=sys.stderr,
         )
-        return []
+        return None
     return [line for line in result.stdout.splitlines() if line]
 
 
@@ -154,7 +159,7 @@ def _filter_to_task_scope(porcelain_lines: list[str], task_dir: Path, owned_path
     return sorted(in_scope)
 
 
-def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) -> list[str]:
+def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) -> list[str] | None:
     """Return in-scope dirty files at task completion.
 
     Task scope = the task_dir subtree union paths changed by the task's own commits vs the parent
@@ -168,13 +173,16 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
         parent_branch: Name of the parent branch (e.g., "main").
 
     Returns:
-        Sorted list of dirty files within the task scope, in porcelain format.
+        Sorted list of dirty files within the task scope, in porcelain format, or None when the
+        parent diff itself is unresolvable -- distinct from a genuinely empty result.
     """
     # Get current dirt
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
 
     # Get paths changed by the task
     parent_diff_names = _parent_diff_names(worktree, parent_branch)
+    if parent_diff_names is None:
+        return None
     owned_paths = set(parent_diff_names)
 
     # Ensure task_dir is worktree-relative for path membership checks.
@@ -325,7 +333,7 @@ def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[li
 
 def revert_out_of_scope_drift(
     worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str] | None]:
     """
     Revert out-of-scope formatter drift and return status.
 
@@ -352,15 +360,22 @@ def revert_out_of_scope_drift(
 
     Returns:
         A tuple of (reverted_paths, remaining_in_scope_lines) where:
-        - reverted_paths: sorted list of hub-relative file paths that were reverted.
+        - reverted_paths: sorted list of hub-relative file paths that were reverted. Always `[]`
+        (never None) when the parent diff is unresolvable, since nothing was attempted.
         - remaining_in_scope_lines: sorted list of in-scope porcelain lines (with hub-relative
-        paths) still dirty after revert.
+        paths) still dirty after revert, or None when the parent diff itself is unresolvable --
+        distinct from a genuinely empty result.
     """
     # Get current dirt (git-root-relative, regardless of the cwd passed to git)
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
 
     # Get paths changed by the task (also git-root-relative, same reason)
     parent_diff_names = _parent_diff_names(worktree, parent_branch)
+    if parent_diff_names is None:
+        # Owned-path set is unknown -- nothing can be safely reverted (would risk
+        # reverting genuinely task-owned files), so report unknown scope rather than
+        # silently proceeding as if nothing were owned.
+        return ([], None)
     owned_paths = set(parent_diff_names)
 
     # Compute the hub_prefix using the same technique as compute_scope_violations: empty for a flat layout (worktree == git_root) or an unresolved git_root.

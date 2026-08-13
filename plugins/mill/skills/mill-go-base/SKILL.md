@@ -650,16 +650,23 @@ in_scope_dirt = remaining_in_scope_lines
 ```
 
 `signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
-`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None) -> tuple[list[str], list[str]]`
+`signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None) -> tuple[list[str], list[str] | None]`
 
-If `in_scope_dirt` is non-empty (genuine implementer-introduced dirt within task scope that did not pre-date the batch):
+If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists -- so `reverted_paths` is `[]` and nothing was safely revertable):
+- `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+- `_status.set_batch_field(status_path, batch_name, "blocked_reason", "parent diff unresolvable -- cannot determine in-scope drift")`
+- `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+- Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — parent diff unresolvable"`
+- Go to *Blocked*.
+
+If `in_scope_dirt` is non-empty (and not `None`; genuine implementer-introduced dirt within task scope that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — dirty tree"`
 - Go to *Blocked*.
 
-If `in_scope_dirt` is empty, record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
+If `in_scope_dirt` is empty (and not `None`), record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
 Then continue to "3.
 Code Review loop" as normal.
 

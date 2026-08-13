@@ -50,9 +50,13 @@ parent_branch = _parent_branch.resolve(status_path, interactive=False)
 in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
 ```
 
-If `in_scope_dirt` is non-empty, self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
+If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists), halt immediately with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent diff unresolvable (parent branch: <parent_branch>). Investigate the parent branch and retry.` Do NOT fall through to the self-resolve step below -- with the owned-path scope itself unknown, there is no safe file list to commit.
+
+If `in_scope_dirt` is non-empty (and not `None`), self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
 no push — matches every other Builder-owned Handoff-phase commit in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Board discipline").
 Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
+
+If the re-check returns `None` (the parent diff became unresolvable between the two checks), halt with the same `BLOCKED: cannot determine in-scope dirt at task completion -- ...` message as above.
 
 If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), halt with: `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.` where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt.
 Do NOT set `phase: done` when the gate fires;
