@@ -31,13 +31,20 @@ implementing  '2026-08-13T08:24:26Z'
 ```yaml
 batches:
   - name: hub-path-terminal-fallback
-    state: pending
+    state: running
+    implementer_session: 18a92d71-512b-4a82-a375-64c02a3cc765
+    start_sha: a3eaf8edee1747b9163f1c905fd6210957cc69d1
+    verify_baseline_failures: []
   - name: spawn-config-local-yaml-defensive-write
     state: pending
+    verify_baseline_failures: []
   - name: finalize-batch-scoped-dirty-check
     state: pending
+    verify_baseline_failures: []
   - name: cleanliness-unresolvable-parent-diff
     state: pending
+    verify_baseline_failures: []
   - name: discussion-review-tooling-claim-consistency-check
     state: pending
+    verify_baseline_failures: []
 ```
