@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-workflow-routing-and-index
+phase: holistic-reviewing
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-08-14T09:57:50Z'
 implementing  '2026-08-14T09:58:26Z'
 approved-shared-code-comments-skill  '2026-08-14T10:03:15Z'
 approved-workflow-routing-and-index  '2026-08-14T10:05:56Z'
+holistic-reviewing  '2026-08-14T10:06:33Z'
 ```
 
 ## Batches
