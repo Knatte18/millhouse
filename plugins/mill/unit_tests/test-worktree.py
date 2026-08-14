@@ -221,6 +221,79 @@ def main() -> int:
             assert raised_locked, "expected WorktreeLockedError when rmtree fallback raises PermissionError"
             print("PASS: remove_safe raises WorktreeLockedError when rmtree fallback raises PermissionError")
 
+        # --- remove_safe retries safe_rmtree once after WinError 145 and succeeds ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc = OSError("[WinError 145] The directory is not empty")
+            lock_exc.winerror = 145
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc, None]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()) as mock_dotnet_run:
+                                remove_safe(path, cwd=cwd, junctions_cfg={})
+            assert mock_rmtree.call_count == 2, "expected safe_rmtree to be called twice (initial attempt + one retry)"
+            assert mock_dotnet_run.call_count == 1, "expected exactly one dotnet build-server shutdown call"
+            assert mock_dotnet_run.call_args.args[0] == ["dotnet", "build-server", "shutdown"], "expected the dotnet build-server shutdown command to be invoked"
+            print("PASS: remove_safe retries safe_rmtree once after WinError 145 and succeeds")
+
+        # --- remove_safe raises WorktreeLockedError when retry also raises WinError 145 ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc_1 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_1.winerror = 145
+            lock_exc_2 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_2.winerror = 145
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()):
+                                try:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                                except WorktreeLockedError:
+                                    raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError when retry also raises WinError 145"
+            assert mock_rmtree.call_count == 2, "expected safe_rmtree to be called twice (initial attempt + one retry, not more)"
+            print("PASS: remove_safe raises WorktreeLockedError when retry also raises WinError 145")
+
+        # --- remove_safe re-raises a non-145 OSError from rmtree fallback unchanged (no retry) ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            plain_exc = OSError("some other rmtree failure")
+            raised = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=plain_exc):
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()):
+                                try:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                                except OSError as exc:
+                                    raised = True
+                                    assert exc is plain_exc, "expected the original OSError instance to propagate unchanged"
+            assert raised, "expected a non-145 OSError to propagate uncaught past remove_safe"
+            print("PASS: remove_safe re-raises a non-145 OSError from rmtree fallback unchanged (no retry)")
+
         # --- remove_safe raises WorktreeLockedError on "Invalid argument" in git stderr ---
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "wt"
