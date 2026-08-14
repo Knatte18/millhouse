@@ -9,6 +9,7 @@ import subprocess
 import sys
 import _agent_dispatch
 import _cleanliness
+import _pygit2_util
 import _status
 import _subprocess_util
 import _timestamp
@@ -418,16 +419,22 @@ def _in_scope_dirty_stuck(
     task_dir: Path | None,
     parent_branch: str | None,
     session_id: str | None,
+    start_sha: str | None,
 ) -> dict | None:
     """
     Check whether any in-scope files are dirty at finalize time.
 
-    Returns None when task_dir or parent_branch is None (gate disabled).
-    Otherwise calls _cleanliness.compute_terminal_dirt;
-    if the returned list is non-empty, returns a stuck dict.
-    Any exception from compute_terminal_dirt (including GitOpsError when project_root is not a real
-    git repo) is caught and treated as a no-op -- the authoritative mill-go 2b cleanliness gate
-    still runs afterward.
+    Returns None when task_dir, parent_branch, or start_sha is None (gate disabled).
+    Unlike _cleanliness.compute_terminal_dirt (the task-wide, authoritative gate used by mill-go's
+    separate terminal cleanliness check), this gate deliberately drops task_dir's blanket subtree
+    inclusion: owned paths are scoped to `git diff --name-only start_sha` -- a working-tree diff
+    against this batch's own start commit -- intersected with `git status --porcelain` dirt. This
+    keeps a prior, already-approved batch's committed file out of scope for the current batch's
+    gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
+    current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
+    that would reintroduce the false-block this function exists to avoid.
+    Any exception (including GitOpsError when project_root is not a real git repo) is caught and
+    treated as a no-op -- the authoritative mill-go 2b cleanliness gate still runs afterward.
 
     Args:
         project_root: Path to the worktree root.
@@ -436,22 +443,29 @@ def _in_scope_dirty_stuck(
         parent_branch: Name of the parent branch (e.g. "main");
         None disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
+        start_sha: This batch's start commit SHA; None disables the gate.
 
     Returns:
         A stuck dict with stuck_type="logic" when dirty,
         or None otherwise.
     """
     # Gate is a no-op when required inputs are absent.
-    if task_dir is None or parent_branch is None:
+    if task_dir is None or parent_branch is None or start_sha is None:
         return None
 
     try:
-        dirt = _cleanliness.compute_terminal_dirt(project_root, task_dir, parent_branch)
+        diff_result = _subprocess_util.run(
+            ["git", "diff", "--name-only", start_sha],
+            cwd=project_root,
+        )
+        if diff_result.returncode != 0:
+            return None
+        owned_paths = {line for line in diff_result.stdout.splitlines() if line}
+        porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
+        dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
     except Exception:
-        # compute_terminal_dirt raises GitOpsError on non-git paths (e.g.
-        # test fixtures).
-        # Treat any failure as a safe no-op;
-        # the mill-go gate is authoritative.
+        # Any failure (including GitOpsError on non-git paths, e.g. test fixtures) is a
+        # safe no-op; the mill-go 2b cleanliness gate is authoritative.
         return None
 
     if dirt:
@@ -509,6 +523,30 @@ def _has_windows_cleanup_race_signature(text: str) -> bool:
         "winerror 32",
     ]
     return any(sig in text_lower for sig in cleanup_signatures)
+
+
+def _has_dotnet_lock_race_signature(text: str) -> bool:
+    """
+    Check if text contains a dotnet build-server file-lock race signature (case-insensitive).
+
+    Detects the MSB3021/MSB3027 testhost/MSBuild lock signature ("msb3021", "msb3027",
+    "is locked by:") distinct from _has_windows_cleanup_race_signature's benign-cleanup
+    signatures -- this signature triggers a retry-and-judge response, never a benign pass.
+
+    Args:
+        text: A string to check (e.g., a verify command's combined stdout+stderr).
+
+    Returns:
+        True if any dotnet-lock-race signature is present;
+        False otherwise.
+    """
+    text_lower = text.lower()
+    dotnet_lock_patterns = [
+        "msb3021",
+        "msb3027",
+        "is locked by:",
+    ]
+    return any(pattern in text_lower for pattern in dotnet_lock_patterns)
 
 
 def _is_benign_windows_cleanup(output: str) -> bool:
@@ -779,6 +817,13 @@ def _run_verify_gate(
     benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the
     non-zero exit as success and returns None.
 
+    On Windows, when the command contains "dotnet" and the failure output matches a dotnet
+    build-server file-lock signature (per _has_dotnet_lock_race_signature: MSB3021, MSB3027, or
+    "is locked by:"), retries the same command once -- after the unconditional post-run shutdown
+    below has already run. A passing retry returns None exactly like any other pass. A
+    still-failing retry returns a stuck dict built from the retry's own output, with reason
+    prefixed by "[retried once after dotnet build-server shutdown; still failing] ".
+
     After the verify subprocess completes (regardless of exit code), if the platform is win32 and
     the command contains "dotnet", runs `dotnet build-server shutdown` to release
     VBCSCompiler/MSBuild locks that prevent re-runs.
@@ -847,6 +892,34 @@ def _run_verify_gate(
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
+            retry_marker = ""
+            if (
+                sys.platform == "win32"
+                and verify_cmd is not None
+                and "dotnet" in verify_cmd.lower()
+                and _has_dotnet_lock_race_signature(output)
+            ):
+                # A stale build-server node from an earlier dotnet invocation in this
+                # worktree can still hold file handles into bin/obj when this command
+                # runs. The unconditional shutdown above already blocked until that
+                # process exited, so a bare re-run of the same command usually clears
+                # the race with no code changes (GitHub #848, #860).
+                retry_result = subprocess.run(
+                    run_args,
+                    capture_output=True,
+                    text=True,
+                    cwd=effective_cwd,
+                    **run_kwargs,
+                )
+                if retry_result.returncode == 0:
+                    return None
+                output = retry_result.stdout + retry_result.stderr
+                if sys.platform == "win32" and _is_benign_windows_cleanup(output):
+                    return None
+                retry_marker = (
+                    "[retried once after dotnet build-server shutdown; "
+                    "still failing] "
+                )
             # Extract every raw failure-marker line from the FULL, untruncated output -- this is the signature set _run_verify_gates uses (after normalization) for baseline/finalize subset-diff comparison, distinct from the capped excerpt used below for the human-facing reason.
             signatures = _extract_failure_signatures(output)
             # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
@@ -865,7 +938,7 @@ def _run_verify_gate(
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
-                "reason": reason,
+                "reason": retry_marker + reason,
                 "signatures": signatures,
             }
     except Exception as e:
@@ -1756,7 +1829,7 @@ def _forward_output(
 
             # In-scope dirty-tree gate: demote to stuck/logic when tracked in-scope files remain dirty.
             _dirty_result = _in_scope_dirty_stuck(
-                project_root, task_dir, parent_branch, _gate_session_id
+                project_root, task_dir, parent_branch, _gate_session_id, start_sha
             )
             if _dirty_result is not None:
                 print(json.dumps(_dirty_result))

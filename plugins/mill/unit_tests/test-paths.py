@@ -385,6 +385,34 @@ def main() -> int:
             assert got.exists(), f"flat layout task path should exist"
         print("PASS: resolve_task_path flat layout finds _mill/status.md (regression)")
 
+        # Regression: resolve_hub_path terminal fallback on a task worktree whose own
+        # config.local.yaml is missing must return the task worktree's own git_root,
+        # not the main worktree (#833).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            wts_dir = tmp_path / "wts"
+            wts_dir.mkdir()
+            main_root = wts_dir / "millhouse"
+            main_root.mkdir()
+            subprocess.run(["git", "init", "--quiet", str(main_root)], check=True)
+            _write_config(main_root, "hub_relative_path: .\n")
+            linked_worktree = wts_dir / "feat"
+            subprocess.run(
+                ["git", "-C", str(main_root), "worktree", "add", str(linked_worktree)],
+                capture_output=True,
+            )
+            # Deliberately no .millhouse/ anywhere inside linked_worktree — reproduces the
+            # exact #833 scenario (a task worktree whose own local config is missing).
+            got = _paths.resolve_hub_path(linked_worktree)
+            assert got == linked_worktree, (
+                f"task worktree with missing config.local.yaml: expected own git_root "
+                f"{linked_worktree}, got {got}"
+            )
+        print(
+            "PASS: resolve_hub_path task worktree missing config.local.yaml -> falls back "
+            "to own git_root, not main_root (#833)"
+        )
+
         # resolve_wiki_path — container-form default (main_root under wts/)
 
         with tempfile.TemporaryDirectory() as tmp:

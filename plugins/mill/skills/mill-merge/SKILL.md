@@ -29,16 +29,15 @@ Always run from the child worktree — never from the parent.
    On success: extract `slug = active_data['slug']` and call `mode_inplace = _inplace.is_inplace(slug, git_root, cfg)`.
    Set `mode = 'inplace'` if `mode_inplace` else `mode = 'worktree'`.
 
-   Stale-worktree edge: if `active_data` is not None AND the corresponding `<worktrees-dir>/<slug>/` directory exists AND the branch matches, investigate the ambiguity directly instead of prompting: run `git worktree list --porcelain` and inspect the entry for `<worktrees-dir>/<slug>/`.
-   If that entry is absent from the output,
-   or its recorded branch no longer matches the active task branch (a stale registration), treat the directory as in-place cruft: `mode = 'inplace'`.
-   If the entry is present, current,
-   and its branch matches the active task branch, treat it as a genuine live worktree: `mode = 'worktree'`.
+   Stale-worktree edge: this disambiguation procedure — including its `status.md` write/commit/push side effects below — fires only when a genuine ambiguity exists.
+   Run `git worktree list --porcelain` unconditionally first (cheap, read-only, no side effects) and inspect the entry for `<worktrees-dir>/<slug>/`.
+   If that entry is present, current, and its branch matches the active task branch: no ambiguity — the `mode` already set above (from `_inplace.is_inplace()`) is trustworthy as-is.
+   Skip the rest of this Stale-worktree edge block and continue to Step 1.5.
+   If that entry is absent from the output, or its recorded branch no longer matches the active task branch (a stale registration): genuine ambiguity — treat the directory as in-place cruft, `mode = 'inplace'`, and run the disambiguation procedure below.
    Before appending the timeline row below, derive the path variables inline (Path Setup in Step 1.5 has not run yet at this point): `worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)` and `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`.
-   Either way, capture `original_phase = _status.read_full(status_path)["yaml"].get("phase")` before mutating anything, then `_status.append_phase(status_path, f"self-resolved-stale-worktree-{mode}", _timestamp.now_utc_iso())`. `append_phase` overwrites the top-level `phase:` field as well as appending the timeline row — since Step 5 immediately below reads that same `phase:` field and expects exactly `done` or `pr-pending`, restore it before continuing: `_status.append_phase(status_path, original_phase, _timestamp.now_utc_iso())`.
+   Capture `original_phase = _status.read_full(status_path)["yaml"].get("phase")` before mutating anything, then `_status.append_phase(status_path, f"self-resolved-stale-worktree-{mode}", _timestamp.now_utc_iso())`. `append_phase` overwrites the top-level `phase:` field as well as appending the timeline row — since Step 5 immediately below reads that same `phase:` field and expects exactly `done` or `pr-pending`, restore it before continuing: `_status.append_phase(status_path, original_phase, _timestamp.now_utc_iso())`.
    Commit both mutations together: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: self-resolved stale-worktree ambiguity ({mode})"` and push before continuing.
-   Only when `git worktree list --porcelain` output does not disambiguate the two cases, fall back to the existing safe default and halt: report to the operator that the branch matches the current cwd AND `<worktree_path>` exists, that `git worktree list --porcelain` output was inconclusive,
-   and that the run is stopping rather than guessing.
+   If the entry is present but its state does not cleanly resolve to either "current and matching" or "stale/absent/mismatched" above (an inconclusive `git worktree list --porcelain` read), fall back to the existing safe default and halt: report to the operator that the branch matches the current cwd AND `<worktree_path>` exists, that `git worktree list --porcelain` output was inconclusive, and that the run is stopping rather than guessing.
 
    If `mode == 'worktree'` AND `git worktree list --porcelain` shows the cwd is the main worktree:
 
@@ -78,6 +77,57 @@ Derive:
    Branch on `status_path.exists()` before calling `_parent_branch.resolve(...)` at all — the "file entirely absent" case (typical in the closed-PR re-entry path, where an earlier `mill-merge` invocation's own Step 4 cleanup commit already removed `task_dir`) has a resolvable fallback that the "file exists but the `parent:` row is missing" case does not.
    If `status_path.exists()` is `False`: skip the `_parent_branch.resolve(...)` call entirely for this run, set `parent_branch = cfg.git.base_branch` directly (already loaded in Entry Step 1, "Config keys to read," with its own documented `"main"` fallback when absent), and report the one-line operator-facing notice "status.md absent; assuming parent branch is `<base_branch>` (config `base_branch`) -- if this task's true parent differs (e.g. a stacked branch merging into something other than `base_branch`), abort and resolve manually."
    If `status_path.exists()` is `True`: call `_parent_branch.resolve(status_path, interactive=False, expected_slug=slug)` exactly as before.
+
+   **Liveness check (#817):** when `_parent_branch.resolve(...)` above returns successfully, verify the returned `parent_branch` is still live:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _parent_branch, _paths
+   git_root = _paths.resolve_git_root()
+   print(json.dumps({'alive': _parent_branch.check_liveness('<parent_branch>', git_root)}))
+   "
+   ```
+
+   If `alive` is `true`, continue as before — no further action.
+
+   If `alive` is `false`, resolve a successor:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _parent_branch, _paths, _config
+   git_root = _paths.resolve_git_root()
+   cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+   print(json.dumps(_parent_branch.resolve_dead_parent('<parent_branch>', git_root, cfg)))
+   "
+   ```
+
+   Report the result to the operator and require confirmation before mill-merge proceeds, except in the `cycle` case, which always halts outright with no confirmation prompt (there is no candidate branch to confirm):
+   - `outcome: "resolved"` — "Parent branch `<parent_branch>` no longer exists on origin. It appears to have been merged and archived (chain: `<hops, joined by ' -> '>`). The resolved successor parent is `<branch>`. Confirm before mill-merge proceeds against `<branch>`."
+   - `outcome: "fallback"` — "Parent branch `<parent_branch>` no longer exists on origin. No archive-tag chain could resolve a successor (`<reason>`). Falling back to the repo's base branch `<branch>`. Confirm before mill-merge proceeds against `<branch>`."
+   - `outcome: "cycle"` — halt outright, no confirmation prompt: "Archive-tag chain walk for `<parent_branch>` hit its 10-hop cap without resolving a live parent (chain: `<hops, joined by ' -> '>`). Investigate manually."
+
+   On operator confirmation (the `resolved` and `fallback` cases only), rebind `status.md`'s `parent:` row to the new branch and use it for the remainder of this run. Derive `status_path` the same way the rest of this Entry Step 4 already does (Path Setup 1.5's `worktree_root = _paths.resolve_active_hub(container_path, slug, cfg=cfg, git_root=git_root)` then `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])`) — never a fresh `_paths.resolve_hub_path()` + literal `'_mill/status.md'` derivation, which walks from cwd instead of the already-resolved `worktree_root` and bypasses the config-driven `cfg['paths']['status_md']` the rest of the file always reads:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import _status, _paths, _config
+   git_root = _paths.resolve_git_root()
+   container_path = _paths.resolve_container_path(git_root)
+   cfg = _config.load_config(_paths.resolve_hub_path(), git_root)
+   worktree_root = _paths.resolve_active_hub(container_path, '<slug>', cfg=cfg, git_root=git_root)
+   status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])
+   _status.update_field(status_path, 'parent', '<resolved_branch>')
+   "
+   git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: rebind dead parent branch for {slug}"
+   git -C <worktree> push
+   ```
+
+   `parent_branch` for the remainder of this run is now `<resolved_branch>`.
+
+   This liveness check applies only to the `status_path.exists()` True branch (the actual `_parent_branch.resolve(...)` call) — it does not apply to the `status_path.exists()` False fallback branch above it, which already sets `parent_branch = cfg.git.base_branch` directly and has its own separate operator-facing notice.
+
    On `_parent_branch.ParentBranchError` (status.md is missing the `parent:` row): `_status.set_blocked(status_path, f"missing parent: row for {slug}", timestamp=_timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-merge: blocked (missing parent: row) for {slug}"` and push, then halt with `BLOCKED: status.md is missing the parent: row for <slug> -- mill-spawn should have written it; set it manually and re-run /mill-merge.`
 5. **Phase gate — also the re-entry point for PR-path recovery.**
 
@@ -247,8 +297,29 @@ This step is direct path only.
 
   > "The parent worktree is not clean — either (a) this is independent uncommitted work in the parent worktree: commit or stash it, then re-run `/mill-merge`; or (b) this is a partially-applied squash left over from a Step 5 that failed after `merge --squash`/`reset`/`checkout` already staged changes but before `commit` landed: run `git -C <parent-path> commit` to complete it, or `git -C <parent-path> reset --hard` to discard it, then re-run."
 
-  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt (Step 5)" carve-out.
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below — see that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" carve-out.
   Nothing has been mutated yet at this halt point, so there is nothing to roll back.
+
+  **Pre-squash parent fast-forward (`mode == 'worktree'` only):** immediately after the dirty-parent-worktree check above confirms the parent worktree is clean, fast-forward the parent worktree's local branch to `origin/<parent_branch>`:
+
+  ```bash
+  git -C <parent-path> fetch origin "<parent_branch>"
+  git -C <parent-path> merge --ff-only "origin/<parent_branch>"
+  ```
+
+  This step also applies only when `mode == 'worktree'` — skip it entirely in in-place mode, same gate as the dirty-parent-worktree check immediately above it.
+
+  **Why:** `mill-merge-in` only advances the *child* branch to `origin/<parent_branch>`; it never touches the parent worktree's own local ref. Whenever `origin/<parent_branch>` has moved since the parent worktree last synced (a race, not specifically "non-linear history" — a plain fast-forward advance on origin triggers it just as easily as a merge commit), Step 5's squash-then-push below would otherwise run against a stale parent ref and get rejected as a non-fast-forward push.
+
+  **Not a conflict with the `merged` PR-state route's own "do not ff-sync" note:** the `### PR-state gate`'s `merged` route (`## Entry`) documents that the local parent branch is intentionally NOT fast-forwarded there, and says not to add a parent ff-sync step. That note is about the `merged` route specifically, which skips Step 5 entirely (it only runs Steps 4, 5.5, 6, 7, 8, 9). This card's fast-forward step lives inside `### 5. Direct squash` itself, which the `merged` route never reaches — so the two notes describe disjoint code paths, not a contradiction.
+
+  `merge --ff-only` fails only when the parent worktree's local branch and `origin/<parent_branch>` have genuinely diverged — the parent has local commits not present on `origin/<parent_branch>` AND `origin/<parent_branch>` has independently advanced past the parent's own last-synced point (neither ref is a fast-forward of the other). A parent with local-only commits whose `origin/<parent_branch>` has NOT independently moved is not a failure case — `--ff-only` reports "Already up to date" and exits 0 in that case, since a fast-forward trivially exists. If `merge --ff-only` fails (a genuine two-sided divergence — an out-of-band state this task does not otherwise expect), halt Step 5 — do NOT run `merge --squash` below — and report to the operator:
+
+  > "The parent worktree's local branch has diverged from `origin/<parent_branch>` — it has local commits not present on the remote. Reconcile manually (commit/push, or investigate the divergence), then re-run `/mill-merge`."
+
+  **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" paragraph, which covers both halts.
+
+  `reset --hard origin/<parent_branch>` is deliberately never used as the fast-forward mechanism here — it would silently discard any local-only commits on the parent worktree's branch, exactly the class of silent parent-state destruction the sibling rollback-target fix (Card 4) treats as a bug. `merge --ff-only` fails loudly instead.
 
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"
@@ -418,15 +489,17 @@ All merged/open/closed/none routing is defined there.
 
 ## Rollback (Steps 1–5 only)
 
-Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back via the checkpoint `mill-merge-in` created:
+Any failure between lock acquisition (Step 1) and the squash landing on parent (Step 5) rolls back the parent worktree to `origin/<parent_branch>`:
 
 ```bash
-git -C <parent-path> reset --hard mill-checkpoint-<name>
+git -C <parent-path> reset --hard origin/<parent_branch>
 ```
 
 Release the merge lock.
 Preserve the checkpoint branch.
 Report the failure with the step name.
+
+**Why `origin/<parent_branch>`, not the checkpoint:** `mill-checkpoint-<name>` is created in the *child* worktree by `mill-merge-in` and points at the child's own pre-merge-in history — resetting the parent worktree to it checks the parent out to unrelated child commits, regardless of which Steps 1-5 failure triggered the rollback. `origin/<parent_branch>` is the correct rollback target for the parent worktree in every case.
 
 **Cleanup-commit rollback (Step 4):** if the cleanup commit fails mid-way (e.g. `git rm` succeeded but `git commit` failed), reset the task branch:
 
@@ -434,8 +507,8 @@ Report the failure with the step name.
 git reset --hard HEAD
 ```
 
-**Dirty-parent-worktree halt (Step 5):** the pre-squash dirty-parent-worktree check (`mode == 'worktree'` only) that halts Step 5 before `merge --squash` runs is exempt from this rollback — no checkpoint reset applies, and there is no `git reset --hard` at all.
-Nothing has been mutated yet at that halt point: running `git -C <parent-path> reset --hard mill-checkpoint-<name>` there would destroy exactly the independent uncommitted parent-worktree work the halt message's scenario (a) tells the operator to commit or stash.
+**Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5):** the pre-squash dirty-parent-worktree check and the pre-squash parent-fast-forward check (both `mode == 'worktree'` only) that halt Step 5 before `merge --squash` runs are exempt from this rollback — no reset applies, and there is no `git reset --hard` at all.
+Nothing has been mutated yet at either halt point: running `git -C <parent-path> reset --hard origin/<parent_branch>` there would destroy exactly the independent uncommitted (or unpushed local-commit) parent-worktree work each halt message tells the operator to reconcile manually.
 
 Post-Step-5 failures (archive tag, Home.md, sidebar) are **not** rolled back — the merge on parent is production state and un-doing it would waste the squash that the PR or direct merge already committed to origin.
 

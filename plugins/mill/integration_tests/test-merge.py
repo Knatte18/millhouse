@@ -920,6 +920,398 @@ def main() -> int:
 
         print("PASS -- mill-merge phase-gate slug-mismatch fallback (#656/#659/#662)")
 
+        # === #824: pre-squash parent fast-forward (success + divergence halt) ===
+        # Reproduces the race #824 fixes: origin/<parent_branch> moves after the parent worktree's
+        # local ref last synced, and the new fast-forward step (batch 2 Card 3) must catch the
+        # parent up before the squash-then-push below, or the push is rejected as non-fast-forward.
+        # Neither sub-scenario needs a wiki, worktree, or junctions -- mirrors the #705
+        # dirty-parent-worktree-preflight fixtures' lightweight, self-contained real-git style.
+
+        # --- Success sub-scenario ---
+        container_ff = SCRATCH / f"merge-test-ff-{uuid.uuid4().hex[:8]}"
+        container_ff.mkdir(parents=True, exist_ok=True)
+        origin_ff = container_ff / "origin.git"
+        parent_ff = container_ff / "parent"
+        _run(["git", "init", "--bare", str(origin_ff), "-b", "main"], cwd=container_ff)
+        _run(["git", "clone", str(origin_ff), str(parent_ff)], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "config", "user.email", "test@example.com"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "config", "user.name", "Test"], cwd=container_ff)
+        (parent_ff / "README.md").write_text("ff success test\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_ff), "add", "README.md"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "commit", "-m", "init"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "push", "origin", "main"], cwd=container_ff)
+
+        # Simulates another thread's concurrent squash-merge landing on origin while parent_ff's
+        # local main sits stale -- parent_ff is deliberately never fetched here.
+        advancer_ff = container_ff / "advancer"
+        _run(["git", "clone", str(origin_ff), str(advancer_ff)], cwd=container_ff)
+        _run(["git", "-C", str(advancer_ff), "config", "user.email", "test@example.com"], cwd=container_ff)
+        _run(["git", "-C", str(advancer_ff), "config", "user.name", "Test"], cwd=container_ff)
+        (advancer_ff / "advanced.txt").write_text("advanced by another thread\n", encoding="utf-8")
+        _run(["git", "-C", str(advancer_ff), "add", "advanced.txt"], cwd=container_ff)
+        _run(["git", "-C", str(advancer_ff), "commit", "-m", "advance origin"], cwd=container_ff)
+        _run(["git", "-C", str(advancer_ff), "push", "origin", "main"], cwd=container_ff)
+
+        _run(["git", "-C", str(parent_ff), "checkout", "-b", "test/ff-success-child"], cwd=container_ff)
+        (parent_ff / "feature.txt").write_text("ff success feature\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_ff), "add", "feature.txt"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "commit", "-m", "feat: ff success child"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "checkout", "main"], cwd=container_ff)
+
+        # Run the fast-forward step exactly as batch 2 Card 3 documents.
+        ff_fetch = _run(["git", "-C", str(parent_ff), "fetch", "origin", "main"], cwd=container_ff, check=False)
+        ff_merge = _run(["git", "-C", str(parent_ff), "merge", "--ff-only", "origin/main"], cwd=container_ff, check=False)
+        _assert(ff_fetch.returncode == 0 and ff_merge.returncode == 0,
+                f"expected fast-forward to succeed, got fetch rc={ff_fetch.returncode} "
+                f"merge rc={ff_merge.returncode}")
+        parent_ff_main = _run(["git", "-C", str(parent_ff), "rev-parse", "main"], cwd=container_ff).stdout.strip()
+        origin_ff_main = _run(["git", "-C", str(origin_ff), "rev-parse", "main"], cwd=container_ff).stdout.strip()
+        _assert(parent_ff_main == origin_ff_main,
+                f"expected parent_ff's local main to catch up to origin, got "
+                f"{parent_ff_main!r} != {origin_ff_main!r}")
+
+        # Proves the fast-forward actually prevents the non-ff push rejection this fix targets.
+        _run(["git", "-C", str(parent_ff), "merge", "--squash", "test/ff-success-child"], cwd=container_ff)
+        _run(["git", "-C", str(parent_ff), "commit", "-m", "ff success squash"], cwd=container_ff)
+        ff_push = _run(["git", "-C", str(parent_ff), "push", "origin", "main"], cwd=container_ff, check=False)
+        _assert(ff_push.returncode == 0,
+                f"expected push after fast-forward to succeed (no non-ff rejection), "
+                f"got rc={ff_push.returncode}: {ff_push.stderr}")
+        print("PASS: #824 pre-squash parent fast-forward prevents the non-ff push rejection")
+
+        # --- Divergence-halt sub-scenario ---
+        # A one-sided advance (only local ahead) is NOT sufficient here -- `merge --ff-only` treats
+        # that as "Already up to date" and exits 0. Both refs must genuinely diverge (neither is an
+        # ancestor of the other) to exercise the halt path.
+        container_ff_halt = SCRATCH / f"merge-test-ff-halt-{uuid.uuid4().hex[:8]}"
+        container_ff_halt.mkdir(parents=True, exist_ok=True)
+        origin_ff_halt = container_ff_halt / "origin.git"
+        parent_ff_halt = container_ff_halt / "parent"
+        _run(["git", "init", "--bare", str(origin_ff_halt), "-b", "main"], cwd=container_ff_halt)
+        _run(["git", "clone", str(origin_ff_halt), str(parent_ff_halt)], cwd=container_ff_halt)
+        _run(["git", "-C", str(parent_ff_halt), "config", "user.email", "test@example.com"], cwd=container_ff_halt)
+        _run(["git", "-C", str(parent_ff_halt), "config", "user.name", "Test"], cwd=container_ff_halt)
+        (parent_ff_halt / "README.md").write_text("ff halt test\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_ff_halt), "add", "README.md"], cwd=container_ff_halt)
+        _run(["git", "-C", str(parent_ff_halt), "commit", "-m", "init"], cwd=container_ff_halt)
+        _run(["git", "-C", str(parent_ff_halt), "push", "origin", "main"], cwd=container_ff_halt)
+
+        advancer_ff_halt = container_ff_halt / "advancer"
+        _run(["git", "clone", str(origin_ff_halt), str(advancer_ff_halt)], cwd=container_ff_halt)
+        _run(["git", "-C", str(advancer_ff_halt), "config", "user.email", "test@example.com"], cwd=container_ff_halt)
+        _run(["git", "-C", str(advancer_ff_halt), "config", "user.name", "Test"], cwd=container_ff_halt)
+        (advancer_ff_halt / "origin-side.txt").write_text("advanced independently on origin\n", encoding="utf-8")
+        _run(["git", "-C", str(advancer_ff_halt), "add", "origin-side.txt"], cwd=container_ff_halt)
+        _run(["git", "-C", str(advancer_ff_halt), "commit", "-m", "advance origin independently"], cwd=container_ff_halt)
+        _run(["git", "-C", str(advancer_ff_halt), "push", "origin", "main"], cwd=container_ff_halt)
+
+        # Local-only commit on parent_ff_halt's main, never pushed -- both sides now hold a commit
+        # the other lacks, a genuine two-sided divergence.
+        (parent_ff_halt / "parent-side.txt").write_text("local-only parent commit\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_ff_halt), "add", "parent-side.txt"], cwd=container_ff_halt)
+        _run(["git", "-C", str(parent_ff_halt), "commit", "-m", "local-only parent commit"], cwd=container_ff_halt)
+
+        local_before = _run(
+            ["git", "-C", str(parent_ff_halt), "rev-parse", "main"], cwd=container_ff_halt
+        ).stdout.strip()
+        files_before = _run(["git", "-C", str(parent_ff_halt), "ls-files"], cwd=container_ff_halt).stdout
+
+        ff_halt_fetch = _run(
+            ["git", "-C", str(parent_ff_halt), "fetch", "origin", "main"], cwd=container_ff_halt, check=False
+        )
+        _assert(ff_halt_fetch.returncode == 0,
+                f"expected fetch to succeed (divergence is between local refs, not the fetch), "
+                f"got rc={ff_halt_fetch.returncode}")
+        ff_halt_merge = _run(
+            ["git", "-C", str(parent_ff_halt), "merge", "--ff-only", "origin/main"],
+            cwd=container_ff_halt, check=False,
+        )
+        _assert(ff_halt_merge.returncode != 0,
+                "expected merge --ff-only to fail on a genuine two-sided divergence, got rc=0")
+
+        local_after = _run(
+            ["git", "-C", str(parent_ff_halt), "rev-parse", "main"], cwd=container_ff_halt
+        ).stdout.strip()
+        files_after = _run(["git", "-C", str(parent_ff_halt), "ls-files"], cwd=container_ff_halt).stdout
+        halt_status = _run(
+            ["git", "-C", str(parent_ff_halt), "status", "--porcelain"], cwd=container_ff_halt
+        ).stdout
+        _assert(local_after == local_before,
+                f"expected parent_ff_halt's main to be untouched by the failed ff-only, "
+                f"got {local_after!r} != {local_before!r}")
+        _assert(files_after == files_before,
+                "expected the failed ff-only to leave the working tree file listing untouched")
+        _assert(halt_status.strip() == "",
+                f"expected a clean working tree after the failed ff-only halt, got {halt_status!r}")
+        print(
+            "PASS: #824 parent fast-forward halts (does not reset --hard) when the parent "
+            "worktree has genuinely diverged from origin"
+        )
+
+        # === #824: Steps 1-5 rollback resets to origin/<parent_branch>, not the child checkpoint ===
+        container_rb = SCRATCH / f"merge-test-rollback-{uuid.uuid4().hex[:8]}"
+        container_rb.mkdir(parents=True, exist_ok=True)
+        origin_rb = container_rb / "origin.git"
+        parent_rb = container_rb / "parent"
+        _run(["git", "init", "--bare", str(origin_rb), "-b", "main"], cwd=container_rb)
+        _run(["git", "clone", str(origin_rb), str(parent_rb)], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "config", "user.email", "test@example.com"], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "config", "user.name", "Test"], cwd=container_rb)
+        (parent_rb / "README.md").write_text("rollback test\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_rb), "add", "README.md"], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "commit", "-m", "init"], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "push", "origin", "main"], cwd=container_rb)
+
+        # Advance origin past parent_rb's local main, fetch it into parent_rb (populating
+        # refs/remotes/origin/main) but do NOT fast-forward local main -- local main and
+        # origin/main now point at two different commits.
+        advancer_rb = container_rb / "advancer"
+        _run(["git", "clone", str(origin_rb), str(advancer_rb)], cwd=container_rb)
+        _run(["git", "-C", str(advancer_rb), "config", "user.email", "test@example.com"], cwd=container_rb)
+        _run(["git", "-C", str(advancer_rb), "config", "user.name", "Test"], cwd=container_rb)
+        (advancer_rb / "origin-advance.txt").write_text("origin advanced\n", encoding="utf-8")
+        _run(["git", "-C", str(advancer_rb), "add", "origin-advance.txt"], cwd=container_rb)
+        _run(["git", "-C", str(advancer_rb), "commit", "-m", "advance origin"], cwd=container_rb)
+        _run(["git", "-C", str(advancer_rb), "push", "origin", "main"], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "fetch", "origin", "main"], cwd=container_rb)
+
+        local_sha = _run(["git", "-C", str(parent_rb), "rev-parse", "main"], cwd=container_rb).stdout.strip()
+        origin_sha = _run(["git", "-C", str(origin_rb), "rev-parse", "main"], cwd=container_rb).stdout.strip()
+        _assert(local_sha != origin_sha,
+                f"expected parent_rb's local main to differ from origin after the fetch-without-ff, "
+                f"got {local_sha!r} == {origin_sha!r}")
+
+        # Checkpoint branch on a third, unrelated commit -- the child worktree's own pre-merge-in
+        # history per #824's bug report, unrelated to the parent's state.
+        _run(["git", "-C", str(parent_rb), "checkout", "-b", "throwaway-checkpoint-source"], cwd=container_rb)
+        (parent_rb / "child-history.txt").write_text("unrelated child history\n", encoding="utf-8")
+        _run(["git", "-C", str(parent_rb), "add", "child-history.txt"], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "commit", "-m", "unrelated child history"], cwd=container_rb)
+        checkpoint_sha = _run(["git", "-C", str(parent_rb), "rev-parse", "HEAD"], cwd=container_rb).stdout.strip()
+        _run(["git", "-C", str(parent_rb), "branch", "-f", "mill-checkpoint-demo", checkpoint_sha], cwd=container_rb)
+        _run(["git", "-C", str(parent_rb), "checkout", "main"], cwd=container_rb)
+
+        # Repro (old, buggy target): the checkpoint branch lands the parent worktree on
+        # unrelated child history.
+        _run(["git", "-C", str(parent_rb), "reset", "--hard", "mill-checkpoint-demo"], cwd=container_rb)
+        repro_head = _run(["git", "-C", str(parent_rb), "rev-parse", "HEAD"], cwd=container_rb).stdout.strip()
+        _assert(repro_head == checkpoint_sha,
+                f"expected the old rollback target to land HEAD on the checkpoint sha "
+                f"{checkpoint_sha!r}, got {repro_head!r}")
+        print(
+            "PASS: repro -- old rollback target (mill-checkpoint-<name>) lands parent worktree "
+            "on unrelated child history (#824)"
+        )
+
+        # Undo the repro before proving the fix.
+        _run(["git", "-C", str(parent_rb), "reset", "--hard", local_sha], cwd=container_rb)
+
+        # Fix (new, correct target): rollback resets to origin/<parent_branch> regardless of which
+        # Steps 1-5 failure triggered it.
+        _run(["git", "-C", str(parent_rb), "reset", "--hard", "origin/main"], cwd=container_rb)
+        fix_head = _run(["git", "-C", str(parent_rb), "rev-parse", "HEAD"], cwd=container_rb).stdout.strip()
+        _assert(fix_head == origin_sha,
+                f"expected the fixed rollback target to land HEAD on origin's main "
+                f"{origin_sha!r}, got {fix_head!r}")
+        print("PASS: fix -- rollback resets parent worktree to origin/<parent_branch> (#824)")
+
+        # === #817: dead-parent-branch detection (torn-down + never-pushed) ===
+        container_dead = SCRATCH / f"merge-test-dead-parent-{uuid.uuid4().hex[:8]}"
+        container_dead.mkdir(parents=True, exist_ok=True)
+        origin_dead = container_dead / "origin.git"
+        repo_dead = container_dead / "repo"
+        _run(["git", "init", "--bare", str(origin_dead), "-b", "main"], cwd=container_dead)
+        _run(["git", "clone", str(origin_dead), str(repo_dead)], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "config", "user.email", "test@example.com"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "config", "user.name", "Test"], cwd=container_dead)
+        (repo_dead / "README.md").write_text("dead-parent test\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "README.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "init"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "push", "origin", "main"], cwd=container_dead)
+
+        # resolve_dead_parent only reads these two nested keys -- no _config.load_config call needed.
+        cfg_dead = {"spawn": {"branch_prefix": "test/"}, "git": {"base_branch": "main"}}
+
+        # --- Sub-scenario (a): torn-down parent (archive tag present, chain-walk resolves) ---
+        # Reproduces the "merged and torn down" shape mill-cleanup's _delete_remote_branch leaves:
+        # the branch existed, was pushed, and is now gone from origin.
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/parent-task"], cwd=container_dead)
+        (repo_dead / "parent-feature.txt").write_text("parent task feature\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "parent-feature.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "feat: parent task feature"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "push", "origin", "test/parent-task"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "push", "origin", "--delete", "test/parent-task"], cwd=container_dead)
+
+        parent_task_mill = repo_dead / "_mill"
+        parent_task_mill.mkdir()
+        (parent_task_mill / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Parent task\nparent: main\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "_mill/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "rm", "-r", "_mill"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: pre-merge cleanup"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/parent-task", "test/parent-task"], cwd=container_dead)
+
+        result_a = _parent_branch.resolve_dead_parent("test/parent-task", repo_dead, cfg_dead)
+        _assert(
+            result_a == {"outcome": "resolved", "branch": "main", "hops": ["parent-task"]},
+            f"expected resolved outcome for torn-down parent, got {result_a}",
+        )
+        print("PASS: #817 chain-walk resolves a torn-down (merged-and-archived) parent to its own live parent")
+
+        # --- Sub-scenario (b): never-pushed parent (no archive tag, falls back to base_branch) ---
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/never-pushed"], cwd=container_dead)
+
+        result_b = _parent_branch.resolve_dead_parent("test/never-pushed", repo_dead, cfg_dead)
+        _assert(
+            result_b == {"outcome": "fallback", "reason": "no-tag", "branch": "main", "hops": ["never-pushed"]},
+            f"expected no-tag fallback for never-pushed parent, got {result_b}",
+        )
+        print("PASS: #817 chain-walk falls back to base_branch when no archive tag exists (never-pushed parent)")
+
+        # --- Sub-scenario (c): archived parent with no status.md at either layout ---
+        # Distinct from sub-scenario (a)'s "no parent: row" case -- here neither _mill/status.md
+        # nor task/status.md exists in the pre-cleanup tree at all.
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/no-status-file"], cwd=container_dead)
+        (repo_dead / "feature.txt").write_text("no status file here\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "feature.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "feat: unrelated feature"], cwd=container_dead)
+        (repo_dead / "trivial-follow-up.txt").write_text("trivial follow-up\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "trivial-follow-up.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/no-status-file", "test/no-status-file"], cwd=container_dead)
+
+        result_c = _parent_branch.resolve_dead_parent("test/no-status-file", repo_dead, cfg_dead)
+        _assert(
+            result_c == {"outcome": "fallback", "reason": "chain-end", "branch": "main", "hops": ["no-status-file"]},
+            f"expected chain-end fallback when no status.md exists at either layout, got {result_c}",
+        )
+        print(
+            "PASS: #817 chain-walk falls back to chain-end when neither _mill/status.md nor "
+            "task/status.md exists in the archived tree"
+        )
+
+        # === #817: two chained dead-parent hops resolve to the live branch at the end of the chain ===
+        # Reuses container_dead/repo_dead/origin_dead/cfg_dead from the sub-scenarios above.
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "release/1.0", "main"], cwd=container_dead)
+        (repo_dead / "release-marker.txt").write_text("release 1.0\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "release-marker.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "feat: release 1.0 marker"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "push", "origin", "release/1.0"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/task-c"], cwd=container_dead)
+        chain_mill = repo_dead / "_mill"
+        chain_mill.mkdir(exist_ok=True)
+        (chain_mill / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Task C\nparent: release/1.0\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "_mill/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add status.md for task C"], cwd=container_dead)
+        (repo_dead / "task-c-trivial.txt").write_text("trivial\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "task-c-trivial.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for task C"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/task-c", "test/task-c"], cwd=container_dead)
+        # Dead by construction -- never pushed to origin.
+
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/task-b"], cwd=container_dead)
+        # main tracks no _mill/ (checkout removed the now-empty directory) -- recreate it.
+        chain_mill.mkdir(exist_ok=True)
+        (chain_mill / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Task B\nparent: test/task-c\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "_mill/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add status.md for task B"], cwd=container_dead)
+        (repo_dead / "task-b-trivial.txt").write_text("trivial\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "task-b-trivial.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for task B"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/task-b", "test/task-b"], cwd=container_dead)
+        # Dead by construction -- never pushed to origin.
+
+        # The walk starts at task-b (dead), follows its parent to task-c (also dead), follows
+        # THAT parent to release/1.0 (live), and stops there -- two hops recorded, not one.
+        result_chain = _parent_branch.resolve_dead_parent("test/task-b", repo_dead, cfg_dead)
+        _assert(
+            result_chain == {"outcome": "resolved", "branch": "release/1.0", "hops": ["task-b", "task-c"]},
+            f"expected the two-hop chain to resolve to release/1.0, got {result_chain}",
+        )
+        print(
+            "PASS: #817 chain-walk resolves through two chained dead-parent hops to the live "
+            "branch at the end of the chain"
+        )
+
+        # === #817: a genuine cycle hits the 10-hop cap and halts with outcome: cycle ===
+        # Reuses container_dead/repo_dead/cfg_dead. Two dead branches point at each other, forming
+        # a cycle with no live endpoint ever reachable.
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/cycle-x"], cwd=container_dead)
+        cycle_mill = repo_dead / "_mill"
+        cycle_mill.mkdir(exist_ok=True)
+        (cycle_mill / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Cycle X\nparent: test/cycle-y\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "_mill/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add status.md for cycle X"], cwd=container_dead)
+        (repo_dead / "cycle-x-trivial.txt").write_text("trivial\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "cycle-x-trivial.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for cycle X"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/cycle-x", "test/cycle-x"], cwd=container_dead)
+
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/cycle-y"], cwd=container_dead)
+        # main tracks no _mill/ (checkout removed the now-empty directory) -- recreate it.
+        cycle_mill.mkdir(exist_ok=True)
+        (cycle_mill / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Cycle Y\nparent: test/cycle-x\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "_mill/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add status.md for cycle Y"], cwd=container_dead)
+        (repo_dead / "cycle-y-trivial.txt").write_text("trivial\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "cycle-y-trivial.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for cycle Y"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/cycle-y", "test/cycle-y"], cwd=container_dead)
+
+        # Uses the default max_hops=10 -- the loop runs exactly 10 iterations, alternating
+        # cycle-x/cycle-y, and never finds a live branch or a chain-end.
+        result_cycle = _parent_branch.resolve_dead_parent("test/cycle-x", repo_dead, cfg_dead)
+        _assert(
+            result_cycle.get("outcome") == "cycle" and len(result_cycle.get("hops", [])) == 10,
+            f"expected a 10-hop cycle outcome, got {result_cycle}",
+        )
+        print("PASS: #817 chain-walk caps at 10 hops and reports outcome: cycle for a pathological cycle")
+
+        # === #817: legacy task/status.md layout is read via the same _mill/-then-task/ fallback order ===
+        # Reuses container_dead/repo_dead/cfg_dead. Proves the git show archive/legacy-task~1:_mill/status.md
+        # attempt fails (no such path in that tree) and the function falls back to
+        # archive/legacy-task~1:task/status.md, per batch 1 Card 2's documented fallback order.
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/legacy-task"], cwd=container_dead)
+        legacy_task_dir = repo_dead / "task"
+        legacy_task_dir.mkdir(exist_ok=True)
+        (legacy_task_dir / "status.md").write_text(
+            "```yaml\nphase: done\ntask: Legacy task\nparent: main\n```\n", encoding="utf-8"
+        )
+        _run(["git", "-C", str(repo_dead), "add", "task/status.md"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "task: add legacy status.md"], cwd=container_dead)
+        (repo_dead / "legacy-trivial.txt").write_text("trivial\n", encoding="utf-8")
+        _run(["git", "-C", str(repo_dead), "add", "legacy-trivial.txt"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for legacy task"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "tag", "archive/legacy-task", "test/legacy-task"], cwd=container_dead)
+
+        result_legacy = _parent_branch.resolve_dead_parent("test/legacy-task", repo_dead, cfg_dead)
+        _assert(
+            result_legacy == {"outcome": "resolved", "branch": "main", "hops": ["legacy-task"]},
+            f"expected legacy task/status.md layout to resolve via fallback order, got {result_legacy}",
+        )
+        print(
+            "PASS: #817 chain-walk falls back to the legacy task/status.md layout instead of "
+            "misclassifying it as chain-end"
+        )
+
         # === Run nested-hub scenario (new test for #497 bug 2) ===
         print(f"\n[test-merge] nested-hub scenario starting", file=sys.stderr)
         container_nested = SCRATCH / f"merge-test-nested-{uuid.uuid4().hex[:8]}"
@@ -1090,6 +1482,14 @@ def main() -> int:
                 print(f"Scratch preserved: {container_untracked}", file=sys.stderr)
             if "container_step5_guard" in locals():
                 print(f"Scratch preserved: {container_step5_guard}", file=sys.stderr)
+            if "container_ff" in locals():
+                print(f"Scratch preserved: {container_ff}", file=sys.stderr)
+            if "container_ff_halt" in locals():
+                print(f"Scratch preserved: {container_ff_halt}", file=sys.stderr)
+            if "container_rb" in locals():
+                print(f"Scratch preserved: {container_rb}", file=sys.stderr)
+            if "container_dead" in locals():
+                print(f"Scratch preserved: {container_dead}", file=sys.stderr)
         else:
             _safe_rmtree.safe_rmtree(container, allowed_root=container, ignore_errors=True)
             if "container_nested" in locals():
@@ -1128,6 +1528,16 @@ def main() -> int:
                     allowed_root=container_step5_guard,
                     ignore_errors=True,
                 )
+            if "container_ff" in locals():
+                _safe_rmtree.safe_rmtree(container_ff, allowed_root=container_ff, ignore_errors=True)
+            if "container_ff_halt" in locals():
+                _safe_rmtree.safe_rmtree(
+                    container_ff_halt, allowed_root=container_ff_halt, ignore_errors=True
+                )
+            if "container_rb" in locals():
+                _safe_rmtree.safe_rmtree(container_rb, allowed_root=container_rb, ignore_errors=True)
+            if "container_dead" in locals():
+                _safe_rmtree.safe_rmtree(container_dead, allowed_root=container_dead, ignore_errors=True)
 
 
 if __name__ == "__main__":
