@@ -150,29 +150,35 @@ something that was, in both cases, a pure timing artifact with no underlying cod
   `_safe_rmtree.safe_rmtree` with `getattr(exc, "winerror", None) == 145`, runs a
   best-effort `dotnet build-server shutdown`, and retries `safe_rmtree` once before raising
   `WorktreeLockedError`; and (b) `_run_baseline_stage`'s two `remove_safe` call sites
-  (`millpy-implement.py:379` and `:426`) are each wrapped in their own try/except so a
-  `WorktreeError`/`WorktreeLockedError` that survives (a) is logged to stderr and swallowed,
+  (`millpy-implement.py:379` and `:426`) are each wrapped in their own `try/except Exception`
+  (deliberately general — not narrowed to `WorktreeError`/`WorktreeLockedError`) so ANY
+  exception surviving (a) — including `remove_safe`'s unguarded `_subprocess_util.run` calls
+  (e.g. a missing `git` binary) and its call into `_junction.strip_all_in_worktree`, whose
+  exception surface this task does not otherwise touch — is logged to stderr and swallowed,
   never crashing the process.
 - Rationale: `remove_safe` is a shared helper (also used by `mill-merge`/`mill-cleanup`
   worktree teardown), so fixing the retry there benefits every caller, not just baseline.
   But `_run_baseline_stage`'s own docstring already documents "Never raises -- every failure
-  path prints a JSON line ... and returns 0", and `mill-go-base/SKILL.md` documents the
-  orchestrator's expectation of "log the reason and continue to batch 1 anyway" on a baseline
-  error — a promise the current code violates by letting a bare `OSError` from the `finally`
-  block's teardown call propagate out uncaught. Fixing only the retry (layer a) still leaves
-  a crash if the lock genuinely never clears (e.g. a truly stuck process); fixing only the
-  wrapper (layer b) leaves every other `remove_safe` caller exposed to the same crash. Both
-  layers together give real self-healing (retry) plus a hard guarantee the documented
-  contract holds even when self-healing fails, matching the issue's own framing of an
-  orphaned `.scratch/verify-baseline-*` dir as acceptable, gitignored clutter — never a
-  crash.
+  path prints a JSON line ... and returns 0" — an *unconditional* promise, not one scoped to
+  the WinError-145 case alone — and `mill-go-base/SKILL.md` documents the orchestrator's
+  matching expectation of "log the reason and continue to batch 1 anyway" on a baseline error.
+  The current code violates that unconditional promise by letting any bare exception from the
+  `finally` block's teardown call propagate out uncaught, not only a WinError-145 one; a
+  wrapper scoped to just `WorktreeError`/`WorktreeLockedError` would still leave the docstring
+  overstated. Fixing only the retry (layer a) still leaves a crash if the lock genuinely never
+  clears (e.g. a truly stuck process) or if a wholly different exception occurs; fixing only
+  the wrapper (layer b) leaves every other `remove_safe` caller exposed to the same crash.
+  Both layers together give real self-healing (retry) plus a hard guarantee the documented
+  contract holds even when self-healing fails or a different failure mode occurs, matching the
+  issue's own framing of an orphaned `.scratch/verify-baseline-*` dir as acceptable, gitignored
+  clutter — never a crash.
 - Rejected: retry-only (still crashes if the lock never clears); wrapper-only (never
   self-heals, always leaves an orphaned scratch dir even for the common transient case).
 
 ### baseline-retry-match-on-winerror-not-string
 
 - Decision: match the retry-eligible error via `getattr(exc, "winerror", None) == 145`,
-  falling back to a string check (`"directory not empty" in str(exc).lower()`) only when the
+  falling back to a string check (`"directory is not empty" in str(exc).lower()`) only when the
   exception has no `winerror` attribute (e.g. a test double or non-Windows OSError).
 - Rationale: `winerror` is a stable numeric attribute independent of the OS display
   language, unlike the human-readable message text (which the same function's *existing*

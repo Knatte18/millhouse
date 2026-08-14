@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: mill-go-windows-buildserver-lock-hygiene
 branch: hanf/mill-go-windows-buildserver-lock-hygiene
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-14T08:33:12Z'
+discussion-fix-r1  '2026-08-14T08:49:35Z'
 ```
