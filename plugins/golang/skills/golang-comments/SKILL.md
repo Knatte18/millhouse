@@ -5,26 +5,15 @@ description: Godoc and inline comment rules for Go. Use when writing Go comments
 
 # Comments and Documentation Skill
 
+**Load the `code-comments` skill first.**
+
 Guidelines for code comments and documentation in Go.
-
----
-
-## Introduction
-
-The goal is to write code with doc comments detailed enough that a reader understands what a function does and why it exists, without reading the implementation — not how it works internally.
-Inline comments explain why something is done, never what is being done;
-the code already shows that.
 
 ---
 
 ## File-level comments
 
-Every `.go` file **must** begin with a comment that describes what this specific file is for — what it contains and why it exists.
-This comment is separated from the `package` declaration by a blank line so it is not treated as a godoc package comment.
-
-- Describe the file's role within the package, not just the package itself.
-- Write in plain narrative prose, not a bullet list.
-- One to three lines is usually sufficient.
+Separate the file's header comment from the `package` declaration by a blank line, so it is not parsed as a godoc package comment (see "Package doc comments" below for the no-blank-line form).
 
 **Example:**
 
@@ -64,10 +53,6 @@ All exported functions, types, methods, variables, and constants must have a doc
 
 - Place the doc comment immediately before the declaration with no blank line between comment and code.
 - Begin the comment with the name of the symbol being documented.
-- Explain **what the symbol does** and **why it exists** — not just a restatement of the name.
-- Do **not** narrate **how** it works internally (algorithm steps, control flow);
-  that belongs in the implementation, not the doc comment.
-- A reader should understand the symbol's purpose from its signature and doc comment alone, without reading the implementation.
 
 **Bad example:**
 
@@ -153,16 +138,19 @@ func (u *User) Delete(ctx context.Context) error {
 ## Constants and variables
 
 - Group-level variables and constants get one introductory comment explaining the purpose of the group.
-- Individual items get short end-of-line comments only when the name alone is insufficient to convey meaning.
+- Individual items get a short comment on the line above when the name alone is insufficient to convey meaning.
 
 **Example:**
 
 ```go
 // HTTP status codes used by the API.
 const (
-	StatusOK       = 200  // OK
-	StatusBadReq   = 400  // Bad Request
-	StatusNotFound = 404  // Not Found
+	// StatusOK indicates the request succeeded.
+	StatusOK = 200
+	// StatusBadReq indicates the request was malformed.
+	StatusBadReq = 400
+	// StatusNotFound indicates the resource does not exist.
+	StatusNotFound = 404
 )
 ```
 
@@ -184,18 +172,10 @@ func (b *Buffer) Write(p []byte) (int, error) {
 
 ---
 
-## Line-wrap style — semantic line breaks, not fixed-column wrapping
-
-Do not hard-wrap a multi-line doc comment at a fixed column.
-Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
-or a semicolon, where what follows has its own subject and verb.
-A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
-
-When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
-Readability wins over mechanical rule compliance in that edge case.
+## Line-wrap style
 
 Godoc collapses consecutive `//` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
+See the `code-comments` skill for the full line-wrap rule.
 
 **Bad example:**
 
@@ -214,13 +194,6 @@ func LoadPortfolio(dir string) (*Portfolio, error) {
 // and it returns an error if any file fails validation or two files declare the same position ID.
 func LoadPortfolio(dir string) (*Portfolio, error) {
 ```
-
----
-
-## Inline comments
-
-- Use inline comments only to explain **why**, never **what**.
-- If the code needs a "what" comment, the code itself is unclear — refactor instead.
 
 ---
 
@@ -246,12 +219,7 @@ if err := db.Query(ctx, sql); err != nil {
 
 ## Prohibited patterns
 
-- **Never** comment out code.
-  Delete it.
-  Version control handles history.
-- **No edit-history comments** ("added in v2", "removed old logic", "changed from X to Y").
 - **No `/* block comments */` inside function bodies.**
   Use `//` line comments only.
-- **No mechanical restatements** — if code needs explaining "what", refactor instead.
 
 <!-- Project-specific comments configuration goes here -->
