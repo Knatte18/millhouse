@@ -5,19 +5,19 @@ description: Docstring and inline comment rules for Python. Use when writing Pyt
 
 # Comments and Documentation Skill
 
+**Load the `code-comments` skill first.**
+
 Guidelines for docstrings and comments in Python.
-The goal is **readable code** — a developer should be able to understand the module's logic by reading the docstrings and comments without tracing through the implementation.
+The goal is **readable code** — a developer should be able to understand what a module does and why, without tracing through the implementation.
 
 ---
 
 ## Module docstrings
 
-- Every `.py` file **must** have a module-level docstring.
-- Describe the module's purpose in plain narrative prose.
-- For modules with multiple public functions or classes, list and briefly describe them.
-- For pipeline or orchestration modules, describe the steps performed.
+- Every `.py` file **must** have a module-level docstring — it is the file's header comment.
+- Follows the same triple-quote placement as function docstrings (see below): the opening `"""` alone on its own line, text starting on the next line.
 
-## Function docstrings — Google style, narrative depth
+## Function docstrings — Google style
 
 - Use **Google-style** docstrings.
 - **Multi-line docstrings start the text on the line after the opening `"""`**, never on the same line:
@@ -44,8 +44,10 @@ def foo():
   Either write a substantive docstring or omit it.
 - For any non-trivial function, the docstring must be **multi-line** and explain:
   1. **What** the function does at the domain level — not "processes data" but "stitches together a CBI price index from two sources".
-  2. **How** it works — the algorithm or logic in numbered steps or narrative prose.
-  3. **What** it returns — describe the structure, columns, or shape of the output.
+  2. **What** it returns — describe the structure, columns, or shape of the output.
+- See the `code-comments` skill's "many comments needed" corollary for when a function's steps need explaining — decompose into named sub-functions instead of narrating in the docstring.
+  Only when that isn't practical does a single inline comment inside the function body remain an accepted exception;
+  it does not go in the docstring.
 - Include `Args:` when parameters carry domain meaning not obvious from the name (e.g., `std_ratio`, `filter_outliers`, `RSI_stop_date`).
 - Include `Returns:` when the return value is a complex structure (DataFrame with specific columns, tuple, dict).
 - Omit docstrings only on trivial private helpers where the name and signature are self-explanatory.
@@ -57,14 +59,11 @@ def foo():
 def create_CBI_from_SSB_and_RSI(SSB_quarterly, RSI_weekly, RSI_stop_date=None):
     """Create CBI from SSB and RSI data."""
 
-# GOOD — explains the domain logic, the stitching algorithm, and the output structure
+# GOOD — explains the domain purpose and the output structure, without narrating the algorithm
 def create_CBI_from_SSB_and_RSI(SSB_quarterly, RSI_weekly, RSI_stop_date=None):
     """
-    Stitches together a CBI price index from two different price indices:
-    1. Use SSB_quarterly for the period before RSI_weekly is sufficiently populated.
-       This is a quarterly sampled price index from SSB, with distinct regions (covering all of Norway), but no count data.
-    2. Use RSI_weekly for the main period, where this RSI is sufficiently populated.
-       This RSI is supplied as a LORSI cube class, which contains Logarithmic Repeated Sales Indices (LORSI).
+    Stitches together a CBI price index from two different price indices,
+    preferring SSB_quarterly before RSI_weekly is sufficiently populated and RSI_weekly for the main period.
 
     Returns: DataFrame with "date" and "price" columns, plus additional information
         on how the index was created, and a "count" column representative of the
@@ -101,16 +100,13 @@ class LORSIPartitionClass:
 
 ## Inline comments — narrate the reasoning
 
-Inline comments are **mandatory** at each logical step in non-trivial functions.
-They narrate the domain reasoning so a reader can follow the logic without deciphering the code.
+Inline comments explain the domain reasoning behind a non-obvious step, so a reader can follow the logic without deciphering the code.
 
-- **Comment every logical step** — not every line,
-  but every block that does something conceptually distinct.
-  A function with 5 logical steps should have ~5 comments.
-- Explain **why this step is needed** and **what domain rule it implements**, not what the code mechanically does.
+- Use an inline comment on a step that isn't self-evident from the code alone — not on every step.
+  A function with 5 logical steps does not need 5 comments;
+  it needs one wherever the domain reasoning isn't already obvious from well-named identifiers.
 - Write in natural language: "Extract the date where the CBI data will start.
   This is simply the first date in the SSB data."
-- Place comments on their own line above the code, not at the end of a line.
 
 ### Good vs bad examples
 
@@ -135,20 +131,12 @@ df = df.dropna(subset=['grunnkrets_number', 'postcode', 'sold_date', 'location',
 df = df[df['price_inc_debt'] != 0]
 ```
 
-## Line-wrap style — semantic line breaks, not fixed-column wrapping
-
-Do not hard-wrap docstring or comment prose at a fixed column.
-Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole paragraph.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
-or a semicolon, where what follows has its own subject and verb.
-A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
-
-When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
-Readability wins over mechanical rule compliance in that edge case.
+## Line-wrap style
 
 Raw Python docstrings preserve literal newlines, so tools like `help()`, `pydoc`, and IDE tooltips display sentence-per-line text as short lines rather than reflowing it into one paragraph.
 This is a display difference only — the text stays fully readable,
 and the addressing/diff-locality benefit holds regardless of how it renders.
+See the `code-comments` skill for the full line-wrap rule.
 
 ### Good vs bad examples
 
@@ -165,11 +153,3 @@ The result feeds directly into the CBI stitching step,
 and later steps assume the join has already happened.
 """
 ```
-
-## Prohibited patterns
-
-- **Never** comment out code.
-  Delete it.
-  Version control handles history.
-- **No edit-history comments** ("added in v2", "removed old logic", "changed from X to Y").
-- **No mechanical comments** that restate what the code does: `x = x + 1  # increment x`.
