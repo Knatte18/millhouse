@@ -38,6 +38,8 @@ batches:
     commit_sha: f12599738e1bf3856a2be9264e30cb7cabdd177a
     verify_baseline_failures: []
   - name: baseline-teardown-defense-in-depth
-    state: pending
+    state: running
+    implementer_session: 261f9d10-6820-4378-92e8-bef69697ed5c
+    start_sha: 2df2ed9f8330eff7c59d338b1156ac12c287d5c5
     verify_baseline_failures: []
 ```
