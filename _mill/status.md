@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-shared-code-comments-skill
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-08-14T09:52:56Z'
 plan-fix-r4  '2026-08-14T09:57:35Z'
 planned  '2026-08-14T09:57:50Z'
 implementing  '2026-08-14T09:58:26Z'
+approved-shared-code-comments-skill  '2026-08-14T10:03:15Z'
 ```
 
 ## Batches
@@ -33,9 +34,10 @@ implementing  '2026-08-14T09:58:26Z'
 ```yaml
 batches:
   - name: shared-code-comments-skill
-    state: running
+    state: approved
     implementer_session: 7799d4e6-8d8f-454a-ae8e-a43dd7368a9a
     start_sha: ee9f0fda0aab7604f9dccd35c46d61d779600f58
+    commit_sha: bdf83e123b3827980ed6d52db2233a0575fedd22
   - name: workflow-routing-and-index
     state: pending
 ```
