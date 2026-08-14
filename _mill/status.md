@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go-windows-buildserver-lock-hygiene
 branch: hanf/mill-go-windows-buildserver-lock-hygiene
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-08-14T09:29:07Z'
 approved-dotnet-verify-lock-retry  '2026-08-14T09:34:39Z'
 approved-baseline-teardown-defense-in-depth  '2026-08-14T09:41:33Z'
 holistic-reviewing  '2026-08-14T09:41:56Z'
+holistic-approved  '2026-08-14T09:44:28Z'
 ```
 
 ## Batches
