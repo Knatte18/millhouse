@@ -19,6 +19,12 @@ Public API:
     around resolve() that swallows ParentBranchError and returns None instead of raising, for
     callers (e.g.
     git-commit) that must never block on a missing parent.
+    check_liveness(branch, git_root) -> bool Return True if branch currently exists on origin
+    (``git ls-remote --exit-code``).
+    resolve_dead_parent(dead_branch, git_root, cfg, *, max_hops=10) -> dict Walk the
+    ``archive/<slug>`` tag chain to find a live successor for a dead parent branch, falling back
+    to the configured base branch or reporting a cycle -- see the function's own docstring for the
+    three exact return shapes.
 
 The status.md yaml-block parser lives in ``_status`` but is internal;
 here we reuse the same ```yaml fence convention and hand-parse the single row we care about. Keeps
@@ -28,6 +34,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import _subprocess_util
+
 
 class ParentBranchError(Exception):
     """Raised when no parent branch can be resolved without a human."""
@@ -36,14 +44,12 @@ class ParentBranchError(Exception):
 _YAML_FENCE = "```yaml"
 
 
-def _read_parent_from_status(
-    status_path: Path, *, expected_slug: str | None = None
-) -> str | None:
-    """Return the ``parent:`` row value from status.md, or None.
+def _parse_parent_from_yaml_text(text: str, *, expected_slug: str | None = None) -> str | None:
+    """Return the ``parent:`` row value from a status.md yaml block, or None.
 
     Scans the first fenced ```yaml``` block.
     Returns the first matching ``parent: <value>`` row with any surrounding quotes stripped.
-    Missing file / absent row / malformed block -> None;
+    Absent row / malformed block -> None;
     caller decides whether to prompt.
 
     Args:
@@ -56,10 +62,6 @@ def _read_parent_from_status(
             A ``slug:`` row that is absent,
             or an ``expected_slug`` of None, never triggers this check.
     """
-    try:
-        text = status_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
     lines = text.splitlines()
     in_block = False
     parent_value: str | None = None
@@ -77,6 +79,99 @@ def _read_parent_from_status(
     if expected_slug is not None and slug_value is not None and slug_value != expected_slug:
         return None
     return parent_value or None
+
+
+def _read_parent_from_status(
+    status_path: Path, *, expected_slug: str | None = None
+) -> str | None:
+    """Read status.md and return its ``parent:`` row value, or None.
+
+    Missing file -> None.
+    See ``_parse_parent_from_yaml_text`` for the yaml-block parsing rules and the
+    ``expected_slug`` guard semantics.
+    """
+    try:
+        text = status_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    return _parse_parent_from_yaml_text(text, expected_slug=expected_slug)
+
+
+def check_liveness(branch: str, git_root: Path) -> bool:
+    """
+    Return True if `branch` currently exists on `origin` (`git ls-remote --exit-code`).
+
+    `git branch -a` / local remote-tracking refs are deliberately not used as the liveness
+    signal, because `mill-cleanup`'s remote-branch deletion never prunes them -- a torn-down
+    parent's stale local `origin/<branch>` ref would otherwise report as alive.
+    """
+    result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "ls-remote", "--exit-code", "origin", branch],
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def resolve_dead_parent(
+    dead_branch: str, git_root: Path, cfg: dict, *, max_hops: int = 10
+) -> dict:
+    """
+    Walk the ``archive/<slug>`` tag chain to find a live successor for a dead parent branch.
+
+    Each hop reads the pre-cleanup-commit status.md at ``archive/<slug>~1`` (checking the
+    ``_mill/status.md`` layout first, then the legacy ``task/status.md`` layout) to recover that
+    ancestor's own recorded ``parent:`` row, then checks whether that parent is alive via
+    ``check_liveness``.
+    A dead parent becomes the next hop's branch to resolve;
+    the walk is capped at ``max_hops`` iterations to guard against a pathological cycle.
+
+    Returns exactly one of three outcome shapes:
+        ``{"outcome": "resolved", "branch": <live-branch>, "hops": [<slug>, ...]}``
+        ``{"outcome": "fallback", "reason": "no-tag" | "chain-end", "branch": <base_branch>, "hops": [...]}``
+        ``{"outcome": "cycle", "hops": [...]}`` -- every hop up to ``max_hops`` stayed dead.
+
+    Args:
+        dead_branch: The branch confirmed dead by ``check_liveness`` before this call.
+        cfg: Deep-merged config dict;
+            reads ``spawn.branch_prefix`` (to derive each hop's slug) and
+            ``git.base_branch`` (the fallback target, default ``"main"``).
+    """
+    prefix = cfg.get("spawn", {}).get("branch_prefix", "")
+    base_branch = cfg.get("git", {}).get("base_branch", "main")
+    branch = dead_branch
+    hops: list[str] = []
+    for _ in range(max_hops):
+        slug = branch.removeprefix(prefix)
+        hops.append(slug)
+
+        tag_check = _subprocess_util.run(
+            ["git", "-C", str(git_root), "rev-parse", "--verify", "--quiet", f"refs/tags/archive/{slug}"],
+            check=False,
+        )
+        if tag_check.returncode != 0:
+            return {"outcome": "fallback", "reason": "no-tag", "branch": base_branch, "hops": hops}
+
+        show_result = _subprocess_util.run(
+            ["git", "-C", str(git_root), "show", f"archive/{slug}~1:_mill/status.md"],
+            check=False,
+        )
+        if show_result.returncode != 0:
+            show_result = _subprocess_util.run(
+                ["git", "-C", str(git_root), "show", f"archive/{slug}~1:task/status.md"],
+                check=False,
+            )
+        if show_result.returncode != 0:
+            return {"outcome": "fallback", "reason": "chain-end", "branch": base_branch, "hops": hops}
+
+        parent = _parse_parent_from_yaml_text(show_result.stdout)
+        if parent is None:
+            return {"outcome": "fallback", "reason": "chain-end", "branch": base_branch, "hops": hops}
+
+        if check_liveness(parent, git_root):
+            return {"outcome": "resolved", "branch": parent, "hops": hops}
+        branch = parent
+
+    return {"outcome": "cycle", "hops": hops}
 
 
 def resolve(
@@ -108,8 +203,8 @@ def resolve(
             "set status.md's parent: row and re-run mill-merge manually."
         )
     prompt = (
-        f"[_parent_branch] status.md has no parent: row. "
-        f"Enter parent branch name (e.g. main): "
+        "[_parent_branch] status.md has no parent: row. "
+        "Enter parent branch name (e.g. main): "
     )
     try:
         response = input(prompt).strip()

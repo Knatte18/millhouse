@@ -27,6 +27,7 @@ Do not infer from filenames or positions.
   could a plan writer disagree?
 - **Constraint coverage** — CONSTRAINTS.md items acknowledged;
   implicit perf/compat constraints stated.
+- **Tooling/validator claims** — any testing-plan claim about tooling, validator, or command-prefix requirements (e.g. `PYTHONPATH=`) must be cross-checked against CLAUDE.md and the actual enforcement (e.g. `_plan_validate.py`); a contradiction is `[BLOCKING:consistency]`.
 - **Failure modes** — empty states, concurrency, invalid input, partial failures addressed.
 - **Testing** — strategy named (unit/integration/e2e);
   absence or non-commital language flagged.
