@@ -262,8 +262,11 @@ def _run_baseline_stage(
         `_worktree.remove_safe` in a `finally` block regardless of
         outcome.
 
-    Never raises -- every failure path prints a JSON line describing the outcome and returns 0. A
-    per-batch computation failure leaves that batch's `verify_baseline_failures` UNSET, which is the
+    Never raises -- every failure path prints a JSON line describing the outcome and returns 0.
+    Both `_worktree.remove_safe` teardown call sites are themselves wrapped in `try`/`except
+    Exception` so a teardown failure (e.g. a still-locked dotnet build-server file) is logged to
+    stderr and never propagates past this function.
+    A per-batch computation failure leaves that batch's `verify_baseline_failures` UNSET, which is the
     same fail-safe direction as the module-wide mechanism's `None` default: the next
     `_run_verify_gates` call for that batch runs the gate strictly.
 
@@ -376,7 +379,13 @@ def _run_baseline_stage(
             )
         )
         if tmp_path is not None:
-            _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
+            try:
+                _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
+            except Exception as teardown_exc:
+                print(
+                    f"[millpy-implement] baseline teardown failed (checkout-failure path): {teardown_exc}",
+                    file=sys.stderr,
+                )
         return 0
 
     try:
@@ -423,7 +432,10 @@ def _run_baseline_stage(
                 continue
             computed_names.append(name)
     finally:
-        _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
+        try:
+            _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
+        except Exception as teardown_exc:
+            print(f"[millpy-implement] baseline teardown failed: {teardown_exc}", file=sys.stderr)
 
     print(json.dumps(module_wide_payload))
     print(
