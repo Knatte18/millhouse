@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: _mill/plan
@@ -25,4 +25,15 @@ plan-fix-r2  '2026-08-14T09:46:56Z'
 plan-fix-r3  '2026-08-14T09:52:56Z'
 plan-fix-r4  '2026-08-14T09:57:35Z'
 planned  '2026-08-14T09:57:50Z'
+implementing  '2026-08-14T09:58:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: shared-code-comments-skill
+    state: pending
+  - name: workflow-routing-and-index
+    state: pending
 ```
