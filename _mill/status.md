@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-fix-r3
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: _mill/plan
@@ -22,4 +22,5 @@ planning  '2026-08-14T09:34:49Z'
 plan-fix-r1  '2026-08-14T09:40:53Z'
 plan-review-r2  '2026-08-14T09:46:56Z'
 plan-fix-r2  '2026-08-14T09:46:56Z'
+plan-fix-r3  '2026-08-14T09:52:56Z'
 ```
