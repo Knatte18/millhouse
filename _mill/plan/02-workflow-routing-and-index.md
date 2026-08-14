@@ -44,10 +44,10 @@ No batch-local decisions beyond `workflow-md-go-row` (already captured in `_mill
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  From the worktree root (git_root), run the worktree's own copy of the skills-index script — not the plugin cache copy, per this repo's self-hosted-repo source-verification rule — so it scans the just-edited `plugins/*/skills/**/SKILL.md` files on disk and regenerates `SKILLS.md` deterministically from their frontmatter (`name`, `description`):
+  From the worktree root (git_root), run the standard cache-form invocation (per CLAUDE.md's `## Script invocation` — this is a script invocation, not the source-code-verification case that bullet narrows, so `${CLAUDE_PLUGIN_ROOT}` is the correct form). The script resolves its target repo via `git rev-parse --show-toplevel` (cwd-based), so it correctly scans this worktree's just-edited `plugins/*/skills/**/SKILL.md` files on disk and regenerates this worktree's `SKILLS.md` deterministically from their frontmatter (`name`, `description`), regardless of which copy of the script itself is executing:
 
   ```bash
-  PYTHONPATH=plugins/mill/scripts "$MILL_PYTHON" plugins/mill/scripts/millpy-skills-index.py
+  PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-skills-index.py"
   ```
 
   This must pick up a new row for `code-comments` (added in batch 1, card 1) alongside every pre-existing skill row, unchanged otherwise.

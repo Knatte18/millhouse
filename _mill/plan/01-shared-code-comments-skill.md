@@ -15,7 +15,7 @@ Create the new language-agnostic `code-comments` skill (mirroring `code-quality`
 
 External interface the next batch consumes: `plugins/mill/skills/code-comments/SKILL.md` must exist (with valid `name`/`description` frontmatter) before batch 2 regenerates `SKILLS.md`, since the regeneration scans frontmatter across every `SKILL.md` under `plugins/*/skills/`.
 
-No batch-local decisions beyond the three listed in the overview's `## Shared Decisions` — see `no-redundancy-extraction`, `line-wrap-rendering-paragraph-stays-per-language`, and `end-of-line-comments-no-carveout`.
+Beyond the three cross-cutting decisions listed in the overview's `## Shared Decisions` (`no-redundancy-extraction`, `line-wrap-rendering-paragraph-stays-per-language`, `end-of-line-comments-no-carveout`), two batch-local decisions from `_mill/discussion.md` apply to single cards: `python-how-it-works-conflict` (card 3 only — drop the "How it works" numbered-algorithm requirement and the mandatory-per-step inline-comment requirement from Python's docstring/inline-comment rules, replaced by sub-function-decomposition guidance) and `csharp-file-header-syntax` (card 4 only — C#'s new file header uses a `///` block above `using`/`namespace`, not `/* */`).
 
 ## Cards
 
@@ -534,7 +534,7 @@ and later steps assume the join has already happened.
 - **Moves:** none
 - **Requirements:**
   Replace the entire content of `plugins/csharp/skills/csharp-comments/SKILL.md` with exactly the following.
-  Relative to today's file: adds the Step-0 load line; adds a new "File header" section (first section, per the `csharp-file-header-syntax` discussion decision — a `///` comment block above `using`/`namespace`, not `/* */`, for consistency with `///` used on every other doc comment in a C# file); trims "XML documentation" to keep only the Go/C#-specific `/// <summary>` requirement (drops the restated what+why/not-how prose); trims "Line-wrap style" to keep only the XML-doc-tooling-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); removes "Prohibited patterns" entirely (all three entries — comment-out, edit-history, no-end-of-line-comments — are now fully covered by `code-comments` and nothing C#-specific remains):
+  Relative to today's file: adds the Step-0 load line; adds a new "File header" section (first section, per the `csharp-file-header-syntax` discussion decision — a `///` comment block above `using`/`namespace`, not `/* */`, for consistency with `///` used on every other doc comment in a C# file); trims "XML documentation" to keep only the C#-specific `/// <summary>` requirement (drops the restated what+why/not-how prose); trims "Line-wrap style" to keep only the XML-doc-tooling-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); removes "Prohibited patterns" entirely (all three entries — comment-out, edit-history, no-end-of-line-comments — are now fully covered by `code-comments` and nothing C#-specific remains):
 
 ````markdown
 ---
@@ -626,7 +626,7 @@ Open edge case (non-blocking, per the `csharp-file-header-syntax` discussion dec
 - **Moves:** none
 - **Requirements:**
   Run these checks and fix any failure by re-editing the offending file from card 1-4's `Requirements:` text before proceeding — this card's job is to confirm cards 1-4 landed exactly as specified, not to make new decisions:
-  1. `grep -n "must begin with a comment describing" plugins/golang/skills/golang-comments/SKILL.md` and equivalent greps for the removed purpose-not-mechanism prose, the "How it works" / numbered-algorithm-step language, and the "mandatory" per-step inline-comment language in `python-comments/SKILL.md` — all must return no matches (confirms `## Testing` bullets 1 and 4 in `_mill/discussion.md`).
+  1. `grep -n "must begin with a comment that describes" plugins/golang/skills/golang-comments/SKILL.md` and equivalent greps for the removed purpose-not-mechanism prose, the "How it works" / numbered-algorithm-step language, and the "mandatory" per-step inline-comment language in `python-comments/SKILL.md` — all must return no matches (confirms `## Testing` bullets 1 and 4 in `_mill/discussion.md`).
   2. Confirm the first line under the H1 in each of `golang-comments/SKILL.md`, `python-comments/SKILL.md`, and `csharp-comments/SKILL.md` is exactly `**Load the `code-comments` skill first.**`.
   3. Confirm `plugins/mill/skills/code-comments/SKILL.md` has valid frontmatter (`name: code-comments`, a one-line `description`) and its content matches card 1's `Requirements:` block.
   4. Confirm the "Constants and variables" example in `golang-comments/SKILL.md` has no end-of-line comments (no trailing `//` sharing a line with a constant's value).
