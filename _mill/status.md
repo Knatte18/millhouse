@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: _mill/plan
@@ -30,6 +30,8 @@ approved-shared-code-comments-skill  '2026-08-14T10:03:15Z'
 approved-workflow-routing-and-index  '2026-08-14T10:05:56Z'
 holistic-reviewing  '2026-08-14T10:06:33Z'
 holistic-fixing  '2026-08-14T10:10:31Z'
+nits-fixed-holistic  '2026-08-14T10:11:33Z'
+holistic-approved  '2026-08-14T10:11:42Z'
 ```
 
 ## Batches
