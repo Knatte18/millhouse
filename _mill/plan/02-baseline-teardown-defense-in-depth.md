@@ -27,7 +27,8 @@ verify-gate fix.
 
 ### Card 3: Retry `_safe_rmtree.safe_rmtree` once on WinError 145 before raising
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_safe_rmtree.py`
 - **Edits:**
   - `plugins/mill/scripts/_worktree.py`
 - **Creates:** none
@@ -205,6 +206,7 @@ verify-gate fix.
 
 - **Context:**
   - `plugins/mill/scripts/_worktree.py`
+  - `plugins/mill/scripts/_safe_rmtree.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-worktree.py`
 - **Creates:** none
@@ -258,6 +260,8 @@ verify-gate fix.
 
 - **Context:**
   - `plugins/mill/scripts/_worktree.py`
+  - `plugins/mill/scripts/_parent_branch.py`
+  - `plugins/mill/scripts/_verify_baseline.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-millpy-implement.py`
 - **Creates:** none

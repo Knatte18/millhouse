@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: mill-go-windows-buildserver-lock-hygiene
 branch: hanf/mill-go-windows-buildserver-lock-hygiene
 plan: _mill/plan
@@ -19,4 +19,6 @@ discussion-fix-r1  '2026-08-14T08:49:35Z'
 discussion-fix-r2  '2026-08-14T08:54:20Z'
 discussed  '2026-08-14T08:54:20Z'
 planning  '2026-08-14T09:14:45Z'
+plan-review-r1  '2026-08-14T09:20:33Z'
+plan-fix-r1  '2026-08-14T09:21:38Z'
 ```

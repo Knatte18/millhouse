@@ -163,7 +163,12 @@ depends on this one; it is fully independent of batch 2's baseline-teardown fix.
   `unittest.mock.patch("sys.platform", "win32")` + mocked `_implementer_common.subprocess.run`
   (`side_effect` list) convention `Test C` already uses. Four sub-cases, each its own
   `with tempfile.TemporaryDirectory()` block wrapped in `try`/`except Exception as exc: print(f"FAIL: Test I<n> ({exc})", file=sys.stderr); errors += 1`, matching the file's existing
-  per-sub-case try/except granularity (see `Test C1`/`Test C2` above it):
+  per-sub-case try/except granularity (see `Test C1`/`Test C2` above it). Below, `failing_result(...)`,
+  `passing_result(...)`, and `failing_result_2(...)` are shorthand for inline
+  `unittest.mock.MagicMock()` construction (one local variable per mock, each with explicit
+  `.returncode`/`.stdout`/`.stderr` attributes set as shown) -- there are no such helper functions
+  in this file today, and none should be added; this mirrors `Test C`'s own
+  `passing_result`/`failing_result`/`shutdown_result` local-variable naming exactly:
 
   - **Test I1** (retry succeeds): `dotnet_cmd = "dotnet test MyProject.csproj"`. Build an output
     string containing `"MSB3021"` (e.g.
