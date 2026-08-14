@@ -33,7 +33,9 @@ implementing  '2026-08-14T09:58:26Z'
 ```yaml
 batches:
   - name: shared-code-comments-skill
-    state: pending
+    state: running
+    implementer_session: 7799d4e6-8d8f-454a-ae8e-a43dd7368a9a
+    start_sha: ee9f0fda0aab7604f9dccd35c46d61d779600f58
   - name: workflow-routing-and-index
     state: pending
 ```
