@@ -28,5 +28,7 @@ implementing  '2026-08-14T09:37:50Z'
 ```yaml
 batches:
   - name: skillmd-blocked-resume-and-fixtable-fixes
-    state: pending
+    state: running
+    implementer_session: 6aa6dc4f-f65e-47d3-9492-76db605bb826
+    start_sha: 5c6a59e6f617641d71e8c43228fbd1de36dfea40
 ```
