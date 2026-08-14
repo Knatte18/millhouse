@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-windows-buildserver-lock-hygiene
 branch: hanf/mill-go-windows-buildserver-lock-hygiene
 plan: _mill/plan
@@ -23,4 +23,15 @@ plan-review-r1  '2026-08-14T09:20:33Z'
 plan-fix-r1  '2026-08-14T09:21:38Z'
 plan-fix-r2  '2026-08-14T09:29:00Z'
 planned  '2026-08-14T09:30:00Z'
+implementing  '2026-08-14T09:29:07Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: dotnet-verify-lock-retry
+    state: pending
+  - name: baseline-teardown-defense-in-depth
+    state: pending
 ```
