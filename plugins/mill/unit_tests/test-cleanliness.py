@@ -450,7 +450,23 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: compute_terminal_dirt absolute task_dir ({type(exc).__name__}): {exc}")
 
-    # PDN-1. _parent_diff_names: non-zero git exit emits stderr warning and returns []
+    # CTD-6. compute_terminal_dirt: unresolvable parent diff propagates as None, not []
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[]
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=None):
+                    result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
+            assert result is None, f"expected None, got {result!r}"
+        print("PASS: compute_terminal_dirt: unresolvable parent diff -> None")
+    except AssertionError as exc:
+        failures.append(f"FAIL: compute_terminal_dirt unresolvable parent diff: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: compute_terminal_dirt unresolvable parent diff ({type(exc).__name__}): {exc}")
+
+    # PDN-1. _parent_diff_names: non-zero git exit emits stderr warning and returns None
     try:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch(
@@ -459,11 +475,11 @@ def main() -> int:
             ):
                 with unittest.mock.patch("sys.stderr", new=io.StringIO()) as fake_err:
                     result = _parent_diff_names(Path(tmp), "nonexistent-branch")
-            assert result == [], f"expected [], got {result!r}"
+            assert result is None, f"expected None, got {result!r}"
             assert "[cleanliness]" in fake_err.getvalue(), (
                 f"'[cleanliness]' not in stderr: {fake_err.getvalue()!r}"
             )
-        print("PASS: _parent_diff_names: non-zero exit -> [] + stderr warning")
+        print("PASS: _parent_diff_names: non-zero exit -> None + stderr warning")
     except AssertionError as exc:
         failures.append(f"FAIL: _parent_diff_names non-zero exit: {exc}")
     except Exception as exc:
@@ -658,6 +674,25 @@ def main() -> int:
         failures.append(f"FAIL: revert_out_of_scope_drift nested-hub owned_paths: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift nested-hub owned_paths ({type(exc).__name__}): {exc}")
+
+    # ROOD-7. revert_out_of_scope_drift: unresolvable parent diff propagates as ([], None), nothing reverted
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            with unittest.mock.patch(
+                "_cleanliness._pygit2_util.status_porcelain",
+                return_value=[" M _mill/briefs/prior.out.md"],
+            ):
+                with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=None):
+                    with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
+                        reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
+            assert reverted == [], f"expected [], got {reverted!r}"
+            assert remaining is None, f"expected None, got {remaining!r}"
+            assert mock_run.call_count == 0, f"expected 0 calls to run, got {mock_run.call_count}"
+        print("PASS: revert_out_of_scope_drift: unresolvable parent diff -> ([], None), nothing reverted")
+    except AssertionError as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift unresolvable parent diff: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: revert_out_of_scope_drift unresolvable parent diff ({type(exc).__name__}): {exc}")
 
     # CESV-1. clean_ephemeral_scope_violations: allowlisted coverage.out is removed and reported
     try:

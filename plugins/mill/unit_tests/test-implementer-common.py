@@ -5020,6 +5020,161 @@ def main() -> int:
             print(f"FAIL: case 72e ({exc})", file=sys.stderr)
             errors += 1
 
+    # Case 73: #825 regression -- a prior batch's committed file, touched again by later
+    # activity but currently reading back its earlier (start_sha-identical) content, must
+    # NOT trip the dirty-tree gate: `git diff --name-only start_sha` is a pure content
+    # comparison against start_sha's tree, so a file whose dirty content is byte-identical
+    # to start_sha's own tree is excluded from owned_paths despite `git status --porcelain`
+    # flagging it as dirty relative to HEAD.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        briefs_dir = project_root / "_mill" / "briefs"
+        briefs_dir.mkdir(parents=True, exist_ok=True)
+        prior_out = briefs_dir / "prior.out.md"
+        prior_out.write_text("content-A", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/briefs/prior.out.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "prior batch commit"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        prior_out.write_text("content-B", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/briefs/prior.out.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "intervening commit"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "checkout",
+                batch_start_sha,
+                "--",
+                "_mill/briefs/prior.out.md",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"case73"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=batch_start_sha,
+                verify_cmd=None,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 73: dirty-tree gate false-blocked, expected success, got {data}"
+            )
+            print(
+                "PASS: case 73 - prior batch's file dirtied back to start_sha-identical"
+                " content does not trip the batch-scoped dirty-tree gate"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 73 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 74: never-committed dirt since start_sha still fires the gate -- a file with only
+    # uncommitted changes since start_sha (never committed at all in that range) must still be
+    # flagged, proving owned_paths is not limited to committed content.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        marker = project_root / "_mill" / "marker.txt"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("marker", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-1 commit"],
+            check=True,
+            capture_output=True,
+        )
+        (project_root / "README.md").write_text("uncommitted dirt", encoding="utf-8")
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"case74"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                verify_cmd=None,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 74: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 74: expected logic (dirty-tree gate), got {data}"
+            )
+            assert "README.md" in data.get("reason", ""), (
+                f"case 74: expected README.md in reason, got {data}"
+            )
+            print(
+                "PASS: case 74 - never-committed dirt since start_sha still trips the"
+                " batch-scoped dirty-tree gate"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 74 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 75: start_sha=None disables the gate entirely, regardless of actual working-tree
+    # dirt -- mirrors the existing task_dir/parent_branch disable-guard coverage, extended to
+    # the new parameter.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        (project_root / "README.md").write_text("dirty, but gate is disabled", encoding="utf-8")
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"case75"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=None,
+                verify_cmd=None,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 75: start_sha=None must disable the dirty-tree gate, got {data}"
+            )
+            print(
+                "PASS: case 75 - start_sha=None disables the batch-scoped dirty-tree gate"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 75 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

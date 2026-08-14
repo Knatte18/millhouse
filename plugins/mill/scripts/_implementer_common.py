@@ -9,6 +9,7 @@ import subprocess
 import sys
 import _agent_dispatch
 import _cleanliness
+import _pygit2_util
 import _status
 import _subprocess_util
 import _timestamp
@@ -418,16 +419,22 @@ def _in_scope_dirty_stuck(
     task_dir: Path | None,
     parent_branch: str | None,
     session_id: str | None,
+    start_sha: str | None,
 ) -> dict | None:
     """
     Check whether any in-scope files are dirty at finalize time.
 
-    Returns None when task_dir or parent_branch is None (gate disabled).
-    Otherwise calls _cleanliness.compute_terminal_dirt;
-    if the returned list is non-empty, returns a stuck dict.
-    Any exception from compute_terminal_dirt (including GitOpsError when project_root is not a real
-    git repo) is caught and treated as a no-op -- the authoritative mill-go 2b cleanliness gate
-    still runs afterward.
+    Returns None when task_dir, parent_branch, or start_sha is None (gate disabled).
+    Unlike _cleanliness.compute_terminal_dirt (the task-wide, authoritative gate used by mill-go's
+    separate terminal cleanliness check), this gate deliberately drops task_dir's blanket subtree
+    inclusion: owned paths are scoped to `git diff --name-only start_sha` -- a working-tree diff
+    against this batch's own start commit -- intersected with `git status --porcelain` dirt. This
+    keeps a prior, already-approved batch's committed file out of scope for the current batch's
+    gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
+    current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
+    that would reintroduce the false-block this function exists to avoid.
+    Any exception (including GitOpsError when project_root is not a real git repo) is caught and
+    treated as a no-op -- the authoritative mill-go 2b cleanliness gate still runs afterward.
 
     Args:
         project_root: Path to the worktree root.
@@ -436,22 +443,29 @@ def _in_scope_dirty_stuck(
         parent_branch: Name of the parent branch (e.g. "main");
         None disables the gate.
         session_id: Session identifier included in the returned dict when non-None.
+        start_sha: This batch's start commit SHA; None disables the gate.
 
     Returns:
         A stuck dict with stuck_type="logic" when dirty,
         or None otherwise.
     """
     # Gate is a no-op when required inputs are absent.
-    if task_dir is None or parent_branch is None:
+    if task_dir is None or parent_branch is None or start_sha is None:
         return None
 
     try:
-        dirt = _cleanliness.compute_terminal_dirt(project_root, task_dir, parent_branch)
+        diff_result = _subprocess_util.run(
+            ["git", "diff", "--name-only", start_sha],
+            cwd=project_root,
+        )
+        if diff_result.returncode != 0:
+            return None
+        owned_paths = {line for line in diff_result.stdout.splitlines() if line}
+        porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
+        dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
     except Exception:
-        # compute_terminal_dirt raises GitOpsError on non-git paths (e.g.
-        # test fixtures).
-        # Treat any failure as a safe no-op;
-        # the mill-go gate is authoritative.
+        # Any failure (including GitOpsError on non-git paths, e.g. test fixtures) is a
+        # safe no-op; the mill-go 2b cleanliness gate is authoritative.
         return None
 
     if dirt:
@@ -1815,7 +1829,7 @@ def _forward_output(
 
             # In-scope dirty-tree gate: demote to stuck/logic when tracked in-scope files remain dirty.
             _dirty_result = _in_scope_dirty_stuck(
-                project_root, task_dir, parent_branch, _gate_session_id
+                project_root, task_dir, parent_branch, _gate_session_id, start_sha
             )
             if _dirty_result is not None:
                 print(json.dumps(_dirty_result))
