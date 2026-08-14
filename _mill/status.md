@@ -31,7 +31,11 @@ implementing  '2026-08-14T09:29:07Z'
 ```yaml
 batches:
   - name: dotnet-verify-lock-retry
-    state: pending
+    state: running
+    implementer_session: 4e041b01-ad5c-4a7d-9353-d5c99d731921
+    start_sha: 784d965bcd6cd65832d3c5944a6bbec322f9580e
+    verify_baseline_failures: []
   - name: baseline-teardown-defense-in-depth
     state: pending
+    verify_baseline_failures: []
 ```
