@@ -5,15 +5,31 @@ description: XML doc and inline comment rules for C#/.NET. Use when writing C# c
 
 # Comments and Documentation Skill
 
+**Load the `code-comments` skill first.**
+
 Guidelines for code comments and XML documentation in C#/.NET.
 
 ---
 
+## File header
+
+Every `.cs` file must open with a `///` comment block, placed above the `using` statements and the `namespace` declaration.
+
+**Example:**
+
+```csharp
+/// OrderProcessor.cs validates, prices, and persists orders for the checkout flow.
+/// Each public method corresponds to one stage of the checkout pipeline.
+
+using System;
+
+namespace Checkout
+{
+```
+
 ## XML documentation
 
 - All `public` methods and classes **must** have `/// <summary>` XML doc comments.
-- The doc comment should explain **what** the method does and **why** it exists.
-- A reader should understand the method's purpose from its signature + doc comment alone, without reading the implementation.
 
 ## Interface implementations — use `<inheritdoc/>`, never duplicate
 
@@ -22,23 +38,10 @@ Guidelines for code comments and XML documentation in C#/.NET.
   This makes the inheritance explicit and signals to future readers (and to Claude) that the doc lives on the interface and no new docstring is needed here.
 - Only write a fresh `/// <summary>` on an implementation when it adds information beyond the interface contract, or when the member has no interface counterpart.
 
-## Inline comments
-
-- Use inline comments only to explain **why**, never **what**.
-- If the code needs a "what" comment, the code itself is unclear — refactor instead.
-
-## Line-wrap style — semantic line breaks, not fixed-column wrapping
-
-Do not hard-wrap a multi-line `/// <summary>` or inline comment at a fixed column.
-Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
-or a semicolon, where what follows has its own subject and verb.
-A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
-
-When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
-Readability wins over mechanical rule compliance in that edge case.
+## Line-wrap style
 
 XML-doc tooling collapses consecutive `///` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
+See the `code-comments` skill for the full line-wrap rule.
 
 **Bad example:**
 
@@ -61,12 +64,3 @@ public string ProcessOrder(Order order) {
 /// </summary>
 public string ProcessOrder(Order order) {
 ```
-
-## Prohibited patterns
-
-- **Never** comment out code.
-  Delete it.
-  Version control handles history.
-- **No edit-history comments** ("added in v2", "removed old logic", "changed from X to Y").
-- **No end-of-line comments.**
-  Place comments on their own line above the code.
