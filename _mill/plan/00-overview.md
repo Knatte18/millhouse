@@ -3,7 +3,7 @@
 ```yaml
 task: Extract a language-agnostic code-comments skill; add a general docstring-length ceiling, purpose-not-mechanism rule, mandatory file/module header, and prohibit measured-result/design-rationale narrative
 slug: code-comments-skill-extraction
-approved: false
+approved: true
 started: 20260814-092858
 parent: main
 root: ""
