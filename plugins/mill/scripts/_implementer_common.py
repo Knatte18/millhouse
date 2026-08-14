@@ -525,6 +525,30 @@ def _has_windows_cleanup_race_signature(text: str) -> bool:
     return any(sig in text_lower for sig in cleanup_signatures)
 
 
+def _has_dotnet_lock_race_signature(text: str) -> bool:
+    """
+    Check if text contains a dotnet build-server file-lock race signature (case-insensitive).
+
+    Detects the MSB3021/MSB3027 testhost/MSBuild lock signature ("msb3021", "msb3027",
+    "is locked by:") distinct from _has_windows_cleanup_race_signature's benign-cleanup
+    signatures -- this signature triggers a retry-and-judge response, never a benign pass.
+
+    Args:
+        text: A string to check (e.g., a verify command's combined stdout+stderr).
+
+    Returns:
+        True if any dotnet-lock-race signature is present;
+        False otherwise.
+    """
+    text_lower = text.lower()
+    dotnet_lock_patterns = [
+        "msb3021",
+        "msb3027",
+        "is locked by:",
+    ]
+    return any(pattern in text_lower for pattern in dotnet_lock_patterns)
+
+
 def _is_benign_windows_cleanup(output: str) -> bool:
     """
     Check if the combined output contains only a Windows cleanup-race signature with no test
@@ -793,6 +817,13 @@ def _run_verify_gate(
     benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the
     non-zero exit as success and returns None.
 
+    On Windows, when the command contains "dotnet" and the failure output matches a dotnet
+    build-server file-lock signature (per _has_dotnet_lock_race_signature: MSB3021, MSB3027, or
+    "is locked by:"), retries the same command once -- after the unconditional post-run shutdown
+    below has already run. A passing retry returns None exactly like any other pass. A
+    still-failing retry returns a stuck dict built from the retry's own output, with reason
+    prefixed by "[retried once after dotnet build-server shutdown; still failing] ".
+
     After the verify subprocess completes (regardless of exit code), if the platform is win32 and
     the command contains "dotnet", runs `dotnet build-server shutdown` to release
     VBCSCompiler/MSBuild locks that prevent re-runs.
@@ -861,6 +892,34 @@ def _run_verify_gate(
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
+            retry_marker = ""
+            if (
+                sys.platform == "win32"
+                and verify_cmd is not None
+                and "dotnet" in verify_cmd.lower()
+                and _has_dotnet_lock_race_signature(output)
+            ):
+                # A stale build-server node from an earlier dotnet invocation in this
+                # worktree can still hold file handles into bin/obj when this command
+                # runs. The unconditional shutdown above already blocked until that
+                # process exited, so a bare re-run of the same command usually clears
+                # the race with no code changes (GitHub #848, #860).
+                retry_result = subprocess.run(
+                    run_args,
+                    capture_output=True,
+                    text=True,
+                    cwd=effective_cwd,
+                    **run_kwargs,
+                )
+                if retry_result.returncode == 0:
+                    return None
+                output = retry_result.stdout + retry_result.stderr
+                if sys.platform == "win32" and _is_benign_windows_cleanup(output):
+                    return None
+                retry_marker = (
+                    "[retried once after dotnet build-server shutdown; "
+                    "still failing] "
+                )
             # Extract every raw failure-marker line from the FULL, untruncated output -- this is the signature set _run_verify_gates uses (after normalization) for baseline/finalize subset-diff comparison, distinct from the capped excerpt used below for the human-facing reason.
             signatures = _extract_failure_signatures(output)
             # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
@@ -879,7 +938,7 @@ def _run_verify_gate(
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
-                "reason": reason,
+                "reason": retry_marker + reason,
                 "signatures": signatures,
             }
     except Exception as e:

@@ -29,6 +29,7 @@ Public API:
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -219,6 +220,27 @@ def remove(path: Path, cwd: Path, force: bool = True) -> None:
     print(f"[worktree] remove: path={path}", file=sys.stderr)
 
 
+def _is_dir_not_empty_error(exc: OSError) -> bool:
+    """
+    True if exc is a Windows "directory not empty" (WinError 145) error.
+
+    Matches on the numeric winerror attribute when present (locale-independent, unlike matching
+    the OS message text). Falls back to a lowercase substring check on str(exc) only when
+    winerror is absent (e.g. a test double or a non-Windows OSError).
+
+    Args:
+        exc: The OSError raised by shutil.rmtree (via _safe_rmtree.safe_rmtree).
+
+    Returns:
+        True if exc represents a WinError 145 (or a string-matching equivalent);
+        False otherwise.
+    """
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        return winerror == 145
+    return "directory is not empty" in str(exc).lower()
+
+
 def remove_safe(
     path: Path,
     cwd: Path,
@@ -240,7 +262,9 @@ def remove_safe(
             Junction-safe by design.
         4. If git fails with a long-path error (Windows, common when ``.scratch/`` has deep claude
             session JSONs), fall back to ``_safe_rmtree.safe_rmtree`` — safe NOW because junctions
-            are already gone.
+            are already gone. On Windows, an ``OSError`` matching WinError 145
+            (directory not empty, typically a lingering dotnet build-server lock) triggers one
+            shutdown-and-retry before raising ``WorktreeLockedError``.
         5. Any other git failure not eligible for the rmtree fallback (an unrecognized error, or
             one matching a lock pattern) is re-raised before prune ever runs;
             callers handle "in use" messages etc.
@@ -308,6 +332,32 @@ def remove_safe(
                 raise WorktreeLockedError(
                     f"worktree is locked via rmtree fallback (path={path}): {exc}"
                 ) from exc
+            except OSError as exc:
+                if not _is_dir_not_empty_error(exc):
+                    raise
+                # Windows: a lingering dotnet build-server lock inside a generated obj/
+                # tree can leave the directory non-empty after junction-strip + rmtree.
+                # Shut down the build-server node and retry once before giving up --
+                # both #846/#859 report the race clearing itself by the time of a bare
+                # manual re-invocation moments later.
+                try:
+                    subprocess.run(
+                        ["dotnet", "build-server", "shutdown"],
+                        capture_output=True,
+                        timeout=30,
+                    )
+                except Exception:
+                    pass
+                try:
+                    _safe_rmtree.safe_rmtree(path, allowed_root=path)
+                except PermissionError as retry_exc:
+                    raise WorktreeLockedError(
+                        f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
+                    ) from retry_exc
+                except OSError as retry_exc:
+                    raise WorktreeLockedError(
+                        f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
+                    ) from retry_exc
 
         removed_via = "fallback"
 

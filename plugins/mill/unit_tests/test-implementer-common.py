@@ -2207,6 +2207,166 @@ def main() -> int:
             print(f"FAIL: Test H ({exc})", file=sys.stderr)
             errors += 1
 
+    # Test I: dotnet build-server lock-race retry (#848, #860)
+    # Sub-case I1: retry succeeds -> _run_verify_gate returns None.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            dotnet_cmd = "dotnet test MyProject.csproj"
+            msb3021_output = (
+                'Build FAILED.\nMSB3021: Unable to copy file "bin/testhost.exe" to '
+                '"obj/testhost.exe". The process cannot access the file because it '
+                'is locked by: "testhost (1234)".'
+            )
+
+            failing_result = unittest.mock.MagicMock()
+            failing_result.returncode = 1
+            failing_result.stdout = msb3021_output
+            failing_result.stderr = ""
+
+            shutdown_result = unittest.mock.MagicMock()
+
+            passing_result = unittest.mock.MagicMock()
+            passing_result.returncode = 0
+            passing_result.stdout = ""
+            passing_result.stderr = ""
+
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                mock_run.side_effect = [failing_result, shutdown_result, passing_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                assert result is None, f"Test I1: expected None (retry pass), got {result}"
+
+                call_args_list = mock_run.call_args_list
+                assert len(call_args_list) == 3, (
+                    f"Test I1: expected 3 subprocess.run calls, got {len(call_args_list)}"
+                )
+                assert call_args_list[0].args == call_args_list[2].args, (
+                    "Test I1: expected the retry to re-run the same command as the first call"
+                )
+
+            print("PASS: Test I1 - retry succeeds after dotnet lock race (#848, #860)")
+        except Exception as exc:
+            print(f"FAIL: Test I1 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Sub-case I2: retry still fails -> reason carries the retry marker and the retry's own output.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            dotnet_cmd = "dotnet test MyProject.csproj"
+            msb3021_output = (
+                'Build FAILED.\nMSB3021: Unable to copy file "bin/testhost.exe" to '
+                '"obj/testhost.exe". The process cannot access the file because it '
+                'is locked by: "testhost (1234)".'
+            )
+
+            failing_result = unittest.mock.MagicMock()
+            failing_result.returncode = 1
+            failing_result.stdout = msb3021_output
+            failing_result.stderr = ""
+
+            shutdown_result = unittest.mock.MagicMock()
+
+            failing_result_2 = unittest.mock.MagicMock()
+            failing_result_2.returncode = 1
+            failing_result_2.stdout = "Build FAILED.\nMSB3021: still locked by testhost (5678)."
+            failing_result_2.stderr = ""
+
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                mock_run.side_effect = [failing_result, shutdown_result, failing_result_2]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                assert result is not None, "Test I2: expected stuck dict on still-failing retry"
+                assert result["reason"].startswith(
+                    "[retried once after dotnet build-server shutdown; still failing] "
+                ), f"Test I2: expected retry marker prefix in reason, got {result['reason']!r}"
+                assert "5678" in result["reason"], (
+                    "Test I2: expected reason to reflect the retry's own output, not the first attempt's"
+                )
+
+            print("PASS: Test I2 - retry still fails, reason carries retry marker (#848, #860)")
+        except Exception as exc:
+            print(f"FAIL: Test I2 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Sub-case I3: dotnet command fails with no lock signature -> no retry call is made.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            dotnet_cmd = "dotnet test MyProject.csproj"
+
+            failing_result = unittest.mock.MagicMock()
+            failing_result.returncode = 1
+            failing_result.stdout = (
+                "Build FAILED.\nCS0103: The name 'Foo' does not exist in the current context"
+            )
+            failing_result.stderr = ""
+
+            shutdown_result = unittest.mock.MagicMock()
+
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                mock_run.side_effect = [failing_result, shutdown_result]
+
+                result = _run_verify_gate(project_root, dotnet_cmd)
+                call_args_list = mock_run.call_args_list
+                assert len(call_args_list) == 2, (
+                    f"Test I3: expected 2 subprocess.run calls (no retry), got {len(call_args_list)}"
+                )
+                assert not result["reason"].startswith(
+                    "[retried once after dotnet build-server shutdown; still failing] "
+                ), "Test I3: unexpected retry marker for a non-lock-signature failure"
+                assert "CS0103" in result["reason"], (
+                    "Test I3: expected the original, unmarked failure text in reason"
+                )
+
+            print("PASS: Test I3 - dotnet failure with no lock signature skips retry (#848, #860)")
+        except Exception as exc:
+            print(f"FAIL: Test I3 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Sub-case I4: non-dotnet command whose output happens to contain "MSB3021" text -> no retry, no shutdown call.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            non_dotnet_cmd = "pytest tests/ -q"
+
+            failing_result = unittest.mock.MagicMock()
+            failing_result.returncode = 1
+            failing_result.stdout = "Build FAILED.\nMSB3021: is locked by: testhost"
+            failing_result.stderr = ""
+
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+            ):
+                mock_run.side_effect = [failing_result]
+
+                result = _run_verify_gate(project_root, non_dotnet_cmd)
+                call_args_list = mock_run.call_args_list
+                assert len(call_args_list) == 1, (
+                    f"Test I4: expected 1 subprocess.run call (no shutdown, no retry), got {len(call_args_list)}"
+                )
+                assert result["reason"] == "Build FAILED.\nMSB3021: is locked by: testhost", (
+                    f"Test I4: expected the original unmarked failure text in reason, got {result['reason']!r}"
+                )
+
+            print(
+                "PASS: Test I4 - non-dotnet command with MSB3021-like text skips retry and shutdown (#848, #860)"
+            )
+        except Exception as exc:
+            print(f"FAIL: Test I4 ({exc})", file=sys.stderr)
+            errors += 1
+
     # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
     # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit, the parsed-success path emits stuck/logic rather than success.
     with tempfile.TemporaryDirectory() as tmpdir:
