@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go/millpy-implement: Windows dotnet build-server file-lock races in verify/baseline stages"
 slug: mill-go-windows-buildserver-lock-hygiene
-approved: false
+approved: true
 started: 20260814-090726
 parent: main
 root: ""

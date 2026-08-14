@@ -162,8 +162,13 @@ depends on this one; it is fully independent of batch 2's baseline-teardown fix.
   that ends `Test H`, immediately before the `# Case 36 -- Bug #557` comment), using the same
   `unittest.mock.patch("sys.platform", "win32")` + mocked `_implementer_common.subprocess.run`
   (`side_effect` list) convention `Test C` already uses. Four sub-cases, each its own
-  `with tempfile.TemporaryDirectory()` block wrapped in `try`/`except Exception as exc: print(f"FAIL: Test I<n> ({exc})", file=sys.stderr); errors += 1`, matching the file's existing
-  per-sub-case try/except granularity (see `Test C1`/`Test C2` above it). Below, `failing_result(...)`,
+  `with tempfile.TemporaryDirectory()` block wrapped in `try`/`except Exception as exc: print(f"FAIL: Test I<n> ({exc})", file=sys.stderr); errors += 1`. This is intentionally finer-grained
+  than `Test C`'s own structure -- `Test C` (lines 1912-2019) wraps all of its C1/C2/non-dotnet
+  sub-cases in ONE shared `TemporaryDirectory`/`try`/`except`, matching every other lettered Test
+  block's one-block-per-Test norm -- because Test I's four sub-cases assert materially different
+  things (retry succeeds / retry still fails / no retry / non-dotnet no-retry) and isolating each
+  in its own try/except keeps a failure in one sub-case from masking whether the other three still
+  pass. Below, `failing_result(...)`,
   `passing_result(...)`, and `failing_result_2(...)` are shorthand for inline
   `unittest.mock.MagicMock()` construction (one local variable per mock, each with explicit
   `.returncode`/`.stdout`/`.stderr` attributes set as shown) -- there are no such helper functions

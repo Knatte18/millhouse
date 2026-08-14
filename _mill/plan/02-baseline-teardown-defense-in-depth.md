@@ -282,11 +282,10 @@ verify-gate fix.
     (`return_value=self.tmp_path / "checkout"`), `millpy_implement._verify_baseline._link_dependency_dirs`
     (no side effect -- succeeds), `millpy_implement._worktree.remove_safe` (`side_effect=millpy_implement._worktree.WorktreeLockedError("still locked")`),
     and `millpy_implement._verify_baseline.compute_batch_baselines`
-    (`return_value={"batch-a": [], "batch-b": []}` -- note `compute_batch_baselines` is called once
-    per batch with a single-item list, per its existing signature in `test_baseline_stage_per_batch_failure_isolation`
-    above, so use a `side_effect` function returning `{name: []}` keyed off the single item in
-    `commands`, matching that existing test's `_side_effect` helper shape, rather than a flat
-    `return_value` dict). Call `rc, out = self._run_main(["--stage", "baseline"])`. Assert
+    (`return_value={"batch-a": [], "batch-b": []}` -- a flat `return_value` is sufficient here,
+    unlike `test_baseline_stage_per_batch_failure_isolation`'s own `_side_effect` function above it,
+    because both batches get the identical outcome in this test, so there is no need to branch on
+    which batch name was passed). Call `rc, out = self._run_main(["--stage", "baseline"])`. Assert
     `rc == 0`. Assert `out.strip().splitlines()` has exactly 2 lines. Parse both as JSON and assert
     the first has `"substage": "module_wide"` and the second has `"substage": "per_batch"` with
     `"computed": ["batch-a", "batch-b"]` -- proving the function returned normally with both
