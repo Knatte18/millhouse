@@ -117,14 +117,21 @@ something that was, in both cases, a pure timing artifact with no underlying cod
 
 ### verify-gate-retry-one-shot-no-sleep
 
-- Decision: on signature match, retry exactly once, with `dotnet build-server shutdown`
-  (best-effort, wrapped in try/except, 30s timeout — matching the existing post-run shutdown
-  call's timeout) as the only wait between attempts; no additional fixed sleep or backoff.
+- Decision: on signature match, retry exactly once, with no additional fixed sleep or
+  backoff between the failed attempt and the retry. No new/second `dotnet build-server
+  shutdown` call is added for the retry itself — the retry relies on the shutdown that
+  `_run_verify_gate` already runs unconditionally after every dotnet verify subprocess (the
+  existing #554/#556 behavior, which always fires before the signature check ever runs, per
+  Technical context below). See Testing scenario D1 for the exact 3-call sequence this
+  implies: (1) the initial verify subprocess, (2) the existing unconditional post-run
+  shutdown, (3) the retried verify subprocess — no fourth call.
 - Rationale: both #848 and #860 report the race clearing itself by the time of a bare manual
-  re-invocation moments after the failure, with no explicit delay involved; `dotnet
-  build-server shutdown` already blocks until the build-server process has actually exited,
-  which is the real synchronization point. Adding a sleep/backoff on top adds latency and
-  complexity for a race both source issues describe as already gone one invocation later.
+  re-invocation moments after the failure, with no explicit delay involved; the shutdown call
+  that already runs unconditionally after every dotnet verify attempt already blocks until the
+  build-server process has actually exited, which is the real synchronization point — a
+  second, retry-specific shutdown call would be redundant. Adding a sleep/backoff on top adds
+  latency and complexity for a race both source issues describe as already gone one invocation
+  later.
 - Rejected: a fixed extra sleep after shutdown; exponential backoff over multiple retries —
   both are unsupported by the evidence in the issues and add wall-clock cost to every finalize
   replay of a dotnet-based batch.
@@ -315,11 +322,13 @@ something that was, in both cases, a pure timing artifact with no underlying cod
   signature) and would be unsafe even if it could fire (masks genuine build breakage); a
   blanket pre-shutdown adds latency to every dotnet verify call, not just the rare racing
   ones.
-- **Q:** How many retries, and with what backoff? **A:** [auto-pick] One retry, gated only by
-  `dotnet build-server shutdown` itself (no extra sleep). **Why:** both source issues (#848,
-  #860) report the race already cleared by the time of a bare manual re-invocation moments
-  later with no explicit delay; the shutdown call already blocks until the server process
-  exits, which is the real synchronization point.
+- **Q:** How many retries, and with what backoff? **A:** [auto-pick] One retry, no extra
+  sleep, and no new/second shutdown call — the retry relies on the existing unconditional
+  post-run shutdown that already fires before the signature check runs. **Why:** both source
+  issues (#848, #860) report the race already cleared by the time of a bare manual
+  re-invocation moments later with no explicit delay; the existing shutdown call already
+  blocks until the server process exits, which is the real synchronization point, so a
+  retry-specific second shutdown would be redundant.
 - **Q:** Does the retry logic live in the shared `_run_verify_gate` helper or as
   finalize-stage-specific code? **A:** [auto-pick] Shared `_run_verify_gate`. **Why:** the
   helper has no notion of which stage called it, and the race isn't unique to finalize replay
