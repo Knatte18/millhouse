@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-plan-step6-and-fixtable-bugs
 branch: hanf/mill-plan-step6-and-fixtable-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ implementing  '2026-08-14T09:37:50Z'
 approved-skillmd-blocked-resume-and-fixtable-fixes  '2026-08-14T09:42:18Z'
 holistic-reviewing  '2026-08-14T09:42:38Z'
 holistic-approved  '2026-08-14T09:49:16Z'
+done  '2026-08-14T09:49:46Z'
 ```
 
 ## Batches
