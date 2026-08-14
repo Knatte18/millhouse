@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-skillmd-blocked-resume-and-fixtable-fixes
 slug: mill-plan-step6-and-fixtable-bugs
 branch: hanf/mill-plan-step6-and-fixtable-bugs
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-08-14T09:32:25Z'
 plan-fix-r1  '2026-08-14T09:37:10Z'
 planned  '2026-08-14T09:37:23Z'
 implementing  '2026-08-14T09:37:50Z'
+approved-skillmd-blocked-resume-and-fixtable-fixes  '2026-08-14T09:42:18Z'
 ```
 
 ## Batches
@@ -28,7 +29,8 @@ implementing  '2026-08-14T09:37:50Z'
 ```yaml
 batches:
   - name: skillmd-blocked-resume-and-fixtable-fixes
-    state: running
+    state: approved
     implementer_session: 6aa6dc4f-f65e-47d3-9492-76db605bb826
     start_sha: 5c6a59e6f617641d71e8c43228fbd1de36dfea40
+    commit_sha: 22e7ff2f702e01da9c064241956715e2803c5826
 ```
