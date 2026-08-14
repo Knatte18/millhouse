@@ -32,9 +32,11 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
    - `wiki_path = _paths.resolve_wiki_path(git_root)`
+   - `worktree_root = _paths.resolve_hub_path()` (the task worktree root; used to anchor `_mill/` paths in nested layouts)
    `signature: _paths.resolve_git_root(start: Path | None = None) -> Path`
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` with `.millhouse/config.local.yaml`.
+   Call `cfg = _config.load_config(worktree_root, git_root)`.
    Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    Read `roles.plan-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Plan Review below).
    Entry step 4's `phase: discussing` row additionally reads two `pipeline.*` keys at the point of use (see "Entry-gate wait for upstream mill-start" below): `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent) — and `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
@@ -44,9 +46,7 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
 **Path Setup.**
 Derive:
 - `git_root = _paths.resolve_git_root()`
-- `worktree_root = _paths.resolve_hub_path()` (the hub root;
-  used to anchor `_mill/` paths in nested layouts)
-- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the hub root)
+- `status_path = _paths.resolve_task_path(worktree_root, cfg['paths']['status_md'])` (resolves against the task worktree root; `worktree_root` is already bound at Entry step 1 above)
 
 `plan_dir` and `reviews_dir` will be derived during Phase: Plan (writes) or Phase: Plan Review (reads) as appropriate — see those phases for details.
 
@@ -55,8 +55,9 @@ Derive:
 
    **`--revise` pre-check.** Whenever `revise_requested` is set (from Step 0.5), this pre-check runs **before** every row of the table below, as a distinct pre-check, not merely appended after it — this ordering is required because the table's existing `| approved: true in overview frontmatter | ... |` row is unconditional on `phase:`, and its condition (`approved: true`) is also satisfied throughout the entire `phase: planned` window `--revise` targets (since `approved:` stays `true` for the whole duration of mill-go's later run too — mill-go's own Prepare step immediately overwrites `phase: planned` to `phase: implementing` the moment execution starts, so `phase: planned` is the narrow, correct window that can only be true in the intended pre-execution period); without this explicit precedence, `--revise` would always hit the pre-existing halt row before ever reaching the new logic.
    Read `phase = _status.read_full(status_path)["yaml"].get("phase")` and the overview frontmatter's `approved:` field (via the file's existing YAML-block-extraction pattern already used elsewhere in this file for the `approved:` field).
-   - If **both** `phase == "planned"` **and** `approved` is currently `true`: proceed with the revise action — (1) flip `approved: false` in `plan/00-overview.md` via the same direct-`Edit` convention already used elsewhere in this file for that field (no `_status.py` involvement, since `approved:` intentionally lives outside `status.md` per this file's own "## Board discipline" section); (2) call `_status.append_phase(status_path, "planning", <timestamp>)`; (3) commit both mutations together on the task branch in one commit (`git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: --revise re-open plan review for {slug}"`) and push; (4) fall through into the existing `phase: planning`/`plan-review-r{N}`/`plan-fix-r{N}` re-entry row (Phase: Plan Review; do NOT rewrite plan files) unmodified.
-   - If `revise_requested` is set but the condition is **not** met (any phase other than `planned`, or `approved` is not `true`): halt with an explicit message naming the current `phase:` value and stating that revising a plan mill-go has already started executing (or has not yet been approved) is unsupported — do not silently force-flip `phase: planning` onto a task with committed/approved batches.
+   - If **both** `phase == "planned"` **and** `approved` is currently `true`: proceed with the revise action — (1) flip `approved: false` in `plan/00-overview.md` via the same direct-`Edit` convention already used elsewhere in this file for that field (no `_status.py` involvement, since `approved:` intentionally lives outside `status.md` per this file's own "## Board discipline" section); (2) call `_status.append_phase(status_path, "planning", <timestamp>)`; (3) commit both mutations together on the task branch in one commit (`git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: --revise re-open plan review for {slug}"`) and push; (4) bind `revise_from_blocked = False`; (5) fall through into the existing `phase: planning`/`plan-review-r{N}`/`plan-fix-r{N}` re-entry row (Phase: Plan Review; do NOT rewrite plan files) unmodified.
+   - If `phase == "blocked"`: proceed with the blocked-resume action — (1) do NOT touch the overview's `approved:` field (it is already `false`); (2) call `_status.append_phase(status_path, "planning", <timestamp>)`; (3) commit on the task branch — `<plan_dir>` is deliberately NOT in this pathspec, unlike the `planned+approved` branch above, since this branch never touches `plan_dir` — `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: --revise resume from blocked for {slug}"` and push; (4) bind `revise_from_blocked = True`; (5) fall through into the existing `phase: planning`/`plan-review-r{N}`/`plan-fix-r{N}` re-entry row (Phase: Plan Review; do NOT rewrite plan files) — same fallthrough target as the `planned+approved` branch above. `blocked_resume_round` is NOT computed here — it is deferred to Phase: Plan Review's own "Path Setup (Plan Review)" step, since `reviews_dir` does not exist yet at this point in Entry (see that section).
+   - If `revise_requested` is set but neither of the two conditions above is met (`phase` is neither `"planned"` with `approved == true` nor `"blocked"`): halt with an explicit message naming the current `phase:` value and stating that revising a plan mill-go has already started executing, that has not yet been approved, or that is not currently blocked, is unsupported — do not silently force-flip `phase: planning` onto a task with committed/approved batches.
    - When `revise_requested` is not set, skip this entire pre-check and fall through to the existing table exactly as it is today.
 
    | state | action |
@@ -64,7 +65,8 @@ Derive:
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
-   | `phase: discussing` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | `phase: blocked` | surface `blocked_reason` from status.md and tell the operator to re-run `/mill-plan --revise` to resume plan review (or resolve manually); halt. This row is reached only when `--revise` was NOT passed — the `--revise` pre-check above already intercepts the `phase: blocked` case when `--revise` is set. |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
 ### Entry-gate wait for upstream mill-start
@@ -73,12 +75,11 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
 
 - Compute the match:
   ```python
-  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [])
+  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [r"^discussion-fix-r\d+$"])
   ```
-  No regex widening on this side.
-  This is deliberate, not an oversight: mill-start's `discussion-fix-r{N}` phase value (written mid-loop during its own Discussion Review, per `mill-start/SKILL.md`'s step 4b) is always folded into the same commit as the immediately following `discussed` write and is never itself pushed as a standalone, externally observable phase;
-  and mill-start's REQUEST_CHANGES loop makes no `_status.append_phase` call at all.
-  The entire span of mill-start's active work — including every round of its own review loop, in both branches — is therefore already fully covered by the single exact value `discussing`, unlike mill-go's side, where mill-plan's own Plan Review loop commits its approve-phase and its Handoff-phase as separate, independently observable commits.
+  The trigger is now widened to also match `discussion-fix-r{N}`.
+  This closes a real gap: GitHub issue #821 has a concrete repro (commit `ab1786d6`) showing mill-start's own convergence-gate not-converged branch (Phase: Discussion Review step 4b, per `mill-start/SKILL.md`) appends+commits+pushes `discussion-fix-r{N}` and continues to the next round *without* the `discussed` phase following in the same commit — so `discussion-fix-r{N}` genuinely is pushed as a standalone, externally observable phase, not always folded into the same commit as the following `discussed` write.
+  This mirrors mill-go's own copy of this exact wait pattern for mill-plan's own phases (`mill-go-base/SKILL.md`: `{"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]`) — same mechanism, same file family.
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
   - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 120)` and compute `giveup_s = timeout_minutes * 60`.
@@ -95,7 +96,7 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
     See `../../docs/harness-tool-contracts.md` for this contract's canonical write-up.
     Branch on the `<event>` content:
     - **`READY`** — re-run Entry step 4 from its top: re-read `status_path` fresh and re-evaluate the whole entry-branch table again from scratch (do not assume `discussed` is now the phase and jump straight to Phase: Plan).
-    - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to the operator. mill-plan's phase table has no pre-existing `blocked` row to reuse the exact message shape from (unlike mill-go's side) — halt with a message of the same shape mill-plan already uses elsewhere for a `BLOCKED:`-prefixed halt (e.g. the Plan Review non-progress/max-rounds `_status.set_blocked` halts): state the phase is blocked and surface `<reason>` verbatim.
+    - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to the operator. This halt is unrelated to the Entry-table's own `phase: blocked` row (see the phase table above) — that row reacts to this task's own `status.md` already being blocked before the wait even starts, whereas this branch reacts to the *upstream mill-start* wait's own script reporting a `BLOCKED:` line; halt with a message of the same shape mill-plan already uses elsewhere for a `BLOCKED:`-prefixed halt (e.g. the Plan Review non-progress/max-rounds `_status.set_blocked` halts): state the phase is blocked and surface `<reason>` verbatim.
       Do not re-arm the wait automatically.
     - **`TIMEOUT after <N>s waiting for phase: discussed`** — halt with a message distinct from the `BLOCKED` case: state that the configured give-up period (`pipeline.entry_wait_timeout_minutes`) elapsed without mill-start reaching `phase: discussed`,
       and that the operator should check on the upstream mill-start session (it may be abandoned, still legitimately working past the give-up window, or never started) and re-run `/mill-plan` to re-arm the wait if it is in fact still in progress.
@@ -104,6 +105,29 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
 - **If `matched` is `True` but `entry_wait` is `False`:** fall back to the original catch-all action for this phase — tell the user what phase is set (`discussing`) and which skill should run instead (mill-start), and halt.
 - **If `matched` is `False`:** the phase is not `discussing`;
   fall through to the narrowed catch-all row above.
+
+### Entry: resuming after a max-rounds block
+
+Whenever the phase-table lookup above lands on the `phase: blocked` row, run this procedure instead of jumping straight to its listed action:
+
+- Read `blocked_reason = _status.read_full(status_path)["yaml"].get("blocked_reason")`.
+- **If `blocked_reason` does not start with `"max-rounds exhausted"`:** this is a hard stop exactly as today — surface `blocked_reason` to the operator and halt.
+  Manual `status.md` intervention is required (matches this file's own "## Board discipline" ban on hand-editing the status.md yaml block — the operator investigates and clears `blocked_reason` themselves, mill-plan does not).
+- **If `blocked_reason` starts with `"max-rounds exhausted"`:** this is a resource-exhaustion block, safe to resume automatically now that the operator has explicitly re-invoked `/mill-plan`.
+  - Derive `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])` (the same expression Phase: Plan Review's own "**Path Setup (Plan Review).**" section uses — `worktree_root` and `cfg` are already bound by this point in Entry step 4).
+  - **`--revise` mid-block detection (check before deriving `N`):** list any `reviews_dir/revise-*` subdirectories.
+    If the most-recently-modified review file across all of them is newer than the most-recently-modified review file directly in the plain `reviews_dir` (or the plain directory has no review files at all), the block occurred mid-`--revise`.
+    Halt: state the block occurred during a `--revise` session and that resuming it is unsupported (the ordinary `--revise` pre-check cannot be re-supplied to recover the namespace, since it requires `phase == "planned"`, which is false once `phase: blocked`).
+    Do not derive `N` or proceed below when this fires.
+  - Otherwise, derive `N = _review_common.discover_round(reviews_dir, "plan", "holistic")` (the file's own established round-discovery helper — scans `reviews_dir` for existing review files and returns `max(found) + 1`, or `1` if none exist).
+  - Compute `local_max_review_rounds = N + max_review_rounds - 1` (a fresh, full `max_review_rounds`-sized budget starting at round `N`).
+    Because `set_blocked`'s `"max-rounds exhausted"` reason is only ever written when `round == max_review_rounds`, `N` will typically equal `max_review_rounds + 1` — without this extension, every one of Phase: Plan Review's existing `round >= max_review_rounds` checks would already be satisfied on the very first resumed iteration, immediately re-triggering an implicit-approve-at-cap or a fresh max-rounds halt without ever running a real review round.
+    `local_max_review_rounds` substitutes for `max_review_rounds` at every site named in Phase: Plan Review's "Resumed-loop round-cap substitution" paragraph, for the remainder of this resumed loop only — the config-derived `max_review_rounds` value itself is never mutated, and a subsequent fresh `/mill-plan` invocation (no `blocked` re-entry involved) uses the unmodified config value as always.
+  - Call `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())` — **not** `f"plan-review-r{N}"`, since round `N` has not run yet; `_status.append_phase` never dedupes against an existing identical Timeline row, so pre-writing round N's own completion marker before round N has even run would leave two identical `plan-review-r{N}` entries with different timestamps once the round actually completes and 4a/4d append it again for real.
+    `"planning"` is already one of the phase values the Entry step-4 table's ordinary re-entry row matches, so it correctly signals "resume the review loop" without claiming a round completed.
+    This call also auto-clears `blocked_reason` per `_status.append_phase`'s existing transition-away-from-blocked behavior — no separate clearing step is needed.
+  - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: resume plan review after max-rounds block for {slug}"`. Push.
+  - Fall through into Phase: Plan Review, entering the loop at round `N` with `local_max_review_rounds` in effect.
 
 ## Phases
 
@@ -226,8 +250,10 @@ skip_checks = frozenset()
 If any batch's `Edits:`/`Creates:` includes `mill-config.yaml`, apply the same two-condition test as Step 1.5's `wiki-config-mutation` fix-table row before calling `_plan_validate.run`: (a) a bootstrap card is present in the plan explaining why the `mill-config.yaml` change is safe mid-flight;
 or (b) the modified keys are provably unused — zero grep hits across `scripts/` and `skills/` for key *removal or rename* only;
 a key *addition* whose consuming code ships in this same plan never satisfies (b), even with zero grep hits.
-If either condition holds, set `skip_checks = frozenset({"wiki-config-mutation"})` and record the justification in the plan commit message (see "Commit on the task branch" below).
+If either condition holds, set `skip_checks = skip_checks | frozenset({"wiki-config-mutation"})` and record the justification in the plan commit message (see "Commit on the task branch" below).
 If neither condition holds, leave `skip_checks` as the empty frozenset from above — let the check fire and halt per the `wiki-config-mutation` fix-table row instead.
+
+**`verify-full-suite` skip-check escape hatch.** Keep the "Verify command scope" section's carve-out (a batch that legitimately touches a cross-cutting helper every test imports MAY use the unbounded `run-all.py`) — but only when the batch's own `## Batch Tests` section documents that justification. If it does, set `skip_checks = skip_checks | frozenset({"verify-full-suite"})` and record the justification in the plan commit message (see "Commit on the task branch" below). If the justification is absent or unconvincing, leave `skip_checks` unchanged for this check — let it fire and halt per the `verify-full-suite` fix-table row (Phase: Plan Review Step 1.5) instead.
 
 ```python
 errors = _plan_validate.run(
@@ -263,11 +289,15 @@ Push.
 Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])`.
 Use this variable for all review file path references in this phase.
 
-When `revise_requested` is set (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
+When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
+
+When `revise_requested` is set **and `revise_from_blocked` is not set** (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
 This mirrors `discover_round`'s own `max(found) + 1` pattern (in `_review_common.py`), applied one level up at the subdirectory level, and supports any number of `--revise` passes on the same task over time — a second `--revise` (e.g. after the first revision was re-approved and mill-go later needs another correction) resolves to `revise-2`, never colliding with or overwriting `revise-1`'s files, since `RE_SIMPLE`/`RE_BATCH` (the fixed-shape filename regexes `discover_round` matches against) have no room for a distinguishing prefix and only work correctly once scoped to a distinct directory.
-Every prepare/finalize CLI invocation dispatched later in this same Plan Review round (both the Agent-mode branch's `--stage prepare`/`--stage finalize` calls and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must pass a new `--reviews-subdir revise-{N+1}` flag whenever `revise_requested` is set, mirroring the existing `--reviewer` flag's documented contract: "override for this invocation only, nothing written back to config."
-When `revise_requested` is not set, omit `--reviews-subdir` entirely and use `reviews_dir` exactly as resolved today — this override never activates for a normal (non-`--revise`) Plan Review run.
+Every prepare/finalize CLI invocation dispatched later in this same Plan Review round (both the Agent-mode branch's `--stage prepare`/`--stage finalize` calls and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must pass a new `--reviews-subdir revise-{N+1}` flag whenever `revise_requested` is set and `revise_from_blocked` is not set, mirroring the existing `--reviewer` flag's documented contract: "override for this invocation only, nothing written back to config."
+When `revise_requested` is not set, or `revise_from_blocked` is set, omit `--reviews-subdir` entirely and use `reviews_dir` exactly as resolved today — this override never activates for a normal (non-`--revise`) Plan Review run, nor for a blocked-resume `--revise` (a blocked-resume is a continuation of the same never-approved round sequence, not a fresh revision pass over an approved plan — reviews continue writing into the plain `reviews_dir`, picking up at `blocked_resume_round` via the normal `discover_round` mechanism).
 This namespacing does not alter `reviews_dir`'s use anywhere else in this file (e.g. Phase: Plan's own writes, which are unaffected by `--revise` since `--revise` only ever re-enters Phase: Plan Review, never Phase: Plan).
+
+**`--max-rounds` threading for blocked-resume (`revise_from_blocked` only).** When `revise_from_blocked` is set **and** the current loop's `round == blocked_resume_round`: every prepare/finalize CLI invocation dispatched in step 2's dispatch below for that one round only (both the Agent-mode branch's `<args>` and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must additionally pass `--max-rounds <blocked_resume_round>`, mirroring the exact `--reviews-subdir revise-{N+1}` threading pattern above and mill-start's `--auto` extension-round mechanism (`--max-rounds <max_review_rounds + 1>`). Omit `--max-rounds` on every other round, including subsequent rounds within the same blocked-resume `--revise` invocation once `round` has advanced past `blocked_resume_round`. This override exists so the CLI's own round-cap guard (`round_n > max_rounds` raises a hard error) does not reject the resumed round — it is never itself a signal to run more rounds than the loop's existing convergence/step-6 logic would otherwise allow.
 
 **Tree-guard safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call in this phase (steps 4a/4b/4c/4d below), call `_treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`.
 If the returned dict's `"triggered"` field is `True`, call `_status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` immediately after — this records the detection non-blockingly;
@@ -284,6 +314,9 @@ The skip is recorded in commit history;
 no `status.md` phase flip beyond the existing Handoff `planned` row.
 
 Loop up to `max_review_rounds` rounds.
+
+**Resumed-loop round-cap substitution.** When this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), `local_max_review_rounds` substitutes for `max_review_rounds` at every site in this phase that compares against it, for the remainder of that resumed loop only: the loop-length cap just stated above, the step 1 round-report line ("Plan Review — round N/max_review_rounds" prints as "round N/local_max_review_rounds" instead), the Convergence gate's two `round >= max_review_rounds` / `round < max_review_rounds` bullets, every 4a/4b/4c inline `round >= max_review_rounds` (implicit-approve-at-cap) / `round < max_review_rounds` restatement, and step 6's `{N} rounds` in its halt message. The config-derived `max_review_rounds` value itself is never mutated by this substitution — a subsequent fresh `/mill-plan` invocation (no `blocked` re-entry involved) uses the unmodified config value everywhere, as always.
+
 Each round:
 
 1. Report: **"Plan Review — round N/max_review_rounds"**.
@@ -297,7 +330,7 @@ Each round:
      no LLM token is spent;
      no review round is consumed.
    - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then run `grep '^{' <log-path> | tail -1` to extract the JSON line.
-   - **Two-pass cap:** if the validator fails again on the second pass, mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user.
+   - **Two-pass cap:** if the validator fails again on the second pass, immediately before halting, call `_status.set_blocked(status_path, "plan-validate non-progress", timestamp=_timestamp.now_utc_iso())`; commit on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan-validate non-progress) for {slug}"`) and push. Then mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user.
      Do NOT auto-retry beyond the second pass.
      The two-pass cap matches the `roles.implementer.self_fix_rounds` self-fix pattern.
    - If `pipeline.skip_validate: true` ever appears in config (currently it does not;
@@ -310,6 +343,7 @@ Each round:
    | commit-none-with-content       | Halt — a card declares Commit: none but also has non-none Edits:/Creates:/Deletes:/Moves:. The planner must either give the card a real Commit: message (if the content is genuinely this card's own work) or move the non-none content to a separate card and leave this card as a true zero-diff verification-only card. Not mechanically fixable — either resolution changes the plan's structure. |
    | card-numbering                 | Renumber cards within the affected batch sequentially starting at the lowest existing number; if the conflict is across batches, re-number the later-batch's cards to start above the earlier batch's max. Update every "card N" reference inside the plan. |
    | depends-on-unknown             | If the unknown dep is an integer, compare it against the `number:` values in the Batch Index — if close to an existing number (likely a typo), correct it. If the unknown dep is a string (legacy format), compare it against the `name:` values — if it is a typo of an existing entry, correct it. If the dependency genuinely needs a new batch, halt — adding a batch is not a mechanical fix. |
+   | depends-on-batch-mismatch      | The payload's `batch:` field names the batch whose per-batch file frontmatter `depends-on:` disagrees with the overview's Batch Index entry for that same batch (payload's `message:` field shows both sides). Edit whichever side is stale so the per-batch file's `depends-on:` and the overview Batch Index entry's `depends-on:` name the identical dependency set. |
    | parallel-modifies-overlap      | If one batch logically depends on the other, add the missing edge to the dependent's depends-on list. If the two batches truly need to write to the same file in parallel, the plan is structurally wrong — halt.        |
    | reads-not-backtick-path        | Re-format the bullet to backtick-only paths; move any inline parenthetical commentary to the card's Requirements: prose. Strip any line-range suffix (e.g. `:55-65`) from the path.                                       |
    | move-format                    | Re-format the `Moves:` sub-bullet to `` `old/path` -> `new/path` `` (backtick-wrapped paths, ASCII ` -> ` arrow, no extra whitespace or commentary). |
@@ -323,7 +357,10 @@ Each round:
    | requirements-quote-indent-drift | Locate the card's `Requirements:` fence identified by the error payload's `message` (its fence index and the reported strip amount `N` — the message carries no content snippet). Strip exactly `N` leading space characters from each line of the fence body (not necessarily to column 0 — preserve whatever baseline indentation remains after the strip) so its content is a literal byte-exact substring of the target `Edits:` file named in the payload's `path` field. |
    | verify-not-isolated            | Open the per-batch file named by the error payload's `batch:` field (resolve `_mill/plan/<batch>.md`). Read the offending command from the payload's `path:` field. Replace the frontmatter line `verify: <original>` with `verify: PYTHONPATH= <original>` (literal `PYTHONPATH=`, single space, original command). One row, one prepend. |
    | verify-unrelated-test-file     | Remove the named token (the payload's `path:` field) from the offending batch's `verify:` command frontmatter (identified by the payload's `batch:` field). Log what was dropped and why in the validator-fix commit message, so the drop is auditable rather than silent. |
-   | verify-excludes-edited-tagged-test | Open the offending batch's verify: command (payload's batch/path fields name the batch and the tagged test file; the payload's message field names the missing tag in its trailing "naming '<tag>'" fragment). If a -tags flag already exists, append ,<tag> to its value; otherwise append " -tags <tag>" to the command. |
+   | verify-excludes-edited-tagged-test | Open the offending batch's verify: command (payload's batch/path fields name the batch and the tagged test file; the payload's message field names the missing tag in its trailing "naming '<tag>'" fragment). If a `-tags` flag already exists on the command: do not comma-join `<tag>` into its value. Note this is a defense-in-depth choice, not a correction of broken Go semantics — Go's `-tags` set is satisfied by ANY-membership (each file's own `//go:build` line is checked independently against the full enabled-tag set, so a plain single-tag `//go:build scout` file is compiled/run whenever `scout` is enabled, regardless of what else is also enabled; `-tags integration,scout` does NOT exclude it). The real risk is project-specific: some repos deliberately give tagged suites mutually exclusive semantics (a suite's own constraint combines its tag with a negation of a sibling suite's tag, e.g. to keep suites isolated for cost/reporting reasons) — comma-joining silently breaks that convention if it's in use, and this check cannot tell whether a given project relies on it. Instead, append a new ` && `-chained invocation of the same base command (same verb and package pattern as the existing invocation) carrying its own `-tags <tag>` flag — strictly safer, since it never assumes either way. Otherwise (no `-tags` flag anywhere in the command yet): append `" -tags <tag>"` to the command in place, unchanged. |
+   | verify-malformed-cwd           | Open the offending `verify:` field named by the error payload's `path:` field (a batch file path or the overview path) and `batch:` field (batch stem, or `None` for the overview). Fix the malformed `{cwd, command}` mapping per the payload's `message:` field (e.g. a bad `cwd` value that isn't `hub`/`git_root`, or a mapping missing `command:`). |
+   | verify-mixed-cwd               | Each error dict's `message:` field states only that batch's own resolved cwd plus the sorted list of conflicting batch names; read all `verify-mixed-cwd` error dicts emitted for this plan together to see every batch's individual cwd. Change the outlier batch(es)' `verify:` mapping's `cwd:` value (or convert to the plain-string form, which implies `cwd: git_root`) so every batch in the plan resolves the `{cwd, command}` mapping form to the same root — all `hub` or all `git_root`. |
+   | verify-full-suite              | The payload's `path:` field carries the offending `verify:` command (`batch:` names the offending batch, or `None` for the overview's module-wide `verify:`). If the batch's own `## Batch Tests` section already documents the cross-cutting-helper justification (see the `verify-full-suite` skip-check escape hatch in Phase: Plan), re-run with `--skip-check verify-full-suite`. Otherwise scope the command via `-k <pattern>` or `--only <every affected test file>`. |
    | wiki-config-mutation           | This check cannot be fixed by editing plan files — the batch intentionally modifies `mill-config.yaml`. To proceed, verify one of two conditions: (a) a bootstrap card is present — a card whose body explains why the mill-config.yaml change is safe mid-flight for the currently-shipping task; or (b) the modified keys are provably unused — meaning key *removal or rename* where zero grep hits across `scripts/` and `skills/` confirm no existing code references them. (For key *addition* where consuming code is also being added in the same plan, zero grep hits does NOT satisfy condition (b); use (a) or halt.) If either condition holds: document the justification in the validator-fix commit message and re-run the CLI with `--skip-check wiki-config-mutation`. If `wiki-config-mutation` co-occurs with other fixable validator errors, fix those first per their rows, then re-run with `--skip-check wiki-config-mutation`. If neither condition holds: halt — the plan requires redesign. |
    | batch-oversized                | Halt — the batch exceeds `pipeline.max_cards_per_batch` cards and/or the `pipeline.max_batch_context_tokens` context estimate. Splitting a batch is a structural change, not a mechanical fix; the planner must re-split at Phase: Plan. Not auto-fixable. |
    | out-of-worktree-target         | Halt — an `Edits:`/`Creates:` target resolves outside the worktree (home-dir or absolute path). The operator must handle such edits manually; the implementer can never be pointed at them. Not auto-fixable. |
@@ -361,6 +398,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
    If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
    The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
@@ -402,6 +440,8 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -456,6 +496,7 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    Does not apply to the Subprocess/psmux branch immediately below.
 
    **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
@@ -464,6 +505,8 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    **Subprocess/psmux branch:**
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
@@ -475,8 +518,8 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
 
    The round counter is **not** consumed — the round produced no reviewable output.
    Absent-JSON and `verdict: ERROR` share **one consecutive-non-reviewable-round counter**: any mix of two consecutive non-reviewable rounds (ERROR then absent-JSON, or vice versa) triggers the two-pass cap.
-   On the **second** consecutive non-reviewable run, halt: if it was absent-JSON, report `BLOCKED: plan review no-JSON round {N}` and surface the last stderr line(s) from the bg log;
-   if it was `verdict: ERROR`, report `BLOCKED: review ERROR-only round {N}` and surface each entry's `error` string to the user.
+   On the **second** consecutive non-reviewable run, immediately before halting: if it was absent-JSON, call `_status.set_blocked(status_path, f"plan review no-JSON round {N}", timestamp=_timestamp.now_utc_iso())`; commit (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan review no-JSON round {N}) for {slug}"`) and push; then halt, reporting `BLOCKED: plan review no-JSON round {N}` and surfacing the last stderr line(s) from the bg log.
+   If it was `verdict: ERROR`, call `_status.set_blocked(status_path, f"review ERROR-only round {N}", timestamp=_timestamp.now_utc_iso())`; commit (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (review ERROR-only round {N}) for {slug}"`) and push; then halt, reporting `BLOCKED: review ERROR-only round {N}` and surfacing each entry's `error` string to the user.
    Do NOT auto-retry beyond the second pass.
    The two-pass cap mirrors step 1.5's validator gate. *(Note: the CLI now emits a `verdict: ERROR` envelope on uncaught exceptions per millpy-review-plan.py, so a true absent-JSON line means the worker died before printing — mirroring mill-go's "only treat exit 1 as unrecoverable when the JSON line is absent" rule.
    Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4c's NIT path.)*
@@ -514,8 +557,9 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
 
 6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): `_status.set_blocked(status_path, f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain", timestamp=ts)`;
    commit and push;
-   halt with "Plan blocked after {N} rounds, {M} BLOCKINGs remain.
+   halt with "Plan blocked after {N} rounds, the last round's {M} BLOCKING finding(s) were acted on (fixed or pushed back) but not yet re-reviewed.
    Task left as [active] for manual review." `{M}` is `result["blocking_count"]` from the most recent CLI invocation — do not re-count manually.
+   Step 4d's fixer pass already ran on those exact findings before this round-cap check fires, so "BLOCKINGs remain" would be misleading at the moment this halt prints — this operator-facing halt text is reworded accordingly; `_status.set_blocked`'s own `blocked_reason` argument keeps its existing, unreworded text (a machine field consumed only by the Entry `blocked` re-entry row's `.startswith("max-rounds exhausted")` prefix check, never read verbatim by a human at that point).
    If `blocking_count` was 0 in the latest round, this halt should not have fired — verify step 4c logic before proceeding.
 
 ### Phase: Handoff
@@ -558,6 +602,7 @@ Never hand-write or guess a date.
   "Replace `_load_config` in `mill-claim.py` with `from _config import load_config`" is correct.
   "Refactor config loading to use the shared helper" is not — it forces the implementer to explore, defeating the cold-start guarantee.
   Any fenced block quoting exact source text inside `Requirements:` must reproduce the source's own original indentation byte-for-byte and must NOT pick up extra leading whitespace from the surrounding list item's continuation indent — author such fences so their content, read literally, is already a byte-exact substring of the file being quoted, regardless of how deeply the enclosing list item is nested (the source excerpt may legitimately have its own nonzero baseline indentation — e.g. quoting an indented method body — the rule is "no *extra* indentation beyond the source's own," not "no indentation at all").
+- **Existing-test-impact check for contract changes** — when a card's `Requirements:` states that it changes an exported function's, method's, or class's existing behavior/contract (not just adding new code), grep the codebase for existing callers and tests of that symbol before finalizing the plan, and add any found to that card's `Context:` (read-only) or `Edits:` (if the test itself needs updating to match the new contract). "Intentionally changes an exported symbol's contract" is a judgment call about the card's own stated design intent — only the planning agent, already reading the full `Requirements:` prose, can reliably make it; a mechanical validator check can't distinguish an intentional contract change from an incidental edit to the same function.
 - **Express renames as `Moves:` pairs** — never encode a rename as a `Creates:` + `Deletes:` combination;
   that destroys git rename history and inflates the diff.
   A rename-plus-extraction is the `Moves:` pair for the relocated file plus a separate `Creates:` for the newly extracted file.
