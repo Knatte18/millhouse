@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan SKILL.md: step 6 max-rounds escape bugs, self-run validator citation errors, and Step 1.5 fix-table wrong remedies'
 slug: mill-plan-step6-and-fixtable-bugs
-approved: false
+approved: true
 started: '20260814-092916'
 parent: main
 root: ""

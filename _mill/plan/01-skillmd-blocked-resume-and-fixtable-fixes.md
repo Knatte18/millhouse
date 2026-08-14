@@ -131,6 +131,8 @@ No batch-local decisions beyond the two in `## Shared Decisions` (00-overview.md
 - **Moves:** none
 - **Requirements:**
 
+  Depends on card 1 (this card's new "Path Setup" paragraphs reference `revise_from_blocked`, bound by card 1's pre-check — apply in card order to avoid Edit-tool ambiguity from a stale anchor, consistent with cards 2/3).
+
   In `### Phase: Plan Review`, the `**Path Setup (Plan Review).**` section, locate this exact current text (no leading indentation — these are top-level paragraph lines):
 
 ```
