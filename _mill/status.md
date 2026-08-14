@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r3
 slug: code-comments-skill-extraction
 branch: hanf/code-comments-skill-extraction
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-14T08:33:03Z'
+discussion-fix-r3  '2026-08-14T09:20:31Z'
 ```
