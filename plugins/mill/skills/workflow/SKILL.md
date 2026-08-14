@@ -72,5 +72,6 @@ Detect the project language from marker files in the working directory and use t
 |-------------|----------|--------|
 | `pyproject.toml`, `setup.py`, `setup.cfg` | Python | `@python:python-build`, `python-comments`, `python-testing` |
 | `.csproj`, `.sln` | C# | `@csharp:csharp-build`, `csharp-comments`, `csharp-testing` |
+| `go.mod` | Go | `@golang:golang-build`, `golang-comments`, `golang-testing` |
 
 If multiple languages are present, use the skills matching the files being edited.
