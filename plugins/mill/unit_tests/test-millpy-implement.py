@@ -1576,6 +1576,71 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertIn("batch-a", per_batch["errored"])
         self.assertIn("batch-b", per_batch["errored"])
 
+    def test_baseline_stage_finally_teardown_failure_never_raises(self):
+        """remove_safe raising from the finally-block teardown site never crashes the stage."""
+        self._write_two_batch_fixture()
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(
+                millpy_implement._worktree, "remove_safe",
+                side_effect=millpy_implement._worktree.WorktreeLockedError("still locked"),
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                return_value={"batch-a": [], "batch-b": []},
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        self.assertEqual(module_wide["substage"], "module_wide")
+        self.assertEqual(per_batch["substage"], "per_batch")
+        self.assertEqual(per_batch["computed"], ["batch-a", "batch-b"])
+
+    def test_baseline_stage_checkout_failure_teardown_failure_never_raises(self):
+        """remove_safe raising from the checkout-failure early-return teardown site never crashes the stage."""
+        self._write_two_batch_fixture()
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_link_dependency_dirs",
+                side_effect=RuntimeError("link failed"),
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._worktree, "remove_safe",
+                side_effect=millpy_implement._worktree.WorktreeLockedError("still locked"),
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(json.loads(lines[0])["substage"], "module_wide")
+        per_batch = json.loads(lines[1])
+        self.assertEqual(per_batch["substage"], "per_batch")
+        self.assertIn("batch-a", per_batch["errored"])
+        self.assertIn("batch-b", per_batch["errored"])
+
     def test_baseline_stage_enumerates_batch_own_verify_despite_later_deletes(self):
         """A batch whose own verify: names a path a LATER batch's Deletes: removes still gets a baseline."""
         plan_dir = self.tmp_path / "task" / "plan"
