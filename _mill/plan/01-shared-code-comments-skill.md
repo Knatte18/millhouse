@@ -53,6 +53,7 @@ A reader should understand a symbol's purpose from its signature and doc comment
 
 Inline comments explain **why** something is done, never **what** is being done;
 the code already shows that.
+If the code needs a "what" comment, the code itself is unclear — refactor instead.
 
 ### Corollary: many comments needed is a refactoring signal
 
@@ -112,7 +113,7 @@ See the per-language skill for how that language's tooling renders consecutive c
 - **Moves:** none
 - **Requirements:**
   Replace the entire content of `plugins/golang/skills/golang-comments/SKILL.md` with exactly the following.
-  Relative to today's file: adds the Step-0 load line; trims "File-level comments" to Go's placement mechanic only (the "must describe the file" principle now lives in `code-comments`); drops the "Introduction" section entirely (purpose-not-mechanism now lives in `code-comments`); trims "Exported symbol doc comments" to keep only the Go-specific placement/naming-start rule (drops the restated what+why/not-how prose); rewrites the "Constants and variables" example and bullet to remove the end-of-line comment style, per `end-of-line-comments-no-carveout`; trims "Line-wrap style" to keep only the Godoc-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); drops "Never comment out code", "No edit-history comments", and "No mechanical restatements" from "Prohibited patterns", keeping only the Go-specific "No `/* block comments */` inside function bodies" entry:
+  Relative to today's file: adds the Step-0 load line; trims "File-level comments" to Go's placement mechanic only (the "must describe the file" principle now lives in `code-comments`); drops the "Introduction" section entirely (purpose-not-mechanism now lives in `code-comments`); trims "Exported symbol doc comments" to keep only the Go-specific placement/naming-start rule (drops the restated what+why/not-how prose); rewrites the "Constants and variables" example and bullet to remove the end-of-line comment style, per `end-of-line-comments-no-carveout`; trims "Line-wrap style" to keep only the Godoc-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); removes "Inline comments" entirely (byte-identical to the shared why-not-what rule, now stated once in `code-comments` including the "refactor instead" tail — card 1's Requirements above already carries this addition); drops "Never comment out code", "No edit-history comments", and "No mechanical restatements" from "Prohibited patterns", keeping only the Go-specific "No `/* block comments */` inside function bodies" entry:
 
 ````markdown
 ---
@@ -314,13 +315,6 @@ func LoadPortfolio(dir string) (*Portfolio, error) {
 
 ---
 
-## Inline comments
-
-- Use inline comments only to explain **why**, never **what**.
-- If the code needs a "what" comment, the code itself is unclear — refactor instead.
-
----
-
 ## Error handling
 
 Always comment non-obvious error handling choices.
@@ -411,7 +405,7 @@ def foo():
 - For any non-trivial function, the docstring must be **multi-line** and explain:
   1. **What** the function does at the domain level — not "processes data" but "stitches together a CBI price index from two sources".
   2. **What** it returns — describe the structure, columns, or shape of the output.
-- When a function's steps genuinely need explaining, decompose it into named sub-functions that each get their own docstring — the decomposition itself becomes the documentation.
+- See the `code-comments` skill's "many comments needed" corollary for when a function's steps need explaining — decompose into named sub-functions instead of narrating in the docstring.
   Only when that isn't practical does a single inline comment inside the function body remain an accepted exception;
   it does not go in the docstring.
 - Include `Args:` when parameters carry domain meaning not obvious from the name (e.g., `std_ratio`, `filter_outliers`, `RSI_stop_date`).
@@ -534,7 +528,7 @@ and later steps assume the join has already happened.
 - **Moves:** none
 - **Requirements:**
   Replace the entire content of `plugins/csharp/skills/csharp-comments/SKILL.md` with exactly the following.
-  Relative to today's file: adds the Step-0 load line; adds a new "File header" section (first section, per the `csharp-file-header-syntax` discussion decision — a `///` comment block above `using`/`namespace`, not `/* */`, for consistency with `///` used on every other doc comment in a C# file); trims "XML documentation" to keep only the C#-specific `/// <summary>` requirement (drops the restated what+why/not-how prose); trims "Line-wrap style" to keep only the XML-doc-tooling-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); removes "Prohibited patterns" entirely (all three entries — comment-out, edit-history, no-end-of-line-comments — are now fully covered by `code-comments` and nothing C#-specific remains):
+  Relative to today's file: adds the Step-0 load line; adds a new "File header" section (first section, per the `csharp-file-header-syntax` discussion decision — a `///` comment block above `using`/`namespace`, not `/* */`, for consistency with `///` used on every other doc comment in a C# file); trims "XML documentation" to keep only the C#-specific `/// <summary>` requirement (drops the restated what+why/not-how prose); trims "Line-wrap style" to keep only the XML-doc-tooling-collapses-into-one-paragraph sentence (the common rule now lives in `code-comments`); removes "Inline comments" entirely (byte-identical to the shared why-not-what rule, now stated once in `code-comments` including the "refactor instead" tail); removes "Prohibited patterns" entirely (all three entries — comment-out, edit-history, no-end-of-line-comments — are now fully covered by `code-comments` and nothing C#-specific remains):
 
 ````markdown
 ---
@@ -577,11 +571,6 @@ namespace Checkout
   This makes the inheritance explicit and signals to future readers (and to Claude) that the doc lives on the interface and no new docstring is needed here.
 - Only write a fresh `/// <summary>` on an implementation when it adds information beyond the interface contract, or when the member has no interface counterpart.
 
-## Inline comments
-
-- Use inline comments only to explain **why**, never **what**.
-- If the code needs a "what" comment, the code itself is unclear — refactor instead.
-
 ## Line-wrap style
 
 XML-doc tooling collapses consecutive `///` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
@@ -610,7 +599,7 @@ public string ProcessOrder(Order order) {
 ```
 ````
 
-Open edge case (non-blocking, per the `csharp-file-header-syntax` discussion decision): placing `///` above `using`/`namespace` with no declaration directly beneath it may trigger the compiler's CS1587 warning depending on exact placement. If a `.csproj`/`dotnet` toolchain is available in this environment, verify by compiling a throwaway `.cs` file with the proposed header placement; if it warns, note the finding in this card's commit body but do not change the shipped example — this is documented as an open edge case for a future C# batch to resolve, not a blocker for this task. If no `.csproj`/`dotnet` toolchain is available, skip the compile check — it was never required to block completion.
+Open edge case (non-blocking, per the `csharp-file-header-syntax` discussion decision): placing `///` above `using`/`namespace` with no declaration directly beneath it may trigger the compiler's CS1587 warning depending on exact placement. If a `.csproj`/`dotnet` toolchain is available in this environment, verify by compiling a throwaway `.cs` file with the proposed header placement, created at `.scratch/csharp-header-check/Program.cs` (create the directory if needed); delete the entire `.scratch/csharp-header-check/` directory immediately after the check so no stray file is left in the repo tree. If it warns, note the finding in this card's commit body but do not change the shipped example — this is documented as an open edge case for a future C# batch to resolve, not a blocker for this task. If no `.csproj`/`dotnet` toolchain is available, skip the compile check — it was never required to block completion.
 - **Commit:** `docs(csharp-comments): add file header section, extract shared rules into code-comments`
 
 ### Card 5: Verify batch 1 — no duplicated content, correct structure
@@ -620,17 +609,23 @@ Open edge case (non-blocking, per the `csharp-file-header-syntax` discussion dec
   - `plugins/golang/skills/golang-comments/SKILL.md`
   - `plugins/python/skills/python-comments/SKILL.md`
   - `plugins/csharp/skills/csharp-comments/SKILL.md`
+  - `_mill/discussion.md`
 - **Edits:** none
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
   Run these checks and fix any failure by re-editing the offending file from card 1-4's `Requirements:` text before proceeding — this card's job is to confirm cards 1-4 landed exactly as specified, not to make new decisions:
-  1. `grep -n "must begin with a comment that describes" plugins/golang/skills/golang-comments/SKILL.md` and equivalent greps for the removed purpose-not-mechanism prose, the "How it works" / numbered-algorithm-step language, and the "mandatory" per-step inline-comment language in `python-comments/SKILL.md` — all must return no matches (confirms `## Testing` bullets 1 and 4 in `_mill/discussion.md`).
+  1. Run these greps; all must return no matches (confirms `## Testing` bullets 1 and 4 in `_mill/discussion.md`):
+     - `grep -n "must begin with a comment that describes" plugins/golang/skills/golang-comments/SKILL.md` (removed purpose-not-mechanism prose)
+     - `grep -n "How it works" plugins/python/skills/python-comments/SKILL.md` (removed numbered-algorithm-step heading text)
+     - `grep -n "algorithm or logic in numbered steps" plugins/python/skills/python-comments/SKILL.md` (removed numbered-algorithm-step requirement text)
+     - `grep -n "mandatory" plugins/python/skills/python-comments/SKILL.md` (removed "mandatory at each logical step" inline-comment requirement)
   2. Confirm the first line under the H1 in each of `golang-comments/SKILL.md`, `python-comments/SKILL.md`, and `csharp-comments/SKILL.md` is exactly `**Load the `code-comments` skill first.**`.
   3. Confirm `plugins/mill/skills/code-comments/SKILL.md` has valid frontmatter (`name: code-comments`, a one-line `description`) and its content matches card 1's `Requirements:` block.
   4. Confirm the "Constants and variables" example in `golang-comments/SKILL.md` has no end-of-line comments (no trailing `//` sharing a line with a constant's value).
   5. Confirm `csharp-comments/SKILL.md`'s "Prohibited patterns" section and `python-comments/SKILL.md`'s "Prohibited patterns" section are both absent (fully removed, not just emptied).
+  6. Confirm `golang-comments/SKILL.md`'s and `csharp-comments/SKILL.md`'s "## Inline comments" sections are both absent (fully removed, not just emptied) — the why-not-what rule, including the "refactor instead" tail, now lives only in `code-comments/SKILL.md`.
 - **Commit:** none
 
 ## Batch Tests
