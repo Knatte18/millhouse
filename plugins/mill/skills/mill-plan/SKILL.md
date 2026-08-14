@@ -481,8 +481,8 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
 
    The round counter is **not** consumed — the round produced no reviewable output.
    Absent-JSON and `verdict: ERROR` share **one consecutive-non-reviewable-round counter**: any mix of two consecutive non-reviewable rounds (ERROR then absent-JSON, or vice versa) triggers the two-pass cap.
-   On the **second** consecutive non-reviewable run, halt: if it was absent-JSON, report `BLOCKED: plan review no-JSON round {N}` and surface the last stderr line(s) from the bg log;
-   if it was `verdict: ERROR`, report `BLOCKED: review ERROR-only round {N}` and surface each entry's `error` string to the user.
+   On the **second** consecutive non-reviewable run, immediately before halting: if it was absent-JSON, call `_status.set_blocked(status_path, f"plan review no-JSON round {N}", timestamp=_timestamp.now_utc_iso())`; commit (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan review no-JSON round {N}) for {slug}"`) and push; then halt, reporting `BLOCKED: plan review no-JSON round {N}` and surfacing the last stderr line(s) from the bg log.
+   If it was `verdict: ERROR`, call `_status.set_blocked(status_path, f"review ERROR-only round {N}", timestamp=_timestamp.now_utc_iso())`; commit (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (review ERROR-only round {N}) for {slug}"`) and push; then halt, reporting `BLOCKED: review ERROR-only round {N}` and surfacing each entry's `error` string to the user.
    Do NOT auto-retry beyond the second pass.
    The two-pass cap mirrors step 1.5's validator gate. *(Note: the CLI now emits a `verdict: ERROR` envelope on uncaught exceptions per millpy-review-plan.py, so a true absent-JSON line means the worker died before printing — mirroring mill-go's "only treat exit 1 as unrecoverable when the JSON line is absent" rule.
    Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4c's NIT path.)*
