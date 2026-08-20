@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: git-pr-graphql-5xx-fallback
 branch: hanf/git-pr-graphql-5xx-fallback
 plan: _mill/plan
@@ -22,4 +22,13 @@ planning  '2026-08-20T17:55:58Z'
 plan-fix-r1  '2026-08-20T18:00:08Z'
 plan-fix-r2  '2026-08-20T18:03:27Z'
 planned  '2026-08-20T18:03:41Z'
+implementing  '2026-08-20T18:04:05Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: rest-fallback
+    state: pending
 ```
