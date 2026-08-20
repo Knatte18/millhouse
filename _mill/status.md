@@ -30,7 +30,9 @@ implementing  '2026-08-20T18:19:58Z'
 ```yaml
 batches:
   - name: long-path-helper
-    state: pending
+    state: running
+    implementer_session: 7162cddf-10b2-4913-bc7f-c36e5d1bf669
+    start_sha: b3ba95ffa380ede3033ac291cf10db9a5e564e0a
   - name: worktree-removal-longpaths
     state: pending
   - name: junction-walker-long-path-safety
