@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-plan-entry-config-load-args-swapped
 branch: hanf/mill-plan-entry-config-load-args-swapped
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-20T16:38:15Z'
 discussed  '2026-08-20T17:57:57Z'
 planning  '2026-08-20T18:00:40Z'
+plan-review-r1  '2026-08-20T18:03:53Z'
 ```

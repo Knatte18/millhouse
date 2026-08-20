@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan Entry step 2: _config.load_config called with hub_root/worktree_root swapped vs its own signature'
 slug: mill-plan-entry-config-load-args-swapped
-approved: false
+approved: true
 started: 20260820-175854
 parent: main
 root: ""
