@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fix-call-site-keyword-args
 slug: mill-plan-entry-config-load-args-swapped
 branch: hanf/mill-plan-entry-config-load-args-swapped
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-08-20T18:00:40Z'
 plan-review-r1  '2026-08-20T18:03:53Z'
 planned  '2026-08-20T18:04:10Z'
 implementing  '2026-08-20T18:04:37Z'
+approved-fix-call-site-keyword-args  '2026-08-20T18:06:55Z'
 ```
 
 ## Batches
@@ -27,7 +28,8 @@ implementing  '2026-08-20T18:04:37Z'
 ```yaml
 batches:
   - name: fix-call-site-keyword-args
-    state: running
+    state: approved
     implementer_session: a51c59da-b407-4819-818d-32a39a0acc96
     start_sha: b7c3df157e0ac4f5654bea02cfb1405e70dfb02f
+    commit_sha: 7da172119e07f2c514d20affef96edfcd24d3b9f
 ```
