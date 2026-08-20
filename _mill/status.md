@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-plan-entry-config-load-args-swapped
 branch: hanf/mill-plan-entry-config-load-args-swapped
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-08-20T18:04:10Z'
 implementing  '2026-08-20T18:04:37Z'
 approved-fix-call-site-keyword-args  '2026-08-20T18:06:55Z'
 holistic-reviewing  '2026-08-20T18:07:26Z'
+holistic-approved  '2026-08-20T18:08:29Z'
 ```
 
 ## Batches
