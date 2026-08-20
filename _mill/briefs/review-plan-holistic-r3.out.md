@@ -1,0 +1,23 @@
+MILL_REVIEW_BEGIN
+# Review: millpy-implement --stage baseline: Windows verify-baseline worktree teardown fails (WinError 145 / long paths), leaves orphaned artifacts — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewer_self_id: claude-sonnet-5
+reviewed_file: plan/
+date: 2026-08-20
+```
+
+## Findings
+
+### [NIT:scope] Card 8's `_is_reparse_point` test skips the `os.lstat` fallback branch
+**Location:** 04-safe-rmtree-long-path-safety.md, Card 8, 4th test case
+**Issue:** Card 7 routes `p` through both `os.path.isjunction(p)` and the `except`-guarded `os.lstat(p)` fallback inside `_is_reparse_point`, but Card 8's new case only mocks `os.path.isjunction` (never `os.lstat`), so the fallback branch's `to_extended` routing is never exercised. Additionally, on any Python <3.12 test runner (no `os.path.isjunction` builtin, `hasattr` is False), the mocked `isjunction` would never be invoked at all and the case would pass without verifying anything, since `os.lstat`'s real `AttributeError` on `st_file_attributes` is silently caught and returns `False` regardless.
+**Fix:** Add a fifth sub-case (or extend the fourth) that patches `hasattr`/removes `os.path.isjunction` and mocks `_safe_rmtree.os.lstat` instead, asserting it receives the marker value, to cover both branches of `_is_reparse_point` that Card 7 touches.
+
+## Verdict
+
+APPROVE
+Plan is internally consistent, decisions faithfully applied, and source claims verified accurate; one non-blocking test-coverage gap noted.
+MILL_REVIEW_END

@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-implement --stage baseline: Windows verify-baseline worktree teardown fails (WinError 145 / long paths), leaves orphaned artifacts'
 slug: mill-go-windows-baseline-teardown-winerror145
-approved: false
+approved: true
 started: 20260820-175134
 parent: main
 root: ""
