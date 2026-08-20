@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-long-path-helper
 slug: mill-go-windows-baseline-teardown-winerror145
 branch: hanf/mill-go-windows-baseline-teardown-winerror145
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r2  '2026-08-20T18:12:34Z'
 plan-fix-r3  '2026-08-20T18:19:08Z'
 planned  '2026-08-20T18:19:28Z'
 implementing  '2026-08-20T18:19:58Z'
+approved-long-path-helper  '2026-08-20T18:23:17Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-08-20T18:19:58Z'
 ```yaml
 batches:
   - name: long-path-helper
-    state: running
+    state: approved
     implementer_session: 7162cddf-10b2-4913-bc7f-c36e5d1bf669
     start_sha: b3ba95ffa380ede3033ac291cf10db9a5e564e0a
+    commit_sha: a6d6d7187335b793d023485b3b68d9fcd5025fe3
   - name: worktree-removal-longpaths
     state: pending
   - name: junction-walker-long-path-safety
