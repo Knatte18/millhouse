@@ -85,7 +85,9 @@ even though full automation was still possible via REST.
   the `-q .url` pattern step 7 already uses (`gh pr view --json url -q .url`). `head` is the bare
   branch name (no `owner:` prefix), consistent with step 10's existing `--head <branch>` usage —
   this skill assumes a same-repo (non-fork) flow throughout, so no cross-repo head format is
-  needed.
+  needed here. (The duplicate-pr-detection decision's GET fallback uses the owner-prefixed
+  `owner:branch` form instead — that's a different GitHub endpoint with a different field
+  requirement, not a contradiction; see that decision's note.)
 - Rejected: `jq -n ... > payload.json` + `gh api --input payload.json` (adds an external `jq`
   dependency not otherwise required by this skill, plus a temp-file lifecycle to manage).
   `python -c "import json..."` for the same purpose (heavier than needed, same temp-file issue).
@@ -104,7 +106,16 @@ even though full automation was still possible via REST.
   create attempts will fail with GitHub's standard duplicate-PR message (GraphQL and REST use the
   same wording for this case), which is a reliable, stable signal to check at the single point
   where both tiers have already been tried — cheaper than duplicating the check before every
-  tier, and it closes the loop without touching step 7 at all.
+  tier, and it closes the loop without touching step 7 at all. Unlike the transient-outage error
+  text rejected in rest-fallback-trigger (which genuinely drifts across `gh` versions and outage
+  types), the "already exists" wording is GitHub's stable, canonical 422/GraphQL response for a
+  specific, well-defined condition — that's what makes matching it here reliable where matching
+  outage text was not.
+  Note also that the GET fallback's `-f head="<owner>:<branch>"` is **not** the same field format
+  as rest-payload-construction's create-PR `head` (bare branch name): GitHub's list-pulls endpoint
+  requires the owner-prefixed `owner:branch` form for its `head` filter, while create-pulls
+  (same-repo) does not. The two commands use different formats because the two endpoints require
+  different formats — this is not an inconsistency to reconcile.
 - Rejected: Checking the duplicate pattern immediately after the GraphQL failure (before
   attempting REST) — adds an extra branch for a case the post-REST check already covers just as
   correctly. Not special-casing duplicates at all — leaves the operator dropped into a browser
