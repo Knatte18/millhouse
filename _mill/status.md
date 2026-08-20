@@ -30,5 +30,7 @@ implementing  '2026-08-20T18:04:05Z'
 ```yaml
 batches:
   - name: rest-fallback
-    state: pending
+    state: running
+    implementer_session: 173d1c90-38c8-4240-8720-a6f93f14f81a
+    start_sha: bd61856f5572a1c004be7de321dcc83739733e82
 ```
