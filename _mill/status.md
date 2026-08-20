@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: planned
 slug: mill-go-windows-baseline-teardown-winerror145
 branch: hanf/mill-go-windows-baseline-teardown-winerror145
 plan: _mill/plan
@@ -21,4 +21,5 @@ plan-fix-r1  '2026-08-20T18:06:58Z'
 plan-review-r2  '2026-08-20T18:12:16Z'
 plan-fix-r2  '2026-08-20T18:12:34Z'
 plan-fix-r3  '2026-08-20T18:19:08Z'
+planned  '2026-08-20T18:19:28Z'
 ```
