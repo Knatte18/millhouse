@@ -1,0 +1,18 @@
+# Status
+
+```yaml
+phase: discussing
+slug: mill-go-windows-baseline-teardown-winerror145
+branch: hanf/mill-go-windows-baseline-teardown-winerror145
+plan: null
+parent: main
+task: 'millpy-implement --stage baseline: Windows verify-baseline worktree teardown fails (WinError 145 / long paths), leaves orphaned artifacts'
+task_description: |
+  millpy-implement --stage baseline: Windows verify-baseline worktree teardown fails (WinError 145 / long paths), leaves orphaned artifacts
+```
+
+## Timeline
+
+```text
+discussing  '2026-08-20T16:38:04Z'
+```
