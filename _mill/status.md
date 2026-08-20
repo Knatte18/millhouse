@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-windows-baseline-teardown-winerror145
 branch: hanf/mill-go-windows-baseline-teardown-winerror145
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-junction-walker-long-path-safety  '2026-08-20T18:29:49Z'
 approved-safe-rmtree-long-path-safety  '2026-08-20T18:33:04Z'
 holistic-reviewing  '2026-08-20T18:33:47Z'
 holistic-approved  '2026-08-20T18:35:54Z'
+done  '2026-08-20T18:36:24Z'
 ```
 
 ## Batches
