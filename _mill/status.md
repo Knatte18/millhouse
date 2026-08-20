@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: git-pr-graphql-5xx-fallback
 branch: hanf/git-pr-graphql-5xx-fallback
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-08-20T18:04:05Z'
 approved-rest-fallback  '2026-08-20T18:06:26Z'
 holistic-reviewing  '2026-08-20T18:06:53Z'
 holistic-approved  '2026-08-20T18:08:39Z'
+done  '2026-08-20T18:09:07Z'
 ```
 
 ## Batches
