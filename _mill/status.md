@@ -48,5 +48,7 @@ batches:
     start_sha: e396da4555c6c3842d6d9351256db1755e793608
     commit_sha: 5266d558d41846d961ffba8fe88bbb3c969bd99d
   - name: safe-rmtree-long-path-safety
-    state: pending
+    state: running
+    implementer_session: e0fc0974-5ac2-4007-9234-c3e294645836
+    start_sha: 48cca4dce40abd8f9eabeeecfb508f3a8f51087f
 ```
