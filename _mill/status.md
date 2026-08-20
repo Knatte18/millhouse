@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-windows-baseline-teardown-winerror145
 branch: hanf/mill-go-windows-baseline-teardown-winerror145
 plan: _mill/plan
@@ -22,4 +22,19 @@ plan-review-r2  '2026-08-20T18:12:16Z'
 plan-fix-r2  '2026-08-20T18:12:34Z'
 plan-fix-r3  '2026-08-20T18:19:08Z'
 planned  '2026-08-20T18:19:28Z'
+implementing  '2026-08-20T18:19:58Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: long-path-helper
+    state: pending
+  - name: worktree-removal-longpaths
+    state: pending
+  - name: junction-walker-long-path-safety
+    state: pending
+  - name: safe-rmtree-long-path-safety
+    state: pending
 ```
