@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-rest-fallback
 slug: git-pr-graphql-5xx-fallback
 branch: hanf/git-pr-graphql-5xx-fallback
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-08-20T18:00:08Z'
 plan-fix-r2  '2026-08-20T18:03:27Z'
 planned  '2026-08-20T18:03:41Z'
 implementing  '2026-08-20T18:04:05Z'
+approved-rest-fallback  '2026-08-20T18:06:26Z'
 ```
 
 ## Batches
@@ -30,7 +31,8 @@ implementing  '2026-08-20T18:04:05Z'
 ```yaml
 batches:
   - name: rest-fallback
-    state: running
+    state: approved
     implementer_session: 173d1c90-38c8-4240-8720-a6f93f14f81a
     start_sha: bd61856f5572a1c004be7de321dcc83739733e82
+    commit_sha: c613d81f931c01f318e4de13565ba6a48cc8d4b2
 ```
