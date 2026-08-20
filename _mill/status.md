@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-go-windows-baseline-teardown-winerror145
 branch: hanf/mill-go-windows-baseline-teardown-winerror145
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-20T16:38:04Z'
+discussed  '2026-08-20T17:48:38Z'
 ```
