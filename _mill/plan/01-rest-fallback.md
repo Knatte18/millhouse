@@ -38,7 +38,7 @@ this is the only batch in the plan.
      browser` (mirrors the file's existing `### 1.5 Detect task branch`
      sub-step numbering convention). Content:
 
-     ```markdown
+     ```````markdown
      ### 10.5 REST-API fallback
 
      If `gh pr create` (step 10) exits non-zero, attempt the REST API before
@@ -82,7 +82,7 @@ this is the only batch in the plan.
          URL could not be retrieved — check the repository's Pull Requests
          tab" and stop — do not proceed to step 11.
        - If not matched: proceed to step 11.
-     ```
+     ```````
 
   2. In the existing `### 11. Fallback to browser` section, replace the
      trigger sentence "If `gh` is not installed or the `gh pr create` command

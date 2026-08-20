@@ -23,6 +23,13 @@ batches:
 
 ## Shared Decisions
 
+_Only two of `_mill/discussion.md`'s five decisions are cross-cutting enough to
+list here (`unconditional-rest-attempt`, `duplicate-pr-check-after-both-tiers`
+— both shape how step 10.5 behaves as a whole). The other three
+(`rest-payload-construction`, `doc-structure`, `report-wording`) are
+batch-local to the single batch in this plan and are covered directly in
+Card 1's Requirements in `01-rest-fallback.md`, not restated here._
+
 ### Decision: unconditional-rest-attempt
 
 - **Decision:** Step 10.5 (REST fallback) fires on any non-zero exit from step 10's `gh pr create`, not only on error text that looks like a GraphQL 5xx.
