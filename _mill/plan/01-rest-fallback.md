@@ -88,9 +88,10 @@ this is the only batch in the plan.
      trigger sentence "If `gh` is not installed or the `gh pr create` command
      fails, fall back to opening a pre-filled GitHub PR URL in the browser:"
      with: "If `gh` is not installed, or both step 10 and step 10.5 have
-     failed (and step 10.5's own duplicate-PR check did not already resolve
-     and report a URL), fall back to opening a pre-filled GitHub PR URL in the
-     browser:" Add one sentence immediately after that trigger sentence: "Skip
+     failed and step 10.5 did not already instruct stopping (duplicate match,
+     resolved with a URL or not), fall back to opening a pre-filled GitHub PR
+     URL in the browser:" Add one sentence immediately after that trigger
+     sentence: "Skip
      step 10.5 entirely and come straight here when `gh` was already
      determined unavailable in step 7." The rest of step 11 (the three
      platform-specific `open`/`start`/`xdg-open` command blocks and the

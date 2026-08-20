@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: git-pr-graphql-5xx-fallback
 branch: hanf/git-pr-graphql-5xx-fallback
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussion-fix-r3  '2026-08-20T17:53:57Z'
 discussed  '2026-08-20T17:53:57Z'
 planning  '2026-08-20T17:55:58Z'
 plan-fix-r1  '2026-08-20T18:00:08Z'
+plan-fix-r2  '2026-08-20T18:03:27Z'
 ```

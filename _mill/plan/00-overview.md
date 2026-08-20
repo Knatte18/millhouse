@@ -3,7 +3,7 @@
 ```yaml
 task: 'git-pr: gh pr create fails on GraphQL 5xx with no REST fallback documented'
 slug: git-pr-graphql-5xx-fallback
-approved: false
+approved: true
 started: 20260820-175433
 parent: main
 root: ""
