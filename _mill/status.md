@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-plan-entry-config-load-args-swapped
 branch: hanf/mill-plan-entry-config-load-args-swapped
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-plan Entry step 2: _config.load_config called with hub_root/worktree_root swapped vs its own signature'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-20T16:38:15Z'
 discussed  '2026-08-20T17:57:57Z'
+planning  '2026-08-20T18:00:40Z'
 ```
