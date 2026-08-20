@@ -216,9 +216,43 @@ BODY
 )"
 ```
 
+### 10.5 REST-API fallback
+
+If `gh pr create` (step 10) exits non-zero, attempt the REST API before falling back to the browser.
+
+Skip this step entirely if `gh` was already determined to be unavailable in step 7 — `gh api` needs the same binary as `gh pr create`.
+Go straight to step 11.
+
+```bash
+gh api repos/<owner>/<repo>/pulls -X POST \
+  -f title="<title>" \
+  -f body="$(cat <<'BODY'
+<body text>
+BODY
+)" \
+  -f head="<branch>" \
+  -f base="<base>" \
+  -q .html_url
+```
+
+`<owner>/<repo>` is the value resolved in step 8.
+`<branch>`, `<base>`, `<title>`, `<body>` are the same values used in step 10 — no new content generation.
+
+If this command succeeds (prints a URL): the PR was created via REST.
+Record this for step 12's report and skip step 11.
+
+If this command also fails:
+
+- Inspect the combined failure output of both step 10 and this step for an "already exists" pattern (case-insensitive match on GitHub's standard duplicate-PR message, e.g. "A pull request already exists for `<owner>:<branch>`").
+  - If matched: look up the existing PR's URL — re-run `gh pr view --json url -q .url`, or on its failure `gh api repos/<owner>/<repo>/pulls -X GET -f head="<owner>:<branch>" -f state=open -q '.[0].html_url'`.
+    Report that URL (see step 12) and stop — do not proceed to step 11.
+    If both URL-lookup attempts also fail, report "A pull request already exists for this branch, but its URL could not be retrieved — check the repository's Pull Requests tab" and stop — do not proceed to step 11.
+  - If not matched: proceed to step 11.
+
 ### 11. Fallback to browser
 
-If `gh` is not installed or the `gh pr create` command fails, fall back to opening a pre-filled GitHub PR URL in the browser:
+If `gh` is not installed, or both step 10 and step 10.5 have failed and step 10.5 did not already instruct stopping (duplicate match, resolved with a URL or not), fall back to opening a pre-filled GitHub PR URL in the browser:
+Skip step 10.5 entirely and come straight here when `gh` was already determined unavailable in step 7.
 
 ```bash
 # Windows:
@@ -234,5 +268,7 @@ Detect the platform from the environment.
 
 ### 12. Report
 
-Tell the user the PR URL from `gh` output,
-or that the browser was opened as fallback.
+Tell the user the PR URL from `gh` output, or that the browser was opened as fallback.
+When step 10.5 (REST) fired and succeeded, state "PR created via REST API fallback: `<url>`" instead of the plain URL line.
+When the duplicate-PR check in step 10.5 resolved and reported a URL, state "Existing PR found: `<url>`" instead.
+Do not name the cause ("GraphQL was unavailable") — step 10.5 fires on any non-zero exit from step 10 without diagnosing why, so the report must stay cause-agnostic.
