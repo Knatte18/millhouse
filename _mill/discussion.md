@@ -37,10 +37,17 @@ even though full automation was still possible via REST.
 - Updating step 12 (Report) to mention which tier was used, but only when a non-default tier fired.
 
 **Out:**
-- Changing step 7's existing-PR check (`gh pr view --json url`). It already treats any failure —
-  including a GraphQL 5xx — as "no PR found, proceed." That assumption can be wrong during a
-  GraphQL outage, but the consequence is caught safely downstream (see Decisions →
-  duplicate-pr-detection) rather than by adding a second REST-based existence check here.
+- Changing step 7's existing-PR check (`gh pr view --json url`). The step's text defines only two
+  explicit branches — "PR already exists → stop" and "`gh` not installed → proceed to step 8" —
+  with no explicit third branch for "`gh` installed but the command failed for another reason"
+  (e.g. a GraphQL 5xx, or simply "no PR found"). By the file's linear step-then-proceed structure,
+  that unaddressed case falls through to "proceed to step 8" the same as the gh-unavailable
+  branch; this is an inferred convention from the document's structure, not a rule the text states
+  outright. That inference can be wrong during a GraphQL outage (a PR could genuinely exist and
+  the check simply failed to confirm it), but the consequence is caught safely downstream (see
+  Decisions → duplicate-pr-detection) rather than by adding a second REST-based existence check
+  here — the downstream catch doesn't depend on step 7's fallthrough being an explicit rule,
+  only on the fallthrough actually happening, which the linear-proceed structure supports.
 - Retry/backoff logic on the original `gh pr create` call before falling back. Blindly retrying
   the identical GraphQL mutation risks a create-then-503-then-retry double-create race; that race
   already exists today in the browser-fallback path and isn't being solved by this task, so
@@ -142,11 +149,15 @@ even though full automation was still possible via REST.
 
 - Decision: Step 12 (Report) states the URL as it does today when the default GraphQL `gh pr
   create` path succeeds — no extra wording. When step 10.5 (REST) or step 11 (browser) fired
-  instead, step 12 additionally states which tier succeeded, e.g. "PR created via REST API
-  (GraphQL was unavailable): <url>" or the existing browser-opened wording.
-  Duplicate-PR resolution (see duplicate-pr-detection) reports "Existing PR found: <url>".
+  instead, step 12 additionally states which tier succeeded, using cause-agnostic phrasing, e.g.
+  "PR created via REST API fallback: <url>" or the existing browser-opened wording. Duplicate-PR
+  resolution (see duplicate-pr-detection) reports "Existing PR found: <url>".
 - Rationale: Keeps the common-case output byte-for-byte unchanged; only surfaces extra
-  information when something notable (an outage workaround) actually happened.
+  information when something notable (an outage workaround) actually happened. The wording stays
+  cause-agnostic ("REST API fallback", not "GraphQL was unavailable") because rest-fallback-trigger
+  deliberately fires step 10.5 on any non-zero exit from step 10 without diagnosing *why* it
+  failed — asserting "GraphQL was unavailable" in the report would claim a diagnosis the trigger
+  logic never actually made.
 - Rejected: Always stating the method regardless of tier (noise on the common path). Never
   disclosing the method (loses useful diagnostic signal for the rare cases operators will want to
   know about, e.g. to notice a GraphQL outage is in progress).
