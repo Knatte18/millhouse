@@ -107,7 +107,11 @@ even though full automation was still possible via REST.
   for <owner>:<branch>"`). If matched: look up the existing PR's URL (re-run `gh pr view --json
   url -q .url`, or on its failure `gh api repos/<owner>/<repo>/pulls -X GET -f
   head="<owner>:<branch>" -f state=open -q '.[0].html_url'`) and report that URL — do not open the
-  browser.
+  browser. If both URL-lookup attempts also fail (double failure — GraphQL and REST both still
+  unavailable for the lookup), report "A pull request already exists for this branch, but its URL
+  could not be retrieved — check the repository's Pull Requests tab" and stop; do not fall through
+  to the browser-compare fallback, since that would still create a *new* PR attempt against a
+  branch GitHub has already told us has one.
 - Rationale: This is the real gap left by leaving step 7 unchanged (see Scope → Out). Step 7
   treats a GraphQL 5xx as "no PR exists" and proceeds; if a PR genuinely already exists, both
   create attempts will fail with GitHub's standard duplicate-PR message (GraphQL and REST use the
