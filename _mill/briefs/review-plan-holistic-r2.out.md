@@ -1,0 +1,23 @@
+MILL_REVIEW_BEGIN
+# Review: millpy-implement --stage baseline: Windows verify-baseline worktree teardown fails (WinError 145 / long paths), leaves orphaned artifacts — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: Claude Sonnet 4.5 (self-assessed; exact point version not independently verifiable)
+reviewed_file: plan/
+date: 2026-08-20
+```
+
+## Findings
+
+### [BLOCKING:scope] Card 1's Context omits `_junction.py` despite naming it as the docstring-style model
+**Location:** 01-long-path-helper.md, Card 1
+**Issue:** Requirements says to follow "the module-docstring house style used elsewhere in `plugins/mill/scripts/` ... as in `_junction.py`'s module docstring", but `Context:` is `none` and `_junction.py` appears nowhere in Creates/Edits for this card.
+**Fix:** Add `plugins/mill/scripts/_junction.py` to Card 1's `Context:` list so the implementer isn't forced into cold-start exploration to find the referenced example.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 1 references `_junction.py`'s docstring convention by name without listing it in Context.
+MILL_REVIEW_END

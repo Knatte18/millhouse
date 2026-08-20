@@ -17,7 +17,8 @@ Introduces the shared `_long_path.py` helper module (`to_extended(path: Path) ->
 
 ### Card 1: Add `_long_path.py` extended-length path helper
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_junction.py`
 - **Edits:** none
 - **Creates:**
   - `plugins/mill/scripts/_long_path.py`
