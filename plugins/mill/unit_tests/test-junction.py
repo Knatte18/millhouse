@@ -267,6 +267,100 @@ def main() -> int:
     except Exception as exc:
         fail("(h) strip_all_in_worktree entry-point window case", exc)
 
+    # --- (i) extended-path form is what _walk actually passes to os.scandir ---
+    try:
+        tmp = tempfile.mkdtemp()
+        tmp_path = Path(tmp)
+        try:
+            wt = tmp_path / "wt"
+            wt.mkdir()
+
+            def fake_scandir(path: str):
+                assert path == "LONGPATH-MARKER-SUCCESS", f"unexpected scandir arg: {path}"
+                return []
+
+            with patch("_junction._long_path.to_extended", MagicMock(return_value="LONGPATH-MARKER-SUCCESS")), \
+                    patch("_junction.os.scandir", side_effect=fake_scandir):
+                result = _junction.strip_all_in_worktree(wt, junctions_cfg={})
+
+            assert result == [], f"expected empty list, got {result}"
+            ok("(i) extended-path form passed to os.scandir case")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path, ignore_errors=True)
+    except Exception as exc:
+        fail("(i) extended-path form passed to os.scandir case", exc)
+
+    # --- (j) vanished-entry handling still fires when the extended-path call raises FileNotFoundError ---
+    try:
+        tmp = tempfile.mkdtemp()
+        tmp_path = Path(tmp)
+        try:
+            wt = tmp_path / "wt"
+            wt.mkdir()
+
+            def fake_scandir(path: str):
+                assert path == "LONGPATH-MARKER-VANISHED", f"unexpected scandir arg: {path}"
+                raise FileNotFoundError("vanished")
+
+            with patch("_junction._long_path.to_extended", MagicMock(return_value="LONGPATH-MARKER-VANISHED")), \
+                    patch("_junction.os.scandir", side_effect=fake_scandir):
+                result = _junction.strip_all_in_worktree(wt, junctions_cfg={})
+
+            assert result == [], f"expected empty list rather than a raised exception, got {result}"
+            ok("(j) vanished-entry handling via extended-path call case")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path, ignore_errors=True)
+    except Exception as exc:
+        fail("(j) vanished-entry handling via extended-path call case", exc)
+
+    # --- (k) _is_junction_or_symlink routes lexists/islink through _long_path.to_extended ---
+    try:
+        tmp = tempfile.mkdtemp()
+        tmp_path = Path(tmp)
+        try:
+            target_file = tmp_path / "target_file"
+
+            def fake_lexists(path: str) -> bool:
+                assert path == "LONGPATH-MARKER-ISJUNCTION", f"unexpected lexists arg: {path}"
+                return True
+
+            def fake_islink(path: str) -> bool:
+                assert path == "LONGPATH-MARKER-ISJUNCTION", f"unexpected islink arg: {path}"
+                return False
+
+            with patch("_junction._long_path.to_extended", MagicMock(return_value="LONGPATH-MARKER-ISJUNCTION")), \
+                    patch("_junction.os.path.lexists", side_effect=fake_lexists), \
+                    patch("_junction.os.path.islink", side_effect=fake_islink):
+                result = _junction._is_junction_or_symlink(target_file)
+
+            assert result is False, f"expected False, got {result}"
+            ok("(k) _is_junction_or_symlink extended-path routing case")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path, ignore_errors=True)
+    except Exception as exc:
+        fail("(k) _is_junction_or_symlink extended-path routing case", exc)
+
+    # --- (l) remove() routes its os.unlink call through _long_path.to_extended ---
+    try:
+        tmp = tempfile.mkdtemp()
+        tmp_path = Path(tmp)
+        try:
+            link_path = tmp_path / "a_symlink"
+
+            with patch("_junction._long_path.to_extended", MagicMock(return_value="LONGPATH-MARKER-REMOVE")), \
+                    patch("_junction.os.path.lexists", MagicMock(return_value=True)), \
+                    patch("_junction.os.path.islink", MagicMock(return_value=True)), \
+                    patch("_junction.os.unlink", MagicMock()) as mock_unlink:
+                _junction.remove(link_path)
+
+            assert mock_unlink.call_args[0][0] == "LONGPATH-MARKER-REMOVE", \
+                f"expected extended-path marker passed to os.unlink, got {mock_unlink.call_args[0][0]}"
+            ok("(l) remove() extended-path routing to os.unlink case")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp_path, allowed_root=tmp_path, ignore_errors=True)
+    except Exception as exc:
+        fail("(l) remove() extended-path routing to os.unlink case", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)

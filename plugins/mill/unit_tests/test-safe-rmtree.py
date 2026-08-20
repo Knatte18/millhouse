@@ -362,6 +362,113 @@ def main() -> int:
         mock_rmtree.assert_called_once()
         print("PASS: top-level safe_rmtree entry-point window skips without raising")
 
+    # --- os.scandir receives the extended-path form ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        scandir_cm = MagicMock()
+        scandir_cm.__enter__ = MagicMock(return_value=iter([]))
+        scandir_cm.__exit__ = MagicMock(return_value=False)
+
+        def fake_scandir(path):
+            assert path == "LONGPATH-MARKER-SUCCESS", f"unexpected scandir arg: {path}"
+            return scandir_cm
+
+        with patch(
+            "_safe_rmtree._long_path.to_extended",
+            MagicMock(return_value="LONGPATH-MARKER-SUCCESS"),
+        ), patch("_safe_rmtree.os.scandir", side_effect=fake_scandir), \
+                patch("_safe_rmtree.shutil.rmtree"):
+            safe_rmtree(tree_dir, allowed_root=tree_dir)
+        print("PASS: os.scandir receives the extended-path form")
+
+    # --- vanished-entry handling still fires when the extended-path scandir call itself raises FileNotFoundError ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        def fake_scandir_vanished(path):
+            assert path == "LONGPATH-MARKER-VANISHED", f"unexpected scandir arg: {path}"
+            raise FileNotFoundError("vanished")
+
+        with patch(
+            "_safe_rmtree._long_path.to_extended",
+            MagicMock(return_value="LONGPATH-MARKER-VANISHED"),
+        ), patch("_safe_rmtree.os.scandir", side_effect=fake_scandir_vanished), \
+                patch("_safe_rmtree.shutil.rmtree") as mock_rmtree:
+            safe_rmtree(tree_dir, allowed_root=tree_dir)
+
+        mock_rmtree.assert_called_once()
+        print(
+            "PASS: vanished-entry handling still fires when the extended-path "
+            "scandir call itself raises FileNotFoundError"
+        )
+
+    # --- shutil.rmtree is invoked with the extended-path-prefixed root string ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        scandir_cm = MagicMock()
+        scandir_cm.__enter__ = MagicMock(return_value=iter([]))
+        scandir_cm.__exit__ = MagicMock(return_value=False)
+
+        with patch(
+            "_safe_rmtree._long_path.to_extended",
+            MagicMock(return_value="LONGPATH-MARKER-RMTREE-ROOT"),
+        ), patch("_safe_rmtree.os.scandir", return_value=scandir_cm), \
+                patch("_safe_rmtree.shutil.rmtree") as mock_rmtree:
+            safe_rmtree(tree_dir, allowed_root=tree_dir, ignore_errors=True)
+
+        assert mock_rmtree.call_args[0][0] == "LONGPATH-MARKER-RMTREE-ROOT", \
+            f"expected extended-path root, got {mock_rmtree.call_args[0]}"
+        print("PASS: shutil.rmtree is invoked with the extended-path-prefixed root string")
+
+    # --- _is_reparse_point's os.path.isjunction branch routes through _long_path.to_extended ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        def fake_isjunction(path):
+            assert path == "LONGPATH-MARKER-REPARSE-ISJUNCTION", f"unexpected isjunction arg: {path}"
+            return False
+
+        with patch(
+            "_safe_rmtree._long_path.to_extended",
+            MagicMock(return_value="LONGPATH-MARKER-REPARSE-ISJUNCTION"),
+        ), patch("_safe_rmtree.os.name", "nt"), \
+                patch("_safe_rmtree.os.path.isjunction", side_effect=fake_isjunction, create=True):
+            result = _safe_rmtree._is_reparse_point(tree_dir)
+
+        assert result is False, f"expected False, got {result}"
+        print("PASS: _is_reparse_point's os.path.isjunction branch routes through _long_path.to_extended")
+
+    # --- _is_reparse_point's os.lstat fallback branch also routes through _long_path.to_extended ---
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        tree_dir = tmp_path / "tree"
+        tree_dir.mkdir()
+
+        def fake_lstat(path):
+            assert path == "LONGPATH-MARKER-REPARSE-LSTAT", f"unexpected lstat arg: {path}"
+            return MagicMock(st_file_attributes=0x400)
+
+        with patch(
+            "_safe_rmtree._long_path.to_extended",
+            MagicMock(return_value="LONGPATH-MARKER-REPARSE-LSTAT"),
+        ), patch("_safe_rmtree.os.name", "nt"), \
+                patch("_safe_rmtree.hasattr", MagicMock(return_value=False)), \
+                patch("_safe_rmtree.os.lstat", side_effect=fake_lstat):
+            result = _safe_rmtree._is_reparse_point(tree_dir)
+
+        assert result is True, f"expected True, got {result}"
+        print("PASS: _is_reparse_point's os.lstat fallback branch also routes through _long_path.to_extended")
+
     # --- non-container allowed_root does not crash ---
     with tempfile.TemporaryDirectory() as tmp:
         non_container = Path(tmp)

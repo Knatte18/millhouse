@@ -295,7 +295,7 @@ def remove_safe(
 
     kill_stale_holders(path)
 
-    cmd = ["git", "-C", str(cwd), "worktree", "remove"]
+    cmd = ["git", "-C", str(cwd), "-c", "core.longpaths=true", "worktree", "remove"]
     if force:
         cmd.append("--force")
     cmd.append(str(path))
@@ -362,7 +362,7 @@ def remove_safe(
         removed_via = "fallback"
 
     prune = _subprocess_util.run(
-        ["git", "-C", str(cwd), "worktree", "prune"],
+        ["git", "-C", str(cwd), "-c", "core.longpaths=true", "worktree", "prune"],
     )
     if prune.returncode != 0:
         print(

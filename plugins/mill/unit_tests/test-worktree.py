@@ -426,6 +426,49 @@ def main() -> int:
             )
             print("PASS: remove_safe prunes stale nested-worktree registration after force-removing enclosing task worktree")
 
+        # --- remove_safe passes -c core.longpaths=true in both the worktree-remove
+        # and worktree-prune argv, mirroring _verify_baseline.py's creation-side placement ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            captured_argv = []
+
+            def _fake_run_capture_all(argv, **kwargs):
+                captured_argv.append(argv)
+                return MagicMock(returncode=0, stdout="", stderr="")
+
+            with patch("_worktree._subprocess_util.run", side_effect=_fake_run_capture_all):
+                with patch("_worktree.kill_stale_holders"):
+                    remove_safe(path, cwd=cwd, junctions_cfg={})
+
+            assert len(captured_argv) == 2, (
+                f"expected exactly 2 subprocess calls (remove, prune), got {len(captured_argv)}: {captured_argv!r}"
+            )
+
+            for argv in captured_argv:
+                # -c core.longpaths=true must appear as an adjacent pair.
+                longpaths_index = None
+                for i, token in enumerate(argv[:-1]):
+                    if token == "-c" and argv[i + 1] == "core.longpaths=true":
+                        longpaths_index = i
+                        break
+                assert longpaths_index is not None, (
+                    f"expected '-c core.longpaths=true' pair in argv: {argv!r}"
+                )
+
+                # It must sit after the -C <cwd> pair and before the 'worktree' token.
+                c_index = argv.index("-C")
+                worktree_index = argv.index("worktree")
+                assert c_index < longpaths_index < worktree_index, (
+                    f"expected order -C ... -c core.longpaths=true ... worktree, got {argv!r}"
+                )
+            print(
+                "PASS: remove_safe's git worktree remove/prune argv carries "
+                "-c core.longpaths=true between -C <cwd> and 'worktree'"
+            )
+
         # --- processes_holding_path: only records whose cmdline references worktree ---
         with tempfile.TemporaryDirectory() as tmp:
             worktree = Path(tmp) / "my-worktree"

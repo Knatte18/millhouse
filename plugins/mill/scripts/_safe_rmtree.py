@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 
 import _junction
+import _long_path
 import _paths
 
 
@@ -48,10 +49,11 @@ def _onexc_chmod_retry(func, path, exc):
 def _is_reparse_point(p: Path) -> bool:
     if os.name != "nt":
         return False
+    p = _long_path.to_extended(p)
     if hasattr(os.path, "isjunction"):
-        return os.path.isjunction(str(p))
+        return os.path.isjunction(p)
     try:
-        attrs = os.lstat(str(p)).st_file_attributes
+        attrs = os.lstat(p).st_file_attributes
         return bool(attrs & 0x400)
     except (OSError, AttributeError):
         return False
@@ -62,7 +64,7 @@ def _walk_strip_reparse_points(root: Path) -> None:
     # Guard the whole scandir open plus the per-entry processing separately so one vanished entry never aborts sibling processing,
     # and a vanished root never propagates past this call.
     try:
-        with os.scandir(str(root)) as it:
+        with os.scandir(_long_path.to_extended(root)) as it:
             for entry in it:
                 ep = Path(entry.path)
                 try:
@@ -168,9 +170,9 @@ def safe_rmtree(path: Path, *, allowed_root: Path, ignore_errors: bool = False) 
     # strip the bit and retry.
     try:
         if ignore_errors:
-            shutil.rmtree(str(original), ignore_errors=True)
+            shutil.rmtree(_long_path.to_extended(original), ignore_errors=True)
         else:
-            shutil.rmtree(str(original), onexc=_onexc_chmod_retry)
+            shutil.rmtree(_long_path.to_extended(original), onexc=_onexc_chmod_retry)
     except OSError:
         if not ignore_errors:
             raise

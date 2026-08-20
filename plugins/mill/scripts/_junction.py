@@ -53,6 +53,7 @@ from pathlib import Path
 
 import yaml
 
+import _long_path
 import _subprocess_util
 
 
@@ -151,21 +152,22 @@ def _is_junction_or_symlink(link_path: Path) -> bool:
     Uses ``lexists`` so a broken junction/symlink whose target was deleted is still recognised as
     present rather than silently falling through to the "is a regular directory" branch.
     """
-    if not os.path.lexists(str(link_path)):
+    p = _long_path.to_extended(link_path)
+    if not os.path.lexists(p):
         return False
     if os.name == "nt":
         is_junction = False
         if hasattr(os.path, "isjunction"):
-            is_junction = os.path.isjunction(str(link_path))
+            is_junction = os.path.isjunction(p)
         else:
             try:
-                attrs = os.lstat(str(link_path)).st_file_attributes
+                attrs = os.lstat(p).st_file_attributes
                 is_junction = bool(attrs & 0x400)
             except (OSError, AttributeError):
                 is_junction = False
-        return is_junction or os.path.islink(str(link_path))
+        return is_junction or os.path.islink(p)
     else:
-        return os.path.islink(str(link_path))
+        return os.path.islink(p)
 
 
 def create(target: Path, link_path: Path) -> None:
@@ -233,21 +235,22 @@ def remove(link_path: Path) -> None:
     Raises:
         ValueError: If ``link_path`` exists but is neither a junction nor a symlink.
     """
-    if not os.path.lexists(str(link_path)):
+    p = _long_path.to_extended(link_path)
+    if not os.path.lexists(p):
         return
     if not _is_junction_or_symlink(link_path):
         raise ValueError(
             f"{link_path} is not a junction or symlink — refusing to remove"
         )
     if os.name == "nt":
-        if os.path.islink(str(link_path)):
-            os.unlink(str(link_path))
+        if os.path.islink(p):
+            os.unlink(p)
             print(f"[junction] removed symlink {link_path}", file=sys.stderr)
         else:
-            os.rmdir(str(link_path))
+            os.rmdir(p)
             print(f"[junction] removed junction {link_path}", file=sys.stderr)
     else:
-        os.unlink(str(link_path))
+        os.unlink(p)
         print(f"[junction] removed symlink {link_path}", file=sys.stderr)
 
 
@@ -305,7 +308,7 @@ def strip_all_in_worktree(worktree_path: Path, junctions_cfg: dict[str, str]) ->
     def _walk(dir_path: Path) -> None:
         """Recursively walk dir_path, stopping at junctions/symlinks."""
         try:
-            entries = list(os.scandir(str(dir_path)))
+            entries = list(os.scandir(_long_path.to_extended(dir_path)))
         except PermissionError:
             print(
                 f"[junction] WARNING: permission denied scanning {dir_path}; "
