@@ -79,17 +79,26 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 ### #896 — unconditional per-round Timeline append
 
 - Decision: move the `plan-review-r{N}` `_status.append_phase` call out of the verdict branches —
-  but NOT immediately after step 2's dispatch returns. Step 4.5 (ERROR-only-aggregate retry) sits
-  between step 2 and 4a-4d: on `error_kind: usage`, `verdict: ERROR`, or absent-JSON, the round is
-  explicitly "not consumed" and 4a-4d are skipped for a same-N retry. Appending right after step 2
-  would write a Timeline row for a round that produced no reviewable output, then write a second,
-  duplicate `plan-review-r{N}` row when the retry actually resolves — the file's own Entry
-  "resuming after a max-rounds block" section already documents exactly this hazard
-  (`_status.append_phase` never dedupes). Instead, append the single unconditional
-  `plan-review-r{N}` call immediately AFTER step 4.5's screening confirms the round is reviewable
-  (i.e., after ruling out a usage error, an ERROR verdict, and absent-JSON — all of which retry
-  without consuming the round) and BEFORE branching into 4a/4b/4c/4d. Remove the now-duplicate calls
-  currently in 4a (line 469) and 4d (line 537).
+  but NOT immediately after step 2's dispatch returns. **Document-position correction:** in the
+  CURRENT `mill-plan/SKILL.md`, step 4.5 (ERROR-only-aggregate retry) is textually positioned
+  BETWEEN 4b (line 475) and 4c (line 527) — i.e. physically AFTER 4a and 4b, not before any of
+  4a-4d. Its EXECUTION order, however, already runs before 4a-4d fire in practice: 4.5's own trigger
+  condition ("skip steps 4a/4b/4c/4d entirely and immediately re-run") is evaluated on the same
+  envelope step 2's dispatch just returned, before any of 4a-4d's branch conditions are consulted —
+  it is a screening gate on the verdict, not a fifth verdict branch, despite its `4.5` numbering and
+  its current mid-4a–4d document placement. On `error_kind: usage`, `verdict: ERROR`, or absent-JSON,
+  the round is explicitly "not consumed" and 4a-4d never fire for that dispatch. Appending right
+  after step 2 (before 4.5's screening) would write a Timeline row for a round that produced no
+  reviewable output, then write a second, duplicate `plan-review-r{N}` row when the retry actually
+  resolves — the file's own Entry "resuming after a max-rounds block" section already documents
+  exactly this hazard (`_status.append_phase` never dedupes). **Required structural change:**
+  relocate step 4.5's text to sit physically BEFORE 4a in the document (renumbering it, e.g. to
+  `3.5`, mirroring how step `1.5`'s pre-review validator gate already precedes step `2`'s dispatch by
+  the same half-integer convention) so the document's physical order matches its actual execution
+  order. Insert the new unconditional `plan-review-r{N}` append immediately after the relocated
+  3.5's screening confirms the round is reviewable (i.e., after ruling out a usage error, an ERROR
+  verdict, and absent-JSON — all of which retry without consuming the round) and BEFORE 4a's branch
+  text. Remove the now-duplicate calls currently in 4a (line 469) and 4d (line 537).
 - Rationale: collapses four independent call sites into one, still structurally preventing recurrence
   if a hypothetical 4e branch is ever added, while correctly excluding non-reviewable retried rounds
   from getting a premature or duplicate Timeline row. (The originally-cited precedent —
@@ -190,8 +199,13 @@ round budget or forces a manual operator recovery that the SKILL should handle a
   own deliverables against other batches' `creates` sets): if the token is in some OTHER
   batch C's `creates` set (C != B, both `entry["name"]` values) and C is not in `ancestors[B]`, emit
   an error dict naming the missing edge (reporting the batch's file stem, not its name, in the error
-  dict's `batch` field, to match every other check's error-dict convention — resolve back via
-  `batch_name_to_path[B].stem`). Wire into `run()` alongside `_check_non_existent_path` (same input
+  dict's `batch` field, matching MOST other checks' error-dict convention — e.g.
+  `_check_non_existent_path`, `_check_card_missing_field` — though not universally: both
+  `_check_parallel_modifies_overlap` (`_plan_validate.py:1055`) and `_check_depends_on_batch_mismatch`
+  (`_plan_validate.py:1141`) report `entry["name"]` rather than the stem in their own `batch` fields.
+  The stem-based choice here is still correct (it matches the majority convention and the two
+  functions this check most directly reuses machinery from happen to be exceptions, not the rule) —
+  resolve back via `batch_name_to_path[B].stem`). Wire into `run()` alongside `_check_non_existent_path` (same input
   shape). Add a
   Step 1.5 fix-table row mirroring `parallel-modifies-overlap`'s remedy shape: add the missing
   `depends-on` edge (both the per-batch file's frontmatter and the overview's Batch Index entry, per
