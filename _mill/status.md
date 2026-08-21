@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-go2-fork-dispatch-reliability
 branch: hanf/mill-go2-fork-dispatch-reliability
 plan: _mill/plan
@@ -21,4 +21,5 @@ discussed  '2026-08-21T09:02:46Z'
 planning  '2026-08-21T09:07:20Z'
 plan-review-r1  '2026-08-21T09:13:27Z'
 plan-fix-r1  '2026-08-21T09:13:27Z'
+plan-fix-r2  '2026-08-21T09:18:21Z'
 ```

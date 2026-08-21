@@ -25,9 +25,9 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In the YAML frontmatter at the top of the file, replace the `description:` field's value. The current value reads (single line): `Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator.`
+- **Requirements:** In the YAML frontmatter at the top of the file, replace the `description:` field's value. The current value reads (single line): `Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
 
-  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator.`
+  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
 
   This wording must match Card 3's narrowed forked set exactly (initial dispatch and step 3(a)'s transient re-dispatch only -- the Stuck-escalation self-resolve re-fire no longer forks per Card 3) rather than the plain "(every attempt)" phrasing this card originally proposed, which would misrepresent Card 3's own change and defeat the #851 catalog-accuracy goal this card exists to fix.
 
@@ -47,11 +47,7 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 - **Requirements:** Replace the `## Driver preamble` section's body. It currently reads just `(none)` on its own line below the heading. Replace `(none)` with the following preload instructions (keep the `## Driver preamble` heading itself unchanged):
 
   ```
-  Before Step 0, preload skills every fork dispatch would otherwise reload independently -- run once per task session, never per-batch or per-fork:
-
-  - `Skill(mill:code-quality)`
-  - `Skill(mill:markdown)`
-  - For each language detected in the worktree via `mill:workflow`'s Language Detection marker-file table: `pyproject.toml`/`setup.py`/`setup.cfg` -> `Skill(python:python-build)`, `Skill(python:python-comments)`, `Skill(python:python-testing)`; `.csproj`/`.sln` -> `Skill(csharp:csharp-build)`, `Skill(csharp:csharp-comments)`, `Skill(csharp:csharp-testing)`; `go.mod` -> `Skill(golang:golang-build)`, `Skill(golang:golang-comments)`, `Skill(golang:golang-testing)`.
+  Before Step 0, preload skills every fork dispatch would otherwise reload independently -- run once per task session, never per-batch or per-fork. Load the `mill:code-quality` and `mill:markdown` skills via the Skill tool unconditionally, plus, for each language detected in the worktree via `mill:workflow`'s Language Detection marker-file table, that language's skill trio via the Skill tool: `pyproject.toml`/`setup.py`/`setup.cfg` -> `python:python-build`, `python:python-comments`, `python:python-testing`; `.csproj`/`.sln` -> `csharp:csharp-build`, `csharp:csharp-comments`, `csharp:csharp-testing`; `go.mod` -> `golang:golang-build`, `golang:golang-comments`, `golang:golang-testing`.
   ```
 
   Read `plugins/mill/skills/workflow/SKILL.md`'s "## Language Detection" table (listed in this card's `Context:`) to confirm the marker-file-to-skill-name mapping above matches it exactly before writing this text -- do not invent skill names.
