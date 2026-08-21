@@ -4440,6 +4440,352 @@ def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
         return 0
 
 
+def test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error() -> int:
+    """Dirty: verify invokes 'go test ./...' without a -run filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: go test ./...\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "go test ./..." in check_full_suite[0]["message"], (
+                f"message should mention go test ./...: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok() -> int:
+    """Clean: verify invokes 'go test ./...' with a -run filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: go test ./... -run TestFoo\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_dotnet_test_without_filter_is_error() -> int:
+    """Dirty: verify invokes 'dotnet test' without --filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: dotnet test MyProject.csproj\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "dotnet test" in check_full_suite[0]["message"], (
+                f"message should mention dotnet test: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_dotnet_test_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_dotnet_test_without_filter_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_dotnet_test_with_filter_is_ok() -> int:
+    """Clean: verify invokes 'dotnet test' with --filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: dotnet test MyProject.csproj --filter Category=Unit\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_dotnet_test_with_filter_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_dotnet_test_with_filter_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_bare_pytest_without_filter_is_error() -> int:
+    """Dirty: Python project + bare 'pytest' with no path/-k filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        # Marker file required so _is_python_project returns True for this fixture's project_root.
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "pytest" in check_full_suite[0]["message"], (
+                f"message should mention pytest: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_bare_pytest_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_bare_pytest_without_filter_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error() -> int:
+    """Dirty: Python project + bare 'python -m pytest' with no path/-k filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        # Marker file required so _is_python_project returns True for this fixture's project_root.
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: python -m pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            print("PASS test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_verify_full_suite_pytest_with_k_filter_is_ok() -> int:
+    """Clean: Python project + 'pytest -k foo' -> no verify-full-suite error (scoped)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest -k foo\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_pytest_with_k_filter_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_pytest_with_k_filter_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_pytest_with_path_is_ok() -> int:
+    """Clean: Python project + 'pytest tests/test_foo.py' -> no verify-full-suite error (scoped)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest tests/test_foo.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_pytest_with_path_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_pytest_with_path_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_bare_pytest_no_python_marker_clean() -> int:
+    """Clean: no Python marker present + bare 'pytest' -> no verify-full-suite error (check 4 gated on _is_python_project)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_bare_pytest_no_python_marker_clean: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_bare_pytest_no_python_marker_clean")
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # verify cwd mapping form (Cards 23-25 / #604)
 # ---------------------------------------------------------------------------
@@ -6666,6 +7012,16 @@ def main() -> int:
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
         test_check_verify_full_suite_run_all_py_with_only_is_ok,
+        # verify-full-suite: language-aware unbounded-verify guard (#881)
+        test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error,
+        test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok,
+        test_check_verify_full_suite_dotnet_test_without_filter_is_error,
+        test_check_verify_full_suite_dotnet_test_with_filter_is_ok,
+        test_check_verify_full_suite_bare_pytest_without_filter_is_error,
+        test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error,
+        test_check_verify_full_suite_pytest_with_k_filter_is_ok,
+        test_check_verify_full_suite_pytest_with_path_is_ok,
+        test_check_verify_full_suite_bare_pytest_no_python_marker_clean,
         # verify cwd mapping form (Cards 23-25 / #604)
         test_check_verify_not_isolated_mapping_form_dirty,
         test_check_verify_not_isolated_mapping_form_clean,

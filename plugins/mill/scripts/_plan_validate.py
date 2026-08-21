@@ -2033,6 +2033,16 @@ def _check_all_files_touched_mismatch(
 # verify-not-isolated check
 # ---------------------------------------------------------------------------
 
+def _is_python_project(project_root: Path) -> bool:
+    """Return whether `project_root` looks like a Python project (root-level pyproject.toml/setup.py/setup.cfg, OR a nested plugins/mill/pyproject.toml marker for this repo's own dogfood layout)."""
+    return (
+        (project_root / "pyproject.toml").exists()
+        or (project_root / "setup.py").exists()
+        or (project_root / "setup.cfg").exists()
+        or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
+    )
+
+
 def _check_verify_not_isolated(
     batch_files: list[Path],
     project_root: Path,
@@ -2066,13 +2076,8 @@ def _check_verify_not_isolated(
     Returns:
         List of error dicts, one per non-compliant verify command.
     """
-    # Python-project detection is a one-time lookup shared across every batch and the overview -- markers live at the project root or in the plugins/mill/ subdirectory used by this repo's own dogfood layout.
-    is_python_project = (
-        (project_root / "pyproject.toml").exists()
-        or (project_root / "setup.py").exists()
-        or (project_root / "setup.cfg").exists()
-        or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
-    )
+    # Python-project detection is a one-time lookup shared across every batch and the overview -- delegated to the shared _is_python_project helper.
+    is_python_project = _is_python_project(project_root)
 
     def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
         try:
@@ -2324,7 +2329,9 @@ def _check_verify_full_suite(
     overview_path: Path,
 ) -> list[dict]:
     """
-    Flag verify: commands that invoke run-all.py without a scoping filter.
+    Flag verify: commands that invoke an unscoped full-suite runner: run-all.py without
+    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test without --filter
+    (C#), or bare pytest/python -m pytest with no path or -k filter (Python, non-mill).
 
     Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``,
     mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping
@@ -2342,8 +2349,11 @@ def _check_verify_full_suite(
             checked alongside the per-batch loop.
 
     Returns:
-        List of error dicts, one per unscoped run-all.py invocation.
+        List of error dicts, one per unscoped full-suite invocation.
     """
+    # Python-project detection is a one-time lookup shared across every batch and the overview -- mirrors _check_verify_not_isolated's own one-time-lookup pattern.
+    is_python_project = _is_python_project(project_root)
+
     def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
         try:
             command, _cwd = _plan_dag.parse_verify_field(frontmatter, project_root, project_root)
@@ -2361,6 +2371,39 @@ def _check_verify_full_suite(
                 "message": (
                     "verify command invokes run-all.py without a filter (-k pattern); "
                     "use '-k <pattern>' or '--only <files>' to scope the run"
+                ),
+            }
+        if re.search(r"\bgo test\b.*\./\.\.\.", command) and "-run " not in command:
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes 'go test ./...' without a -run <pattern> filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                ),
+            }
+        if "dotnet test" in command and "--filter" not in command:
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes 'dotnet test' without a --filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                ),
+            }
+        if is_python_project and re.fullmatch(r"(python -m )?pytest", command.strip()):
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes bare pytest with no path or -k filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
                 ),
             }
         return None
