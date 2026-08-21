@@ -2562,10 +2562,14 @@ def finalize_scope(
     summary never goes stale silently.
 
     The returned `verdict` is recomputed from the post-ceiling findings, per the
-    verdict-derives-from-surviving-blocking-count Shared Decision: when `parse_verdict` returned
-    `NEED_CONTEXT`, that value passes through unchanged;
-    otherwise the returned verdict is `REQUEST_CHANGES` when `blocking_count > 0`, else `APPROVE`.
-    The reviewer's own `verdict:` line is advisory only past this point.
+    escalate-always-downgrade-only-on-this-call-demotion Shared Decision: when `parse_verdict`
+    returned `NEED_CONTEXT`, that value passes through unchanged; when `blocking_count > 0`, the
+    verdict is always `REQUEST_CHANGES` (an escalation safety net against a reviewer that
+    under-reports its own findings); when `blocking_count == 0` and this call's blocking-class
+    ceiling demoted at least one finding (`demoted_any`), the verdict is `APPROVE`; when
+    `blocking_count == 0` and `demoted_any` is `False`, the verdict is left as the reviewer's own
+    `original_verdict` unchanged (no forced recompute), since there is nothing this call did to
+    reconcile.
 
     Args:
         reviews_dir: Directory where review files are stored.
@@ -2615,7 +2619,10 @@ def finalize_scope(
 
     verdict = original_verdict
     if verdict != "NEED_CONTEXT":
-        verdict = "REQUEST_CHANGES" if blocking_count > 0 else "APPROVE"
+        if blocking_count > 0:
+            verdict = "REQUEST_CHANGES"
+        elif demoted_any:
+            verdict = "APPROVE"
 
     # Only rewrite the persisted verdict tokens when THIS call's ceiling demotion actually
     # flipped the recomputed verdict -- never for a pre-existing reviewer-stated/finding-count

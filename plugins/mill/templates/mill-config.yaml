@@ -126,7 +126,7 @@ pipeline:
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
   rename_detect_pct: 30  # similarity threshold (%) for git find-renames in per-batch code review; lower values catch surgical-edit renames that drop below git's default 50%
   entry_wait: true  # master on/off switch for the mill-go/mill-plan entry-gate blocking wait; see _phase_wait.py
-  entry_wait_timeout_minutes: 120  # give-up timeout (minutes) for the entry-gate wait before halting
+  entry_wait_timeout_minutes: 240  # give-up timeout (minutes) for the entry-gate wait before halting
 
 # ---------------------------------------------------------------------------
 # Reviewer roles
