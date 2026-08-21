@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go: baseline-stage timeout/cold-build cost and finalize dirty-tree false positive"
 slug: mill-go-finalize-and-baseline-stage-bugs
-approved: false
+approved: true
 started: "20260821-091559"
 parent: main
 root: ""
