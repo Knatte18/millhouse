@@ -229,7 +229,7 @@ def _is_dir_not_empty_error(exc: OSError) -> bool:
     winerror is absent (e.g. a test double or a non-Windows OSError).
 
     Args:
-        exc: The OSError raised by shutil.rmtree (via _safe_rmtree.safe_rmtree).
+        exc: The OSError raised by shutil's rmtree (via _safe_rmtree.safe_rmtree).
 
     Returns:
         True if exc represents a WinError 145 (or a string-matching equivalent);

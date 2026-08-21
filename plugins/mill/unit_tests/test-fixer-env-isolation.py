@@ -59,7 +59,7 @@ def main() -> int:
             with mock.patch.object(_subprocess_util_mod, "run", side_effect=capture_run):
                 with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=True):
                     with mock.patch("shutil.which", return_value="/usr/bin/psmux"):
-                        result, session_id = _llm_claude_mod._invoke(
+                        _llm_claude_mod._invoke(
                             "test prompt",
                             model="claude-opus-4-7",
                             effort=None,
@@ -111,7 +111,7 @@ def main() -> int:
 
             with mock.patch.object(_subprocess_util_mod, "run", side_effect=capture_run):
                 with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
-                    result, session_id = _llm_claude_mod._invoke(
+                    _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
                         effort=None,
@@ -158,7 +158,7 @@ def main() -> int:
 
             with mock.patch.object(_subprocess_util_mod, "run", side_effect=capture_run):
                 with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
-                    result, session_id = _llm_claude_mod._invoke(
+                    _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
                         effort=None,
@@ -200,7 +200,7 @@ def main() -> int:
 
             with mock.patch.object(_subprocess_util_mod, "run", side_effect=capture_run):
                 with mock.patch.object(_llm_claude_mod, "_get_via_psmux_flag", return_value=False):
-                    result, session_id = _llm_claude_mod._invoke(
+                    _llm_claude_mod._invoke(
                         "test prompt",
                         model="claude-opus-4-7",
                         effort=None,
