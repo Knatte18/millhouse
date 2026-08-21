@@ -4,11 +4,20 @@ from __future__ import annotations
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
+import _parent_branch  # noqa: E402
 from _parent_branch import ParentBranchError, resolve, resolve_for_codeguide  # noqa: E402
+
+
+def _make_run_mock(returncode: int) -> MagicMock:
+    """Return a MagicMock that looks like a CompletedProcess from _subprocess_util.run."""
+    mock = MagicMock()
+    mock.returncode = returncode
+    return mock
 
 
 def main() -> int:
@@ -95,6 +104,29 @@ def main() -> int:
             )
             assert resolve(sp, interactive=False, expected_slug="anything") == "main"
             print("PASS: resolve with expected_slug is a no-op when status.md has no slug: row")
+
+            with patch.object(
+                _parent_branch._subprocess_util, "run", return_value=_make_run_mock(0)
+            ) as mock_run:
+                assert _parent_branch.check_liveness("main", Path(tmp)) is True
+                assert mock_run.call_count == 1
+            print("PASS: check_liveness returns True when the remote ls-remote check succeeds")
+
+            with patch.object(
+                _parent_branch._subprocess_util,
+                "run",
+                side_effect=[_make_run_mock(1), _make_run_mock(0)],
+            ):
+                assert _parent_branch.check_liveness("main", Path(tmp)) is True
+            print("PASS: check_liveness falls back to the local branch ref when origin lacks it")
+
+            with patch.object(
+                _parent_branch._subprocess_util,
+                "run",
+                side_effect=[_make_run_mock(2), _make_run_mock(1)],
+            ):
+                assert _parent_branch.check_liveness("main", Path(tmp)) is False
+            print("PASS: check_liveness returns False when neither origin nor a local ref exists")
 
         print("All _parent_branch unit tests passed.")
         return 0

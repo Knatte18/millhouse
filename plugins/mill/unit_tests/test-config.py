@@ -1603,6 +1603,151 @@ def test_load_config_done_gate_key_present() -> None:
     print("PASS: pipeline.done_gate key present and null in template")
 
 
+def test_load_config_stub_misuse_warning_nested_layout() -> None:
+    """load_config warns when a nested-hub stub declares hub_relative_path but also carries an
+    unrelated top-level key -- the pointer-stub and real-override roles must not mix in one file.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "projects" / "sub"
+        hub_root.mkdir(parents=True)
+        worktree_root = tmp_path
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: sub_project\n")
+        stub_path = worktree_root / ".millhouse" / "config.local.yaml"
+        _write_yaml(
+            stub_path,
+            "hub_relative_path: projects/sub\nspawn:\n  branch_prefix: leaked\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(hub_root, worktree_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert str(stub_path) in stderr_output, (
+            f"Expected stub path in warning; got {stderr_output!r}"
+        )
+        assert "unexpected top-level key(s)" in stderr_output, (
+            f"Expected unexpected-key warning text; got {stderr_output!r}"
+        )
+        assert "spawn" in stderr_output, (
+            f"Expected leaked key name 'spawn' in warning; got {stderr_output!r}"
+        )
+    print("PASS load_config -- nested-hub stub with hub_relative_path plus extra key warns")
+
+
+def test_load_config_stub_misuse_no_warning_flat_layout() -> None:
+    """load_config never warns in the flat layout (hub_root == worktree_root) -- there the stub IS
+    the real config file, so extra keys are not a pointer/override mixing bug.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        _git_init(hub_root)
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: repo\n  workers: 2\n")
+        _write_yaml(
+            hub_root / ".millhouse" / "config.local.yaml",
+            "spawn:\n  branch_prefix: local\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(hub_root, hub_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unexpected top-level key(s)" not in stderr_output, (
+            f"Flat layout must never emit the stub-misuse warning; got {stderr_output!r}"
+        )
+    print("PASS load_config -- flat layout never emits stub-misuse warning")
+
+
+def test_review_common_load_config_git_root_param() -> None:
+    """_review_common.load_config's opt-in git_root parameter makes a git-root stub's overrides
+    visible, while remaining fully opt-in -- omitting it reproduces the pre-existing default
+    behavior where the git-root stub is invisible.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir(parents=True)
+        git_root = tmp_path
+        _write_yaml(
+            git_root / ".millhouse" / "config.local.yaml",
+            "roles:\n  plan-review:\n    holistic:\n      reviewer: fablehigh\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _review_common, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    cfg_with_git_root = _review_common.load_config(
+                        hub_root=hub_root, mill_dir=hub_root / ".millhouse", git_root=git_root
+                    )
+                    stderr_output = mock_stderr.getvalue()
+
+                cfg_without_git_root = _review_common.load_config(
+                    hub_root=hub_root, mill_dir=hub_root / ".millhouse"
+                )
+
+        assert cfg_with_git_root["roles"]["plan-review"]["holistic"]["reviewer"] == "fablehigh", (
+            f"git_root stub override should be honored; got {cfg_with_git_root.get('roles')!r}"
+        )
+        assert "unexpected top-level key(s)" not in stderr_output, (
+            f"Pure git-root override stub (no hub_relative_path) must not warn; got {stderr_output!r}"
+        )
+        assert (
+            cfg_without_git_root["roles"]["plan-review"]["holistic"]["reviewer"] != "fablehigh"
+        ), (
+            "Without git_root, the git-root stub must be invisible (opt-in parameter regression guard); "
+            f"got {cfg_without_git_root.get('roles')!r}"
+        )
+    print("PASS _review_common.load_config -- git_root parameter opt-in, honored when passed, invisible when omitted")
+
+
+def test_load_config_stub_misuse_no_warning_git_root_override_only() -> None:
+    """load_config never warns on a nested-hub stub that carries only real-override keys and no
+    hub_relative_path -- it never claims to be a pointer, so there is no pointer/override mixing.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        hub_root = tmp_path / "projects" / "sub"
+        hub_root.mkdir(parents=True)
+        worktree_root = tmp_path
+        _write_yaml(hub_root / "mill-config.yaml", "spawn:\n  branch_prefix: sub_project\n")
+        _write_yaml(
+            worktree_root / ".millhouse" / "config.local.yaml",
+            "git:\n  base_branch: develop\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(hub_root, worktree_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "unexpected top-level key(s)" not in stderr_output, (
+            f"Override-only stub (no hub_relative_path) must not warn; got {stderr_output!r}"
+        )
+    print("PASS load_config -- nested-hub git-root-override-only stub (no hub_relative_path) never warns")
+
+
 def main() -> int:
     tests = [
         test_load_config_shared_present,
@@ -1660,6 +1805,10 @@ def main() -> int:
         test_no_repo_layer_config_anywhere_emits_note,
         test_load_config_rename_detect_pct_key_present,
         test_load_config_done_gate_key_present,
+        test_load_config_stub_misuse_warning_nested_layout,
+        test_load_config_stub_misuse_no_warning_flat_layout,
+        test_review_common_load_config_git_root_param,
+        test_load_config_stub_misuse_no_warning_git_root_override_only,
     ]
     failures: list[str] = []
     for fn in tests:
