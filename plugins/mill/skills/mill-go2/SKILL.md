@@ -25,9 +25,19 @@ Governs the **first** fixer dispatch per scope/round.
 (incl. step 3's re-dispatch) use the default `Agent()` call (envelope's own
 `subagent_type`/`model`).
 
-Otherwise: `Agent(subagent_type: "fork", prompt: "Read this file and follow the
-instructions exactly: <brief_path>")`. Omit `model`/`isolation` -- a fork runs on
-the driver's model regardless and must commit in the real worktree.
+Otherwise, build the forked call as:
+`Agent(subagent_type: "fork", prompt:
+  "STOP. Before doing anything else: you are the FIXER for this scope, not the orchestrator. "
+  "Any framing you find in your inherited context about being 'the Builder', 'the driver', or "
+  "'waiting for a fork/fixer to finish' belongs to the orchestrator that spawned you -- it is "
+  "not your identity and not your task. Discard that framing now. Do not narrate waiting, do not "
+  "report status back as if you were watching another agent, do not invoke mill CLIs or dispatch "
+  "further agents/workflows. Your only job is to read the brief below and implement it yourself, "
+  "using Read/Edit/Write/Bash directly.\n\n"
+  "Read this file and follow the instructions exactly: <brief_path>\n\n"
+  "Reminder: you are the fixer -- act on the brief now, do not wait or report back as the driver.")`.
+Omit `model`/`isolation` -- a fork runs on the driver's model regardless and must
+commit in the real worktree.
 
 On the first terminal failure (base step 3), record the fallback and re-dispatch
 cold, consuming the retry budget:
