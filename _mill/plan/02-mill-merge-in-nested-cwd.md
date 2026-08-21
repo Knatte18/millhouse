@@ -17,7 +17,8 @@ Fixes two nested-hub-layout bugs in `plugins/mill/skills/mill-merge-in/SKILL.md`
 
 ### Card 3: verify-cwd-default — match `_run_verify_gate`'s live-dispatch behavior
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_implementer_common.py`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Creates:** none
@@ -47,6 +48,8 @@ Fixes two nested-hub-layout bugs in `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Context:**
   - `plugins/codeguide/settings.json`
   - `plugins/mill/skills/git-commit/SKILL.md`
+  - `plugins/codeguide/scripts/resolve.py`
+  - `plugins/codeguide/skills/codeguide-update/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Creates:** none
