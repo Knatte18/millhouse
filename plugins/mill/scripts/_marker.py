@@ -75,8 +75,8 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
         try:
             sha = _pygit2_util.head_sha(git_root)
             matches = _pygit2_util.local_branches_at_sha(git_root, sha)
-        except _pygit2_util.GitOpsError:
-            raise MarkerError("detached HEAD or non-branch state")
+        except _pygit2_util.GitOpsError as e:
+            raise MarkerError("detached HEAD or non-branch state") from e
         if matches:
             raise MarkerError(
                 f"HEAD is detached at a commit matching branch(es) {', '.join(matches)} -- "
