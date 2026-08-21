@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ self-resolved-verify-logic  '2026-08-21T09:23:29Z'
 approved-verdict-derivation-fix  '2026-08-21T09:24:59Z'
 holistic-reviewing  '2026-08-21T09:25:18Z'
 holistic-approved  '2026-08-21T09:26:59Z'
+done  '2026-08-21T09:27:21Z'
 ```
 
 ## Batches
