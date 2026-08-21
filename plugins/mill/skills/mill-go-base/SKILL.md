@@ -539,11 +539,23 @@ Skip this step entirely for every batch after the first.
 Immediately before "### 1.
 Implement" fires for the task's **FIRST batch only** (not on every batch — only once per task run), invoke the task-scoped module-wide verify baseline computation:
 
+> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" --stage baseline
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+    --slug baseline-preflight -- \
+    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" --stage baseline
 ```
 
-(no `batch_name` positional argument — `--stage baseline` is task-scoped, not batch-scoped.) Parse the two JSON lines the CLI prints — one per substage. The first line covers the `module_wide` substage and is identical in shape to today's single-line contract, just tagged with `"substage": "module_wide"` (parse and log exactly as today: `{"stage": "baseline", "substage": "module_wide", "result": "computed"|"cached"|"error"|"skipped", "value": ...}`). This call is **idempotent and safe to invoke unconditionally even on a resumed/restarted mill-go run**: the `--stage baseline` handler itself checks whether `module_verify_baseline` is already cached in status.md and no-ops (`{"stage": "baseline", "substage": "module_wide", "result": "cached", "value": ...}`) if so. On `{"result": "error", ...}` or `{"result": "skipped", ...}` (no module-wide verify configured for this task), log the reason and continue to batch 1 anyway — this pre-flight step never blocks the task; its only job is to populate the cache before batch 1's implementer can touch dependency manifests. A failed/skipped computation just means the per-batch module-wide gate falls back to strict behavior, which is safe.
+This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until the line `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+```
+
+Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> log the reason (ASCII-only) and continue to batch 1 anyway — do NOT halt here, matching this section's own "never blocks the task" principle stated below (a failed/skipped computation just means the per-batch module-wide gate falls back to strict behavior, which is safe). Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the two JSON summary lines.
+
+(no `batch_name` positional argument — `--stage baseline` is task-scoped, not batch-scoped.) Parse the two JSON lines extracted above — one per substage. The first line covers the `module_wide` substage and is identical in shape to today's single-line contract, just tagged with `"substage": "module_wide"` (parse and log exactly as today: `{"stage": "baseline", "substage": "module_wide", "result": "computed"|"cached"|"error"|"skipped", "value": ...}`). This call is **idempotent and safe to invoke unconditionally even on a resumed/restarted mill-go run**: the `--stage baseline` handler itself checks whether `module_verify_baseline` is already cached in status.md and no-ops (`{"stage": "baseline", "substage": "module_wide", "result": "cached", "value": ...}`) if so. On `{"result": "error", ...}` or `{"result": "skipped", ...}` (no module-wide verify configured for this task), log the reason and continue to batch 1 anyway — this pre-flight step never blocks the task; its only job is to populate the cache before batch 1's implementer can touch dependency manifests. A failed/skipped computation just means the per-batch module-wide gate falls back to strict behavior, which is safe.
 
 The second line covers the `per_batch` substage: `{"stage": "baseline", "substage": "per_batch", "computed": [<batch names computed this call>], "cached": [<batch names already had a baseline>], "errored": {<batch name>: <reason>, ...}}`.
 Log a one-line summary of the `computed`/`cached`/`errored` counts and continue to batch 1 regardless of any `errored` entries — this substage never blocks the task either, matching the `module_wide` substage's own never-block behavior.
@@ -552,7 +564,7 @@ An errored batch just means that batch's own per-batch verify gate falls back to
 Why this must run before batch 1 specifically, eagerly and once: per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision ("Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**"), this ordering guarantees no implementer session has touched dependency manifests yet, so the transient worktree's reused dependency state is still guaranteed to match the parent branch tip.
 Skip this step entirely for every batch after the first.
 
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `--stage baseline`'s `per_batch` substage replays every batch's `verify:` command to seed `verify_baseline_failures`, which is an arbitrary, potentially slow project command with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+This background-dispatch-and-poll pattern removes the Bash-tool timeout ceiling entirely, instead of relying on a capped foreground call: `--stage baseline`'s `per_batch` substage replays every batch's `verify:` command to seed `verify_baseline_failures`, an arbitrary, potentially slow project command with no bound on runtime, and a capped foreground Bash-tool call -- even at the 600000ms (10-minute) ceiling previously recommended here -- has twice been observed to time out on tasks with several slow batch verify commands (#897, #875).
 
 ### 0.6. Per-batch baseline recapture (self-hosting only)
 
@@ -579,19 +591,26 @@ Set `baseline_recapture_attempted = True` immediately (before running the comman
 Then run, from the task worktree (same cwd convention as "0.5.
 Baseline pre-flight" above):
 
+> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
+
 ```bash
-PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+    --slug baseline-recapture -- \
+    env PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
 ```
 
-Substitute the literal `git_root` path resolved at Path Setup — do NOT use `${CLAUDE_PLUGIN_ROOT}` here;
-this is the one deliberate, narrow exception to the cache-form convention (see the plan overview's "cache-vs-worktree execution path for the retry" Shared Decision and root `CLAUDE.md`'s "Hard constraints" / "Path invariants").
-Parse the two JSON lines this call prints, in the identical shape "0.5.
+The `env PYTHONPATH="<git_root>/plugins/mill/scripts"` prefix on the inner command is required, not cosmetic: everything after `millpy-bg.py`'s `--` separator is executed as a literal argv list (`_worker_main` in `millpy-bg.py` calls `subprocess.run(cmd, ...)` with no shell and no `env=` override), so the pre-edit block's `PYTHONPATH="<git_root>/..." "$MILL_PYTHON" ...` shell-level env-var-prefix idiom cannot be reused verbatim inside that payload — without an explicit `env VAR=value` wrapper, the inner command would silently inherit the OUTER `millpy-bg.py` call's own `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` (cache-form) instead, defeating this section's entire purpose (importing the worktree's own in-progress sibling modules instead of the frozen cache). `env` is a plain executable that sets environment variables for a single child process without requiring a shell, so it composes correctly with `subprocess.run`'s no-shell argv-list execution.
+
+Poll the same way "0.5. Baseline pre-flight" does above (`cat <log-path>` for `[mill-bg] EXIT`, with the same `_bg.check_bg_status` liveness-check branch, parsed as `(status, pid_or_code)`: `"running"` -> keep polling, `"exit"` -> proceed, `"dead"` -> log the reason (ASCII-only) and treat as a no-op, matching this card's own "0.6" Failure handling paragraph below), then run `grep '^{' <log-path>` to extract the two JSON summary lines.
+
+Substitute the literal `git_root` path resolved at Path Setup for BOTH the inner `env PYTHONPATH=` value and the `millpy-implement.py` script path argument — do NOT use `${CLAUDE_PLUGIN_ROOT}` for either; this is the one deliberate, narrow exception to the cache-form convention (see the plan overview's "cache-vs-worktree execution path for the retry" Shared Decision and root `CLAUDE.md`'s "Hard constraints" / "Path invariants"). The OUTER `millpy-bg.py` wrapper call — both its own script path and its own `PYTHONPATH` — stays cache-form (`${CLAUDE_PLUGIN_ROOT}`), matching every other `millpy-bg` call site in this file family (e.g. "0.5. Baseline pre-flight" above); only the inner command that `millpy-bg.py` backgrounds gets the worktree-form exception.
+Parse the two JSON lines extracted above, in the identical shape "0.5.
 Baseline pre-flight" already documents (first line: `{"stage": "baseline", "substage": "module_wide", "result":
 "computed"|"cached"|"error"|"skipped", "value": ...}`; second line:
 `{"stage": "baseline", "substage": "per_batch", "computed": [...], "cached": [...], "errored": {...}}`), and log a one-line ASCII-only summary of the `per_batch` line's counts.
 
 **Failure handling.**
-Any failure of this invocation — non-zero exit, timeout, malformed or missing JSON output on either line, or `--stage baseline` not yet existing in the worktree's mid-development code — is logged (ASCII-only) and treated as a no-op: proceed to this batch's normal strict-mode finalize exactly as if no recapture had been attempted.
+Any failure of this invocation — non-zero exit, a `dead` liveness-check result (the worker died mid-run), malformed or missing JSON output on either line, or `--stage baseline` not yet existing in the worktree's mid-development code — is logged (ASCII-only) and treated as a no-op: proceed to this batch's normal strict-mode finalize exactly as if no recapture had been attempted.
 Never escalate to `stuck`/blocked over a recapture failure.
 
 ### 1. Implement
