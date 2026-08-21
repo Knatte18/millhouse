@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -25,4 +25,17 @@ plan-review-r2  '2026-08-21T09:38:05Z'
 plan-fix-r2  '2026-08-21T09:38:05Z'
 plan-review-r3  '2026-08-21T09:44:46Z'
 planned  '2026-08-21T09:44:54Z'
+implementing  '2026-08-21T09:45:15Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: dirty-tree-briefs-exclusion
+    state: pending
+  - name: baseline-build-once-step
+    state: pending
+  - name: baseline-dispatch-background-skill
+    state: pending
 ```
