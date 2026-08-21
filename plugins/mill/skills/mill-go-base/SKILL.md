@@ -798,7 +798,7 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
    The round counter `N` is **not** consumed — the round produced no reviewable output.
    On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user.
    Do NOT auto-retry beyond the second pass.
-   The two-pass cap mirrors mill-plan's existing step 4.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
+   The two-pass cap mirrors mill-plan's existing step 3.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
 
 5. **Max-rounds exhaustion.**
    After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`.
