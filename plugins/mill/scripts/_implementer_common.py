@@ -433,6 +433,13 @@ def _in_scope_dirty_stuck(
     gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
     current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
     that would reintroduce the false-block this function exists to avoid.
+    `_mill/briefs/` paths are excluded from `owned_paths` entirely -- they are Builder-owned
+    orchestration bookkeeping (rendered prompt / captured transcript), never implementer content
+    this gate exists to police, and the Builder already stages and commits them itself at
+    batch-approve/holistic-approve/handoff time (see mill-go-base/SKILL.md and holistic-review.md's
+    `git add ... _mill/briefs/` commit lines). A resumed-after-blocked batch's round-1 brief/output
+    filenames colliding with an earlier attempt's already-committed files must never trip this gate
+    (#885).
     Any exception (including GitOpsError when project_root is not a real git repo) is caught and
     treated as a no-op -- the authoritative mill-go 2b cleanliness gate still runs afterward.
 
@@ -460,7 +467,10 @@ def _in_scope_dirty_stuck(
         )
         if diff_result.returncode != 0:
             return None
-        owned_paths = {line for line in diff_result.stdout.splitlines() if line}
+        owned_paths = {
+            line for line in diff_result.stdout.splitlines()
+            if line and not line.startswith("_mill/briefs/")
+        }
         porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
         dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
     except Exception:
