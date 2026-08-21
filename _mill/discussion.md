@@ -79,13 +79,25 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 ### #896 — unconditional per-round Timeline append
 
 - Decision: move the `plan-review-r{N}` `_status.append_phase` call out of the verdict branches —
-  append it unconditionally right after step 2's dispatch returns and the verdict is known, before
-  the "4a. On APPROVE..." branch text. Remove the now-duplicate calls currently in 4a (line 469) and
-  4d (line 537).
-- Rationale: collapses four independent call sites into one, matching the pattern
-  `mill-go-base/holistic-review.md` already uses (append the review-round phase unconditionally,
-  before/independent of the verdict) for the structurally identical code-review loop. Structurally
-  prevents the bug from recurring if a hypothetical 4e branch is ever added.
+  but NOT immediately after step 2's dispatch returns. Step 4.5 (ERROR-only-aggregate retry) sits
+  between step 2 and 4a-4d: on `error_kind: usage`, `verdict: ERROR`, or absent-JSON, the round is
+  explicitly "not consumed" and 4a-4d are skipped for a same-N retry. Appending right after step 2
+  would write a Timeline row for a round that produced no reviewable output, then write a second,
+  duplicate `plan-review-r{N}` row when the retry actually resolves — the file's own Entry
+  "resuming after a max-rounds block" section already documents exactly this hazard
+  (`_status.append_phase` never dedupes). Instead, append the single unconditional
+  `plan-review-r{N}` call immediately AFTER step 4.5's screening confirms the round is reviewable
+  (i.e., after ruling out a usage error, an ERROR verdict, and absent-JSON — all of which retry
+  without consuming the round) and BEFORE branching into 4a/4b/4c/4d. Remove the now-duplicate calls
+  currently in 4a (line 469) and 4d (line 537).
+- Rationale: collapses four independent call sites into one, still structurally preventing recurrence
+  if a hypothetical 4e branch is ever added, while correctly excluding non-reviewable retried rounds
+  from getting a premature or duplicate Timeline row. (The originally-cited precedent —
+  `mill-go-base/holistic-review.md` appending its per-round marker unconditionally — does not
+  actually match this placement: that file appends its marker BEFORE dispatch, every round, with no
+  equivalent post-dispatch retry-screening step in its loop shape; it is not a precedent for "append
+  after verdict is known," only for "append unconditionally somewhere in the loop." The design here
+  stands on its own reasoning, not on that analogy.)
 - Rejected: minimal patch (add the missing append only to 4b/4c at their existing sites) — cheaper
   diff, but keeps four independent call sites in sync going forward instead of one; scope decision
   above also rejects extending this fix to mill-start's own (worse, zero-branch) version of the same
