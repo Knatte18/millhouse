@@ -520,7 +520,7 @@ If not `converged` and `round < max_review_rounds`: 4a has no NITs to fix, so ta
 
 4b. On `APPROVE` with one or more `[NIT]` findings (the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
 Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
-Re-validate the plan DAG via `_plan_dag.validate`.
+Re-validate the plan DAG: read `overview_text = (plan_dir / "00-overview.md").read_text(encoding="utf-8")`, call `batches = _plan_dag.extract_batch_index(overview_text)`, then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
 This NIT-fix work, fixer report, and DAG re-validation happen regardless of `converged` — real work, safe either way.
 Compute `converged` per the Convergence gate above.
 If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
@@ -546,7 +546,7 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
      For each finding, run the `mill-receiving-review` decision tree.
    - Apply fixes to plan files.
    - Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
-   - Re-validate the plan DAG (`_plan_dag.validate`).
+   - Re-validate the plan DAG: read `overview_text = (plan_dir / "00-overview.md").read_text(encoding="utf-8")`, call `batches = _plan_dag.extract_batch_index(overview_text)`, then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
    - Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: plan-fix round {N} for {slug}"`.
      Push.
