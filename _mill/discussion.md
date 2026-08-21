@@ -108,7 +108,15 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 - Rationale: only approach that satisfies both "tolerate a transient blocked window" and "still halt
   promptly and unconditionally for a genuinely persistent block" simultaneously. The default-0
   parameter design lets the shared script change ship without forcing mill-go-base's own copy of
-  this wait pattern to change behavior in the same task.
+  this wait pattern to change behavior in the same task. **The suggested ~20s default is
+  intentionally conservative — it guards only against a single-poll coin-flip race, not the full
+  ~2m41s window actually observed in the reported repro.** This hub's own `pipeline.entry_wait_blocked_grace_s`
+  should therefore be configured explicitly larger than the ~20s baseline (e.g. 300s) if it wants to
+  tolerate the specific mill-start convergence-gate transient the issue reports; the plan should not
+  assume the bare 20s default alone closes that exact repro, and should either set a larger value in
+  this hub's `mill-config.yaml`/`config.local.yaml` as part of the same batch, or explicitly document
+  in the plan's Shared Decisions that the default is a conservative baseline only, with a pointer to
+  raising the config value for hubs that need more coverage.
 - Rejected: fixed re-check-once (simpler, no new parameter/state, but only guards a blocked window
   narrower than one poll interval — the actual reported repro's ~3-minute window would still
   false-halt under this option); never-exit-early-on-blocked (removes the fast-fail benefit for a
@@ -150,8 +158,10 @@ round budget or forces a manual operator recovery that the SKILL should handle a
   `batch_creates: dict[str, set[str]]` (per-batch `Creates:` sets, via the already-present
   `_parse_creates_only` helper). Build `ancestors = _compute_transitive_ancestors(batches)` (already
   defined and used by the existing `_check_parallel_modifies_overlap` check — reuse, don't
-  reimplement). For each batch B, for each token in B's `Context:`/`Edits:` refs (the same
-  `general_refs` set `_check_non_existent_path` already computes): if the token is in some OTHER
+  reimplement). For each batch B, for each token in `_parse_context_only(path) | _parse_edits_only(path)`
+  (Context: and Edits: refs ONLY — deliberately narrower than `_check_non_existent_path`'s own
+  `general_refs`, which also includes B's own `Creates:` tokens and would incorrectly scan a batch's
+  own deliverables against other batches' `creates` sets): if the token is in some OTHER
   batch C's `creates` set (C != B) and C is not in `ancestors[B]`, emit an error dict naming the
   missing edge. Wire into `run()` alongside `_check_non_existent_path` (same input shape). Add a
   Step 1.5 fix-table row mirroring `parallel-modifies-overlap`'s remedy shape: add the missing
@@ -208,14 +218,19 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 - Decision: add a new rule to `mill-plan/SKILL.md`'s "## Principles" section (alongside "Express
   renames as `Moves:` pairs" and "Card `Context:` is an allowlist"): a plan must never require two
   separately-numbered cards to land in the same commit. Each card produces its own commit at
-  implementation time; once a card's commit is made and pushed, the harness's no-amend policy
-  forbids folding a later card's diff into it. If two changes are genuinely atomic, express them as
-  a single card with one `Commit:` message, not two cards linked by a cross-card "same commit"
-  instruction.
-- Rationale: planning-discipline gap, not a code bug — confirmed no such rule exists anywhere in the
-  file today (grepped for "same commit"/"amend"/"atomic": zero hits). The one-commit-per-card
-  execution flow plus the harness's no-amend policy make such an instruction structurally
-  unsatisfiable once the earlier card is committed.
+  implementation time; once a card's commit is made and pushed, the harness's git-safety protocol
+  (always create a new commit rather than amending a prior one, absent explicit operator
+  instruction otherwise) forbids folding a later card's diff into it. If two changes are genuinely
+  atomic, express them as a single card with one `Commit:` message, not two cards linked by a
+  cross-card "same commit" instruction.
+- Rationale: planning-discipline gap, not a code bug — confirmed no rule governing cross-card commit
+  merging exists anywhere in the file today (grepped "same commit"/"amend"/"atomic": one incidental,
+  unrelated "same commit" hit in the Entry-gate wait section describing phase-transition commit
+  coupling, not cross-card commits; zero hits for "amend"/"atomic"). The confirmed one-commit-per-card
+  execution convention (`mill-go-base/SKILL.md` line 871: "every per-card commit invokes the
+  `git-commit` skill") combined with the harness's standing git-safety protocol against amending
+  prior commits makes a cross-card same-commit instruction structurally unsatisfiable once the
+  earlier card is committed.
 - Rejected: a mechanical validator regex check flagging `\bsame commit\b` + a card-number reference
   in `Requirements:` — flagged as a nice-to-have only; the SKILL.md prose rule is the sufficient,
   minimum-viable fix, since this is fundamentally a planning-discipline gap the planner should never
@@ -294,8 +309,8 @@ round budget or forces a manual operator recovery that the SKILL should handle a
   as of this discussion (commit `ee597d9a`) — re-verify line numbers at plan-writing time, since
   earlier batches in this same plan will shift later line numbers within the file.
 - Key scripts: `plugins/mill/scripts/_plan_validate.py` (all the `_check_*` validator functions,
-  `run()` wiring at ~line 2708), `plugins/mill/scripts/_plan_dag.py` (`validate`, `extract_batch_index`,
-  `_compute_transitive_ancestors`), `plugins/mill/scripts/millpy-review-plan.py` (CLI prepare/finalize
+  `run()` wiring at ~line 2708, and `_compute_transitive_ancestors` at line 985), `plugins/mill/scripts/_plan_dag.py` (`validate`, `extract_batch_index`),
+  `plugins/mill/scripts/millpy-review-plan.py` (CLI prepare/finalize
   stages, `--skip-check` argparse handling at lines ~86-93), `plugins/mill/scripts/_phase_wait.py`
   (`build_wait_command`, `matches_wait_trigger`), `plugins/mill/scripts/_review_common.py`
   (`resolve_ref_paths` with `soft_fail_gitignored`, `resolve_existing_paths` — gitignore-blind),
