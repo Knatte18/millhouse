@@ -3,10 +3,10 @@ Windows extended-length path prefixing.
 
 NTFS enforces a legacy ``MAX_PATH`` (260 character) limit on any path passed through the
 non-extended Win32 API surface. Deeply nested mill worktrees (task slug + `_mill/` + wiki-mirrored
-subtrees) routinely exceed it, causing ``os.scandir``/``shutil.rmtree``/junction-removal calls to
-fail with ``WinError 145`` during verify-baseline teardown. Prefixing an absolute path with the
-extended-length marker (``\\\\?\\``) tells the Win32 API to bypass ``MAX_PATH`` entirely. POSIX has
-no such limit, so the prefix is a no-op there.
+subtrees) routinely exceed it, causing ``os.scandir``/``shutil``'s recursive-delete/junction-removal
+calls to fail with ``WinError 145`` during verify-baseline teardown. Prefixing an absolute path with
+the extended-length marker (``\\\\?\\``) tells the Win32 API to bypass ``MAX_PATH`` entirely. POSIX
+has no such limit, so the prefix is a no-op there.
 
 Public API:
     to_extended(path)
