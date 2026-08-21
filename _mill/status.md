@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-baseline-build-once-step  '2026-08-21T09:54:47Z'
 approved-baseline-dispatch-background-skill  '2026-08-21T09:57:20Z'
 holistic-reviewing  '2026-08-21T09:57:53Z'
 holistic-approved  '2026-08-21T10:00:52Z'
+done  '2026-08-21T10:01:23Z'
 ```
 
 ## Batches
