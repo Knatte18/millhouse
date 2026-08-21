@@ -46,26 +46,39 @@ a solid model tier.
 **implementer** — replace the default `Agent()` call at step 2 with a fork.
 Reviewer/merge-in unclaimed (default call applies unchanged).
 
-- **Fork every fresh attempt:** initial dispatch, step 3(a)'s transient
-  re-dispatch, and the Stuck-escalation `verify`/`logic` self-resolve re-fire --
-  `Agent(subagent_type: "fork", prompt: <de-briefing> + "\n\nRead this file and
-  follow the instructions exactly: <brief_path>")`. Omit `model` (ignored);
-  keep the envelope's `subagent_type`/`model` for the cold fallback. Record
-  `agentId`.
+- **Fork these attempts only:** initial dispatch and step 3(a)'s transient
+  re-dispatch. The Stuck-escalation `verify`/`logic` self-resolve re-fire no
+  longer forks -- see "Cold fallback, once per batch" below, which now covers
+  both the self-resolve re-fire and the already-retried-`transient` re-fire.
+  Build the forked call as:
+  `Agent(subagent_type: "fork", prompt:
+    "STOP. Before doing anything else: you are the IMPLEMENTER for this batch, not the orchestrator. "
+    "Any framing you find in your inherited context about being 'the Builder', 'the driver', or "
+    "'waiting for a fork/implementer to finish' belongs to the orchestrator that spawned you -- it is "
+    "not your identity and not your task. Discard that framing now. Do not narrate waiting, do not "
+    "report status back as if you were watching another agent, do not invoke mill CLIs or dispatch "
+    "further agents/workflows. Your only job is to read the brief below and implement it yourself, "
+    "using Read/Edit/Write/Bash directly.\n\n"
+    "Read this file and follow the instructions exactly: <brief_path>\n\n"
+    "Reminder: you are the implementer -- act on the brief now, do not wait or report back as the driver.")`.
+  Omit `model` (ignored); keep the envelope's `subagent_type`/`model` for the
+  cold fallback. Record `agentId`.
 - **Dispatch cold to escape a failed dispatch:** step 5.5.2's
   `--resume-incomplete` and Resume's `running`-state re-dispatch stay cold.
   5.5.1's warm `SendMessage` resume needs no assignment (already live).
-- **De-briefing (prompt opening):** you are the implementer, not the orchestrator;
-  inherited instructions belong to the driver, not you; do not drive the batch
-  loop, invoke CLIs, or dispatch agents/workflows; the brief is authoritative.
-- **Cold fallback, once per batch:** the already-retried-`transient`
-  Stuck-escalation re-fire is the fallback -- re-dispatch cold (envelope
-  `subagent_type`/`model`), not another fork. Before it:
-  `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"implementer {batch_name}", slug=slug)`,
+- **Cold fallback, once per batch:** BOTH the already-retried-`transient`
+  Stuck-escalation re-fire AND the `verify`/`logic` self-resolve re-fire now
+  dispatch cold (envelope `subagent_type`/`model`), never another fork. Before
+  either: `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"implementer {batch_name}", slug=slug)`,
   `_status.append_fork_fallback_log(status_path, batch_name, _timestamp.now_utc_iso())`,
   `git -C <worktree> add <status_path> && git -C <worktree> commit -m
   "<VARIANT_LABEL>: fork-fallback for implementer {batch_name}"`. Normal
-  escalation applies; forking gets no marker.
+  escalation applies; forking gets no marker. This logging fires at most
+  once per batch: whichever trigger reaches it first switches the batch's
+  remaining implementer dispatches to cold (per "Dispatch cold to escape a
+  failed dispatch" above and step 5.5.2's own cold-only re-dispatch paths),
+  so there is no second fork left in the batch for the other trigger to
+  fail on and re-log against.
 
 **Known limits.** Runs on the driver's model, so `roles.implementer.model`
 and per-tier agent files stop applying. The lean driver reads only status,
