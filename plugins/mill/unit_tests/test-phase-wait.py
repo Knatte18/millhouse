@@ -22,11 +22,7 @@ def main() -> int:
         )
         print("PASS: build_wait_command contains the ready-phase grep pipeline")
 
-        # Case 2: the blocked-phase grep is CRLF-piped too,
-        # and no bare (un-piped-through-tr) grep of status_path exists anywhere.
-        assert (
-            "tr -d '\\r' < \"/tmp/status.md\" | grep -q \"^phase: blocked$\"" in cmd
-        )
+        # Case 2: no bare (un-piped-through-tr) grep of status_path exists anywhere.
         for line in cmd.splitlines():
             if "grep" in line and "/tmp/status.md" in line:
                 assert "tr -d '\\r' <" in line, (
@@ -43,16 +39,16 @@ def main() -> int:
         assert "elapsed=$((elapsed + 10))" in cmd
         print("PASS: build_wait_command renders the poll_interval_s sleep/accumulate lines")
 
-        # Case 5: exactly one of each echo/exit trio.
+        # Case 5: exactly one of each echo/exit pair, and no BLOCKED branch --
+        # an upstream `blocked` phase is not terminal for this wait (it just keeps polling).
         assert cmd.count('echo "READY"') == 1
-        assert "BLOCKED: " in cmd
-        blocked_idx = cmd.index("BLOCKED: ")
-        assert "${reason}" in cmd[blocked_idx : blocked_idx + len("BLOCKED: ${reason}") + 1]
+        assert "BLOCKED: " not in cmd
+        assert "phase: blocked" not in cmd
         assert cmd.count("TIMEOUT after") == 1
         assert cmd.count("exit 0") == 1
-        assert cmd.count("exit 1") == 1
         assert cmd.count("exit 2") == 1
-        print("PASS: build_wait_command emits exactly one echo/exit pair per outcome")
+        assert "exit 1" not in cmd
+        print("PASS: build_wait_command emits exactly one echo/exit pair per outcome, no BLOCKED branch")
 
         # Case 6: a status_path containing a space stays double-quoted everywhere.
         spacey_cmd = build_wait_command(
@@ -66,10 +62,9 @@ def main() -> int:
                 )
         print("PASS: build_wait_command double-quotes a status_path containing spaces")
 
-        # Case 7: both grep patterns end with a trailing $ anchor.
+        # Case 7: the ready-phase grep pattern ends with a trailing $ anchor.
         assert 'grep -q "^phase: planned$"' in cmd
-        assert 'grep -q "^phase: blocked$"' in cmd
-        print("PASS: build_wait_command anchors both grep patterns with a trailing $")
+        print("PASS: build_wait_command anchors the ready-phase grep pattern with a trailing $")
 
         # Case 8: matches_wait_trigger — exact-set membership.
         assert matches_wait_trigger(
