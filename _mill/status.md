@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verdict-derivation-fix
+phase: holistic-reviewing
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: _mill/plan
@@ -22,6 +22,7 @@ planned  '2026-08-21T09:16:01Z'
 implementing  '2026-08-21T09:16:25Z'
 self-resolved-verify-logic  '2026-08-21T09:23:29Z'
 approved-verdict-derivation-fix  '2026-08-21T09:24:59Z'
+holistic-reviewing  '2026-08-21T09:25:18Z'
 ```
 
 ## Batches
