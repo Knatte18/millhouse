@@ -25,8 +25,8 @@ batches:
 
 ### Decision: single-file scope
 
-- **Decision:** every card in this plan edits `plugins/mill/skills/mill-go2/SKILL.md` only. No other file is touched — this task is a prompt/frontmatter change to one variant skill's dispatch-override text, per `_mill/discussion.md`'s Scope section.
-- **Rationale:** `_mill/discussion.md`'s four implementation Decisions (de-briefing text for both roles, logic/verify self-resolve re-fire dispatches cold, shared-skill preload scope, catalog description) all resolve to edits inside `mill-go2/SKILL.md`'s existing `## Dispatch overrides` and `## Driver preamble` sections, or its frontmatter — none require changes to `mill-go-base/SKILL.md` (see discussion's "shared-skill preload scope" Decision, which explicitly rejects placing the preload there) or to any Python helper (see discussion's Technical context: "No Python helper changes are anticipated").
+- **Decision:** every card in this plan edits `plugins/mill/skills/mill-go2/SKILL.md`, with one post-approval scope extension to `plugins/mill/unit_tests/test-mill-go-variants.py` (see batch 1's `## Scope Extension (post-approval)`) — this task is a prompt/frontmatter change to one variant skill's dispatch-override text, per `_mill/discussion.md`'s Scope section, plus the follow-on test update that change required.
+- **Rationale:** `_mill/discussion.md`'s four implementation Decisions (de-briefing text for both roles, logic/verify self-resolve re-fire dispatches cold, shared-skill preload scope, catalog description) all resolve to edits inside `mill-go2/SKILL.md`'s existing `## Dispatch overrides` and `## Driver preamble` sections, or its frontmatter — none require changes to `mill-go-base/SKILL.md` (see discussion's "shared-skill preload scope" Decision, which explicitly rejects placing the preload there) or to any Python helper (see discussion's Technical context: "No Python helper changes are anticipated"). Mid-implementation, `test-mill-go-variants.py` was found to directly exercise `mill-go2/SKILL.md`'s content (a byte-size ceiling and a `## Driver preamble` placeholder assertion), so it required a matching update — documented as a scope extension in batch 1 rather than anticipated up front.
 - **Applies to:** all batches (there is only one).
 
 ### Decision: verify is full-suite regression guard, not scoped
@@ -38,3 +38,4 @@ batches:
 ## All Files Touched
 
 - `plugins/mill/skills/mill-go2/SKILL.md`
+- `plugins/mill/unit_tests/test-mill-go-variants.py` (post-approval scope extension — see batch 1's `## Scope Extension (post-approval)`)
