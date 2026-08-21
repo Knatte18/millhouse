@@ -10,6 +10,26 @@ root: ""
 verify: null
 ```
 
+## Prior failure
+
+- Holistic fix round 1: `millpy-fix.py --stage finalize --scope holistic` returned
+  `stuck_type: verify` after the fixer correctly applied the review's single BLOCKING
+  finding (commit `d36455cd`, `00-overview.md`'s stale scope Decision/file list). The
+  verify replay found the same 3 pre-existing, unrelated failures already documented in
+  `01-fork-dispatch-reliability-fixes.md`'s own `## Prior failure` section
+  (`test-fixer-env-isolation.py`, `test-guards.py`, `test-language-skills-directive.py`) --
+  none touched by the fix. Investigation: unlike `millpy-implement.py --stage finalize`
+  (batch scope) and the module-wide gate, `millpy-fix.py --stage finalize --scope
+  holistic` never forwards `batch_verify_baseline`/`module_verify_baseline` to
+  `finalize_from_output` at all (confirmed by reading `millpy-fix.py`'s finalize-stage
+  branch), so the holistic-fix verify gate has no baseline-waiver path and blocks on ANY
+  failure regardless of pre-existing status. This is an architectural gap in
+  `millpy-fix.py`, not a card-implementation issue -- out of scope for this task's single
+  batch (SKILL.md text edits only) to fix directly. No plan edit changes the outcome; a
+  fresh re-invoke of the holistic fixer will reproduce the identical verify-stuck signal.
+  Flagged for mill-self-report as a follow-up mill bug (holistic-fix finalize missing
+  baseline forwarding).
+
 ## Batch Index
 
 ```yaml
