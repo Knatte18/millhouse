@@ -10,6 +10,8 @@ Check coverage:
   check 3 — card-numbering (within-batch gap, cross-batch duplicate)
   check 4 — depends-on-unknown
   check 5 — parallel-modifies-overlap
+  cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
+      creates, with no depends-on edge to that creating batch
   check 6 — reads-not-backtick-path (incl.
       none-exempt)
   check 8 — all-files-touched-mismatch
@@ -742,6 +744,106 @@ def test_check_parallel_modifies_overlap_dirty() -> int:
         except AssertionError as exc:
             print(f"FAIL test_check_parallel_modifies_overlap_dirty: {exc}", file=sys.stderr)
             return 1
+
+
+def test_check_cross_batch_creates_no_depends_on_clean() -> int:
+    """Clean: beta depends-on alpha and references alpha's Creates: target -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        if check:
+            print(f"FAIL test_check_cross_batch_creates_no_depends_on_clean: unexpected: {check}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_cross_batch_creates_no_depends_on_clean")
+        return 0
+
+
+def test_check_cross_batch_creates_no_depends_on_dirty() -> int:
+    """Dirty: beta references alpha's Creates: target but has no depends-on edge -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        try:
+            assert len(check) == 1, f"expected 1 error, got {len(check)}: {check}"
+            assert check[0]["path"] == "shared/new_file.py", (
+                f"wrong path: {check[0]['path']!r}"
+            )
+            assert "alpha" in check[0]["message"] and "beta" in check[0]["message"], (
+                f"message should mention both batch names: {check[0]['message']!r}"
+            )
+            print("PASS test_check_cross_batch_creates_no_depends_on_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_cross_batch_creates_no_depends_on_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_cross_batch_creates_no_depends_on_transitive_clean() -> int:
+    """Clean: gamma depends-on beta depends-on alpha; gamma references alpha's Creates: target -> no error (transitive ancestry honored)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+            {"name": "gamma", "file": "03-gamma.md", "depends-on": ["beta"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2)
+        batch_c = _make_batch_file("gamma", card_num=3, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+            ("03-gamma.md", batch_c),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        if check:
+            print(
+                f"FAIL test_check_cross_batch_creates_no_depends_on_transitive_clean: "
+                f"unexpected: {check}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_cross_batch_creates_no_depends_on_transitive_clean")
+        return 0
 
 
 def test_check_reads_not_backtick_path_clean() -> int:
@@ -6455,6 +6557,9 @@ def main() -> int:
         test_depends_on_batch_mismatch_emits_finding,
         test_check_parallel_modifies_overlap_clean,
         test_check_parallel_modifies_overlap_dirty,
+        test_check_cross_batch_creates_no_depends_on_clean,
+        test_check_cross_batch_creates_no_depends_on_dirty,
+        test_check_cross_batch_creates_no_depends_on_transitive_clean,
         test_check_reads_not_backtick_path_clean,
         test_check_reads_not_backtick_path_none_exempt,
         test_check_reads_not_backtick_path_dirty,

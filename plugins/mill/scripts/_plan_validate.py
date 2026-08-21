@@ -58,6 +58,9 @@ Checks performed (check keys):
     move-mechanic-missing — batch has non-empty Moves: but is missing a '## Rename mechanic' section
     commit-none-with-content — a card's Commit: is the literal 'none' sentinel but its
         Edits:/Creates:/Deletes:/Moves: has non-none content
+    cross-batch-creates-no-depends-on — a card's Context:/Edits: references a file another batch's
+        Creates: produces, with no depends-on edge (direct or transitive) from the referencing batch to the
+        creating batch
 """
 from __future__ import annotations
 
@@ -1060,6 +1063,87 @@ def _check_parallel_modifies_overlap(
                             f"batches '{a_name}' and '{b_name}'"
                         ),
                     })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# cross-batch-creates-no-depends-on check (#887)
+# ---------------------------------------------------------------------------
+
+def _check_cross_batch_creates_no_depends_on(
+    batch_files: list[Path],
+    overview_text: str,
+) -> list[dict]:
+    """
+    Flag a Context:/Edits: reference to another batch's Creates: target with no depends-on edge.
+
+    A card that names a file another batch produces via Creates: implicitly relies on that batch
+    having already run.
+    Without a depends-on edge (direct or transitive) from the referencing batch to the creating
+    batch, the plan's DAG does not guarantee that ordering, so the reference may resolve to a
+    file that does not exist yet at runtime.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+
+    Returns:
+        List of error dicts, one per (referencing batch, token) pair missing the required edge.
+    """
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    ancestors = _compute_transitive_ancestors(batches)
+
+    # Map batch name -> batch file path via the index's `file:` field.
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        file_ref = entry.get("file", "")
+        stem = Path(file_ref).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    batch_creates: dict[str, set[str]] = {
+        name: _parse_creates_only(path) for name, path in batch_name_to_path.items()
+    }
+    # Deliberately Context:+Edits: only, never Creates: -- a batch's own Creates: tokens must
+    # never be scanned against other batches' creates sets.
+    batch_context_edits: dict[str, set[str]] = {
+        name: _parse_context_only(path) | _parse_edits_only(path)
+        for name, path in batch_name_to_path.items()
+    }
+
+    errors: list[dict] = []
+    for name_b, tokens in batch_context_edits.items():
+        for token in tokens:
+            if token.lower() == "none":
+                continue
+            for name_c, creates in batch_creates.items():
+                if name_c == name_b:
+                    continue
+                if token in creates and name_c not in ancestors.get(name_b, set()):
+                    errors.append({
+                        "check": "cross-batch-creates-no-depends-on",
+                        "batch": batch_name_to_path[name_b].stem,
+                        "card": None,
+                        "path": token,
+                        "message": (
+                            f"'{token}' is created by batch '{name_c}' but batch '{name_b}' "
+                            f"(file {batch_name_to_path[name_b].name}) has no depends-on edge "
+                            f"to '{name_c}'"
+                        ),
+                    })
+                    # Stop after the first matching creator for this token -- defensive
+                    # against two batches both declaring the same Creates: target, which is a
+                    # separate, pre-existing structural error other checks already catch.
+                    break
 
     return errors
 
@@ -2725,7 +2809,9 @@ def run(
     plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd,
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
-    move-source-missing, move-target-collision, move-mechanic-missing).
+    move-source-missing, move-target-collision, move-mechanic-missing), and
+    cross-batch-creates-no-depends-on.
+
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -2785,6 +2871,7 @@ def run(
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
+    errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
     errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))
