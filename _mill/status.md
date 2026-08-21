@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-base-documented-behavior-gaps
 branch: hanf/mill-go-base-documented-behavior-gaps
 plan: _mill/plan
@@ -22,4 +22,17 @@ plan-review-r1  '2026-08-21T09:14:35Z'
 plan-fix-r1  '2026-08-21T09:14:35Z'
 plan-fix-r2  '2026-08-21T09:19:42Z'
 planned  '2026-08-21T09:20:02Z'
+implementing  '2026-08-21T09:20:27Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: detached-head-branch-detection
+    state: pending
+  - name: preflight-attribute-guard
+    state: pending
+  - name: entry-gate-discussion-phases
+    state: pending
 ```
