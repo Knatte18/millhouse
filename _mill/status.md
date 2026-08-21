@@ -40,7 +40,9 @@ batches:
     commit_sha: 49afd2054a2bb211c6f0a08ab36cf508d56535f5
     verify_baseline_failures: []
   - name: baseline-build-once-step
-    state: pending
+    state: running
+    implementer_session: 77a777ba-6966-4054-bc4d-96cc7d34b201
+    start_sha: 8a115b027e59745944dd92219d21c6a89a748203
     verify_baseline_failures: []
   - name: baseline-dispatch-background-skill
     state: pending
