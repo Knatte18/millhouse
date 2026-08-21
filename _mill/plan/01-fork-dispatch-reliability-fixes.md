@@ -24,6 +24,7 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 - **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-go2/SKILL.md`
+  - `plugins/mill/unit_tests/test-mill-go-variants.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
@@ -78,6 +79,7 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-go2/SKILL.md`
+  - `plugins/mill/unit_tests/test-mill-go-variants.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
@@ -145,6 +147,21 @@ the driver's model regardless and must commit in the real worktree.
 
   Do not change the `name:` field or anything else in the frontmatter.
 - **Commit:** `docs(mill-go2): correct catalog description to name both forked roles (#851)`
+
+## Scope Extension (post-approval)
+
+`plugins/mill/unit_tests/test-mill-go-variants.py` was discovered mid-implementation to
+directly exercise `plugins/mill/skills/mill-go2/SKILL.md`'s content -- contrary to this
+batch's original "no existing test exercises this file's content" premise (see `## Batch
+Tests` below). Specifically: `_check_variants_carry_no_machinery` enforces a 4096-byte
+ceiling on the variant file (breached starting at Card 1's bookended de-briefing text), and
+`_check_mill_go2_declares_fork_override` asserts `## Driver preamble`'s first non-blank line
+is the literal `(none)` (contradicted by Card 2's preload text). Both assertions were locking
+in the pre-task state of this same file as a regression guard, not asserting an unrelated
+invariant -- they must be updated to match this task's intended end state: raise the byte
+ceiling to accommodate the now-larger, intentionally thicker variant file, and assert the
+`## Driver preamble` body contains the preload instructions (starting with "Before Step 0")
+instead of `(none)`.
 
 ## Batch Tests
 
