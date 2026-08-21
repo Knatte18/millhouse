@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-dirty-tree-briefs-exclusion
+phase: approved-baseline-build-once-step
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-review-r3  '2026-08-21T09:44:46Z'
 planned  '2026-08-21T09:44:54Z'
 implementing  '2026-08-21T09:45:15Z'
 approved-dirty-tree-briefs-exclusion  '2026-08-21T09:50:12Z'
+approved-baseline-build-once-step  '2026-08-21T09:54:47Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ batches:
     commit_sha: 49afd2054a2bb211c6f0a08ab36cf508d56535f5
     verify_baseline_failures: []
   - name: baseline-build-once-step
-    state: running
+    state: approved
     implementer_session: 77a777ba-6966-4054-bc4d-96cc7d34b201
     start_sha: 8a115b027e59745944dd92219d21c6a89a748203
+    commit_sha: c626b4fd091df849394f2a3dd38cbe8bae179163
     verify_baseline_failures: []
   - name: baseline-dispatch-background-skill
     state: pending

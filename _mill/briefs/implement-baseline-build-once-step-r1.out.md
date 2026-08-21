@@ -1,0 +1,11 @@
+{"status":"success","commit_sha":"c626b4fd091df849394f2a3dd38cbe8bae179163","session_id":"77a777ba-6966-4054-bc4d-96cc7d34b201","cards_done":[3,4,5]}
+
+Summary: 3 of 3 cards committed — all complete. Batch `02-baseline-build-once-step` implemented and verified.
+
+- Card 3 (`feat(implementer): run baseline_prepare_cmd once per cwd fragment before baseline verify replay (#894)`, commit `2e037f84`): added `baseline_prepare_cmd: str | None` param to `_run_baseline_stage`, docstring entry, the build-once loop inserted between the shared-checkout setup and the module-wide/per-batch verify block, and threaded the config value at the `--stage baseline` call site in `/home/knatte/Code/millhouse/wts/mill-go-finalize-and-baseline-stage-bugs/plugins/mill/scripts/millpy-implement.py`.
+- Card 4 (`docs(config): document pipeline.baseline_prepare_cmd in template and hub config (#894)`, commit `cc1e49ae`): added `pipeline.baseline_prepare_cmd: null` with matching comment to `/home/knatte/Code/millhouse/wts/mill-go-finalize-and-baseline-stage-bugs/plugins/mill/templates/mill-config.yaml` and `/home/knatte/Code/millhouse/wts/mill-go-finalize-and-baseline-stage-bugs/mill-config.yaml`.
+- Card 5 (`test(implementer): cover baseline_prepare_cmd build-once step (#894)`, commit `c626b4fd`): added three tests to `/home/knatte/Code/millhouse/wts/mill-go-finalize-and-baseline-stage-bugs/plugins/mill/unit_tests/test-millpy-implement.py`.
+
+`verify:` (`plugins/mill/unit_tests/test-millpy-implement.py`) passed: 79/79 tests OK, run both mid-batch and after the final commit. `git status --porcelain --untracked-files=no` is clean (only the untracked brief file remains, which is out of scope). Ruff flagged pre-existing pervasive style patterns (BLE001 blind excepts, RUF059 unused unpacked `out`, I001 import order) throughout both edited files that predate this batch and match the plan's own specified code/test shape verbatim — these were not introduced as new categories of issue by this batch's edits and were left untouched per the plan's exact instructions.
+
+{"status":"success","commit_sha":"c626b4fd091df849394f2a3dd38cbe8bae179163","session_id":"77a777ba-6966-4054-bc4d-96cc7d34b201","cards_done":[3,4,5]}
