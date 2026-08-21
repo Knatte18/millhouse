@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: mill-go2-fork-dispatch-reliability
 branch: hanf/mill-go2-fork-dispatch-reliability
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-21T06:51:28Z'
+discussion-fix-r1  '2026-08-21T08:58:16Z'
 ```
