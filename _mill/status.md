@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-merge-nested-layout-and-lock-bugs
 branch: hanf/mill-merge-nested-layout-and-lock-bugs
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussed  '2026-08-21T09:21:42Z'
 planning  '2026-08-21T09:32:00Z'
 plan-review-r1  '2026-08-21T09:40:11Z'
 plan-fix-r1  '2026-08-21T09:40:11Z'
+plan-fix-r2  '2026-08-21T09:49:51Z'
 ```

@@ -11,7 +11,7 @@ depends-on: []
 
 ## Batch Scope
 
-Fixes two bugs in `plugins/mill/skills/mill-merge/SKILL.md`'s Step 5 (Direct squash) / Step 8 (Release merge lock) flow: (1) `#904`/`#862` — Step 5's push-failure classification has no branch for a plain non-fast-forward rejection, so the existing pre-squash `merge --ff-only` guard's race window (between the guard and the actual push) still ends in a full Step 1–5 rollback instead of a cheap fetch+rebase+retry; (2) `#863` — the merge lock is released at Step 8, the very end of the Teardown sequence, so a session interrupted between Step 5's successful push and Step 8 leaks the lock. Both fixes live in the same file and the same "push succeeded, what happens next" flow, so they are one batch. `Requirements:` below give exact before/after text for each edit site — apply them as literal text edits (Edit tool), not paraphrases, since this file is followed verbatim by an LLM orchestrator at runtime. Every fenced block below reproduces the source file's own byte-exact indentation (flush left, no extra indent from this card's own list nesting) — copy fence contents literally, do not re-indent them to match this document's bullet structure.
+Fixes two bugs in `plugins/mill/skills/mill-merge/SKILL.md`'s Step 5 (Direct squash) / Step 8 (Release merge lock) flow: (1) `#904`/`#862` — Step 5's push-failure classification has no branch for a plain non-fast-forward rejection, so the existing pre-squash `merge --ff-only` guard's race window (between the guard and the actual push) still ends in a full Step 1–5 rollback instead of a cheap fetch+rebase+retry; (2) `#863` — the merge lock is released at Step 8, the very end of the Teardown sequence, so a session interrupted between Step 5's successful push and Step 8 leaks the lock. Both fixes live in the same file and the same "push succeeded, what happens next" flow, so they are one batch. `Requirements:` below give exact before/after text for each edit site — apply them as literal text edits (Edit tool), not paraphrases, since this file is followed verbatim by an LLM orchestrator at runtime. Every fenced block below reproduces the source file's own byte-exact indentation — some sections are flush-left (top-level `##`/`###` prose), others carry a 2-space (or deeper) base indent because they are nested under a `- **Direct path:**` bullet in the source; each fence's own indentation is the literal, correct source indentation regardless of this document's own bullet structure — copy fence contents literally, do not re-indent them to match this document's bullet structure and do not flatten them to column 0.
 
 ## Cards
 
@@ -25,45 +25,45 @@ Fixes two bugs in `plugins/mill/skills/mill-merge/SKILL.md`'s Step 5 (Direct squ
 - **Moves:** none
 - **Requirements:** In the `**On push failure — branch-protection fallback:**` section (under `### 5. Direct squash`), replace the existing numbered sub-step 1 and the start of sub-step 2 with a new sub-step 1a inserted between them. This section's current sub-steps 1–8 keep their numbers unchanged except for the new 1a insertion (sub-steps 2–8 are otherwise untouched — do not renumber them).
 
-  Find this exact text (fence content is byte-exact, flush-left, matching the source file's own indentation):
+  Find this exact text (fence content is byte-exact, reproducing the source file's own 2-space base indent — this numbered list is nested under the `- **Direct path:**` bullet):
 
 ```
-1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
-   If none match → fail the step and trigger the Step 1–5 rollback (do not attempt the fallback).
+  1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
+     If none match → fail the step and trigger the Step 1–5 rollback (do not attempt the fallback).
 
-2. If a match is found — branch-protection rejection — undo the local squash commit on the parent:
+  2. If a match is found — branch-protection rejection — undo the local squash commit on the parent:
 ```
 
   Replace it with:
 
 ```
-1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
-   If a match is found, skip to sub-step 2 (branch-protection rejection) below.
-   If none match, continue to sub-step 1a.
+  1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
+     If a match is found, skip to sub-step 2 (branch-protection rejection) below.
+     If none match, continue to sub-step 1a.
 
-1a. Check the captured output for `! [rejected]` together with either `(fetch first)` or `(non-fast-forward)` — git's own literal rejection markers for a plain non-fast-forward push rejection (distinct from the branch-protection substrings in sub-step 1 above, and from any other failure such as auth or network errors).
+  1a. Check the captured output for `! [rejected]` together with either `(fetch first)` or `(non-fast-forward)` — git's own literal rejection markers for a plain non-fast-forward push rejection (distinct from the branch-protection substrings in sub-step 1 above, and from any other failure such as auth or network errors).
 
-    If both markers are present:
+      If both markers are present:
 
-    ```bash
-    git -C <parent-path> fetch origin "<parent_branch>"
-    git -C <parent-path> rebase "origin/<parent_branch>"
-    ```
+      ```bash
+      git -C <parent-path> fetch origin "<parent_branch>"
+      git -C <parent-path> rebase "origin/<parent_branch>"
+      ```
 
-    On a rebase conflict (non-zero exit from `git rebase`): capture the conflicting files via `git -C <parent-path> diff --name-only --diff-filter=U`, then run `git -C <parent-path> rebase --abort`, then fail the step and trigger the Step 1–5 rollback, naming the conflicting files in the operator-facing report.
+      On a rebase conflict (non-zero exit from `git rebase`): capture the conflicting files via `git -C <parent-path> diff --name-only --diff-filter=U`, then run `git -C <parent-path> rebase --abort`, then fail the step and trigger the Step 1–5 rollback, naming the conflicting files in the operator-facing report.
 
-    On a clean rebase (exit 0): retry the push once —
+      On a clean rebase (exit 0): retry the push once —
 
-    ```bash
-    git -C <parent-path> push
-    ```
+      ```bash
+      git -C <parent-path> push
+      ```
 
-    If this retry succeeds (exit 0): the parent now has the squash commit rebased onto the current `origin/<parent_branch>` tip — treat this exactly as if the original push above had succeeded, and continue from the "Post-Step-5-success sequencing" paragraph at the end of this `### 5. Direct squash` section.
-    If this retry also fails: fail the step and trigger the Step 1–5 rollback.
+      If this retry succeeds (exit 0): the parent now has the squash commit rebased onto the current `origin/<parent_branch>` tip — treat this exactly as if the original push above had succeeded, and continue from the "Post-Step-5-success sequencing" paragraph at the end of this `### 5. Direct squash` section.
+      If this retry also fails: fail the step and trigger the Step 1–5 rollback.
 
-    If neither marker is present (this is not a plain non-fast-forward rejection — e.g. an auth or network failure): fail the step and trigger the Step 1–5 rollback (do not attempt any fallback) — this is the unchanged "no match" behavior for any failure that is neither branch-protection nor a plain non-fast-forward rejection.
+      If neither marker is present (this is not a plain non-fast-forward rejection — e.g. an auth or network failure): fail the step and trigger the Step 1–5 rollback (do not attempt any fallback) — this is the unchanged "no match" behavior for any failure that is neither branch-protection nor a plain non-fast-forward rejection.
 
-2. If a match is found in sub-step 1 — branch-protection rejection — undo the local squash commit on the parent:
+  2. If a match is found in sub-step 1 — branch-protection rejection — undo the local squash commit on the parent:
 ```
 
   Do not modify sub-steps 2 through 8 or the `**Idempotency check:**` line that follows them.
@@ -103,18 +103,18 @@ a failed step is reported with its name so the user can re-run from that step (S
 **Step 8 (release merge lock) executes out of its numeric position on the direct-squash path:** once Step 5's squash+push succeeds (including via the sub-step 1a rebase-retry — see Card 1), Step 8 runs immediately — before Steps 5.5, 6, and 7 — since none of those three steps touch the locked parent worktree. See "Post-Step-5-success sequencing" at the end of `### 5. Direct squash` and `### 8. Release merge lock`'s own note. This reordering does not affect the `merged` PR-state route (`## Entry`), which already skips Steps 1/2 (never acquires the lock) and documents Step 8 there as a no-op.
 ```
 
-  **Edit B — end of `### 5. Direct squash`.** Find this exact text (the section's final paragraph, immediately before the `### 5.5. Preflight check for cache helpers` heading):
+  **Edit B — end of `### 5. Direct squash`.** Find this exact text (the section's final paragraph, immediately before the `### 5.5. Preflight check for cache helpers` heading; 2-space base indent, nested under the `- **Direct path:**` bullet like the rest of this section):
 
 ```
-**Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
+  **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 ```
 
   Replace it with:
 
 ```
-**Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
+  **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
-**Post-Step-5-success sequencing:** whenever Step 5 succeeds — either via the original `git -C <parent-path> push` above, or via sub-step 1a's rebase-retry push under "On push failure — branch-protection fallback" — run Step 8 (release merge lock) immediately next, before proceeding to Step 5.5. This applies to the direct-squash path only (this section); it does not apply to the `merged` PR-state route, which never reaches this section and has its own unaffected Step 8 no-op note in `## Entry`.
+  **Post-Step-5-success sequencing:** whenever Step 5 succeeds — either via the original `git -C <parent-path> push` above, or via sub-step 1a's rebase-retry push under "On push failure — branch-protection fallback" — run Step 8 (release merge lock) immediately next, before proceeding to Step 5.5. This applies to the direct-squash path only (this section); it does not apply to the `merged` PR-state route, which never reaches this section and has its own unaffected Step 8 no-op note in `## Entry`.
 ```
 
   **Edit C — `### 7. Home.md — mark [done]` failure-handling paragraph.** Find this exact text:
