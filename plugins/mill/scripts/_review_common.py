@@ -2723,7 +2723,7 @@ def resolve_blocking_classes(cfg: dict, review_type: str, scope: str | None) -> 
     return DEFAULT_BLOCKING_CLASSES[role]
 
 
-def load_config(hub_root: Path, mill_dir: Path) -> dict:
+def load_config(hub_root: Path, mill_dir: Path, *, git_root: Path | None = None) -> dict:
     """Load mill config, delegating the core template/repo/local merge to ``_config.load_config``
     and layering two review-specific behaviors on top.
 
@@ -2746,7 +2746,14 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
 
     Args:
         hub_root: Absolute path to the hub directory.
-        mill_dir: Absolute path to the .millhouse directory.
+        mill_dir: Absolute path to the .millhouse directory. Always used for the stale-
+            ``review:``-key peek (``mill_dir / config.local.yaml``), regardless of ``git_root``.
+        git_root: Optional. When provided, used instead of ``mill_dir.parent`` as the delegate's
+            ``worktree_root`` argument (governing the merge-order stub/real config layers) --
+            ``mill_dir.parent`` is always a hub-anchored path, while callers with a nested-hub
+            layout (``hub_root != git_root``) may need the git-repository-root stub layer
+            instead. When omitted (the default), behavior is unchanged from before this
+            parameter existed.
 
     Returns:
         Merged configuration dict, as produced by ``_config.load_config``.
@@ -2754,7 +2761,7 @@ def load_config(hub_root: Path, mill_dir: Path) -> dict:
     Raises:
         ReviewError: If neither the plugin template nor a repo-layer mill-config.yaml source exists.
     """
-    worktree_root = mill_dir.parent
+    worktree_root = git_root if git_root is not None else mill_dir.parent
 
     # Missing-source check, independent of the delegate's return value: an empty dict from the delegate does not distinguish "nothing found" from "a source was found but happened to be empty".
     template_path = resolve_plugin_template_path("mill-config.yaml")
