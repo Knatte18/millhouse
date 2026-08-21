@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-review-round-and-gate-bugs
 branch: hanf/mill-plan-review-round-and-gate-bugs
 plan: _mill/plan
@@ -27,4 +27,17 @@ plan-review-r4  '2026-08-21T10:28:20Z'
 plan-fix-r4  '2026-08-21T10:28:36Z'
 plan-fix-r5  '2026-08-21T10:42:09Z'
 planned  '2026-08-21T10:42:32Z'
+implementing  '2026-08-21T10:43:03Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-loop-gate-doc-fixes
+    state: pending
+  - name: validator-checks-lang-gitignore
+    state: pending
+  - name: validator-checks-skill-doc-sync
+    state: pending
 ```
