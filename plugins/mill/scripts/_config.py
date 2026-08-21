@@ -300,6 +300,17 @@ def load_config(hub_root: Path, worktree_root: Path) -> dict:
         source_label = "config.local.yaml"
         hub_subpath = stub_data.get("hub_relative_path", ".")
 
+        if worktree_root != hub_root and "hub_relative_path" in stub_data:
+            unexpected_keys = sorted(k for k in stub_data if k != "hub_relative_path")
+            if unexpected_keys:
+                print(
+                    f"[config] warning: {stub_path} sets hub_relative_path but also carries "
+                    f"unexpected top-level key(s) {unexpected_keys} -- in a nested-hub layout this "
+                    f"file is meant to be a pointer stub; real overrides belong in the hub's own "
+                    f".millhouse/config.local.yaml",
+                    file=sys.stderr,
+                )
+
     if hub_subpath != ".":
         real_path = worktree_root / hub_subpath / ".millhouse" / "config.local.yaml"
         if real_path.exists():
