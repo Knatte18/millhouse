@@ -27,8 +27,10 @@ sha) -> list[str]` (card 1) — no other batch in this plan consumes it, but it 
 that consistency.
 
 Batch-local decision (not in Shared Decisions since it's specific to this batch's own new helper):
-on any `pygit2.GitError`/`_pygit2_util.GitOpsError` raised while looking up the detached commit's
-SHA or matching branches, `_marker.slug_from_branch` falls back to the original unchanged generic
+on any `_pygit2_util.GitOpsError` raised while looking up the detached commit's SHA or matching
+branches (`head_sha`/`local_branches_at_sha` both always re-wrap any lower-level `pygit2.GitError`
+into `GitOpsError`, so catching only `GitOpsError` is sufficient — see card 3's exact except
+clause), `_marker.slug_from_branch` falls back to the original unchanged generic
 message (`"detached HEAD or non-branch state"`) rather than letting the lookup failure surface as
 an unrelated, undocumented exception type from a function whose docstring promises `MarkerError`
 only — see card 3.

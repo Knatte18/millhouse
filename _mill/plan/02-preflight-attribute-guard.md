@@ -63,7 +63,12 @@ surface as an unhandled traceback at the guard call site — see card 1.
   if `False`, append `name` to `missing`. Update the function's docstring (currently lines 26-34) to
   document the new `"module:attr"` form alongside the existing `"module"` form, and update
   `check_helpers`'s docstring (currently lines 44-57) with the same clarification since it delegates
-  to `missing_helpers`. Do not change the bare-`"module"`-form code path's behavior — a bare module
+  to `missing_helpers`. Add a one-line docstring caveat on `missing_helpers` noting that the
+  `"module:attr"` form fully imports (executes the top level of) the target module to check the
+  attribute, not just a presence check — a cost worth flagging for any future caller passing a
+  heavier module, even though it is harmless for this task's own two call sites (`_parent_branch.py`
+  imports only `_subprocess_util` at its top level). Do not change the bare-`"module"`-form code
+  path's behavior — a bare module
   name must produce byte-identical results to today (no import, file-existence check only).
 - **Commit:** `feat(preflight): support module:attr entries for attribute-level presence checks (#856)`
 
@@ -89,14 +94,14 @@ surface as an unhandled traceback at the guard call site — see card 1.
   `missing` rather than the exception propagating out of `missing_helpers`; (4) a bare `"module"`
   entry (no `:`) continues to use file-existence-only checking, unaffected by the new code path —
   reuse/adapt the existing `test_missing_helpers_all_present` fixture to confirm no regression. This
-  file currently defines seven `test_*` functions (six pre-existing plus this card's new one — or
-  more, if multiple new test functions are added per the coverage above) but has **no
+  file currently defines seven pre-existing `test_*` functions, plus whichever new ones this card
+  adds per the coverage above, but has **no
   test-invocation entrypoint at all**: no `main()`, no `if __name__ == "__main__"` block, so
   `run-all.py` (which runs each `test-*.py` as a subprocess) currently executes this file as a
   no-op that silently exits 0 without running any test. Add a `main() -> int` function and an `if
   __name__ == "__main__": sys.exit(main())` block at the end of the file, mirroring
   `test-marker.py`'s `main()` (its exact structure: a hard-coded `tests = [...]` list of every
-  `test_*` function in this file — all six pre-existing plus every new one this card adds — a loop
+  `test_*` function in this file — all seven pre-existing plus every new one this card adds — a loop
   calling each and catching `AssertionError`/`Exception` into a `failures` list, and a final
   pass/fail summary print with `return 1` on any failure or `return 0` when all pass).
 - **Commit:** `test(preflight): cover module:attr entries and import-failure handling (#856)`

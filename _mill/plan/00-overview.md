@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go-base/mill-merge: documented step behavior diverges from underlying script capability'
 slug: mill-go-base-documented-behavior-gaps
-approved: false
+approved: true
 started: 20260821-090525
 parent: main
 root: ""
