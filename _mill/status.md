@@ -48,5 +48,7 @@ batches:
     commit_sha: fd7e43fae642874d14dc59e57ed03ac1cabe4946
     verify_baseline_failures: []
   - name: validator-checks-skill-doc-sync
-    state: pending
+    state: running
+    implementer_session: 695b6cae-5c64-4522-9a92-f16a125cc3da
+    start_sha: fd9c4ad800ffc4f9dcfd4b5fae4a6038ec4cc490
 ```
