@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-loop-gate-doc-fixes
+phase: approved-validator-checks-lang-gitignore
 slug: mill-plan-review-round-and-gate-bugs
 branch: hanf/mill-plan-review-round-and-gate-bugs
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-fix-r5  '2026-08-21T10:42:09Z'
 planned  '2026-08-21T10:42:32Z'
 implementing  '2026-08-21T10:43:03Z'
 approved-review-loop-gate-doc-fixes  '2026-08-21T10:50:25Z'
+approved-validator-checks-lang-gitignore  '2026-08-21T10:57:52Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: 3c52a8a55e18db2c1fc10c38ecea5402624537ea
     commit_sha: bebd55efd7ae8ebf1adae5097eb21993394fd15e
   - name: validator-checks-lang-gitignore
-    state: running
+    state: approved
     implementer_session: 0f906a74-83f3-4c08-932f-ee58fa68ca0e
     start_sha: bc3aa9b9962b588aac1e3c27b38c8307b29db8ac
+    commit_sha: fd7e43fae642874d14dc59e57ed03ac1cabe4946
     verify_baseline_failures: []
   - name: validator-checks-skill-doc-sync
     state: pending
