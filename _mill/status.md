@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go2-fork-dispatch-reliability
 branch: hanf/mill-go2-fork-dispatch-reliability
 plan: _mill/plan
@@ -24,4 +24,13 @@ plan-fix-r1  '2026-08-21T09:13:27Z'
 plan-fix-r2  '2026-08-21T09:18:21Z'
 plan-fix-r3  '2026-08-21T09:24:13Z'
 planned  '2026-08-21T09:24:25Z'
+implementing  '2026-08-21T09:24:53Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fork-dispatch-reliability-fixes
+    state: pending
 ```
