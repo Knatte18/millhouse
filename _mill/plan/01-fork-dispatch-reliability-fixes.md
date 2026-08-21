@@ -9,6 +9,25 @@ verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests
 depends-on: []
 ```
 
+## Prior failure
+
+- Round 1: finalize returned `stuck_type: verify` because the live replay of `verify:`
+  found 3 failures (`test-fixer-env-isolation.py`, `test-guards.py`,
+  `test-language-skills-directive.py`) while the cached per-batch baseline recorded only 2
+  (missing `test-guards.py`), so the replay set was not a subset of the baseline and the
+  waiver did not apply. Investigation: `test-guards.py`'s rmtree-callsite scan fails
+  deterministically on `plugins/mill/scripts/_long_path.py` and `_worktree.py` -- neither
+  file is touched by this batch's diff (`git diff main..HEAD --stat` confirms no overlap),
+  and the failure reproduces identically on the unrelated `millhouse` main worktree
+  checkout, confirming it is pre-existing and unrelated to any card here. Recomputing the
+  per-batch baseline via `--stage baseline` (the documented eager, temp-checkout-based
+  mechanism) reproduced the same 2-failure undercount rather than 3 -- the temp-checkout
+  environment does not reproduce `test-guards.py`'s failure the way a live worktree does,
+  so the baseline-capture mechanism itself has an environment-parity gap for this guard
+  test (candidate for mill-self-report). No card in this batch is implicated, so no plan
+  edit was made; the stored `verify_baseline_failures` for this batch was corrected by hand
+  to the true 3-failure set so the subset waiver applies correctly on replay.
+
 ## Batch Scope
 
 This batch closes the four implementation Decisions from `_mill/discussion.md` in a single file, `plugins/mill/skills/mill-go2/SKILL.md`: it bookends the implementer fork's de-briefing text and moves its Stuck-escalation self-resolve re-fire to a cold dispatch, adds the same bookended de-briefing treatment to the fixer fork (which currently has none), populates the previously-empty `## Driver preamble` with a one-time shared-skill preload (#849), and fixes the catalog-facing `description` (#851). All four cards are sequential edits to the same file by the same implementer session — no other file is touched, no external interface changes, and there is no next batch (this plan has only one).
