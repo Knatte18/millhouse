@@ -35,9 +35,12 @@ implementing  '2026-08-21T10:43:03Z'
 ```yaml
 batches:
   - name: review-loop-gate-doc-fixes
-    state: pending
+    state: running
+    implementer_session: 34fc997f-8496-41e6-9d65-8837d4b768e7
+    start_sha: 3c52a8a55e18db2c1fc10c38ecea5402624537ea
   - name: validator-checks-lang-gitignore
     state: pending
+    verify_baseline_failures: []
   - name: validator-checks-skill-doc-sync
     state: pending
 ```
