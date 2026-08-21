@@ -152,6 +152,82 @@ def test_current_branch_detached() -> None:
     print("PASS: test_current_branch_detached")
 
 
+def test_local_branches_at_sha_single_match() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        result = _pygit2_util.local_branches_at_sha(tmp, sha)
+        if result != [branch]:
+            raise AssertionError(f"expected [{branch!r}], got {result!r}")
+    print("PASS: test_local_branches_at_sha_single_match")
+
+
+def test_local_branches_at_sha_two_matches() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(tmp), "branch", "second-branch", sha],
+            capture_output=True,
+            check=True,
+        )
+        result = _pygit2_util.local_branches_at_sha(tmp, sha)
+        if result != sorted([branch, "second-branch"]):
+            raise AssertionError(f"expected {sorted([branch, 'second-branch'])!r}, got {result!r}")
+    print("PASS: test_local_branches_at_sha_two_matches")
+
+
+def test_local_branches_at_sha_no_match() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        _init_repo(tmp)
+        first_sha = subprocess.run(
+            ["git", "-C", str(tmp), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        (tmp / "file2.txt").write_text("file2", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(tmp), "add", "file2.txt"],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(tmp), "commit", "-m", "commit 2"],
+            capture_output=True,
+            check=True,
+        )
+        result = _pygit2_util.local_branches_at_sha(tmp, first_sha)
+        if result != []:
+            raise AssertionError(f"expected empty list, got {result!r}")
+    print("PASS: test_local_branches_at_sha_no_match")
+
+
 def test_status_porcelain_clean() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -357,6 +433,9 @@ def run_all() -> int:
         test_head_sha_happy_path,
         test_current_branch_named,
         test_current_branch_detached,
+        test_local_branches_at_sha_single_match,
+        test_local_branches_at_sha_two_matches,
+        test_local_branches_at_sha_no_match,
         test_status_porcelain_clean,
         test_status_porcelain_modified,
         test_status_porcelain_staged,
