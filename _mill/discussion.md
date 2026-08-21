@@ -34,7 +34,7 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 **In:**
 - #902 — thread Phase: Plan's `skip_checks` into every Phase: Plan Review CLI dispatch (persisted via `00-overview.md` frontmatter).
 - #896 — fix status.md Timeline undercounting plan-review rounds (4b/4c never append `plan-review-r{N}`).
-- #895 — add a grace-window to the entry-gate wait's `blocked` handling in the shared `_phase_wait.py`, threaded into mill-plan's own call site.
+- #895 — SUPERSEDED, verify-only: confirm `origin/main` commit `ff6e1280` (pulled in via pre-plan `mill-merge-in`) already fixes this by removing the `blocked` branch from `_phase_wait.build_wait_command()` entirely; no code change in this task's plan.
 - #890 — add missing `signature:` lines for `_plan_dag.validate` at Phase: Plan Review steps 4b and 4d.
 - #887 — new `_plan_validate.py` check: cross-batch `Creates:` reference with no `depends-on` edge to the creating batch.
 - #886 — convergence gate: drop the `demoted` predicate, rely solely on `blocking_count == 0`.
@@ -47,7 +47,7 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 
 **Out:**
 - mill-start's discussion-review loop's own (worse) version of #896's Timeline-undercounting bug — same bug family, but out of scope for this mill-plan-titled task; file as a separate follow-up.
-- mill-go-base's own copy of the #895 entry-gate-wait `blocked_grace_s` threading — the shared `_phase_wait.py` fix benefits it for free once adopted, but this task only threads the new parameter into mill-plan's call site. `blocked_grace_s` defaults to `0`, so mill-go-base's behavior is unchanged (no regression) until it's threaded there separately.
+- N/A — #895's original mill-go-base-threading scope question is moot now that #895 is closed as already-fixed upstream (see Decisions below); the already-shipped fix already covers mill-go-base's own entry-gate wait, no separate threading needed.
 - Any change to `_plan_validate.py`'s `out-of-worktree-target` check logic itself (#901 Option B, config-driven authorized-roots) — rejected in favor of Option A (skip-check row, zero code change).
 - Any change to the Handoff "Pre-done gate" step's baseline semantics (#861's rejected Option 3 — making `done_gate` baseline-aware for all commands) — the process-fix (verify-clean-first precondition) is sufficient; baseline-awareness is a "belt and suspenders" follow-up only if repeat incidents occur.
 - Re-litigating any of `_plan_validate.py`'s other existing checks not named in one of the 12 source issues.
@@ -112,42 +112,36 @@ round budget or forces a manual operator recovery that the SKILL should handle a
   above also rejects extending this fix to mill-start's own (worse, zero-branch) version of the same
   bug class.
 
-### #895 — entry-gate wait grace window for transient `blocked`
+### #895 — SUPERSEDED: already fixed upstream by a simpler mechanism (no code change)
 
-- Decision: add a `blocked_grace_s: int = 0` parameter to `_phase_wait.build_wait_command()`
-  (default `0` preserves exact current behavior for any caller that doesn't opt in — this is the
-  mechanism that keeps mill-go-base's own call site unaffected per the Scope section above). Bash
-  poll-loop change: on first observing `phase: blocked`, do not exit immediately — record
-  `blocked_since` and continue polling. If `phase:` moves off `blocked` before the grace window
-  elapses, clear `blocked_since` and resume normal polling. If still `blocked` once
-  `elapsed - blocked_since >= blocked_grace_s`, echo `BLOCKED: <reason>` and exit 1 exactly as
-  today. `READY` is checked first every iteration and always wins immediately, unaffected. Thread a
-  new `blocked_grace_s` argument into mill-plan's own "Entry-gate wait for upstream mill-start" call
-  site (`mill-plan/SKILL.md` line 86), sourced from a new config key `pipeline.entry_wait_blocked_grace_s`
-  (default ~20s = 2x the existing 10s poll interval — comfortably wider than a single-poll
-  coin-flip window, far short of the ~3-minute transient window in the reported repro). Add a
-  template-comment line for `pipeline.entry_wait_blocked_grace_s` in
-  `plugins/mill/templates/mill-config.yaml`, alongside its two existing siblings
-  `entry_wait`/`entry_wait_timeout_minutes` (lines 127-128 today, both already have an inline
-  explanatory comment) — per CLAUDE.md's "hub file and plugin template must stay in sync" rule,
-  matching #861's own explicit template-sync step below.
-- Rationale: only approach that satisfies both "tolerate a transient blocked window" and "still halt
-  promptly and unconditionally for a genuinely persistent block" simultaneously. The default-0
-  parameter design lets the shared script change ship without forcing mill-go-base's own copy of
-  this wait pattern to change behavior in the same task. **The suggested ~20s default is
-  intentionally conservative — it guards only against a single-poll coin-flip race, not the full
-  ~2m41s window actually observed in the reported repro.** This hub's own `pipeline.entry_wait_blocked_grace_s`
-  should therefore be configured explicitly larger than the ~20s baseline (e.g. 300s) if it wants to
-  tolerate the specific mill-start convergence-gate transient the issue reports; the plan should not
-  assume the bare 20s default alone closes that exact repro, and should either set a larger value in
-  this hub's `mill-config.yaml`/`config.local.yaml` as part of the same batch, or explicitly document
-  in the plan's Shared Decisions that the default is a conservative baseline only, with a pointer to
-  raising the config value for hubs that need more coverage.
-- Rejected: fixed re-check-once (simpler, no new parameter/state, but only guards a blocked window
-  narrower than one poll interval — the actual reported repro's ~3-minute window would still
-  false-halt under this option); never-exit-early-on-blocked (removes the fast-fail benefit for a
-  genuinely stuck upstream task, overcorrects); threading the new parameter into mill-go-base's call
-  site in this same task (rejected per the Scope section — out of scope, zero-regression follow-up).
+- Decision: no code change. This decision (originally: add a `blocked_grace_s` parameter to
+  `_phase_wait.build_wait_command()`) is superseded — while mill-plan was writing the implementation
+  plan, a pre-plan `mill-merge-in` sync pulled `origin/main` commit `ff6e1280` ("Entry-gate wait:
+  don't treat upstream blocked as terminal; raise timeout default to 4h; ...") into this task branch.
+  That commit ships a materially simpler fix for the same bug: `_phase_wait.build_wait_command()` no
+  longer has a `blocked` branch at all — it removed the `BLOCKED: <reason>` echo/exit-1 path entirely
+  and now keeps polling through an upstream `blocked` phase exactly like any other non-ready value,
+  until `ready_phase` is reached or the (now-4-hour-default, was 2-hour) `giveup_s` timeout elapses.
+  This is strictly stronger than the grace-window design originally decided here: it tolerates a
+  transient `blocked` window of ANY length up to the full timeout, not just a small configured grace
+  period, and requires no new config key. Verified already threaded into BOTH mill-plan's own
+  Entry-gate wait AND mill-go-base's copy, `plugins/mill/templates/mill-config.yaml` and this hub's
+  own `mill-config.yaml` (both `entry_wait_timeout_minutes: 240` now), and `test-phase-wait.py`
+  (updated to assert the `BLOCKED` branch is ABSENT). No follow-up work remains for #895 in this
+  task's plan.
+- Rationale: re-implementing a bug that a prior commit already fixed — via a different, more complex
+  mechanism (a new `blocked_grace_s` parameter and config key) — would produce redundant, conflicting
+  design against code already on the branch. The upstream fix fully satisfies #895's original
+  "Expected" behavior ("READY should still win whenever it appears" — unaffected; tolerate a
+  transient blocked window — now unconditional, not capped at a small grace period). Discovered via
+  the same task-worktree-vs-cache divergence CLAUDE.md warns about: the Skill tool's freshly-loaded
+  `mill-plan/SKILL.md` (from the plugin cache, which had already picked up the newer commit) showed
+  different entry-gate-wait behavior than the task-worktree copy this discussion originally cited —
+  prompting the merge-in check that surfaced this.
+- Rejected: proceeding with the original grace-window plan anyway (would conflict with/duplicate
+  already-shipped code, and is objectively a worse fix — bounded grace period vs. unconditional
+  tolerance); leaving the original Decision text unedited and letting Phase: Plan's `Self-run the
+  validator gate`/DAG-validate catch the conflict later (wasteful — the conflict is knowable now).
 
 ### #890 — explicit `_plan_dag.validate` call shape at all three call sites
 
@@ -355,10 +349,14 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 
 ## Technical context
 
-- `mill-plan/SKILL.md` is 624 lines; all line-number citations above are against the CURRENT
+- `mill-plan/SKILL.md` is 622 lines; all line-number citations above are against the CURRENT
   task-worktree copy at `/home/knatte/Code/millhouse/wts/mill-plan-review-round-and-gate-bugs/plugins/mill/skills/mill-plan/SKILL.md`
-  as of this discussion (commit `ee597d9a`) — re-verify line numbers at plan-writing time, since
-  earlier batches in this same plan will shift later line numbers within the file.
+  as of this discussion, POST-merge-in of `origin/main` (commit `83589672`, merging in `ff6e1280`
+  and `12916293` — see the #895 Decision above) — re-verify line numbers at plan-writing time, since
+  earlier batches in this same plan will shift later line numbers within the file. The merge-in
+  shrank the "Entry-gate wait" section by 2 net lines versus the pre-merge copy this discussion was
+  originally drafted against; every other section's content is unchanged, only shifted by that
+  constant offset.
 - Key scripts: `plugins/mill/scripts/_plan_validate.py` (all the `_check_*` validator functions,
   `run()` wiring at ~line 2708, and `_compute_transitive_ancestors` at line 985), `plugins/mill/scripts/_plan_dag.py` (`validate`, `extract_batch_index`),
   `plugins/mill/scripts/millpy-review-plan.py` (CLI prepare/finalize
@@ -420,12 +418,8 @@ directory listing — file absent).
   the round-append logic into a standalone, testable helper, add unit coverage then; until that
   extraction happens, this is verified by manual/reviewer inspection of the SKILL.md text only, same
   as #890's documentation-only fix below.
-- **#895**: unit test for `_phase_wait.build_wait_command`'s new `blocked_grace_s` parameter — cover
-  (a) `blocked_grace_s=0` behaves identically to today (immediate halt), (b) a `blocked` window
-  shorter than the grace period followed by a phase change to something other than `blocked`
-  resumes polling without halting, (c) a `blocked` window that persists past the grace period still
-  halts with the same `BLOCKED: <reason>` message. This is the clearest TDD candidate in the whole
-  batch — the bash-loop logic is precise and mechanically verifiable.
+- **#895**: no test — superseded, no code change (see Decisions). `test-phase-wait.py` already covers
+  the already-shipped fix (asserts the `BLOCKED` branch is absent from `build_wait_command`'s output).
 - **#890**: no test — documentation-only fix (SKILL.md prose), nothing to assert against at the
   script level (the script's actual signature is unchanged).
 - **#888**: no test needed — verify-only, no code change.
