@@ -82,6 +82,12 @@ Derive:
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import _preflight; exit(_preflight.check_helpers(['_parent_branch:check_liveness']))
+   "
+   ```
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import json
    import _parent_branch, _paths
    git_root = _paths.resolve_git_root()
