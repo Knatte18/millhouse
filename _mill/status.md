@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-verify-logic
+phase: approved-verdict-derivation-fix
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: _mill/plan
@@ -21,6 +21,7 @@ plan-fix-r1  '2026-08-21T09:15:43Z'
 planned  '2026-08-21T09:16:01Z'
 implementing  '2026-08-21T09:16:25Z'
 self-resolved-verify-logic  '2026-08-21T09:23:29Z'
+approved-verdict-derivation-fix  '2026-08-21T09:24:59Z'
 ```
 
 ## Batches
@@ -28,8 +29,9 @@ self-resolved-verify-logic  '2026-08-21T09:23:29Z'
 ```yaml
 batches:
   - name: verdict-derivation-fix
-    state: running
+    state: approved
     implementer_session: 1e846eb0-0415-4a90-9378-3e76cd73ed20
     start_sha: 57020a1ad6bbe44c42c4530d594dbbe3a15ae8c8
+    commit_sha: 869b19b5f7723082e1d36eeed6773e0ccc29a2ff
     verify_baseline_failures: []
 ```
