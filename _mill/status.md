@@ -42,7 +42,9 @@ batches:
     start_sha: 6958293aececd6a3601261b256fe19e910fb679a
     commit_sha: d2b885c5e46107b6abc76d52b6e756e9cb98ed20
   - name: parent-branch-liveness
-    state: pending
+    state: running
+    implementer_session: dff120c8-cf0a-4bfe-b3a8-8d293c38cec5
+    start_sha: 3f86d5e2b545fa264e140739d02371757ad65806
     verify_baseline_failures: []
   - name: config-caller-alignment
     state: pending
