@@ -33,9 +33,14 @@ implementing  '2026-08-21T09:45:15Z'
 ```yaml
 batches:
   - name: dirty-tree-briefs-exclusion
-    state: pending
+    state: running
+    implementer_session: 75ca5303-31f0-4218-b71e-90951280e288
+    start_sha: 96a363a4f9c8dfaa21b84a00a2bf6d41ec488443
+    verify_baseline_failures: []
   - name: baseline-build-once-step
     state: pending
+    verify_baseline_failures: []
   - name: baseline-dispatch-background-skill
     state: pending
+    verify_baseline_failures: []
 ```
