@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-dirty-tree-briefs-exclusion  '2026-08-21T09:50:12Z'
 approved-baseline-build-once-step  '2026-08-21T09:54:47Z'
 approved-baseline-dispatch-background-skill  '2026-08-21T09:57:20Z'
 holistic-reviewing  '2026-08-21T09:57:53Z'
+holistic-approved  '2026-08-21T10:00:52Z'
 ```
 
 ## Batches
