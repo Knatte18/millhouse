@@ -116,7 +116,12 @@ round budget or forces a manual operator recovery that the SKILL should handle a
   new `blocked_grace_s` argument into mill-plan's own "Entry-gate wait for upstream mill-start" call
   site (`mill-plan/SKILL.md` line 86), sourced from a new config key `pipeline.entry_wait_blocked_grace_s`
   (default ~20s = 2x the existing 10s poll interval — comfortably wider than a single-poll
-  coin-flip window, far short of the ~3-minute transient window in the reported repro).
+  coin-flip window, far short of the ~3-minute transient window in the reported repro). Add a
+  template-comment line for `pipeline.entry_wait_blocked_grace_s` in
+  `plugins/mill/templates/mill-config.yaml`, alongside its two existing siblings
+  `entry_wait`/`entry_wait_timeout_minutes` (lines 127-128 today, both already have an inline
+  explanatory comment) — per CLAUDE.md's "hub file and plugin template must stay in sync" rule,
+  matching #861's own explicit template-sync step below.
 - Rationale: only approach that satisfies both "tolerate a transient blocked window" and "still halt
   promptly and unconditionally for a genuinely persistent block" simultaneously. The default-0
   parameter design lets the shared script change ship without forcing mill-go-base's own copy of
@@ -166,16 +171,28 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 
 ### #887 — new validator check: cross-batch Creates: reference requires a depends-on edge
 
-- Decision: add a new check `cross-batch-creates-no-depends-on` to `_plan_validate.py`. Build
-  `batch_creates: dict[str, set[str]]` (per-batch `Creates:` sets, via the already-present
-  `_parse_creates_only` helper). Build `ancestors = _compute_transitive_ancestors(batches)` (already
-  defined and used by the existing `_check_parallel_modifies_overlap` check — reuse, don't
-  reimplement). For each batch B, for each token in `_parse_context_only(path) | _parse_edits_only(path)`
+- Decision: add a new check `cross-batch-creates-no-depends-on` to `_plan_validate.py`.
+  `_compute_transitive_ancestors(batches)` returns a dict keyed by batch `entry["name"]` (the
+  human `<batch-name>` field from the Batch Index), NOT by file stem — `name` and the `NN-<slug>.md`
+  file stem are distinct strings. So `batch_creates` MUST be keyed the same way, mirroring the exact
+  `batch_name_to_path` bridging step `_check_parallel_modifies_overlap` already uses to go from
+  name-keyed ancestors to stem-derived per-file parsing: build `batch_name_to_path: dict[str, Path]`
+  by mapping each `entry["name"]` to its batch file (via the stem), then build
+  `batch_creates: dict[str, set[str]] = {name: _parse_creates_only(path) for name, path in
+  batch_name_to_path.items()}` — keyed by `entry["name"]`, not by stem. Build
+  `ancestors = _compute_transitive_ancestors(batches)` (already defined and used by the existing
+  `_check_parallel_modifies_overlap` check — reuse, don't reimplement; also reuse its
+  `batch_name_to_path` construction rather than rederiving it). For each batch B (iterating
+  `batch_name_to_path.items()` so B is always a name, matching `ancestors`' and `batch_creates`' key
+  space), for each token in `_parse_context_only(path) | _parse_edits_only(path)`
   (Context: and Edits: refs ONLY — deliberately narrower than `_check_non_existent_path`'s own
   `general_refs`, which also includes B's own `Creates:` tokens and would incorrectly scan a batch's
   own deliverables against other batches' `creates` sets): if the token is in some OTHER
-  batch C's `creates` set (C != B) and C is not in `ancestors[B]`, emit an error dict naming the
-  missing edge. Wire into `run()` alongside `_check_non_existent_path` (same input shape). Add a
+  batch C's `creates` set (C != B, both `entry["name"]` values) and C is not in `ancestors[B]`, emit
+  an error dict naming the missing edge (reporting the batch's file stem, not its name, in the error
+  dict's `batch` field, to match every other check's error-dict convention — resolve back via
+  `batch_name_to_path[B].stem`). Wire into `run()` alongside `_check_non_existent_path` (same input
+  shape). Add a
   Step 1.5 fix-table row mirroring `parallel-modifies-overlap`'s remedy shape: add the missing
   `depends-on` edge (both the per-batch file's frontmatter and the overview's Batch Index entry, per
   the existing `depends-on-batch-mismatch` discipline) if legitimate; halt if genuinely ambiguous.
@@ -380,9 +397,15 @@ directory listing — file absent).
   round-dispatch threading (Agent-mode `<args>`, subprocess `millpy-bg` invocation, 4.5 retry) should
   each get a fixture/mock-level check if the existing test suite has an analog for `--reviews-subdir`
   threading (mirror that test's shape).
-- **#896**: unit test asserting `_status.append_phase` is called with `plan-review-r{N}` exactly
-  once per round dispatch regardless of which of 4a/4b/4c/4d verdict branch is taken — TDD candidate,
-  since the current asymmetric behavior is a direct, mechanically-testable regression target.
+- **#896**: no unit test — same hedge as #902 above. The 4a-4d verdict dispatch and the moved-out
+  unconditional `plan-review-r{N}` append are entirely `mill-plan/SKILL.md` prose interpreted by the
+  orchestrating LLM; no Python module implements this branching (`grep` for
+  `plan-review-r|plan-fix-r` across `scripts/` hits only regex-constant/docstring references, e.g.
+  `millpy-cleanup.py`'s cleanup-pattern list and `_status.py`'s docstring example — never the actual
+  branch logic), so there is no code-level call site to assert against. If a future refactor extracts
+  the round-append logic into a standalone, testable helper, add unit coverage then; until that
+  extraction happens, this is verified by manual/reviewer inspection of the SKILL.md text only, same
+  as #890's documentation-only fix below.
 - **#895**: unit test for `_phase_wait.build_wait_command`'s new `blocked_grace_s` parameter — cover
   (a) `blocked_grace_s=0` behaves identically to today (immediate halt), (b) a `blocked` window
   shorter than the grace period followed by a phase change to something other than `blocked`
