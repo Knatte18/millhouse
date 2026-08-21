@@ -11,51 +11,15 @@ depends-on: []
 
 ## Batch Scope
 
-This batch closes the four implementation Decisions from `_mill/discussion.md` in a single file, `plugins/mill/skills/mill-go2/SKILL.md`: it fixes the catalog-facing `description` (#851), populates the previously-empty `## Driver preamble` with a one-time shared-skill preload (#849), bookends the implementer fork's de-briefing text and moves its Stuck-escalation self-resolve re-fire to a cold dispatch, and adds the same bookended de-briefing treatment to the fixer fork (which currently has none). All four cards are sequential edits to the same file by the same implementer session — no other file is touched, no external interface changes, and there is no next batch (this plan has only one).
+This batch closes the four implementation Decisions from `_mill/discussion.md` in a single file, `plugins/mill/skills/mill-go2/SKILL.md`: it bookends the implementer fork's de-briefing text and moves its Stuck-escalation self-resolve re-fire to a cold dispatch, adds the same bookended de-briefing treatment to the fixer fork (which currently has none), populates the previously-empty `## Driver preamble` with a one-time shared-skill preload (#849), and fixes the catalog-facing `description` (#851). All four cards are sequential edits to the same file by the same implementer session — no other file is touched, no external interface changes, and there is no next batch (this plan has only one).
+
+Card order matters here: the catalog-description card (Card 4) states the implementer's narrowed forked set in prose, so it must commit at or after the card that actually narrows that forked set (Card 1) — otherwise the file's frontmatter and body briefly contradict each other between commits.
 
 There are no batch-local decisions beyond the two `## Shared Decisions` in `00-overview.md`.
 
 ## Cards
 
-### Card 1: fix mill-go2 catalog description to name both forked roles (#851)
-
-- **Context:** none
-- **Edits:**
-  - `plugins/mill/skills/mill-go2/SKILL.md`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:** In the YAML frontmatter at the top of the file, replace the `description:` field's value. The current value reads (single line): `Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
-
-  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
-
-  This wording must match Card 3's narrowed forked set exactly (initial dispatch and step 3(a)'s transient re-dispatch only -- the Stuck-escalation self-resolve re-fire no longer forks per Card 3) rather than the plain "(every attempt)" phrasing this card originally proposed, which would misrepresent Card 3's own change and defeat the #851 catalog-accuracy goal this card exists to fix.
-
-  Do not change the `name:` field or anything else in the frontmatter.
-- **Commit:** `docs(mill-go2): correct catalog description to name both forked roles (#851)`
-
-### Card 2: preload shared skills once via Driver preamble (#849)
-
-- **Context:**
-  - `plugins/mill/skills/workflow/SKILL.md`
-  - `plugins/mill/skills/mill-go-base/SKILL.md`
-- **Edits:**
-  - `plugins/mill/skills/mill-go2/SKILL.md`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:** Replace the `## Driver preamble` section's body. It currently reads just `(none)` on its own line below the heading. Replace `(none)` with the following preload instructions (keep the `## Driver preamble` heading itself unchanged):
-
-  ```
-  Before Step 0, preload skills every fork dispatch would otherwise reload independently -- run once per task session, never per-batch or per-fork. Load the `mill:code-quality` and `mill:markdown` skills via the Skill tool unconditionally, plus, for each language detected in the worktree via `mill:workflow`'s Language Detection marker-file table, that language's skill trio via the Skill tool: `pyproject.toml`/`setup.py`/`setup.cfg` -> `python:python-build`, `python:python-comments`, `python:python-testing`; `.csproj`/`.sln` -> `csharp:csharp-build`, `csharp:csharp-comments`, `csharp:csharp-testing`; `go.mod` -> `golang:golang-build`, `golang:golang-comments`, `golang:golang-testing`.
-  ```
-
-  Read `plugins/mill/skills/workflow/SKILL.md`'s "## Language Detection" table (listed in this card's `Context:`) to confirm the marker-file-to-skill-name mapping above matches it exactly before writing this text -- do not invent skill names.
-
-  Do not add or remove any other heading in the file. This section is mill-go-base's documented "Override point B" extension point -- read `plugins/mill/skills/mill-go-base/SKILL.md`'s Entry section (listed in this card's `Context:`) before writing this card's edit and confirm it verbatim states: "Override point B: treat your variant's `## Driver preamble` text as if written here, ahead of everything below; if your variant declared no such section, halt ... A variant whose `## Driver preamble` section contains only `(none)` has declared the section and contributes no text; that is not a halt." This confirms the block runs before Step 0 of every mill-go2 session (ahead of Prepare and the Execute loop where forking happens), so no other wiring in `mill-go-base/SKILL.md` or elsewhere is needed to make this preload fire once, early, before any fork dispatch -- do not edit `mill-go-base/SKILL.md` itself.
-- **Commit:** `feat(mill-go2): preload shared skills once before forking (#849)`
-
-### Card 3: bookend implementer fork de-briefing; cold-dispatch the stuck-escalation self-resolve re-fire
+### Card 1: bookend implementer fork de-briefing; cold-dispatch the stuck-escalation self-resolve re-fire
 
 - **Context:** none
 - **Edits:**
@@ -107,7 +71,28 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
   Do not touch the `**Known limits.**` paragraph that follows, or anything above the `### fixer` section's `Risks:` paragraph.
 - **Commit:** `fix(mill-go2): bookend implementer fork de-briefing, cold-dispatch the stuck-escalation self-resolve re-fire`
 
-### Card 4: add bookended de-briefing text to fixer fork dispatch
+### Card 2: preload shared skills once via Driver preamble (#849)
+
+- **Context:**
+  - `plugins/mill/skills/workflow/SKILL.md`
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Edits:**
+  - `plugins/mill/skills/mill-go2/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Replace the `## Driver preamble` section's body. It currently reads just `(none)` on its own line below the heading. Replace `(none)` with the following preload instructions (keep the `## Driver preamble` heading itself unchanged):
+
+  ```
+  Before Step 0, preload skills every fork dispatch would otherwise reload independently -- run once per task session, never per-batch or per-fork. Load the `mill:code-quality` and `mill:markdown` skills via the Skill tool unconditionally, plus, for each language detected in the worktree via `mill:workflow`'s Language Detection marker-file table, that language's skill trio via the Skill tool: `pyproject.toml`/`setup.py`/`setup.cfg` -> `python:python-build`, `python:python-comments`, `python:python-testing`; `.csproj`/`.sln` -> `csharp:csharp-build`, `csharp:csharp-comments`, `csharp:csharp-testing`; `go.mod` -> `golang:golang-build`, `golang:golang-comments`, `golang:golang-testing`.
+  ```
+
+  Read `plugins/mill/skills/workflow/SKILL.md`'s "## Language Detection" table (listed in this card's `Context:`) to confirm the marker-file-to-skill-name mapping above matches it exactly before writing this text -- do not invent skill names.
+
+  Do not add or remove any other heading in the file. This section is mill-go-base's documented "Override point B" extension point -- read `plugins/mill/skills/mill-go-base/SKILL.md`'s Entry section (listed in this card's `Context:`) before writing this card's edit and confirm it verbatim states: "Override point B: treat your variant's `## Driver preamble` text as if written here, ahead of everything below; if your variant declared no such section, halt ... A variant whose `## Driver preamble` section contains only `(none)` has declared the section and contributes no text; that is not a halt." This confirms the block runs before Step 0 of every mill-go2 session (ahead of Prepare and the Execute loop where forking happens), so no other wiring in `mill-go-base/SKILL.md` or elsewhere is needed to make this preload fire once, early, before any fork dispatch -- do not edit `mill-go-base/SKILL.md` itself.
+- **Commit:** `feat(mill-go2): preload shared skills once before forking (#849)`
+
+### Card 3: add bookended de-briefing text to fixer fork dispatch
 
 - **Context:** none
 - **Edits:**
@@ -143,6 +128,23 @@ the driver's model regardless and must commit in the real worktree.
 
   Do not touch the paragraph above it (the `fork_attempted`/cold-dispatch condition) or the "On the first terminal failure" cold-fallback block below it -- those are unchanged by this task (see `_mill/discussion.md`'s "warm-resume-then-cold-fallback unchanged" Decision, which scopes to the implementer's `incomplete` path only and does not touch fixer's own existing cold-fallback mechanics).
 - **Commit:** `fix(mill-go2): add bookended de-briefing text to fixer fork dispatch`
+
+### Card 4: fix mill-go2 catalog description to name both forked roles (#851)
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go2/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** In the YAML frontmatter at the top of the file, replace the `description:` field's value. The current value reads (single line): `Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
+
+  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.`
+
+  This wording must match Card 1's narrowed forked set exactly (initial dispatch and step 3(a)'s transient re-dispatch only -- the Stuck-escalation self-resolve re-fire no longer forks per Card 1, which commits before this card) rather than the plain "(every attempt)" phrasing originally proposed, which would misrepresent Card 1's own change and defeat the #851 catalog-accuracy goal this card exists to fix. This card is deliberately ordered last so the file's frontmatter and body are never briefly contradictory between commits.
+
+  Do not change the `name:` field or anything else in the frontmatter.
+- **Commit:** `docs(mill-go2): correct catalog description to name both forked roles (#851)`
 
 ## Batch Tests
 

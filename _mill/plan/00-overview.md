@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go2: fork-based dispatch reliability, shared-skill preloading, and catalog accuracy"
 slug: mill-go2-fork-dispatch-reliability
-approved: false
+approved: true
 started: "20260821-090547"
 parent: main
 root: ""
