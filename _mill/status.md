@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: plan-fix-r2
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -21,4 +21,6 @@ discussed  '2026-08-21T09:10:20Z'
 planning  '2026-08-21T09:22:13Z'
 plan-review-r1  '2026-08-21T09:28:16Z'
 plan-fix-r1  '2026-08-21T09:28:16Z'
+plan-review-r2  '2026-08-21T09:38:05Z'
+plan-fix-r2  '2026-08-21T09:38:05Z'
 ```

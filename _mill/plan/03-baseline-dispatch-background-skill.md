@@ -19,6 +19,7 @@ Fixes the dispatch-ceiling half of Bug A (issues #897, #875): `mill-go-base/SKIL
 
 - **Context:**
   - `CLAUDE.md`
+  - `plugins/mill/scripts/_bg.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:** none
@@ -47,7 +48,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
   ```
 
-  Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> surface a clear message to the operator: "baseline pre-flight worker died (logout?); re-run the baseline pre-flight step" and halt. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the two JSON summary lines.
+  Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> log the reason (ASCII-only) and continue to batch 1 anyway — do NOT halt here, matching this section's own "never blocks the task" principle stated below (a failed/skipped computation just means the per-batch module-wide gate falls back to strict behavior, which is safe). Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the two JSON summary lines.
 
   **6b. "0.5" — adjust the parse-source reference.** In the paragraph immediately following (beginning `(no `batch_name` positional argument`), change the phrase `Parse the two JSON lines the CLI prints` to `Parse the two JSON lines extracted above`. Leave the rest of that paragraph (the substage-shape descriptions, the idempotency note, the error/skipped handling) unchanged.
 
@@ -76,10 +77,12 @@ PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/
   ```bash
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
       --slug baseline-recapture -- \
-      "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
+      env PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
   ```
 
-  Poll the same way "0.5. Baseline pre-flight" does above (`cat <log-path>` for `[mill-bg] EXIT`, with the same `_bg.check_bg_status` liveness-check branch, parsed as `(status, pid_or_code)`: `"running"` -> keep polling, `"exit"` -> proceed, `"dead"` -> surface a clear message and halt), then run `grep '^{' <log-path>` to extract the two JSON summary lines.
+  The `env PYTHONPATH="<git_root>/plugins/mill/scripts"` prefix on the inner command is required, not cosmetic: everything after `millpy-bg.py`'s `--` separator is executed as a literal argv list (`_worker_main` in `millpy-bg.py` calls `subprocess.run(cmd, ...)` with no shell and no `env=` override), so the pre-edit block's `PYTHONPATH="<git_root>/..." "$MILL_PYTHON" ...` shell-level env-var-prefix idiom cannot be reused verbatim inside that payload — without an explicit `env VAR=value` wrapper, the inner command would silently inherit the OUTER `millpy-bg.py` call's own `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` (cache-form) instead, defeating this section's entire purpose (importing the worktree's own in-progress sibling modules instead of the frozen cache). `env` is a plain executable that sets environment variables for a single child process without requiring a shell, so it composes correctly with `subprocess.run`'s no-shell argv-list execution.
+
+  Poll the same way "0.5. Baseline pre-flight" does above (`cat <log-path>` for `[mill-bg] EXIT`, with the same `_bg.check_bg_status` liveness-check branch, parsed as `(status, pid_or_code)`: `"running"` -> keep polling, `"exit"` -> proceed, `"dead"` -> log the reason (ASCII-only) and treat as a no-op, matching this card's own "0.6" Failure handling paragraph below), then run `grep '^{' <log-path>` to extract the two JSON summary lines.
 
   **6e. "0.6" — replace the cache-form-exception paragraph.** Replace this exact two-sentence paragraph immediately after the (now-replaced) bash block:
 
@@ -91,7 +94,7 @@ this is the one deliberate, narrow exception to the cache-form convention (see t
   with:
 
   ```
-  Substitute the literal `git_root` path resolved at Path Setup for the INNER `millpy-implement.py` command only — do NOT use `${CLAUDE_PLUGIN_ROOT}` there; this is the one deliberate, narrow exception to the cache-form convention (see the plan overview's "cache-vs-worktree execution path for the retry" Shared Decision and root `CLAUDE.md`'s "Hard constraints" / "Path invariants"). The OUTER `millpy-bg.py` wrapper call stays cache-form (`${CLAUDE_PLUGIN_ROOT}`), matching every other `millpy-bg` call site in this file family (e.g. "0.5. Baseline pre-flight" above).
+  Substitute the literal `git_root` path resolved at Path Setup for BOTH the inner `env PYTHONPATH=` value and the `millpy-implement.py` script path argument — do NOT use `${CLAUDE_PLUGIN_ROOT}` for either; this is the one deliberate, narrow exception to the cache-form convention (see the plan overview's "cache-vs-worktree execution path for the retry" Shared Decision and root `CLAUDE.md`'s "Hard constraints" / "Path invariants"). The OUTER `millpy-bg.py` wrapper call — both its own script path and its own `PYTHONPATH` — stays cache-form (`${CLAUDE_PLUGIN_ROOT}`), matching every other `millpy-bg` call site in this file family (e.g. "0.5. Baseline pre-flight" above); only the inner command that `millpy-bg.py` backgrounds gets the worktree-form exception.
   ```
 
   **6f. "0.6" — adjust the parse-source reference and failure-handling wording.** In the sentence beginning `Parse the two JSON lines this call prints`, change `Parse the two JSON lines this call prints` to `Parse the two JSON lines extracted above`. In the "**Failure handling.**" paragraph, replace this exact sentence:
