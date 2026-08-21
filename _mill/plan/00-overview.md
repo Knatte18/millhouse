@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-plan SKILL.md: Phase Plan Review gate, convergence, and DAG-validation correctness bugs"
 slug: mill-plan-review-round-and-gate-bugs
-approved: false
+approved: true
 started: "20260821-094558"
 parent: main
 root: ""
@@ -74,5 +74,6 @@ batches:
 
 - `plugins/mill/scripts/_plan_validate.py`
 - `plugins/mill/skills/mill-plan/SKILL.md`
+- `plugins/mill/skills/mill-go-base/SKILL.md`
 - `plugins/mill/templates/mill-config.yaml`
 - `plugins/mill/unit_tests/test-plan-validate.py`

@@ -30,6 +30,7 @@ Batch 2's new checks (sequencing after Batch 2).
 - **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
@@ -98,6 +99,12 @@ Batch 2's new checks (sequencing after Batch 2).
   `_status.append_phase` call site exists earlier in the phase (this paragraph is well before the
   relocated 3.5 section in document order, so this is a separate, standalone edit at its own
   existing location — do not move this paragraph).
+
+  In `plugins/mill/skills/mill-go-base/SKILL.md`, the sentence at the line reading "The two-pass cap
+  mirrors mill-plan's existing step 4.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the
+  implementer with a null review file.)*" — replace "step 4.5" with "step 3.5" (the italicized
+  `Closes #228` clause is unchanged) — this line cross-references mill-plan's step by name and would
+  otherwise go stale once this card's own relocation above renumbers it.
 - **Commit:** `docs(mill-plan): relocate step 4.5 to 3.5 and append plan-review-r{N} unconditionally per round`
 
 ### Card 2: #902 — persist skip_checks across Phase: Plan / Phase: Plan Review

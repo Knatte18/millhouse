@@ -301,16 +301,22 @@ and modified tests live in.
   missing `Edits:` (or `Creates:`) ref that IS confirmed git-ignored → assert the finding STILL fires
   (no leniency outside `Context:` — this is the case #868's own fix rationale explicitly excludes).
   Since `resolve_ref_paths`'s gitignore check shells out to real `git check-ignore`, the fixture's
-  `project_root` must be a real (even if minimal) git repository — initialize it with `git init` and
-  commit or stage the `.gitignore` file itself (a `.gitignore` rule only takes effect once the
-  repository recognizes the directory as a git worktree; an uninitialized directory will make `git
-  check-ignore` fail/no-op, which `resolve_ref_paths` already treats as "not confirmed ignored" per
-  its own `except Exception: continue` fallback) — check whether `test-plan-validate.py` already has
-  a git-fixture helper elsewhere in the file (or in a sibling test file this file's own imports
-  reference) before writing a new one from scratch. If this takes the form of adding new sibling test
+  `project_root` must be a real (even if minimal) git repository — initialize it with
+  `_test_helpers.init_minimal_git_repo` (the existing pygit2-based helper in
+  `plugins/mill/unit_tests/_test_helpers.py`; add `from _test_helpers import init_minimal_git_repo`
+  to this file's own import block if not already present) and commit or stage the `.gitignore` file
+  itself (a `.gitignore` rule only takes effect once the repository recognizes the directory as a git
+  worktree; an uninitialized directory will make `git check-ignore` fail/no-op, which
+  `resolve_ref_paths` already treats as "not confirmed ignored" per its own `except Exception:
+  continue` fallback). If this takes the form of adding new sibling test
   functions (rather than only extending the existing two functions' bodies), add each new function's
   name to the `tests = [...]` list inside `main()` (same explicit-registration requirement as Card 8
   above).
+
+  This test file's module docstring (near the top of the file) currently states "no real LLM, no
+  real git, no network." Update it to note the one documented exception this card introduces: append
+  ", except the one gitignore-fixture case in `test_check_non_existent_path_*` which shells out to
+  real `git check-ignore` via `_test_helpers.init_minimal_git_repo`" to that sentence.
 - **Commit:** `fix(plan-validate): soft-fail gitignored Context: refs in non-existent-path check`
 
 ## Batch Tests
