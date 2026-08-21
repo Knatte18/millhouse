@@ -228,7 +228,7 @@ The Handoff terminal gate auto-cleans common ephemeral artifacts (`coverage.out`
 
 **Done-gate reminder.**
 If the plan's batch-verify scopes do not cover the entire module tree (the common case for scoped plans), consider setting `pipeline.done_gate` in `mill-config.yaml` to a cheap repo-wide test command (e.g. `go test ./...` for Go repos, `dotnet test` for .NET solutions). mill-go runs this command from `git_root` before marking the task `done`, catching regressions in packages outside the batch-verify scope.
-When the target language's build skill defines a lint command (Go: `golangci-lint run`; Python: `ruff check .`), default `done_gate` to include it — e.g. `go test ./... && golangci-lint run`. This applies even when a repo-wide *test* command is skipped as too slow: author `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`, since linters are fast, unlike full regression suites. `csharp-build` defines no lint command today, so C# projects are unaffected by this default.
+Before defaulting `done_gate` to the target language's lint command (Go: `golangci-lint run`; Python: `ruff check .`), first run that candidate command against the current worktree tip (not the plan's own scoped changes) from `git_root` and confirm it exits 0. If it does, default `done_gate` to include it — e.g. `go test ./... && golangci-lint run` — applying even when a repo-wide *test* command is skipped as too slow: author `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`, since linters are fast, unlike full regression suites. If the candidate command does NOT exit 0 (pre-existing repo-wide lint debt unrelated to this task), leave `done_gate: null` and record the finding in the plan overview's Shared Decisions instead of silently making every future task in the hub depend on unrelated debt being fixed first. `csharp-build` defines no lint command today, so C# projects are unaffected by this default.
 Leave `done_gate: null` only when the project has neither a meaningful repo-wide test nor a defined lint command.
 
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`.
@@ -254,6 +254,8 @@ If neither condition holds, leave `skip_checks` as the empty frozenset from abov
 
 **`verify-full-suite` skip-check escape hatch.** Keep the "Verify command scope" section's carve-out (a batch that legitimately touches a cross-cutting helper every test imports MAY use the unbounded `run-all.py`) — but only when the batch's own `## Batch Tests` section documents that justification. If it does, set `skip_checks = skip_checks | frozenset({"verify-full-suite"})` and record the justification in the plan commit message (see "Commit on the task branch" below). If the justification is absent or unconvincing, leave `skip_checks` unchanged for this check — let it fire and halt per the `verify-full-suite` fix-table row (Phase: Plan Review Step 1.5) instead.
 
+**`out-of-worktree-target` skip-check override.** If any batch's `Edits:`/`Creates:` includes an absolute path resolving outside the worktree, apply a two-condition test before calling `_plan_validate.run`, mirroring the `wiki-config-mutation` override's shape: (a) `discussion.md` contains an explicit statement recording the operator's cross-worktree authorization — naming the second worktree/repo path and the reason writes there are required for this task; and (b) the second worktree is itself a git worktree the operator created/cloned specifically for this task (not an incidental absolute path into an unrelated system directory). If both conditions hold, set `skip_checks = skip_checks | frozenset({"out-of-worktree-target"})` and record the justification in the plan commit message (see "Commit on the task branch" below). If either condition fails, leave `skip_checks` unchanged for this check — let it fire and halt per the `out-of-worktree-target` fix-table row instead.
+
 ```python
 errors = _plan_validate.run(
     plan_dir,
@@ -269,6 +271,8 @@ errors = _plan_validate.run(
 ```
 
 Fix any findings using the Step 1.5 fix table below, then re-run, before committing the plan.
+
+**Persist `skip_checks` for Phase: Plan Review.** When `skip_checks` (computed above, after applying the `wiki-config-mutation`, `verify-full-suite`, and `out-of-worktree-target` skip-check overrides) is non-empty, write it into `00-overview.md`'s fenced-yaml frontmatter as a new `skip_checks:` list field (parallel to the existing `approved:` field, e.g. `skip_checks: ["wiki-config-mutation"]`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Omit the field entirely (do not write `skip_checks: []`) when the frozenset is empty, matching the template's convention of omitting optional frontmatter keys that don't apply. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
 
 `signature: _status.read(status_path: Path) -> dict`
 
@@ -288,6 +292,8 @@ Push.
 Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])`.
 Use this variable for all review file path references in this phase.
 
+**Read persisted `skip_checks` from Phase: Plan.** Parse `00-overview.md`'s fenced-yaml frontmatter (the same extraction pattern already used elsewhere in this file for the `approved:` field) and read `plan_skip_checks = <parsed skip_checks: list, or [] if the key is absent>`. This is the `skip_checks` frozenset Phase: Plan already justified via the `wiki-config-mutation` / `verify-full-suite` two-condition tests — thread it into every round's CLI dispatch below as `--skip-check <name>` per entry (repeatable flag, one `--skip-check` per list entry), so Phase: Plan Review's own validator gate does not re-flag a finding Phase: Plan already resolved and committed against.
+
 When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
 
 When `revise_requested` is set **and `revise_from_blocked` is not set** (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
@@ -298,7 +304,7 @@ This namespacing does not alter `reviews_dir`'s use anywhere else in this file (
 
 **`--max-rounds` threading for blocked-resume (`revise_from_blocked` only).** When `revise_from_blocked` is set **and** the current loop's `round == blocked_resume_round`: every prepare/finalize CLI invocation dispatched in step 2's dispatch below for that one round only (both the Agent-mode branch's `<args>` and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must additionally pass `--max-rounds <blocked_resume_round>`, mirroring the exact `--reviews-subdir revise-{N+1}` threading pattern above and mill-start's `--auto` extension-round mechanism (`--max-rounds <max_review_rounds + 1>`). Omit `--max-rounds` on every other round, including subsequent rounds within the same blocked-resume `--revise` invocation once `round` has advanced past `blocked_resume_round`. This override exists so the CLI's own round-cap guard (`round_n > max_rounds` raises a hard error) does not reject the resumed round — it is never itself a signal to run more rounds than the loop's existing convergence/step-6 logic would otherwise allow.
 
-**Tree-guard safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call in this phase (steps 4a/4b/4c/4d below), call `_treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`.
+**Tree-guard safeguard (applies to all `_status.append_phase` calls in this phase):** Before any `_status.append_phase` call in this phase (the unconditional round-recorded append at step 3.5, and steps 4b/4c/4d below), call `_treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`.
 If the returned dict's `"triggered"` field is `True`, call `_status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])` immediately after — this records the detection non-blockingly;
 it never halts the phase. mill-plan runs a structurally identical review-loop architecture to mill-start and mill-go and had no equivalent safeguard before this task (see `_mill/discussion.md`'s "Wiring point: all three review loops, not just mill-start" Decision).
 
@@ -333,17 +339,18 @@ Each round:
      Do NOT auto-retry beyond the second pass.
      The two-pass cap matches the `roles.implementer.self_fix_rounds` self-fix pattern.
    - If `pipeline.skip_validate: true` ever appears in config (currently it does not;
-     this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan passes `--skip-check wiki-config-mutation` only when the fix table instructs it — see the `wiki-config-mutation` row.
+     this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan threads `plan_skip_checks` (persisted from Phase: Plan, per the 'Read persisted `skip_checks` from Phase: Plan' paragraph in Path Setup above) into every round's dispatch proactively; the fix-table's own `--skip-check wiki-config-mutation` / `--skip-check verify-full-suite` / `--skip-check out-of-worktree-target` rows (below) remain the reactive fallback for a check that becomes newly true *during* Plan Review itself (e.g. an LLM fix-pass in 4b/4c/4d that edits the hub config file), which `plan_skip_checks` — fixed at Phase: Plan's commit time — cannot have anticipated.
 
    | check                          | mechanical fix                                                                                                  |
    | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-   | non-existent-path              | A path declared as a `Creates:` target anywhere in this plan counts as existing for `Context:`/`Edits:` purposes; this row fires only for paths that are neither on disk nor declared as a `Creates:` target anywhere in the plan. If the path is a typo of an existing file, correct it. If it is meant to be a new `Creates:` target that does not yet appear anywhere in the plan, add it as a `Creates:` entry in the appropriate card. If neither applies, the planner intended to read a file that does not exist — halt; this is not mechanically fixable. |
+   | non-existent-path              | A path declared as a `Creates:` target anywhere in this plan counts as existing for `Context:`/`Edits:` purposes; this row fires only for paths that are neither on disk nor declared as a `Creates:` target anywhere in the plan. If the path is a typo of an existing file, correct it. If it is meant to be a new `Creates:` target that does not yet appear anywhere in the plan, add it as a `Creates:` entry in the appropriate card. For a `Context:`-only reference (never `Edits:`/`Creates:`/`Deletes:`) to a not-yet-existing path that IS confirmed git-ignored under its own source root, this check no longer fires at all — no fix needed; that is the intended, already-passing case for a runtime-produced, gitignored artefact. If neither applies, the planner intended to read a file that does not exist — halt; this is not mechanically fixable. |
    | card-missing-field             | Add the missing field with a sensible default: Context: → list the file(s) the requirement names; Edits: → none if the card creates a new file only; Creates: → none if the card edits an existing file only; Moves: → `Moves: none` if the card has no renames; Requirements: → restate the card title as a one-sentence requirement; Commit: → derive from the card title using the existing conventional-commit prefix pattern. |
    | commit-none-with-content       | Halt — a card declares Commit: none but also has non-none Edits:/Creates:/Deletes:/Moves:. The planner must either give the card a real Commit: message (if the content is genuinely this card's own work) or move the non-none content to a separate card and leave this card as a true zero-diff verification-only card. Not mechanically fixable — either resolution changes the plan's structure. |
    | card-numbering                 | Renumber cards within the affected batch sequentially starting at the lowest existing number; if the conflict is across batches, re-number the later-batch's cards to start above the earlier batch's max. Update every "card N" reference inside the plan. |
    | depends-on-unknown             | If the unknown dep is an integer, compare it against the `number:` values in the Batch Index — if close to an existing number (likely a typo), correct it. If the unknown dep is a string (legacy format), compare it against the `name:` values — if it is a typo of an existing entry, correct it. If the dependency genuinely needs a new batch, halt — adding a batch is not a mechanical fix. |
    | depends-on-batch-mismatch      | The payload's `batch:` field names the batch whose per-batch file frontmatter `depends-on:` disagrees with the overview's Batch Index entry for that same batch (payload's `message:` field shows both sides). Edit whichever side is stale so the per-batch file's `depends-on:` and the overview Batch Index entry's `depends-on:` name the identical dependency set. |
    | parallel-modifies-overlap      | If one batch logically depends on the other, add the missing edge to the dependent's depends-on list. If the two batches truly need to write to the same file in parallel, the plan is structurally wrong — halt.        |
+   | cross-batch-creates-no-depends-on | If one batch logically depends on the other, add the missing `depends-on` edge to the dependent batch — both the per-batch file's frontmatter `depends-on:` and the overview's Batch Index entry for that batch, per the existing `depends-on-batch-mismatch` discipline (both sides must name the identical dependency set). If the dependency is genuinely ambiguous (e.g. it's unclear which batch should own the edge), halt — not auto-fixable. |
    | reads-not-backtick-path        | Re-format the bullet to backtick-only paths; move any inline parenthetical commentary to the card's Requirements: prose. Strip any line-range suffix (e.g. `:55-65`) from the path.                                       |
    | move-format                    | Re-format the `Moves:` sub-bullet to `` `old/path` -> `new/path` `` (backtick-wrapped paths, ASCII ` -> ` arrow, no extra whitespace or commentary). |
    | move-redundant                 | Remove the duplicated path from `Creates:` or `Deletes:`, keeping it only in `Moves:`. If the path appears in both `Moves:` and `Creates:`, remove it from `Creates:` (unless it is the *target* of a rename-plus-extraction, in which case the `Creates:` entry is correct and `Moves:` is the error). |
@@ -362,7 +369,7 @@ Each round:
    | verify-full-suite              | The payload's `path:` field carries the offending `verify:` command (`batch:` names the offending batch, or `None` for the overview's module-wide `verify:`). If the batch's own `## Batch Tests` section already documents the cross-cutting-helper justification (see the `verify-full-suite` skip-check escape hatch in Phase: Plan), re-run with `--skip-check verify-full-suite`. Otherwise scope the command via `-k <pattern>` or `--only <every affected test file>`. |
    | wiki-config-mutation           | This check cannot be fixed by editing plan files — the batch intentionally modifies `mill-config.yaml`. To proceed, verify one of two conditions: (a) a bootstrap card is present — a card whose body explains why the mill-config.yaml change is safe mid-flight for the currently-shipping task; or (b) the modified keys are provably unused — meaning key *removal or rename* where zero grep hits across `scripts/` and `skills/` confirm no existing code references them. (For key *addition* where consuming code is also being added in the same plan, zero grep hits does NOT satisfy condition (b); use (a) or halt.) If either condition holds: document the justification in the validator-fix commit message and re-run the CLI with `--skip-check wiki-config-mutation`. If `wiki-config-mutation` co-occurs with other fixable validator errors, fix those first per their rows, then re-run with `--skip-check wiki-config-mutation`. If neither condition holds: halt — the plan requires redesign. |
    | batch-oversized                | Halt — the batch exceeds `pipeline.max_cards_per_batch` cards and/or the `pipeline.max_batch_context_tokens` context estimate. Splitting a batch is a structural change, not a mechanical fix; the planner must re-split at Phase: Plan. Not auto-fixable. |
-   | out-of-worktree-target         | Halt — an `Edits:`/`Creates:` target resolves outside the worktree (home-dir or absolute path). The operator must handle such edits manually; the implementer can never be pointed at them. Not auto-fixable. |
+   | out-of-worktree-target         | If the plan's `discussion.md` records an explicit cross-worktree authorization and the target is itself a git worktree under legitimate task control (see the `out-of-worktree-target` skip-check override in Phase: Plan), re-run with `--skip-check out-of-worktree-target`. Otherwise: Halt — the operator must handle such edits manually; the implementer can never be pointed at them. Not auto-fixable. |
    | missing-overview               | Halt — the plan is structurally broken, not mechanically fixable.                                                                                                                                                       |
    | batch-index-parse              | Halt — the overview's fenced-yaml block is unparseable; not mechanically fixable.                                                                                                                                        |
 
@@ -377,17 +384,15 @@ Each round:
    Before re-running via millpy-bg for the `plan-validator-fix` slug, verify `pwd` in the Bash terminal matches the task worktree.
    If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
-**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE`, or (at step 4c only) `REQUEST_CHANGES` with `blocking_count == 0` (see step 4c below), compute:
+**Convergence gate (min_rounds).** On any round whose envelope's top-level `verdict` is `APPROVE`, or (at step 4c only) `REQUEST_CHANGES` with `blocking_count == 0` (see step 4c below), compute:
 
 ```
-converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in envelope["findings"])
+converged = (round >= min_review_rounds)
 ```
-
-**Exception — mill-plan's site only.** `envelope["findings"]` is not safe to read directly at this site: `_review_plan.py`'s `_scan_approved_batches` (called from `run()`) splices already-approved, carried-forward batches' own `findings` — which can carry a stale `demoted: true` marker written by an earlier round's ceiling, re-read verbatim off disk via `extract_findings` — into the same `reviews[]` list every round, and `aggregate_findings = [f for r in reviews for f in r.get("findings", [])]` folds those stale entries into the envelope's top-level `findings` unconditionally. If `plan-review.batch` is ever enabled, a demotion from an unrelated, already-approved batch would make `not any(f.get("demoted") for f in envelope["findings"])` permanently `False`, so the gate could never converge before the round cap forces the implicit-approve fallback, every round. At this site, replace `envelope["findings"]` with a round-filtered variant: `current_round_findings = [f for r in envelope["reviews"] if r.get("round") == envelope["round"] for f in r.get("findings", [])]`, then `converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in current_round_findings)`. This works because `_scan_approved_batches`' carryforward entries retain their own original approval round (`"round": n`, always < the current round once a fresh round has run), while every entry produced by the current round (freshly-reviewed batches plus the holistic scope) shares the current round number — and `envelope["round"]` is `_review_plan.run()`'s own `agg_round = max(r["round"] for r in reviews)`, i.e. the current round, so the filter cleanly excludes carryforward and keeps only this round's live findings.
 
 - `converged is True`: proceed exactly as the branch's terminal actions describe below (no behavior change).
 - `converged is False` AND `round < max_review_rounds`: still apply any `[NIT]` fixes the branch describes (real, safe work), but do NOT execute the branch's terminal phase-transition / approve-commit / break-loop actions. Instead continue the loop to round N+1 exactly as the file's own next-round-continuation path already does — no operator gap-prompt (there are zero BLOCKING findings to present).
-- `converged is False` AND `round >= max_review_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to that round's commit message (whichever of 4a/4b/4c fires) so the shortfall is auditable.
+- `converged is False` AND `round >= max_review_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds not satisfied by round cap)"` to that round's commit message (whichever of 4a/4b/4c fires) so the shortfall is auditable.
 - The gate applies only to 4a, 4b, and 4c — never to 4d (`REQUEST_CHANGES` AND `blocking_count > 0`) or step 6 (max-rounds escape with BLOCKINGs remaining) — those already continue/hard-block by existing logic, untouched.
 - The gate is orthogonal to `mill-start --auto`'s `prev_blocking_titles`/`extension_used` non-progress-extension machinery — that machinery is specific to mill-start and is never read or written here.
 
@@ -396,7 +401,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
@@ -452,6 +457,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    `--no-holistic` skips the holistic plan review and runs per-batch reviews only.
    Default — both run per the `roles.plan-review.batch.reviewer` and `roles.plan-review.holistic.reviewer` config keys.
    Append the flag to the inner `uv run …millpy-review-plan.py` portion of the millpy-bg invocation when needed.
+   Append one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty) to that same inner invocation.
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
 
@@ -462,30 +468,8 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    Non-negotiable.
    The VERIFY → HARM CHECK → FIX-or-PUSH-BACK decision tree is what keeps review loops useful.
 
-**Guardrail:** NIT/BLOCKING fixes during Plan Review apply ONLY to files under `<plan_dir>` — never to the actual source files the plan describes editing, even when a finding quotes an exact source location.
-
-4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings — the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): compute `converged` per the Convergence gate above.
-If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): set overview frontmatter `approved: true` via direct Edit. `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
-Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message.
-Push.
-Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
-If not `converged` and `round < max_review_rounds`: 4a has no NITs to fix, so take no action this round — continue to round N+1.
-
-4b. On `APPROVE` with one or more `[NIT]` findings (the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
-Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
-Re-validate the plan DAG via `_plan_dag.validate`.
-This NIT-fix work, fixer report, and DAG re-validation happen regardless of `converged` — real work, safe either way.
-Compute `converged` per the Convergence gate above.
-If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
-Set overview frontmatter `approved: true` via direct Edit.
-Single git commit covering exactly four pathspecs — `<plan_dir>`, `<reviews_dir>`, `<status_path>`, `_mill/briefs/` — with message `mill-plan: plan-fix round {N} for {slug}` (matches existing 4d message shape;
-the round counter is NOT advanced) — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message.
-Push.
-Break loop → Handoff.
-If not `converged` and `round < max_review_rounds`: still call `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)` and commit the NIT fixes (same single commit shape as above, without the `approved: true` flip and without the loop-break/Handoff transition) and push — the fix genuinely happened — then continue to round N+1 instead of breaking.
-
-4.5.
-**Step 4.5: ERROR-only-aggregate retry (no round consumed)**
+3.5.
+**Step 3.5: ERROR-only-aggregate retry (no round consumed)**
 
    **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains: call `_status.set_blocked(status_path, f"plan review usage error: <message>", timestamp=ts)` (where `<message>` is the offending entry's `error` field); commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan review usage error) for {slug}"` and push; halt with `BLOCKED: plan review usage error: <message>` — distinct wording from the existing `BLOCKED: review ERROR-only round {N}` halt below.
 
@@ -494,7 +478,7 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
@@ -514,6 +498,7 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    ```
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+   Append one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty) to the inner `millpy-review-plan.py` invocation, exactly as step 2's subprocess branch above.
 
    The round counter is **not** consumed — the round produced no reviewable output.
    Absent-JSON and `verdict: ERROR` share **one consecutive-non-reviewable-round counter**: any mix of two consecutive non-reviewable rounds (ERROR then absent-JSON, or vice versa) triggers the two-pass cap.
@@ -523,23 +508,46 @@ If not `converged` and `round < max_review_rounds`: still call `_status.append_p
    The two-pass cap mirrors step 1.5's validator gate. *(Note: the CLI now emits a `verdict: ERROR` envelope on uncaught exceptions per millpy-review-plan.py, so a true absent-JSON line means the worker died before printing — mirroring mill-go's "only treat exit 1 as unrecoverable when the JSON line is absent" rule.
    Closes #84 — `verdict: ERROR` tracking was introduced so ERROR rounds never silently collapse into 4c's NIT path.)*
 
+**Unconditional round-recorded append.** Once step 3.5's screening above confirms this round produced a reviewable verdict (i.e., did NOT trigger the usage-error halt or the ERROR/absent-JSON retry-and-skip), and before branching into 4a/4b/4c/4d below: call `_status.append_phase(status_path, f"plan-review-r{N}", _timestamp.now_utc_iso())`, then commit immediately on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: record plan-review round {N} for {slug}"`) and push. This records every genuinely-reviewed round's Timeline row exactly once, decoupled from whichever of 4a/4b/4c/4d fires below and from the Convergence gate's `converged`/not-`converged` branching — closing the prior asymmetry where only 4a's converged-or-capped terminal path and 4d ever appended this row (4b and 4c never did, and 4a's own not-converged-under-cap path also skipped it, per its 'take no action this round' branch).
+
+**Guardrail:** NIT/BLOCKING fixes during Plan Review apply ONLY to files under `<plan_dir>` — never to the actual source files the plan describes editing, even when a finding quotes an exact source location.
+
+4a. On `APPROVE` (verdict from JSON) with zero `[NIT]` findings (read the review file at `reviews[0].file` and confirm zero `[NIT]`-prefixed findings — the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): compute `converged` per the Convergence gate above.
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): set overview frontmatter `approved: true` via direct Edit.
+Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: approve plan for {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds not satisfied by round cap)"` to the commit message.
+Push.
+Break loop → Handoff. `iso_ts` is `_timestamp.now_utc_iso()`.
+If not `converged` and `round < max_review_rounds`: 4a has no NITs to fix, so take no action this round — continue to round N+1.
+
+4b. On `APPROVE` with one or more `[NIT]` findings (the heading may carry a class suffix, so `### [NIT:consistency]` counts as a NIT exactly like a bare `### [NIT]` and is never missed; equivalently, this check can be made against the envelope's `findings` list by counting entries whose `severity` is `NIT`): apply each NIT per the `mill-receiving-review` decision tree by editing the plan files directly.
+Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` (timestamp from `_timestamp.now_utc_compact()`) with two sections — `## Fixed` (one line per fixed NIT: short reference to the source review file + quoted finding title) and `## Pushed Back` (one line per rejected NIT: short reference + reason citing code, doc, or scope per `mill-receiving-review`'s legitimate-pushback rules).
+Re-validate the plan DAG: read `overview_text = (plan_dir / "00-overview.md").read_text(encoding="utf-8")`, call `batches = _plan_dag.extract_batch_index(overview_text)`, then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
+This NIT-fix work, fixer report, and DAG re-validation happen regardless of `converged` — real work, safe either way.
+Compute `converged` per the Convergence gate above.
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
+Set overview frontmatter `approved: true` via direct Edit.
+Single git commit covering exactly four pathspecs — `<plan_dir>`, `<reviews_dir>`, `<status_path>`, `_mill/briefs/` — with message `mill-plan: plan-fix round {N} for {slug}` (matches existing 4d message shape;
+the round counter is NOT advanced) — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds not satisfied by round cap)"` to the commit message.
+Push.
+Break loop → Handoff.
+If not `converged` and `round < max_review_rounds`: still call `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)` and commit the NIT fixes (same single commit shape as above, without the `approved: true` flip and without the loop-break/Handoff transition) and push — the fix genuinely happened — then continue to round N+1 instead of breaking.
+
 4c. On `REQUEST_CHANGES` AND `blocking_count == 0` (the JSON's top-level field): the round produced only NITs.
 Apply NIT fixes per the `mill-receiving-review` Decision Tree (no different from a regular fix-pass), write the fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` — this happens regardless of `converged`, real work either way.
 Compute `converged` per the Convergence gate above (this branch is one of the gate's `APPROVE`-equivalent sites, per that section's opening sentence).
-If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status + `_mill/briefs/`; when not `converged`, append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message), break loop → Handoff.
+If `converged`, or `round >= max_review_rounds` (implicit-approve-at-cap): append `plan-fix-r{N}` to status timeline, set overview frontmatter `approved: true`, commit+push (single commit covering plan + reviews + status + `_mill/briefs/`; when not `converged`, append `" (min_rounds not satisfied by round cap)"` to the commit message), break loop → Handoff.
 Do NOT run round N+1.
 Rationale: 0-BLOCKING means the planner and reviewer have converged;
-further rounds only churn cosmetic NITs — this is exactly the premature-termination case a ceiling-demoted BLOCKING can otherwise mask, which is what the convergence gate now guards against.
+further rounds only churn cosmetic NITs — this is exactly the premature-termination case a ceiling-demoted BLOCKING can otherwise mask.
 If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the fixer report (same single commit shape as above, without the `approved: true` flip and without the loop-break/Handoff transition) and push, then continue to round N+1 instead of breaking.
 
 4d. On `REQUEST_CHANGES` AND `blocking_count > 0`:
-   - `_status.append_phase(status_path, f"plan-review-r{N}", iso_ts)`.
    - Read each review file.
      The `findings` list in the envelope is post-ceiling: a finding shown as `[NIT:scope]` in the review file with a `**Demoted-from:** BLOCKING` line was demoted by the stage ceiling and is handled as a NIT, not as a BLOCKING.
      For each finding, run the `mill-receiving-review` decision tree.
    - Apply fixes to plan files.
    - Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
-   - Re-validate the plan DAG (`_plan_dag.validate`).
+   - Re-validate the plan DAG: read `overview_text = (plan_dir / "00-overview.md").read_text(encoding="utf-8")`, call `batches = _plan_dag.extract_batch_index(overview_text)`, then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
    - Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: plan-fix round {N} for {slug}"`.
      Push.
@@ -607,6 +615,7 @@ Never hand-write or guess a date.
   A rename-plus-extraction is the `Moves:` pair for the relocated file plus a separate `Creates:` for the newly extracted file.
   Include a `## Rename mechanic` section in any batch that has a non-empty `Moves:` field.
   Keep naming the specific surgical edits (package declaration, import lines, identifier retargets) in `Requirements:` using stable identifiers.
+- **Never require two separately-numbered cards to land in the same commit.** Each card produces its own commit at implementation time (see the per-card `Commit:` field; every per-card commit invokes the `git-commit` skill per `mill-go-base/SKILL.md`'s one-commit-per-card execution convention). Once a card's commit is made and pushed, the harness's git-safety protocol (always create a new commit rather than amending a prior one, absent explicit operator instruction otherwise) forbids folding a later card's diff into it. If two changes are genuinely atomic — must land together or not at all — express them as a SINGLE card with one `Commit:` message, never as two cards linked by a cross-card "same commit" or "must be squashed into card N" instruction in `Requirements:`.
 - **Phrase Requirements: prohibitions on one line; avoid double negatives** — `_plan_validate.py`'s `context-completeness` check exempts a prohibition via a same-line, lexical word-set match (a negation word/phrase paired with a verb form, anywhere on one physical line), not a structural or semantic parse.
   Write "Do not touch `foo.py`" on a single line (negation, verb, and path together) rather than a nested-bullet form (negation on a parent bullet, path on a child bullet) — the check never looks across bullet lines.
   Avoid double-negative phrasing such as "do not skip touching `foo.py`" or "do not forget to read `bar.py`" — the check misreads these as prohibited (a false exemption) even though the path SHOULD be touched/read.

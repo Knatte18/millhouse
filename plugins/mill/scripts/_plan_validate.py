@@ -58,6 +58,9 @@ Checks performed (check keys):
     move-mechanic-missing — batch has non-empty Moves: but is missing a '## Rename mechanic' section
     commit-none-with-content — a card's Commit: is the literal 'none' sentinel but its
         Edits:/Creates:/Deletes:/Moves: has non-none content
+    cross-batch-creates-no-depends-on — a card's Context:/Edits: references a file another batch's
+        Creates: produces, with no depends-on edge (direct or transitive) from the referencing batch to the
+        creating batch
 """
 from __future__ import annotations
 
@@ -70,6 +73,7 @@ import _plan_dag
 import _subprocess_util
 from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
 from _review_common import (
+    ReviewError,
     _load_root_from_overview,
     compute_creates_union,
     compute_deletes_union,
@@ -77,6 +81,7 @@ from _review_common import (
     parse_batch_refs,
     parse_moves,
     resolve_existing_paths,
+    resolve_ref_paths,
 )
 
 # ---------------------------------------------------------------------------
@@ -698,21 +703,56 @@ def _check_non_existent_path(
     This function continues to operate only on the general Context/Edits/Creates and Deletes tokens
     that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
 
+    - ``Context:`` refs additionally soft-fail when confirmed git-ignored (via
+    ``resolve_ref_paths(..., soft_fail_gitignored=True)``) -- a ``Context:``-only reference to a
+    not-yet-existing, gitignored runtime artefact (e.g. a build/run-output file an earlier batch
+    produces at runtime, under a ``.gitignore``d directory) is not flagged, matching the LLM
+    reviewer's own existing leniency for ``Context:`` refs (``_review_plan.py``, #733/#808).
+    ``Edits:``/``Creates:``/``Deletes:`` refs receive NO such leniency -- those name files the
+    batch is expected to produce or touch, a hard requirement.
+
     Error dict shape: ``{check, batch, card, path, message}``.
     """
     errors: list[dict] = []
     for batch_path in batch_files:
-        raw_refs = parse_batch_refs(batch_path)
         deletes_only = _parse_deletes_only(batch_path)
-        general_refs = set(raw_refs) - deletes_only
+        context_tokens = _parse_context_only(batch_path)
+        edits_creates_tokens = (
+            _parse_edits_only(batch_path) | _parse_creates_only(batch_path)
+        ) - deletes_only
 
-        # General refs (Context/Edits/Creates): missing on disk is suppressed when the token is in creates_union, deletes_union, OR moves_targets.
+        # Edits:/Creates: loop (unchanged behavior): missing on disk is suppressed when the token
+        # is in creates_union, deletes_union, OR moves_targets.
         # The moves_targets suppression prevents false errors on downstream cards that reference a not-yet-existing Move destination in their Context:/Edits:.
-        for t in general_refs:
+        for t in edits_creates_tokens:
             if t.lower() == "none":
                 continue
             existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
             if not existing and t not in creates_union and t not in deletes_union and t not in moves_targets:
+                errors.append({
+                    "check": "non-existent-path",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": t,
+                    "message": (
+                        f"path '{t}' does not exist on disk and is not a "
+                        f"Creates: target in any batch"
+                    ),
+                })
+
+        # Context: loop (new gitignore-aware behavior): same union suppression up front, then a
+        # soft-fail resolve that additionally tolerates a confirmed-gitignored missing path.
+        for t in context_tokens:
+            if t.lower() == "none":
+                continue
+            if t in creates_union or t in deletes_union or t in moves_targets:
+                continue
+            try:
+                resolve_ref_paths(
+                    [t], project_root, root,
+                    wiki_root=wiki_root, git_root=git_root, soft_fail_gitignored=True,
+                )
+            except ReviewError:
                 errors.append({
                     "check": "non-existent-path",
                     "batch": batch_path.stem,
@@ -1060,6 +1100,87 @@ def _check_parallel_modifies_overlap(
                             f"batches '{a_name}' and '{b_name}'"
                         ),
                     })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# cross-batch-creates-no-depends-on check (#887)
+# ---------------------------------------------------------------------------
+
+def _check_cross_batch_creates_no_depends_on(
+    batch_files: list[Path],
+    overview_text: str,
+) -> list[dict]:
+    """
+    Flag a Context:/Edits: reference to another batch's Creates: target with no depends-on edge.
+
+    A card that names a file another batch produces via Creates: implicitly relies on that batch
+    having already run.
+    Without a depends-on edge (direct or transitive) from the referencing batch to the creating
+    batch, the plan's DAG does not guarantee that ordering, so the reference may resolve to a
+    file that does not exist yet at runtime.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+
+    Returns:
+        List of error dicts, one per (referencing batch, token) pair missing the required edge.
+    """
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    ancestors = _compute_transitive_ancestors(batches)
+
+    # Map batch name -> batch file path via the index's `file:` field.
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        file_ref = entry.get("file", "")
+        stem = Path(file_ref).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    batch_creates: dict[str, set[str]] = {
+        name: _parse_creates_only(path) for name, path in batch_name_to_path.items()
+    }
+    # Deliberately Context:+Edits: only, never Creates: -- a batch's own Creates: tokens must
+    # never be scanned against other batches' creates sets.
+    batch_context_edits: dict[str, set[str]] = {
+        name: _parse_context_only(path) | _parse_edits_only(path)
+        for name, path in batch_name_to_path.items()
+    }
+
+    errors: list[dict] = []
+    for name_b, tokens in batch_context_edits.items():
+        for token in tokens:
+            if token.lower() == "none":
+                continue
+            for name_c, creates in batch_creates.items():
+                if name_c == name_b:
+                    continue
+                if token in creates and name_c not in ancestors.get(name_b, set()):
+                    errors.append({
+                        "check": "cross-batch-creates-no-depends-on",
+                        "batch": batch_name_to_path[name_b].stem,
+                        "card": None,
+                        "path": token,
+                        "message": (
+                            f"'{token}' is created by batch '{name_c}' but batch '{name_b}' "
+                            f"(file {batch_name_to_path[name_b].name}) has no depends-on edge "
+                            f"to '{name_c}'"
+                        ),
+                    })
+                    # Stop after the first matching creator for this token -- defensive
+                    # against two batches both declaring the same Creates: target, which is a
+                    # separate, pre-existing structural error other checks already catch.
+                    break
 
     return errors
 
@@ -1949,6 +2070,16 @@ def _check_all_files_touched_mismatch(
 # verify-not-isolated check
 # ---------------------------------------------------------------------------
 
+def _is_python_project(project_root: Path) -> bool:
+    """Return whether `project_root` looks like a Python project (root-level pyproject.toml/setup.py/setup.cfg, OR a nested plugins/mill/pyproject.toml marker for this repo's own dogfood layout)."""
+    return (
+        (project_root / "pyproject.toml").exists()
+        or (project_root / "setup.py").exists()
+        or (project_root / "setup.cfg").exists()
+        or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
+    )
+
+
 def _check_verify_not_isolated(
     batch_files: list[Path],
     project_root: Path,
@@ -1982,13 +2113,8 @@ def _check_verify_not_isolated(
     Returns:
         List of error dicts, one per non-compliant verify command.
     """
-    # Python-project detection is a one-time lookup shared across every batch and the overview -- markers live at the project root or in the plugins/mill/ subdirectory used by this repo's own dogfood layout.
-    is_python_project = (
-        (project_root / "pyproject.toml").exists()
-        or (project_root / "setup.py").exists()
-        or (project_root / "setup.cfg").exists()
-        or (project_root / "plugins" / "mill" / "pyproject.toml").exists()
-    )
+    # Python-project detection is a one-time lookup shared across every batch and the overview -- delegated to the shared _is_python_project helper.
+    is_python_project = _is_python_project(project_root)
 
     def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
         try:
@@ -2240,7 +2366,9 @@ def _check_verify_full_suite(
     overview_path: Path,
 ) -> list[dict]:
     """
-    Flag verify: commands that invoke run-all.py without a scoping filter.
+    Flag verify: commands that invoke an unscoped full-suite runner: run-all.py without
+    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test without --filter
+    (C#), or bare pytest/python -m pytest with no path or -k filter (Python, non-mill).
 
     Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``,
     mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping
@@ -2258,8 +2386,11 @@ def _check_verify_full_suite(
             checked alongside the per-batch loop.
 
     Returns:
-        List of error dicts, one per unscoped run-all.py invocation.
+        List of error dicts, one per unscoped full-suite invocation.
     """
+    # Python-project detection is a one-time lookup shared across every batch and the overview -- mirrors _check_verify_not_isolated's own one-time-lookup pattern.
+    is_python_project = _is_python_project(project_root)
+
     def _check_frontmatter(frontmatter: dict, batch_label: str | None) -> dict | None:
         try:
             command, _cwd = _plan_dag.parse_verify_field(frontmatter, project_root, project_root)
@@ -2277,6 +2408,39 @@ def _check_verify_full_suite(
                 "message": (
                     "verify command invokes run-all.py without a filter (-k pattern); "
                     "use '-k <pattern>' or '--only <files>' to scope the run"
+                ),
+            }
+        if re.search(r"\bgo test\b.*\./\.\.\.", command) and "-run " not in command:
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes 'go test ./...' without a -run <pattern> filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                ),
+            }
+        if "dotnet test" in command and "--filter" not in command:
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes 'dotnet test' without a --filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                ),
+            }
+        if is_python_project and re.fullmatch(r"(python -m )?pytest", command.strip()):
+            return {
+                "check": "verify-full-suite",
+                "batch": batch_label,
+                "card": None,
+                "path": command,
+                "message": (
+                    "verify command invokes bare pytest with no path or -k filter; "
+                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
                 ),
             }
         return None
@@ -2725,7 +2889,9 @@ def run(
     plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd,
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
-    move-source-missing, move-target-collision, move-mechanic-missing).
+    move-source-missing, move-target-collision, move-mechanic-missing), and
+    cross-batch-creates-no-depends-on.
+
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -2785,6 +2951,7 @@ def run(
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
+    errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
     errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))

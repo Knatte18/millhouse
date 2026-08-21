@@ -2,14 +2,19 @@
 
 One test function per check (clean + dirty fixtures).
 Tests use in-memory tempfile fixtures;
-no real LLM, no real git, no network.
+no real LLM, no real git, no network, except the one gitignore-fixture case in
+`test_check_non_existent_path_*` which shells out to real `git check-ignore` via
+`_test_helpers.init_minimal_git_repo`.
 
 Check coverage:
-  check 1 — non-existent-path
+  check 1 — non-existent-path (incl.
+      gitignore-aware Context: soft-fail, #868)
   check 2 — card-missing-field
   check 3 — card-numbering (within-batch gap, cross-batch duplicate)
   check 4 — depends-on-unknown
   check 5 — parallel-modifies-overlap
+  cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
+      creates, with no depends-on edge to that creating batch
   check 6 — reads-not-backtick-path (incl.
       none-exempt)
   check 8 — all-files-touched-mismatch
@@ -295,6 +300,100 @@ def test_check_non_existent_path_dirty() -> int:
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_non_existent_path_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_non_existent_path_context_gitignored_clean() -> int:
+    """(a) missing Context: ref confirmed git-ignored -> zero non-existent-path findings (#868)."""
+    import _test_helpers  # noqa: E402 (local import; sys.path set up at module scope)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        # A .gitignore rule only takes effect once the repository recognizes the directory as a
+        # git worktree, so the .gitignore file itself must be committed.
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # The referenced file is never created -- it is confirmed git-ignored instead.
+        batch = _make_batch_file("alpha", context=["ignored_dir/runtime_artifact.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "ignored_dir/runtime_artifact.py"
+        ]
+        if check1:
+            print(
+                f"FAIL test_check_non_existent_path_context_gitignored_clean: unexpected: {check1}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_non_existent_path_context_gitignored_clean")
+        return 0
+
+
+def test_check_non_existent_path_context_not_gitignored_dirty() -> int:
+    """(b) missing Context: ref NOT covered by any .gitignore rule -> finding still fires (#868)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["not_ignored_dir/missing.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "not_ignored_dir/missing.py"
+        ]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            print("PASS test_check_non_existent_path_context_not_gitignored_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_non_existent_path_context_not_gitignored_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_non_existent_path_edits_gitignored_still_dirty() -> int:
+    """(c) missing Edits: ref confirmed git-ignored -> finding STILL fires, no leniency (#868)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["ignored_dir/runtime_artifact.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "ignored_dir/runtime_artifact.py"
+        ]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            print("PASS test_check_non_existent_path_edits_gitignored_still_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_non_existent_path_edits_gitignored_still_dirty: {exc}", file=sys.stderr)
             return 1
 
 
@@ -742,6 +841,106 @@ def test_check_parallel_modifies_overlap_dirty() -> int:
         except AssertionError as exc:
             print(f"FAIL test_check_parallel_modifies_overlap_dirty: {exc}", file=sys.stderr)
             return 1
+
+
+def test_check_cross_batch_creates_no_depends_on_clean() -> int:
+    """Clean: beta depends-on alpha and references alpha's Creates: target -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        if check:
+            print(f"FAIL test_check_cross_batch_creates_no_depends_on_clean: unexpected: {check}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_cross_batch_creates_no_depends_on_clean")
+        return 0
+
+
+def test_check_cross_batch_creates_no_depends_on_dirty() -> int:
+    """Dirty: beta references alpha's Creates: target but has no depends-on edge -> one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": []},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        try:
+            assert len(check) == 1, f"expected 1 error, got {len(check)}: {check}"
+            assert check[0]["path"] == "shared/new_file.py", (
+                f"wrong path: {check[0]['path']!r}"
+            )
+            assert "alpha" in check[0]["message"] and "beta" in check[0]["message"], (
+                f"message should mention both batch names: {check[0]['message']!r}"
+            )
+            print("PASS test_check_cross_batch_creates_no_depends_on_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_cross_batch_creates_no_depends_on_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_cross_batch_creates_no_depends_on_transitive_clean() -> int:
+    """Clean: gamma depends-on beta depends-on alpha; gamma references alpha's Creates: target -> no error (transitive ancestry honored)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "depends-on": ["alpha"]},
+            {"name": "gamma", "file": "03-gamma.md", "depends-on": ["beta"]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, creates=["shared/new_file.py"])
+        batch_b = _make_batch_file("beta",  card_num=2)
+        batch_c = _make_batch_file("gamma", card_num=3, context=["shared/new_file.py"])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md",  batch_b),
+            ("03-gamma.md", batch_c),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "cross-batch-creates-no-depends-on"]
+        if check:
+            print(
+                f"FAIL test_check_cross_batch_creates_no_depends_on_transitive_clean: "
+                f"unexpected: {check}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_cross_batch_creates_no_depends_on_transitive_clean")
+        return 0
 
 
 def test_check_reads_not_backtick_path_clean() -> int:
@@ -4338,6 +4537,352 @@ def test_check_verify_full_suite_run_all_py_with_only_is_ok() -> int:
         return 0
 
 
+def test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error() -> int:
+    """Dirty: verify invokes 'go test ./...' without a -run filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: go test ./...\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "go test ./..." in check_full_suite[0]["message"], (
+                f"message should mention go test ./...: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok() -> int:
+    """Clean: verify invokes 'go test ./...' with a -run filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: go test ./... -run TestFoo\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_dotnet_test_without_filter_is_error() -> int:
+    """Dirty: verify invokes 'dotnet test' without --filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: dotnet test MyProject.csproj\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "dotnet test" in check_full_suite[0]["message"], (
+                f"message should mention dotnet test: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_dotnet_test_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_dotnet_test_without_filter_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_dotnet_test_with_filter_is_ok() -> int:
+    """Clean: verify invokes 'dotnet test' with --filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: dotnet test MyProject.csproj --filter Category=Unit\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_dotnet_test_with_filter_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_dotnet_test_with_filter_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_bare_pytest_without_filter_is_error() -> int:
+    """Dirty: Python project + bare 'pytest' with no path/-k filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        # Marker file required so _is_python_project returns True for this fixture's project_root.
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "pytest" in check_full_suite[0]["message"], (
+                f"message should mention pytest: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_bare_pytest_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_bare_pytest_without_filter_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error() -> int:
+    """Dirty: Python project + bare 'python -m pytest' with no path/-k filter -> one verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        # Marker file required so _is_python_project returns True for this fixture's project_root.
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: python -m pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            print("PASS test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_verify_full_suite_pytest_with_k_filter_is_ok() -> int:
+    """Clean: Python project + 'pytest -k foo' -> no verify-full-suite error (scoped)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest -k foo\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_pytest_with_k_filter_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_pytest_with_k_filter_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_pytest_with_path_is_ok() -> int:
+    """Clean: Python project + 'pytest tests/test_foo.py' -> no verify-full-suite error (scoped)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest tests/test_foo.py\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_pytest_with_path_is_ok: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_pytest_with_path_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_bare_pytest_no_python_marker_clean() -> int:
+    """Clean: no Python marker present + bare 'pytest' -> no verify-full-suite error (check 4 gated on _is_python_project)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: pytest\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(f"FAIL test_check_verify_full_suite_bare_pytest_no_python_marker_clean: unexpected: {check_full_suite}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_check_verify_full_suite_bare_pytest_no_python_marker_clean")
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # verify cwd mapping form (Cards 23-25 / #604)
 # ---------------------------------------------------------------------------
@@ -6437,6 +6982,10 @@ def main() -> int:
     tests = [
         test_check_non_existent_path_clean,
         test_check_non_existent_path_dirty,
+        # gitignore-aware Context: refs (#868)
+        test_check_non_existent_path_context_gitignored_clean,
+        test_check_non_existent_path_context_not_gitignored_dirty,
+        test_check_non_existent_path_edits_gitignored_still_dirty,
         test_check_card_missing_field_clean,
         test_check_card_missing_field_dirty,
         # commit-none-with-content check (issue #664)
@@ -6455,6 +7004,9 @@ def main() -> int:
         test_depends_on_batch_mismatch_emits_finding,
         test_check_parallel_modifies_overlap_clean,
         test_check_parallel_modifies_overlap_dirty,
+        test_check_cross_batch_creates_no_depends_on_clean,
+        test_check_cross_batch_creates_no_depends_on_dirty,
+        test_check_cross_batch_creates_no_depends_on_transitive_clean,
         test_check_reads_not_backtick_path_clean,
         test_check_reads_not_backtick_path_none_exempt,
         test_check_reads_not_backtick_path_dirty,
@@ -6561,6 +7113,16 @@ def main() -> int:
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
         test_check_verify_full_suite_run_all_py_with_only_is_ok,
+        # verify-full-suite: language-aware unbounded-verify guard (#881)
+        test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error,
+        test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok,
+        test_check_verify_full_suite_dotnet_test_without_filter_is_error,
+        test_check_verify_full_suite_dotnet_test_with_filter_is_ok,
+        test_check_verify_full_suite_bare_pytest_without_filter_is_error,
+        test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error,
+        test_check_verify_full_suite_pytest_with_k_filter_is_ok,
+        test_check_verify_full_suite_pytest_with_path_is_ok,
+        test_check_verify_full_suite_bare_pytest_no_python_marker_clean,
         # verify cwd mapping form (Cards 23-25 / #604)
         test_check_verify_not_isolated_mapping_form_dirty,
         test_check_verify_not_isolated_mapping_form_clean,
