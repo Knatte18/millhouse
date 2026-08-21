@@ -26,10 +26,13 @@ mill's issue-bundling convention.
 - #850 — `_marker.slug_from_branch`/`_pygit2_util` gains detached-HEAD-matches-a-local-branch
   detection; `MarkerError`'s message is enriched when a match is found; mill-go-base/SKILL.md's
   Entry Step 1 halt handler surfaces `str(e)` verbatim instead of a blanket fixed string.
-- #856 — add `_preflight.check_helpers(['_parent_branch'])` immediately before
-  `_parent_branch.check_liveness(...)` at mill-merge/SKILL.md Step 4 and at
-  mill-merge-in/SKILL.md's own duplicate liveness-check call site, mirroring the existing Step 5.5
-  `_preflight.check_helpers(['_archive_tag'])` precedent exactly.
+- #856 — `_preflight.missing_helpers`/`check_helpers` gains an optional attribute-level check (see
+  `#856-attribute-level-guard` Decision below); mill-merge/SKILL.md Step 4 and
+  mill-merge-in/SKILL.md's own duplicate liveness-check call site (line 21, not 23) each gain
+  `_preflight.check_helpers(['_parent_branch:check_liveness'])` immediately before their
+  `_parent_branch.check_liveness(...)` call, mirroring the existing Step 5.5
+  `_preflight.check_helpers(['_archive_tag'])` guard-placement precedent but targeting the
+  function, not just the file.
 - #873 — add `r"^discussion-fix-r\d+$"` and `r"^discussion-gap-fix-r\d+$"` to both
   mill-go-base/SKILL.md trigger-set literals: the phase table row (~line 119) and the
   `_phase_wait.matches_wait_trigger` call in the "Entry-gate wait for upstream mill-plan" section
@@ -109,13 +112,36 @@ mill's issue-bundling convention.
 - Decision: Extend `unit_tests/test-marker.py`. Keep `test_slug_from_branch_detached_head` as-is
   in structure (real git repo in a tempdir via `_test_helpers._make_task_worktree`, HEAD checked
   out to its own current SHA) but additionally assert the raised `MarkerError`'s message names
-  branch `foo` (the fixture's own branch, whose tip is the checked-out SHA — this existing fixture
-  already *is* the positive/matching case). Add one new test for the negative case: detached HEAD
-  at a commit that is not any local branch's tip, asserting the message falls back to the current
-  generic text with no branch name.
+  branch `hanf/foo` — not bare `foo` — since the fixture calls `_make_task_worktree(tmp, "foo",
+  ..., branch_prefix="hanf/", ...)`, which checks out `f"{branch_prefix}{slug}"` =
+  `"hanf/foo"` (`_test_helpers.py` lines 183-214); the branch-matching code reads git's actual
+  branch name, so `hanf/foo` is what it will find and report. Add one new test for the negative
+  case: detached HEAD at a commit that is not any local branch's tip, asserting the message falls
+  back to the current generic text with no branch name.
 - Rationale: `test-marker.py` already exercises exactly the fixture shape needed; extending it is
   near-zero marginal cost versus writing a new test file.
 - Rejected: No new test coverage, relying on manual verification.
+
+### #856-attribute-level-guard
+
+- Decision: `_preflight.missing_helpers`/`check_helpers` gains an optional attribute-level check.
+  Accept required-helper entries in `"module"` (file-presence only, unchanged/backward-compatible)
+  or `"module:attr"` form (file-presence AND `hasattr(imported_module, attr)`); on the `:attr`
+  form, missing the attribute is reported the same way as a missing file. Both new call sites
+  (mill-merge/SKILL.md Step 4, mill-merge-in/SKILL.md line 21) use
+  `_preflight.check_helpers(['_parent_branch:check_liveness'])`. Step 5.5's existing
+  `_preflight.check_helpers(['_archive_tag'])` call is left as a bare module name — unchanged.
+- Rationale: `check_liveness` (#817) lives inside `_parent_branch.py`, the same file as the
+  long-established `resolve()` function. A stale plugin cache with a pre-#817 `_parent_branch.py`
+  (has `resolve()`, lacks `check_liveness`) passes a file-existence-only guard and still crashes
+  with `AttributeError` at the exact call the guard exists to protect — the precise failure mode
+  #856 was filed to prevent. Step 5.5's `_archive_tag` guard protects a different failure class
+  (whole-file `ModuleNotFoundError` from a module absent from the cache entirely), where
+  file-presence is sufficient and an attribute check would add nothing — so it's left unchanged
+  rather than migrated to the new syntax.
+- Rejected: Leaving `check_helpers(['_parent_branch'])` as a bare file-presence check (per the
+  original Step 5.5 mirror) — confirmed by discussion-review round 1 to not detect #856's actual
+  failure mode, since the file exists in the stale-cache case that matters here.
 
 ### #847-#842-disposition
 
@@ -155,14 +181,21 @@ mill's issue-bundling convention.
   two new discussion-phase patterns to both call sites — see #873 in Scope above.
 - `mill-merge/SKILL.md` Step 4 "Liveness check (#817)" (lines 81-111) calls
   `_parent_branch.check_liveness('<parent_branch>', git_root)` (line 88) with no
-  `_preflight.check_helpers` guard. Step 5.5 (lines 415-416) is the precedent: `import _preflight;
-  exit(_preflight.check_helpers(['_archive_tag']))` before the `_archive_tag` import at Step 6.
-  `mill-merge-in/SKILL.md` line 23 has its own duplicate `check_liveness` call with the same gap —
+  `_preflight.check_helpers` guard. Step 5.5 (lines 415-416) is the placement precedent: `import
+  _preflight; exit(_preflight.check_helpers(['_archive_tag']))` before the `_archive_tag` import at
+  Step 6. `mill-merge-in/SKILL.md` **line 21** (not line 23 — line 23 is the `resolve_dead_parent`
+  call in the dead-parent branch) has its own duplicate `check_liveness` call with the same gap —
   needs the same guard.
-- `_preflight.check_helpers` (`plugins/mill/scripts/_preflight.py`, lines 43-73): generic, takes a
-  list of required helper module names, resolves the active `CLAUDE_PLUGIN_ROOT` scripts dir, and
-  returns non-zero with an actionable stderr message if any listed module/attribute is missing.
-  Call with `['_parent_branch']` at both new call sites.
+- `_preflight.missing_helpers`/`check_helpers` (`plugins/mill/scripts/_preflight.py`, lines 25-73
+  in current source): takes a list of required helper module names, resolves the active
+  `CLAUDE_PLUGIN_ROOT` scripts dir, and returns non-zero with an actionable stderr message if any
+  listed module is missing — today, file-presence only (`(scripts_dir / f"{name}.py").exists()`,
+  line 38), no attribute check. Per the `#856-attribute-level-guard` Decision above, this needs
+  extending to accept a `"module:attr"` form that additionally checks `hasattr` on the imported
+  module. Call with `['_parent_branch:check_liveness']` at both new call sites; Step 5.5's existing
+  `['_archive_tag']` call stays a bare module name.
+- `unit_tests/test-preflight.py` already exists and covers `_preflight.py` — extend it for the new
+  attribute-check form (see Testing below).
 - Full per-issue investigation detail (issue bodies, exact commit hashes, line-cited current
   behavior) is preserved at `.scratch/issue-detail-report.md` in this worktree for mill-plan's
   reference, though this discussion file is self-contained without it.
@@ -179,11 +212,14 @@ No `CONSTRAINTS.md` present at the hub root.
   stays generic). Add a focused unit test for the new `_pygit2_util` branch-enumeration helper
   itself if it's added as a standalone function (e.g. `unit_tests/test-pygit2-util.py` if that file
   exists, otherwise colocate in `test-marker.py`).
-- `mill-merge` / `mill-merge-in` (#856): no existing automated test harness covers SKILL.md
-  markdown step text directly (these are prose-driven orchestration steps, not executable code) —
-  verify manually that both new `_preflight.check_helpers(['_parent_branch'])` lines are placed
-  immediately before their respective `check_liveness` calls, matching Step 5.5's exact
-  placement-before-import pattern.
+- `_preflight.py` (TDD candidate, #856): extend `unit_tests/test-preflight.py` with cases for the
+  new `"module:attr"` form — module present with the attribute (passes), module present without
+  the attribute (reported missing), and confirm the bare `"module"` form's existing behavior is
+  unchanged. `mill-merge` / `mill-merge-in` SKILL.md step text itself has no automated test harness
+  (prose-driven orchestration, not executable code) — verify manually that both new
+  `_preflight.check_helpers(['_parent_branch:check_liveness'])` lines are placed immediately
+  before their respective `check_liveness` calls, matching Step 5.5's exact placement-before-import
+  pattern.
 - `mill-go-base` phase-table / `matches_wait_trigger` (#873): if `_phase_wait.py` has unit tests
   (check `unit_tests/` for a `test-phase-wait.py` or similar), add cases asserting
   `discussion-fix-r3` and `discussion-gap-fix-r12`-shaped strings match the wait trigger. Otherwise
@@ -231,3 +267,13 @@ No `CONSTRAINTS.md` present at the hub root.
   extend `test-marker.py`'s existing detached-HEAD test plus one new negative-case test. **Why:**
   the existing fixture (real git tempdir, HEAD checked out to its own SHA) already *is* the
   positive case; extending it is near-zero marginal cost.
+- **Q:** (discussion-review round 1, BLOCKING) `_preflight.check_helpers(['_parent_branch'])` is a
+  file-presence-only check, but #856's actual failure mode is a stale cache with `_parent_branch.py`
+  present yet missing the `check_liveness` function — should the guard gain an attribute-level
+  check, or is file-presence documented as intentionally sufficient? **A:** [auto-resolved] Extend
+  `_preflight.missing_helpers`/`check_helpers` to accept an optional `"module:attr"` form that also
+  checks `hasattr`; use `['_parent_branch:check_liveness']` at both new #856 call sites. **Why:**
+  file-presence alone does not catch the specific stale-cache scenario #856 was filed to guard
+  against, since `_parent_branch.py` already exists in that scenario — only the function is
+  missing. Step 5.5's `_archive_tag` guard is left as a bare module name since its failure mode
+  (whole-file absence) is genuinely caught by file-presence alone.
