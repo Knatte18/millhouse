@@ -58,6 +58,8 @@ only — see card 3.
   docstring shape (Args/Returns/Raises) — see `head_sha`'s docstring as the closest template (single
   SHA input, list-of-branch-names output difference noted). Return an empty list (not an error) when
   no local branch matches — that is the normal, expected outcome for most detached-HEAD cases.
+  Append `"local_branches_at_sha"` to the file's `__all__` list (currently lines 333-344),
+  alphabetically, matching every other public function's existing entry there.
 - **Commit:** `feat(pygit2-util): add local_branches_at_sha helper for #850`
 
 ### Card 2: test `local_branches_at_sha`
@@ -77,7 +79,10 @@ only — see card 3.
   a commit that is the tip of two local branches simultaneously (create a second branch ref pointing
   at the same commit via `git branch <name2> <sha>`) — assert the returned list contains both names,
   sorted; (3) a commit that is not any local branch's tip (e.g. an intermediate commit with a later
-  commit on top) — assert the returned list is empty (`[]`), not an error.
+  commit on top) — assert the returned list is empty (`[]`), not an error. Append the three new
+  test function names to `run_all()`'s hard-coded `tests = [...]` list (currently defined inside
+  `run_all`, this file has no auto-discovery — every test function must be explicitly listed there
+  to actually execute when `run-all.py` invokes this file as a subprocess).
 - **Commit:** `test(pygit2-util): cover local_branches_at_sha (#850)`
 
 ### Card 3: enrich `MarkerError` message in `_marker.slug_from_branch`
@@ -149,7 +154,13 @@ only — see card 3.
   commit --allow-empty -m "extra"`, then check out that new commit's own parent SHA (the original
   branch-tip commit now has a child, so it is no longer the branch tip) — assert the raised
   `MarkerError`'s message is exactly `"detached HEAD or non-branch state"` (`str(e) ==
-  "detached HEAD or non-branch state"`), confirming the no-match fallback path.
+  "detached HEAD or non-branch state"`), confirming the no-match fallback path. Append
+  `test_slug_from_branch_detached_head_no_matching_branch` to `main()`'s hard-coded `tests = [...]`
+  list (currently lines 305-324, immediately after `test_slug_from_branch_detached_head`'s own
+  entry) — this file has no auto-discovery, every test function must be explicitly listed there to
+  actually execute when `run-all.py` invokes this file as a subprocess. The existing
+  `test_slug_from_branch_detached_head` entry is already in that list, so its modified assertion
+  runs unchanged; only the new function needs adding.
 - **Commit:** `test(marker): cover detached-HEAD branch-name enrichment, positive and negative (#850)`
 
 ## Batch Tests

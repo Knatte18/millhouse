@@ -48,11 +48,16 @@ surface as an unhandled traceback at the guard call site — see card 1.
   `(scripts_dir / f"{module_name}.py").exists()` exactly as today; if missing, append the original
   `name` (not just `module_name`) to the `missing` list and `continue` to the next entry — unchanged
   behavior for this half. If the file exists and `attr_name` is non-empty, additionally attempt to
-  import the module via `importlib.import_module(module_name)` (add `import importlib` to the
-  file's existing `import os` / `import sys` block at the top) — this relies on `scripts_dir`
-  already being on `sys.path` via the `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts"` convention every
-  `check_helpers` call site already uses, so no new path-manipulation is needed — inside a
-  `try/except Exception`. If the import raises for any reason, append
+  import the module directly from the file path in `scripts_dir` — do NOT use
+  `importlib.import_module(module_name)`, since that resolves against `sys.path` and `scripts_dir`
+  is a plain function argument that is not guaranteed to be on `sys.path` (it is only the real
+  `CLAUDE_PLUGIN_ROOT/scripts` path for `check_helpers`'s own call sites; `missing_helpers` is also
+  called directly with arbitrary `scripts_dir` values, e.g. in tests). Instead use
+  `importlib.util.spec_from_file_location(module_name, scripts_dir / f"{module_name}.py")`, then
+  `importlib.util.module_from_spec(spec)` and `spec.loader.exec_module(module)` (add `import
+  importlib.util` to the file's existing `import os` / `import sys` block at the top) — this loads
+  the module straight from its file path regardless of `sys.path` contents. Wrap the whole
+  spec-load-exec sequence in a `try/except Exception`. If it raises for any reason, append
   `name` to `missing` (per this batch's Batch Scope decision — an import failure is reported as
   "missing" too, not left to propagate). If the import succeeds, check `hasattr(module, attr_name)`;
   if `False`, append `name` to `missing`. Update the function's docstring (currently lines 26-34) to
@@ -83,7 +88,17 @@ surface as an unhandled traceback at the guard call site — see card 1.
   (e.g. a syntax error, or any other uncaught exception during import) — the entry appears in
   `missing` rather than the exception propagating out of `missing_helpers`; (4) a bare `"module"`
   entry (no `:`) continues to use file-existence-only checking, unaffected by the new code path —
-  reuse/adapt the existing `test_missing_helpers_all_present` fixture to confirm no regression.
+  reuse/adapt the existing `test_missing_helpers_all_present` fixture to confirm no regression. This
+  file currently defines seven `test_*` functions (six pre-existing plus this card's new one — or
+  more, if multiple new test functions are added per the coverage above) but has **no
+  test-invocation entrypoint at all**: no `main()`, no `if __name__ == "__main__"` block, so
+  `run-all.py` (which runs each `test-*.py` as a subprocess) currently executes this file as a
+  no-op that silently exits 0 without running any test. Add a `main() -> int` function and an `if
+  __name__ == "__main__": sys.exit(main())` block at the end of the file, mirroring
+  `test-marker.py`'s `main()` (its exact structure: a hard-coded `tests = [...]` list of every
+  `test_*` function in this file — all six pre-existing plus every new one this card adds — a loop
+  calling each and catching `AssertionError`/`Exception` into a `failures` list, and a final
+  pass/fail summary print with `return 1` on any failure or `return 0` when all pass).
 - **Commit:** `test(preflight): cover module:attr entries and import-failure handling (#856)`
 
 ### Card 8: guard mill-merge Step 4's liveness check
