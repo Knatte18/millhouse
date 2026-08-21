@@ -226,17 +226,17 @@ and modified tests live in.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  `ReviewError` and `resolve_ref_paths` (used below) are defined in `plugins/mill/scripts/_review_common.py`
-  — no need to read that file's source; its full call shape is given here, mirroring Card 8's own
-  established precedent in this same batch for `_compute_transitive_ancestors`/`_plan_dag.py`.
+  `ReviewError` and `resolve_ref_paths` (used below) are defined in the shared review-common helper
+  module — no need to read that module's source; its full call shape is given here, mirroring Card
+  8's own established precedent in this same batch for `_compute_transitive_ancestors`/`_plan_dag.py`.
   `ReviewError` is a plain exception class (`class ReviewError(Exception)`) raised with no
   meaningful attributes beyond its message.
   `signature: resolve_ref_paths(tokens: list[str], project_root: Path, root: str | None, *,
   wiki_root: Path | None = None, git_root: Path | None = None, soft_fail_gitignored: bool = False)
   -> list[Path]` — raises `ReviewError` when a token resolves to no candidate path that either exists
   on disk or (when `soft_fail_gitignored` is `True`) is confirmed git-ignored via `git check-ignore`;
-  otherwise returns the resolved `Path` list. (`_review_common.py` is intentionally excluded from
-  this batch's `Context:` — adding the full file, at ~30812 estimated tokens, would push this
+  otherwise returns the resolved `Path` list. (The review-common helper module is intentionally
+  excluded from this batch's `Context:` — adding the full file, at ~30812 estimated tokens, would push this
   batch's total to ~135746, over the `pipeline.max_batch_context_tokens` cap of 120000; the file is
   large enough that no batch containing this card and that file can pass the cap regardless of how
   the batch is split, since this card's own `Edits:` — `_plan_validate.py` and
