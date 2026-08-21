@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-go2-fork-dispatch-reliability
 branch: hanf/mill-go2-fork-dispatch-reliability
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-08-21T09:39:01Z'
 holistic-fixing  '2026-08-21T09:43:49Z'
 self-resolved-verify-logic  '2026-08-21T09:47:42Z'
 holistic-fixing  '2026-08-21T09:47:49Z'
+holistic-reviewing  '2026-08-21T09:52:50Z'
 ```
 
 ## Batches
