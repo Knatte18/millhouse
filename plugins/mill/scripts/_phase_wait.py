@@ -31,8 +31,15 @@ def build_wait_command(
     giveup_s: int,
 ) -> str:
     """
-    Render a bash script that polls ``status_path`` until it reaches ``ready_phase``, detects a
-    terminal ``blocked`` phase, or times out.
+    Render a bash script that polls ``status_path`` until it reaches ``ready_phase`` or times out.
+
+    A ``blocked`` phase on the upstream task is NOT terminal for this wait: ``blocked`` means the
+    upstream task needs operator attention, not that it has given up, and an operator can resolve it
+    (e.g. ``/mill-plan --revise``) and let the upstream task carry on to ``ready_phase`` while this
+    wait keeps polling. Treating it as terminal would force the *waiting* task to be manually
+    restarted too, on top of the upstream fix -- so this wait just keeps polling through ``blocked``
+    exactly like any other non-``ready_phase`` value, until ``ready_phase`` is reached or ``giveup_s``
+    elapses.
 
     The returned string is safe to pass verbatim as the ``command`` argument to the harness
     ``Monitor`` tool.
@@ -40,13 +47,9 @@ def build_wait_command(
 
     1. Checks whether ``status_path``'s ``phase:`` line already equals ``ready_phase``;
         if so, prints ``READY`` and exits 0.
-    2. Otherwise checks whether ``phase:`` is ``blocked``;
-        if so, extracts the ``blocked_reason:`` value (via ``grep``/``head``/bash parameter
-            expansion -- never ``sed``, per this repo's project convention), prints ``BLOCKED:
-            <reason>``, and exits 1.
-    3. Otherwise, once accumulated ``elapsed`` seconds reach ``giveup_s``, prints a ``TIMEOUT after ...``
+    2. Otherwise, once accumulated ``elapsed`` seconds reach ``giveup_s``, prints a ``TIMEOUT after ...``
         message and exits 2.
-    4. Otherwise sleeps ``poll_interval_s`` seconds and loops.
+    3. Otherwise sleeps ``poll_interval_s`` seconds and loops.
 
     Every read of ``status_path`` is piped through ``tr -d '\\r'`` before ``grep`` ever sees it.
     ``_status.py``'s writers (``update_field`` / ``append_phase`` / ``set_blocked``) write via
@@ -78,8 +81,8 @@ def build_wait_command(
             this function performs no unit conversion.
 
     Returns:
-        A bash script, as a single string, printing exactly one of ``READY`` / ``BLOCKED: <reason>``
-        / ``TIMEOUT after ...`` and exiting with the corresponding code (0 / 1 / 2).
+        A bash script, as a single string, printing exactly one of ``READY`` / ``TIMEOUT after ...``
+        and exiting with the corresponding code (0 / 2).
     """
     quoted_path = f'"{status_path}"'
     return (
@@ -88,14 +91,6 @@ def build_wait_command(
         f"  if tr -d '\\r' < {quoted_path} | grep -q \"^phase: {ready_phase}$\"; then\n"
         '    echo "READY"\n'
         "    exit 0\n"
-        "  fi\n"
-        f"  if tr -d '\\r' < {quoted_path} | grep -q \"^phase: blocked$\"; then\n"
-        f"    reason_line=$(tr -d '\\r' < {quoted_path} | grep \"^blocked_reason:\" | head -1)\n"
-        '    reason=${reason_line#blocked_reason: }\n'
-        "    reason=${reason#\\'}\n"
-        "    reason=${reason%\\'}\n"
-        '    echo "BLOCKED: ${reason}"\n'
-        "    exit 1\n"
         "  fi\n"
         f'  if [ "$elapsed" -ge {int(giveup_s)} ]; then\n'
         f'    echo "TIMEOUT after ${{elapsed}}s waiting for phase: {ready_phase}"\n'
