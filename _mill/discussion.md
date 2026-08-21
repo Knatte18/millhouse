@@ -212,8 +212,16 @@ round budget or forces a manual operator recovery that the SKILL should handle a
 - Decision: generalize `_check_verify_full_suite` (`_plan_validate.py`) beyond its current
   Python-only `run-all.py`-without-`-k`/`--only` detection. Detect project language the same way
   mill-plan's own "Verify command shape" section already does for `verify-not-isolated`'s conditional
-  enforcement (Python marker files: `pyproject.toml`/`setup.py`/`setup.cfg`) — build or reuse a
-  shared language-detection helper so both checks stay consistent. Add per-language unbounded-command
+  enforcement — reuse `_plan_validate.py`'s existing `is_python_project` detection verbatim (line
+  ~1986), which ORs **four** markers, not three: `pyproject.toml`, `setup.py`, `setup.cfg`, AND
+  `plugins/mill/pyproject.toml` (a nested-plugin marker). This 4th marker is not optional to
+  reproduce — this repo (`millhouse`) has no root-level `pyproject.toml`/`setup.py`/`setup.cfg` and
+  is detected as a Python project *solely* via the nested `plugins/mill/pyproject.toml` marker, so a
+  shared language-detection helper that drops it would misdetect this very self-hosted repo. (CLAUDE.md's
+  own "Python/mill projects" language for the `PYTHONPATH=` verify-prefix rule has the same
+  three-marker drift; out of scope to fix here, but the plan should not propagate the omission into
+  new code.) Build or reuse a shared language-detection helper so both checks stay consistent. Add
+  per-language unbounded-command
   heuristics: Go — `go test ./...` with no `-run <pattern>`; C#/.NET — `dotnet test <project>` with
   no `--filter`; Python — extend to bare `pytest`/`python -m pytest` with no `-k` and no explicit
   path, for parity outside the `run-all.py` wrapper. Keep the check name `verify-full-suite`
