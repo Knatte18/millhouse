@@ -47,6 +47,8 @@ batches:
     commit_sha: c626b4fd091df849394f2a3dd38cbe8bae179163
     verify_baseline_failures: []
   - name: baseline-dispatch-background-skill
-    state: pending
+    state: running
+    implementer_session: b3645b6e-6bc2-42cd-93b9-f63ed10a6e77
+    start_sha: 36818bccce97fe4e96a44cc58ca0fb95c21f718c
     verify_baseline_failures: []
 ```
