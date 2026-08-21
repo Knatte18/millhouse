@@ -41,7 +41,9 @@ batches:
     start_sha: 3c52a8a55e18db2c1fc10c38ecea5402624537ea
     commit_sha: bebd55efd7ae8ebf1adae5097eb21993394fd15e
   - name: validator-checks-lang-gitignore
-    state: pending
+    state: running
+    implementer_session: 0f906a74-83f3-4c08-932f-ee58fa68ca0e
+    start_sha: bc3aa9b9962b588aac1e3c27b38c8307b29db8ac
     verify_baseline_failures: []
   - name: validator-checks-skill-doc-sync
     state: pending
