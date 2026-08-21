@@ -140,7 +140,7 @@ For each `(name, cmd, cwd)`:
 - Allowlist pre-check: iterate `skip_list`;
   on the first entry `p` where `p in cmd` is true, print `[verify] skipped {p} (allowlisted as known-broken)` to stdout (where `{p}` is the literal matched entry), increment `skipped`, and `continue` to the next `(name, cmd, cwd)` triple without running the command and without invoking the verify-fix sub-agent.
   If no entry in `skip_list` matches, fall through to the next bullet.
-- Resolve the run cwd: `hub_root` when `cwd == hub_root`, `git_root` when `cwd == git_root`, and `hub_root` when `cwd is None` (the string-form default — matching the existing pre-batch-3 behavior, since "the worktree root" this step has always run in resolves to `hub_root`, not `git_root`).
+- Resolve the run cwd: `hub_root` when `cwd == hub_root`, `git_root` when `cwd == git_root`, and `git_root` when `cwd is None` (the string-form default — matching `_implementer_common._run_verify_gate`'s actual live-dispatch behavior: mill-go's own batch verify calls always pass `git_root=git_root` to `_run_verify_gate`, which resolves a plain-string `verify:` command's cwd to `git_root` whenever `git_root` is not `None`, per that function's own docstring — "When None, falls back to project_root" — so `git_root` is what a plain-string `verify:` command was actually exercised against during implementation, and this replay step must match that, not `hub_root`).
   Run the command from that resolved cwd.
   On success: increment `ran` and continue to the next triple.
 - On failure → **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
@@ -158,8 +158,13 @@ This covers tasks that were entirely docs or config.
 
 If `_codeguide/Overview.md` exists anywhere in the repo, invoke the `codeguide-update` skill scoped to the checkpoint diff:
 
+- Resolve `hub_root = _paths.resolve_hub_path()`.
+- Run `cd <hub_root>` via the Bash tool.
 - Use the Skill tool with name `codeguide:codeguide-update` (namespace matches `plugins/codeguide/settings.json`).
 - Pass argument `"$CHK..HEAD"` so the update sees everything the merge introduced, including your conflict resolutions.
+- Immediately after the Skill tool call returns, run `cd <worktree>` via the Bash tool to restore cwd for the remaining steps in this file (Step 5.5, Step 6).
+
+**Why the explicit `cd`:** `codeguide/scripts/resolve.py`'s inline walk only searches from cwd *upward* to the git toplevel — it has no mechanism to find a `_codeguide/` directory that lives in a descendant directory below cwd (i.e. the hub, nested under `git_root`). `codeguide-update/SKILL.md`'s own Step 1 (`resolve.py --json`) and Step 2 (`resolve_scope.py $ARGUMENTS`) take no cwd/root argument at all — the CLI has no `--cwd` flag — so the ambient shell cwd at invocation time is the only lever available. Pinning it to `hub_root` here matches the confirmed repro (running from the hub root resolves correctly; running from git_root in a nested layout does not) without changing `resolve.py`'s shared upward-only walk algorithm, which other flat-layout call sites depend on. This `cd` is intra-worktree (`hub_root` is a subdirectory of the current worktree, not a different worktree), so it does not conflict with the cross-worktree `cd`-to-parent prohibition.
 
 If `_codeguide/Overview.md` is absent → skip silently.
 This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` step 2 and we follow it here for symmetry.

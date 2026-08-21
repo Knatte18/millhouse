@@ -175,7 +175,7 @@ def main(argv: list[str] | None = None) -> int:
         git_root = _paths.resolve_git_root()
         mill_dir = project_root / ".millhouse"
         wiki_root = resolve_wiki_path(project_root)
-        cfg = load_config(project_root, mill_dir)
+        cfg = load_config(project_root, mill_dir, git_root=git_root)
     except (ReviewError, ValueError, SystemExit) as exc:
         print_error_envelope("plan", str(exc), round=args.round if args.round is not None else 0)
         return 1

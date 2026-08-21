@@ -1641,6 +1641,114 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertIn("batch-a", per_batch["errored"])
         self.assertIn("batch-b", per_batch["errored"])
 
+    def test_baseline_stage_prepare_cmd_runs_once_per_cwd_fragment_before_verify(self):
+        """A configured baseline_prepare_cmd runs once (single cwd fragment) before either batch's verify."""
+        self._write_two_batch_fixture()
+        self.mock_load_config.return_value = {
+            **self.mock_load_config.return_value,
+            "pipeline": {"baseline_prepare_cmd": "dotnet build"},
+        }
+        checkout_path = self.tmp_path / "checkout"
+        call_order = []
+
+        def _run_verify_in_side_effect(command, cwd):
+            call_order.append(("prepare_cmd", command, cwd))
+            return (0, "")
+
+        def _compute_batch_baselines_side_effect(commands, checkout_path_arg, project_root):
+            call_order.append(("verify", commands[0][0]))
+            return {commands[0][0]: []}
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=checkout_path,
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_run_verify_in",
+                side_effect=_run_verify_in_side_effect,
+            ) as mock_run_verify_in,
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=_compute_batch_baselines_side_effect,
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_run_verify_in.assert_called_once_with("dotnet build", checkout_path)
+        self.assertEqual(call_order[0][0], "prepare_cmd")
+        self.assertIn(("verify", "batch-a"), call_order[1:])
+        self.assertIn(("verify", "batch-b"), call_order[1:])
+
+    def test_baseline_stage_prepare_cmd_unset_no_prepare_call(self):
+        """No pipeline.baseline_prepare_cmd configured -> _run_verify_in is never called for a prepare step."""
+        self._write_two_batch_fixture()
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_run_verify_in",
+            ) as mock_run_verify_in,
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=lambda commands, checkout_path, project_root: {commands[0][0]: []},
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        mock_run_verify_in.assert_not_called()
+
+    def test_baseline_stage_prepare_cmd_failure_is_non_fatal(self):
+        """A non-zero-exit baseline_prepare_cmd is logged but never blocks the baseline stage."""
+        self._write_two_batch_fixture()
+        self.mock_load_config.return_value = {
+            **self.mock_load_config.return_value,
+            "pipeline": {"baseline_prepare_cmd": "dotnet build"},
+        }
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch",
+                return_value=self.tmp_path / "checkout",
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
+            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_run_verify_in",
+                return_value=(1, "build failed: missing csproj"),
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_batch_baselines",
+                side_effect=lambda commands, checkout_path, project_root: {commands[0][0]: []},
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        per_batch = json.loads(lines[1])
+        self.assertEqual(sorted(per_batch["computed"]), ["batch-a", "batch-b"])
+        self.assertEqual(per_batch["errored"], {})
+
     def test_baseline_stage_enumerates_batch_own_verify_despite_later_deletes(self):
         """A batch whose own verify: names a path a LATER batch's Deletes: removes still gets a baseline."""
         plan_dir = self.tmp_path / "task" / "plan"

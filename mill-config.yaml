@@ -21,6 +21,7 @@ pipeline:
   entry_wait_timeout_minutes: 240  # give-up timeout (minutes) for the entry-gate wait before halting
   done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) even when a full test run is skipped as too slow. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561)
   done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
+  baseline_prepare_cmd: null  # Optional build-once command run once per distinct cwd fragment against --stage baseline's shared transient checkout, before any module-wide/per-batch verify command; null = disabled. e.g. "dotnet build" for a .NET solution whose verify: commands otherwise pay a cold-compile cost inside the first of several doubled baseline runs. (#894)
 merge:
   model: sonnethigh
 junctions:

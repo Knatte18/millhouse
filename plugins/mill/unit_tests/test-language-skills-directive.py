@@ -220,6 +220,7 @@ def test_render_fixer_brief() -> None:
             "SELF_FIX_ROUNDS": "2",
             "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_path),
             "NITS_ONLY_CARVEOUT": ".",
+            "PRIOR_BLOCKING": "(none)",
         }
         rendered = _render.render(template_path, tokens)
 
