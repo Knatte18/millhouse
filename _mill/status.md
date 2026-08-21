@@ -30,11 +30,15 @@ implementing  '2026-08-21T09:56:38Z'
 ```yaml
 batches:
   - name: mill-merge-push-and-lock
-    state: pending
+    state: running
+    implementer_session: 5164b161-d031-4e66-bc50-acea6bf35856
+    start_sha: 22a384c56f8f7b4b0e4914b9e0a41b88f0e109cd
   - name: mill-merge-in-nested-cwd
     state: pending
   - name: parent-branch-liveness
     state: pending
+    verify_baseline_failures: []
   - name: config-caller-alignment
     state: pending
+    verify_baseline_failures: []
 ```
