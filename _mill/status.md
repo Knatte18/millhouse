@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-plan-review-round-and-gate-bugs
 branch: hanf/mill-plan-review-round-and-gate-bugs
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-review-loop-gate-doc-fixes  '2026-08-21T10:50:25Z'
 approved-validator-checks-lang-gitignore  '2026-08-21T10:57:52Z'
 approved-validator-checks-skill-doc-sync  '2026-08-21T10:59:37Z'
 holistic-reviewing  '2026-08-21T11:00:17Z'
+holistic-approved  '2026-08-21T11:04:08Z'
 ```
 
 ## Batches
