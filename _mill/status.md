@@ -30,9 +30,14 @@ implementing  '2026-08-21T09:20:27Z'
 ```yaml
 batches:
   - name: detached-head-branch-detection
-    state: pending
+    state: running
+    implementer_session: 8f6c802d-b6ef-4a39-9af7-eaaaac3aa976
+    start_sha: 83e791837be411be3836019f608d92703f1ffd44
+    verify_baseline_failures: []
   - name: preflight-attribute-guard
     state: pending
+    verify_baseline_failures: []
   - name: entry-gate-discussion-phases
     state: pending
+    verify_baseline_failures: []
 ```
