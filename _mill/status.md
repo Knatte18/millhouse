@@ -36,7 +36,9 @@ batches:
     start_sha: 22a384c56f8f7b4b0e4914b9e0a41b88f0e109cd
     commit_sha: 6eeb5bac60aab4d67f1dc65806c2147db0c78c44
   - name: mill-merge-in-nested-cwd
-    state: pending
+    state: running
+    implementer_session: 2ad1fac5-da57-4029-a61e-784c55c4909e
+    start_sha: 6958293aececd6a3601261b256fe19e910fb679a
   - name: parent-branch-liveness
     state: pending
     verify_baseline_failures: []
