@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-08-21T06:51:37Z'
+discussed  '2026-08-21T09:05:01Z'
 ```
