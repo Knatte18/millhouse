@@ -140,7 +140,7 @@ For each `(name, cmd, cwd)`:
 - Allowlist pre-check: iterate `skip_list`;
   on the first entry `p` where `p in cmd` is true, print `[verify] skipped {p} (allowlisted as known-broken)` to stdout (where `{p}` is the literal matched entry), increment `skipped`, and `continue` to the next `(name, cmd, cwd)` triple without running the command and without invoking the verify-fix sub-agent.
   If no entry in `skip_list` matches, fall through to the next bullet.
-- Resolve the run cwd: `hub_root` when `cwd == hub_root`, `git_root` when `cwd == git_root`, and `hub_root` when `cwd is None` (the string-form default — matching the existing pre-batch-3 behavior, since "the worktree root" this step has always run in resolves to `hub_root`, not `git_root`).
+- Resolve the run cwd: `hub_root` when `cwd == hub_root`, `git_root` when `cwd == git_root`, and `git_root` when `cwd is None` (the string-form default — matching `_implementer_common._run_verify_gate`'s actual live-dispatch behavior: mill-go's own batch verify calls always pass `git_root=git_root` to `_run_verify_gate`, which resolves a plain-string `verify:` command's cwd to `git_root` whenever `git_root` is not `None`, per that function's own docstring — "When None, falls back to project_root" — so `git_root` is what a plain-string `verify:` command was actually exercised against during implementation, and this replay step must match that, not `hub_root`).
   Run the command from that resolved cwd.
   On success: increment `ran` and continue to the next triple.
 - On failure → **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
