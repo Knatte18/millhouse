@@ -112,6 +112,14 @@ and modified tests live in.
   Update this test file's module docstring's "Check coverage:" list to add a line:
   `  cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
   creates, with no depends-on edge to that creating batch`.
+
+  Add all three new function names (`test_check_cross_batch_creates_no_depends_on_clean`,
+  `test_check_cross_batch_creates_no_depends_on_dirty`,
+  `test_check_cross_batch_creates_no_depends_on_transitive_clean`) to the `tests = [...]` list
+  inside `main()` (near line ~6436), placed near the existing `test_check_parallel_modifies_overlap_*`
+  entries in that list, so `run-all.py --only test-plan-validate.py` actually exercises them —
+  `main()` has no dynamic test discovery; a function defined in the file but not listed there is dead
+  code that never runs.
 - **Commit:** `feat(plan-validate): add cross-batch-creates-no-depends-on check`
 
 ### Card 9: #881 — language-aware unbounded-verify guard
@@ -189,7 +197,10 @@ and modified tests live in.
   "verify-full-suite"`, assert count and `path`/`message` content). For the Python bare-pytest case,
   the fixture's `project_root` must actually contain a Python marker file (e.g. create an empty
   `pyproject.toml` under the fixture's `project_root`) so `_is_python_project` returns `True` — add a
-  short comment noting why the marker file is required.
+  short comment noting why the marker file is required. If this extension takes the form of adding new
+  sibling test functions (rather than only appending assertions inside the existing function bodies),
+  add each new function's name to the `tests = [...]` list inside `main()` (same explicit-registration
+  requirement as Card 8 above) — `main()` has no dynamic test discovery.
 - **Commit:** `feat(plan-validate): widen verify-full-suite to Go, C#, and bare pytest`
 
 ### Card 10: #868 — gitignore-aware Context: refs in the pre-review validator
@@ -267,7 +278,10 @@ and modified tests live in.
   check-ignore` fail/no-op, which `resolve_ref_paths` already treats as "not confirmed ignored" per
   its own `except Exception: continue` fallback) — check whether `test-plan-validate.py` already has
   a git-fixture helper elsewhere in the file (or in a sibling test file this file's own imports
-  reference) before writing a new one from scratch.
+  reference) before writing a new one from scratch. If this takes the form of adding new sibling test
+  functions (rather than only extending the existing two functions' bodies), add each new function's
+  name to the `tests = [...]` list inside `main()` (same explicit-registration requirement as Card 8
+  above).
 - **Commit:** `fix(plan-validate): soft-fail gitignored Context: refs in non-existent-path check`
 
 ## Batch Tests

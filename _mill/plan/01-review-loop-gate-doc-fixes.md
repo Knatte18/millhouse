@@ -109,8 +109,9 @@ not run in parallel.
   line), insert a new paragraph:
 
   "**Persist `skip_checks` for Phase: Plan Review.** When `skip_checks` (computed above, after
-  applying the `wiki-config-mutation` and `verify-full-suite` skip-check overrides) is non-empty,
-  write it into `00-overview.md`'s fenced-yaml frontmatter as a new `skip_checks:` list field
+  applying the `wiki-config-mutation`, `verify-full-suite`, and `out-of-worktree-target` skip-check
+  overrides) is non-empty, write it into `00-overview.md`'s fenced-yaml frontmatter as a new
+  `skip_checks:` list field
   (parallel to the existing `approved:` field, e.g. `skip_checks: [\"wiki-config-mutation\"]`), via
   the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field.
   Omit the field entirely (do not write `skip_checks: []`) when the frozenset is empty, matching the
@@ -163,9 +164,10 @@ not run in parallel.
   `wiki-config-mutation` row.") with: "mill-plan threads `plan_skip_checks` (persisted from Phase:
   Plan, per the 'Read persisted `skip_checks` from Phase: Plan' paragraph in Path Setup above) into
   every round's dispatch proactively; the fix-table's own `--skip-check wiki-config-mutation` /
-  `--skip-check verify-full-suite` rows (below) remain the reactive fallback for a check that becomes
-  newly true *during* Plan Review itself (e.g. an LLM fix-pass in 4b/4c/4d that edits the hub config
-  file), which `plan_skip_checks` — fixed at Phase: Plan's commit time — cannot have anticipated."
+  `--skip-check verify-full-suite` / `--skip-check out-of-worktree-target` rows (below) remain the
+  reactive fallback for a check that becomes newly true *during* Plan Review itself (e.g. an LLM
+  fix-pass in 4b/4c/4d that edits the hub config file), which `plan_skip_checks` — fixed at Phase:
+  Plan's commit time — cannot have anticipated."
 - **Commit:** `docs(mill-plan): thread Phase: Plan's skip_checks into every Plan Review dispatch`
 
 ### Card 3: #890 — explicit `_plan_dag.validate` call shape at steps 4b and 4d
