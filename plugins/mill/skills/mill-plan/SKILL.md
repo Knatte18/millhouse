@@ -270,6 +270,8 @@ errors = _plan_validate.run(
 
 Fix any findings using the Step 1.5 fix table below, then re-run, before committing the plan.
 
+**Persist `skip_checks` for Phase: Plan Review.** When `skip_checks` (computed above, after applying the `wiki-config-mutation`, `verify-full-suite`, and `out-of-worktree-target` skip-check overrides) is non-empty, write it into `00-overview.md`'s fenced-yaml frontmatter as a new `skip_checks:` list field (parallel to the existing `approved:` field, e.g. `skip_checks: ["wiki-config-mutation"]`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Omit the field entirely (do not write `skip_checks: []`) when the frozenset is empty, matching the template's convention of omitting optional frontmatter keys that don't apply. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
+
 `signature: _status.read(status_path: Path) -> dict`
 
 **Update `_mill/status.md`.**
@@ -287,6 +289,8 @@ Push.
 **Path Setup (Plan Review).**
 Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['reviews_dir'])`.
 Use this variable for all review file path references in this phase.
+
+**Read persisted `skip_checks` from Phase: Plan.** Parse `00-overview.md`'s fenced-yaml frontmatter (the same extraction pattern already used elsewhere in this file for the `approved:` field) and read `plan_skip_checks = <parsed skip_checks: list, or [] if the key is absent>`. This is the `skip_checks` frozenset Phase: Plan already justified via the `wiki-config-mutation` / `verify-full-suite` two-condition tests — thread it into every round's CLI dispatch below as `--skip-check <name>` per entry (repeatable flag, one `--skip-check` per list entry), so Phase: Plan Review's own validator gate does not re-flag a finding Phase: Plan already resolved and committed against.
 
 When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
 
@@ -333,7 +337,7 @@ Each round:
      Do NOT auto-retry beyond the second pass.
      The two-pass cap matches the `roles.implementer.self_fix_rounds` self-fix pattern.
    - If `pipeline.skip_validate: true` ever appears in config (currently it does not;
-     this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan passes `--skip-check wiki-config-mutation` only when the fix table instructs it — see the `wiki-config-mutation` row.
+     this is a future hook), pass `--skip-validate` to the CLI and skip step 1.5 entirely. mill-plan threads `plan_skip_checks` (persisted from Phase: Plan, per the 'Read persisted `skip_checks` from Phase: Plan' paragraph in Path Setup above) into every round's dispatch proactively; the fix-table's own `--skip-check wiki-config-mutation` / `--skip-check verify-full-suite` / `--skip-check out-of-worktree-target` rows (below) remain the reactive fallback for a check that becomes newly true *during* Plan Review itself (e.g. an LLM fix-pass in 4b/4c/4d that edits the hub config file), which `plan_skip_checks` — fixed at Phase: Plan's commit time — cannot have anticipated.
 
    | check                          | mechanical fix                                                                                                  |
    | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -396,7 +400,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
@@ -452,6 +456,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    `--no-holistic` skips the holistic plan review and runs per-batch reviews only.
    Default — both run per the `roles.plan-review.batch.reviewer` and `roles.plan-review.holistic.reviewer` config keys.
    Append the flag to the inner `uv run …millpy-review-plan.py` portion of the millpy-bg invocation when needed.
+   Append one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty) to that same inner invocation.
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
 
@@ -472,7 +477,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
@@ -492,6 +497,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
    ```
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
+   Append one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty) to the inner `millpy-review-plan.py` invocation, exactly as step 2's subprocess branch above.
 
    The round counter is **not** consumed — the round produced no reviewable output.
    Absent-JSON and `verdict: ERROR` share **one consecutive-non-reviewable-round counter**: any mix of two consecutive non-reviewable rounds (ERROR then absent-JSON, or vice versa) triggers the two-pass cap.
