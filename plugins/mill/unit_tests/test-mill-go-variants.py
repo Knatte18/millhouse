@@ -171,17 +171,21 @@ def _check_base_halts_unbound() -> list[str]:
 
 def _check_variants_carry_no_machinery() -> list[str]:
     """
-    Variant files must be thin: under 4096 bytes and free of base machinery literals.
+    Variant files must be thin: under 8192 bytes and free of base machinery literals.
 
-    This is the regression catch for someone re-inlining the base into a variant.
+    This is the regression catch for someone re-inlining the base into a variant. The
+    ceiling was raised from 4096 to 8192 when mill-go2 grew a bookended fork de-briefing
+    prompt for both the implementer and fixer plus a shared-skill Driver preamble -- it
+    still guards against wholesale machinery duplication, just with headroom for the
+    variant's own, intentionally verbose dispatch-override prose.
     """
     failures: list[str] = []
 
     for name in VARIANTS:
         path = _variant_path(name)
         raw = path.read_bytes()
-        if len(raw) >= 4096:
-            failures.append(f"FAIL: {path}: is {len(raw)} bytes, expected under 4096")
+        if len(raw) >= 8192:
+            failures.append(f"FAIL: {path}: is {len(raw)} bytes, expected under 8192")
         text = raw.decode("utf-8")
         for literal in MACHINERY_LITERALS:
             if literal in text:
@@ -390,14 +394,14 @@ def _check_mill_go_overrides_stay_none() -> list[str]:
 
 def _check_mill_go2_declares_fork_override() -> list[str]:
     """
-    `mill-go2` must declare an implementer fork override, and nothing else claims Driver preamble.
+    `mill-go2` must declare an implementer fork override and a shared-skill Driver preamble.
 
     Asserts the `## Dispatch overrides` body's first non-blank line is not
     `(none)` (an override was actually written), then asserts each required
     substring is present in that body -- one distinct failure per missing
     substring so a partial regression is diagnosable. Also asserts `mill-go2`'s
-    `## Driver preamble` body still starts with `(none)`: that override point
-    is unclaimed by this task.
+    `## Driver preamble` body is no longer the `(none)` placeholder and starts
+    with the one-time shared-skill preload instructions.
     """
     failures: list[str] = []
     path = _variant_path("mill-go2")
@@ -425,9 +429,15 @@ def _check_mill_go2_declares_fork_override() -> list[str]:
 
     preamble_body = _section_body(text, "## Driver preamble")
     preamble_first = _first_non_blank(preamble_body)
-    if preamble_first != "(none)":
+    if preamble_first is None or not preamble_first.startswith("Before Step 0"):
         failures.append(
-            f"FAIL: {path}: '## Driver preamble' first non-blank line is {preamble_first!r}, expected '(none)'"
+            f"FAIL: {path}: '## Driver preamble' first non-blank line is {preamble_first!r}, "
+            "expected the shared-skill preload text starting with 'Before Step 0'"
+        )
+    if preamble_first == "(none)":
+        failures.append(
+            f"FAIL: {path}: '## Driver preamble' body is still the '(none)' placeholder -- "
+            "shared-skill preload override missing"
         )
 
     return failures

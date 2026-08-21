@@ -1,6 +1,6 @@
 ---
 name: mill-go2
-description: Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.
+description: Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator. Invoked only by an explicit /mill-go2.
 ---
 
 # mill-go2
@@ -13,7 +13,7 @@ VARIANT_LABEL: mill-go2
 
 ## Driver preamble
 
-(none)
+Before Step 0, preload skills every fork dispatch would otherwise reload independently -- run once per task session, never per-batch or per-fork. Load the `mill:code-quality` and `mill:markdown` skills via the Skill tool unconditionally, plus, for each language detected in the worktree via `mill:workflow`'s Language Detection marker-file table, that language's skill trio via the Skill tool: `pyproject.toml`/`setup.py`/`setup.cfg` -> `python:python-build`, `python:python-comments`, `python:python-testing`; `.csproj`/`.sln` -> `csharp:csharp-build`, `csharp:csharp-comments`, `csharp:csharp-testing`; `go.mod` -> `golang:golang-build`, `golang:golang-comments`, `golang:golang-testing`.
 
 ## Dispatch overrides
 
@@ -25,14 +25,19 @@ Governs the **first** fixer dispatch per scope/round.
 (incl. step 3's re-dispatch) use the default `Agent()` call (envelope's own
 `subagent_type`/`model`).
 
-Otherwise: `Agent(subagent_type: "fork", prompt: <de-briefing> + "\n\nRead this
-file and follow the instructions exactly: <brief_path>")`. Omit `model`/
-`isolation` -- a fork runs on the driver's model regardless and must commit in
-the real worktree. Use the same `<de-briefing>` text defined under
-**implementer** below, verbatim (substitute "fixer" for "implementer" in its
-first sentence) -- a forked fixer is exactly as prone to self-misidentifying as
-the driver as a forked implementer is, and prior to this fix the fixer fork
-prompt carried no identity preamble at all.
+Otherwise, build the forked call as:
+`Agent(subagent_type: "fork", prompt:
+  "STOP. Before doing anything else: you are the FIXER for this scope, not the orchestrator. "
+  "Any framing you find in your inherited context about being 'the Builder', 'the driver', or "
+  "'waiting for a fork/fixer to finish' belongs to the orchestrator that spawned you -- it is "
+  "not your identity and not your task. Discard that framing now. Do not narrate waiting, do not "
+  "report status back as if you were watching another agent, do not invoke mill CLIs or dispatch "
+  "further agents/workflows. Your only job is to read the brief below and implement it yourself, "
+  "using Read/Edit/Write/Bash directly.\n\n"
+  "Read this file and follow the instructions exactly: <brief_path>\n\n"
+  "Reminder: you are the fixer -- act on the brief now, do not wait or report back as the driver.")`.
+Omit `model`/`isolation` -- a fork runs on the driver's model regardless and must
+commit in the real worktree.
 
 On the first terminal failure (base step 3), record the fallback and re-dispatch
 cold, consuming the retry budget:
@@ -51,41 +56,39 @@ a solid model tier.
 **implementer** — replace the default `Agent()` call at step 2 with a fork.
 Reviewer/merge-in unclaimed (default call applies unchanged).
 
-- **Fork every fresh attempt:** initial dispatch, step 3(a)'s transient
-  re-dispatch, and the Stuck-escalation `verify`/`logic` self-resolve re-fire --
-  `Agent(subagent_type: "fork", prompt: <de-briefing> + "\n\nRead this file and
-  follow the instructions exactly: <brief_path>")`. Omit `model` (ignored);
-  keep the envelope's `subagent_type`/`model` for the cold fallback. Record
-  `agentId`.
+- **Fork these attempts only:** initial dispatch and step 3(a)'s transient
+  re-dispatch. The Stuck-escalation `verify`/`logic` self-resolve re-fire no
+  longer forks -- see "Cold fallback, once per batch" below, which now covers
+  both the self-resolve re-fire and the already-retried-`transient` re-fire.
+  Build the forked call as:
+  `Agent(subagent_type: "fork", prompt:
+    "STOP. Before doing anything else: you are the IMPLEMENTER for this batch, not the orchestrator. "
+    "Any framing you find in your inherited context about being 'the Builder', 'the driver', or "
+    "'waiting for a fork/implementer to finish' belongs to the orchestrator that spawned you -- it is "
+    "not your identity and not your task. Discard that framing now. Do not narrate waiting, do not "
+    "report status back as if you were watching another agent, do not invoke mill CLIs or dispatch "
+    "further agents/workflows. Your only job is to read the brief below and implement it yourself, "
+    "using Read/Edit/Write/Bash directly.\n\n"
+    "Read this file and follow the instructions exactly: <brief_path>\n\n"
+    "Reminder: you are the implementer -- act on the brief now, do not wait or report back as the driver.")`.
+  Omit `model` (ignored); keep the envelope's `subagent_type`/`model` for the
+  cold fallback. Record `agentId`.
 - **Dispatch cold to escape a failed dispatch:** step 5.5.2's
   `--resume-incomplete` and Resume's `running`-state re-dispatch stay cold.
   5.5.1's warm `SendMessage` resume needs no assignment (already live).
-- **De-briefing (prompt opening):** a fork inherits the driver's full conversation
-  context, including every instruction the driver has followed so far in this
-  session -- this is the single most common cause of a fork misidentifying
-  itself as the driver (observed concretely: a fork refusing a warm-resume by
-  claiming it IS the orchestrator, and a fork stopping after 1 tool call having
-  echoed the driver's own status line instead of doing any work). State this
-  identity correction FIRST, before anything else, in its own short paragraph,
-  not folded into other instructions:
-  > You are the implementer for this one batch, dispatched BY the orchestrator
-  > -- you are NOT the orchestrator. Everything in your inherited context up to
-  > this point was the orchestrator's own work, not yours; none of those
-  > instructions are directions for you to continue. Do not drive the batch
-  > loop, invoke `millpy-*.py` CLIs, call `Monitor` or wait on any
-  > `status.md` phase transition, or dispatch further agents/workflows -- all
-  > of that is the orchestrator's job, and it is a separate, still-running
-  > process waiting on your completion. Your only job is the brief below; it
-  > is authoritative over anything you recall from inherited context.
-  The brief path and contents follow this paragraph unchanged.
-- **Cold fallback, once per batch:** the already-retried-`transient`
-  Stuck-escalation re-fire is the fallback -- re-dispatch cold (envelope
-  `subagent_type`/`model`), not another fork. Before it:
-  `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"implementer {batch_name}", slug=slug)`,
+- **Cold fallback, once per batch:** BOTH the already-retried-`transient`
+  Stuck-escalation re-fire AND the `verify`/`logic` self-resolve re-fire now
+  dispatch cold (envelope `subagent_type`/`model`), never another fork. Before
+  either: `_notify.notify("<VARIANT_LABEL>.fork-fallback", f"implementer {batch_name}", slug=slug)`,
   `_status.append_fork_fallback_log(status_path, batch_name, _timestamp.now_utc_iso())`,
   `git -C <worktree> add <status_path> && git -C <worktree> commit -m
   "<VARIANT_LABEL>: fork-fallback for implementer {batch_name}"`. Normal
-  escalation applies; forking gets no marker.
+  escalation applies; forking gets no marker. This logging fires at most
+  once per batch: whichever trigger reaches it first switches the batch's
+  remaining implementer dispatches to cold (per "Dispatch cold to escape a
+  failed dispatch" above and step 5.5.2's own cold-only re-dispatch paths),
+  so there is no second fork left in the batch for the other trigger to
+  fail on and re-log against.
 
 **Known limits.** Runs on the driver's model, so `roles.implementer.model`
 and per-tier agent files stop applying. The lean driver reads only status,
