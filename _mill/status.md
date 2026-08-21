@@ -27,5 +27,8 @@ implementing  '2026-08-21T09:16:25Z'
 ```yaml
 batches:
   - name: verdict-derivation-fix
-    state: pending
+    state: running
+    implementer_session: 1e846eb0-0415-4a90-9378-3e76cd73ed20
+    start_sha: 57020a1ad6bbe44c42c4530d594dbbe3a15ae8c8
+    verify_baseline_failures: []
 ```
