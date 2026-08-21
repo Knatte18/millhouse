@@ -218,8 +218,7 @@ and modified tests live in.
 
 ### Card 10: #868 — gitignore-aware Context: refs in the pre-review validator
 
-- **Context:**
-  - `plugins/mill/scripts/_review_common.py`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/unit_tests/test-plan-validate.py`
@@ -227,6 +226,22 @@ and modified tests live in.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
+  `ReviewError` and `resolve_ref_paths` (used below) are defined in `plugins/mill/scripts/_review_common.py`
+  — no need to read that file's source; its full call shape is given here, mirroring Card 8's own
+  established precedent in this same batch for `_compute_transitive_ancestors`/`_plan_dag.py`.
+  `ReviewError` is a plain exception class (`class ReviewError(Exception)`) raised with no
+  meaningful attributes beyond its message.
+  `signature: resolve_ref_paths(tokens: list[str], project_root: Path, root: str | None, *,
+  wiki_root: Path | None = None, git_root: Path | None = None, soft_fail_gitignored: bool = False)
+  -> list[Path]` — raises `ReviewError` when a token resolves to no candidate path that either exists
+  on disk or (when `soft_fail_gitignored` is `True`) is confirmed git-ignored via `git check-ignore`;
+  otherwise returns the resolved `Path` list. (`_review_common.py` is intentionally excluded from
+  this batch's `Context:` — adding the full file, at ~30812 estimated tokens, would push this
+  batch's total to ~135746, over the `pipeline.max_batch_context_tokens` cap of 120000; the file is
+  large enough that no batch containing this card and that file can pass the cap regardless of how
+  the batch is split, since this card's own `Edits:` — `_plan_validate.py` and
+  `test-plan-validate.py` — already account for ~104934 of the 120000 budget by themselves.)
+
   In `plugins/mill/scripts/_plan_validate.py`'s `from _review_common import (...)` block (the
   multi-line import near the top of the file, currently listing `_load_root_from_overview`,
   `compute_creates_union`, `compute_deletes_union`, `compute_moves_union`, `parse_batch_refs`,
