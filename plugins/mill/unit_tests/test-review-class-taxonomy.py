@@ -560,6 +560,67 @@ def test_verdict_token_rewritten_for_plan_and_code_types() -> bool:
         return plan_ok and code_ok
 
 
+def test_verdict_preserved_when_reviewer_writes_request_changes_with_zero_blocking() -> bool:
+    """A NIT-only response has blocking_count == 0 by construction and no `[BLOCKING]` heading
+    for the ceiling to demote, so `demoted_any` is False regardless of `blocking_classes`.
+
+    finalize_scope must leave the reviewer's own REQUEST_CHANGES verdict untouched -- in both
+    the returned envelope and the persisted file -- since there is nothing this call reconciled.
+    """
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        blocking_classes = resolve_blocking_classes({}, "discussion", None)
+        raw = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("NIT", "consistency", "reviewer judgment call")
+        )
+        result, written_text = _finalize(
+            tmpdir, "discussion", raw, blocking_classes=blocking_classes
+        )
+        return (
+            result["verdict"] == "REQUEST_CHANGES"
+            and result["blocking_count"] == 0
+            and "verdict: REQUEST_CHANGES" in written_text
+            and "## Verdict\n\nREQUEST_CHANGES\n<summary>\n" in written_text
+        )
+
+
+def test_verdict_preserved_for_plan_and_code_types() -> bool:
+    """Mirrors test_verdict_token_rewritten_for_plan_and_code_types's two-part structure, but
+    with a NIT-only raw text (no demotion possible) for both the plan and code review types.
+    """
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        plan_blocking_classes = resolve_blocking_classes({}, "plan", "holistic")
+        raw_plan = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("NIT", "consistency", "reviewer judgment call")
+        )
+        _, written_plan = _finalize(
+            tmpdir, "plan", raw_plan, blocking_classes=plan_blocking_classes
+        )
+        plan_ok = (
+            "verdict: REQUEST_CHANGES" in written_plan
+            and "## Verdict\n\nREQUEST_CHANGES\n<summary>\n" in written_plan
+        )
+
+        code_blocking_classes = frozenset(RECOGNIZED_CLASSES)
+        raw_code = (
+            _verdict_yaml("REQUEST_CHANGES")
+            + _verdict_section("REQUEST_CHANGES")
+            + _heading("NIT", "consistency", "reviewer judgment call")
+        )
+        _, written_code = _finalize(
+            tmpdir, "code", raw_code, blocking_classes=code_blocking_classes
+        )
+        code_ok = (
+            "verdict: REQUEST_CHANGES" in written_code
+            and "## Verdict\n\nREQUEST_CHANGES\n<summary>\n" in written_code
+        )
+
+        return plan_ok and code_ok
+
+
 # ---------------------------------------------------------------------------
 # Demotion note: appended after the ## Verdict summary whenever demoted_any is True,
 # independent of whether the verdict token itself flipped (covers #822 and #829).
@@ -681,6 +742,14 @@ TESTS = [
     (
         "verdict token rewritten for plan and code review types",
         test_verdict_token_rewritten_for_plan_and_code_types,
+    ),
+    (
+        "verdict preserved when reviewer writes REQUEST_CHANGES with zero blocking",
+        test_verdict_preserved_when_reviewer_writes_request_changes_with_zero_blocking,
+    ),
+    (
+        "verdict preserved for plan and code review types",
+        test_verdict_preserved_for_plan_and_code_types,
     ),
     (
         "demotion note appended when verdict flips",
