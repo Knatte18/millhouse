@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-merge-nested-layout-and-lock-bugs
 branch: hanf/mill-merge-nested-layout-and-lock-bugs
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-merge/merge-in: nested-layout config resolution, stale locks, and rollback-target bugs'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-21T06:51:41Z'
 discussed  '2026-08-21T09:21:42Z'
+planning  '2026-08-21T09:32:00Z'
 ```
