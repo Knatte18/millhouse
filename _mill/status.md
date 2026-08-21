@@ -44,6 +44,8 @@ batches:
     commit_sha: ccee2c9352c2b2d2f14a67fa7b668b49a63697dc
     verify_baseline_failures: []
   - name: entry-gate-discussion-phases
-    state: pending
+    state: running
+    implementer_session: c69cbeb8-983e-4fb1-91e4-2647a714931d
+    start_sha: f08b1e90d23bfd3851e3372a08773fa5a59f0a3b
     verify_baseline_failures: []
 ```
