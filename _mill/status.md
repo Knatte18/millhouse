@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-go: baseline-stage timeout/cold-build cost and finalize dirty-tree false positive'
 task_description: |
@@ -18,4 +18,5 @@ discussing  '2026-08-21T06:51:23Z'
 discussion-fix-r2  '2026-08-21T09:03:33Z'
 discussion-fix-r3  '2026-08-21T09:07:37Z'
 discussed  '2026-08-21T09:10:20Z'
+planning  '2026-08-21T09:22:13Z'
 ```
