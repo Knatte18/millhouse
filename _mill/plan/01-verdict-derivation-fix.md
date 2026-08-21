@@ -9,6 +9,13 @@ verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests
 depends-on: []
 ```
 
+## Prior failure
+
+- Round 1 finalize: `/bin/sh: 1: uv: not found` — environment PATH gap (uv was installed on disk
+  but not reachable from the orchestrator shell's PATH), not a card defect. Self-resolved by
+  symlinking the existing `uv`/`uvx` binaries into `~/.local/bin` (already on PATH); no plan or
+  card edit was needed. Re-firing the implementer fresh for this batch.
+
 ## Batch Scope
 
 This batch is the whole task: fix `_review_common.py::finalize_scope()`'s verdict-recomputation

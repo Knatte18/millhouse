@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: self-resolved-verify-logic
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: _mill/plan
@@ -20,6 +20,7 @@ planning  '2026-08-21T09:10:37Z'
 plan-fix-r1  '2026-08-21T09:15:43Z'
 planned  '2026-08-21T09:16:01Z'
 implementing  '2026-08-21T09:16:25Z'
+self-resolved-verify-logic  '2026-08-21T09:23:29Z'
 ```
 
 ## Batches
