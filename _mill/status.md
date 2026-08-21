@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-entry-gate-discussion-phases
+phase: holistic-reviewing
 slug: mill-go-base-documented-behavior-gaps
 branch: hanf/mill-go-base-documented-behavior-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-08-21T09:20:27Z'
 approved-detached-head-branch-detection  '2026-08-21T09:25:55Z'
 approved-preflight-attribute-guard  '2026-08-21T09:29:29Z'
 approved-entry-gate-discussion-phases  '2026-08-21T09:31:57Z'
+holistic-reviewing  '2026-08-21T09:32:28Z'
 ```
 
 ## Batches
