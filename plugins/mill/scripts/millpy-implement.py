@@ -220,6 +220,7 @@ def _run_baseline_stage(
     module_wide_verify_cmd: str | None,
     module_wide_cwd_override: Path | None,
     plan_base: Path,
+    baseline_prepare_cmd: str | None,
 ) -> int:
     """
     Compute (idempotent, no-op-if-already-cached) both baseline sub-steps and persist them.
@@ -281,6 +282,11 @@ def _run_baseline_stage(
             verify: or absent).
         plan_base: Directory containing `00-overview.md` and every batch file, used to enumerate
             per-batch verify commands directly off disk.
+        baseline_prepare_cmd: Optional build-once command (e.g. "dotnet build") to run against the
+            shared transient checkout, once per distinct cwd fragment, before any verify command
+            executes -- read by the caller from `pipeline.baseline_prepare_cmd` in mill-config.yaml.
+            `None` (the default when the key is absent) disables this step entirely, matching
+            today's behavior exactly.
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;
@@ -387,6 +393,25 @@ def _run_baseline_stage(
                     file=sys.stderr,
                 )
         return 0
+
+    # Build-once step: run baseline_prepare_cmd (if configured) once per distinct cwd fragment,
+    # against the shared checkout, before any verify command executes -- eliminates the cold-build
+    # cost otherwise paid inside the first of several doubled verify commands below (#894).
+    # Failure here is deliberately non-fatal: it is logged and the verify commands still run,
+    # since a real build break will also surface naturally as a verify-command failure signature,
+    # which is correct baseline data rather than something to suppress by aborting early.
+    if baseline_prepare_cmd:
+        for fragment in cwd_fragments:
+            target = tmp_path / fragment if fragment is not None else tmp_path
+            try:
+                prepare_rc, prepare_output = _verify_baseline._run_verify_in(baseline_prepare_cmd, target)
+                if prepare_rc != 0:
+                    print(
+                        f"[millpy-implement] baseline_prepare_cmd failed (cwd={target}, exit={prepare_rc}): {prepare_output.strip()}",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                print(f"[millpy-implement] baseline_prepare_cmd raised (cwd={target}): {e}", file=sys.stderr)
 
     try:
         # (a) Module-wide command, if it needs computing this round -- its own try/except, mirroring the standalone path, so a module-wide failure never aborts the per-batch work below.
@@ -642,8 +667,9 @@ def main(argv=None) -> int:
     module_verify_baseline = _status.get_module_verify_baseline(status_path)
 
     if args.stage == "baseline":
+        baseline_prepare_cmd = (cfg.get("pipeline") or {}).get("baseline_prepare_cmd")
         return _run_baseline_stage(
-            project_root, git_root, status_path, module_wide_verify_cmd, module_wide_cwd_override, plan_base
+            project_root, git_root, status_path, module_wide_verify_cmd, module_wide_cwd_override, plan_base, baseline_prepare_cmd
         )
 
     try:
