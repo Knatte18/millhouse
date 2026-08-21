@@ -342,9 +342,32 @@ This step is direct path only.
   If the exit code is non-zero:
 
   1. Check the captured output for any of these substrings: `Changes must be made through a pull request`, `repository rule violations`, `protected branch`, `GH006`.
-     If none match → fail the step and trigger the Step 1–5 rollback (do not attempt the fallback).
+     If a match is found, skip to sub-step 2 (branch-protection rejection) below.
+     If none match, continue to sub-step 1a.
 
-  2. If a match is found — branch-protection rejection — undo the local squash commit on the parent:
+  1a. Check the captured output for `! [rejected]` together with either `(fetch first)` or `(non-fast-forward)` — git's own literal rejection markers for a plain non-fast-forward push rejection (distinct from the branch-protection substrings in sub-step 1 above, and from any other failure such as auth or network errors).
+
+      If both markers are present:
+
+      ```bash
+      git -C <parent-path> fetch origin "<parent_branch>"
+      git -C <parent-path> rebase "origin/<parent_branch>"
+      ```
+
+      On a rebase conflict (non-zero exit from `git rebase`): capture the conflicting files via `git -C <parent-path> diff --name-only --diff-filter=U`, then run `git -C <parent-path> rebase --abort`, then fail the step and trigger the Step 1–5 rollback, naming the conflicting files in the operator-facing report.
+
+      On a clean rebase (exit 0): retry the push once —
+
+      ```bash
+      git -C <parent-path> push
+      ```
+
+      If this retry succeeds (exit 0): the parent now has the squash commit rebased onto the current `origin/<parent_branch>` tip — treat this exactly as if the original push above had succeeded, and continue from the "Post-Step-5-success sequencing" paragraph at the end of this `### 5. Direct squash` section.
+      If this retry also fails: fail the step and trigger the Step 1–5 rollback.
+
+      If neither marker is present (this is not a plain non-fast-forward rejection — e.g. an auth or network failure): fail the step and trigger the Step 1–5 rollback (do not attempt any fallback) — this is the unchanged "no match" behavior for any failure that is neither branch-protection nor a plain non-fast-forward rejection.
+
+  2. If a match is found in sub-step 1 — branch-protection rejection — undo the local squash commit on the parent:
 
      ```bash
      git -C <parent-path> reset --hard origin/<parent_branch>
