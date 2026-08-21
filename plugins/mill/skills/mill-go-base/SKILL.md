@@ -49,7 +49,7 @@ Load the `mill:conversation` skill via the Skill tool, unconditionally, immediat
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
-   On `MarkerError` → halt with "this worktree was not created by mill-spawn". `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
+   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
