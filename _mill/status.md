@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-fix-r1
 slug: millpy-review-plan-verdict-envelope-bugs
 branch: hanf/millpy-review-plan-verdict-envelope-bugs
 plan: _mill/plan
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-08-21T06:51:37Z'
 discussed  '2026-08-21T09:05:01Z'
 planning  '2026-08-21T09:10:37Z'
+plan-fix-r1  '2026-08-21T09:15:43Z'
 ```

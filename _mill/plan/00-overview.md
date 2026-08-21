@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-review-plan: finalize envelope verdict silently diverges from the review file''s own written verdict'
 slug: millpy-review-plan-verdict-envelope-bugs
-approved: false
+approved: true
 started: '20260821-090752'
 parent: main
 root: ""

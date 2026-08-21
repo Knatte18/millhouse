@@ -160,10 +160,10 @@ apply to this batch (the only batch).
   to argv").
 
   Add three new test methods to `TestReviewCliErrorEnvelope`, one per CLI, each placed
-  immediately after that CLI's existing `..._pre_launch_error_includes_round` test (for plan,
-  after `test_plan_engine_internal_error` instead, since plan has no
-  `pre_launch_error_includes_round` test in this file today — place it directly after
-  `test_plan_engine_internal_error`):
+  immediately after that CLI's existing `..._pre_launch_error_includes_round` test —
+  `test_discussion_pre_launch_error_includes_round`, `test_code_pre_launch_error_includes_round`,
+  and `test_plan_pre_launch_error_includes_round` respectively (the plan test already exists in
+  this file, at lines 333-343 as of plan-writing time — do not skip it):
 
   - `test_discussion_finalize_missing_agent_output_is_usage_error(self)`
   - `test_code_finalize_missing_agent_output_is_usage_error(self)`
