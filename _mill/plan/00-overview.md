@@ -47,7 +47,7 @@ batches:
 
 ### Decision: `pipeline.done_gate` stays `null`
 
-- **Decision:** per this plan's own #861 fix (Card 6, Batch 1 — the new "verify it passes clean
+- **Decision:** per this plan's own #861 fix (Card 7, Batch 1 — the new "verify it passes clean
   first" precondition on the Done-gate reminder), `pipeline.done_gate` in this hub's
   `mill-config.yaml` is left `null` for this task.
 - **Rationale:** `PYTHONPATH= uvx ruff check .` was run against this worktree during planning and
@@ -68,7 +68,7 @@ batches:
 - **Rationale:** matches this file's own "Verify command scope" rule — target only the tests
   affected by each batch's `Edits:`/`Creates:`, never the unbounded 77-file suite for a scoped
   batch.
-- **Applies to:** Batch 1, Batch 2.
+- **Applies to:** Batch 1, Batch 2, Batch 3.
 
 ## All Files Touched
 

@@ -18,8 +18,10 @@ documentation/instruction change the mill-plan orchestrator itself reads and fol
 independently unit-testable (see `_mill/discussion.md`'s Testing section for the per-issue hedge).
 Cards are ordered so structural changes (Card 1's step relocation) land before cards whose own
 Requirements reference the resulting post-relocation structure (Card 2). This batch is a root batch
-(no dependencies) and Batch 2 depends on it, since both batches touch `mill-plan/SKILL.md` and must
-not run in parallel.
+(no dependencies); Batch 2 is also a root batch and does NOT depend on Batch 1 — Batch 2 deliberately
+never touches `mill-plan/SKILL.md` (see Batch 2's own Scope text). Batch 3 is the one that depends on
+both Batch 1 and Batch 2, since it touches `mill-plan/SKILL.md` (overlapping Batch 1) and documents
+Batch 2's new checks (sequencing after Batch 2).
 
 ## Cards
 
@@ -42,8 +44,13 @@ not run in parallel.
   FIX-or-PUSH-BACK decision tree is what keeps review loops useful."), and immediately before the
   `**Guardrail:**` line ("NIT/BLOCKING fixes during Plan Review apply ONLY to files under
   `<plan_dir>`..."). Renumber the relocated section's own heading from the literal token `4.5.` to
-  `3.5.` — this is purely a structural move: do not alter any other text inside the moved block,
-  including its internal references to "steps 4a/4b/4c/4d" (those remain correct after the move —
+  `3.5.`, AND rename the bold sub-heading text on the very next line from "**Step 4.5:
+  ERROR-only-aggregate retry (no round consumed)**" to "**Step 3.5: ERROR-only-aggregate retry (no
+  round consumed)**" (both the marker token and its own label must agree — leaving the label as "Step
+  4.5" while the marker reads "3.5." would self-contradict, unlike the matching `1.5.`/`**Step 1.5:
+  ...**` pattern elsewhere in this file). Otherwise this is purely a structural move: do not alter
+  any other text inside the moved block, including its internal references to "steps 4a/4b/4c/4d"
+  (those remain correct after the move —
   the block's own logic already treats itself as a screening gate that runs *before* 4a-4d, this
   relocation only makes the physical document order match that existing logical order, mirroring
   how step `1.5`'s pre-review validator gate already physically precedes step `2`'s dispatch by the
@@ -83,8 +90,11 @@ not run in parallel.
   phase):**" paragraph's parenthetical citation — it currently reads "Before any
   `_status.append_phase` call in this phase (steps 4a/4b/4c/4d below), call
   `_treeguard.check_and_restore(...)`" — to instead read "Before any `_status.append_phase` call in
-  this phase (the unconditional round-recorded append at step 3.5, and steps 4a/4b/4c/4d below),
-  call `_treeguard.check_and_restore(...)`", so the citation stays accurate now that a new
+  this phase (the unconditional round-recorded append at step 3.5, and steps 4b/4c/4d below),
+  call `_treeguard.check_and_restore(...)`" (4a is dropped from this list — Card 1's own edits above
+  remove 4a's only `_status.append_phase` call, moving that write into the new step-3.5 unconditional
+  append, so 4a no longer makes any such call and listing it here would be stale), so the citation
+  stays accurate now that a new
   `_status.append_phase` call site exists earlier in the phase (this paragraph is well before the
   relocated 3.5 section in document order, so this is a separate, standalone edit at its own
   existing location — do not move this paragraph).
