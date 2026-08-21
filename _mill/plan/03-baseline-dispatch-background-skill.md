@@ -47,7 +47,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
   ```
 
-  Parse the JSON result and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> surface a clear message to the operator: "baseline pre-flight worker died (logout?); re-run the baseline pre-flight step" and halt. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the two JSON summary lines.
+  Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> surface a clear message to the operator: "baseline pre-flight worker died (logout?); re-run the baseline pre-flight step" and halt. Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the two JSON summary lines.
 
   **6b. "0.5" — adjust the parse-source reference.** In the paragraph immediately following (beginning `(no `batch_name` positional argument`), change the phrase `Parse the two JSON lines the CLI prints` to `Parse the two JSON lines extracted above`. Leave the rest of that paragraph (the substage-shape descriptions, the idempotency note, the error/skipped handling) unchanged.
 
@@ -79,7 +79,7 @@ PYTHONPATH="<git_root>/plugins/mill/scripts" "$MILL_PYTHON" "<git_root>/plugins/
       "$MILL_PYTHON" "<git_root>/plugins/mill/scripts/millpy-implement.py" --stage baseline
   ```
 
-  Poll the same way "0.5. Baseline pre-flight" does above (`cat <log-path>` for `[mill-bg] EXIT`, with the same `_bg.check_bg_status` liveness-check branch: `"running"` -> keep polling, `"exit"` -> proceed, `"dead"` -> surface a clear message and halt), then run `grep '^{' <log-path>` to extract the two JSON summary lines.
+  Poll the same way "0.5. Baseline pre-flight" does above (`cat <log-path>` for `[mill-bg] EXIT`, with the same `_bg.check_bg_status` liveness-check branch, parsed as `(status, pid_or_code)`: `"running"` -> keep polling, `"exit"` -> proceed, `"dead"` -> surface a clear message and halt), then run `grep '^{' <log-path>` to extract the two JSON summary lines.
 
   **6e. "0.6" — replace the cache-form-exception paragraph.** Replace this exact two-sentence paragraph immediately after the (now-replaced) bash block:
 
