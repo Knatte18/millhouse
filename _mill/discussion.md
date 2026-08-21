@@ -33,15 +33,15 @@ five issues' filing timestamps (2026-08-14 through 2026-08-19). The reporting re
 certainly on a stale cached plugin build. See Decisions below for what's actually left to do with
 those two.
 
-While exploring the exact code region the core fix touches, a fourth, previously unfiled bug
-surfaced: the finalize-stage `except ReviewError` handlers in all three review CLIs default
-`error_kind` to `"usage"` for any caught error, even though the only `ReviewError` reachable
-there is genuinely reviewer-origin (a malformed/missing reviewer output that `parse_verdict()`
-can't parse). Given the usage-error immediate-halt logic `acdeab07` added to the consuming
-SKILLs treats `error_kind:"usage"` as a hard, no-retry stop, this misclassification turns a
-transient reviewer hiccup into an unnecessary operator-intervention halt. It's included in this
-task's scope since it's the same code family and the same call sites the core fix already
-touches.
+A fourth candidate bug was investigated during discussion review and **rejected as a false
+premise**: the finalize-stage CLI-level `except ReviewError` handlers in all three review CLIs
+were suspected of misclassifying reviewer-origin parse failures as `error_kind: "usage"`. On
+closer reading, each `finalize()` wrapper in `_review_plan.py`/`_review_discussion.py`/
+`_review_code.py` already wraps its own call to `finalize_scope()` in a `try`/`except
+ReviewError`, and returns a dict with `error_kind: "reviewer"` directly — it never re-raises. The
+CLI-level catch these three files' finalize-stage try blocks wrap cannot receive a
+`parse_verdict`-originated `ReviewError` in production; the only other call inside that block
+(`resolve_blocking_classes`) never raises. See Decisions below.
 
 ## Scope
 
@@ -50,11 +50,6 @@ touches.
   `REQUEST_CHANGES`-with-zero-`BLOCKING` verdict to `APPROVE` when no ceiling demotion happened
   this call. Both the returned envelope `verdict` and the persisted file must agree with the
   reviewer's original verdict in that case.
-- The three review CLIs' (`millpy-review-plan.py`, `millpy-review-discussion.py`,
-  `millpy-review-code.py`) finalize-stage `except ReviewError` handlers — pass
-  `error_kind="reviewer"` instead of the default `"usage"`, since every `ReviewError` reachable
-  at that specific catch site originates from `parse_verdict()` failing on the reviewer's own
-  output, not from an orchestrator argument mistake.
 - Regression-test coverage for #864 (usage-error `error_kind` classification on the
   missing-`--agent-output` path) and #867 (`--actual-model` override reaching the persisted
   `reviewer_model` field) confirming the existing `acdeab07` fix, since neither appears to have
@@ -77,6 +72,9 @@ touches.
   written correctly and does not need editing; only the producer-side backend was wrong.
 - Actually re-implementing #864 or #867's underlying mechanisms — both already exist in the
   current codebase; this task only adds missing regression coverage for them.
+- Changing `error_kind` classification on the three review CLIs' finalize-stage CLI-level
+  `except ReviewError` handlers — investigated and rejected; see Decisions
+  ("Fourth candidate bug: rejected as unreachable").
 
 ## Decisions
 
@@ -136,25 +134,34 @@ touches.
   into this wiki task and the task should close the loop on all five even if two need no
   production-code change.
 
-### error_kind misclassification on finalize-stage ReviewError: reviewer, not usage
+### Fourth candidate bug: rejected as unreachable
 
-- Decision: In the finalize-stage `except ReviewError` handler of all three review CLIs, pass
-  `error_kind="reviewer"` explicitly (overriding `print_error_envelope`'s `"usage"` default).
-  Leave the prepare-stage and full-stage `except ReviewError` handlers untouched — their `"usage"`
-  default is correct there, since those try blocks wrap config loading, batch resolution, and
-  validation, which are genuinely pre-reviewer/orchestrator-origin failures.
-- Rationale: Traced every path into the finalize-stage try block in `millpy-review-plan.py`
-  (structurally identical in the other two CLIs): the explicit `--agent-output`-missing check is
-  a separate, already-correct usage-error emission that happens *before* the try block; the only
-  `ReviewError` the try block itself can raise comes from `finalize()` → `finalize_scope()` →
-  `parse_verdict()` failing to find a valid verdict in the reviewer's own raw output (missing
-  file collapses to empty text, or malformed output). That is definitionally a reviewer-origin
-  failure. Since `mill-plan/SKILL.md`'s usage-error immediate-halt (added by the same commit that
-  addressed #864) treats `error_kind:"usage"` as an unconditional no-retry halt, misclassifying a
-  reviewer hiccup this way skips the one-retry-then-halt treatment the ERROR-only-aggregate retry
-  logic is supposed to give it.
-- Rejected: A broader audit reclassifying every `except ReviewError` site across all stages —
-  unnecessary scope expansion; the prepare/full-stage sites were checked and are already correct.
+- Decision: Do not change `error_kind` classification on the three review CLIs' finalize-stage
+  CLI-level `except ReviewError` handlers. Treat this candidate like #864/#867 — investigated,
+  found already correct, closed with no production-code change.
+- Rationale: Discussion review round 1 (holistic, `sonnethigh`) flagged this as
+  `[BLOCKING:design]` with the finding "Fourth bug's premise is false — the catch site is
+  unreachable," citing `_review_plan.py:706-733`, `_review_discussion.py`, and `_review_code.py`
+  as each already wrapping their own call to `finalize_scope()` in an internal
+  `try`/`except ReviewError` that returns `error_kind: "reviewer"` directly, never re-raising.
+  Independently re-verified by reading `_review_plan.py:662-733`: `finalize()`'s only other
+  pre-try-block call, `resolve_blocking_classes()`, is documented "Never raises." — confirmed by
+  reading its docstring. There is no live path in current code that reaches the CLI-level
+  `except ReviewError` with a `parse_verdict`-originated failure; the original premise (that this
+  catch site silently misclassifies reviewer-origin errors) does not hold. The reviewer also
+  flagged two supporting `[NIT:consistency]` findings, both independently verified: (1) the
+  original scope item contradicted three already-passing tests in
+  `test-review-plan-finalize-round.py` (`review-{plan,discussion,code}-finalize-outer-catch-error-kind-usage`,
+  cases e/f/g) that mock `finalize()` to raise `ReviewError` directly and pin `error_kind ==
+  "usage"` as the correct value for that exact catch site — confirming "usage" is the intended
+  contract if that path were ever hit by a genuinely unexpected error, not a bug; (2)
+  `test-review-cli-error-envelope.py` was wrongly cited as the "existing regression home for
+  error_kind" — a full read confirms it contains zero `error_kind` assertions, covering only the
+  exit-code contract; actual `error_kind` coverage lives in `test-review-cli.py` and the
+  finalize()-wrapper-level assertions in `test-review-{plan,discussion,code}-flow.py`.
+- Rejected: Keeping the scope item and instead trying to find some other production path that
+  reaches the CLI-level catch — none was found, and inventing a defensive-only path to "fix" would
+  add code for a case that cannot occur today.
 
 ## Technical context
 
@@ -197,16 +204,13 @@ touches.
   `error_kind` kwarg (default `"usage"`), documented as `"usage"` for pre-reviewer failures vs
   `"reviewer"` for failures inside the reviewer's own finalize step. `ReviewError` itself
   (`_review_common.py:115`) is a flat `Exception` subclass with no origin-distinguishing
-  subclasses — call sites are the only signal.
-- **Finalize-stage CLI call sites to change** (`error_kind="reviewer"` on the `except ReviewError`
-  that wraps the `finalize(...)` call):
-  - `millpy-review-plan.py` — around line 307–309
-  - `millpy-review-discussion.py` — the finalize-stage handler around line 246–248 (not the
-    prepare-stage one around 202–204, nor the full-stage one around 257–259)
-  - `millpy-review-code.py` — the finalize-stage handler around line 266–268 (not the
-    prepare-stage one around 233–235, nor the full-stage one around 286–288)
-- **Existing regression home for error_kind:** `plugins/mill/unit_tests/test-review-cli-error-envelope.py`
-  (added by `acdeab07`) — extend with the finalize-stage `error_kind="reviewer"` case per CLI.
+  subclasses — call sites are the only signal. Each `finalize()` wrapper (`_review_plan.py:662-733`
+  and structurally identical in `_review_discussion.py`/`_review_code.py`) already catches its own
+  `ReviewError` from `finalize_scope()` internally and returns `error_kind: "reviewer"` directly;
+  it never propagates to the CLI-level catch. `test-review-plan-finalize-round.py` cases (e)/(f)/(g)
+  already pin `error_kind == "usage"` as correct for the CLI-level finalize-stage catch itself
+  (a mocked/hypothetical raise, since no live path currently reaches it). No change needed here —
+  see Decisions, "Fourth candidate bug: rejected as unreachable".
 - **`--actual-model` / `reviewer_model` threading (#867, already fixed):**
   `_review_common.py::apply_actual_model_override()` (~line 2430) delegates to
   `_inject_or_rewrite_yaml_field(raw_text, "reviewer_model", actual_model)`; wired through
@@ -241,12 +245,6 @@ touches.
   interpreted by the orchestrating session, not executed code), but the fix should be verified by
   confirming the envelope shape 4c expects (`verdict: REQUEST_CHANGES`, `blocking_count: 0`) is
   now producible by `finalize_scope()` for a non-demoted round — covered by the test above.
-- **`error_kind="reviewer"` classification** (`test-review-cli-error-envelope.py`): for each of
-  the three CLIs, invoke `--stage finalize` with `--agent-output` pointing at a file containing
-  raw text with no parseable `verdict:` field (triggering `parse_verdict`'s `ReviewError`), and
-  assert the emitted envelope's `reviews[0].error_kind == "reviewer"` (not `"usage"`). Add a
-  companion assertion that the missing-`--agent-output` case (no flag passed at all) still
-  produces `error_kind == "usage"`, to guard the boundary between the two call sites explicitly.
 - **#864/#867 regression coverage:** confirm or add (if genuinely absent —
   check `test-review-cli-error-envelope.py` and the `apply_actual_model_override` tests in
   `test-review-common.py` first, since they may already cover the exact repro shape) a test per
@@ -265,4 +263,5 @@ touches.
 - **Q:** Include the unfiled adjacent bug (all three review CLIs default `error_kind` to "usage" for any caught `ReviewError`, including genuine reviewer-side parse failures that should be "reviewer") in this task's scope? **A:** [auto-pick] Yes, include it. **Why:** Same code family and call sites the core fix already touches; mill-plan's new usage-error immediate-halt (from the same commit that addressed #864) turns a transient reviewer hiccup into a no-retry operator halt when misclassified, which is a real correctness gap in the exact mechanism #864 established.
 - **Q:** Does NEED_CONTEXT verdict handling need reconsideration as part of this fix? **A:** [auto-pick] No, leave NEED_CONTEXT passthrough unchanged. **Why:** Orthogonal signal (missing context, not pass/fail judgment), already correctly excluded from the blocking_count-derivation branch; out of scope.
 - **Q:** Scope of the `error_kind` misclassification fix -- finalize-stage catches only, or a broader audit of every `except ReviewError` site? **A:** [auto-pick] Finalize-stage catches only, in all three review CLIs (`error_kind="reviewer"` instead of the default `"usage"`). **Why:** Traced the finalize-stage try block in `millpy-review-plan.py` (and the structurally identical discussion/code CLIs): the only `ReviewError` reachable there originates from `parse_verdict()` inside `finalize()`/`finalize_scope()` -- genuinely reviewer-origin, since the explicit `--agent-output`-missing usage check already short-circuits before the try block. Prepare-stage and full-stage catches wrap config/validation/batch-resolution logic that is genuinely usage-origin and stays "usage".
-- **Q:** Testing approach for the core fix and the error_kind fix? **A:** [auto-pick] Extend existing test files rather than create new ones: add cases to `test-review-class-taxonomy.py` (reviewer REQUEST_CHANGES + zero BLOCKING + no demotion -> envelope and file both stay REQUEST_CHANGES; companion regression test locking in the existing escalation direction unchanged) and to `test-review-cli-error-envelope.py` (finalize-stage ReviewError -> error_kind="reviewer", per CLI or shared if structurally identical). **Why:** `test-review-class-taxonomy.py` is already the home of the adjacent `test_verdict_token_*`/`test_demotion_note_*` tests this bug sits next to; extending keeps related coverage co-located per existing repo convention rather than fragmenting it across new files.
+- **Q:** Testing approach for the core fix and the error_kind fix? **A:** [auto-pick] Extend existing test files rather than create new ones: add cases to `test-review-class-taxonomy.py` (reviewer REQUEST_CHANGES + zero BLOCKING + no demotion -> envelope and file both stay REQUEST_CHANGES; companion regression test locking in the existing escalation direction unchanged) and to `test-review-cli-error-envelope.py` (finalize-stage ReviewError -> error_kind="reviewer", per CLI or shared if structurally identical). **Why:** `test-review-class-taxonomy.py` is already the home of the adjacent `test_verdict_token_*`/`test_demotion_note_*` tests this bug sits next to; extending keeps related coverage co-located per existing repo convention rather than fragmenting it across new files. (Note: the `test-review-cli-error-envelope.py` half of this answer was later corrected -- see the round-1 gap-fix Q&A entry below; that file does not cover `error_kind` at all, and the error_kind scope item it was meant to test was dropped entirely.)
+- **Q:** [gap, round 1] Discussion review round 1 (holistic, sonnethigh) found `[BLOCKING:design]` that the fourth-bug scope item's premise is false -- the CLI-level `except ReviewError` catch site it targeted is unreachable in production, since each `finalize()` wrapper already catches `ReviewError` from `finalize_scope()` internally and returns `error_kind: "reviewer"` directly without re-raising. Two supporting `[NIT:consistency]` findings: the item contradicted three already-passing tests pinning `error_kind == "usage"` as correct for that exact (unreachable-in-practice) catch site, and cited the wrong file as the "existing regression home for error_kind" (that file has zero error_kind coverage). How to resolve? **A:** [auto-pick] Drop the fourth-bug scope item entirely from Problem/Scope/Decisions/Technical context/Testing; treat it like #864/#867 (investigated, found already correct, no code change). **Why:** Independently re-verified the reviewer's claim by reading `_review_plan.py:662-733` directly (confirmed the internal catch-and-return, never-re-raise pattern) and confirmed `resolve_blocking_classes()` is documented "Never raises."; also confirmed both NIT citations by grepping the two test files directly. All three findings are factually accurate per the mill-receiving-review VERIFY step, and fixing means removing incorrect scope rather than risking any working code — no HARM CHECK objection applies. This is the "recommended option" auto-picked per mill-start --auto's gap-resolution rule (BLOCKING findings are always FIX under --auto, PUSH BACK is unavailable with no operator present).
