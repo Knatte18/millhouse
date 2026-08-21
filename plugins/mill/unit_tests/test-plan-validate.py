@@ -2,10 +2,13 @@
 
 One test function per check (clean + dirty fixtures).
 Tests use in-memory tempfile fixtures;
-no real LLM, no real git, no network.
+no real LLM, no real git, no network, except the one gitignore-fixture case in
+`test_check_non_existent_path_*` which shells out to real `git check-ignore` via
+`_test_helpers.init_minimal_git_repo`.
 
 Check coverage:
-  check 1 — non-existent-path
+  check 1 — non-existent-path (incl.
+      gitignore-aware Context: soft-fail, #868)
   check 2 — card-missing-field
   check 3 — card-numbering (within-batch gap, cross-batch duplicate)
   check 4 — depends-on-unknown
@@ -297,6 +300,100 @@ def test_check_non_existent_path_dirty() -> int:
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_non_existent_path_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_non_existent_path_context_gitignored_clean() -> int:
+    """(a) missing Context: ref confirmed git-ignored -> zero non-existent-path findings (#868)."""
+    import _test_helpers  # noqa: E402 (local import; sys.path set up at module scope)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        # A .gitignore rule only takes effect once the repository recognizes the directory as a
+        # git worktree, so the .gitignore file itself must be committed.
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        # The referenced file is never created -- it is confirmed git-ignored instead.
+        batch = _make_batch_file("alpha", context=["ignored_dir/runtime_artifact.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "ignored_dir/runtime_artifact.py"
+        ]
+        if check1:
+            print(
+                f"FAIL test_check_non_existent_path_context_gitignored_clean: unexpected: {check1}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_non_existent_path_context_gitignored_clean")
+        return 0
+
+
+def test_check_non_existent_path_context_not_gitignored_dirty() -> int:
+    """(b) missing Context: ref NOT covered by any .gitignore rule -> finding still fires (#868)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", context=["not_ignored_dir/missing.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "not_ignored_dir/missing.py"
+        ]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            print("PASS test_check_non_existent_path_context_not_gitignored_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_non_existent_path_context_not_gitignored_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_non_existent_path_edits_gitignored_still_dirty() -> int:
+    """(c) missing Edits: ref confirmed git-ignored -> finding STILL fires, no leniency (#868)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "ignored_dir/\n", "add gitignore")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file("alpha", edits=["ignored_dir/runtime_artifact.py"])
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check1 = [
+            e for e in result
+            if e["check"] == "non-existent-path" and e["path"] == "ignored_dir/runtime_artifact.py"
+        ]
+        try:
+            assert len(check1) == 1, f"expected 1 error, got {len(check1)}: {check1}"
+            print("PASS test_check_non_existent_path_edits_gitignored_still_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_non_existent_path_edits_gitignored_still_dirty: {exc}", file=sys.stderr)
             return 1
 
 
@@ -6885,6 +6982,10 @@ def main() -> int:
     tests = [
         test_check_non_existent_path_clean,
         test_check_non_existent_path_dirty,
+        # gitignore-aware Context: refs (#868)
+        test_check_non_existent_path_context_gitignored_clean,
+        test_check_non_existent_path_context_not_gitignored_dirty,
+        test_check_non_existent_path_edits_gitignored_still_dirty,
         test_check_card_missing_field_clean,
         test_check_card_missing_field_dirty,
         # commit-none-with-content check (issue #664)

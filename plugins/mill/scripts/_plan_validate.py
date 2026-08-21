@@ -73,6 +73,7 @@ import _plan_dag
 import _subprocess_util
 from _plan_dag import PlanDAGError, extract_batch_index, resolve_deps_as_names
 from _review_common import (
+    ReviewError,
     _load_root_from_overview,
     compute_creates_union,
     compute_deletes_union,
@@ -80,6 +81,7 @@ from _review_common import (
     parse_batch_refs,
     parse_moves,
     resolve_existing_paths,
+    resolve_ref_paths,
 )
 
 # ---------------------------------------------------------------------------
@@ -701,21 +703,56 @@ def _check_non_existent_path(
     This function continues to operate only on the general Context/Edits/Creates and Deletes tokens
     that ``parse_batch_refs`` already parses (it does not parse Moves: bullets).
 
+    - ``Context:`` refs additionally soft-fail when confirmed git-ignored (via
+    ``resolve_ref_paths(..., soft_fail_gitignored=True)``) -- a ``Context:``-only reference to a
+    not-yet-existing, gitignored runtime artefact (e.g. a build/run-output file an earlier batch
+    produces at runtime, under a ``.gitignore``d directory) is not flagged, matching the LLM
+    reviewer's own existing leniency for ``Context:`` refs (``_review_plan.py``, #733/#808).
+    ``Edits:``/``Creates:``/``Deletes:`` refs receive NO such leniency -- those name files the
+    batch is expected to produce or touch, a hard requirement.
+
     Error dict shape: ``{check, batch, card, path, message}``.
     """
     errors: list[dict] = []
     for batch_path in batch_files:
-        raw_refs = parse_batch_refs(batch_path)
         deletes_only = _parse_deletes_only(batch_path)
-        general_refs = set(raw_refs) - deletes_only
+        context_tokens = _parse_context_only(batch_path)
+        edits_creates_tokens = (
+            _parse_edits_only(batch_path) | _parse_creates_only(batch_path)
+        ) - deletes_only
 
-        # General refs (Context/Edits/Creates): missing on disk is suppressed when the token is in creates_union, deletes_union, OR moves_targets.
+        # Edits:/Creates: loop (unchanged behavior): missing on disk is suppressed when the token
+        # is in creates_union, deletes_union, OR moves_targets.
         # The moves_targets suppression prevents false errors on downstream cards that reference a not-yet-existing Move destination in their Context:/Edits:.
-        for t in general_refs:
+        for t in edits_creates_tokens:
             if t.lower() == "none":
                 continue
             existing = resolve_existing_paths([t], project_root, root, wiki_root=wiki_root, git_root=git_root)
             if not existing and t not in creates_union and t not in deletes_union and t not in moves_targets:
+                errors.append({
+                    "check": "non-existent-path",
+                    "batch": batch_path.stem,
+                    "card": None,
+                    "path": t,
+                    "message": (
+                        f"path '{t}' does not exist on disk and is not a "
+                        f"Creates: target in any batch"
+                    ),
+                })
+
+        # Context: loop (new gitignore-aware behavior): same union suppression up front, then a
+        # soft-fail resolve that additionally tolerates a confirmed-gitignored missing path.
+        for t in context_tokens:
+            if t.lower() == "none":
+                continue
+            if t in creates_union or t in deletes_union or t in moves_targets:
+                continue
+            try:
+                resolve_ref_paths(
+                    [t], project_root, root,
+                    wiki_root=wiki_root, git_root=git_root, soft_fail_gitignored=True,
+                )
+            except ReviewError:
                 errors.append({
                     "check": "non-existent-path",
                     "batch": batch_path.stem,
