@@ -5175,6 +5175,149 @@ def main() -> int:
             print(f"FAIL: case 75 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 76: #885 regression -- a dirty tracked _mill/briefs/ file with no other in-scope
+    # dirt must not trip the gate. Simulates a resumed-after-blocked batch whose round-1
+    # brief/output filename collides with the same batch's earlier, already-committed
+    # round-1 attempt.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        briefs_dir = project_root / "_mill" / "briefs"
+        briefs_dir.mkdir(parents=True, exist_ok=True)
+        brief_file = briefs_dir / "implement-test-batch-r1.md"
+        brief_file.write_text("round-1 brief content", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/briefs/implement-test-batch-r1.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "blocked-time brief commit"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # A genuine content commit made this round -- HEAD must differ from start_sha for the
+        # no-content-commit gate (which runs ahead of the dirty-tree gate) to let the report
+        # through to the dirty-tree gate this case actually exercises.
+        marker = project_root / "_mill" / "marker.txt"
+        marker.write_text("card-1 content commit", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-1 commit"],
+            check=True,
+            capture_output=True,
+        )
+        brief_file.write_text("round-1 brief content, regenerated on resume", encoding="utf-8")
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"case76"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=batch_start_sha,
+                verify_cmd=None,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 76: dirty _mill/briefs/ file false-blocked, expected success, got {data}"
+            )
+            print(
+                "PASS: case 76 - #885 dirty _mill/briefs/ file (resumed-batch round-1"
+                " collision) does not trip the batch-scoped dirty-tree gate"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 76 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 77: the same dirty _mill/briefs/ file PLUS a genuinely dirty in-scope source file
+    # must still trip the gate, and the gate's reason must name the source file but never the
+    # briefs file -- proves the exclusion is scoped, not a blanket disable.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        briefs_dir = project_root / "_mill" / "briefs"
+        briefs_dir.mkdir(parents=True, exist_ok=True)
+        brief_file = briefs_dir / "implement-test-batch-r1.md"
+        brief_file.write_text("round-1 brief content", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/briefs/implement-test-batch-r1.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "blocked-time brief commit"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # A genuine content commit made this round -- HEAD must differ from start_sha for the
+        # no-content-commit gate (which runs ahead of the dirty-tree gate) to let the report
+        # through to the dirty-tree gate this case actually exercises.
+        marker = project_root / "_mill" / "marker.txt"
+        marker.write_text("card-1 content commit", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-1 commit"],
+            check=True,
+            capture_output=True,
+        )
+        brief_file.write_text("round-1 brief content, regenerated on resume", encoding="utf-8")
+        (project_root / "README.md").write_text(
+            "genuinely uncommitted in-scope dirt", encoding="utf-8"
+        )
+        agent_output = '{"status":"success","commit_sha":"abc","session_id":"case77"}\n'
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=batch_start_sha,
+                verify_cmd=None,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"case 77: expected stuck, got {data}"
+            assert data["stuck_type"] == "logic", (
+                f"case 77: expected logic (dirty-tree gate), got {data}"
+            )
+            assert "README.md" in data.get("reason", ""), (
+                f"case 77: expected README.md in reason, got {data}"
+            )
+            assert "_mill/briefs/implement-test-batch-r1.md" not in data.get("reason", ""), (
+                f"case 77: excluded briefs file must not appear in reason, got {data}"
+            )
+            print(
+                "PASS: case 77 - #885 dirty _mill/briefs/ file does not mask a genuinely"
+                " dirty in-scope source file, which still trips the gate"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
