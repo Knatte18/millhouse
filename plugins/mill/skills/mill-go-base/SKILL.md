@@ -57,7 +57,7 @@ this skill is loaded defensively in case a future addition needs its numbered-op
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at `plugins/mill/skills/mill-go-base/handoff.md` step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
      See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent).
-   - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `120` if the key is absent).
+   - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `240` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
@@ -174,22 +174,21 @@ do not branch on which upstream skill "should" logically run next.
   ```
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
-  - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 120)` and compute `giveup_s = timeout_minutes * 60`.
+  - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 240)` and compute `giveup_s = timeout_minutes * 60`.
   - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "planned", 10, giveup_s)`.
   - State one sentence to the user: waiting for the upstream mill-plan run to reach `phase: planned`.
   - Call the `Monitor` tool with `command=cmd`, `persistent: true`, `description` naming the slug and the target phase (e.g. "waiting for phase: planned (mill-plan handoff) for `<slug>`").
     Do not set a `timeout_ms` value distinct from the default — `persistent: true` makes it irrelevant, matching the existing "Waiting is never a decision point" convention already documented for Agent-mode dispatch elsewhere in this file: state what is being waited for, then wait, with no `AskUserQuestion` or free-text prompt in between.
   - **Record the `task_id` the `Monitor` tool call returns** in a local Builder variable and retain it for the duration of this wait (mirrors the existing "record the `agentId`" step in "## Agent-mode dispatch" above).
   - Wait for the `<task-notification>`.
-    A `Monitor` run of this poll script delivers exactly one per-line event notification (the single `READY` / `BLOCKED: ...` / `TIMEOUT after ...` line the script echoes before exiting, carried in that notification's `<event>` tag), immediately followed by a second, separate terminal notification (`<status>completed</status>`, no `<event>` tag) once the script's process actually exits — this two-notification shape (confirmed by a live spike during this task's plan review, not assumed from the Agent tool's differently-shaped single-result notification) is expected and requires no special handling: act on the first notification's `<event>` content;
+    A `Monitor` run of this poll script delivers exactly one per-line event notification (the single `READY` / `TIMEOUT after ...` line the script echoes before exiting, carried in that notification's `<event>` tag), immediately followed by a second, separate terminal notification (`<status>completed</status>`, no `<event>` tag) once the script's process actually exits — this two-notification shape (confirmed by a live spike during this task's plan review, not assumed from the Agent tool's differently-shaped single-result notification) is expected and requires no special handling: act on the first notification's `<event>` content;
     the second, event-less completion notification for the same `task_id` carries no further information and needs no separate branch.
     See `plugins/mill/docs/harness-tool-contracts.md` for this contract's canonical write-up.
     Branch on the `<event>` content:
     - **`READY`** — re-run this Entry phase gate step from its top: re-read `status_path` via `_status.read_full` fresh, and re-evaluate the whole phase table again from scratch (do not assume `planned` is now the phase and jump straight to Prepare;
       a fresh read could in principle still show something else if the upstream state changed again in the interim).
-    - **`BLOCKED: <reason>`** — halt immediately, surfacing `<reason>` to the operator using the same message shape as this table's existing `blocked` row (`surface blocked_reason from status.md and halt`).
-      Do not re-arm the wait automatically.
-    - **`TIMEOUT after <N>s waiting for phase: planned`** — halt with a message distinct from the `BLOCKED` case: state that the configured give-up period (`pipeline.entry_wait_timeout_minutes`) elapsed without mill-plan reaching `phase: planned`,
+      Note that the upstream `status.md` may have passed through `phase: blocked` and back before reaching `planned` — the wait does not treat upstream `blocked` as terminal (see `_phase_wait.build_wait_command`), so this is expected and requires no special handling here either.
+    - **`TIMEOUT after <N>s waiting for phase: planned`** — halt with a message stating that the configured give-up period (`pipeline.entry_wait_timeout_minutes`) elapsed without mill-plan reaching `phase: planned`,
       and that the operator should check on the upstream mill-plan session (it may be abandoned, still legitimately working past the give-up window, or never started) and re-run `/mill-go` to re-arm the wait if it is in fact still in progress.
   - **If the wait itself is stopped/interrupted at the harness level** (a `TaskStop` or equivalent operator-level cancellation of the recorded `task_id`, rather than one of the three outcomes above): treat it like any other harness-level stop elsewhere in this file — no automatic retry.
     Halt with a short message telling the operator the wait was cancelled and that re-running `/mill-go` will re-evaluate the phase (proceeding immediately if it has since become ready, or re-arming the wait if not).

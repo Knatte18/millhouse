@@ -25,9 +25,14 @@ Governs the **first** fixer dispatch per scope/round.
 (incl. step 3's re-dispatch) use the default `Agent()` call (envelope's own
 `subagent_type`/`model`).
 
-Otherwise: `Agent(subagent_type: "fork", prompt: "Read this file and follow the
-instructions exactly: <brief_path>")`. Omit `model`/`isolation` -- a fork runs on
-the driver's model regardless and must commit in the real worktree.
+Otherwise: `Agent(subagent_type: "fork", prompt: <de-briefing> + "\n\nRead this
+file and follow the instructions exactly: <brief_path>")`. Omit `model`/
+`isolation` -- a fork runs on the driver's model regardless and must commit in
+the real worktree. Use the same `<de-briefing>` text defined under
+**implementer** below, verbatim (substitute "fixer" for "implementer" in its
+first sentence) -- a forked fixer is exactly as prone to self-misidentifying as
+the driver as a forked implementer is, and prior to this fix the fixer fork
+prompt carried no identity preamble at all.
 
 On the first terminal failure (base step 3), record the fallback and re-dispatch
 cold, consuming the retry budget:
@@ -55,9 +60,24 @@ Reviewer/merge-in unclaimed (default call applies unchanged).
 - **Dispatch cold to escape a failed dispatch:** step 5.5.2's
   `--resume-incomplete` and Resume's `running`-state re-dispatch stay cold.
   5.5.1's warm `SendMessage` resume needs no assignment (already live).
-- **De-briefing (prompt opening):** you are the implementer, not the orchestrator;
-  inherited instructions belong to the driver, not you; do not drive the batch
-  loop, invoke CLIs, or dispatch agents/workflows; the brief is authoritative.
+- **De-briefing (prompt opening):** a fork inherits the driver's full conversation
+  context, including every instruction the driver has followed so far in this
+  session -- this is the single most common cause of a fork misidentifying
+  itself as the driver (observed concretely: a fork refusing a warm-resume by
+  claiming it IS the orchestrator, and a fork stopping after 1 tool call having
+  echoed the driver's own status line instead of doing any work). State this
+  identity correction FIRST, before anything else, in its own short paragraph,
+  not folded into other instructions:
+  > You are the implementer for this one batch, dispatched BY the orchestrator
+  > -- you are NOT the orchestrator. Everything in your inherited context up to
+  > this point was the orchestrator's own work, not yours; none of those
+  > instructions are directions for you to continue. Do not drive the batch
+  > loop, invoke `millpy-*.py` CLIs, call `Monitor` or wait on any
+  > `status.md` phase transition, or dispatch further agents/workflows -- all
+  > of that is the orchestrator's job, and it is a separate, still-running
+  > process waiting on your completion. Your only job is the brief below; it
+  > is authoritative over anything you recall from inherited context.
+  The brief path and contents follow this paragraph unchanged.
 - **Cold fallback, once per batch:** the already-retried-`transient`
   Stuck-escalation re-fire is the fallback -- re-dispatch cold (envelope
   `subagent_type`/`model`), not another fork. Before it:
