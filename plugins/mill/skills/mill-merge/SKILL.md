@@ -260,6 +260,8 @@ worktree, portal, and wiki active-dir teardown is handled by `/mill-cleanup`.
 Each step is independent;
 a failed step is reported with its name so the user can re-run from that step (Step 4's squash idempotency handles the common re-entry case).
 
+**Step 8 (release merge lock) executes out of its numeric position on the direct-squash path:** once Step 5's squash+push succeeds (including via the sub-step 1a rebase-retry — see Card 1), Step 8 runs immediately — before Steps 5.5, 6, and 7 — since none of those three steps touch the locked parent worktree. See "Post-Step-5-success sequencing" at the end of `### 5. Direct squash` and `### 8. Release merge lock`'s own note. This reordering does not affect the `merged` PR-state route (`## Entry`), which already skips Steps 1/2 (never acquires the lock) and documents Step 8 there as a no-op.
+
 > **Recovery note:** After teardown completes, the cleanup commit is permanently visible via `git log archive/<slug>`. Operators can inspect (or restore) the task-branch state at any point via `git checkout archive/<slug>`.
 
 ### 4. Cleanup commit
@@ -427,6 +429,8 @@ This step is direct path only.
 
   **Idempotency check:** if `git merge --squash` prints "Already up to date" or `git commit` prints "nothing to commit" → skip `push` and proceed to Step 6.
 
+  **Post-Step-5-success sequencing:** whenever Step 5 succeeds — either via the original `git -C <parent-path> push` above, or via sub-step 1a's rebase-retry push under "On push failure — branch-protection fallback" — run Step 8 (release merge lock) immediately next, before proceeding to Step 5.5. This applies to the direct-squash path only (this section); it does not apply to the `merged` PR-state route, which never reaches this section and has its own unaffected Step 8 no-op note in `## Entry`.
+
 ### 5.5. Preflight check for cache helpers
 
 Before attempting Step 6's archive-tag import, verify that the plugin cache is complete.
@@ -479,7 +483,8 @@ _client.set_phase(wiki_path, '<slug>', 'done')
 ```
 
 **Failure handling after the squash landed on parent:** do NOT roll back the merge.
-Report the error, release all locks, tell the user "Merge landed on <parent> but <step> failed: <err>.
+The merge lock was already released by Step 8's early execution (see "Post-Step-5-success sequencing" at the end of `### 5. Direct squash`), so there is nothing left to release here.
+Report the error, tell the user "Merge landed on <parent> but <step> failed: <err>.
 Re-run `/mill-merge` to retry — Step 5's idempotency check will skip the squash."
 This is the non-destructive boundary: once the parent has the squash, it stays.
 
@@ -487,6 +492,8 @@ This is the non-destructive boundary: once the parent has the squash, it stays.
 
 Delete `<parent-path>/.scratch/merge.lock`.
 Run this in a `finally:` equivalent so the lock is released on every exit path.
+
+**Execution point on the direct-squash path:** this step runs immediately after Step 5 succeeds (see "Post-Step-5-success sequencing" at the end of `### 5. Direct squash`), before Steps 5.5, 6, and 7 — not at the end of the Teardown sequence as its position in this document might otherwise suggest. On any of the pre-squash halts in Step 5 (dirty-parent-worktree, parent-fast-forward-failure) or a Step 1–5 rollback, this step still runs at its normal point in the Rollback/halt flow, unchanged.
 
 **In-place mode:** no merge lock was acquired (Entry Steps 1 and 2 were skipped).
 Skip lock release.
