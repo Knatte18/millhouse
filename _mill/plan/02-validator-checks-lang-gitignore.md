@@ -113,6 +113,13 @@ and modified tests live in.
   `  cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
   creates, with no depends-on edge to that creating batch`.
 
+  In `plugins/mill/scripts/_plan_validate.py`'s own module-level docstring (top of file, the
+  "Checks performed (check keys):" list), add a new line immediately after the existing
+  `commit-none-with-content` entry (matching that entry's existing indentation/wrapping style):
+  `    cross-batch-creates-no-depends-on — a card's Context:/Edits: references a file another batch's
+  Creates: produces, with no depends-on edge (direct or transitive) from the referencing batch to the
+  creating batch`.
+
   Add all three new function names (`test_check_cross_batch_creates_no_depends_on_clean`,
   `test_check_cross_batch_creates_no_depends_on_dirty`,
   `test_check_cross_batch_creates_no_depends_on_transitive_clean`) to the `tests = [...]` list
@@ -188,6 +195,12 @@ and modified tests live in.
   unchanged and already covers the new languages verbatim (scope the command, or document the
   cross-cutting-helper justification and re-run with `--skip-check verify-full-suite`).
 
+  Update `_check_verify_full_suite`'s own one-line docstring summary — currently "Flag verify:
+  commands that invoke run-all.py without a scoping filter." — to: "Flag verify: commands that invoke
+  an unscoped full-suite runner: run-all.py without -k/--only (Python/mill), go test ./... without
+  -run (Go), dotnet test without --filter (C#), or bare pytest/python -m pytest with no path or -k
+  filter (Python, non-mill)."
+
   In `plugins/mill/unit_tests/test-plan-validate.py`, extend whatever existing test function(s) cover
   `verify-full-suite` (search the file for `verify_full_suite` or `verify-full-suite` to locate them)
   with new fixture cases for each new language heuristic (Go `go test ./...` with and without
@@ -205,7 +218,8 @@ and modified tests live in.
 
 ### Card 10: #868 — gitignore-aware Context: refs in the pre-review validator
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/unit_tests/test-plan-validate.py`
