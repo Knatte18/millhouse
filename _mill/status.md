@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-verify-logic
+phase: approved-fork-dispatch-reliability-fixes
 slug: mill-go2-fork-dispatch-reliability
 branch: hanf/mill-go2-fork-dispatch-reliability
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r3  '2026-08-21T09:24:13Z'
 planned  '2026-08-21T09:24:25Z'
 implementing  '2026-08-21T09:24:53Z'
 self-resolved-verify-logic  '2026-08-21T09:37:52Z'
+approved-fork-dispatch-reliability-fixes  '2026-08-21T09:38:30Z'
 ```
 
 ## Batches
@@ -33,9 +34,10 @@ self-resolved-verify-logic  '2026-08-21T09:37:52Z'
 ```yaml
 batches:
   - name: fork-dispatch-reliability-fixes
-    state: running
+    state: approved
     implementer_session: ed370400-a455-46b3-b77c-ebfc1dc8ae01
     start_sha: 5b12b2b1b2ea3d252d6fc9d5408537b505b1ee17
+    commit_sha: 2e97410e7731e3034ecc2de638f7bbef108b73ee
     verify_baseline_failures: ['--- FAIL test-fixer-env-isolation.py (0.3s) ---', '--- FAIL test-guards.py (0.2s)
     ---', '--- FAIL test-language-skills-directive.py (0.1s) ---', 'FAIL -- 3 of 111
     in 12.2s: [''test-fixer-env-isolation.py'', ''test-guards.py'', ''test-language-skills-directive.py'']']
