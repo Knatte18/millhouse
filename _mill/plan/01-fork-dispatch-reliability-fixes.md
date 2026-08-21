@@ -27,7 +27,9 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 - **Moves:** none
 - **Requirements:** In the YAML frontmatter at the top of the file, replace the `description:` field's value. The current value reads (single line): `Experimental, opt-in variant of the mill-go orchestrator. Forks the fixer role instead of dispatching it cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator.`
 
-  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every attempt) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator.`
+  Replace it with: `Experimental, opt-in variant of the mill-go orchestrator. Forks the implementer (every batch's initial dispatch and transient re-dispatch) and the first fixer dispatch per scope/round, instead of dispatching cold; otherwise identical to /mill-go, so fork-dispatch experiments never destabilise the production orchestrator.`
+
+  This wording must match Card 3's narrowed forked set exactly (initial dispatch and step 3(a)'s transient re-dispatch only -- the Stuck-escalation self-resolve re-fire no longer forks per Card 3) rather than the plain "(every attempt)" phrasing this card originally proposed, which would misrepresent Card 3's own change and defeat the #851 catalog-accuracy goal this card exists to fix.
 
   Do not change the `name:` field or anything else in the frontmatter.
 - **Commit:** `docs(mill-go2): correct catalog description to name both forked roles (#851)`
@@ -36,6 +38,7 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 
 - **Context:**
   - `plugins/mill/skills/workflow/SKILL.md`
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-go2/SKILL.md`
 - **Creates:** none
@@ -53,7 +56,7 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
 
   Read `plugins/mill/skills/workflow/SKILL.md`'s "## Language Detection" table (listed in this card's `Context:`) to confirm the marker-file-to-skill-name mapping above matches it exactly before writing this text -- do not invent skill names.
 
-  Do not add or remove any other heading in the file. This section is mill-go-base's documented "Override point B" extension point (`mill-go-base/SKILL.md`'s Entry section: "treat your variant's `## Driver preamble` text as if written here, ahead of everything below") -- it already runs before Step 0 of every mill-go2 session, so no other wiring is needed to make this preload fire once, early, before any fork dispatch.
+  Do not add or remove any other heading in the file. This section is mill-go-base's documented "Override point B" extension point -- read `plugins/mill/skills/mill-go-base/SKILL.md`'s Entry section (listed in this card's `Context:`) before writing this card's edit and confirm it verbatim states: "Override point B: treat your variant's `## Driver preamble` text as if written here, ahead of everything below; if your variant declared no such section, halt ... A variant whose `## Driver preamble` section contains only `(none)` has declared the section and contributes no text; that is not a halt." This confirms the block runs before Step 0 of every mill-go2 session (ahead of Prepare and the Execute loop where forking happens), so no other wiring in `mill-go-base/SKILL.md` or elsewhere is needed to make this preload fire once, early, before any fork dispatch -- do not edit `mill-go-base/SKILL.md` itself.
 - **Commit:** `feat(mill-go2): preload shared skills once before forking (#849)`
 
 ### Card 3: bookend implementer fork de-briefing; cold-dispatch the stuck-escalation self-resolve re-fire
@@ -97,7 +100,12 @@ There are no batch-local decisions beyond the two `## Shared Decisions` in `00-o
     `_status.append_fork_fallback_log(status_path, batch_name, _timestamp.now_utc_iso())`,
     `git -C <worktree> add <status_path> && git -C <worktree> commit -m
     "<VARIANT_LABEL>: fork-fallback for implementer {batch_name}"`. Normal
-    escalation applies; forking gets no marker.
+    escalation applies; forking gets no marker. This logging fires at most
+    once per batch: whichever trigger reaches it first switches the batch's
+    remaining implementer dispatches to cold (per "Dispatch cold to escape a
+    failed dispatch" above and step 5.5.2's own cold-only re-dispatch paths),
+    so there is no second fork left in the batch for the other trigger to
+    fail on and re-log against.
   ```
 
   Do not touch the `**Known limits.**` paragraph that follows, or anything above the `### fixer` section's `Risks:` paragraph.
