@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-detached-head-branch-detection
+phase: approved-preflight-attribute-guard
 slug: mill-go-base-documented-behavior-gaps
 branch: hanf/mill-go-base-documented-behavior-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r2  '2026-08-21T09:19:42Z'
 planned  '2026-08-21T09:20:02Z'
 implementing  '2026-08-21T09:20:27Z'
 approved-detached-head-branch-detection  '2026-08-21T09:25:55Z'
+approved-preflight-attribute-guard  '2026-08-21T09:29:29Z'
 ```
 
 ## Batches
@@ -37,9 +38,10 @@ batches:
     commit_sha: 4dd6a29f2a905cb0fd40c2168b4f89cdda7a1424
     verify_baseline_failures: []
   - name: preflight-attribute-guard
-    state: running
+    state: approved
     implementer_session: f8fb9e87-c955-4942-9f31-9961da825571
     start_sha: 07785c351577350989867a1bcdc3aa71cb090f13
+    commit_sha: ccee2c9352c2b2d2f14a67fa7b668b49a63697dc
     verify_baseline_failures: []
   - name: entry-gate-discussion-phases
     state: pending
