@@ -32,5 +32,10 @@ implementing  '2026-08-21T09:24:53Z'
 ```yaml
 batches:
   - name: fork-dispatch-reliability-fixes
-    state: pending
+    state: running
+    implementer_session: ed370400-a455-46b3-b77c-ebfc1dc8ae01
+    start_sha: 5b12b2b1b2ea3d252d6fc9d5408537b505b1ee17
+    verify_baseline_failures: ['--- FAIL test-fixer-env-isolation.py (0.2s) ---', '--- FAIL test-language-skills-directive.py
+    (0.2s) ---', 'FAIL -- 2 of 111 in 12.1s: [''test-fixer-env-isolation.py'', ''test-language-skills-directive.py'']',
+  'FAIL -- 2 of 111 in 12.3s: [''test-fixer-env-isolation.py'', ''test-language-skills-directive.py'']']
 ```
