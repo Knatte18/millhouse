@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-merge-nested-layout-and-lock-bugs
 branch: hanf/mill-merge-nested-layout-and-lock-bugs
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-08-21T10:08:07Z'
 holistic-fixing  '2026-08-21T10:10:47Z'
 nits-fixed-holistic  '2026-08-21T10:12:23Z'
 holistic-approved  '2026-08-21T10:12:30Z'
+done  '2026-08-21T10:12:59Z'
 ```
 
 ## Batches
