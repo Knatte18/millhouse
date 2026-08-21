@@ -37,7 +37,9 @@ batches:
     commit_sha: 4dd6a29f2a905cb0fd40c2168b4f89cdda7a1424
     verify_baseline_failures: []
   - name: preflight-attribute-guard
-    state: pending
+    state: running
+    implementer_session: f8fb9e87-c955-4942-9f31-9961da825571
+    start_sha: 07785c351577350989867a1bcdc3aa71cb090f13
     verify_baseline_failures: []
   - name: entry-gate-discussion-phases
     state: pending
