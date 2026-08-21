@@ -20,7 +20,7 @@ Public API:
     callers (e.g.
     git-commit) that must never block on a missing parent.
     check_liveness(branch, git_root) -> bool Return True if branch currently exists on origin
-    (``git ls-remote --exit-code``).
+    (``git ls-remote --exit-code``) or as a live local branch ref (``git rev-parse --verify``).
     resolve_dead_parent(dead_branch, git_root, cfg, *, max_hops=10) -> dict Walk the
     ``archive/<slug>`` tag chain to find a live successor for a dead parent branch, falling back
     to the configured base branch or reporting a cycle -- see the function's own docstring for the
@@ -99,17 +99,30 @@ def _read_parent_from_status(
 
 def check_liveness(branch: str, git_root: Path) -> bool:
     """
-    Return True if `branch` currently exists on `origin` (`git ls-remote --exit-code`).
+    Return True if `branch` currently exists on `origin`, OR exists as a local branch ref.
 
-    `git branch -a` / local remote-tracking refs are deliberately not used as the liveness
-    signal, because `mill-cleanup`'s remote-branch deletion never prunes them -- a torn-down
-    parent's stale local `origin/<branch>` ref would otherwise report as alive.
+    Checks `git ls-remote --exit-code origin <branch>` first; if that fails, falls back to
+    `git rev-parse --verify --quiet refs/heads/<branch>` against `git_root` -- a live, local-only
+    (never-pushed) parent branch is not dead (#879).
+
+    `git branch -a` / local *remote-tracking* refs (`refs/remotes/origin/<branch>`) are
+    deliberately not used as the liveness signal, because `mill-cleanup`'s remote-branch
+    deletion never prunes them -- a torn-down parent's stale local `origin/<branch>` ref would
+    otherwise report as alive. This is a distinct signal from the local *branch* ref
+    (`refs/heads/<branch>`) checked below, which mill-cleanup DOES delete when a task is torn
+    down, so it carries no equivalent staleness risk.
     """
     result = _subprocess_util.run(
         ["git", "-C", str(git_root), "ls-remote", "--exit-code", "origin", branch],
         check=False,
     )
-    return result.returncode == 0
+    if result.returncode == 0:
+        return True
+    local_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+        check=False,
+    )
+    return local_result.returncode == 0
 
 
 def resolve_dead_parent(
