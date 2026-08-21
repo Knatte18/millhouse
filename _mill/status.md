@@ -49,6 +49,8 @@ batches:
     commit_sha: d67cc1f4277a7acc3d08b4da393b426c60af4178
     verify_baseline_failures: []
   - name: config-caller-alignment
-    state: pending
+    state: running
+    implementer_session: f2f59972-1002-49be-a733-aadcb5e1322a
+    start_sha: 6881b85899e738ccd277c43f3934a6de549e88d0
     verify_baseline_failures: []
 ```
