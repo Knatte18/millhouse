@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussion-fix-r3
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-08-21T06:51:23Z'
 discussion-fix-r2  '2026-08-21T09:03:33Z'
+discussion-fix-r3  '2026-08-21T09:07:37Z'
 ```
