@@ -127,7 +127,11 @@ mill's issue-bundling convention.
 - Decision: `_preflight.missing_helpers`/`check_helpers` gains an optional attribute-level check.
   Accept required-helper entries in `"module"` (file-presence only, unchanged/backward-compatible)
   or `"module:attr"` form (file-presence AND `hasattr(imported_module, attr)`); on the `:attr`
-  form, missing the attribute is reported the same way as a missing file. Both new call sites
+  form, missing the attribute is reported the same way as a missing file. If importing the module
+  raises for any reason (e.g. a syntax error in a very stale cached file, not just a missing
+  attribute), catch the exception and report that module as missing too — consistent with the
+  guard's actionable-message intent, rather than letting an unrelated import error surface as an
+  unhandled traceback at the guard call site. Both new call sites
   (mill-merge/SKILL.md Step 4, mill-merge-in/SKILL.md line 21) use
   `_preflight.check_helpers(['_parent_branch:check_liveness'])`. Step 5.5's existing
   `_preflight.check_helpers(['_archive_tag'])` call is left as a bare module name — unchanged.
