@@ -92,8 +92,7 @@ not run in parallel.
 
 ### Card 2: #902 — persist skip_checks across Phase: Plan / Phase: Plan Review
 
-- **Context:**
-  - `plugins/mill/skills/mill-plan/SKILL.md`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Creates:** none
@@ -264,6 +263,16 @@ converged = (round >= min_review_rounds)
   `" (min_rounds/demoted-predicate not satisfied by round cap)"` with
   `" (min_rounds not satisfied by round cap)"` throughout `mill-plan/SKILL.md` — there are four
   occurrences total: one in the Convergence gate section itself, and one each in 4a, 4b, and 4c).
+
+  Step 4c's own rationale sentence ("Rationale: 0-BLOCKING means the planner and reviewer have
+  converged; further rounds only churn cosmetic NITs — this is exactly the premature-termination
+  case a ceiling-demoted BLOCKING can otherwise mask, which is what the convergence gate now guards
+  against.") becomes self-contradicting once the `demoted` predicate is removed — the gate no longer
+  guards against ceiling-demoted findings at all. Replace the clause ", which is what the convergence
+  gate now guards against" with nothing (delete it), leaving the sentence ending "...this is exactly
+  the premature-termination case a ceiling-demoted BLOCKING can otherwise mask." — still a true,
+  standalone justification for why 0-BLOCKING alone should terminate the loop, without the now-false
+  claim that the gate specifically guards against that case.
 - **Commit:** `docs(mill-plan): drop redundant demoted predicate from convergence gate`
 
 ### Card 6: #901 — `out-of-worktree-target` skip-check paragraph
