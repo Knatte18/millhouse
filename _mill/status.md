@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-merge-in-nested-cwd
+phase: approved-parent-branch-liveness
 slug: mill-merge-nested-layout-and-lock-bugs
 branch: hanf/mill-merge-nested-layout-and-lock-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-08-21T09:56:08Z'
 implementing  '2026-08-21T09:56:38Z'
 approved-mill-merge-push-and-lock  '2026-08-21T09:59:15Z'
 approved-mill-merge-in-nested-cwd  '2026-08-21T10:01:42Z'
+approved-parent-branch-liveness  '2026-08-21T10:04:12Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: 6958293aececd6a3601261b256fe19e910fb679a
     commit_sha: d2b885c5e46107b6abc76d52b6e756e9cb98ed20
   - name: parent-branch-liveness
-    state: running
+    state: approved
     implementer_session: dff120c8-cf0a-4bfe-b3a8-8d293c38cec5
     start_sha: 3f86d5e2b545fa264e140739d02371757ad65806
+    commit_sha: d67cc1f4277a7acc3d08b4da393b426c60af4178
     verify_baseline_failures: []
   - name: config-caller-alignment
     state: pending
