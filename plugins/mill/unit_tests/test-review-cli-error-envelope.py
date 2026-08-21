@@ -58,6 +58,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         raise_find_slug: bool = False,
         skip_validate_flag: bool = True,
         round_arg: int | None = None,
+        stage: str | None = None,
     ) -> tuple[int, str, str]:
         """Run a CLI module and capture exit code + stdout + stderr.
 
@@ -68,6 +69,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
             --skip-validate
             round_arg: when not None, appends "--round <round_arg>" to argv for all three
                 cli_name values (not just "plan").
+            stage: when not None, appends "--stage <stage>" to argv.
 
         Returns:
             (exit_code, stdout, stderr)
@@ -84,6 +86,8 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
             argv.append("--skip-validate")
         if round_arg is not None:
             argv.extend(["--round", str(round_arg)])
+        if stage is not None:
+            argv.extend(["--stage", stage])
 
         # Capture stdout/stderr
         captured_stdout = io.StringIO()
@@ -177,6 +181,17 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
         result = json.loads(stdout)
         self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
 
+    def test_discussion_finalize_missing_agent_output_is_usage_error(self):
+        """Discussion CLI: --stage finalize with no --agent-output is a usage error (#864)."""
+        exit_code, stdout, stderr = self._run_cli_test("discussion", stage="finalize")
+
+        self.assertEqual(exit_code, 1)
+        result = json.loads(stdout)
+        self.assertEqual(result["verdict"], "ERROR")
+        self.assertEqual(result["round"], 0)
+        self.assertEqual(result["reviews"][0]["error_kind"], "usage")
+        self.assertIn("agent-output required for finalize stage", stderr)
+
     def test_discussion_success(self):
         """Discussion CLI: success returns exit 0 with APPROVE envelope."""
         from _review_common import ReviewResult
@@ -256,6 +271,17 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
 
         result = json.loads(stdout)
         self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
+
+    def test_code_finalize_missing_agent_output_is_usage_error(self):
+        """Code CLI: --stage finalize with no --agent-output is a usage error (#864)."""
+        exit_code, stdout, stderr = self._run_cli_test("code", stage="finalize")
+
+        self.assertEqual(exit_code, 1)
+        result = json.loads(stdout)
+        self.assertEqual(result["verdict"], "ERROR")
+        self.assertEqual(result["round"], 0)
+        self.assertEqual(result["reviews"][0]["error_kind"], "usage")
+        self.assertIn("agent-output required for finalize stage", stderr)
 
     def test_code_success(self):
         """Code CLI: success returns exit 0 with APPROVE envelope."""
@@ -341,6 +367,17 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
 
         result = json.loads(stdout)
         self.assertEqual(result["round"], 7, f"Expected round 7, got {result['round']}")
+
+    def test_plan_finalize_missing_agent_output_is_usage_error(self):
+        """Plan CLI: --stage finalize with no --agent-output is a usage error (#864)."""
+        exit_code, stdout, stderr = self._run_cli_test("plan", stage="finalize")
+
+        self.assertEqual(exit_code, 1)
+        result = json.loads(stdout)
+        self.assertEqual(result["verdict"], "ERROR")
+        self.assertEqual(result["round"], 0)
+        self.assertEqual(result["reviews"][0]["error_kind"], "usage")
+        self.assertIn("agent-output required for finalize stage", stderr)
 
     def test_plan_success(self):
         """Plan CLI: success returns exit 0 with APPROVE envelope."""
