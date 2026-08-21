@@ -66,6 +66,62 @@ def test_missing_helpers_all_missing() -> None:
     print("PASS missing_helpers — returns all names when all missing")
 
 
+def test_missing_helpers_module_attr_present() -> None:
+    """A "module:attr" entry is not missing when the module defines attr."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "_parent_branch.py").write_text("def check_liveness():\n    pass\n")
+
+        result = _preflight.missing_helpers(["_parent_branch:check_liveness"], tmp_path)
+        assert result == [], f"Expected [], got {result!r}"
+
+    print("PASS missing_helpers — module:attr present is not missing")
+
+
+def test_missing_helpers_module_attr_missing_attribute() -> None:
+    """A "module:attr" entry is reported missing (in full "module:attr" form) when the
+    module file exists but does not define attr."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "_parent_branch.py").write_text("def some_other_function():\n    pass\n")
+
+        result = _preflight.missing_helpers(["_parent_branch:check_liveness"], tmp_path)
+        assert result == ["_parent_branch:check_liveness"], (
+            f"Expected ['_parent_branch:check_liveness'], got {result!r}"
+        )
+
+    print("PASS missing_helpers — module:attr missing attribute reported in full form")
+
+
+def test_missing_helpers_module_attr_import_error() -> None:
+    """A "module:attr" entry whose module raises on import is reported missing rather
+    than letting the exception propagate."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "_parent_branch.py").write_text("this is not valid python (((\n")
+
+        result = _preflight.missing_helpers(["_parent_branch:check_liveness"], tmp_path)
+        assert result == ["_parent_branch:check_liveness"], (
+            f"Expected ['_parent_branch:check_liveness'], got {result!r}"
+        )
+
+    print("PASS missing_helpers — module:attr import error reported rather than raised")
+
+
+def test_missing_helpers_bare_module_unaffected_by_attr_form() -> None:
+    """A bare "module" entry (no ":") continues to use file-existence-only checking,
+    unaffected by the new module:attr code path."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        (tmp_path / "_archive_tag.py").write_text("# dummy\n")
+        (tmp_path / "_other_helper.py").write_text("# dummy\n")
+
+        result = _preflight.missing_helpers(["_archive_tag", "_other_helper"], tmp_path)
+        assert result == [], f"Expected [], got {result!r}"
+
+    print("PASS missing_helpers — bare module entry unaffected by module:attr form")
+
+
 def test_check_helpers_all_present() -> None:
     """check_helpers returns 0 when all helpers are present."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -154,3 +210,41 @@ def test_check_helpers_fallback_missing_module() -> None:
         stderr_output.encode("ascii")
 
     print("PASS check_helpers — fallback reports missing module correctly")
+
+
+def main() -> int:
+    tests = [
+        test_missing_helpers_all_present,
+        test_missing_helpers_some_missing,
+        test_missing_helpers_all_missing,
+        test_missing_helpers_module_attr_present,
+        test_missing_helpers_module_attr_missing_attribute,
+        test_missing_helpers_module_attr_import_error,
+        test_missing_helpers_bare_module_unaffected_by_attr_form,
+        test_check_helpers_all_present,
+        test_check_helpers_missing_prints_message,
+        test_check_helpers_fallback_to_own_dir,
+        test_check_helpers_fallback_missing_module,
+    ]
+
+    failures: list[str] = []
+    for test_fn in tests:
+        try:
+            test_fn()
+        except AssertionError as exc:
+            print(f"FAIL [{test_fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(test_fn.__name__)
+        except Exception as exc:  # noqa: BLE001
+            print(f"ERROR [{test_fn.__name__}]: {exc}", file=sys.stderr)
+            failures.append(test_fn.__name__)
+
+    print()
+    if failures:
+        print(f"FAIL -- {len(failures)} of {len(tests)} tests: {failures}", file=sys.stderr)
+        return 1
+    print(f"All {len(tests)} _preflight unit tests passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

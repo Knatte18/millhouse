@@ -49,7 +49,7 @@ Load the `mill:conversation` skill via the Skill tool, unconditionally, immediat
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
 1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
-   On `MarkerError` → halt with "this worktree was not created by mill-spawn". `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
+   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
 3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
@@ -116,7 +116,7 @@ this skill is loaded defensively in case a future addition needs its numbered-op
    | `planned` | fresh run — continue to Prepare |
    | `implementing` / `reviewing` / `fixing`, or matching the widened batch-scoped set (see "### Mid-execution phase-gate widening" below) | resume or routed continuation — see subsection |
    | `blocked` | surface `blocked_reason` from status.md and halt |
-   | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
+   | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` / `^discussion-fix-r\d+$` / `^discussion-gap-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
 
@@ -158,7 +158,7 @@ Route on the current `phase` value:
 
 ### Entry-gate wait for upstream mill-plan
 
-Whenever the phase-table lookup above lands on the widened `discussed`/`discussing`/`planning`/`plan-review-r{N}`/`plan-fix-r{N}` row, run this procedure instead of jumping straight to its listed action:
+Whenever the phase-table lookup above lands on the widened `discussed`/`discussing`/`planning`/`plan-review-r{N}`/`plan-fix-r{N}`/`discussion-fix-r{N}`/`discussion-gap-fix-r{N}` row, run this procedure instead of jumping straight to its listed action:
 
 **The phase-table match is authoritative — do not second-guess it.**
 Do not inspect `discussion.md`, `_mill/reviews/`, or any other artifact to judge whether the current phase "looks like" an abandoned or still-in-progress mill-start run, and do not conclude the operator invoked the wrong skill by mistake or present a menu of alternatives (e.g. "resume mill-start instead of waiting").
@@ -169,7 +169,9 @@ do not branch on which upstream skill "should" logically run next.
 - Compute the match:
   ```python
   matched = _phase_wait.matches_wait_trigger(
-      phase, {"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]
+      phase,
+      {"discussed", "discussing", "planning"},
+      [r"^plan-review-r\d+$", r"^plan-fix-r\d+$", r"^discussion-fix-r\d+$", r"^discussion-gap-fix-r\d+$"],
   )
   ```
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.

@@ -72,6 +72,17 @@ def slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str:
     except _pygit2_util.GitOpsError as e:
         raise MarkerError(f"could not read branch in {git_root}: {e}") from e
     if branch is None:
+        try:
+            sha = _pygit2_util.head_sha(git_root)
+            matches = _pygit2_util.local_branches_at_sha(git_root, sha)
+        except _pygit2_util.GitOpsError as e:
+            raise MarkerError("detached HEAD or non-branch state") from e
+        if matches:
+            raise MarkerError(
+                f"HEAD is detached at a commit matching branch(es) {', '.join(matches)} -- "
+                f"run 'git checkout <name>', or use /mill-resume if this worktree was copied "
+                f"from another machine."
+            )
         raise MarkerError("detached HEAD or non-branch state")
 
     prefix = cfg.get("spawn", {}).get("branch_prefix", "")

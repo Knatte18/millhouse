@@ -61,11 +61,54 @@ def test_slug_from_branch_detached_head() -> None:
         cfg = {"spawn": {"branch_prefix": "hanf/"}}
         try:
             _marker.slug_from_branch(worktree_path, wiki_path, cfg)
-        except _marker.MarkerError:
-            pass
+        except _marker.MarkerError as e:
+            if "hanf/foo" not in str(e):
+                raise AssertionError(f"expected 'hanf/foo' in message, got: {e}")
         else:
             raise AssertionError("expected MarkerError for detached HEAD")
     print("PASS: test_slug_from_branch_detached_head")
+
+
+def test_slug_from_branch_detached_head_no_matching_branch() -> None:
+    with _test_helpers.safe_temp_dir() as tmp:
+        worktree_path, wiki_path = _test_helpers._make_task_worktree(
+            tmp, "foo", "Foo Title", branch_prefix="hanf/", phase="active"
+        )
+        # The fixture's "main" branch never moves past the initial commit (checkout_new_branch
+        # forks "hanf/foo" from it without advancing "main"), so a single "extra" commit on
+        # "hanf/foo" would leave its parent == the initial commit == "main"'s tip, still matching a
+        # branch. Two extra commits put the target (the first "extra" commit) strictly between the
+        # initial commit and the current "hanf/foo" tip, so no local branch points at it.
+        subprocess.run(
+            ["git", "-C", str(worktree_path), "commit", "--allow-empty", "-m", "extra1"],
+            capture_output=True,
+            check=True,
+        )
+        target_sha = subprocess.run(
+            ["git", "-C", str(worktree_path), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        subprocess.run(
+            ["git", "-C", str(worktree_path), "commit", "--allow-empty", "-m", "extra2"],
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(worktree_path), "checkout", target_sha],
+            capture_output=True,
+            check=True,
+        )
+        cfg = {"spawn": {"branch_prefix": "hanf/"}}
+        try:
+            _marker.slug_from_branch(worktree_path, wiki_path, cfg)
+        except _marker.MarkerError as e:
+            if str(e) != "detached HEAD or non-branch state":
+                raise AssertionError(f"expected fallback message, got: {e}")
+        else:
+            raise AssertionError("expected MarkerError for detached HEAD with no matching branch")
+    print("PASS: test_slug_from_branch_detached_head_no_matching_branch")
 
 
 def test_slug_from_branch_unknown_slug() -> None:
@@ -306,6 +349,7 @@ def main() -> int:
         test_slug_from_branch_happy_path,
         test_slug_from_branch_empty_prefix,
         test_slug_from_branch_detached_head,
+        test_slug_from_branch_detached_head_no_matching_branch,
         test_slug_from_branch_unknown_slug,
         test_slug_from_branch_ready_to_merge,
         test_slug_from_branch_pr_pending,

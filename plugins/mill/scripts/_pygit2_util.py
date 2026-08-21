@@ -100,6 +100,37 @@ def head_sha(path: Path) -> str:
         raise GitOpsError(f"could not read HEAD SHA in {path}: {error_msg}") from e
 
 
+def local_branches_at_sha(path: Path, sha: str) -> list[str]:
+    """Find every local branch whose tip commit matches a given SHA.
+
+    Used to enrich a detached-HEAD error with the branch name(s) the caller most likely meant to
+    check out.
+
+    Args:
+        path: Path inside the repository.
+        sha: The commit SHA to match branch tips against.
+
+    Returns:
+        Sorted list of local branch shorthand names (e.g. "hanf/foo") whose tip equals sha.
+        Empty list if no local branch's tip matches -- this is the normal, expected outcome for most
+        detached-HEAD cases, not an error.
+
+    Raises:
+        GitOpsError: If unable to enumerate local branches.
+    """
+    try:
+        repo = open_repo(path)
+        matches = []
+        for name in repo.branches.local:
+            branch = repo.branches.local[name]
+            if str(branch.target) == sha:
+                matches.append(name)
+        return sorted(matches)
+    except (pygit2.GitError, GitOpsError) as e:
+        error_msg = str(e).encode("ascii", errors="replace").decode("ascii")
+        raise GitOpsError(f"could not enumerate local branches at {sha} in {path}: {error_msg}") from e
+
+
 def current_branch(path: Path) -> str | None:
     """Get the current branch name,
 or None if HEAD is detached.
@@ -337,6 +368,7 @@ __all__ = [
     "head_sha",
     "is_ancestor",
     "list_worktrees",
+    "local_branches_at_sha",
     "open_repo",
     "resolve_common_dir_parent",
     "status_porcelain",

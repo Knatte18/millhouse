@@ -181,6 +181,30 @@ def main() -> int:
             "unsuffixed 'approved' near-miss against the widened set"
         )
 
+        # Case 15: matches_wait_trigger — the Entry-gate wait's widened
+        # discussion-fix-r{N} / discussion-gap-fix-r{N} patterns
+        # (mill-go-base/SKILL.md's "Entry-gate wait for upstream mill-plan" section).
+        entry_gate_exact = {"discussed", "discussing", "planning"}
+        entry_gate_regexes = [
+            r"^plan-review-r\d+$",
+            r"^plan-fix-r\d+$",
+            r"^discussion-fix-r\d+$",
+            r"^discussion-gap-fix-r\d+$",
+        ]
+        assert matches_wait_trigger("discussion-fix-r3", entry_gate_exact, entry_gate_regexes)
+        assert matches_wait_trigger(
+            "discussion-gap-fix-r12", entry_gate_exact, entry_gate_regexes
+        )
+        # Near-miss: "discussion-fixed-r3" must not accidentally match "^discussion-fix-r\d+$".
+        assert not matches_wait_trigger(
+            "discussion-fixed-r3", entry_gate_exact, entry_gate_regexes
+        )
+        print(
+            "PASS: matches_wait_trigger matches the Entry-gate wait's widened "
+            "discussion-fix-rN/discussion-gap-fix-rN patterns without accidentally "
+            "matching a near-miss string"
+        )
+
         print("All _phase_wait unit tests passed.")
         return 0
     except AssertionError as exc:
