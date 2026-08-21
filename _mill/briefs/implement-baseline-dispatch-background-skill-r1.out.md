@@ -1,0 +1,7 @@
+1 of 1 card committed — Card 6 is complete, matching the single commit in the log against the single card declared in this batch file. Verify passed.
+
+{"status":"success","commit_sha":"8206de62f5708194e9119544a608723a54a6c509","session_id":"b3645b6e-6bc2-42cd-93b9-f63ed10a6e77","cards_done":[6]}
+
+Summary: 1 of 1 cards committed (Card 6). Edited `/home/knatte/Code/millhouse/wts/mill-go-finalize-and-baseline-stage-bugs/plugins/mill/skills/mill-go-base/SKILL.md` to switch the "0.5. Baseline pre-flight" and "0.6. Per-batch baseline recapture (self-hosting only)" sections from a capped 600000ms foreground `millpy-implement.py --stage baseline` Bash call to the `millpy-bg.py` background-dispatch-and-poll pattern with `_bg.check_bg_status` liveness checks, per the plan's Card 6 requirements 6a-6f. Section 0.6 preserves its `<git_root>`-form inner-command exception via an explicit `env PYTHONPATH=` wrapper (since `millpy-bg.py` runs its payload as a literal argv list with no shell), while its outer `millpy-bg.py` wrapper call is cache-form; section 0.5 is fully cache-form. Committed as `8206de62f5708194e9119544a608723a54a6c509` and pushed. Verify command (`PYTHONPATH= grep -q millpy-bg.py plugins/mill/skills/mill-go-base/SKILL.md`) passed. Working tree is clean.
+
+{"status":"success","commit_sha":"8206de62f5708194e9119544a608723a54a6c509","session_id":"b3645b6e-6bc2-42cd-93b9-f63ed10a6e77","cards_done":[6]}

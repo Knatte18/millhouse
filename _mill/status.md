@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-build-once-step
+phase: approved-baseline-dispatch-background-skill
 slug: mill-go-finalize-and-baseline-stage-bugs
 branch: hanf/mill-go-finalize-and-baseline-stage-bugs
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-08-21T09:44:54Z'
 implementing  '2026-08-21T09:45:15Z'
 approved-dirty-tree-briefs-exclusion  '2026-08-21T09:50:12Z'
 approved-baseline-build-once-step  '2026-08-21T09:54:47Z'
+approved-baseline-dispatch-background-skill  '2026-08-21T09:57:20Z'
 ```
 
 ## Batches
@@ -47,8 +48,9 @@ batches:
     commit_sha: c626b4fd091df849394f2a3dd38cbe8bae179163
     verify_baseline_failures: []
   - name: baseline-dispatch-background-skill
-    state: running
+    state: approved
     implementer_session: b3645b6e-6bc2-42cd-93b9-f63ed10a6e77
     start_sha: 36818bccce97fe4e96a44cc58ca0fb95c21f718c
+    commit_sha: 8206de62f5708194e9119544a608723a54a6c509
     verify_baseline_failures: []
 ```
