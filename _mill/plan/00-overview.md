@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-merge/merge-in: nested-layout config resolution, stale locks, and rollback-target bugs'
 slug: mill-merge-nested-layout-and-lock-bugs
-approved: false
+approved: true
 started: 20260821-092340
 parent: main
 root: ""
