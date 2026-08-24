@@ -88,6 +88,7 @@ Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depe
    Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
+   Report the slug to the user now, before any other output: `"slug: <slug>"` — this worker's identifier is otherwise not visible anywhere in a dispatched agent's own transcript, and the orchestrator needs it verbatim for `orch-review <slug>` (under `--orch`) or any other slug-addressed command.
 
 **Path Setup.** `cfg` is already loaded.
 Derive:
