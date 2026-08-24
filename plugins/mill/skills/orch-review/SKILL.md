@@ -1,12 +1,14 @@
 ---
 name: orch-review
-description: Write an orchestrator-authored discussion review for a mill-start --orch worker that is paused awaiting review, signaling it to resume.
+description: Wait for a mill-start --orch worker to write discussion.md, then write an orchestrator-authored discussion review, signaling the worker to resume.
 argument-hint: "<slug>"
 ---
 
 # orch-review
 
 Companion to `mill-start`'s `--orch` flag. A worker running `/mill-start --orch` pauses before discussion-review round 1's automated reviewer dispatch, waiting for a file named `orch-review.md` to appear next to `discussion.md`. This skill is what **this session** (the orchestrator/driver, not the worker) loads to actually write that file — it is the human-in-the-loop substitute for round 1's automated reviewer.
+
+Invoke it right after dispatching the worker — it blocks on its own until `discussion.md` exists, so there is no need to separately watch the worker and only invoke this once Phase: Discussion File has been confirmed complete.
 
 This skill never dispatches an agent, never touches `_mill/reviews/`, and never commits or pushes anything — it only writes one ephemeral file. The waiting worker consumes it and is solely responsible for turning it into the canonical, committed review artifact.
 
@@ -25,17 +27,23 @@ print(_paths.resolve_canonical_worktree_path(container, '<slug>'))
 
 If the printed path does not exist, halt: `"<slug>: no worktree found at <path> — was it spawned, and is the worker actually running mill-start --orch there?"`
 
-## Step 2 — Read the discussion in full
+## Step 2 — Blocking wait for `discussion.md`
+
+This skill can be invoked as soon as the worker is dispatched — it does not require the operator to first confirm the worker has reached Phase: Discussion Review. Block until `<worktree>/_mill/discussion.md` exists: same idiom as `orch-wait`'s own wait (`Monitor` tool, persistent bash poll, not a fixed `sleep`), polling every 30 seconds, giving up after the same configured `pipeline.entry_wait_timeout_minutes` `orch-wait` reads (load config the same way — do not hardcode).
+
+On timeout: halt and report `"<slug>: discussion.md not written after <N>h -- is the worker still running mill-start --orch?"`. This skill makes no `status.md` writes of its own even on timeout — the worker owns all `status.md` mutations; if it is actually stuck, that is diagnosed and fixed on the worker side, not here.
+
+## Step 3 — Read the discussion in full
 
 Read `<worktree>/_mill/discussion.md` in full — do not skim. If `<worktree>/_mill/orch-review.md` already exists, halt and ask whether to overwrite (a stale file from a prior round may still be awaiting pickup).
 
-## Step 3 — Review it
+## Step 4 — Review it
 
 Apply the same rubric `plugins/mill/templates/review-discussion.md` gives an automated reviewer — read that template's "## Criteria" section and apply each bullet (undecided items, scope, constraint coverage, tooling/validator claims, failure modes, testing, ambiguity, feasibility, decisions). Ground every finding in an actual quote or section reference from `discussion.md` — never fabricate. Explore the codebase as needed to verify claims, exactly as an automated reviewer would.
 
 Severity and class vocabulary are closed, per `plugins/mill/templates/review-output.schema.md`: severity is `BLOCKING` or `NIT` only (default ambiguous findings to `BLOCKING`); class is `design`, `scope`, `decision`, or `consistency`, always supplied.
 
-## Step 4 — Write `orch-review.md`
+## Step 5 — Write `orch-review.md`
 
 Write `<worktree>/_mill/orch-review.md` (next to `discussion.md`, never inside `_mill/reviews/` — that directory is reserved for the canonical, timestamped files the worker's `finalize()` call produces) in the exact format `plugins/mill/templates/review-output.schema.md` documents:
 
@@ -64,7 +72,7 @@ APPROVE | REQUEST_CHANGES
 
 Omit `## Findings` entirely (write `(no findings)`) if there are none. `duration_s`/`tool_calls`/`cost_usd` are absent — this review has no such metadata, same as any review file written before that feature existed (see the schema doc).
 
-## Step 5 — Report
+## Step 6 — Report
 
 Tell the user:
 
