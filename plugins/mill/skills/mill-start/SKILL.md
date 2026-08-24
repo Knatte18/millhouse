@@ -1,7 +1,7 @@
 ---
 name: mill-start
 description: In a spawned worktree, discuss the solution with the user and produce a self-contained discussion.md that mill-plan can consume with zero conversation history.
-argument-hint: "[--auto]"
+argument-hint: "[--auto|--orch]"
 ---
 
 # mill-start
@@ -58,6 +58,19 @@ Operator-driven entries keep the existing bare format (`- **Q:** … **A:** …`
 
 `--auto` is mill-start's own separate mechanism: a per-invocation flag controlling Phase: Discuss / Discussion Review behaviour in mill-start. mill-plan and mill-go are unconditionally autonomous outside mill-start entirely — there is no config key or flag governing their behavior,
 and the Auto mode subsection here neither reads nor writes any such setting.
+
+## Orch mode (`--orch`)
+
+`--orch` is for a worker dispatched (via the `Agent` tool) to run mill-start unattended while a *human orchestrator* — the session that dispatched it, not an automated reviewer — supplies discussion-review round 1's review by hand. Companion skill: `orch-review`, loaded separately by the orchestrator to write the file this flag waits for.
+
+`--orch` implies every `--auto` rule above (Phase: Discuss auto-picks, the FIX-everything decision-tree override, the convergence gate, the non-progress/extension machinery) — it is not a third independent mode, just `--auto` with one substitution on discussion-review round 1. Everywhere `--auto` is checked in this SKILL, treat `--orch` as satisfying it too.
+
+At the top of Phase: Discussion Review's loop, compute `round_n` the same way `_review_discussion.prepare` does — call `_review_common.discover_round(reviews_dir, "discussion", "holistic")` directly, don't re-derive it.
+
+- `round_n == 1`: load the `orch-wait` skill via the Skill tool now and follow it in place of the normal Step 2 dispatch — it handles the wait, the substitute review, and handing back an envelope shaped exactly like Step 2's own output. Resume this SKILL's Phase: Discussion Review at step 3 with that envelope.
+- `round_n > 1`: do not load `orch-wait` — run Step 2 exactly as written (the real configured automated reviewer). The substitution is one-shot, round 1 only.
+
+**Never combine `--orch` with interactive mode** — interactive mill-start already has an operator in its own conversation to review directly; `--orch` exists only so a dispatched worker with no operator in its context can receive one human-authored review.
 
 ## Entry
 

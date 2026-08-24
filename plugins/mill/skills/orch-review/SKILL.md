@@ -1,12 +1,12 @@
 ---
-name: mill-orch-review
-description: Write an orchestrator-authored discussion review for a dispatched mill-start --auto agent that is paused awaiting review (mill-start-orch-review's round-1 wait), signaling it to resume.
+name: orch-review
+description: Write an orchestrator-authored discussion review for a mill-start --orch worker that is paused awaiting review, signaling it to resume.
 argument-hint: "<slug>"
 ---
 
-# mill-orch-review
+# orch-review
 
-Companion skill to `mill:mill-start-orch-review`. That skill dispatches a worker agent to run `/mill-start --auto` but pauses it before round 1's automated reviewer dispatch, waiting for a file named `orch-review.md` to appear next to `discussion.md`. This skill is what **this session** (the orchestrator/driver, not the worker) loads to actually write that file — it is the human-in-the-loop substitute for round 1's automated reviewer.
+Companion to `mill-start`'s `--orch` flag. A worker running `/mill-start --orch` pauses before discussion-review round 1's automated reviewer dispatch, waiting for a file named `orch-review.md` to appear next to `discussion.md`. This skill is what **this session** (the orchestrator/driver, not the worker) loads to actually write that file — it is the human-in-the-loop substitute for round 1's automated reviewer.
 
 This skill never dispatches an agent, never touches `_mill/reviews/`, and never commits or pushes anything — it only writes one ephemeral file. The waiting worker consumes it and is solely responsible for turning it into the canonical, committed review artifact.
 
@@ -23,7 +23,7 @@ print(_paths.resolve_canonical_worktree_path(container, '<slug>'))
 "
 ```
 
-If the printed path does not exist, halt: `"<slug>: no worktree found at <path> — was it spawned, and is the worker actually running mill-start-orch-review there?"`
+If the printed path does not exist, halt: `"<slug>: no worktree found at <path> — was it spawned, and is the worker actually running mill-start --orch there?"`
 
 ## Step 2 — Read the discussion in full
 
@@ -70,12 +70,12 @@ Tell the user:
 
 ```
 Wrote _mill/orch-review.md for <slug>. The waiting worker polls every few seconds and will
-pick this up, apply the mill-start review-fix decision tree, and resume mill-start --auto
+pick this up, apply the mill-start review-fix decision tree, and resume mill-start --orch
 on its own — no further action needed here.
 ```
 
 ## Rules
 
 - **One file, one purpose.** This skill's entire footprint is writing `_mill/orch-review.md`. It does not read or write `status.md`, `_mill/reviews/`, or anything under the wiki.
-- **Never used for round 2+.** The paired `mill-start-orch-review` skill only waits for this file on discussion-review round 1; any later round in the same task reverts to the normal configured automated reviewer. Re-running this skill against a task past round 1 has no effect (nothing is waiting for the file).
+- **Never used for round 2+.** `mill-start --orch` only waits for this file on discussion-review round 1; any later round in the same task reverts to the normal configured automated reviewer. Re-running this skill against a task past round 1 has no effect (nothing is waiting for the file).
 - **Ground every finding.** Same source-grounding rule the automated reviewer prompt carries: never fabricate file contents or discussion.md sections not actually read.
