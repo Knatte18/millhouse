@@ -70,6 +70,8 @@ At the top of Phase: Discussion Review's loop, compute `round_n` the same way `_
 - `round_n == 1`: load the `orch-wait` skill via the Skill tool now and follow it in place of the normal Step 2 dispatch — it handles the wait, the substitute review, and handing back an envelope shaped exactly like Step 2's own output. Resume this SKILL's Phase: Discussion Review at step 3 with that envelope.
 - `round_n > 1`: do not load `orch-wait` — run Step 2 exactly as written (the real configured automated reviewer). The substitution is one-shot, round 1 only.
 
+**Convergence-gate floor override.** `min_review_rounds` (read in Entry step 2) is raised to `max(min_review_rounds, 2)` for the remainder of this `mill-start` invocation, the moment `--orch` is in effect. Round 1 under `--orch` is a human substitute, not the automated reviewer the configured `min_rounds` was tuned for — an APPROVE with zero findings there must never by itself satisfy the Convergence gate in Phase: Discussion Review, or the real configured automated reviewer would never run at all on this task. This forces at least one genuine automated round (round 2) after any round-1 orch approval, before the loop can break to Handoff.
+
 **Never combine `--orch` with interactive mode** — interactive mill-start already has an operator in its own conversation to review directly; `--orch` exists only so a dispatched worker with no operator in its context can receive one human-authored review.
 
 ## Entry
@@ -85,7 +87,7 @@ Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depe
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay).
    Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
-   Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
+   Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). Under `--orch`, apply the floor override in "## Orch mode" immediately after reading it. `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
    Report the slug to the user now, before any other output: `"slug: <slug>"` — this worker's identifier is otherwise not visible anywhere in a dispatched agent's own transcript, and the orchestrator needs it verbatim for `orch-review <slug>` (under `--orch`) or any other slug-addressed command.
