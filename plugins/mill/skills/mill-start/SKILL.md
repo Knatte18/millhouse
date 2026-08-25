@@ -263,8 +263,8 @@ Each round:
    This recovery applies even though mill-start is interactive and has no autonomous stuck machinery;
    the one-retry plus subprocess fallback is the defined recovery, after which the skill surfaces to the operator.
 
-   **Agent-mode properties:** mill-start remains interactive and the REQUEST_CHANGES / APPROVE-with-NIT branches (steps 4a/4b/5) are unchanged once the envelope is in hand.
-   Preserve `--auto` mode behavior.
+   **Agent-mode properties:** the mechanics of steps 4a/4b/5 (how to read the envelope, where the review file lives, how to enumerate findings) are unchanged once the envelope is in hand — Agent-mode dispatch only changes *how the review runs*, never *who resolves the findings*.
+   Under `--auto`/`--orch`, step 5's interactive gap-prompt behavior is still fully replaced by "Phase: Discussion Review — `--auto` changes" above — see the explicit guard at the top of step 5 below. Do not read "unchanged" as "still interactive."
    For the async background-agent launch, notification handling, and stopped/interrupted agent recovery, see the "## Agent-mode dispatch" section in `plugins/mill/skills/mill-go-base/SKILL.md` — that section is the single source of truth;
    do not re-assert synchronous return behavior here.
 
@@ -380,7 +380,9 @@ the fixer report's `discussion-fix-r<N>` reuses the just-completed review round'
 If not `converged` and `round < max_review_rounds`: still call `_status.append_phase(status_path, f"discussion-fix-r{N}", _timestamp.now_utc_iso())` and commit the NIT fixes (single git commit covering `<discussion_path>`, `<reviews_dir>/`, `<status_path>`, `_mill/briefs/`, message `mill-start: discussion-fix round {N} for {slug}`) and push — the fix genuinely happened — but skip the `"discussed"` phase append and the Handoff completion report, and continue to round N+1 instead of breaking.
 If not `converged` and `round >= max_review_rounds`: run the branch's full terminal actions above exactly as if `converged` were `True`, appending the implicit-approve note to the `discussion-fix round {N}` commit message per the Convergence gate above.
 
-5. On REQUEST_CHANGES: read the review file and enumerate each `[BLOCKING]` finding.
+5. **Guard — `--auto`/`--orch` skip this entire step.** Under `--auto` or `--orch` (every round, not just round 1 — `--orch`'s round-1 substitution only changes *who wrote* the review, not which rules govern reading it), do NOT run any part of step 5 below. Instead follow "Phase: Discussion Review — `--auto` changes" above verbatim: auto-resolve each `[BLOCKING]` finding using best judgment, commit, push, re-run the review — no operator gap-prompt, no batches, no waiting for an answer. Step 5's numbered text below is the plain-interactive path only.
+
+   On REQUEST_CHANGES (plain interactive mode only): read the review file and enumerate each `[BLOCKING]` finding.
    The heading may carry a class suffix — `### [BLOCKING:design]` counts as a BLOCKING finding exactly like a bare `### [BLOCKING]` — so a classed heading is never missed.
    Routing here is on severity alone: whether a finding is presented to the operator as a gap in this step depends only on its `BLOCKING` severity, never on its class.
    Class never enters this SKILL's routing decision — the discussion stage's `blocking_classes` ceiling has already produced exactly the intended routing set by the time this file is written, so duplicating that logic here would only risk diverging from it.
