@@ -70,7 +70,9 @@ At the top of Phase: Discussion Review's loop, compute `round_n` the same way `_
 - `round_n == 1`: load the `orch-wait` skill via the Skill tool now and follow it in place of the normal Step 2 dispatch — it handles the wait, the substitute review, and handing back an envelope shaped exactly like Step 2's own output. Resume this SKILL's Phase: Discussion Review at step 3 with that envelope.
 - `round_n > 1`: do not load `orch-wait` — run Step 2 exactly as written (the real configured automated reviewer). The substitution is one-shot, round 1 only.
 
-**Convergence-gate floor override.** `min_review_rounds` (read in Entry step 2) is raised to `max(min_review_rounds, 2)` for the remainder of this `mill-start` invocation, the moment `--orch` is in effect. Round 1 under `--orch` is a human substitute, not the automated reviewer the configured `min_rounds` was tuned for — an APPROVE with zero findings there must never by itself satisfy the Convergence gate in Phase: Discussion Review, or the real configured automated reviewer would never run at all on this task. This forces at least one genuine automated round (round 2) after any round-1 orch approval, before the loop can break to Handoff.
+**Convergence gate — two consecutive APPROVEs required.** Before the loop, additionally initialise `prev_verdict_was_approve: bool = False` (there is no round before round 1, so it starts `False` — this is the entire mechanism, no `min_review_rounds` override needed). Under `--orch`, layer one extra AND-clause onto the shared Convergence gate formula in Phase: Discussion Review: `converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in envelope["findings"]) and prev_verdict_was_approve`. After every round is processed (whichever of 4a/4b/5 fires, `converged` or not), set `prev_verdict_was_approve = (envelope["verdict"] == "APPROVE")` for the next round's check.
+
+Round 1 under `--orch` is a human substitute, not the automated reviewer `min_rounds` was tuned for — one lone APPROVE there, or anywhere, must never by itself satisfy convergence. Since `prev_verdict_was_approve` starts `False`, round 1's own APPROVE can never converge no matter how `min_review_rounds` is configured; the loop only breaks once two APPROVE rounds land back-to-back (e.g. round 1 orch-APPROVE immediately followed by round 2's real-reviewer APPROVE, or — if round 1 was REQUEST_CHANGES — the first two consecutive real-reviewer APPROVEs after that). This treats the orch round as an ordinary round in the same N-round loop: no `reviewer_model` check, no identity-based special-casing, just the natural fact that it is always the first round and therefore can never have a qualifying predecessor.
 
 **Never combine `--orch` with interactive mode** — interactive mill-start already has an operator in its own conversation to review directly; `--orch` exists only so a dispatched worker with no operator in its context can receive one human-authored review.
 
@@ -87,7 +89,7 @@ Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depe
    `signature: _paths.resolve_wiki_path(git_toplevel: Path) -> Path`
 2. Load config — deep-merge `<hub_root>/mill-config.yaml` (shared hub overlay) with `.millhouse/config.local.yaml` (gitignored worktree overlay).
    Read `roles.discussion-review.holistic.rounds` as `max_review_rounds`.
-   Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). Under `--orch`, apply the floor override in "## Orch mode" immediately after reading it. `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
+   Read `roles.discussion-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Discussion Review below). Under `--orch`, also initialise `prev_verdict_was_approve` per "## Orch mode"'s Convergence-gate addendum. `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError`, halt and tell the user this worktree was not created by `mill-spawn`.
    Report the slug to the user now, before any other output: `"slug: <slug>"` — this worker's identifier is otherwise not visible anywhere in a dispatched agent's own transcript, and the orchestrator needs it verbatim for `orch-review <slug>` (under `--orch`) or any other slug-addressed command.
@@ -347,6 +349,8 @@ Print this round's cost line per the shared "## Review cost line" section in `pl
 converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in envelope["findings"])
 ```
 
+**Under `--orch`: AND `prev_verdict_was_approve`** — see "## Orch mode"'s "Convergence gate — two consecutive APPROVEs required" addendum above for the extra clause and the `prev_verdict_was_approve` bookkeeping (init before the loop, update after every round). Not optional, not a suggestion — under `--orch` this file's `converged` formula is that addendum's version, not the bare one above.
+
 `envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
 
 - `converged is True`: proceed exactly as the branch's terminal actions describe below (no behavior change).
@@ -354,6 +358,7 @@ converged = (round >= min_review_rounds) and not any(f.get("demoted") for f in e
 - `converged is False` AND `round >= max_review_rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to that round's commit message (4a's Handoff commit at `### Phase: Handoff`, or 4b's own commit, whichever fires) so the shortfall is auditable.
 - This gate never applies to a REQUEST_CHANGES round (step 5) — those already continue/exhaust by existing logic, untouched.
 - The gate is orthogonal to `--auto`'s `prev_blocking_titles`/`extension_used` non-progress-extension machinery — that machinery only reads BLOCKING-finding titles across REQUEST_CHANGES rounds; the convergence gate never reads or writes `prev_blocking_titles`/`extension_used`.
+- Regardless of `converged`'s outcome, `prev_verdict_was_approve` (under `--orch` only) is updated once per round per the addendum above — including on the implicit-approve-at-round-cap branch, so a round-cap implicit approval still counts as an APPROVE for the next invocation's bookkeeping (moot in practice since Handoff follows immediately, but keeps the state honest).
 
 4a. On APPROVE (verdict from JSON) with no NIT findings: read the review file at the absolute path supplied by `reviews[0].file` in the JSON envelope from step 2 and confirm zero `[NIT]`-prefixed findings.
 The heading may carry a class suffix — `### [NIT:scope]` counts as a NIT exactly like a bare `### [NIT]` — so a classed heading is never missed.
