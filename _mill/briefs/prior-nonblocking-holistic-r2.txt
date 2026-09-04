@@ -1,1 +1,0 @@
-- CLI-to-finalize git identity wiring has no regression test: **Location:** `plugins/mill/unit_tests/test-millpy-implement.py`, `plugins/mill/unit_tests/test-fix-finalize.py`
