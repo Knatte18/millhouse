@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-plan-fixer-doc-update
+phase: holistic-reviewing
 slug: plan-validate-context-completeness-missing-symbol-refs
 branch: hanf/plan-validate-context-completeness-missing-symbol-refs
 plan: _mill/plan
@@ -29,6 +29,7 @@ planned  '2026-09-04T09:49:04Z'
 implementing  '2026-09-04T09:49:36Z'
 approved-symbol-reference-check  '2026-09-04T09:59:10Z'
 approved-mill-plan-fixer-doc-update  '2026-09-04T10:00:52Z'
+holistic-reviewing  '2026-09-04T10:01:27Z'
 ```
 
 ## Batches
