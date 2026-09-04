@@ -26,8 +26,10 @@ The `mill:code-comments` skill is the shared, language-agnostic rulebook that bo
 
 **Out:**
 
-- No change to `plugins/golang/skills/golang-comments/SKILL.md`, `plugins/csharp/skills/csharp-comments/SKILL.md`, or the python plugin's `python-comments` skill.
-  Those `## Prohibited patterns` sections carry language *syntax/mechanics* rules only (golang's sole bullet is "No `/* block comments */` inside function bodies"); a language-agnostic content rule belongs in `code-comments` and would be duplication there.
+- No change to `plugins/golang/skills/golang-comments/SKILL.md`, `plugins/csharp/skills/csharp-comments/SKILL.md`, or `plugins/python/skills/python-comments/SKILL.md`.
+  Of the three, only `golang-comments` has a `## Prohibited patterns` section at all (line 220), and its single bullet is a language *syntax/mechanics* rule ("No `/* block comments */` inside function bodies");
+  `csharp-comments` and `python-comments` have no such section to extend.
+  A language-agnostic content rule belongs in `code-comments` -- which those skills explicitly layer on top of -- and duplicating it into any of them would drift.
 - No change to `SKILLS.md` -- the root index renders each skill's frontmatter `description:`, and the frontmatter is untouched.
   No `/mill-skills-index` run is required.
 - No change to the review-prompt templates under `plugins/mill/templates/` (`review-code-batch.md`, `review-code-holistic.md`).
@@ -44,6 +46,8 @@ The `mill:code-comments` skill is the shared, language-agnostic rulebook that bo
 - Decision: add exactly one bullet to `plugins/mill/skills/code-comments/SKILL.md`'s `## Prohibited patterns` list, appended after the existing final bullet ("No measured-result or design-rationale narrative").
 - Rationale: the rule is language-agnostic and concerns comment *content*, which is precisely what `code-comments` owns ("Language-agnostic -- each language's own `{lang}-comments` skill covers syntax and mechanics on top of this").
   The existing prohibited-pattern bullets are the closest siblings in both form and intent: `No edit-history comments` and `No measured-result or design-rationale narrative` are also "don't put volatile/incidental facts in a comment" rules.
+- Note: of the per-language comment skills, only `golang-comments` has a `## Prohibited patterns` section (its one bullet is syntax-only); `csharp-comments` and `python-comments` have none.
+  Either way there is no language-agnostic content rule in any of them to extend or duplicate.
 - Rejected: a new top-level `##` section of its own -- overweight for a single rule, and it would separate the rule from the sibling anti-staleness bullets it belongs with.
   Also rejected: mirroring the bullet into each per-language comment skill -- duplication that would drift.
 
