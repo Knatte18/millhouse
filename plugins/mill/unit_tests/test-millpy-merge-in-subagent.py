@@ -155,6 +155,16 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIn("`a.py`", values["CONFLICTING_FILES"])
         self.assertIn("`b.py`", values["CONFLICTING_FILES"])
         self.assertIn("PROJECT_ROOT", values)
+        # Pin: CONFLICTING_FILES renders the --files argument verbatim (already
+        # repo-relative, since it comes from `git diff --name-only --diff-filter=U`)
+        # rather than being joined onto project_root -- the task brief's claim of a
+        # full-path leak here is inaccurate (see the plan's
+        # build_deletes_section-and-millpy-merge-in-subagent-verified Shared Decision).
+        self.assertNotIn(
+            str(self.tmp_path), values["CONFLICTING_FILES"],
+            "CONFLICTING_FILES must not carry the fixture's absolute project-root "
+            "prefix -- the --files argument is already repo-relative",
+        )
 
     def test_2_conflicts_stuck(self):
         """conflicts mode: sub-agent returns stuck -> exit 0, stuck JSON."""
