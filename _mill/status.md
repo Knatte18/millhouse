@@ -63,5 +63,7 @@ batches:
     start_sha: 15ac85a49813bb288b1f83b550f71331a0cbb7c2
     commit_sha: 2c614d713e5737a75876bde44ed35f9e11d13b96
   - name: step-5-5-liveness-probe
-    state: pending
+    state: running
+    implementer_session: 69e887f5-206e-48b0-bdab-d175bd654a9e
+    start_sha: 642118602cf5ae9ae9fd5e14b95bc362b7bd1794
 ```
