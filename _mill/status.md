@@ -1,7 +1,8 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r7
+phase: blocked
+blocked_reason: 'auto: discussion review gaps unresolved after 9 rounds'
 slug: plan-validate-context-completeness-missing-symbol-refs
 branch: hanf/plan-validate-context-completeness-missing-symbol-refs
 plan: null
@@ -19,4 +20,5 @@ discussion-fix-r3  '2026-09-04T08:18:05Z'
 discussion-fix-r5  '2026-09-04T08:26:00Z'
 discussion-fix-r6  '2026-09-04T08:31:48Z'
 discussion-fix-r7  '2026-09-04T08:36:49Z'
+blocked  '2026-09-04T08:46:33Z'
 ```
