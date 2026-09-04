@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-validator-exemptions
+phase: approved-structural-exemption-tests
 slug: plan-validate-context-completeness-false-positive-exemptions
 branch: hanf/plan-validate-context-completeness-false-positive-exemptions
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r2  '2026-09-04T17:01:06Z'
 planned  '2026-09-04T17:01:16Z'
 implementing  '2026-09-04T17:01:56Z'
 approved-validator-exemptions  '2026-09-04T17:12:13Z'
+approved-structural-exemption-tests  '2026-09-04T17:25:52Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ batches:
     commit_sha: 505cd83ada453ba43759fece1100cf988aecea0f
     verify_baseline_failures: []
   - name: structural-exemption-tests
-    state: running
+    state: approved
     implementer_session: b7c3b2d1-4bd4-4331-9c67-4089e9a077ea
     start_sha: f4de74d1780a95fc0cdb62ba465e3762ce535db9
+    commit_sha: f52804ad3577f34035e1c58164d67f8561d4de27
     verify_baseline_failures: []
   - name: reviewer-and-docs-sync
     state: pending
