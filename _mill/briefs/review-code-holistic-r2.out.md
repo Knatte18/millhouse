@@ -1,0 +1,55 @@
+MILL_REVIEW_BEGIN
+# Review: millpy-implement/fix.py: stuck-type false positives and session-hygiene gaps — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-04
+```
+
+## Findings
+
+No findings. Verified end-to-end across all five batches:
+
+- Batch 1/2 (#954): `_run_verify_gates`'s corroboration-waiver branch in `_implementer_common.py`
+  correctly commits the `status.md` write (git add + `_subprocess_util.git_commit`, no push) before
+  `_in_scope_dirty_stuck` runs later in the same `finalize_from_output` call. `git_name`/`git_email`
+  are threaded through `_run_verify_gates`, `finalize_from_output`, and all four `_forward_output`
+  call sites identically, matching the plan's exact code text. Tests (cases 78-80 in
+  `test-implementer-common.py`) cover the explicit-JSON path, a no-JSON-inference path (asserting no
+  uncommitted diff), and the `None`-identity safe no-op.
+- Batch 3 (#916): `millpy-fix.py`'s finalize branch now derives `module_wide_verify_cmd`/
+  `module_wide_cwd_override` from the overview and forwards `batch_verify_baseline` (per-batch for
+  `--scope batch`, sorted union for `--scope holistic`) — code matches Card 6 verbatim, including the
+  shared `batch_verify_baseline = None` initializer. `test-fix-finalize.py` Tests 6/7 assert on both
+  scopes, including the module-wide derivation and the union-with-dedup case.
+- Batch 4 (#956): `millpy-implement.py`'s prepare-reuse gate now consults the timeline's last row for
+  `self-resolved-verify-logic` and withholds reuse until the fresh mint records
+  `self_resolve_remint_at`, bounding the remint to exactly one cycle. `_status.py`'s
+  `_BATCH_ALLOWED_KEYS` and `_serialise_batches` both gained the new field consistently. The
+  `--stage full` fresh-mint-always contract is preserved (`_prepare_reuse_entry` only computed for
+  `--stage prepare`). Four new tests in `test-millpy-implement.py` cover the remint, the
+  non-self-resolve reuse regression guard, the bounded-second-call case, and phase-field isolation.
+- Batch 5 (#955): `millpy-bg.py`'s heartbeat thread writes through the single already-open log
+  handle, is stopped/joined inside the `with` block (not the outer `finally`), and is
+  defense-in-depth `daemon=True` only. Three new tests (q/r/s) verify presence, single-handle usage,
+  and clean join with no escaped exception.
+- Shared Decisions verified consistently applied: git identity is threaded as parameters and never
+  re-resolved inside `_implementer_common.py`; every new optional parameter defaults to `None` and
+  degrades to a safe no-op (confirmed by case 80 and the `_already_reminted`/no-op paths); no new CLI
+  flags or `mill-go-base/SKILL.md` edits were introduced.
+- No out-of-plan files, no duplicated helpers across batches, no cross-batch contract mismatches
+  (`_plan_dag.parse_verify_field`/`iter_batch_verifies`/`_read_batch_frontmatter` signatures match
+  every call site added by batch 3).
+- Prior non-blocking item (CLI-to-finalize git identity wiring untested) is now covered: both
+  `test-millpy-implement.py` (`test_16_stage_finalize_accepts_round_flag`) and `test-fix-finalize.py`
+  (Test 6) assert `git_name`/`git_email` are forwarded from `main()`'s resolved locals into
+  `finalize_from_output`. No escalation needed — this strengthens rather than regresses the prior
+  state.
+
+## Verdict
+
+APPROVE
+All five batches match their plan cards exactly; Shared Decisions hold; tests cover every new path.
+MILL_REVIEW_END
