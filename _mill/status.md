@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-enumerated-consumer-rule
+phase: holistic-reviewing
 slug: code-comments-skill-consumer-enumeration-rule
 branch: hanf/code-comments-skill-consumer-enumeration-rule
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-09-04T16:20:10Z'
 planned  '2026-09-04T16:20:19Z'
 implementing  '2026-09-04T16:20:50Z'
 approved-enumerated-consumer-rule  '2026-09-04T16:24:00Z'
+holistic-reviewing  '2026-09-04T16:24:35Z'
 ```
 
 ## Batches
