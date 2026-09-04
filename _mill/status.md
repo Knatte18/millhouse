@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
-plan: null
+plan: _mill/plan
 parent: main
 task: 'millpy-implement/bg: Windows baseline-worktree teardown (WinError 145) and stale liveness reporting'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-04T07:57:23Z'
 discussed  '2026-09-04T08:28:20Z'
+planning  '2026-09-04T08:39:54Z'
 ```
