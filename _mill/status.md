@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-brief-instruction-hardening  '2026-09-04T10:23:18Z'
 approved-git-commit-staging-verification  '2026-09-04T10:24:47Z'
 approved-commit-sha-field-rename-and-regression-tests  '2026-09-04T10:29:15Z'
 holistic-reviewing  '2026-09-04T10:29:41Z'
+holistic-approved  '2026-09-04T10:32:08Z'
 ```
 
 ## Batches
