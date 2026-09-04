@@ -146,6 +146,11 @@ do not count them as part of the expected total when comparing your committed-ca
 Your free-text summary MUST state the real count honestly (e.g. "4 of 9 cards committed") — never write an unqualified "all complete"/"all done" claim without having actually verified the count this way.
 This applies regardless of which model is running this session: this check is what protects an operator who is only reading your chat summary from a false completion claim, independent of whatever the machine-readable JSON status line below says.
 
+**Never restate `commit_sha` in prose.** Your free-text summary may say the
+work is committed, but never write the SHA value (full or abbreviated)
+anywhere in prose -- the JSON line is the only place it appears. Restating it
+manually invites a transcription error the JSON line never has.
+
 Your last line of output (after all work and commits) MUST be a single JSON object:
 
 ```json
@@ -201,6 +206,13 @@ mill-go treats that as `stuck_type: logic` with reason "no structured report".
 **Long-session reminder:** if you have produced a lot of tool output earlier in this session (e.g. many `Bash` calls, large `Read` results), your final assistant turn's text output may be truncated by the orchestrator before the JSON line is captured.
 To protect against this, emit the JSON line as the **first** non-tool content of your final assistant turn, before any optional commentary or further tool calls.
 Re-emit the JSON line at the end of the same turn as well — duplicate JSON is fine, `_implementer_common._forward_output` reads the last match.
+
+**Nothing follows the JSON line.** If you notice yourself starting a wrap-up
+paragraph after finishing implementation -- a "Note:", "Summary:", or any
+explanation of what you did or did not run -- stop and delete it before
+ending your turn. The JSON line above is the end of your turn; no prose,
+caveats, or notes may come after it, even ones that seem helpful to a human
+reader.
 
 ## On review resume
 
