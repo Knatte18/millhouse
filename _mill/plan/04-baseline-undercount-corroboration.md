@@ -116,8 +116,9 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
                 # Waived: fall through to the module-wide gate below exactly as the batch_result is None path already does.
                 batch_result = None
   ```
-  Add an `else:` clause after the `if normalized_replay.issubset(normalized_baseline):` block (same
-  indentation level as that `if`), so the mismatch case now attempts corroboration before falling
+  Extend the `if normalized_replay.issubset(normalized_baseline):` block with an
+  `elif start_sha is None: pass` and a final `else:` (both at the same indentation level as that
+  `if`, per the code block below), so the mismatch case now attempts corroboration before falling
   through to the unchanged `if batch_result is not None: return batch_result` below it. Guard the
   corroboration attempt on `start_sha is not None` at this call site itself — do not rely solely on
   `_corroborate_batch_failure`'s own internal `None` check (Card 9's test 72h patches
@@ -229,6 +230,7 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
 - **Context:**
   - `plugins/mill/scripts/_verify_baseline.py`
   - `plugins/mill/scripts/millpy-implement.py`
+  - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/unit_tests/test-implementer-common.py`
 - **Creates:** none
@@ -247,12 +249,14 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   waived + baseline persisted". Setup: call `base_sha = _setup_fixture(project_root)`. Use a
   `verify_cmd` whose failure is content-independent (reproduces identically regardless of repo
   content, e.g. `"echo '--- FAIL: TestNew (0.00s)' && exit 1"`, matching case 72b's own
-  content-independent command). Build a real `status.md` fixture (reuse whatever helper this file or
-  a sibling test file already uses to construct a minimal `status.md` with a `## Batches` section
-  containing one batch entry — if no such helper exists in this file, write the minimal `status.md`
-  text directly, following `_status.py`'s documented `## Batches` format closely enough that
-  `_status.set_batch_field` can find and mutate the entry by name) with one batch named e.g.
-  `"01-test-batch"` and no `verify_baseline_failures` field yet. Call `_run_verify_gates(project_root,
+  content-independent command). Build a real `status.md` fixture using the established
+  `_status.render_initial(...)` + `_status.init_batches(status_path, [...])` pattern (used
+  identically in `test-millpy-fix.py`/`test-status.py`): write
+  `_status.render_initial("Test Task", "test", "2026-01-01T00:00:00Z", "main", "test-slug",
+  "test-branch")`'s return value to a `status_path` under `project_root` (e.g. `project_root /
+  "_mill" / "status.md"`, creating the parent `_mill/` dir first), then call
+  `_status.init_batches(status_path, ["01-test-batch"])` to seed one batch entry at `state: pending`
+  with no `verify_baseline_failures` field yet. Call `_run_verify_gates(project_root,
   verify_cmd, None, batch_verify_baseline=["--- FAIL: TestOld (1.11s)"], start_sha=base_sha,
   status_path=<the fixture status.md path>, batch_name="01-test-batch")`. Assert the result is `None`
   (waived). Assert (via `_status.read_batches(status_path)`) that the `"01-test-batch"` entry's
@@ -267,7 +271,8 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   `"test -f marker.txt && echo '--- FAIL: TestNew (0.00s)' && exit 1 || exit 0"` (fails at `HEAD`
   where `marker.txt` exists, passes at `base_sha` where it does not exist yet). Call
   `_run_verify_gates(project_root, verify_cmd, None, batch_verify_baseline=["--- FAIL: TestOld
-  (1.11s)"], start_sha=base_sha, status_path=<fixture path>, batch_name="01-test-batch")`. Assert the
+  (1.11s)"], start_sha=base_sha, status_path=<a fresh status.md fixture built via the same
+  `_status.render_initial`/`_status.init_batches` pattern as case 72f>, batch_name="01-test-batch")`. Assert the
   result is not `None` and `result["stuck_type"] == "verify"` (still blocks — the control run at
   `base_sha` passed, so the mismatch was not corroborated as pre-existing).
 
