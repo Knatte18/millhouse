@@ -1,0 +1,22 @@
+MILL_REVIEW_BEGIN
+# Review: mill-plan: review-round cap and skip-check threading bugs — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-04
+```
+
+## Findings
+
+### [NIT:consistency] Card 2's literal "before" quote doesn't match the actual `phase: blocked` row text
+**Location:** `plugins/mill/skills/mill-plan/SKILL.md:78`
+**Issue:** Card 2 (`01-mill-plan-skill-round-cap-and-skip-check-fixes.md:38`) specifies changing the row's action text from a short "surface blocked_reason ... tell operator to re-run --revise ... halt" string, but the file already carries the longer, pre-restructured "this row's literal action is superseded ... Entry: resuming after a max-rounds block" text from prior unrelated work — the literal find/replace target never existed. The implementer correctly folded in equivalent `--approve` messaging instead of performing a literal substitution.
+**Fix:** None required now — the resulting text is functionally correct and the second required edit (trailing citation sentence) matches verbatim; future cards touching this row should quote the current text rather than a stale baseline.
+
+## Verdict
+
+APPROVE
+All 8 cards are faithfully realized; `_plan_validate.run`/`_status` call signatures match; round-cap and `--approve` threading are consistent across every dispatch site.
+MILL_REVIEW_END
