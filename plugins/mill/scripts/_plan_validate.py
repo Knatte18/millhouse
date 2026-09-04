@@ -125,6 +125,16 @@ _RE_VERIFY_ONLY = re.compile(r"--only\s+(.+)$")
 # Naturally stops before the next --flag-shaped token since flags don't match this pattern.
 _RE_TEST_FILE_TOKEN = re.compile(r"^[\w.-]+\.(py|go)$")
 
+# Matches a Windows drive-letter root (e.g. "C:/" or "C:\") or a UNC root (a doubled leading
+# backslash, e.g. "\\server\share"). Used by context-completeness's out-of-repo-literal exemption
+# to recognize an absolute-looking token without compiling this pattern per token.
+_RE_WINDOWS_ABS_ROOT = re.compile(r"^(?:[A-Za-z]:[/\\]|\\\\)")
+
+# Clause-boundary punctuation: comma, semicolon, colon, period. Used by the negation-phrase and
+# contrast-citation exemptions below to keep a phrase match from reaching across an unrelated
+# clause in the same Requirements: line.
+_RE_CLAUSE_BOUNDARY = re.compile(r"[,;:.]")
+
 # Required card fields. "Moves" sits after "Deletes" and before "Requirements" per the moves-grammar Shared Decision.
 _REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Requirements", "Commit"]
 
@@ -1710,7 +1720,87 @@ def _is_prohibition_exempt(lowered_line: str) -> bool:
         _PROHIBITION_VERB_RE.search(lowered_line)
     )
 
-# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging. "signature inlined" and "no file read needed" additionally cover the case where a Requirements: line inlines a cited symbol's full signature and therefore needs no file read, which is why naming the defining file on that line is not an unlisted read dependency.
+
+def _clause_bounds(lowered_line: str, start: int, end: int) -> tuple[int, int]:
+    """Return the (start, end) offsets of the clause containing the ``[start, end)`` span in
+    ``lowered_line``.
+
+    A clause is delimited by comma/semicolon/colon/period (``_RE_CLAUSE_BOUNDARY``) on either side,
+    or by the line's own edges when no such punctuation exists on that side.
+    Shared by the negation-phrase and contrast-citation exemptions so neither reaches across an
+    unrelated clause on the same Requirements: line.
+    """
+    clause_start = 0
+    for boundary in _RE_CLAUSE_BOUNDARY.finditer(lowered_line[:start]):
+        clause_start = boundary.end()
+    boundary_after = _RE_CLAUSE_BOUNDARY.search(lowered_line, end)
+    clause_end = boundary_after.start() if boundary_after else len(lowered_line)
+    return clause_start, clause_end
+
+
+_RE_NEGATION_NO_WORD = re.compile(r"\bno\b")
+_RE_NEGATION_IS_INVOLVED = re.compile(r"\bis involved\b")
+_RE_NEGATION_WITHOUT_IMMEDIATE = re.compile(r"\bwithout\s*`?\s*$")
+_RE_NEGATION_IS_NOT_VERB = re.compile(r"\bis not\b.*\b(?:involved|needed|required|used)\b")
+
+
+def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+    """
+    Return True when the token occurrence at ``[token_start, token_end)`` in ``lowered_line`` is
+    positioned by the surrounding prose as explicitly NOT a dependency, rather than merely
+    mentioned near a negation word anywhere on the line.
+
+    Supports three phrase templates, each clause-scoped via ``_clause_bounds`` so intervening words
+    are allowed but never across a comma/semicolon/colon/period:
+    1. the token preceded by "no" and followed by "is involved" (e.g. "no `x.py` is involved"),
+    2. the token immediately preceded by "without" (e.g. "without `x.py`"), with no intervening
+       words -- unlike the other two templates, "without" only reads as a dependency-negating
+       preposition when it sits right next to the token,
+    3. the token followed by "is not" plus one of "involved"/"needed"/"required"/"used".
+
+    This exemption exists as a separate, positional check rather than widening
+    ``_is_prohibition_exempt``'s word-set with "no" plus the verbs "involve"/"need"/"require"/
+    "exist": ``_is_prohibition_exempt`` matches line-wide with no positional requirement, so a bare
+    "no" paired with any of its roughly twenty existing verb forms anywhere on the line would exempt
+    a large share of ordinary Requirements prose that has nothing to do with the token being
+    checked.
+    """
+    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    before = lowered_line[clause_start:token_start]
+    after = lowered_line[token_end:clause_end]
+
+    if _RE_NEGATION_NO_WORD.search(before) and _RE_NEGATION_IS_INVOLVED.search(after):
+        return True
+    if _RE_NEGATION_WITHOUT_IMMEDIATE.search(before):
+        return True
+    return bool(_RE_NEGATION_IS_NOT_VERB.search(after))
+
+
+# Contrast markers: naming a rejected alternative alongside the chosen one (e.g. "`new.py` rather
+# than `old.py`"). Unlike the narrow existing _CITATION_MARKERS entries ("e.g.", "signature
+# inlined"), "rather than" and "instead of" are ordinary connective English that also appears in
+# genuine dependency prose ("read `config.py` instead of hardcoding the value"), so a line-wide
+# substring match would wrongly exempt real dependencies -- these are matched only with the
+# clause-scoped adjacency requirement in ``_is_contrast_citation_exempt`` below, never folded into
+# _CITATION_MARKERS.
+_CONTRAST_MARKERS = ("rather than", "instead of")
+
+
+def _is_contrast_citation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+    """
+    Return True when a contrast marker (``_CONTRAST_MARKERS``) shares the token occurrence's
+    clause, per ``_clause_bounds``.
+
+    Sharing a clause covers both directions the motivating phrasing takes -- the token can be the
+    chosen alternative appearing before the marker, or the rejected one appearing after it -- since
+    a clause by definition has no comma/semicolon/colon/period between its ends.
+    """
+    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    clause_text = lowered_line[clause_start:clause_end]
+    return any(marker in clause_text for marker in _CONTRAST_MARKERS)
+
+
+# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging. "signature inlined" and "no file read needed" additionally cover the case where a Requirements: line inlines a cited symbol's full signature and therefore needs no file read, which is why naming the defining file on that line is not an unlisted read dependency. "mentioned, not read" is the planner's explicit escape hatch for a mention that no structural or phrasing rule below reaches -- a bare line-wide substring match is correct for it, exactly like "signature inlined" and "no file read needed", because the phrase is unambiguous and would not appear by accident.
 _CITATION_MARKERS = (
     "as an example",
     "as examples",
@@ -1721,6 +1811,7 @@ _CITATION_MARKERS = (
     "citing",
     "signature inlined",
     "no file read needed",
+    "mentioned, not read",
 )
 
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
@@ -1962,6 +2053,124 @@ def _covered_by_own_refs(candidate: str, own_refs: set[str], moves_sources: set[
     )
 
 
+def _is_confirmed_git_ignored(
+    candidate: Path,
+    project_root: Path,
+    git_root: Path | None,
+    wiki_root: Path | None,
+    ignore_memo: dict[Path, bool],
+) -> bool:
+    """
+    Return True when ``candidate`` (an existing, resolvable Requirements: path reference) is
+    confirmed git-ignored under its own source repository root.
+
+    ``candidate`` arrives unresolved from ``resolve_existing_paths`` and ``Path.is_relative_to`` is
+    a lexical prefix comparison that does not collapse parent-directory segments, so both
+    ``candidate`` and each root are ``.resolve()``-d before comparison -- the same reasoning the
+    out-of-repo-literal exemption's second half applies.
+    The candidate's own source root is the first of ``git_root``, ``project_root``, ``wiki_root`` (in
+    that order, skipping any that is ``None``) it is relative to;
+    when none matches, the candidate is out-of-repo and this returns False without running any
+    subprocess -- the out-of-repo-literal exemption has already handled that case upstream.
+    Otherwise runs ``git -C <source_root> check-ignore -q <candidate>`` and treats returncode 0 as
+    ignored;
+    any exception whatsoever, including a non-git source root, is swallowed and treated as
+    not-confirmed-ignored, mirroring the ``soft_fail_gitignored`` branch of ``resolve_ref_paths`` in
+    ``_review_common.py``.
+    That pairing cannot simply be reused here because ``resolve_existing_paths`` returns a flat list
+    of paths with no source-root attribution, unlike ``resolve_ref_paths``, which carries
+    candidate-and-root pairs.
+
+    Memoized in ``ignore_memo`` (created once per ``_check_context_completeness`` call) by the
+    resolved candidate path, so a path recurring across cards costs one subprocess call, not one per
+    occurrence.
+    """
+    resolved_candidate = candidate.resolve()
+    if resolved_candidate in ignore_memo:
+        return ignore_memo[resolved_candidate]
+
+    source_root: Path | None = None
+    for root_candidate in (git_root, project_root, wiki_root):
+        if root_candidate is None:
+            continue
+        resolved_root = root_candidate.resolve()
+        if resolved_candidate.is_relative_to(resolved_root):
+            source_root = resolved_root
+            break
+
+    if source_root is None:
+        ignore_memo[resolved_candidate] = False
+        return False
+
+    try:
+        result = _subprocess_util.run(
+            ["git", "-C", str(source_root), "check-ignore", "-q", str(resolved_candidate)]
+        )
+        ignored = result.returncode == 0
+    except Exception:
+        # Any failure whatsoever -- including source_root not being a git repository -- means
+        # "not confirmed ignored"; this check never propagates.
+        ignored = False
+
+    ignore_memo[resolved_candidate] = ignored
+    return ignored
+
+
+def _card_creates_tokens(card_text: str) -> list[str]:
+    """Return this card's own ``Creates:`` backtick tokens, in declaration order.
+
+    Mirrors ``_card_edits_tokens``'s inline/sub-bullet walk via ``_RE_REFS_HEADER``/``_RE_REFS_SUB``,
+    scoped to the ``Creates`` field only.
+    """
+    tokens: list[str] = []
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_REFS_HEADER.match(line)
+        if m and m.group(1) == "Creates":
+            inline = m.group("inline").strip()
+            if inline:
+                tokens.extend(re.findall(r"`([^`]+)`", inline))
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                tokens.extend(re.findall(r"`([^`]+)`", sm.group(1)))
+                j += 1
+            i = j
+            continue
+        i += 1
+    return tokens
+
+
+def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tuple[int, int]]:
+    """
+    Return a plan-wide map from each ``Creates:`` token to the composite key of the card declaring
+    it: a ``(batch_index, card_number)`` two-tuple, where ``batch_index`` is the token's declaring
+    batch file's index in ``batch_files`` (which callers pass already sorted).
+    Composite keys compare lexicographically, so this map lets a caller test cross-batch ordering
+    without assuming card numbers are monotonic across batches -- ``_check_card_numbering`` enforces
+    only within-batch sequencing and cross-batch uniqueness, never cross-batch monotonicity.
+
+    When one token is declared by more than one card (a plan-authoring irregularity that other
+    checks may separately flag), the lowest composite key wins.
+    """
+    declaring: dict[str, tuple[int, int]] = {}
+    for batch_index, batch_path in enumerate(batch_files):
+        text = batch_path.read_text(encoding="utf-8")
+        for card_num, card_lines in _parse_cards(text):
+            card_text = "\n".join(card_lines)
+            key = (batch_index, card_num)
+            for token in _card_creates_tokens(card_text):
+                if token not in declaring or key < declaring[token]:
+                    declaring[token] = key
+    return declaring
+
+
 def _check_context_completeness(
     batch_files: list[Path],
     project_root: Path,
@@ -1973,6 +2182,7 @@ def _check_context_completeness(
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
+    creates_declaring_card_map: dict[str, tuple[int, int]] | None = None,
 ) -> list[dict]:
     """
     Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
@@ -2006,7 +2216,8 @@ def _check_context_completeness(
     check (batch 2 of this task) parses to distinguish the symbol case from the path case;
     this wording must not drift.
 
-    Three exemptions prevent false positives (apply to both branches):
+    The following exemptions prevent false positives. Unless noted otherwise, an exemption applies
+    to both branches:
 
     1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a file the card must NOT
     act on, not an unlisted dependency.
@@ -2015,9 +2226,31 @@ def _check_context_completeness(
     This also covers a Requirements: line that inlines a cited symbol's full signature (e.g.
     "signature inlined" or "no file read needed") -- naming the defining file on that line is not
     an unlisted read dependency, since no file read is needed to act on the inlined signature.
+    "mentioned, not read" is the planner's explicit escape hatch for a mention that no structural
+    or phrasing rule below reaches.
     3. A token matching the plan-wide ``moves_sources`` set is exempt in any later card's
     ``Requirements:``, not just the declaring card's own -- mirrors how ``creates_union``/
     ``deletes_union`` are already plan-wide.
+    4. Directory-intent (path branch only): a path-shaped token whose stripped form ends with ``/``
+    is an unambiguous authorial statement of directory intent -- a directory can never be a
+    ``Context:`` entry.
+    5. Out-of-repo path literal (path branch only): a token that is absolute-looking (leading ``/``
+    or ``~``, a Windows drive-letter root, or a UNC root) and not ``wiki/``-prefixed, or whose
+    resolved existing file(s) are not relative to any in-scope root (``project_root``, ``git_root``,
+    ``wiki_root``), cites a file elsewhere on disk rather than a project dependency.
+    6. Gitignored path (path branch only): every resolved existing file confirmed git-ignored
+    (``git check-ignore``) under its own source root is exempt -- an ignored file cannot be a
+    ``Context:``/``Edits:`` entry a bulk-mode reviewer would ever see.
+    7. Forward cross-card Creates (path branch only): a not-yet-existing token that some later card
+    (by composite ``(batch_index, card_number)`` key) declares in its own ``Creates:`` is exempt --
+    the earlier card is reading about a file that will exist once the plan finishes, not citing an
+    unlisted dependency of its own.
+    8. Non-dependency negation phrasing: the token is positioned by the line as explicitly
+    not-involved (e.g. "no `x.py` is involved", "without `x.py`", "`x.py` is not needed").
+    9. Contrast-citation: the token shares a clause with "rather than" or "instead of", naming it as
+    the chosen or rejected half of an explicit comparison.
+    10. Quoted material: the token appears inside a fenced code block or on a blockquote (``>``)
+    line within Requirements: -- quoted prose or docs excerpts, not the card's own claims.
 
     Not-shaped-at-all or unresolvable tokens (JSON keys, ordinary lowercase words, sentinel strings)
     are never flagged -- only genuine file/symbol references that this validator can independently
@@ -2028,6 +2261,8 @@ def _check_context_completeness(
     context-completeness.
 
     Error dict shape: ``{check, batch, card, path, message, line}``.
+    The emitted ``message`` wording (both the path-branch and symbol-branch formats) must not drift,
+    since a downstream fixer-doc check parses it to distinguish the two cases.
 
     Args:
         batch_files: Sorted list of batch file paths to validate.
@@ -2039,30 +2274,61 @@ def _check_context_completeness(
         moves_targets: Plan-wide union of Moves: destination paths.
         wiki_root: Optional wiki root path for wiki/-prefixed refs.
         git_root: Optional repo root for git_root-relative resolution.
+        creates_declaring_card_map: Plan-wide map from a Creates: token to the composite
+            ``(batch_index, card_number)`` key of the card declaring it, used by exemption 7.
+            Defaults to ``None`` and is materialized to an empty dict on entry (a mutable default
+            argument is never used directly in the signature) -- an empty map yields no forward
+            exemptions, which is the correct no-op default.
 
     Returns:
         List of error dicts, one per unresolvable-elsewhere Requirements: reference.
     """
+    if creates_declaring_card_map is None:
+        creates_declaring_card_map = {}
     errors: list[dict] = []
     backtick_re = re.compile(r"`([^`]+)`")
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
     # recurring across the plan is only walked once (see _resolve_symbol_files's memoization).
     search_cache: dict[str, tuple[list[Path], Path | None]] = {}
+    # One git-ignore confirmation cache per run() call, keyed by resolved candidate path, so a path
+    # recurring across cards costs one `git check-ignore` subprocess, not one per occurrence.
+    ignore_memo: dict[Path, bool] = {}
 
-    for batch_path in batch_files:
+    for batch_index, batch_path in enumerate(batch_files):
         text = batch_path.read_text(encoding="utf-8")
         cards = _parse_cards(text)
         for card_num, card_lines in cards:
             card_text = "\n".join(card_lines)
-            requirements_text = _extract_requirements_text(card_text)
+            # Fence-aware extraction (rather than _extract_requirements_text) so a fence quoting a
+            # field-header-shaped line does not truncate the Requirements: body before the
+            # quoted-material exemption below ever sees the remainder -- exactly the docs-quoting
+            # scenario that exemption exists to fix. _requirements_fence_aware_body is already what
+            # the sibling requirements-quote-indent-drift check uses, so both checks now agree about
+            # what a fence means.
+            requirements_text = _requirements_fence_aware_body(card_lines)
             if requirements_text is None:
                 continue
 
             requirements_lines = requirements_text.splitlines()
             own_refs: set[str] | None = None  # lazily computed per card
+            current_card_key = (batch_index, card_num)
+            in_fence = False
 
             for line in requirements_lines:
-                for token in backtick_re.findall(line):
+                # Quoted-material exemption: every token on a fenced or blockquoted line is quoted
+                # prose (a docs excerpt or another card's example), not this card's own claim about
+                # a dependency. The fence toggle below is evaluated on the CURRENT state (matching
+                # _parse_cards's convention) so the fence-delimiter line itself is judged by
+                # whichever state it opens or closes, not the state it produces.
+                line_is_quoted = in_fence or line.lstrip().startswith(">")
+                if line.startswith("```"):
+                    in_fence = not in_fence
+                if line_is_quoted:
+                    continue
+
+                lowered_line = line.lower()
+                for match in backtick_re.finditer(line):
+                    token = match.group(1)
                     # Shape gate: path-shaped tokens fall through unconditionally; non-path tokens
                     # fall through only when they look like a bare/dotted symbol candidate.
                     is_path_shaped = "/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)
@@ -2072,12 +2338,24 @@ def _check_context_completeness(
                             continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
-                    lowered_line = line.lower()
                     if _is_prohibition_exempt(lowered_line):
+                        continue
+
+                    # Non-dependency negation phrasing exemption: the line positions this specific
+                    # occurrence of the token as explicitly not-involved. This runs immediately
+                    # after the prohibition-marker check and before the citation-marker check
+                    # (rather than alongside it) so that it matches the exemption's own numbered
+                    # enumeration order in the docstring above.
+                    if _is_non_dependency_negation_exempt(lowered_line, match.start(1), match.end(1)):
                         continue
 
                     # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
                     if any(marker in lowered_line for marker in _CITATION_MARKERS):
+                        continue
+
+                    # Contrast-citation exemption: this occurrence shares a clause with "rather
+                    # than"/"instead of", naming it as the chosen or rejected half of a comparison.
+                    if _is_contrast_citation_exempt(lowered_line, match.start(1), match.end(1)):
                         continue
 
                     if is_path_shaped:
@@ -2085,11 +2363,64 @@ def _check_context_completeness(
                         # the ORIGINAL token is kept for the emitted error's "path" field.
                         stripped_token = _RE_LINE_RANGE.sub("", token)
 
+                        # Directory-intent exemption: a trailing slash is an unambiguous authorial
+                        # statement of directory intent, and a directory can never be a Context:
+                        # entry. This test is deliberately filesystem-independent (it never touches
+                        # disk) because in a linked git worktree the repository's own `.git` is a
+                        # regular file, not a directory, so the existing `is_file()` filter a few
+                        # lines below does not suppress a `.git/` token there. It does not remove or
+                        # weaken that filter -- this exemption is additive.
+                        if stripped_token.endswith("/"):
+                            continue
+
+                        # Out-of-repo path literal exemption, first half: an absolute-looking token
+                        # (leading "/" or "~", a Windows drive-letter root, or a UNC root) cites a
+                        # file elsewhere on disk, not a project dependency -- except a "wiki/"-
+                        # prefixed token, which resolve_existing_paths routes to wiki_root, a
+                        # legitimate sibling-clone dependency that must not be exempted here.
+                        if not stripped_token.startswith("wiki/") and (
+                            stripped_token.startswith(("/", "~"))
+                            or _RE_WINDOWS_ABS_ROOT.match(stripped_token)
+                        ):
+                            continue
+
                         existing = resolve_existing_paths(
                             [stripped_token], project_root, root,
                             wiki_root=wiki_root, git_root=git_root,
                         )
                         existing_files = [p for p in existing if p.is_file()]
+
+                        # Out-of-repo path literal exemption, second half: resolve_existing_paths
+                        # builds its candidates by joining the raw token onto a root and never calls
+                        # .resolve() itself, and Path.is_relative_to is a pure lexical prefix
+                        # comparison that does not collapse parent-directory segments -- so an
+                        # uncollapsed ".." prefix would still carry a root's parts as a literal
+                        # prefix and be wrongly judged in-repo. Both the candidate and each in-scope
+                        # root are .resolve()-d before comparison. wiki_root is one of the in-scope
+                        # roots, so this half needs no separate wiki/ carve-out -- omitting either
+                        # guard would exempt a legitimate wiki dependency and convert a fixed false
+                        # positive into a silent false negative.
+                        if existing_files:
+                            in_scope_roots = [
+                                r.resolve() for r in (project_root, git_root, wiki_root)
+                                if r is not None
+                            ]
+                            if not any(
+                                f.resolve().is_relative_to(scope_root)
+                                for f in existing_files
+                                for scope_root in in_scope_roots
+                            ):
+                                continue
+
+                        # Gitignored-path exemption: every resolved existing file confirmed
+                        # git-ignored under its own source root is not a candidate a bulk-mode
+                        # reviewer could ever be shown, so it is not an unlisted dependency.
+                        if existing_files and all(
+                            _is_confirmed_git_ignored(f, project_root, git_root, wiki_root, ignore_memo)
+                            for f in existing_files
+                        ):
+                            continue
+
                         resolvable = (
                             bool(existing_files)
                             or stripped_token in creates_union
@@ -2097,6 +2428,23 @@ def _check_context_completeness(
                             or stripped_token in moves_targets
                         )
                         if not resolvable:
+                            continue
+
+                        # Forward cross-card Creates exemption: a not-yet-existing token that some
+                        # LATER card (by composite (batch_index, card_number) key, not bare card
+                        # number -- _check_card_numbering enforces only within-batch sequencing and
+                        # cross-batch uniqueness, never cross-batch monotonicity, so a plan whose
+                        # first batch holds cards 4-6 and second batch holds cards 1-3 validates
+                        # today, and a bare card-number test would misfire into a false negative on
+                        # such a plan) declares in its own Creates: is exempt. The existing_files-
+                        # empty clause is required because nothing prevents a Creates: target from
+                        # already existing on disk -- an earlier card naming the path may genuinely
+                        # be reading the file's current content before a later card replaces it.
+                        if (
+                            not existing_files
+                            and stripped_token in creates_declaring_card_map
+                            and creates_declaring_card_map[stripped_token] > current_card_key
+                        ):
                             continue
 
                         if own_refs is None:
@@ -3401,6 +3749,10 @@ def run(
     overview_text = overview_path.read_text(encoding="utf-8")
     creates_union = compute_creates_union(plan_dir)
     deletes_union = compute_deletes_union(plan_dir)
+    # Threaded into context-completeness's forward cross-card Creates exemption: built from the same
+    # sorted batch_files list every other check sees, so a token's composite (batch_index,
+    # card_number) key agrees across checks.
+    creates_declaring_card_map = _build_creates_declaring_card_map(batch_files)
     # Move sources behave like Deletes (disappear) and targets like Creates (appear).
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
@@ -3443,6 +3795,7 @@ def run(
         moves_sources, moves_targets,
         wiki_root=wiki_root,
         git_root=git_root,
+        creates_declaring_card_map=creates_declaring_card_map,
     ))
     errors.extend(_check_requirements_quote_indent_drift(
         batch_files, project_root, effective_root,

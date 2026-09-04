@@ -151,6 +151,27 @@ def test_plan_mechanism_claim_rule_present() -> None:
     print("PASS test_plan_mechanism_claim_rule_present")
 
 
+def test_context_completeness_exemption_enumeration_present() -> None:
+    """The context-completeness exemption enumeration (cards 18/19) is present verbatim in both
+    plan-review templates' raw source.
+
+    This enumeration exists to keep the LLM plan reviewer from blocking on Requirements: citations
+    that _check_context_completeness deliberately suppresses (prohibitions, citation/contrast/
+    escape-marker lines, quoted material, gitignored paths, out-of-repo literals, trailing-slash
+    directories, and forward cross-card Creates: references) -- a future editor removing it
+    reintroduces the false-positive review rounds this task fixed.
+    """
+    for name in ["review-plan-holistic", "review-plan-batch"]:
+        source = _read_template_source(name)
+        assert "mentioned, not read" in source, (
+            f"{name} missing the 'mentioned, not read' escape marker"
+        )
+        assert "forward reference to a path a later card" in source, (
+            f"{name} missing the forward-reference-to-a-later-card exemption"
+        )
+    print("PASS test_context_completeness_exemption_enumeration_present")
+
+
 def test_no_output_file_token() -> None:
     """No template names the report destination via an <OUTPUT_FILE> token."""
     for name in TEMPLATE_NAMES:
@@ -213,6 +234,7 @@ def main() -> int:
         test_kept_prose_stays_kept,
         test_plan_criteria_bullets_present,
         test_plan_mechanism_claim_rule_present,
+        test_context_completeness_exemption_enumeration_present,
         test_no_output_file_token,
         test_unified_vocabulary_and_class_taxonomy,
     ]
