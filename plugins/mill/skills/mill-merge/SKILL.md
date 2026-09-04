@@ -253,6 +253,10 @@ If it reports failure → release the merge lock and halt.
 Capture the checkpoint branch name it prints;
 you may need it on rollback.
 
+**Rebind on dead-parent substitution (#977):** if `mill-merge-in`'s Step 6 report (see `mill-merge-in/SKILL.md` Step 6, "Substituted parent branch" line) includes a `Substituted parent branch: <old> -> <new>` line, rebind `parent_branch` (this skill's own variable, bound at Entry Step 4) to `<new>` before continuing to Step 3. This is required because `mill-merge-in`'s own dead-parent liveness check (its Entry section's "Liveness check (#817)" paragraph) only ever resolves a successor for its own run — it has no mechanism to reach back into this caller's already-bound `parent_branch`, and Step 5 below reuses `parent_branch`/`<parent-path>` verbatim from here through push/rollback.
+If `mode == 'worktree'`, also re-derive `<parent-path>` for the new branch: re-run `git worktree list --porcelain` and locate the entry whose branch matches `<new>`, the same lookup Step 1 above used for the original `parent_branch`.
+If `mode == 'inplace'`, there is no separate parent worktree to re-derive (Step 5 already omits `-C <parent-path>` in that mode per the "In-place mode bypass" note in `## Entry`) — rebinding `parent_branch` alone is sufficient.
+
 ### 3. Capture child branch
 
 ```bash

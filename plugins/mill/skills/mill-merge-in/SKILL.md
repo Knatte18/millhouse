@@ -30,6 +30,8 @@ This skill does not acquire the merge lock — only the calling `mill-merge` (or
    - **If `status_path.exists()` is `False`:** this reordering is what newly makes the override branch reach the liveness check with a possibly-absent `status_path` (the exact #977 scenario: `mill-merge`'s Card 1 passes its own `status_path`-absent `cfg.git.base_branch` fallback, which `mill-merge` never liveness-checks itself). Skip the rebind write (and its commit/push) entirely — there is nothing to persist to — report the resolved/fallback outcome to the operator as informational only, and proceed using that resolved branch for the remainder of this run.
    - **If `status_path.exists()` is `True`** (the pre-existing case, and the override-supplied case when a task's status.md still exists): rebind `status.md`'s `parent:` row via `_status.update_field(status_path, "parent", resolved_branch)`, commit, push, and use `resolved_branch` as `parent_branch` for the remainder of this run, exactly as documented today.
 
+   **Caller propagation (#977 follow-up):** whichever sub-case above ran, once the `if dead` branch above fires and the operator confirms, record `substituted_parent_branch = resolved_branch` (distinct from the ordinary `<parent-branch>` this file's own `## Steps` use) for this run. Step 6's Report below must surface this value. Resolving a successor here only ever affects `mill-merge-in`'s own remainder-of-run `parent_branch` (and, in the `True` sub-case, the persisted `status.md` row) — it never itself updates a calling skill's already-bound variables. When this skill is invoked as `mill-merge`'s own Step 2 (see `mill-merge/SKILL.md` Step 2), that caller's `parent_branch`/`<parent-path>` were resolved and bound before this call and are reused verbatim through its own Step 5 onward, so the caller must read `substituted_parent_branch` back out of this skill's Report and rebind its own variables from it before continuing past its Step 2 — this file cannot do that rebind on the caller's behalf.
+
    This rebind reuses the same `status_path` hoisted in step 2 above (`_paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")`) rather than deriving a fresh one, and that is safe here even though `mill-merge/SKILL.md` Entry Step 4 warns against the same `resolve_hub_path()` + literal-path pattern for its own rebind — that warning exists because `mill-merge` must reconcile cwd against a separately-tracked worktree location (its `mode == 'inplace'` vs `'worktree'` disambiguation, where cwd can legitimately be the main hub while the active slug's tracked worktree lives elsewhere).
    `mill-merge-in` has no such ambiguity: it always operates on "the current branch" from within that branch's own worktree (it is never dispatched against a different slug's worktree from some other cwd), so `resolve_hub_path()`'s cwd-walk necessarily lands on the same hub a slug-driven `resolve_active_hub()` lookup would return for that slug.
    This mirrors the identical `resolve_hub_path()`-based derivation this file's own Step 4 (Verify) already uses (`hub_root = _paths.resolve_hub_path()`), so this rebind is consistent with the rest of this file, not a one-off exception to it.
@@ -218,6 +220,12 @@ Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so 
 Merged <parent-branch> into <current-branch>. <N> commits integrated.
 Verify: <ran> batch tests ran.
 Checkpoint: <CHK> (delete manually once you are confident the merge is stable).
+```
+
+If `substituted_parent_branch` was recorded during this run (Entry's "Liveness check (#817)" paragraph, `if dead` branch), append one more line to the report, after the `Checkpoint:` line:
+
+```
+Substituted parent branch: <parent-branch> -> <substituted_parent_branch> (dead; not persisted to status.md unless status_path.exists() was True above). If this skill was called from mill-merge Step 2, that caller must rebind its own parent_branch/<parent-path> to <substituted_parent_branch> before continuing to Step 3.
 ```
 
 Build the `Verify:` line by starting with `Verify: <ran> batch tests ran` and appending one clause per nonzero skip counter, in this fixed order -- allowlisted, not-approved, target-removed -- each included only when its own count is nonzero: `, <skipped> skipped (allowlisted as known-broken)` when `skipped >= 1`;
