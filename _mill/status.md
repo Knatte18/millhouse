@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-finalize-codeguide-bugs
 branch: hanf/mill-merge-finalize-codeguide-bugs
 plan: _mill/plan
@@ -31,4 +31,17 @@ plan-fix-r5  '2026-09-04T10:46:17Z'
 plan-review-r6  '2026-09-04T10:51:22Z'
 plan-fix-r6  '2026-09-04T10:51:32Z'
 planned  '2026-09-04T10:51:47Z'
+implementing  '2026-09-04T10:52:16Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-merge-in-parent-and-baseline
+    state: pending
+  - name: mill-finalize-discussion-citation-scan
+    state: pending
+  - name: resolve-scope-cwd-anchor
+    state: pending
 ```
