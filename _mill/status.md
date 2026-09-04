@@ -50,7 +50,9 @@ batches:
     commit_sha: 5b2d5fc4d8679ba6fee3083cab0f9efe2c6b2b2a
     verify_baseline_failures: []
   - name: forward-verify-baselines-millpy-fix
-    state: pending
+    state: running
+    implementer_session: 5c2c65d3-c31f-4008-b5f7-4b06ba2bcf83
+    start_sha: ab803683325a2aa4fd2792fc933b8d2ae3ae833b
     verify_baseline_failures: []
   - name: fresh-session-after-self-resolve
     state: pending
