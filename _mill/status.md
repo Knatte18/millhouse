@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
 plan: _mill/plan
@@ -23,4 +23,21 @@ plan-fix-r3  '2026-09-04T09:04:33Z'
 plan-fix-r4  '2026-09-04T09:10:34Z'
 plan-fix-r5  '2026-09-04T09:18:28Z'
 planned  '2026-09-04T09:22:25Z'
+implementing  '2026-09-04T09:22:57Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: worktree-teardown-retry
+    state: pending
+  - name: cleanup-orphan-baseline-sweep
+    state: pending
+  - name: bg-liveness-windows-probe
+    state: pending
+  - name: baseline-undercount-corroboration
+    state: pending
+  - name: baseline-undercount-corroboration-tests
+    state: pending
 ```
