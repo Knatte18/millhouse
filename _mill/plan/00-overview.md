@@ -3,7 +3,7 @@
 ```yaml
 task: 'code-comments skill: prohibit enumerating current consumers/writers of a shared resource'
 slug: 'code-comments-skill-consumer-enumeration-rule'
-approved: false
+approved: true
 started: '20260904-161657'
 parent: 'main'
 root: ""
@@ -21,7 +21,7 @@ batches:
     name: enumerated-consumer-rule
     file: 01-enumerated-consumer-rule.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skills-index.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skills-index.py test-skill-writer.py test-skill-helper-drift.py
 ```
 
 ## Shared Decisions

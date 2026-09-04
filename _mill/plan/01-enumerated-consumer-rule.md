@@ -5,7 +5,7 @@ task: 'code-comments skill: prohibit enumerating current consumers/writers of a 
 batch: 'enumerated-consumer-rule'
 number: 1
 cards: 1
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skills-index.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-skills-index.py test-skill-writer.py test-skill-helper-drift.py
 depends-on: []
 ```
 
@@ -47,9 +47,10 @@ No batch-local decisions differ from `## Shared Decisions` in the overview.
 
 ## Batch Tests
 
-`verify:` runs `plugins/mill/unit_tests/test-skills-index.py` only.
-That test asserts `SKILLS.md` stays consistent with each skill's YAML frontmatter;
-since this batch edits a skill file's body but not its frontmatter, the test is the precise regression guard for the one way a `SKILL.md` edit can break a machine-checked invariant, and it runs in ~0.2s.
+`verify:` runs the three structural skill-file tests named in `_mill/discussion.md`'s `## Testing` section: `plugins/mill/unit_tests/test-skills-index.py`, `plugins/mill/unit_tests/test-skill-writer.py`, and `plugins/mill/unit_tests/test-skill-helper-drift.py`.
+Together they cover every machine-checked invariant a `SKILL.md` edit can break -- `SKILLS.md` consistency with each skill's YAML frontmatter, skill-file structure, and skill/helper drift -- and the three run in ~0.1s combined, so the `--only` scoping costs nothing in coverage relative to the full suite.
+No other unit test reads `code-comments/SKILL.md`;
+`grep -n "code-comments" plugins/mill/unit_tests/*.py` returns nothing.
 
 No new test is added.
 As recorded in `_mill/discussion.md`'s `## Testing` section, the repo has no harness that asserts on `SKILL.md` body prose, and pinning prose to a string literal would fail on every future wording tweak without catching a real defect.
