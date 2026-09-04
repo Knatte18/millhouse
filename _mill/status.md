@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: planned
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -20,4 +20,5 @@ planning  '2026-09-04T11:00:06Z'
 plan-review-r1  '2026-09-04T11:07:00Z'
 plan-fix-r1  '2026-09-04T11:07:38Z'
 plan-review-r2  '2026-09-04T11:12:06Z'
+planned  '2026-09-04T11:12:27Z'
 ```
