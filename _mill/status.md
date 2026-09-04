@@ -59,6 +59,8 @@ batches:
     commit_sha: 2ccad779633bec7ec414d809721c387f64271d8a
     verify_baseline_failures: []
   - name: baseline-undercount-corroboration-tests
-    state: pending
+    state: running
+    implementer_session: 2b9a9a68-9a1a-4886-8c35-838311477272
+    start_sha: 923067430c8d8544a1da5a10f2d50166fe0d2c66
     verify_baseline_failures: []
 ```
