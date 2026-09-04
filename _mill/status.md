@@ -31,11 +31,15 @@ implementing  '2026-09-04T08:44:05Z'
 ```yaml
 batches:
   - name: done-gate-run-gate
-    state: pending
+    state: running
+    implementer_session: 19c81086-e9f2-421a-b64f-3ed6ce9f365c
+    start_sha: f26136215f75c30c411ecc4c0ee1c16da3b5d0b2
+    verify_baseline_failures: []
   - name: mill-pause-agent-dispatch
     state: pending
   - name: cleanliness-pycache-allowlist
     state: pending
+    verify_baseline_failures: []
   - name: handoff-pre-done-gate-and-lock-release
     state: pending
   - name: cleanliness-gate-dead-parent-recovery
