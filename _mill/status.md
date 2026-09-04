@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-reviewer-and-docs-sync
+phase: approved-lexical-exemption-tests
 slug: plan-validate-context-completeness-false-positive-exemptions
 branch: hanf/plan-validate-context-completeness-false-positive-exemptions
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-09-04T17:01:56Z'
 approved-validator-exemptions  '2026-09-04T17:12:13Z'
 approved-structural-exemption-tests  '2026-09-04T17:25:52Z'
 approved-reviewer-and-docs-sync  '2026-09-04T17:29:32Z'
+approved-lexical-exemption-tests  '2026-09-04T17:38:04Z'
 ```
 
 ## Batches
@@ -53,8 +54,9 @@ batches:
     commit_sha: 0288f17b0c40579ff8f963d68b0348f39148de86
     verify_baseline_failures: []
   - name: lexical-exemption-tests
-    state: running
+    state: approved
     implementer_session: aeb3bd80-04a1-4702-8a0f-fc1840477a0f
     start_sha: f7e21f52a6d858195790de12b781b3a937379393
+    commit_sha: 97a3bd41fdc3245ada5d8861c52e6c991191e41d
     verify_baseline_failures: []
 ```
