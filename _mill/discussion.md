@@ -70,7 +70,7 @@ This narrows the task to **bug C only**: add a mechanism-claim source-verificati
   - `finalize_scope` (~line 2530) is the already-fixed function for bug B; not touched by this task.
   - `apply_actual_model_override` (~line 2430) is the already-fixed function for bug A; not touched by this task.
 - `plugins/mill/unit_tests/test-review-templates.py`: `test_plan_criteria_bullets_present` (line 126) is the existing precedent — asserts specific bullet text is present verbatim in both plan templates' raw source. Follow this exact pattern for the new rule (either extend this test or add a sibling assertion next to it).
-- The reviewer configured for this hub's `roles.plan-review.holistic` is `sonnethigh` (`max_review_rounds: 8`, `min_review_rounds: 1`); not relevant to the fix itself, just context for what will actually exercise the new rule text in this repo's own future plan reviews.
+- The reviewer configured for this hub's `roles.plan-review.holistic` is `sonnethigh` (`max_review_rounds: 7`, `min_review_rounds: 1`); not relevant to the fix itself, just context for what will actually exercise the new rule text in this repo's own future plan reviews.
 
 ## Testing
 

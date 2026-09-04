@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: review-plan-verdict-envelope-model-bugs
 branch: hanf/review-plan-verdict-envelope-model-bugs
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-09-04T07:58:01Z'
+discussion-fix-r1  '2026-09-04T08:10:15Z'
+discussed  '2026-09-04T08:10:15Z'
 ```
