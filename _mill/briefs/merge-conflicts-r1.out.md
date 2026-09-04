@@ -1,0 +1,5 @@
+All conflicts resolved and staged. As instructed, I did not commit or run `git merge --continue`.
+
+Summary: the only conflicted file was `plugins/mill/templates/review-plan-holistic.md`. The conflict was two independent, non-overlapping prose additions inserted at the same location — HEAD (this branch) added a new `## Overview verify: scope rule` section (the `reviewer-prompt-guardrail` decision from this task's discussion.md), while `origin/main` added a `**Mechanism claims must be source-verified.**` paragraph continuing the existing `## Source-grounding rule` section. Neither is a duplicate/move of content found elsewhere in the file (confirmed via grep). I combined both: kept the mechanism-claims paragraph as part of `## Source-grounding rule` (since it's an unheaded bold-paragraph continuation matching that section's style) and placed the new `## Overview verify: scope rule` section immediately after it, before `## Criteria`. Re-read the full resolved section afterward and found no contradictory or stale claims.
+
+{"status":"success"}
