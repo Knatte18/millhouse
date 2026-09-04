@@ -15,6 +15,8 @@ Check coverage:
   check 5 — parallel-modifies-overlap
   cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
       creates, with no depends-on edge to that creating batch
+  verify-batch-mismatch — a batch's overview Batch Index verify: disagrees with that batch file's
+      own frontmatter verify: (command or cwd)
   check 6 — reads-not-backtick-path (incl.
       none-exempt)
   check 8 — all-files-touched-mismatch
@@ -2529,6 +2531,118 @@ def test_check_context_completeness_dirty_citation_marker_absent() -> int:
         except AssertionError as exc:
             print(
                 f"FAIL test_check_context_completeness_dirty_citation_marker_absent: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_signature_inlined_marker() -> int:
+    """Requirements: names a real, resolvable, backtick-wrapped file absent from the card's own refs, together with 'signature inlined' -> zero errors (inline-signature citation exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (signature inlined from `src/a.py`: `def helper() -> int`).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_signature_inlined_marker")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_signature_inlined_marker: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_no_file_read_needed_marker() -> int:
+    """Same shape as the 'signature inlined' case, but the line instead carries 'no file read needed' -> zero errors (inline-signature citation exemption, second marker spelling)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`; "
+                "no file read needed).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_no_file_read_needed_marker")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_no_file_read_needed_marker: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_inline_signature_marker_absent() -> int:
+    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_dirty_inline_signature_marker_absent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_inline_signature_marker_absent: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -7905,6 +8019,10 @@ def main() -> int:
         test_check_context_completeness_dirty_odd_backtick_count_line_field,
         test_check_context_completeness_clean_citation_marker,
         test_check_context_completeness_dirty_citation_marker_absent,
+        # inline-signature citation markers (validator-tests batch, Card 8)
+        test_check_context_completeness_clean_signature_inlined_marker,
+        test_check_context_completeness_clean_no_file_read_needed_marker,
+        test_check_context_completeness_dirty_inline_signature_marker_absent,
         test_check_context_completeness_clean_moves_source_plan_wide,
         test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged,
         test_check_context_completeness_message_includes_moves_source_qualifier,
