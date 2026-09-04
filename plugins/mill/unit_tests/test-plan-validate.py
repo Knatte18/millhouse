@@ -4617,6 +4617,682 @@ def test_check_context_completeness_direct_call_forward_map_default() -> int:
             return 1
 
 
+# ---------------------------------------------------------------------------
+# context-completeness lexical exemptions (negation phrase, contrast citation,
+# quoted material + fence-aware extraction) and the mentioned-not-read escape
+# marker -- batch lexical-exemption-tests
+# ---------------------------------------------------------------------------
+
+def test_check_context_completeness_clean_negation_no_is_involved() -> int:
+    """Template 1: "no `x` is involved" -> zero errors (non-dependency negation exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  The refactor is scoped so no `fixtures/alpha.py` is involved in this change.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_negation_no_is_involved")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_negation_no_is_involved: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_negation_without_immediate() -> int:
+    """Template 2: "without `x`" with no intervening words -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  This step runs without `fixtures/alpha.py` being present.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_negation_without_immediate")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_negation_without_immediate: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_negation_is_not_needed() -> int:
+    """Template 3: "`x` is not needed" -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  For this step, `fixtures/alpha.py` is not needed at all.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_negation_is_not_needed")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_negation_is_not_needed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_negation_no_word_elsewhere_not_template() -> int:
+    """"no" appears on the line but not in any of the three supported templates, and the token is a
+    genuine read dependency -> exactly one error. This is the whole reason the matcher is positional
+    rather than a widened line-wide word set, so this assertion must not be relaxed."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  There is no doubt that `fixtures/alpha.py` is the file to read for the exact"
+                " signature.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_negation_no_word_elsewhere_not_template"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_negation_no_word_elsewhere_not_template:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_contrast_citation_rather_than() -> int:
+    """Both-sides rule: "named `x` rather than the more obvious `y`" -> zero errors, since BOTH
+    tokens must be exempt."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+        (project_root / "fixtures" / "beta.md").write_text("# fixture doc", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  The card named `fixtures/alpha.py` rather than the more obvious"
+                " `fixtures/beta.md` for the new module.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_contrast_citation_rather_than")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_contrast_citation_rather_than: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_contrast_citation_instead_of() -> int:
+    """Same both-sides shape with the second marker, "instead of" -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+        (project_root / "fixtures" / "beta.md").write_text("# fixture doc", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  The card named `fixtures/alpha.py` instead of the more obvious"
+                " `fixtures/beta.md` for the new module.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_contrast_citation_instead_of")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_contrast_citation_instead_of: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_contrast_citation_comma_clause_boundary() -> int:
+    """A comma separates the token from the "rather than" marker -> exactly one error, since the
+    marker sits in a different clause. This is a load-bearing assertion for the positional
+    (clause-scoped) requirement over a plain line-wide substring match."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `fixtures/alpha.py`, rather than guessing at the signature.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_contrast_citation_comma_clause_boundary"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_contrast_citation_comma_clause_boundary:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_contrast_citation_separate_sentence() -> int:
+    """The "rather than" marker is present on the line, but the token sits in a clearly separate
+    sentence -> exactly one error. A second load-bearing assertion for the clause-scoped
+    requirement -- must not be weakened to a plain line-wide substring match."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  This approach avoids doing it manually rather than by hand. Read"
+                " `fixtures/alpha.py` for exact wording to reuse.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_contrast_citation_separate_sentence")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_contrast_citation_separate_sentence: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_quoted_material_fenced_block() -> int:
+    """A token named only inside a fenced code block within Requirements: -> zero errors (quoted
+    material is not the card's own claim)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "```\n"
+                "Historical fixture: `fixtures/alpha.py`\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_quoted_material_fenced_block")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_quoted_material_fenced_block: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_quoted_material_blockquote() -> int:
+    """A token named only on a blockquote line (first non-whitespace char is ">") -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  > See `fixtures/alpha.py` for the original wording.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_quoted_material_blockquote")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_quoted_material_blockquote: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_quoted_material_ordinary_prose_same_card() -> int:
+    """The same token, named on an ordinary (non-fenced, non-blockquoted) prose line in the same
+    card -> exactly one error, proving the exemption is scoped to the quoted lines themselves."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `fixtures/alpha.py` for the exact wording to reuse.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_quoted_material_ordinary_prose_same_card"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_quoted_material_ordinary_prose_same_"
+                f"card: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_quoted_material_prose_after_fence_closed() -> int:
+    """A token named on a prose line positioned after a fenced block has closed -> exactly one
+    error, proving the fence state is toggled off rather than latched on once a fence has opened."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "```\n"
+                "some unrelated fenced content\n"
+                "```\n"
+                "  Read `fixtures/alpha.py` for the exact wording to reuse.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_quoted_material_prose_after_fence_closed"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_quoted_material_prose_after_fence_"
+                f"closed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_fence_aware_extraction_fake_header_inside_fence() -> int:
+    """A Requirements: fence quotes a bold field-header-shaped bullet line and then, still inside
+    the same fence, names a resolvable token -> zero errors, proving the body was not truncated at
+    the fake boundary (which the naive, non-fence-aware extractor would have mistaken for the end of
+    the Requirements: field)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "```\n"
+                "- **Fake:** a decorative field-header-shaped bullet quoted verbatim\n"
+                "`fixtures/alpha.py` referenced further down inside the same fence\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_context_completeness_clean_fence_aware_extraction_fake_header_"
+                "inside_fence"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_fence_aware_extraction_fake_header_"
+                f"inside_fence: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_fence_aware_extraction_genuine_header_after_fence() -> int:
+    """A genuine bold field header (Commit:) follows a properly closed fence, and a resolvable token
+    appears on that header's own line, beyond it -> that token is NOT flagged, since its line lies
+    outside the Requirements: field entirely. Paired with an assertion that a token on an ordinary
+    prose line BEFORE that header still produces its finding, so the test cannot pass by the check
+    swallowing the whole card."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+        (project_root / "fixtures" / "beta.md").write_text("# fixture doc", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 1\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `other.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n"
+            "```\n"
+            "fence content, nothing special\n"
+            "```\n"
+            "  Read `fixtures/alpha.py` for the exact wording to reuse.\n"
+            "- **Commit:** feat(alpha): also uses `fixtures/beta.md` here\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path (beta.md should not be flagged; it lies outside Requirements:): "
+                f"{check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_fence_aware_extraction_genuine_header_"
+                "after_fence"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_fence_aware_extraction_genuine_header_"
+                f"after_fence: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_escape_marker_mentioned_not_read() -> int:
+    """A resolvable token, absent from own refs, carrying "mentioned, not read" on the same
+    physical line -> zero errors (the planner's explicit escape hatch)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  `fixtures/alpha.py` is mentioned, not read, for illustration purposes.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_escape_marker_mentioned_not_read")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_escape_marker_mentioned_not_read: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_escape_marker_phrase_removed() -> int:
+    """The identical fixture with the "mentioned, not read" phrase removed -> exactly one error.
+    Keeps both fixtures otherwise byte-identical so the marker is the only variable under test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "fixtures").mkdir()
+        (project_root / "fixtures" / "alpha.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `fixtures/alpha.py` is for illustration purposes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "fixtures/alpha.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_escape_marker_phrase_removed")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_escape_marker_phrase_removed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_requirements_quote_indent_drift_clean_exact_match() -> int:
     """Fence content is already a byte-exact substring of the target Edits: file -> no error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -9642,6 +10318,23 @@ def main() -> int:
         test_check_context_completeness_clean_forward_creates_batch_order_key,
         test_check_context_completeness_dirty_forward_creates_batch_order_key_reversed,
         test_check_context_completeness_direct_call_forward_map_default,
+        # context-completeness lexical exemptions (batch lexical-exemption-tests)
+        test_check_context_completeness_clean_negation_no_is_involved,
+        test_check_context_completeness_clean_negation_without_immediate,
+        test_check_context_completeness_clean_negation_is_not_needed,
+        test_check_context_completeness_dirty_negation_no_word_elsewhere_not_template,
+        test_check_context_completeness_clean_contrast_citation_rather_than,
+        test_check_context_completeness_clean_contrast_citation_instead_of,
+        test_check_context_completeness_dirty_contrast_citation_comma_clause_boundary,
+        test_check_context_completeness_dirty_contrast_citation_separate_sentence,
+        test_check_context_completeness_clean_quoted_material_fenced_block,
+        test_check_context_completeness_clean_quoted_material_blockquote,
+        test_check_context_completeness_dirty_quoted_material_ordinary_prose_same_card,
+        test_check_context_completeness_dirty_quoted_material_prose_after_fence_closed,
+        test_check_context_completeness_clean_fence_aware_extraction_fake_header_inside_fence,
+        test_check_context_completeness_dirty_fence_aware_extraction_genuine_header_after_fence,
+        test_check_context_completeness_clean_escape_marker_mentioned_not_read,
+        test_check_context_completeness_dirty_escape_marker_phrase_removed,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
