@@ -1274,6 +1274,107 @@ def _check_depends_on_batch_mismatch(
 
 
 # ---------------------------------------------------------------------------
+# Check 5c — verify-batch-mismatch
+# ---------------------------------------------------------------------------
+
+def _check_verify_batch_mismatch(
+    batch_files: list[Path],
+    overview_text: str,
+    project_root: Path,
+) -> list[dict]:
+    """
+    Flag a batch whose overview Batch Index ``verify:`` disagrees with its own frontmatter ``verify:``.
+
+    Mirrors ``_check_depends_on_batch_mismatch``'s structure, but compares the ``verify:`` field
+    instead of ``depends-on:``. A malformed ``verify:`` mapping is reported by exactly one of the two
+    sides, never both:
+
+    - On the overview side, this check IS the sole reporter -- ``_check_verify_malformed_cwd``
+    inspects batch-file and overview *frontmatter* only, never Batch Index entries, so a malformed
+    ``verify:`` on an index entry would otherwise go unreported.
+    - On the batch-file side, ``_check_verify_malformed_cwd`` is already the documented sole
+    reporter, so this check silently skips a batch-side parse failure to avoid double-reporting.
+
+    Each side's raw ``cwd:`` key (the un-resolved string, not the normalizer's resolved ``Path``) is
+    compared independently of the normalized command, because both root arguments are passed as
+    ``project_root`` here -- passing the same value for both roots means ``cwd: hub`` and ``cwd:
+    git_root`` would otherwise resolve to the identical ``Path``, silently hiding a real drift between
+    the two spellings. Absent, explicit-null, and blank-string ``verify:`` all normalize to ``None``
+    through the shared normalizer, so those three spellings compare equal to one another and produce
+    no finding.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+        project_root: Root of the project;
+            passed as both the ``hub_root`` and ``git_root`` argument to
+                ``_plan_dag.parse_verify_field`` since only the command/cwd-key pair matters here,
+                never the resolved ``Path``.
+
+    Returns:
+        List of error dicts, one per batch whose two `verify:` sides disagree.
+    """
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+
+    errors: list[dict] = []
+    for entry in batches:
+        stem = Path(entry.get("file", "")).stem
+        batch_path = stem_to_path.get(stem)
+        if batch_path is None:
+            continue
+
+        try:
+            overview_command, _ = _plan_dag.parse_verify_field(entry, project_root, project_root)
+        except ValueError as exc:
+            errors.append({
+                "check": "verify-batch-mismatch",
+                "batch": entry["name"],
+                "card": None,
+                "path": None,
+                "message": f"overview Batch Index verify: is malformed: {exc}",
+            })
+            continue
+        raw_overview_verify = entry.get("verify")
+        overview_cwd_key = (
+            raw_overview_verify.get("cwd") if isinstance(raw_overview_verify, dict) else None
+        )
+
+        batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+        try:
+            batch_command, _ = _plan_dag.parse_verify_field(
+                batch_frontmatter, project_root, project_root
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+        raw_batch_verify = batch_frontmatter.get("verify")
+        batch_cwd_key = raw_batch_verify.get("cwd") if isinstance(raw_batch_verify, dict) else None
+
+        if (overview_command, overview_cwd_key) != (batch_command, batch_cwd_key):
+            errors.append({
+                "check": "verify-batch-mismatch",
+                "batch": entry["name"],
+                "card": None,
+                "path": None,
+                "message": (
+                    f"per-batch file verify: command={batch_command!r} cwd={batch_cwd_key!r} "
+                    f"disagrees with overview Batch Index "
+                    f"verify: command={overview_command!r} cwd={overview_cwd_key!r}"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 6 — reads-not-backtick-path
 # ---------------------------------------------------------------------------
 
