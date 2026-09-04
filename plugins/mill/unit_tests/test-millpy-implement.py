@@ -776,6 +776,12 @@ class TestMillpyImplement(unittest.TestCase):
         # Finalize must use status.md values, not the CLI --round/--session-id/--start-sha args.
         self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
         self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
+        # main()'s already-resolved git_name/git_email locals (from `git config --global --get
+        # user.name`/`user.email`, mocked via mock_subprocess_run's default "abc1234" stdout)
+        # must be forwarded into finalize_from_output -- this is the #954 corroboration-commit
+        # git-identity fix; a future edit that silently drops these kwargs must fail this test.
+        self.assertEqual(call_kwargs.get("git_name"), "abc1234")
+        self.assertEqual(call_kwargs.get("git_email"), "abc1234")
 
     def test_prepare_retry_dirty_staged_commits(self):
         """Re-fire with non-empty staged diff (regenerated session): git_commit IS called.

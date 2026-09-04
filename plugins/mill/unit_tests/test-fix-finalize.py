@@ -671,6 +671,12 @@ def main() -> int:
                             and call_args.kwargs.get("module_wide_cwd_override") == module_wide_cwd
                             and call_args.kwargs.get("module_verify_baseline") == "pre-existing-failures"
                             and call_args.kwargs.get("batch_name") == "test-batch"
+                            # main()'s already-resolved git_name/git_email locals (from mock_subprocess_run's
+                            # user.name/user.email branch above) must be forwarded into finalize_from_output --
+                            # the #954 corroboration-commit git-identity fix; a future edit that silently drops
+                            # these kwargs must fail this test.
+                            and call_args.kwargs.get("git_name") == "Test User"
+                            and call_args.kwargs.get("git_email") == "test@example.com"
                         ):
                             print(
                                 "PASS: --scope batch forwards batch_verify_baseline and module-wide verify derivation"
