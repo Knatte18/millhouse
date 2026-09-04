@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-mill-descope-batch  '2026-09-04T09:36:30Z'
 approved-mill-go-base-scope-and-numbering-fixes  '2026-09-04T09:40:54Z'
 holistic-reviewing  '2026-09-04T09:41:34Z'
 holistic-approved  '2026-09-04T09:45:30Z'
+done  '2026-09-04T09:46:04Z'
 ```
 
 ## Batches
