@@ -55,10 +55,16 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   maps (via CPython's `posixmodule.c`) to `OpenProcess` + `TerminateProcess(handle, sig)` for any
   non-CTRL signal including `0` — it does not probe the process, it **kills** it. This explains the
   reported symptom exactly: the probed worker process dies (because the probe itself just terminated
-  it with exit code 0), while its already-spawned child (`subprocess.run`, further isolated by
-  `CREATE_BREAKAWAY_FROM_JOB` in `_subprocess_util.popen_detached`) survives independently and keeps
-  writing to the inherited log-file handle, appearing to "complete later" from a process that
-  `check_bg_status` already called dead.
+  it with exit code 0), while its already-spawned child (`subprocess.run(cmd, stdout=log_f,
+  stderr=STDOUT, creationflags=CREATE_NO_WINDOW)` inside `millpy-bg.py`'s `_worker_main`) survives
+  independently and keeps writing to the inherited log-file handle, appearing to "complete later"
+  from a process that `check_bg_status` already called dead. This is ordinary Windows parent/child
+  process independence, not `CREATE_BREAKAWAY_FROM_JOB` acting twice: that flag is set only once, on
+  the launcher→worker `Popen` call inside `_subprocess_util.popen_detached` (escaping the *launcher's*
+  Win32 Job Object so the worker itself survives launcher exit) — the worker's own child command is
+  spawned with plain `creationflags=CREATE_NO_WINDOW`, no breakaway flag, no Job Object relationship
+  between worker and child at all. `TerminateProcess`ing the worker simply has no effect on an
+  unrelated sibling process the OS never tied to it.
 - Add a `ctypes`-based, non-destructive liveness probe for `sys.platform == "win32"`
   (`OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` + `GetExitCodeProcess`, no signal sent), gated
   so the POSIX `os.kill(pid, 0)` path is untouched.
@@ -131,6 +137,17 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   the working directory, regardless of the deletion's own success or failure. mill-plan should treat
   "not in `git worktree list`" as the correct, verified detection criterion, not merely an assumed
   one.
+- Edge case (accepted race): because deregistration happens immediately when `git worktree remove
+  --force` itself fails — before `remove_safe`'s own in-process rmtree retry loop (the strengthened
+  3-attempt loop above) even starts — a concurrently-running mill-cleanup sweep in a different
+  session could, in the worst case, target the same directory while the original process's retries
+  are still in flight on it (bounded to the retry loop's own ~2s worst-case window). This is an
+  accepted, benign race: both sides are only ever deleting the same already-abandoned directory tree
+  (nothing is being freshly written there), so a second, concurrent `rmtree`/`safe_rmtree` attempt is
+  idempotent-ish in effect — at worst one side finds less left to delete, never a data-loss or
+  double-use hazard. No lock or skip-if-recently-touched guard is added for this window; mill-plan
+  should not add one either unless a real failure mode (not just a theoretical double-delete) is
+  found during implementation.
 - Rejected: no safety net (matches current behavior — leaves the exact leak the 4 issues report);
   an mtime/age-based or remove-then-check-registration heuristic instead of registration alone (the
   registration criterion is already correct per the verification above, so an alternative heuristic
@@ -149,13 +166,21 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   succeeds silently (no exception) if the process exists, killing it. `_probe_liveness`'s current
   code then reads "no exception raised" as `"affirmative-alive"`, when it actually just terminated
   the process it meant to check. This matches both reports precisely: the worker (whose PID is
-  logged) dies immediately after being probed, while its detached child subprocess (protected by
-  `CREATE_BREAKAWAY_FROM_JOB`, already running independently) continues and finishes normally,
-  writing further log output that arrives after `check_bg_status` already reported `"dead"`.
-- Rejected: adding `psutil` as a dependency (simpler code, but the mill script family is
-  deliberately stdlib-only — see `millpy-bg.py`'s worker fast-path docstring); heartbeat-based
-  liveness as an alternative signal (solves a problem that no longer exists once the probe itself
-  stops being destructive).
+  logged) dies immediately after being probed, while its own child subprocess — spawned via plain
+  `subprocess.run(cmd, ..., creationflags=CREATE_NO_WINDOW)` inside `millpy-bg.py`'s `_worker_main`,
+  with no `CREATE_BREAKAWAY_FROM_JOB` or other Job Object relationship tying it to the worker —
+  continues and finishes normally as an ordinary, independent Windows process, writing further log
+  output that arrives after `check_bg_status` already reported `"dead"`.
+- Rejected: adding `psutil` as a dependency — not because the mill script family is stdlib-only
+  project-wide (it isn't: `plugins/mill/pyproject.toml` already depends on `pyyaml`, `pygit2`, and
+  `tinydb`), but on narrower merits: this fix is a single win32-only branch inside `_probe_liveness`,
+  a new runtime dependency is unwarranted for it, and `ctypes.windll` keeps the fix symmetric with the
+  untouched POSIX `os.kill(pid, 0)` path (stdlib on both sides, not stdlib on one and a third-party
+  package on the other). `millpy-bg.py`'s worker fast-path docstring's "stdlib only" note is scoped to
+  that file's own startup-perf hot path (`if "--_worker" in sys.argv:`), not a project-wide rule, and
+  is cited here only as a convention this fix happens to stay consistent with, not as the reason
+  itself. Heartbeat-based liveness as an alternative signal was also rejected (solves a problem that
+  no longer exists once the probe itself stops being destructive).
 
 ### baseline-undercount-corroboration
 
@@ -204,10 +229,12 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
 - `plugins/mill/scripts/millpy-bg.py`: worker fast-path is intentionally stdlib-only (`if "--_worker"
   in sys.argv:` branch at the top of the file, before any mill imports) — the new Windows probe
   belongs in `_bg.py` (consumed by the orchestrator side), not here.
-- `plugins/mill/scripts/_subprocess_util.py`: `popen_detached()` — confirms the
-  `CREATE_BREAKAWAY_FROM_JOB` + two-stage `cmd /c start /B` launch that explains why the worker's
-  child subprocess survives independently of the worker process on Windows. No change needed here;
-  included for corroboration only.
+- `plugins/mill/scripts/_subprocess_util.py`: `popen_detached()` — confirms `CREATE_BREAKAWAY_FROM_JOB`
+  is applied only to the launcher→worker `Popen` call (escaping the *launcher's* Job Object so the
+  worker survives launcher exit), not to the worker's own inner `subprocess.run(cmd, ...)` child.
+  That child is an ordinary Windows process with no Job Object tie to the worker at all — which is
+  why `TerminateProcess`ing the worker (the actual bg-liveness bug) doesn't affect it. No change
+  needed here; included for corroboration only.
 - `plugins/mill/scripts/_verify_baseline.py`: `compute_baseline()` (module-wide, has the 3-run/
   control-check algorithm already — see `_run_module_wide_verify_algorithm`) vs.
   `compute_batch_baselines()` (per-batch, 2-run union only, no control check — this asymmetry is
