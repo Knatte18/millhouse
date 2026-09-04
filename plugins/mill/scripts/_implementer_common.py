@@ -1052,6 +1052,8 @@ def _run_verify_gates(
     start_sha: str | None = None,
     status_path: Path | None = None,
     batch_name: str | None = None,
+    git_name: str | None = None,
+    git_email: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1136,6 +1138,12 @@ def _run_verify_gates(
         batch_name: This batch's name,
             forwarded to _status.set_batch_field alongside status_path.
             Defaults to None, which disables the self-healing persist exactly like status_path=None.
+        git_name: Git commit identity (user.name) used to persist an expanded
+            verify_baseline_failures corroboration result to status.md.
+            Defaults to None, which disables the persist-commit.
+        git_email: Git commit identity (user.email) used to persist an expanded
+            verify_baseline_failures corroboration result to status.md.
+            Defaults to None, which disables the persist-commit.
 
     Returns:
         A stuck dict on the first gate that fails,
@@ -1187,6 +1195,30 @@ def _run_verify_gates(
                                 )
                             except Exception:
                                 pass
+                            else:
+                                # Commit the status.md write immediately so the in-scope dirty-tree
+                                # gate (which runs later in the same finalize_from_output
+                                # invocation) never observes this write as uncommitted dirt (#954).
+                                # Best-effort: a commit failure here must never crash finalize --
+                                # the pre-existing dirty-tree gate is the fallback authority.
+                                if git_name is not None and git_email is not None:
+                                    try:
+                                        _subprocess_util.run(
+                                            [
+                                                "git",
+                                                "add",
+                                                status_path.relative_to(project_root).as_posix(),
+                                            ],
+                                            cwd=project_root,
+                                        )
+                                        _subprocess_util.git_commit(
+                                            project_root,
+                                            f"mill-go: persist corroborated verify baseline for {batch_name}",
+                                            name=git_name,
+                                            email=git_email,
+                                        )
+                                    except Exception:
+                                        pass
                         batch_result = None
         if batch_result is not None:
             return batch_result
