@@ -29,13 +29,20 @@ implementing  '2026-09-04T12:33:19Z'
 ```yaml
 batches:
   - name: commit-baseline-write-before-dirty-check
-    state: pending
+    state: running
+    implementer_session: 56077ac7-aaaa-41a6-acf0-1aa08a4dc3bb
+    start_sha: 99edd17ee45546c6c6cbaf609b0371d512fa62d0
+    verify_baseline_failures: []
   - name: bg-heartbeat-diagnosability
     state: pending
+    verify_baseline_failures: []
   - name: test-corroboration-write-commit
     state: pending
+    verify_baseline_failures: []
   - name: forward-verify-baselines-millpy-fix
     state: pending
+    verify_baseline_failures: []
   - name: fresh-session-after-self-resolve
     state: pending
+    verify_baseline_failures: []
 ```
