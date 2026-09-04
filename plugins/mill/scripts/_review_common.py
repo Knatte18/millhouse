@@ -2912,12 +2912,16 @@ def load_config(hub_root: Path, mill_dir: Path, *, git_root: Path | None = None)
         hub_root: Absolute path to the hub directory.
         mill_dir: Absolute path to the .millhouse directory. Always used for the stale-
             ``review:``-key peek (``mill_dir / config.local.yaml``), regardless of ``git_root``.
-        git_root: Optional. When provided, used instead of ``mill_dir.parent`` as the delegate's
-            ``worktree_root`` argument (governing the merge-order stub/real config layers) --
-            ``mill_dir.parent`` is always a hub-anchored path, while callers with a nested-hub
-            layout (``hub_root != git_root``) may need the git-repository-root stub layer
-            instead. When omitted (the default), behavior is unchanged from before this
-            parameter existed.
+        git_root: Optional. When provided AND ``git_root / ".millhouse" / "config.local.yaml"``
+            exists, used instead of ``mill_dir.parent`` as the delegate's ``worktree_root``
+            argument (governing the merge-order stub/real config layers) -- ``mill_dir.parent``
+            is always a hub-anchored path, while callers with a nested-hub layout
+            (``hub_root != git_root``) may need the git-repository-root stub layer instead when
+            that stub carries the real overrides (mill-spawn's worktree-root stub).
+            When ``git_root`` has no local-config file of its own (mill-claim's in-place layout,
+            where the stub lives only at the hub), ``mill_dir.parent`` is used so the hub's own
+            ``config.local.yaml`` is not skipped over. When omitted (the default), behavior is
+            unchanged from before this parameter existed.
 
     Returns:
         Merged configuration dict, as produced by ``_config.load_config``.
@@ -2925,7 +2929,10 @@ def load_config(hub_root: Path, mill_dir: Path, *, git_root: Path | None = None)
     Raises:
         ReviewError: If neither the plugin template nor a repo-layer mill-config.yaml source exists.
     """
-    worktree_root = git_root if git_root is not None else mill_dir.parent
+    worktree_root = mill_dir.parent
+    if git_root is not None and git_root != worktree_root:
+        if (git_root / ".millhouse" / "config.local.yaml").exists():
+            worktree_root = git_root
 
     # Missing-source check, independent of the delegate's return value: an empty dict from the delegate does not distinguish "nothing found" from "a source was found but happened to be empty".
     template_path = resolve_plugin_template_path("mill-config.yaml")
