@@ -38,7 +38,9 @@ batches:
     commit_sha: 7e1fb88000ba8cbe71d7657d46d32d1df1f3a3e8
     verify_baseline_failures: []
   - name: mill-pause-agent-dispatch
-    state: pending
+    state: running
+    implementer_session: b989b085-f2a2-45f0-a966-284fdc57f92a
+    start_sha: 2c0d8ba03c0ad204957f7456e1075ba57618fc43
   - name: cleanliness-pycache-allowlist
     state: pending
     verify_baseline_failures: []
