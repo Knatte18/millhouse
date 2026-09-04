@@ -45,5 +45,7 @@ batches:
     commit_sha: f645799b95246fc107d5cafb9fa7437e42fa2fa9
     verify_baseline_failures: []
   - name: fix-table-docs
-    state: pending
+    state: running
+    implementer_session: 72ecef4f-49e4-49c3-855a-a46a1ebac359
+    start_sha: ed9da5630d2790f213f540300378e2bf59046ced
 ```
