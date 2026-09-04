@@ -1964,9 +1964,15 @@ def _check_context_completeness(
                             "line": line.strip(),
                         })
                     else:
-                        matches, producing_root = _resolve_symbol_files(
-                            search_key, project_root, root, git_root, search_cache
-                        )
+                        # Check the shared cache before calling into _resolve_symbol_files at all --
+                        # a recurring search_key across cards/batches then costs one function call
+                        # (the actual filesystem walk), not one call per occurrence.
+                        if search_key in search_cache:
+                            matches, producing_root = search_cache[search_key]
+                        else:
+                            matches, producing_root = _resolve_symbol_files(
+                                search_key, project_root, root, git_root, search_cache
+                            )
                         if len(matches) != 1:
                             continue
 
