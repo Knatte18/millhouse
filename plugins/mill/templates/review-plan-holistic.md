@@ -30,6 +30,10 @@ Do not assert a mechanism claim from memory, naming convention, or plausible-sou
 If you cannot verify the claim against source in your context (not bulked into this prompt, and not Read-able in bulk mode), do not assert it: downgrade the finding to a question under `## Missing context`, or drop it — never write an unverified mechanism claim into a BLOCKING or NIT finding as fact.
 Tool-use-mode reviewers may Read/Grep the target repo's source directly to verify a mechanism claim even when the relevant file was not bulked into this prompt; bulk-mode reviewers have no such option and must rely on this rule alone.
 
+## Overview verify: scope rule
+
+The overview's module-wide `verify:` field (if set) must stay a cheap compile/vet/smoke command, per `plan-overview.md`'s own documented intent — never a full test-suite run. Do not suggest, as a fix for any finding, converting it into an unscoped full-test command (e.g. `go test ./...`, `dotnet test`, `pytest`) — `_plan_validate`'s `verify-full-suite` check will reject that on the plan's very next validation pass, costing a review round for nothing.
+
 ## Criteria (apply to the plan as a whole)
 
 - **Constraint violations** — BLOCKING.
