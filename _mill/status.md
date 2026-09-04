@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-display-layer
 slug: review-manifest-listings-full-path-clutter
 branch: hanf/review-manifest-listings-full-path-clutter
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r1  '2026-09-04T16:45:41Z'
 plan-review-r2  '2026-09-04T16:50:04Z'
 planned  '2026-09-04T16:50:19Z'
 implementing  '2026-09-04T16:50:50Z'
+approved-display-layer  '2026-09-04T16:58:01Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-09-04T16:50:50Z'
 ```yaml
 batches:
   - name: display-layer
-    state: running
+    state: approved
     implementer_session: ced3206b-df9c-4411-aa4b-c3adf9f6824a
     start_sha: bf4cf699cf15f017a105d8a00b62a44e921145b3
+    commit_sha: f24506053ba6ef01bd9d14d654f80b812bea224d
     verify_baseline_failures: []
   - name: plan-review-wiring
     state: pending
