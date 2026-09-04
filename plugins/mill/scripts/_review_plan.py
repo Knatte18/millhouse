@@ -302,7 +302,7 @@ Returns a reviews[] entry dict.
             )
             if missing_paths:
                 retry_prompt = (
-                    build_reattached_section(missing_paths)
+                    build_reattached_section(missing_paths, roots=roots)
                     + "\n\n"
                     + "Please continue your review using the re-attached files above. "
                     + "The original prompt is already in your session context."
@@ -1156,7 +1156,7 @@ def run(
                         )
                         if missing_paths:
                             retry_prompt = (
-                                build_reattached_section(missing_paths)
+                                build_reattached_section(missing_paths, roots=run_hol_roots)
                                 + "\n\n"
                                 + "Please continue your review using the re-attached files above. "
                                 + "The original prompt is already in your session context."
