@@ -84,15 +84,17 @@ Card 1 adds new plumbing (shape detection, filesystem-walk resolution, a shared 
 
 ### Card 3: Add edge-case and regression tests for the symbol branch
 
-- **Context:**
-  - `plugins/mill/scripts/_plan_validate.py`
+- **Context:** none
 - **Edits:**
+  - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Extend plugins/mill/unit_tests/test-plan-validate.py with the remaining test cases from this task's discussion notes' Testing section — no further production-code changes; card 2 already wired every piece these tests exercise. Follow the same end-to-end convention as card 2's tests (see the overview's "new tests follow the file's existing end-to-end convention" Shared Decision).
+  Extend plugins/mill/unit_tests/test-plan-validate.py with the remaining test cases from this task's discussion notes' Testing section. Follow the same end-to-end convention as card 2's tests (see the overview's "new tests follow the file's existing end-to-end convention" Shared Decision).
+
+  Implementer note (round 1): `test_check_context_completeness_symbol_cache_invoked_once_per_key`'s literal assertion (`call_count[0] == 1`) requires `_check_context_completeness`'s symbol branch to check `search_cache` itself before calling `_resolve_symbol_files` at all, rather than relying solely on `_resolve_symbol_files`'s own internal cache check (as card 2 originally wired it) — with only the internal check, `_resolve_symbol_files` (and therefore the counting wrapper) is still invoked once per occurrence (twice, for two cards), even though the underlying filesystem walk only happens on the first call. This is a small, in-scope wiring correction to `_check_context_completeness` (not a new file), made here in card 3 alongside the test that exposes it.
 
   - `test_check_context_completeness_symbol_dotted_trailing_segment_only`: a fixture file's declaration line contains only the unqualified name (e.g. a line reading `func New(...) {}`), never the qualified form `reedengine.New`; the card's `Requirements:` names `` `reedengine.New` `` (dotted, absent from own refs) -> 1 `context-completeness` error, confirming the search key used for resolution is the trailing segment `"New"` (which the fixture file contains), not the literal dotted text `"reedengine.New"` (which the fixture file never contains verbatim).
   - `test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment`: the trailing segment of a dotted candidate (e.g. `Commit` in `` `batch.Commit` ``) appears in two unrelated fixture files -> 0 errors (ambiguous-skip), confirming the accepted trade-off from the resolvability-gate design (see this task's discussion notes).
