@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-plan-discussion-drift-and-interpreter-naming
+phase: approved-mill-start-fork-guardrail
 slug: mill-plan-entry-gate-and-misc-bugs
 branch: hanf/mill-plan-entry-gate-and-misc-bugs
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-04T10:24:55Z'
 planned  '2026-09-04T10:25:12Z'
 implementing  '2026-09-04T10:25:33Z'
 approved-mill-plan-discussion-drift-and-interpreter-naming  '2026-09-04T10:29:21Z'
+approved-mill-start-fork-guardrail  '2026-09-04T10:31:11Z'
 ```
 
 ## Batches
@@ -36,8 +37,9 @@ batches:
     commit_sha: 1e8ec476b085d9c4ad97f958f0f001ea561cf867
     verify_baseline_failures: []
   - name: mill-start-fork-guardrail
-    state: running
+    state: approved
     implementer_session: 9284e9a2-d9e1-4420-8993-85f244de8812
     start_sha: 33484670d876d4cb0fa04bfcf7490b08f42d3de7
+    commit_sha: 5e56f136eafaa7962d2a036a6e0520169facbdc3
     verify_baseline_failures: []
 ```
