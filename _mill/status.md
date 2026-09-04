@@ -45,5 +45,7 @@ batches:
     commit_sha: 689a146d700019c3e15c120409b65ce7d53622c2
     verify_baseline_failures: []
   - name: docs-and-reviewer-guardrail
-    state: pending
+    state: running
+    implementer_session: 7d81bd69-f7ee-42c1-8c8b-34124e9aa7bf
+    start_sha: 4fd936f3b343d2d8e7b1cf880960f5b5128eb950
 ```
