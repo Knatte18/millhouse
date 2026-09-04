@@ -246,7 +246,9 @@ If the lock already exists:
 
 ### 2. Invoke mill-merge-in
 
-Call the `mill-merge-in` skill (no arguments — it picks up the parent from status.md the same way).
+Call the `mill-merge-in` skill, passing `<parent_branch>` — the value already resolved and bound at Entry Step 4 (including that step's `status_path`-absent fallback and its liveness-check rebind) — as `mill-merge-in`'s optional positional `<branch>` argument (documented in `mill-merge-in/SKILL.md` Entry step 3 as "for ad-hoc syncing from some other branch than the task's declared parent"), rather than a bare invocation.
+Passing the value explicitly is what lets `mill-merge-in` skip its own independent `status.md` read — see Card 2 in this same batch for the corresponding `mill-merge-in`-side change this depends on.
+This applies to Step 2 itself, not any one route — both the `done` fresh-merge route and the `closed` PR-state-gate route (the only two routes that reach Step 2 via `## Entry`'s "In-place mode bypass" / PR-state-gate routing) pass the argument.
 If it reports failure → release the merge lock and halt.
 Capture the checkpoint branch name it prints;
 you may need it on rollback.
