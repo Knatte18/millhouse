@@ -36,7 +36,9 @@ batches:
     commit_sha: b079b8b19e0cb3e24c0d11deab80ffa092269105
     verify_baseline_failures: []
   - name: bg-heartbeat-diagnosability
-    state: pending
+    state: running
+    implementer_session: eeec3588-0eb8-4c12-9f3a-06ddba77207c
+    start_sha: 922a1a2dfaf10dc1ce6c88f92d83a7682ab803e9
     verify_baseline_failures: []
   - name: test-corroboration-write-commit
     state: pending
