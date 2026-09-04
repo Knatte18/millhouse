@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-brief-instruction-hardening
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-review-r2  '2026-09-04T10:19:06Z'
 plan-fix-r2  '2026-09-04T10:20:09Z'
 planned  '2026-09-04T10:20:17Z'
 implementing  '2026-09-04T10:20:38Z'
+approved-brief-instruction-hardening  '2026-09-04T10:23:18Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-09-04T10:20:38Z'
 ```yaml
 batches:
   - name: brief-instruction-hardening
-    state: running
+    state: approved
     implementer_session: 360d0cc3-e00a-4416-a308-5db54aa5fb35
     start_sha: 1a4ffc423b141ed17d9da601588e187ce31c2c96
+    commit_sha: 98acdf6bb376659e58b1449f39d774a852ab9d8e
   - name: git-commit-staging-verification
     state: pending
   - name: commit-sha-field-rename-and-regression-tests
