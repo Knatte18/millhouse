@@ -186,13 +186,16 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
 
 - Decision: When `_implementer_common`'s verify-gate subset-diff check finds a live replay's
   failure-signature set is *not* a subset of the cached per-batch baseline (the case that currently
-  produces a `stuck_type: verify` false positive), re-run the specific failing command once directly
-  in `project_root` (the real task worktree — always safe, no mutation) before blocking, mirroring
-  the control-check step `compute_baseline` already performs for the module-wide case. If the
-  control run reproduces the same extra failure signature, treat it as corroborated pre-existing:
-  waive the batch and merge the expanded signature set into the cached per-batch baseline so later
-  batches in the same task don't re-pay the same false block. If the control run does *not*
-  reproduce it, block exactly as today (genuine regression).
+  produces a `stuck_type: verify` false positive), re-run the specific failing command once in a
+  **fresh transient worktree checked out at the batch's own `start_sha`** (the commit `_run_verify_gate`'s
+  live replay started from — captured and stored on `status.md` before the implementer made any
+  commits, per `millpy-implement.py`'s existing `start_sha` capture/resume machinery) before blocking
+  — reusing `_verify_baseline`'s existing `_checkout_parent_branch`/`_link_dependency_dirs`/
+  `_worktree.remove_safe` transient-checkout machinery, generalized to accept an arbitrary ref/SHA
+  rather than only a named branch. If the control run reproduces the same extra failure signature,
+  treat it as corroborated pre-existing: waive the batch and merge the expanded signature set into
+  the cached per-batch baseline so later batches in the same task don't re-pay the same false block.
+  If the control run does *not* reproduce it, block exactly as today (genuine regression).
 - Rationale: `compute_batch_baselines` was deliberately designed without this control-check step
   (per its own docstring, deferring to "finalize's own verify-replay run against the real,
   in-progress worktree" as the intended downstream corroboration point) — but #917 shows that replay
@@ -200,10 +203,28 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   reality* the way the module-wide path already does. Extending the same, already-trusted pattern to
   this path closes exactly the gap #917 hit, without requiring the unreproducible
   checkout-vs-live-environment root cause to ever be found.
+- **Correction (round-3 review):** the control run must target `start_sha`, never `project_root`
+  itself. `project_root` is the exact same live task worktree the failing replay already ran in —
+  by the time finalize's verify-gate runs, it already contains this batch's own commits. Re-running
+  the identical command in the identical, already-modified worktree can only confirm the failure is
+  deterministic, never that it's "unrelated to the batch's own changes": a genuine regression the
+  batch itself introduced would reproduce there just as reliably as a true pre-existing failure would,
+  so it cannot discriminate between the two cases the corroboration exists to tell apart. This is
+  exactly why `compute_baseline`'s own control check is sound where the naive per-batch version above
+  was not: it corroborates the transient-checkout failure against `project_root` at a point in the
+  task lifecycle *before* any batch has made changes yet — a genuinely different, pre-task-changes
+  environment, not the same one the primary run already used. Checking out `start_sha` fresh restores
+  that same "known-prior-state, no task changes yet" property for the per-batch case. This still
+  reuses the temp-checkout mechanism that #917 showed can itself under-detect vs. a live worktree —
+  a residual, accepted risk (a false "not reproduced" on a signature that genuinely was present pre-batch,
+  same environment-parity gap as #917), but strictly better than today's zero-corroboration behavior,
+  and the question being asked here is narrower (does this one already-observed signature reproduce
+  in the pre-batch state) than #917's original full-baseline-discovery use of the same mechanism.
 - Rejected: continuing to chase the exact environment-divergence root cause (open-ended, not
   reproducible outside a live Windows session, and the original reporter already spent a session on
   it without success); diagnostic-only logging with no self-healing (leaves the false-block problem
-  unresolved, just better-explained).
+  unresolved, just better-explained); re-running in `project_root` itself (round-3 review — cannot
+  discriminate regression from pre-existing failure, see Correction above).
 
 ### fail-safe-boundary-preserved
 
@@ -229,6 +250,12 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
 - `plugins/mill/scripts/millpy-bg.py`: worker fast-path is intentionally stdlib-only (`if "--_worker"
   in sys.argv:` branch at the top of the file, before any mill imports) — the new Windows probe
   belongs in `_bg.py` (consumed by the orchestrator side), not here.
+- `plugins/mill/scripts/_vscode_processes.py`: `_probe_windows()` already wraps
+  `ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)` for an
+  unrelated purpose (matching VS Code window titles to workspace paths) — the closest existing
+  in-repo convention for the exact win32 ctypes idiom the new `_bg.py` probe needs. Keep the new
+  probe's `ctypes.windll.kernel32` usage style (constant naming, `False` for `bInheritHandle`, handle
+  cleanup pattern) consistent with this precedent rather than inventing a new idiom.
 - `plugins/mill/scripts/_subprocess_util.py`: `popen_detached()` — confirms `CREATE_BREAKAWAY_FROM_JOB`
   is applied only to the launcher→worker `Popen` call (escaping the *launcher's* Job Object so the
   worker survives launcher exit), not to the worker's own inner `subprocess.run(cmd, ...)` child.
@@ -253,11 +280,15 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
 
 ## Testing
 
-- `_worktree.remove_safe` retry/backoff: unit test mocking `_subprocess_util.run` (git calls) and
-  `_safe_rmtree.safe_rmtree` to raise `OSError` matching WinError145 a controlled number of times
-  (e.g. fails twice then succeeds on the 3rd attempt → asserts success; fails all 3 → asserts
-  `WorktreeLockedError` still raised as today), and asserts `dotnet build-server shutdown` is invoked
-  once per retry, not just once total. TDD candidate.
+- `_worktree.remove_safe` retry/backoff: unit test mocking `_subprocess_util.run` (git calls),
+  `_safe_rmtree.safe_rmtree` (to raise `OSError` matching WinError145 a controlled number of times —
+  e.g. fails twice then succeeds on the 3rd attempt → asserts success; fails all 3 → asserts
+  `WorktreeLockedError` still raised as today), **and the module-level `subprocess.run` imported
+  directly in `_worktree.py`** (the actual call site of `dotnet build-server shutdown` — it is not
+  routed through `_subprocess_util.run`, so that seam alone cannot intercept or count it; mocking only
+  `_subprocess_util.run` would let a real `dotnet build-server shutdown` fire during the test).
+  Asserts `subprocess.run(["dotnet", "build-server", "shutdown"], ...)` is invoked once per retry,
+  not just once total. TDD candidate.
 - mill-cleanup sweep extension: unit test with a fixture `.scratch/` containing both a
   currently-registered worktree dir (must survive) and an orphaned `verify-baseline-*` dir not in
   `git worktree list` output (must be removed).
@@ -271,9 +302,12 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   caught the actual reported bug.
 - Baseline-undercount control-check corroboration: unit test on the subset-diff-mismatch branch in
   `_implementer_common`, injecting a live-replay signature set that is NOT a subset of the cached
-  baseline, mocking the control-check subprocess run to (a) reproduce the extra failure → assert
-  waived + baseline updated to include it, and (b) not reproduce it → assert still blocks with
-  `stuck_type: verify` exactly as today. TDD candidate.
+  baseline, mocking the `start_sha`-checkout control-check run (the generalized
+  `_checkout_parent_branch`-style transient worktree, not `project_root`) to (a) reproduce the extra
+  failure → assert waived + baseline updated to include it, and (b) not reproduce it → assert still
+  blocks with `stuck_type: verify` exactly as today. Also assert the control check's checkout target
+  is `start_sha`, not `project_root` — a regression test for the round-3 review correction above.
+  TDD candidate.
 - All tests run via the existing `plugins/mill/unit_tests/test-*.py` + `run-all.py` convention, no
   real git/LLM/Windows dependency, matching the project's existing in-memory/tempfile fixture
   pattern.
