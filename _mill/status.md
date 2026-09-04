@@ -31,9 +31,13 @@ implementing  '2026-09-04T10:10:46Z'
 ```yaml
 batches:
   - name: validator-checks
-    state: pending
+    state: running
+    implementer_session: a5522f43-8d9b-405b-b9fb-93b4d8e92900
+    start_sha: 9752c350674588ee0c02e7ef5edd37c935b8196e
+    verify_baseline_failures: []
   - name: validator-tests
     state: pending
+    verify_baseline_failures: []
   - name: fix-table-docs
     state: pending
 ```
