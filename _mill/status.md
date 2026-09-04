@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-bg-liveness-windows-probe  '2026-09-04T09:34:25Z'
 approved-baseline-undercount-corroboration  '2026-09-04T09:38:23Z'
 approved-baseline-undercount-corroboration-tests  '2026-09-04T09:40:45Z'
 holistic-reviewing  '2026-09-04T09:41:13Z'
+holistic-fixing  '2026-09-04T09:45:12Z'
 ```
 
 ## Batches
