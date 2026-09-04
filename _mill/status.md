@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-display-layer
+phase: approved-plan-review-wiring
 slug: review-manifest-listings-full-path-clutter
 branch: hanf/review-manifest-listings-full-path-clutter
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-review-r2  '2026-09-04T16:50:04Z'
 planned  '2026-09-04T16:50:19Z'
 implementing  '2026-09-04T16:50:50Z'
 approved-display-layer  '2026-09-04T16:58:01Z'
+approved-plan-review-wiring  '2026-09-04T17:11:20Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ batches:
     commit_sha: f24506053ba6ef01bd9d14d654f80b812bea224d
     verify_baseline_failures: []
   - name: plan-review-wiring
-    state: running
+    state: approved
     implementer_session: b26ed942-856e-4f08-8f05-dc20fc69862b
     start_sha: 344a31bea0548bb51bc02f4b3c022a600b3c880d
+    commit_sha: 3b637a73cce4ba0ddffed0e28d29d477c9a7f6e8
     verify_baseline_failures: ['--- FAIL test-review-plan-flow.py (2.3s) ---', 'FAIL -- 1 of 1 in 2.3s: [''test-review-plan-flow.py'']',
   '--- FAIL test-review-plan-flow.py (2.4s) ---', 'FAIL -- 1 of 1 in 2.4s: [''test-review-plan-flow.py'']']
   - name: code-review-wiring
