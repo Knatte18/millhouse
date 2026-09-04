@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: plan-validate-verify-command-validation-bugs
 branch: hanf/plan-validate-verify-command-validation-bugs
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-verify-full-suite-check-fixes  '2026-09-04T08:37:26Z'
 approved-verify-full-suite-unit-tests  '2026-09-04T08:40:03Z'
 approved-docs-and-reviewer-guardrail  '2026-09-04T08:42:31Z'
 holistic-reviewing  '2026-09-04T08:42:55Z'
+holistic-fixing  '2026-09-04T08:47:01Z'
 ```
 
 ## Batches
