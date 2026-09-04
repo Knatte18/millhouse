@@ -26,8 +26,9 @@ GitHub issues can stay closed against this task with an accurate paper trail.
   line" rule with a concrete anti-pattern example (#944).
 - `plugins/mill/scripts/_implementer_common.py` (`_forward_output` /
   `finalize_from_output`) and `plugins/mill/scripts/millpy-merge-in-subagent.py`
-  (`--mode conflicts --stage finalize`): stop emitting a `commit_sha` field before a
-  merge commit actually exists (#953).
+  (`--mode conflicts`, both the `--stage finalize` branch and `_run_conflicts`'s
+  full-mode return): stop emitting a `commit_sha` field before a merge commit
+  actually exists (#953).
 - `plugins/mill/skills/git-commit/SKILL.md`: add a mandatory post-stage
   verification step that catches the add/edit staging race for moved or
   just-edited files (#923).
@@ -46,10 +47,10 @@ GitHub issues can stay closed against this task with an accurate paper trail.
 - Any change to the batch/card success path in `_implementer_common.py`'s main
   `_forward_output` branch (the one used by `millpy-implement.py`) — that path's
   `commit_sha` already refers to a real, already-created commit and is not
-  misleading. Only the conflicts-mode finalize call (which reaches the same
-  generic fallback with no verify/card args) produces a misleading value.
-  Do not generalize the field-rename to that path.
-  Only the conflicts-mode finalize call is renamed.
+  misleading. Only the two conflicts-mode call sites (finalize-stage and
+  full-mode, both reaching the same generic fallback with no verify/card args)
+  produce a misleading value. Do not generalize the field-rename to the
+  batch/card success path.
 - Rewriting or re-architecting `_forward_output`'s branching structure. This task
   adds one optional parameter, not a refactor.
 - Any change to `mill-go`'s `inferred: true` recovery path — it already handles a
@@ -106,9 +107,15 @@ GitHub issues can stay closed against this task with an accurate paper trail.
 
 ### rename-conflicts-finalize-field (#953)
 
-- Decision: `millpy-merge-in-subagent.py`'s `--mode conflicts --stage finalize`
-  success path emits `pre_merge_head` instead of `commit_sha` in its JSON
-  envelope. Implementation: add an optional keyword parameter (e.g.
+- Decision: `millpy-merge-in-subagent.py`'s conflicts-mode success path emits
+  `pre_merge_head` instead of `commit_sha` in its JSON envelope, at **both**
+  call sites that reach the generic fallback: the `--stage finalize` branch
+  (~line 397-424) and `_run_conflicts`'s own full-mode return (~line 490,
+  `return _forward_output(output, project_root)`) — both funnel through the
+  same unconditional `git rev-parse HEAD` fallback before any merge commit
+  exists, so both are misleading in the same way and both are in scope; this
+  is not a "re-check during planning" item. Implementation: add an optional
+  keyword parameter (e.g.
   `commit_sha_field_name: str = "commit_sha"`) to `_forward_output` /
   `finalize_from_output`, used only where the generic fallback branch attaches the
   freshly-computed `git rev-parse HEAD` value to the success envelope (the
@@ -206,20 +213,18 @@ GitHub issues can stay closed against this task with an accurate paper trail.
   (search `parsed["commit_sha"] = result.stdout.strip()` near the function's
   end) — this is the block both the normal batch success path *and* the
   conflicts-mode merge-in path funnel through when no verify/card gates fire.
-  The `_is_valid_commit_sha` / `_COMMIT_SHA_RE` regex (40 or 64 lowercase hex)
-  and the `_attach_commit_sha` helper already exist and should be reused, not
-  duplicated, by any new code.
-- `plugins/mill/scripts/millpy-merge-in-subagent.py`: `_run_conflicts` (full-mode)
-  and the `--stage finalize` / `args.mode == "conflicts"` branch (~line 397) are
-  the two places conflicts-mode reaches a success envelope. Only the
-  `--stage finalize` branch's *fallthrough* to `finalize_from_output` needs the
-  field-rename — `_run_conflicts`'s own full-mode return (line ~490,
-  `return _forward_output(output, project_root)`) also funnels through the same
-  fallback and produces the same misleading value, so it needs the same
-  `commit_sha_field_name="pre_merge_head"` override for consistency. Re-check
-  this call site during planning; the Decisions section above named the
-  finalize branch as primary because that's where #953 was observed, but full
-  mode has the identical root cause and should not be left inconsistent.
+  The new `commit_sha_field_name` parameter's implementation should reuse the
+  existing `_is_valid_commit_sha` / `_COMMIT_SHA_RE` regex (40 or 64 lowercase
+  hex) that already gates this block. `_attach_commit_sha` is a separate helper
+  used only by unrelated stuck-envelope call sites (retiering/completeness/
+  incomplete, all out of scope for this task) — it is not called by the block
+  being parameterized here and must not be touched.
+- `plugins/mill/scripts/millpy-merge-in-subagent.py`: `_run_conflicts` (full-mode,
+  ~line 490, `return _forward_output(output, project_root)`) and the
+  `--stage finalize` / `args.mode == "conflicts"` branch (~line 397-424) are the
+  two places conflicts-mode reaches a success envelope, and both are in scope
+  for the field-rename per the Decision above — both funnel through the same
+  generic fallback and produce the same misleading value.
 - A grep of `plugins/mill/skills/` for `commit_sha` (run during this discussion
   round) found no file that documents consuming the conflicts-finalize
   envelope's SHA field by name — `mill-merge-in`'s skill file mentions the
