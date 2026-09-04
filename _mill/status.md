@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-validator-checks  '2026-09-04T10:16:04Z'
 approved-validator-tests  '2026-09-04T10:26:05Z'
 approved-fix-table-docs  '2026-09-04T10:28:45Z'
 holistic-reviewing  '2026-09-04T10:29:33Z'
+holistic-fixing  '2026-09-04T10:33:31Z'
 ```
 
 ## Batches
