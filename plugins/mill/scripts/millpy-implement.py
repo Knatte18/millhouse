@@ -764,6 +764,10 @@ def main(argv=None) -> int:
     # mill-go resuming after a transient dispatch failure) would overwrite implementer_session in status.md and make a second "mill-go: start batch" commit, both of which corrupt state the agent-mode dispatch loop and finalize's completeness recount rely on (#625, #635, #643).
     # Resolved once, before the resume/fresh-mint branches below, so the three-way branch reads as: resume-after-incomplete, prepare-reuse, fresh-mint.
     _prepare_reuse_entry = None
+    # Set only when the most recent timeline row is a self-resolve marker (see below);
+    # the fresh-mint branch reads this even when the block above never runs (e.g. --stage full),
+    # so it must be initialized at this same top-level scope regardless of args.stage.
+    _self_resolve_remint_ts = None
     if args.stage == "prepare" and not args.resume_incomplete:
         _prepare_batches = _status.read_batches(status_path)
         _prepare_candidate = next(
@@ -774,7 +778,25 @@ def main(argv=None) -> int:
             and _prepare_candidate.get("state") == "running"
             and _prepare_candidate.get("implementer_session")
         ):
-            _prepare_reuse_entry = _prepare_candidate
+            # A self-resolve (mill-go-base/SKILL.md's per-batch self-resolve step) leaves
+            # "state: running" and the original implementer_session untouched -- it only appends a
+            # "self-resolved-verify-logic" timeline row -- so this reuse heuristic cannot tell a
+            # self-resolved re-fire apart from a genuine transient-dispatch-failure re-fire without
+            # also consulting the timeline.
+            # Withhold reuse exactly once per self-resolve marker: the fresh-mint branch below
+            # records self_resolve_remint_at so a *second* prepare call sees _already_reminted and
+            # reuses normally, bounding this to one remint rather than an unbounded chain.
+            _timeline = _status.read_full(status_path)["timeline"]
+            if _timeline:
+                _last_parts = _timeline[-1].split(None, 1)
+                if len(_last_parts) > 1 and _last_parts[0] == "self-resolved-verify-logic":
+                    _self_resolve_remint_ts = _last_parts[1].strip("'\"")
+            _already_reminted = (
+                _self_resolve_remint_ts is not None
+                and _prepare_candidate.get("self_resolve_remint_at") == _self_resolve_remint_ts
+            )
+            if _self_resolve_remint_ts is None or _already_reminted:
+                _prepare_reuse_entry = _prepare_candidate
 
     if args.resume_incomplete:
         # Resume path: read the original start_sha and implementer_session from status.md.
@@ -826,11 +848,18 @@ def main(argv=None) -> int:
 
         session_id = str(uuid.uuid4())
 
-        _status.set_batch_fields(
-            status_path,
-            args.batch_name,
-            {"state": "running", "start_sha": start_sha, "implementer_session": session_id},
-        )
+        _fresh_mint_fields = {
+            "state": "running",
+            "start_sha": start_sha,
+            "implementer_session": session_id,
+        }
+        # Record the remint marker only when this fresh mint was actually triggered by an
+        # unreacted self-resolve, not an ordinary first-pass dispatch -- so a later prepare
+        # call for this same session can detect _already_reminted and reuse it instead of
+        # minting a third session on a following transient retry.
+        if _self_resolve_remint_ts is not None:
+            _fresh_mint_fields["self_resolve_remint_at"] = _self_resolve_remint_ts
+        _status.set_batch_fields(status_path, args.batch_name, _fresh_mint_fields)
 
         # Stage status.md and the cleanliness snapshot unconditionally.
         # On a re-fire the prepare step regenerated implementer_session, so status.md is always dirty;
