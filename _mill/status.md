@@ -41,6 +41,8 @@ batches:
     commit_sha: 41591862fa161645cc04e299ee429d0eefebead7
     verify_baseline_failures: []
   - name: mill-plan-fixer-doc-update
-    state: pending
+    state: running
+    implementer_session: 847fd099-f0ce-4968-b672-6f380c2a0151
+    start_sha: ce65519f3ecd64a3ea9b25a4593db7b594d452c2
     verify_baseline_failures: []
 ```
