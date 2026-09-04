@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: review-plan-verdict-envelope-model-bugs
 branch: hanf/review-plan-verdict-envelope-model-bugs
 plan: _mill/plan
@@ -23,6 +23,7 @@ planned  '2026-09-04T08:14:58Z'
 implementing  '2026-09-04T08:15:32Z'
 approved-mechanism-claim-rule  '2026-09-04T08:18:09Z'
 holistic-reviewing  '2026-09-04T08:18:39Z'
+holistic-approved  '2026-09-04T08:20:09Z'
 ```
 
 ## Batches
