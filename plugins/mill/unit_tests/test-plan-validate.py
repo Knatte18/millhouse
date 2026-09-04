@@ -3438,6 +3438,288 @@ def test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer(
             return 1
 
 
+def test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence() -> int:
+    """Source has a 2-space baseline indent, fence is flattened to column zero -> one finding, message states it matched after ADDING 2 leading spaces per line (the under-indent direction, #the add pass)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n  gamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "beta\n"
+                "gamma\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "src/target.py", f"wrong path: {e['path']!r}"
+            assert "after adding 2 leading spaces per line" in e["message"], (
+                f"message should state the add direction: {e['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line() -> int:
+    """Same under-indent shape, but the source excerpt's separator line is genuinely empty -> still detected via the default non-blank-only add variant."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "\n"
+                "beta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert "after adding 2 leading spaces per line" in check_errors[0]["message"], (
+                f"message should state the add direction: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line() -> int:
+    """Same under-indent shape, but the source's separator line is whitespace-only with its own indent (not genuinely empty) -> still detected, exercising the include_blank=True add variant."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  \n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "\n"
+                "beta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert "after adding 2 leading spaces per line" in check_errors[0]["message"], (
+                f"message should state the add direction: {check_errors[0]['message']!r}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen() -> int:
+    """An existing over-indented fence still produces the unchanged 'after stripping N leading spaces per line' message, asserted on the exact message text so a regression in the frozen wording fails the test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "alpha\nbeta\ngamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  alpha\n"
+                "  beta\n"
+                "  gamma\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            expected = (
+                "card 1's Requirements: fence 1 matches 'src/target.py' after stripping 2 "
+                "leading spaces per line (found N=2)"
+            )
+            assert check_errors[0]["message"] == expected, (
+                f"frozen message wording regressed: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact() -> int:
+    """Fence content is already a byte-exact substring of the target Edits: file -> no error (regression guard: the byte-exact pre-check must still win before the add pass ever runs)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  alpha\n"
+                "  beta\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match() -> int:
+    """Fence shows plausible but different code, not a substring at any N in 1..40 in either direction -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Illustrative:\n"
+                "```\n"
+                "gamma\n"
+                "delta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_skip_checks_filters_wiki_config_mutation() -> int:
     """skip_checks={"wiki-config-mutation"} suppresses that check entirely."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -7644,6 +7926,13 @@ def main() -> int:
         test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break,
         test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer,
         test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer,
+        # under-indented requirements fences (validator-tests batch, Card 7)
+        test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence,
+        test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line,
+        test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line,
+        test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen,
+        test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact,
+        test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,
