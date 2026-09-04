@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-09-04T12:58:06Z'
 holistic-fixing  '2026-09-04T13:04:24Z'
 holistic-reviewing  '2026-09-04T13:07:19Z'
 holistic-approved  '2026-09-04T13:11:16Z'
+done  '2026-09-04T13:11:39Z'
 ```
 
 ## Batches
