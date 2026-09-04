@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-discussion-review-timeline-and-orch-review-hygiene
 branch: hanf/mill-start-discussion-review-timeline-and-orch-review-hygiene
 plan: _mill/plan
@@ -22,4 +22,13 @@ plan-review-r1  '2026-09-04T10:19:23Z'
 plan-fix-r1  '2026-09-04T10:19:31Z'
 plan-review-r2  '2026-09-04T10:23:23Z'
 planned  '2026-09-04T10:23:41Z'
+implementing  '2026-09-04T12:33:21Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: review-hygiene-fixes
+    state: pending
 ```
