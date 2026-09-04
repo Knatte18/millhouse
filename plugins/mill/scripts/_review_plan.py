@@ -33,6 +33,7 @@ from _llm_common import LLMError
 from _review_common import (
     RE_BATCH,
     RE_SIMPLE,
+    DisplayRoots,
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
@@ -228,22 +229,28 @@ Returns a reviews[] entry dict.
         mode = "tool-use" if batch_spec.get("tooluse") else "bulk"
         tool_rule = build_tool_rule(mode)
 
+        roots = DisplayRoots(project_root=project_root, git_root=git_root, wiki_root=wiki_root)
+
         all_bulked = [overview_path, batch_path, *reads, *ancestors_on_disk, *moves_on_disk]
-        manifest = build_manifest_section(all_bulked)
+        manifest = build_manifest_section(all_bulked, roots=roots)
 
         if mode == "tool-use":
-            read_list = "\n".join(f"- {p}" for p in [*reads, *ancestors_on_disk, *moves_on_disk]) or "(none)"
+            read_list = "\n".join(
+                f"- {roots.render(p)}" for p in [*reads, *ancestors_on_disk, *moves_on_disk]
+            ) or "(none)"
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan files to review\n"
-                f"- Overview: `{overview_path}`\n"
-                f"- Batch:    `{batch_path}`\n\n"
+                f"- Overview: `{roots.render(overview_path)}`\n"
+                f"- Batch:    `{roots.render(batch_path)}`\n\n"
                 f"Read both files above. Then read the source files listed under "
                 f"`Context:` / `Edits:` / `Creates:` in the batch + cross-batch creates "
-                f"that exist on disk:\n{read_list}"
+                f"that exist on disk:\n{read_list}\n\n"
+                f"Every path listed above is relative to the root stated in the "
+                f"`## Path roots` block above and must be resolved against it before reading."
             )
         else:
-            bulked = bulk_files(all_bulked)
+            bulked = bulk_files(all_bulked, roots=roots)
             artefact_section = (
                 f"{manifest}\n\n"
                 f"## Plan content (overview + batch + Context/Edits/Creates files + cross-batch ancestor creates)\n"
