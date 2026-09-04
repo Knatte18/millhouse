@@ -47,6 +47,8 @@ batches:
     verify_baseline_failures: ['--- FAIL test-review-plan-flow.py (2.3s) ---', 'FAIL -- 1 of 1 in 2.3s: [''test-review-plan-flow.py'']',
   '--- FAIL test-review-plan-flow.py (2.4s) ---', 'FAIL -- 1 of 1 in 2.4s: [''test-review-plan-flow.py'']']
   - name: code-review-wiring
-    state: pending
+    state: running
+    implementer_session: d8297780-ca01-4ee7-98a7-986bc453b300
+    start_sha: 431dcdd2cd8c3167f15a79f6176244c5f6cd61ee
     verify_baseline_failures: []
 ```
