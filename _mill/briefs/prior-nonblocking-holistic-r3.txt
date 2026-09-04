@@ -1,1 +1,0 @@
-- Stale "mill-merge's auto-merge path" caveat now describes unreachable code: Location: plugins/mill/skills/mill-merge-in/SKILL.md:23
