@@ -38,7 +38,9 @@ batches:
     commit_sha: 1ac78efd60938d0a221c2b4aaa60940d8df24ecd
     verify_baseline_failures: []
   - name: cleanup-orphan-baseline-sweep
-    state: pending
+    state: running
+    implementer_session: 85fbb65c-3e5e-4c69-a671-f24aa58a6e61
+    start_sha: c281a490b64305a6deff3aa182fb2c834e271de5
     verify_baseline_failures: []
   - name: bg-liveness-windows-probe
     state: pending
