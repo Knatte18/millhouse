@@ -30,7 +30,7 @@ That identical shape now includes `--prior-blocking <digest-path>` too (per `plu
 This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-<scope>` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
 After the dispatch completes, re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`.
 
-If it is STILL non-empty, halt with: `BLOCKED: unfixed nits in scope(s): <scope-list> -- NIT-fix pass did not clear them` where `<scope-list>` is the joined list of scope names.
+If it is STILL non-empty, `_notify.notify("<VARIANT_LABEL>.blocked", f"unfixed nits in scope(s): {scope_list}", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with: `BLOCKED: unfixed nits in scope(s): <scope-list> -- NIT-fix pass did not clear them` where `<scope-list>` is the joined list of scope names.
 Do NOT set `phase: done` when the gate fires;
 the task remains in its current phase so the operator can inspect and re-run `/mill-go`.
 
@@ -50,15 +50,15 @@ parent_branch = _parent_branch.resolve(status_path, interactive=False)
 in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
 ```
 
-If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists), halt immediately with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent diff unresolvable (parent branch: <parent_branch>). Investigate the parent branch and retry.` Do NOT fall through to the self-resolve step below -- with the owned-path scope itself unknown, there is no safe file list to commit.
+If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists), `_notify.notify("<VARIANT_LABEL>.blocked", "cannot determine in-scope dirt at task completion", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt immediately with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent diff unresolvable (parent branch: <parent_branch>). Investigate the parent branch and retry.` Do NOT fall through to the self-resolve step below -- with the owned-path scope itself unknown, there is no safe file list to commit.
 
 If `in_scope_dirt` is non-empty (and not `None`), self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
 no push — matches every other Builder-owned Handoff-phase commit in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Board discipline").
 Re-run `_cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)`.
 
-If the re-check returns `None` (the parent diff became unresolvable between the two checks), halt with the same `BLOCKED: cannot determine in-scope dirt at task completion -- ...` message as above.
+If the re-check returns `None` (the parent diff became unresolvable between the two checks), `_notify.notify("<VARIANT_LABEL>.blocked", "cannot determine in-scope dirt at task completion", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with the same `BLOCKED: cannot determine in-scope dirt at task completion -- ...` message as above.
 
-If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), halt with: `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.` where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt.
+If it is STILL non-empty (e.g. the commit or the re-check itself failed, or new dirt appeared concurrently), `_notify.notify("<VARIANT_LABEL>.blocked", "dirty working tree at task completion", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with: `BLOCKED: dirty working tree at task completion -- <N> file(s) uncommitted: <file-list>. Commit or discard before proceeding.` where `<N>` is the count of dirty lines and `<file-list>` is the filenames extracted from the in-scope dirt.
 Do NOT set `phase: done` when the gate fires;
 the task remains in its current phase so the operator can inspect and fix.
 
@@ -81,7 +81,7 @@ no push — matches every other Builder-owned Handoff-phase commit in `plugins/m
 the cruft removals via `git clean` are untracked-file deletions and have nothing to stage).
 Re-run `_cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)`.
 
-If `blocking_paths` is STILL non-empty (a path could not be classified with confidence against the plan), halt with: `BLOCKED: out-of-scope untracked file(s): <file-list>` where `<file-list>` is the comma-separated list of blocking paths.
+If `blocking_paths` is STILL non-empty (a path could not be classified with confidence against the plan), `_notify.notify("<VARIANT_LABEL>.blocked", f"out-of-scope untracked file(s): {file_list}", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with: `BLOCKED: out-of-scope untracked file(s): <file-list>` where `<file-list>` is the comma-separated list of blocking paths.
 Do NOT set `phase: done` when the gate fires;
 the task remains in its current phase so the operator can inspect and manually remove the files.
 
