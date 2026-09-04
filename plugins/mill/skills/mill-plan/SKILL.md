@@ -144,6 +144,7 @@ Report the current phase to the user at each transition.
 ### Phase: Plan
 
 Read `_mill/discussion.md` in full.
+Immediately capture `discussion_sha = git -C <git_root> rev-parse HEAD:_mill/discussion.md` (or the config-derived relative path from `cfg['paths']['discussion_file']` if it differs) — this pins the exact committed content this plan is written against, before any further reads, forks, or file writes that could race with a concurrent rewrite.
 Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exists()`).
 Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
@@ -240,6 +241,8 @@ If the plan's batch-verify scopes do not cover the entire module tree (the commo
 Before defaulting `done_gate` to the target language's lint command (Go: `golangci-lint run`; Python: `ruff check .`), first run that candidate command against the current worktree tip (not the plan's own scoped changes) from `git_root` and confirm it exits 0. If it does, default `done_gate` to include it — e.g. `go test ./... && golangci-lint run` — applying even when a repo-wide *test* command is skipped as too slow: author `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`, since linters are fast, unlike full regression suites. If the candidate command does NOT exit 0 (pre-existing repo-wide lint debt unrelated to this task), leave `done_gate: null` and record the finding in the plan overview's Shared Decisions instead of silently making every future task in the hub depend on unrelated debt being fixed first. `csharp-build` defines no lint command today, so C# projects are unaffected by this default.
 Leave `done_gate: null` only when the project has neither a meaningful repo-wide test nor a defined lint command.
 
+**Interpreter-naming note.** Every narrative Python call from this point through the end of Phase: Plan (`_plan_dag.extract_batch_index`/`_plan_dag.validate`, `_plan_validate.run`, `_status.update_field`/`_status.append_phase`, and any other `_<module>.<fn>(...)` reference in this phase) is executed by the orchestrator via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON"` — never bare `python3` — matching CLAUDE.md's `## Script invocation` convention and the way every `millpy-bg`/`millpy-review-plan.py` invocation elsewhere in this file already names `$MILL_PYTHON` explicitly. A fresh orchestrator session with no other context has previously hit `ModuleNotFoundError: No module named 'pygit2'` here by reaching for the ambient `python3` instead.
+
 **Self-validate the DAG** before committing: call `_plan_dag.extract_batch_index(overview_text)` then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`.
 Any `PlanDAGError` → fix the plan files, then re-validate.
 Do not commit a plan that fails this check.
@@ -284,6 +287,8 @@ Fix any findings using the Step 1.5 fix table below, then re-run, before committ
 
 **Persist `skip_checks` for Phase: Plan Review.** When `skip_checks` (computed above, after applying the `wiki-config-mutation`, `verify-full-suite`, and `out-of-worktree-target` skip-check overrides) is non-empty, write it into `00-overview.md`'s fenced-yaml frontmatter as a new `skip_checks:` list field (parallel to the existing `approved:` field, e.g. `skip_checks: ["wiki-config-mutation"]`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Omit the field entirely (do not write `skip_checks: []`) when the frozenset is empty, matching the template's convention of omitting optional frontmatter keys that don't apply. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
 
+**Persist `discussion_sha` for drift detection.** Write the `discussion_sha` captured above into `00-overview.md`'s fenced-yaml frontmatter as a new `discussion_sha:` field (parallel to `approved:`/`skip_checks:`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Unlike `skip_checks:`, this field is never optional — write it unconditionally on every Phase: Plan run, since every Phase: Plan Review dispatch site (see that phase's own drift-guard subsection, added in batch 1 card 3) depends on it being present. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
+
 `signature: _status.read(status_path: Path) -> dict`
 
 **Update `_mill/status.md`.**
@@ -292,6 +297,8 @@ Fix any findings using the Step 1.5 fix table below, then re-run, before committ
   write path).
 - `_status.update_field(status_path, "plan", cfg['paths']['plan_dir'].rstrip('/'))` — pointer to the plan dir (worktree-relative).
 - `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())`.
+
+**Pre-commit drift check.** Immediately before committing, re-run `git -C <git_root> rev-parse HEAD:_mill/discussion.md` and compare against the `discussion_sha` captured at the top of this phase. On a mismatch: discard the written-but-uncommitted plan files (`git -C <worktree> clean -fd <plan_dir>`, since nothing under `plan_dir` has been added/committed yet), halt via `_status.set_blocked(status_path, "discussion.md changed after Phase: Plan entry (blob sha drift)", timestamp=_timestamp.now_utc_iso())`, commit that status change alone on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (discussion.md blob sha drift) for {slug}"`), push, and halt with: `BLOCKED: discussion.md changed after Phase: Plan entry (blob sha drift). Delete _mill/plan/ and re-run /mill-plan for a fresh plan against the current discussion.md.` Do not proceed to commit the plan when this fires.
 
 **Commit on the task branch.** `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: write plan for {slug}"`.
 Push.
@@ -303,6 +310,8 @@ Derive: `reviews_dir = _paths.resolve_task_path(worktree_root, cfg['paths']['rev
 Use this variable for all review file path references in this phase.
 
 **Read persisted `skip_checks` from Phase: Plan.** Parse `00-overview.md`'s fenced-yaml frontmatter (the same extraction pattern already used elsewhere in this file for the `approved:` field) and read `plan_skip_checks = <parsed skip_checks: list, or [] if the key is absent>`. This is the `skip_checks` frozenset Phase: Plan already justified via the `wiki-config-mutation` / `verify-full-suite` two-condition tests — thread it into every round's CLI dispatch below as `--skip-check <name>` per entry (repeatable flag, one `--skip-check` per list entry), so Phase: Plan Review's own validator gate does not re-flag a finding Phase: Plan already resolved and committed against.
+
+**Discussion drift guard (reused at every LLM-dispatch site in this phase).** Parse `00-overview.md`'s fenced-yaml frontmatter (same extraction pattern used for `approved:`/`skip_checks:`) and read `plan_discussion_sha = <parsed discussion_sha: field>`. Before every point in this phase where an LLM is actually dispatched or re-dispatched — in both Agent-mode and subprocess/psmux-mode, with no exception for a call that doesn't consume the round counter — re-run `git -C <git_root> rev-parse HEAD:_mill/discussion.md` and compare against `plan_discussion_sha`. Known dispatch points today (audit this file's current LLM-dispatch call sites at implementation time if this file has changed since this plan was written): step 2's initial per-round dispatch (both branches); Step 1.5's validator-fix re-invocation, in both its Agent-mode form ('Agent-mode prepare-envelope handling', the re-render-brief/call-Agent/finalize cycle) and its subprocess/psmux form (the `millpy-bg` re-run under slug `plan-validator-fix`); and step 3.5's ERROR-only-aggregate retry re-dispatch (both branches). On a mismatch at any of these: halt via `_status.set_blocked(status_path, "discussion.md changed after Phase: Plan entry (blob sha drift)", timestamp=_timestamp.now_utc_iso())`, commit that status change alone on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (discussion.md blob sha drift) for {slug}"`), push, and halt with: `BLOCKED: discussion.md changed after Phase: Plan entry (blob sha drift). Delete _mill/plan/ and re-run /mill-plan for a fresh plan against the current discussion.md.` Do not proceed with the dispatch about to happen. Recovery is manual, matching this file's own pattern for every non-max-rounds blocked state — neither a bare `/mill-plan` re-run (hard-stopped by the Entry table's `phase: blocked` row) nor `/mill-plan --revise` (which resumes the existing plan without recapturing `discussion_sha`) reaches Phase: Plan again on its own; the operator must delete `plan_dir` and start fresh.
 
 When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
 
@@ -348,7 +357,7 @@ Each round:
      No review file is written;
      no LLM token is spent;
      no review round is consumed.
-   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then run `grep '^{' <log-path> | tail -1` to extract the JSON line.
+   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. Run the discussion drift guard (see 'Discussion drift guard' above) now, before this re-run. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then run `grep '^{' <log-path> | tail -1` to extract the JSON line.
    - **Two-pass cap:** if the validator fails again on the second pass, immediately before halting, call `_status.set_blocked(status_path, "plan-validate non-progress", timestamp=_timestamp.now_utc_iso())`; commit on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan-validate non-progress) for {slug}"`) and push. Then mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user.
      Do NOT auto-retry beyond the second pass.
      The two-pass cap matches the `roles.implementer.self_fix_rounds` self-fix pattern.
@@ -373,7 +382,7 @@ Each round:
    | move-mechanic-missing          | Add the canonical `## Rename mechanic` section (copied from `plugins/mill/templates/plan-batch.md`) to the offending batch file, placed before `## Batch Scope`. |
    | all-files-touched-mismatch     | Update the overview's All Files Touched to match the union of every card's Edits: + Creates: + Moves: target paths (Move source paths are excluded — they disappear, like Deletes: tokens). (The overview list is derivative; the cards are the source of truth.) |
    | plugin-manifest-context-missing | Add `plugins/mill/.claude-plugin/plugin.json` to the offending batch's `Context:` list (unless the batch's own `Edits:` already includes it, in which case the check should not have fired — re-verify the check's `Creates:`/`Edits:`/`Deletes:` prefix match before editing the plan). |
-   | context-completeness           | Add the referenced file to the card's `Context:` list (unless the card's own `Edits:`/`Creates:`/`Deletes:`/`Moves:`-source already covers it, in which case re-verify the check's own-list cross-reference before editing — the "add to Context:" remedy applies only when the token is absent from all five fields; a token that legitimately belongs to `Deletes:`/`Moves:`-source means the check should not have fired at all). The error dict's `line` field carries the exact offending `Requirements:` line (stripped), so the fixer can locate it directly without re-deriving it from the batch file. When the cited file is large and the card needs only a symbol's exact signature rather than the file's contents, the escape hatch is to inline the full signature in the `Requirements:` prose and put the phrase `signature inlined` or `no file read needed` on the same physical line as the backtick-wrapped path — the check's citation-marker exemption then honours it — instead of adding a large file to `Context:` purely to satisfy this check and pushing the batch over the context cap. |
+   | context-completeness           | If the finding's `message` contains the substring `"which resolves to '"` (the symbol case — e.g. `"card 3's Requirements: references symbol 'SaveState()', which resolves to 'internal/state.go' -- not in this card's Context:/Edits:/Creates:/Deletes:/Moves:-source"`): extract the quoted text between `"which resolves to '"` and the next `"'"` (in the example, `internal/state.go`) and add that path to the card's `Context:` list — NOT the finding's `path` field, which holds the original symbol token text (e.g. `SaveState()`), never a file. Otherwise (the path case — `message` containing `"references '...' which is not in..."`, no `"which resolves to '"` substring): add the referenced file from the finding's `path` field to the card's `Context:` list (unless the card's own `Edits:`/`Creates:`/`Deletes:`/`Moves:`-source already covers it, in which case re-verify the check's own-list cross-reference before editing — the "add to Context:" remedy applies only when the token is absent from all five fields; a token that legitimately belongs to `Deletes:`/`Moves:`-source means the check should not have fired at all). In both cases, the error dict's `line` field carries the exact offending `Requirements:` line (stripped), so the fixer can locate it directly without re-deriving it from the batch file. When the cited file is large and the card needs only a symbol's exact signature rather than the file's contents, the escape hatch is to inline the full signature in the `Requirements:` prose and put the phrase `signature inlined` or `no file read needed` on the same physical line as the backtick-wrapped path — the check's citation-marker exemption then honours it — instead of adding a large file to `Context:` purely to satisfy this check and pushing the batch over the context cap. |
    | requirements-quote-indent-drift | Locate the card's `Requirements:` fence identified by the error payload's `message` (its fence index and the reported direction and amount `N` — the message carries no content snippet). A message reading "after stripping N leading spaces per line" keeps today's remedy: strip exactly `N` leading space characters from each line of the fence body (not necessarily to column 0 — preserve whatever baseline indentation remains after the strip). A message reading "after adding N leading spaces per line" means the fence is flattened relative to its source: add exactly `N` leading space characters to each non-blank line of the fence body instead. In both cases the goal is identical: the fence body must end up a literal byte-exact substring of the target `Edits:` file named in the payload's `path` field. |
    | verify-batch-mismatch          | The payload's `batch:` field names the batch whose per-batch file frontmatter `verify:` disagrees with the overview Batch Index entry for that same batch; the `message:` field shows both sides' command and `cwd:` key. Edit whichever side is stale so both name the identical command and the identical `cwd:` key — mirrors the `depends-on-batch-mismatch` row's "edit whichever side is stale" remedy. A message reading "overview Batch Index verify: is malformed" instead means the index entry's own `verify:` mapping is unparseable — fix that mapping per the `verify-malformed-cwd` row's guidance, then re-run. |
    | verify-not-isolated            | Open the per-batch file named by the error payload's `batch:` field (resolve `_mill/plan/<batch>.md`). Read the offending command from the payload's `path:` field. Replace the frontmatter line `verify: <original>` with `verify: PYTHONPATH= <original>` (literal `PYTHONPATH=`, single space, original command). One row, one prepend. |
@@ -414,6 +423,7 @@ converged = (round >= min_review_rounds)
 2. **Waiting is never a decision point.**
    Waiting on this dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — both the max-rounds escape (step 6) and the non-progress check (step 5) resolve by halting via `_status.set_blocked`, never by prompting.
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
 
@@ -436,6 +446,7 @@ converged = (round >= min_review_rounds)
      Parse the JSON and apply one mechanical fix per error dict, using the fix table in Step 1.5 below as the source of truth for all fix semantics.
      After fixes, commit on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"`.
      Push.
+     Run the discussion drift guard (see 'Discussion drift guard' above) now, before this re-invocation.
      Then re-invoke the prepare stage via the same three-step Agent-mode dispatch (re-render brief, call Agent, finalize;
      the same cycle repeats).
      Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
@@ -460,6 +471,8 @@ converged = (round >= min_review_rounds)
    Print this round's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
 
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
+
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before invoking `millpy-bg`.
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -495,6 +508,7 @@ converged = (round >= min_review_rounds)
 
    When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one remaining entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
 
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
@@ -508,6 +522,8 @@ converged = (round >= min_review_rounds)
    Print this retry's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
+
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before invoking `millpy-bg`.
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 

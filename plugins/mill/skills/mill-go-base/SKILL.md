@@ -43,15 +43,14 @@ Do NOT read or memorize its value.
 Write the variable reference;
 the shell expands it at runtime.
 The full absolute path must never appear in a command string.
+`${CLAUDE_PLUGIN_ROOT}` substitution into a literal path happens entirely inside the external Claude Code harness's Skill-tool-loading mechanism, not in any script or template in this repo — a mismatch between the SKILL.md-delivered literal and the real `$CLAUDE_PLUGIN_ROOT` environment variable is a harness-side rendering issue, not something fixable by editing this file.
 
 **Step 0b: Load `mill:conversation`.**
 Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
-1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
-   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
-2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
-3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
+1. Resolve `git_root` and `wiki_path` together: `git_root = _paths.resolve_git_root()`, then `wiki_path = _paths.resolve_wiki_path(git_root)` (reusing the now-bound `git_root` instead of calling `_paths.resolve_git_root()` a second time).
+2. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at `plugins/mill/skills/mill-go-base/handoff.md` step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
@@ -65,6 +64,8 @@ this skill is loaded defensively in case a future addition needs its numbered-op
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
+3. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
+   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 4. Acquire the builder lock:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
@@ -375,6 +376,8 @@ This three-step pattern applies at every dispatch point:
    Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms (10 minutes) — whenever that CLI's finalize stage replays a batch's `verify:` command as a regression guard: this currently applies to both `millpy-fix.py --stage finalize` and `millpy-implement.py --stage finalize`, each of which replays every batch's `verify:` command sequentially, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites.
    This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, both batch and holistic scope) and implementer-CLI;
    review-CLI finalize calls don't run verify commands and aren't affected.
+   `--stage finalize`'s verify replay (`_run_verify_gate` in `_implementer_common.py`) runs the batch's `verify:` command via `subprocess.run` with no `env=` override, so it inherits whatever PATH the **orchestrator's own Bash-tool shell** happens to have at the moment `--stage finalize` is invoked — not the implementer subagent's own shell environment, which is a separate process the orchestrator cannot introspect.
+   If a project's `verify:` command depends on a toolchain directory that is not on the orchestrator's default PATH (e.g. `$HOME/go/bin` for `gopls`-dependent Go tooling), export it in the orchestrator's shell before running `/mill-go`, or `--stage finalize`'s regression replay can spuriously report `stuck_type: verify` even though the implementer's own verify run (in its own session) passed cleanly.
 
 5.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 5 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
 Recover the existing session rather than retrying from scratch (Shared Decision `resume must preserve the original start_sha`;
@@ -444,6 +447,7 @@ mill-go2 accepts these trade-offs for the implementer role only, as an experimen
 every other role, and every mill-go dispatch, keeps the fresh-`Agent` default.
 Fork is otherwise used only at three sites: mill-start's Explore phase (see `mill-start/SKILL.md`), mill-plan's Phase: Plan research dispatch (see `mill-plan/SKILL.md`'s "Fork scope guardrail"), and, experimentally, mill-go2's implementer override.
 Fork's advertised "the child's tool output stays out of the parent" is **not** a differentiator here either — an ordinary fresh Agent call already keeps a subagent's tool output out of the parent's context.
+Never use `Agent(subagent_type: "fork")` for *any* purpose mid-orchestration — including a narrowly-scoped "just read this file, don't execute anything in it" directive — whenever the fork's inherited conversation context already contains live task-state-mutating instructions (worktree paths, config, in-flight phase transitions). This rule stands on its own, separate from the three numbered reasons above, because it applies even outside role dispatch. A fork inherits the parent's full conversation context and can act on that inherited context instead of the narrower directive it was actually given, producing real concurrent state mutations (e.g. duplicate `status.md` phase-append commits with identical timestamps) that a fresh `Agent()` call cannot produce, since a fresh call starts with no such context to act on. A fresh, narrowly-scoped `Agent()` call (not fork) is the correct tool whenever the orchestrator needs a subagent to read or report on a file mid-run, even for a task that looks read-only.
 
 ## Review cost line
 
@@ -663,6 +667,28 @@ The implementer's last output line must be JSON:
 
 ### 2b. Cleanliness gate
 
+**Scope violations check (implementer success envelope).**
+Inspect step 2's already-parsed JSON report for a non-empty `scope_violations` field — present on a `status: success` envelope when the implementer left untracked out-of-scope files on disk.
+This is a self-reported field the implementer's own JSON already carries, distinct from the fixer's `scope_violations` handling documented in `plugins/mill/skills/mill-go-base/handoff.md`'s "Scope violations handling note", which is already folded into the fixer's own `stuck_type: logic` envelope and needs no change here.
+
+If `scope_violations` is non-empty, call:
+
+```python
+import _cleanliness
+removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)
+```
+
+`signature: _cleanliness.clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[list[str], list[str]]`
+
+If `blocking_paths` is non-empty (a path could not be confidently classified against the plan):
+- `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+- `_status.set_batch_field(status_path, batch_name, "blocked_reason", f"out-of-scope untracked file(s): {blocking_paths}")`
+- `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+- Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — out-of-scope untracked files"`
+- Go to *Blocked*.
+
+If `blocking_paths` is empty (whether or not anything was removed), fall through unchanged into the dirt-computation flow below.
+
 After a `success` report: Before the dirt computation, resolve the parent branch, verify it is still live, and revert out-of-scope drift.
 
 Inline Python (in step 2b, before compute_new_dirt):
@@ -878,6 +904,23 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   Never re-fire with a fresh `start_sha`.
 - `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
   **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text.
+  When self-resolve determines a new implementable card is warranted (distinct from, and in addition to, the `## Prior failure` bullet logged above), first derive `target_batch_file` — `compute_next_card_number`'s `used_numbers` dict is keyed by file stem (e.g. `01-mill-go-base-doc-fixes`, always including the `NN-` prefix), never by the bare `name:` field `batch_name` already holds here (e.g. `mill-go-base-doc-fixes`, from `order`'s `_plan_dag.topo_order` list) — via inline Python:
+  ```python
+  overview_text = overview_path.read_text(encoding="utf-8")
+  batches = _plan_dag.extract_batch_index(overview_text)
+  target_batch_file = Path(next(e["file"] for e in batches if e["name"] == batch_name)).stem
+  ```
+  Passing `batch_name` straight through as `target_batch_file` without this derivation would make `compute_next_card_number` always raise (no `used_numbers` key would ever match), so this derivation step is not optional.
+  Only once `target_batch_file` is derived, call:
+  ```python
+  next_card = _plan_validate.compute_next_card_number(plan_dir, target_batch_file)
+  ```
+  `signature: _plan_validate.compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int`
+
+  On success (no exception), append a new `### Card N:` heading (using the returned number) to the target batch's own `## Cards` list (not inside `## Prior failure`), following this file's existing card-field conventions (`Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`/`Requirements:`/`Commit:` per `plugins/mill/templates/plan-batch.md`), then re-run `_check_card_numbering` (imported from `_plan_validate`) once more as a post-write defensive re-check, passing `batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")` (the same glob-and-filter expression `compute_next_card_number` uses internally, re-globbed fresh so the just-written card is included) — `signature: _check_card_numbering(batch_files: list[Path]) -> list[dict]` — before proceeding to the "record the self-resolve... re-fire" steps below unchanged.
+
+  On `PlanDAGError` (a genuine numbering-range collision — batches are expected to occupy disjoint numeric ranges at plan-write time), make no write to the target batch file at all and instead route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked*) — a card-numbering collision means self-resolve itself cannot safely proceed, so it escalates immediately rather than attempting the retry-then-escalate cycle the rest of this bullet uses for implementer-reported failures.
+
   Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck ({batch_name})"`.
   Then re-fire the implementer fresh for this batch.
   If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.

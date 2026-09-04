@@ -28,6 +28,7 @@ Public API:
     init_batches(status_path, names) -> None
     set_batch_field(status_path, name, key, value) -> None
     set_batch_fields(status_path, name, fields) -> None
+    remove_batch(status_path, name) -> None
     read_batches(status_path) -> list[dict]
     read_status(status_path) -> dict
     get_module_verify_baseline(status_path) -> str | None
@@ -1006,6 +1007,25 @@ def set_batch_fields(
                 else:
                     entry[key] = value
             _write_batches(status_path, batches)
+            return
+    raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
+
+
+def remove_batch(status_path: Path, name: str) -> None:
+    """Delete one batch entry from ``## Batches`` entirely.
+
+    Unlike ``set_batch_field`` / ``set_batch_fields``, which mutate a field on an existing entry,
+    this drops the whole entry — the operation ``/mill-descope-batch`` needs when a not-yet-started
+    batch is removed from the plan.
+    Raises ``ValueError`` naming ``name`` when no entry with that name exists, matching
+    ``set_batch_field``'s own not-found message format.
+    """
+    _require_path(status_path, "remove_batch")
+    batches = read_batches(status_path)
+    for entry in batches:
+        if entry.get("name") == name:
+            remaining = [b for b in batches if b.get("name") != name]
+            _write_batches(status_path, remaining)
             return
     raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
 
