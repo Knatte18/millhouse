@@ -386,7 +386,13 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       ```
       SendMessage(to: <agentId>, "Finish any remaining cards in this batch, run verify, then emit the required JSON report as your final line.")
       ```
-      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
+      Wait for the resulting `<task-notification>`.
+      **Liveness probe:** if that notification is non-clean-terminal in the same sense step 3(b)/(c) already define (the `<status>` tag is present and its value is not `completed`, OR the value is `completed` but the message contains no valid JSON `status` report) — call `TaskOutput(task_id: <agentId>, block: false)` using the same `agentId` retained from the original dispatch (per step 2's existing "Record the `agentId`..." documentation).
+      - If the probe reports the agent is still running: take no action this turn (no `.out.md` write, no finalize call) and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as step 3(c)'s probe already does — this wait is unbounded, matching that existing contract; no bounded re-check loop is added here.
+      - If the probe reports the agent is no longer running, or the probe call itself errors: proceed as documented below.
+      If the notification IS clean-terminal (status `completed` with a valid JSON report) on first receipt, the probe never fires at all — proceed straight to the step below; this changes nothing about the already-working clean-completion path.
+
+      Write the notification's message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
       The warm-`SendMessage` path **bypasses prepare entirely**, so status.md's original `start_sha` and `implementer_session` are untouched — finalize's completeness recount runs from the original baseline and counts every content commit (the partial ones plus any new ones).
       Re-capturing `start_sha` here would under-count a now-finished batch and loop `incomplete` forever.
    2. **`--resume-incomplete` fallback (cold re-dispatch).**
