@@ -29,7 +29,11 @@ implementing  '2026-09-04T10:25:33Z'
 ```yaml
 batches:
   - name: mill-plan-discussion-drift-and-interpreter-naming
-    state: pending
+    state: running
+    implementer_session: a0a155d7-8342-4948-8c28-d9d1e44864f9
+    start_sha: 8023fd57a2bb1e95efed898abdad3926112df7a2
+    verify_baseline_failures: []
   - name: mill-start-fork-guardrail
     state: pending
+    verify_baseline_failures: []
 ```
