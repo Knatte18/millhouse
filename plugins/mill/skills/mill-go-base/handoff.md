@@ -101,33 +101,34 @@ If it is a non-null string, run the command from `git_root` (not hub dir) as a b
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-import json, sys, subprocess, platform
-import _paths, _config
+import json, sys
+import _paths, _config, _done_gate
 git_root = _paths.resolve_git_root()
 hub_root = _paths.resolve_hub_path()
 cfg = _config.load_config(hub_root, git_root)
 gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
 if not gate_cmd:
     sys.exit(0)
-result = subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True, text=True)
-if result.returncode != 0:
-    out = (result.stdout + result.stderr).strip()
-    reason = out[-2000:] if len(out) > 2000 else out
-    print(json.dumps({'status': 'blocked', 'reason': f'done gate failed: {reason}'}))
-    sys.exit(1)
-# dotnet cleanup: if gate command contains 'dotnet' and we are on Windows,
-# run build-server shutdown to release process locks before mill-finalize runs.
-if platform.system() == 'Windows' and 'dotnet' in gate_cmd.lower():
-    subprocess.run(['dotnet', 'build-server', 'shutdown'], capture_output=True, timeout=30)
+result = _done_gate.run_gate(gate_cmd, git_root)
+print(json.dumps(result))
+sys.exit(1 if result['result'] == 'blocked' else 0)
 "
 ```
 
 Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 5 for finalize-stage verify replays: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
 
 Parse stdout for a JSON line.
-If the exit code is non-zero and the JSON line has `status: blocked`, halt with: `BLOCKED: done gate failed — <reason>`.
-Do NOT set `phase: done` when the gate fires;
-the task remains in its current phase so the operator can investigate the failure. `subprocess.run` with `capture_output=True` does not raise on non-zero exit code — check `result.returncode`.
+If the exit code is non-zero and the JSON line has `result: blocked`, proceed to the fixer-dispatch check below before halting.
+
+**Fixer-dispatch check.**
+
+1. Check whether `<git_root>/.claude/agents/mill-done-gate-fixer.md` exists (a plain filesystem existence check, e.g. `Path(git_root, ".claude", "agents", "mill-done-gate-fixer.md").exists()`).
+2. **If it exists:** dispatch it once via `Agent(subagent_type: "mill-done-gate-fixer")` — not through the CLI prepare/finalize family `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" documents for implementer/reviewer/fixer — with a brief naming the plan overview (`<plan_dir>/00-overview.md`), the configured `done_gate` command (`gate_cmd`), and the captured failure output (the JSON's `reason` field). Wait for the dispatch to complete, then re-run the same "0. Pre-done gate" snippet above once more (a second `_done_gate.run_gate(gate_cmd, git_root)` call). If this re-run's `result['result'] == 'ok'`, proceed to the existing numbered step 1 (`_status.append_phase(status_path, "done", ...)`) as normal — the gate now passes. If it is still `'blocked'`: release the builder lock and notify (`_notify.notify("<VARIANT_LABEL>.blocked", "done gate failed", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`), then halt with `BLOCKED: done gate failed — <reason>` (the re-run's `reason` field), appending the note "mill-done-gate-fixer was already attempted and did not resolve the failure."
+   Do NOT set `phase: done` when the gate fires;
+   the task remains in its current phase so the operator can investigate the failure.
+3. **If it does not exist:** skip the dispatch entirely and go straight to the same lock-release/notify sequence and halt as step 2's still-blocked branch, but without the "already attempted" note — `BLOCKED: done gate failed — <reason>` using the original run's `reason` field.
+   Do NOT set `phase: done` when the gate fires;
+   the task remains in its current phase so the operator can investigate the failure.
 
 1. `_status.append_phase(status_path, "done", _timestamp.now_utc_iso())`.
    Commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: done {slug}"`.
