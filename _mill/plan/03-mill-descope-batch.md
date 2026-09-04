@@ -1,0 +1,63 @@
+# Batch: mill-descope-batch
+
+```yaml
+task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
+batch: mill-descope-batch
+number: 3
+cards: 3
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-plan-dag.py
+depends-on: []
+```
+
+## Batch Scope
+
+This batch delivers #973's `/mill-descope-batch` feature end-to-end: a deterministic operation (no LLM judgment needed at run time — given a batch name, check dependents, refuse or proceed, edit two files, move one, commit) implemented as a CLI script (`plugins/mill/scripts/millpy-descope-batch.py`) plus a thin skill wrapper, matching this repo's established "flat Python CLI + thin SKILL.md wrapper" convention (see `mill-abandon`/`mill-color`) rather than prose-driven orchestration. Two small, independently unit-testable helper functions (`_status.remove_batch`, `_plan_dag.find_dependents` + `_plan_dag.remove_batch_from_index`) are added first (cards 8 and 9), then the CLI and skill (card 10) compose them. This batch touches an entirely disjoint file set from Batches 1 and 2 (`_status.py`, `_plan_dag.py`, their test files, and new `plugins/mill/scripts/millpy-descope-batch.py` / `plugins/mill/skills/mill-descope-batch/SKILL.md` / root `SKILLS.md`), so it has no dependency on either.
+
+## Cards
+
+### Card 8: add `_status.remove_batch` with unit tests
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/unit_tests/test-status.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Add a new function `remove_batch(status_path: Path, name: str) -> None` to `plugins/mill/scripts/_status.py`, placed immediately after `set_batch_fields` (the function ending just before `_serialise_batches`). Mirror `set_batch_field`'s existing structure exactly: call `_require_path(status_path, "remove_batch")` first; then `batches = read_batches(status_path)`; iterate to find the entry whose `entry.get("name") == name`; if found, build a new list with that entry excluded and call `_write_batches(status_path, <new list>)`, then `return`; if the loop completes without finding `name`, `raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")` — the exact same message format `set_batch_field` already raises (`_BATCHES_HEADING` is the existing module-level constant `set_batch_field` already references). Add unit test coverage to `plugins/mill/unit_tests/test-status.py`: import `remove_batch` alongside the existing `_status` imports at the top of the file; in the same temp-directory block that already exercises `init_batches`/`set_batch_field` (the block starting at the "Batches section" comment), after the existing `set_batch_field` assertions, add: (a) call `remove_batch(sp, "reviewers")` and assert `read_batches(sp) == [<only the "foundation" entry remains>]`; (b) wrap a call `remove_batch(sp, "reviewers")` (now-already-removed) in `try/except ValueError as exc` and assert `"not present" in str(exc)`, printing a PASS line; (c) assert the surrounding top-level yaml (`phase: discussed`) and Timeline row are still intact after the removal, mirroring the existing `contents = sp.read_text(...)` assertions immediately below the batch-field tests in this same block.
+- **Commit:** `feat(status): add remove_batch for pruning a status.md batch entry`
+
+### Card 9: add `_plan_dag.find_dependents` and `remove_batch_from_index` with unit tests
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/scripts/_plan_dag.py`
+  - `plugins/mill/unit_tests/test-plan-dag.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Add two new functions to `plugins/mill/scripts/_plan_dag.py`, placed immediately after `resolve_deps_as_names`:
+  1. `find_dependents(batches: list[dict], batch_name: str) -> list[str]` — calls the existing `resolve_deps_as_names(batches)` to get `deps_by_name: dict[str, list[str]]`, then returns `sorted(name for name, deps in deps_by_name.items() if batch_name in deps)` (every batch whose resolved `depends-on` still names `batch_name`, sorted for deterministic output; empty list when nothing depends on it).
+  2. `remove_batch_from_index(overview_text: str, batch_name: str) -> str` — calls the existing `extract_batch_index(overview_text)`; builds `remaining = [b for b in batches if b["name"] != batch_name]`; if `len(remaining) == len(batches)` (name not found), `raise PlanDAGError(f"batch {batch_name!r} not present in Batch Index")`; otherwise serialize `remaining` via a new private helper `_serialise_batch_index(batches: list[dict]) -> str` (added alongside these two functions) that mirrors `_status.py`'s `_serialise_batches` convention exactly — fixed key order `["number", "name", "file", "depends-on", "verify"]`, one list entry per batch, `"  - "` prefix on the first key and `"    "` on subsequent keys, list-valued `depends-on:` rendered inline (e.g. `depends-on: [1, 2]` / `depends-on: []`), returning a `"batches:\n..."` string body — then replace the existing fenced yaml block in `overview_text` using the module's existing `_BATCHES_BLOCK_RE` pattern (`re.sub` with a replacement of `` "```yaml\n" + new_body.rstrip("\n") + "\n```" ``, applied via `_BATCHES_BLOCK_RE.sub(..., overview_text, count=1)`) and return the resulting full text. Neither function performs any file I/O — both are pure text/list-in, text/list-out, matching every other function in this module. Add unit test coverage to `plugins/mill/unit_tests/test-plan-dag.py`, following this file's existing `def test_xxx() -> None:` + `assert`/`raise AssertionError` convention (see `test_good_plan_accepted`, `test_cycle_rejected` for the exact pattern — a raw yaml fixture string passed to `extract_batch_index`, then asserted against): (a) `test_find_dependents_none` — a 2-batch plan (`a` root, `b` depends on `[a]`) returns `[]` for `find_dependents(batches, "b")` (nothing depends on the leaf); (b) `test_find_dependents_one` — the same plan returns `["b"]` for `find_dependents(batches, "a")`; (c) `test_find_dependents_multiple_sorted` — a 3-batch plan where both `b` and `c` depend on `a` returns `["b", "c"]` (sorted) for `find_dependents(batches, "a")`; (d) `test_remove_batch_from_index_success` — a 2-batch overview text has batch `b` removed via `remove_batch_from_index`, and the result re-parses via `extract_batch_index` to a single-entry list containing only `a`; (e) `test_remove_batch_from_index_unknown_raises` — calling with a `batch_name` absent from the index raises `PlanDAGError` whose message contains `"not present"`. Import `find_dependents`, `remove_batch_from_index`, and `PlanDAGError` alongside this file's existing `from _plan_dag import (...)` block, and register all five new test functions in `main()`'s existing sequential call list, in the same style as the other entries there.
+- **Commit:** `feat(plan-dag): add find_dependents and remove_batch_from_index`
+
+### Card 10: add the `millpy-descope-batch.py` CLI and `/mill-descope-batch` skill
+
+- **Context:**
+  - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/scripts/_plan_dag.py`
+  - `plugins/mill/scripts/millpy-abandon.py`
+  - `plugins/mill/skills/mill-abandon/SKILL.md`
+- **Edits:**
+  - `SKILLS.md`
+- **Creates:**
+  - `plugins/mill/scripts/millpy-descope-batch.py`
+  - `plugins/mill/skills/mill-descope-batch/SKILL.md`
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Create `plugins/mill/scripts/millpy-descope-batch.py`, following `millpy-abandon.py`'s established structure (argparse entry point, `_paths`/`_marker`/`_review_common.load_config` path resolution, `sys.exit(f"Error: ...")` for user-facing failures, `_subprocess_util.run([...])` for git operations checking `.returncode`). CLI: one positional argument `batch_name`. Behavior, in order: (1) resolve `git_root`, `wiki_path`, `active_hub` (the task worktree), `cfg`, and `slug` the same way `millpy-abandon.py` does (steps 1-3 of that file); (2) derive `status_path` and `plan_dir` via `_paths` the same way `mill-go-base/SKILL.md`'s own Path Setup does (`status_path = _paths.resolve_task_path(active_hub, cfg["paths"]["status_md"])`, `plan_dir = _paths.resolve_task_path(active_hub, cfg["paths"]["plan_dir"])`); (3) read `overview_path = plan_dir / "00-overview.md"`, `overview_text = overview_path.read_text(encoding="utf-8")`, `batches = _plan_dag.extract_batch_index(overview_text)`; (4) find the entry whose `name == batch_name`; if none, `sys.exit(f"Error: batch {batch_name!r} not found in the plan.")`; (5) **safety guard** — read `status_batches = _status.read_batches(status_path)`, find the matching entry by `name`, and if its `state` field is anything other than `"pending"` (i.e. `"running"`, `"reviewing"`, `"fixing"`, `"approved"`, or `"blocked"`), `sys.exit(f"Error: batch {batch_name!r} is state {state!r}, not 'pending' -- only a not-yet-started batch can be descoped.")` — this prevents discarding a batch whose work has already started or landed; (6) call `dependents = _plan_dag.find_dependents(batches, batch_name)`; if non-empty, `sys.exit(f"Error: batch(es) {dependents} still depend on {batch_name!r} -- descope them first or edit their depends-on.")`; (7) call `new_overview_text = _plan_dag.remove_batch_from_index(overview_text, batch_name)` and write it: `overview_path.write_text(new_overview_text, encoding="utf-8")`; (8) locate the removed batch's `file:` value from its (now-removed) index entry, and move the card file out of `plan_dir` via `git mv`: create `descoped_dir = active_hub / "_mill" / "descoped"` if absent (`descoped_dir.mkdir(parents=True, exist_ok=True)`), then `_subprocess_util.run(["git", "-C", str(active_hub), "mv", str((plan_dir / batch_file).relative_to(active_hub)), str((descoped_dir / batch_file).relative_to(active_hub))])`, checking `.returncode` and `sys.exit`-ing on failure exactly as `millpy-abandon.py` does for its own git calls; (9) call `_status.remove_batch(status_path, batch_name)`; (10) call `_status.append_phase(status_path, f"descoped-{batch_name}", _timestamp.now_utc_iso())`; (11) commit: `_subprocess_util.run(["git", "-C", str(active_hub), "add", "-A", str(plan_dir.relative_to(active_hub)), str(descoped_dir.relative_to(active_hub)), str(status_path.relative_to(active_hub))])` then `_subprocess_util.run(["git", "-C", str(active_hub), "commit", "-m", f"mill-descope-batch: remove {batch_name} from {slug}"])`, checking `.returncode` on both and `sys.exit`-ing on failure; (12) push: `_subprocess_util.run(["git", "-C", str(active_hub), "push"])`, checking `.returncode` and `sys.exit`-ing on failure; (13) print a one-line success message (`print(f"Descoped {batch_name!r} from {slug}.")`) and `return 0`. Create `plugins/mill/skills/mill-descope-batch/SKILL.md` as a thin wrapper, following `plugins/mill/skills/mill-abandon/SKILL.md`'s exact structure and frontmatter shape (`---\nname: mill-descope-batch\ndescription: <one line>\n---`, an `# mill-descope-batch` heading, one or two summary sentences, a `## Run it` section with the `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-descope-batch.py" <batch-name>` invocation, and a closing sentence naming the safety guards: refuses a non-`pending` batch, refuses a batch other batches still depend on). Add one new row to root `SKILLS.md`, in the same one-line-per-skill table format as the existing `mill-abandon`/`mill-cleanup` rows, inserted in alphabetical order among the other `mill-*` entries (`mill-descope-batch` sorts between `mill-cleanup` and `mill-finalize`), pointing at `plugins/mill/skills/mill-descope-batch/SKILL.md` with the same one-line description as the new SKILL.md's frontmatter.
+- **Commit:** `feat(mill): add /mill-descope-batch CLI and skill for #973`
+
+## Batch Tests
+
+`verify:` runs `test-status.py` and `test-plan-dag.py` via `run-all.py --only` — the two files touched by cards 8 and 9's new unit tests (`remove_batch`, `find_dependents`, `remove_batch_from_index`). Card 10 (the CLI + skill wrapper) composes already-unit-tested functions with no new pure logic of its own — its argument parsing, path resolution, and git-subprocess sequencing follow `millpy-abandon.py`'s already-proven pattern verbatim, so it is verified by code review reading the diff against that reference file, not by a new automated test.
