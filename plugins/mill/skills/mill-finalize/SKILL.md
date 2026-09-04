@@ -79,6 +79,22 @@ otherwise remove it.
 This prevents PR diffs from being polluted with unrelated deletions on stacked-branch PRs.
 
 Call `_finalize_cleanup.base_tracks_task_dir(git_root, parent_branch, task_dir)`.
+
+**Citation scan (non-blocking).** Before either branch below runs, scan for permanent-doc citations of `_mill/discussion.md` that this cleanup is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts Step 3 under any outcome:
+
+```bash
+git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \
+    ':!<task_dir>' ':!plugins/**/SKILL.md' ':!plugins/**/unit_tests/**' ':!plugins/**/integration_tests/**'
+```
+
+```bash
+git -C <wiki_path> grep -InE '\]\([./]*_mill/discussion\.md\)' -- .
+```
+
+Part 1 excludes `<task_dir>` itself and this plugin's own tooling docs/tests (`plugins/**/SKILL.md`, `plugins/**/unit_tests/**`, `plugins/**/integration_tests/**`) — those are self-referential mentions of the `_mill/discussion.md` convention, not citations of a real task's discussion file — and matches the markdown-link-context pattern rather than a bare literal-string match, since a bare-string scan would hit this repo's own tooling docs on effectively every run. Part 2 covers the wiki-board case (a Done/roadmap entry in the wiki's `Home.md`) that Part 1 structurally cannot reach: the wiki is a sibling clone resolved via `_paths.resolve_wiki_path` (bound in Entry step 1), never part of `<worktree>`'s own git repository, so `git -C <worktree> grep` cannot see wiki content. This wiki-path grep is read-only — it does not go through `_wiki.wiki_lock` or `_client`, since it performs no write.
+
+`git grep` exits 1 with empty stdout when nothing matches — that is the expected common case, not an error. If either part produces any output (non-zero line count), print a warning to the operator (ASCII-only) listing the citing files/wiki pages, worded according to which branch below is about to run: on the False branch (no base tracking), say the link "is about to go dead" — `<task_dir>` is genuinely removed. On the True branch (`base_tracks_task_dir`), say the link "is about to silently start pointing at a different task's `_mill/discussion.md` content" — `<task_dir>` is not deleted there, it is repopulated with `<parent_branch>`'s own tree at that path, so a citation does not 404, it silently resolves to whatever discussion file (if any) `<parent_branch>` happens to have at that same relative path. This scan never halts Step 3 in either case — it only warns.
+
 If True (base tracks task_dir): restore it from the base — but a bare checkout only adds/updates paths, it never deletes, so we delete-then-restore instead. `git rm -r --ignore-unmatch <task_dir>` first empties `task_dir` of everything on the current (child) branch tip — a no-op, not an error, when nothing matches — then `git checkout <parent_branch> -- <task_dir>` repopulates `task_dir` with exactly `<parent_branch>`'s tree at that path.
 Any file present in the child's `task_dir` but absent from `<parent_branch>`'s tree there is now removed rather than left behind — this closes the #653 orphaned-files gap a bare checkout left (it can only add/update paths present in the target ref, never delete paths that are exclusive to the current branch):
 
