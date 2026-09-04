@@ -15,11 +15,13 @@ Check coverage:
   check 5 — parallel-modifies-overlap
   cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
       creates, with no depends-on edge to that creating batch
+  verify-batch-mismatch — a batch's overview Batch Index verify: disagrees with that batch file's
+      own frontmatter verify: (command or cwd)
   check 6 — reads-not-backtick-path (incl.
       none-exempt)
   check 8 — all-files-touched-mismatch
-  context-completeness (#742) — card Requirements: references a resolvable file-path-shaped token
-      absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:
+  context-completeness (#742) — card Requirements: references a resolvable file-path-shaped or
+      symbol-shaped token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:
   verify cwd mapping form — verify-not-isolated/verify-full-suite accept the {cwd, command} mapping
       and the overview-level verify:;
       verify-malformed-cwd;
@@ -48,6 +50,13 @@ sys.path.insert(0, str(_UNIT_TESTS))
 # Fixture helpers
 # ---------------------------------------------------------------------------
 
+# Sentinel for _make_overview's per-entry `verify` override: signals "omit the verify: line
+# entirely from this Batch Index entry" (distinct from an explicit `verify: null`, even though both
+# normalize to the same `entry.get("verify") is None` result -- the two spellings are still tested
+# separately by the verify-batch-mismatch "absent" scenarios).
+_OMIT_VERIFY = object()
+
+
 def _make_overview(
     batches: list[dict],
     *,
@@ -56,12 +65,24 @@ def _make_overview(
 ) -> str:
     """Return 00-overview.md text.
 
-    Each batch dict: {name, file, number (optional), depends-on (optional, default [])}.
+    Each batch dict: {name, file, number (optional), depends-on (optional, default []),
+        verify (optional)}.
     all_files_touched: optional list of path strings for the section.
     overview_verify: optional module-wide verify: command string written into the overview's own
         frontmatter block (first fenced-yaml block, above the Batch Index).
         Omitted entirely when None, matching the plain real-world overview shape where module-wide
             verify: is optional.
+
+    Per-entry ``verify`` key (batch dict): when absent, the entry's ``verify:`` line renders as the
+    literal ``    verify: null`` exactly as before this override was added -- every existing caller
+    that omits this key is unaffected. When present, the caller controls the rendered line(s)
+    directly:
+      - ``_OMIT_VERIFY`` sentinel -> the ``verify:`` line is omitted entirely from this entry.
+      - ``None`` -> rendered as the literal ``verify: null`` (same text as the absent-key default,
+        provided for symmetry with the batch-file frontmatter's own explicit-null spelling).
+      - a plain string -> rendered verbatim as ``verify: <value>``.
+      - a ``{cwd: ..., command: ...}`` dict -> rendered as the nested mapping form, one sub-key per
+        dict key present (so a caller can omit ``cwd`` or ``command`` to test a malformed mapping).
     """
     entries = []
     for b in batches:
@@ -71,12 +92,27 @@ def _make_overview(
             first_line = f"  - number: {b['number']}\n    name: {b['name']}\n"
         else:
             first_line = f"  - name: {b['name']}\n"
-        entries.append(
+        base = (
             first_line
             + f"    file: {b['file']}\n"
-            + f"    depends-on: {deps_yaml}\n"
-            + "    verify: null"
+            + f"    depends-on: {deps_yaml}"
         )
+        if "verify" not in b:
+            entries.append(base + "\n    verify: null")
+            continue
+        v = b["verify"]
+        if v is _OMIT_VERIFY:
+            entries.append(base)
+        elif isinstance(v, dict):
+            lines = ["    verify:"]
+            if "cwd" in v:
+                lines.append(f"      cwd: {v['cwd']}")
+            if "command" in v:
+                lines.append(f"      command: {v['command']}")
+            entries.append(base + "\n" + "\n".join(lines))
+        else:
+            rendered = "null" if v is None else v
+            entries.append(base + f"\n    verify: {rendered}")
     batch_list = "\n".join(entries)
     frontmatter = 'task: test\nslug: test-slug\nroot: ""\n'
     if overview_verify is not None:
@@ -225,6 +261,34 @@ def _make_verify_only_batch_text(
         "### Card 1: card 1\n\n"
         "- **Context:** none\n"
         f"- **Edits:** {edits_part}\n"
+        "- **Creates:** none\n"
+        "- **Deletes:** none\n"
+        "- **Moves:** none\n"
+        "- **Requirements:**\n  See scope.\n"
+        f"- **Commit:** feat({name}): card 1\n"
+    )
+
+
+def _make_batch_verify_only_text(name: str, verify_block: str | None) -> str:
+    """Return a one-card batch file text with a caller-controlled own-frontmatter `verify:` block.
+
+    ``verify_block`` is the raw text spliced in place of the frontmatter's `verify:` value: e.g.
+    ``"null"``, a plain command string, or a multi-line mapping block (e.g.
+    ``"\\n  cwd: hub\\n  command: some cmd"``).
+    When ``None``, the `verify:` key is omitted from the frontmatter entirely -- the batch-file-side
+    counterpart to ``_make_overview``'s ``_OMIT_VERIFY`` "absent" case.
+    """
+    verify_line = "" if verify_block is None else f"verify: {verify_block}\n"
+    return (
+        f"# Batch: {name}\n\n"
+        "```yaml\n"
+        f"task: test\nbatch: {name}\ncards: 1\ndepends-on: []\n"
+        f"{verify_line}"
+        "```\n\n"
+        "## Cards\n\n"
+        "### Card 1: card 1\n\n"
+        "- **Context:** none\n"
+        "- **Edits:** none\n"
         "- **Creates:** none\n"
         "- **Deletes:** none\n"
         "- **Moves:** none\n"
@@ -2472,6 +2536,118 @@ def test_check_context_completeness_dirty_citation_marker_absent() -> int:
             return 1
 
 
+def test_check_context_completeness_clean_signature_inlined_marker() -> int:
+    """Requirements: names a real, resolvable, backtick-wrapped file absent from the card's own refs, together with 'signature inlined' -> zero errors (inline-signature citation exemption)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (signature inlined from `src/a.py`: `def helper() -> int`).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_signature_inlined_marker")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_signature_inlined_marker: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_no_file_read_needed_marker() -> int:
+    """Same shape as the 'signature inlined' case, but the line instead carries 'no file read needed' -> zero errors (inline-signature citation exemption, second marker spelling)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`; "
+                "no file read needed).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_no_file_read_needed_marker")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_no_file_read_needed_marker: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_inline_signature_marker_absent() -> int:
+    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/b.py"],
+            requirements=(
+                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`).\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_dirty_inline_signature_marker_absent")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_inline_signature_marker_absent: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_clean_moves_source_plan_wide() -> int:
     """Requirements: token in a LATER batch names an EARLIER batch's Moves: source -> zero errors (plan-wide exemption)."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -2862,6 +3038,710 @@ def test_check_context_completeness_dirty_prohibition_marker_verb_without_negati
             print(
                 "FAIL test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted: "
                 f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+# symbol-reference context-completeness (bare/dotted identifiers, not just paths)
+def test_check_context_completeness_symbol_clean_in_context() -> int:
+    """A bare symbol token (`SaveState`) resolves to exactly one fixture file, which IS in the
+    card's own Context: -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            context=["internal/state.go"],
+            requirements="  Call `SaveState` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_in_context")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_clean_in_context: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dirty_missing() -> int:
+    """A bare symbol token (`SaveState`) resolves to exactly one fixture file, absent from the
+    card's own refs -> one error naming the resolved path."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `SaveState` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert "which resolves to 'internal/state.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            assert e["path"] == "SaveState", f"wrong path: {e['path']!r}"
+            print("PASS test_check_context_completeness_symbol_dirty_missing")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_dirty_missing: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_clean_zero_matches() -> int:
+    """An identifier-shaped token that appears nowhere in the fixture project's source files ->
+    zero errors (unresolvable, not flagged)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["internal/state.go"],
+            requirements="  `RemapZone` is unrelated to any fixture file here.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_zero_matches")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_clean_zero_matches: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_clean_ambiguous_matches() -> int:
+    """An identifier-shaped token appearing in two distinct fixture files -> zero errors
+    (ambiguous, not flagged)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "a.go").write_text(
+            "package internal\n\nfunc RemapZone() {}\n", encoding="utf-8"
+        )
+        (project_root / "internal" / "b.go").write_text(
+            "package internal\n\nfunc RemapZone() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `RemapZone` appears in two places here.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_ambiguous_matches")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_clean_ambiguous_matches: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_call_site_phrasing() -> int:
+    """`SaveState()` behaves identically to bare `SaveState` -- suffix stripping does not change
+    the shape/resolution outcome, and a flagged finding's path preserves the call-suffix."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}, {"name": "beta", "file": "02-beta.md"}]
+        )
+        clean_batch = _make_batch_file(
+            "alpha",
+            context=["internal/state.go"],
+            requirements="  Call `SaveState()` when the batch completes.\n",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        dirty_batch = _make_batch_file(
+            "beta",
+            edits=["other.py"],
+            requirements="  Call `SaveState()` when the batch completes.\n",
+        )
+        _write_plan(
+            plan_dir, overview, [("01-alpha.md", clean_batch), ("02-beta.md", dirty_batch)]
+        )
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["batch"] == "02-beta", f"wrong batch: {e['batch']!r}"
+            assert e["path"] == "SaveState()", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/state.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_call_site_phrasing")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_call_site_phrasing: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_all_lowercase_not_candidate() -> int:
+    """An all-lowercase bare token (`config`) is never flagged, even when a fixture file contains
+    the literal text `config` exactly once (single unambiguous match) and it is absent from the
+    card's own refs -- the shape gate excludes it before resolution ever runs."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.go").write_text(
+            "package internal\n\nvar config = 1\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  The `config` value is read at startup.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_all_lowercase_not_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_all_lowercase_not_candidate: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_all_lowercase_dotted_not_candidate() -> int:
+    """A dotted, all-lowercase token (`config.example`) is never flagged, even when resolvable to
+    exactly one fixture file via its trailing segment."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "example.go").write_text(
+            "package internal\n\nvar example = 1\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  The `config.example` value is read at startup.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_all_lowercase_dotted_not_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_all_lowercase_dotted_not_candidate: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_single_capitalized_is_candidate() -> int:
+    """A single-capitalized bare word (`New`) resolves to exactly one fixture file, absent from
+    own refs -> one error (the "not entirely lowercase" signal admits a single-capitalized bare
+    word, not only internally-capitalized CamelCase)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "factory.go").write_text(
+            "package internal\n\nfunc New() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `New` to construct the instance.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "New", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/factory.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_single_capitalized_is_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_single_capitalized_is_candidate: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dotted_trailing_segment_only() -> int:
+    """A dotted token (`reedengine.New`) resolves via its trailing segment (`New`) even though the
+    fixture file's declaration line contains only the unqualified name, never the qualified dotted
+    form -- confirms resolution uses the trailing segment as the search key, not the literal
+    dotted text."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "factory.go").write_text(
+            "package reedengine\n\nfunc New(...) {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `reedengine.New` to construct the engine.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "reedengine.New", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/factory.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_dotted_trailing_segment_only")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_dotted_trailing_segment_only: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment() -> int:
+    """The trailing segment of a dotted candidate (`Commit` in `batch.Commit`) appears in two
+    unrelated fixture files -> zero errors (ambiguous-skip)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "a.go").write_text(
+            "package internal\n\nfunc Commit() {}\n", encoding="utf-8"
+        )
+        (project_root / "internal" / "b.go").write_text(
+            "package internal\n\nfunc Commit() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `batch.Commit` to persist the batch.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing() -> int:
+    """A dotted token whose qualifier segment qualifies but whose trailing segment does not
+    (`Foo.bar` -- `Foo` is capitalized, `bar` is plain lowercase), resolvable to exactly one
+    fixture file containing the literal text `bar`, absent from own refs -> zero errors. The
+    qualifier's own capitalization never rescues a non-qualifying trailing segment."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "bar.go").write_text(
+            "package internal\n\nvar bar = 1\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `Foo.bar` for the shared value.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_first_match_wins_root_precedence() -> int:
+    """Regression test for the resolvability-gate's root-precedence design: a symbol resolvable
+    under both git_root/root and bare git_root must resolve to the git_root/root candidate only
+    (first-match-wins), never union across both roots.
+
+    Deliberately a dirty (flagged) case, not a clean one: correct first-match-wins behavior finds
+    exactly one match (under git_root/root, stopping before ever walking bare git_root) and flags
+    it; the rejected "union across all roots" behavior would instead find two matches across both
+    roots and skip as ambiguous (0 errors) -- a clean-only fixture could not distinguish the two
+    behaviors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        root = "subproject"
+        project_root = git_root / root
+        plan_dir = git_root / "plan"
+
+        project_root.mkdir(parents=True)
+        subproject_file = project_root / "internal" / "state.go"
+        subproject_file.parent.mkdir(parents=True)
+        subproject_file.write_text("package internal\n\nfunc New() {}\n", encoding="utf-8")
+
+        other_file = git_root / "other" / "somewhere.go"
+        other_file.parent.mkdir(parents=True)
+        other_file.write_text("package other\n\nfunc New() {}\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            requirements="  Call `New` to construct the instance.\n",
+        )
+        plan_dir.mkdir(parents=True)
+        (plan_dir / "00-overview.md").write_text(overview, encoding="utf-8")
+        (plan_dir / "01-alpha.md").write_text(batch, encoding="utf-8")
+
+        result = _plan_validate.run(plan_dir, project_root, root=root, git_root=git_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/state.go'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_first_match_wins_root_precedence")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_first_match_wins_root_precedence: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_cache_invoked_once_per_key() -> int:
+    """The same symbol (`SaveState`) is named in two different cards' Requirements:, each
+    resolvable via the same fixture file -> the shared search_cache means the underlying
+    filesystem walk for "SaveState" runs once, not once per occurrence."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}, {"name": "beta", "file": "02-beta.md"}]
+        )
+        batch_alpha = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `SaveState` when the batch completes.\n",
+        )
+        batch_beta = _make_batch_file(
+            "beta",
+            edits=["other.py"],
+            requirements="  Call `SaveState` when the batch completes.\n",
+        )
+        _write_plan(
+            plan_dir, overview, [("01-alpha.md", batch_alpha), ("02-beta.md", batch_beta)]
+        )
+
+        original = _plan_validate._resolve_symbol_files
+        call_count = [0]
+
+        def counting_wrapper(*args, **kwargs):
+            call_count[0] += 1
+            return original(*args, **kwargs)
+
+        _plan_validate._resolve_symbol_files = counting_wrapper
+        try:
+            result = _plan_validate.run(plan_dir, project_root)
+        finally:
+            _plan_validate._resolve_symbol_files = original
+
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 2, (
+                f"expected 2 context-completeness errors, got: {check_errors}"
+            )
+            assert call_count[0] == 1, (
+                f"expected _resolve_symbol_files invoked once, got: {call_count[0]}"
+            )
+            print("PASS test_check_context_completeness_symbol_cache_invoked_once_per_key")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_cache_invoked_once_per_key: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_prohibition_marker_exempt() -> int:
+    """A resolvable, own-refs-absent symbol named inside a same-line prohibition -> zero errors,
+    mirroring the existing path-branch prohibition-exemption test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Do not touch `SaveState`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_prohibition_marker_exempt")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_prohibition_marker_exempt: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_citation_marker_exempt() -> int:
+    """A resolvable, own-refs-absent symbol named as an illustrative example -> zero errors,
+    mirroring the existing path-branch citation-exemption test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc SaveState() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  For example, `SaveState` illustrates the pattern.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_citation_marker_exempt")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_citation_marker_exempt: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_underscore_qualifies() -> int:
+    """An all-lowercase, underscore-containing bare token (`save_state`) resolves to exactly one
+    fixture file, absent from own refs -> one error. Confirms qualifies()'s "contains underscore"
+    OR-branch admits a candidate on its own, independent of the capitalization branch."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nvar save_state = 1\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `save_state` before writing.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "save_state", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/state.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_underscore_qualifies")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_underscore_qualifies: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -3371,6 +4251,288 @@ def test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer(
         except AssertionError as exc:
             print(
                 f"FAIL test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence() -> int:
+    """Source has a 2-space baseline indent, fence is flattened to column zero -> one finding, message states it matched after ADDING 2 leading spaces per line (the under-indent direction, #the add pass)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n  gamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "beta\n"
+                "gamma\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "src/target.py", f"wrong path: {e['path']!r}"
+            assert "after adding 2 leading spaces per line" in e["message"], (
+                f"message should state the add direction: {e['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line() -> int:
+    """Same under-indent shape, but the source excerpt's separator line is genuinely empty -> still detected via the default non-blank-only add variant."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "\n"
+                "beta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert "after adding 2 leading spaces per line" in check_errors[0]["message"], (
+                f"message should state the add direction: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line() -> int:
+    """Same under-indent shape, but the source's separator line is whitespace-only with its own indent (not genuinely empty) -> still detected, exercising the include_blank=True add variant."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  \n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "```\n"
+                "alpha\n"
+                "\n"
+                "beta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert "after adding 2 leading spaces per line" in check_errors[0]["message"], (
+                f"message should state the add direction: {check_errors[0]['message']!r}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen() -> int:
+    """An existing over-indented fence still produces the unchanged 'after stripping N leading spaces per line' message, asserted on the exact message text so a regression in the frozen wording fails the test."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "alpha\nbeta\ngamma\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  alpha\n"
+                "  beta\n"
+                "  gamma\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            expected = (
+                "card 1's Requirements: fence 1 matches 'src/target.py' after stripping 2 "
+                "leading spaces per line (found N=2)"
+            )
+            assert check_errors[0]["message"] == expected, (
+                f"frozen message wording regressed: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact() -> int:
+    """Fence content is already a byte-exact substring of the target Edits: file -> no error (regression guard: the byte-exact pre-check must still win before the add pass ever runs)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Quote:\n"
+                "  ```\n"
+                "  alpha\n"
+                "  beta\n"
+                "  ```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match() -> int:
+    """Fence shows plausible but different code, not a substring at any N in 1..40 in either direction -> no error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  alpha\n  beta\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Illustrative:\n"
+                "```\n"
+                "gamma\n"
+                "delta\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match: "
+                f"{exc}",
                 file=sys.stderr,
             )
             return 1
@@ -5441,6 +6603,353 @@ def test_check_verify_mixed_cwd_single_cwd_clean() -> int:
 
 
 # ---------------------------------------------------------------------------
+# verify-batch-mismatch check (Card 6)
+# ---------------------------------------------------------------------------
+
+def test_verify_batch_mismatch_clean_identical_string() -> int:
+    """Clean: identical plain-string verify: on both the overview entry and the batch file -> no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "some cmd"},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "some cmd")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(f"FAIL test_verify_batch_mismatch_clean_identical_string: unexpected: {mismatch}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_identical_string")
+        return 0
+
+
+def test_verify_batch_mismatch_dirty_null_vs_command() -> int:
+    """Dirty: overview names a real command, batch file's own verify: is null -> exactly one finding naming that batch."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "some cmd"},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "null")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        try:
+            assert len(mismatch) == 1, f"expected 1 finding, got {len(mismatch)}: {mismatch}"
+            assert mismatch[0]["batch"] == "alpha", f"wrong batch: {mismatch[0]['batch']!r}"
+            print("PASS test_verify_batch_mismatch_dirty_null_vs_command")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_batch_mismatch_dirty_null_vs_command: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_batch_mismatch_dirty_trailing_clause() -> int:
+    """Dirty: overview and batch commands differ only by a trailing clause -> exactly one finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "pytest test_foo.py"},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "pytest test_foo.py -k mytest")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        try:
+            assert len(mismatch) == 1, f"expected 1 finding, got {len(mismatch)}: {mismatch}"
+            assert mismatch[0]["batch"] == "alpha", f"wrong batch: {mismatch[0]['batch']!r}"
+            print("PASS test_verify_batch_mismatch_dirty_trailing_clause")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_batch_mismatch_dirty_trailing_clause: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_batch_mismatch_clean_absent_vs_null() -> int:
+    """Clean: verify: absent from the overview entry, explicitly null on the batch file -> no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": _OMIT_VERIFY},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "null")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(f"FAIL test_verify_batch_mismatch_clean_absent_vs_null: unexpected: {mismatch}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_absent_vs_null")
+        return 0
+
+
+def test_verify_batch_mismatch_clean_both_absent() -> int:
+    """Clean: verify: key absent from both the overview entry and the batch file's own frontmatter -> no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": _OMIT_VERIFY},
+        ])
+        batch = _make_batch_verify_only_text("alpha", None)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(f"FAIL test_verify_batch_mismatch_clean_both_absent: unexpected: {mismatch}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_both_absent")
+        return 0
+
+
+def test_verify_batch_mismatch_clean_both_null() -> int:
+    """Clean: verify: explicitly null on both the overview entry and the batch file -> no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": None},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "null")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(f"FAIL test_verify_batch_mismatch_clean_both_null: unexpected: {mismatch}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_both_null")
+        return 0
+
+
+def test_verify_batch_mismatch_dirty_string_vs_mapping_cwd() -> int:
+    """Dirty: overview has a plain-string verify:, batch file has the same command as a {cwd: git_root, ...} mapping -> one finding, because the raw cwd keys differ (None vs 'git_root')."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "some cmd"},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "\n  cwd: git_root\n  command: some cmd")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        try:
+            assert len(mismatch) == 1, f"expected 1 finding, got {len(mismatch)}: {mismatch}"
+            assert mismatch[0]["batch"] == "alpha", f"wrong batch: {mismatch[0]['batch']!r}"
+            print("PASS test_verify_batch_mismatch_dirty_string_vs_mapping_cwd")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_batch_mismatch_dirty_string_vs_mapping_cwd: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_batch_mismatch_clean_matching_mapping() -> int:
+    """Clean: identical {cwd, command} mapping form on both sides -> no finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": {"cwd": "hub", "command": "some cmd"}},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "\n  cwd: hub\n  command: some cmd")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(f"FAIL test_verify_batch_mismatch_clean_matching_mapping: unexpected: {mismatch}",
+                  file=sys.stderr)
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_matching_mapping")
+        return 0
+
+
+def test_verify_batch_mismatch_dirty_mapping_cwd_hub_vs_git_root() -> int:
+    """Dirty: identical command, but cwd: hub on the overview side vs cwd: git_root on the batch side -> one finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": {"cwd": "hub", "command": "some cmd"}},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "\n  cwd: git_root\n  command: some cmd")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        try:
+            assert len(mismatch) == 1, f"expected 1 finding, got {len(mismatch)}: {mismatch}"
+            assert mismatch[0]["batch"] == "alpha", f"wrong batch: {mismatch[0]['batch']!r}"
+            print("PASS test_verify_batch_mismatch_dirty_mapping_cwd_hub_vs_git_root")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_batch_mismatch_dirty_mapping_cwd_hub_vs_git_root: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_batch_mismatch_dirty_overview_malformed_mapping() -> int:
+    """Dirty: the overview entry's verify: mapping has no command: -> exactly one verify-batch-mismatch finding whose message contains the normalizer's error text, and no verify-malformed-cwd finding for that entry (the overview side is check-verify-batch-mismatch's sole reporter)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": {"cwd": "hub"}},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "null")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        malformed = [e for e in result if e["check"] == "verify-malformed-cwd"]
+        try:
+            assert len(mismatch) == 1, f"expected 1 finding, got {len(mismatch)}: {mismatch}"
+            assert "command" in mismatch[0]["message"], (
+                f"message should quote the normalizer's error text: {mismatch[0]['message']!r}"
+            )
+            assert len(malformed) == 0, f"expected no verify-malformed-cwd finding, got: {malformed}"
+            print("PASS test_verify_batch_mismatch_dirty_overview_malformed_mapping")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_batch_mismatch_dirty_overview_malformed_mapping: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_batch_mismatch_clean_batch_malformed_mapping_no_double_report() -> int:
+    """Clean (for this check): the batch file's own verify: mapping has no command: -> zero verify-batch-mismatch findings, exactly one verify-malformed-cwd finding (that check is the sole reporter for the batch-file side)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "null"},
+        ])
+        batch = _make_batch_verify_only_text("alpha", "\n  cwd: hub")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        malformed = [e for e in result if e["check"] == "verify-malformed-cwd"]
+        try:
+            assert len(mismatch) == 0, f"expected 0 verify-batch-mismatch findings, got: {mismatch}"
+            assert len(malformed) == 1, f"expected 1 verify-malformed-cwd finding, got {len(malformed)}: {malformed}"
+            print("PASS test_verify_batch_mismatch_clean_batch_malformed_mapping_no_double_report")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_verify_batch_mismatch_clean_batch_malformed_mapping_no_double_report: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_verify_batch_mismatch_clean_overview_batches_unparseable() -> int:
+    """Clean (for this check): the overview's Batch Index fenced yaml is unparseable -> zero verify-batch-mismatch findings (check 4 already records the parse error; this check silently defers)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview_text = (
+            "# Overview\n\n"
+            "```yaml\n"
+            'task: test\nslug: test-slug\nroot: ""\n'
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches: [this is not: valid: yaml: at all\n"
+            "```\n"
+        )
+        batch = _make_batch_verify_only_text("alpha", "some cmd")
+        _write_plan(plan_dir, overview_text, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(
+                f"FAIL test_verify_batch_mismatch_clean_overview_batches_unparseable: unexpected: {mismatch}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_overview_batches_unparseable")
+        return 0
+
+
+def test_verify_batch_mismatch_clean_missing_batch_file() -> int:
+    """Clean: the overview entry's file: names a batch file that does not exist on disk -> zero verify-batch-mismatch findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "verify": "some cmd"},
+        ])
+        # Deliberately do not write 01-alpha.md -- _write_plan([]) writes only the overview.
+        _write_plan(plan_dir, overview, [])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        mismatch = [e for e in result if e["check"] == "verify-batch-mismatch"]
+        if mismatch:
+            print(
+                f"FAIL test_verify_batch_mismatch_clean_missing_batch_file: unexpected: {mismatch}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_verify_batch_mismatch_clean_missing_batch_file")
+        return 0
+
+
+# ---------------------------------------------------------------------------
 # git_root threading tests (Card 5)
 # ---------------------------------------------------------------------------
 
@@ -7214,6 +8723,10 @@ def main() -> int:
         test_check_context_completeness_dirty_odd_backtick_count_line_field,
         test_check_context_completeness_clean_citation_marker,
         test_check_context_completeness_dirty_citation_marker_absent,
+        # inline-signature citation markers (validator-tests batch, Card 8)
+        test_check_context_completeness_clean_signature_inlined_marker,
+        test_check_context_completeness_clean_no_file_read_needed_marker,
+        test_check_context_completeness_dirty_inline_signature_marker_absent,
         test_check_context_completeness_clean_moves_source_plan_wide,
         test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged,
         test_check_context_completeness_message_includes_moves_source_qualifier,
@@ -7223,6 +8736,23 @@ def main() -> int:
         test_check_context_completeness_clean_prohibition_marker_write_irregular,
         test_check_context_completeness_dirty_prohibition_marker_unrelated_negation_not_exempted,
         test_check_context_completeness_dirty_prohibition_marker_verb_without_negation_not_exempted,
+        # symbol-reference context-completeness (bare/dotted identifiers, not just paths)
+        test_check_context_completeness_symbol_clean_in_context,
+        test_check_context_completeness_symbol_dirty_missing,
+        test_check_context_completeness_symbol_clean_zero_matches,
+        test_check_context_completeness_symbol_clean_ambiguous_matches,
+        test_check_context_completeness_symbol_call_site_phrasing,
+        test_check_context_completeness_symbol_all_lowercase_not_candidate,
+        test_check_context_completeness_symbol_all_lowercase_dotted_not_candidate,
+        test_check_context_completeness_symbol_single_capitalized_is_candidate,
+        test_check_context_completeness_symbol_dotted_trailing_segment_only,
+        test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment,
+        test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing,
+        test_check_context_completeness_symbol_first_match_wins_root_precedence,
+        test_check_context_completeness_symbol_cache_invoked_once_per_key,
+        test_check_context_completeness_symbol_prohibition_marker_exempt,
+        test_check_context_completeness_symbol_citation_marker_exempt,
+        test_check_context_completeness_symbol_underscore_qualifies,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
@@ -7235,6 +8765,13 @@ def main() -> int:
         test_check_requirements_quote_indent_drift_dirty_multiple_edits_tie_break,
         test_check_requirements_quote_indent_drift_clean_midline_fragment_flush_closer,
         test_check_requirements_quote_indent_drift_clean_byte_exact_indented_closer,
+        # under-indented requirements fences (validator-tests batch, Card 7)
+        test_check_requirements_quote_indent_drift_dirty_under_indent_flattened_fence,
+        test_check_requirements_quote_indent_drift_dirty_under_indent_empty_separator_line,
+        test_check_requirements_quote_indent_drift_dirty_under_indent_whitespace_separator_line,
+        test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen,
+        test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact,
+        test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,
@@ -7296,6 +8833,20 @@ def main() -> int:
         test_check_verify_malformed_cwd_bad_cwd_value_dirty,
         test_check_verify_mixed_cwd_dirty,
         test_check_verify_mixed_cwd_single_cwd_clean,
+        # verify-batch-mismatch check (Card 6)
+        test_verify_batch_mismatch_clean_identical_string,
+        test_verify_batch_mismatch_dirty_null_vs_command,
+        test_verify_batch_mismatch_dirty_trailing_clause,
+        test_verify_batch_mismatch_clean_absent_vs_null,
+        test_verify_batch_mismatch_clean_both_absent,
+        test_verify_batch_mismatch_clean_both_null,
+        test_verify_batch_mismatch_dirty_string_vs_mapping_cwd,
+        test_verify_batch_mismatch_clean_matching_mapping,
+        test_verify_batch_mismatch_dirty_mapping_cwd_hub_vs_git_root,
+        test_verify_batch_mismatch_dirty_overview_malformed_mapping,
+        test_verify_batch_mismatch_clean_batch_malformed_mapping_no_double_report,
+        test_verify_batch_mismatch_clean_overview_batches_unparseable,
+        test_verify_batch_mismatch_clean_missing_batch_file,
         # git_root threading (Card 5 / #471)
         test_git_root_threading_with_subfolder_cwd_clean,
         test_git_root_threading_without_git_root_default_none_documents_required,

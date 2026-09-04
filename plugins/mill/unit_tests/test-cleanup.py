@@ -153,6 +153,163 @@ def test_scan_orphan_portals() -> None:
         print("PASS _scan_orphan_portals — both conditions true -> returned once")
 
 
+def test_scan_orphan_baseline_dirs() -> None:
+    _scan_orphan_baseline_dirs = mod._scan_orphan_baseline_dirs
+
+    # Case (a): no .scratch/ dir at all -> []
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        result = _scan_orphan_baseline_dirs(wt_path)
+        assert result == [], f"Case (a): expected [], got {result!r}"
+        print("PASS _scan_orphan_baseline_dirs — no .scratch/ dir -> []")
+
+    # Case (b): verify-baseline-<hash>/ exists on disk, but list_worktrees does NOT include it -> orphaned, returned.
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        baseline_dir = wt_path / ".scratch" / "verify-baseline-abc123"
+        baseline_dir.mkdir(parents=True)
+
+        def _mock_list_not_registered(cwd):
+            return [{"path": str(wt_path), "branch": "main"}]
+
+        with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_not_registered):
+            result = _scan_orphan_baseline_dirs(wt_path)
+        assert result == [baseline_dir.resolve()], (
+            f"Case (b): expected [{baseline_dir.resolve()}], got {result!r}"
+        )
+        print("PASS _scan_orphan_baseline_dirs — dir not in list_worktrees -> orphaned, returned")
+
+    # Case (c): verify-baseline-<hash>/ exists on disk AND list_worktrees DOES include its resolved path -> still live, not orphaned.
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        baseline_dir = wt_path / ".scratch" / "verify-baseline-def456"
+        baseline_dir.mkdir(parents=True)
+
+        def _mock_list_registered(cwd):
+            return [
+                {"path": str(wt_path), "branch": "main"},
+                {"path": str(baseline_dir.resolve()), "branch": "baseline-branch"},
+            ]
+
+        with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_registered):
+            result = _scan_orphan_baseline_dirs(wt_path)
+        assert result == [], (
+            f"Case (c): expected [] (still registered, must not be swept), got {result!r}"
+        )
+        print("PASS _scan_orphan_baseline_dirs — dir still in list_worktrees -> not orphaned, []")
+
+    # Case (d): list_worktrees raises WorktreeError -> fail-safe [], sweep nothing.
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        baseline_dir = wt_path / ".scratch" / "verify-baseline-ghi789"
+        baseline_dir.mkdir(parents=True)
+
+        def _mock_list_raises(cwd):
+            raise mod._worktree.WorktreeError("git worktree list failed")
+
+        with patch("mill_cleanup._worktree.list_worktrees", side_effect=_mock_list_raises):
+            result = _scan_orphan_baseline_dirs(wt_path)
+        assert result == [], f"Case (d): expected [] on WorktreeError, got {result!r}"
+        print("PASS _scan_orphan_baseline_dirs — list_worktrees raises WorktreeError -> fail-safe []")
+
+
+def test_apply_orphan_baseline_dir() -> None:
+    _apply_orphan_baseline_dir = mod._apply_orphan_baseline_dir
+
+    # remove_safe called with (dir_path, cwd=wt_path, junctions_cfg={}).
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        dir_path = wt_path / ".scratch" / "verify-baseline-abc123"
+
+        remove_safe_calls: list = []
+
+        def _fake_remove_safe(path, **kwargs):
+            remove_safe_calls.append((path, kwargs))
+
+        with patch("mill_cleanup._worktree.remove_safe", side_effect=_fake_remove_safe):
+            _apply_orphan_baseline_dir(dir_path, wt_path)
+
+        assert len(remove_safe_calls) == 1, f"expected 1 remove_safe call, got {remove_safe_calls}"
+        called_path, called_kwargs = remove_safe_calls[0]
+        assert called_path == dir_path, f"expected path={dir_path}, got {called_path}"
+        assert called_kwargs == {"cwd": wt_path, "junctions_cfg": {}}, (
+            f"expected cwd={wt_path!r}, junctions_cfg={{}}, got {called_kwargs!r}"
+        )
+        print("PASS _apply_orphan_baseline_dir — remove_safe called with (dir_path, cwd=wt_path, junctions_cfg={})")
+
+    # apply_plan must not propagate WorktreeLockedError (the subclass) -- prints REPORT: to stderr, returns normally.
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        dir_path = wt_path / ".scratch" / "verify-baseline-locked"
+        plan = CleanupPlan(
+            to_remove_done=[], to_remove_abandoned=[], to_reset_home=[], to_report=[],
+            orphan_baseline_dirs=[dir_path],
+        )
+        wiki_path = Path(tmp) / "wiki"
+        wiki_path.mkdir()
+        (wiki_path / "Home.md").write_text("", encoding="utf-8")
+
+        stderr_locked = io.StringIO()
+        locked_calls: list = []
+
+        def _fake_remove_safe_locked(path, **kwargs):
+            locked_calls.append((path, kwargs))
+            raise _worktree.WorktreeLockedError("locked")
+
+        with patch(
+            "mill_cleanup._worktree.remove_safe",
+            side_effect=_fake_remove_safe_locked,
+        ):
+            with contextlib.redirect_stderr(stderr_locked):
+                apply_plan(plan, wiki_path, wt_path, {})
+        stderr_text_locked = stderr_locked.getvalue()
+        assert "REPORT:" in stderr_text_locked, f"expected REPORT: line, got {stderr_text_locked!r}"
+        assert str(dir_path) in stderr_text_locked, f"expected {dir_path} in stderr, got {stderr_text_locked!r}"
+        assert len(locked_calls) == 1, f"expected 1 remove_safe call, got {locked_calls}"
+        assert locked_calls[0][1].get("cwd") == wt_path, (
+            f"expected apply_plan's own dir_path.parent.parent derivation to pass cwd={wt_path!r}, "
+            f"got {locked_calls[0][1]!r}"
+        )
+        print("PASS apply_plan — orphan baseline dir removal raises WorktreeLockedError -> REPORT:, no propagation")
+
+    # apply_plan must not propagate plain WorktreeError (the base class) either -- this is the actual
+    # bug scenario the round-2 plan review caught: a narrower `except WorktreeLockedError` would let
+    # this case propagate uncaught and abort the rest of apply_plan.
+    with tempfile.TemporaryDirectory() as tmp:
+        wt_path = Path(tmp)
+        dir_path = wt_path / ".scratch" / "verify-baseline-unrecognized"
+        plan = CleanupPlan(
+            to_remove_done=[], to_remove_abandoned=[], to_reset_home=[], to_report=[],
+            orphan_baseline_dirs=[dir_path],
+        )
+        wiki_path = Path(tmp) / "wiki"
+        wiki_path.mkdir()
+        (wiki_path / "Home.md").write_text("", encoding="utf-8")
+
+        stderr_base = io.StringIO()
+        base_calls: list = []
+
+        def _fake_remove_safe_base(path, **kwargs):
+            base_calls.append((path, kwargs))
+            raise _worktree.WorktreeError("unrecognized git failure")
+
+        with patch(
+            "mill_cleanup._worktree.remove_safe",
+            side_effect=_fake_remove_safe_base,
+        ):
+            with contextlib.redirect_stderr(stderr_base):
+                apply_plan(plan, wiki_path, wt_path, {})
+        stderr_text_base = stderr_base.getvalue()
+        assert "REPORT:" in stderr_text_base, f"expected REPORT: line, got {stderr_text_base!r}"
+        assert str(dir_path) in stderr_text_base, f"expected {dir_path} in stderr, got {stderr_text_base!r}"
+        assert len(base_calls) == 1, f"expected 1 remove_safe call, got {base_calls}"
+        assert base_calls[0][1].get("cwd") == wt_path, (
+            f"expected apply_plan's own dir_path.parent.parent derivation to pass cwd={wt_path!r}, "
+            f"got {base_calls[0][1]!r}"
+        )
+        print("PASS apply_plan — orphan baseline dir removal raises plain WorktreeError -> REPORT:, no propagation")
+
+
 def test_is_live_phase() -> None:
     # Base pipeline phases (bare, no round/batch suffix) -> live.
     for phase in (
@@ -1470,6 +1627,8 @@ def main() -> int:
         test_scan_orphan_portals()
         test_is_live_phase()
         test_resolve_inplace_mode_topology_outcomes()
+        test_scan_orphan_baseline_dirs()
+        test_apply_orphan_baseline_dir()
 
         # Note: registry-based orphan detection (git worktree list --porcelain) is implemented in build_plan and thoroughly tested via mocked list_worktrees.
         # Real git worktree operations are tested in test-worktree.py.

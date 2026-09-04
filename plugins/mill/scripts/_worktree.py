@@ -31,6 +31,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import _pygit2_util
@@ -337,27 +338,37 @@ def remove_safe(
                     raise
                 # Windows: a lingering dotnet build-server lock inside a generated obj/
                 # tree can leave the directory non-empty after junction-strip + rmtree.
-                # Shut down the build-server node and retry once before giving up --
-                # both #846/#859 report the race clearing itself by the time of a bare
-                # manual re-invocation moments later.
-                try:
-                    subprocess.run(
-                        ["dotnet", "build-server", "shutdown"],
-                        capture_output=True,
-                        timeout=30,
-                    )
-                except Exception:
-                    pass
-                try:
-                    _safe_rmtree.safe_rmtree(path, allowed_root=path)
-                except PermissionError as retry_exc:
-                    raise WorktreeLockedError(
-                        f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
-                    ) from retry_exc
-                except OSError as retry_exc:
-                    raise WorktreeLockedError(
-                        f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
-                    ) from retry_exc
+                # Shut down the build-server node and retry, up to 2 more times (3 rmtree
+                # attempts total), before giving up -- #846/#859/#929/#928/#918/#909 all
+                # report the race clearing itself by the time of a bare manual
+                # re-invocation moments later, and a single retry proved insufficient.
+                _retry_backoffs = (0.5, 1.5)
+                for _attempt_index, _backoff in enumerate(_retry_backoffs):
+                    time.sleep(_backoff)
+                    try:
+                        subprocess.run(
+                            ["dotnet", "build-server", "shutdown"],
+                            capture_output=True,
+                            timeout=30,
+                        )
+                    except Exception:
+                        pass
+                    _is_final_attempt = _attempt_index == len(_retry_backoffs) - 1
+                    try:
+                        _safe_rmtree.safe_rmtree(path, allowed_root=path)
+                        break
+                    except PermissionError as retry_exc:
+                        raise WorktreeLockedError(
+                            f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
+                        ) from retry_exc
+                    except OSError as retry_exc:
+                        if not _is_dir_not_empty_error(retry_exc):
+                            raise
+                        if not _is_final_attempt:
+                            continue
+                        raise WorktreeLockedError(
+                            f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
+                        ) from retry_exc
 
         removed_via = "fallback"
 
