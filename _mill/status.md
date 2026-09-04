@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fresh-session-after-self-resolve
+phase: holistic-reviewing
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-bg-heartbeat-diagnosability  '2026-09-04T12:41:28Z'
 approved-test-corroboration-write-commit  '2026-09-04T12:46:37Z'
 approved-forward-verify-baselines-millpy-fix  '2026-09-04T12:51:59Z'
 approved-fresh-session-after-self-resolve  '2026-09-04T12:57:31Z'
+holistic-reviewing  '2026-09-04T12:58:06Z'
 ```
 
 ## Batches
