@@ -31,8 +31,10 @@ GitHub issues can stay closed against this task with an accurate paper trail.
 - `plugins/mill/skills/git-commit/SKILL.md`: add a mandatory post-stage
   verification step that catches the add/edit staging race for moved or
   just-edited files (#923).
-- Updating existing unit tests in `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
-  that currently assert `commit_sha` on the conflicts-mode finalize success path.
+- Adding a new regression test to `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
+  pinning the renamed field's behavior (no existing test in that file asserts
+  `commit_sha` on output today — see Decisions > rename-conflicts-finalize-field
+  for why no existing test needs editing).
 - Documenting, in this file, why #932 and part of #978's risk are already closed
   by prior work — no code change for those.
 
@@ -68,11 +70,13 @@ GitHub issues can stay closed against this task with an accurate paper trail.
 - Rationale: The JSON line's `commit_sha` is already discarded and overwritten by
   `_forward_output` with a freshly computed `git rev-parse HEAD` on every
   self-reported success (see `_implementer_common.py` ~line 1879-1885, added in
-  commit `6d92c82d`) — so a prose restatement is never load-bearing; it exists
-  purely as a UI courtesy to a human skimming the transcript, and is the only
-  place the observed transcription errors occurred (per #978's own report, the
-  JSON line was correct both times). Removing the instruction to restate it
-  removes the failure mode instead of just making the restatement safer.
+  commit `6d92c82d`) — so a prose restatement is never load-bearing. Nothing in
+  the current `implementer-brief.md` `## Report` section actually instructs the
+  implementer to restate `commit_sha` in prose today (confirmed by reading the
+  section in full during this discussion round) — the restatement is
+  spontaneous model behavior, not brief-directed. Adding an explicit prohibition
+  closes off that spontaneous behavior at its only observed error site (per
+  #978's own report, the JSON line was correct both times; the prose was not).
 - Rejected: Instructing the implementer to copy-paste the SHA from `git
   rev-parse HEAD` output when restating it in prose (issue's alternative
   suggestion (b)). Rejected because it still permits a manual-retype failure
@@ -112,12 +116,15 @@ GitHub issues can stay closed against this task with an accurate paper trail.
   the unconditional end of `_forward_output` when no verify/card args are
   supplied). The conflicts-mode call site in `millpy-merge-in-subagent.py` passes
   `commit_sha_field_name="pre_merge_head"`; every other caller keeps the default
-  and is unaffected. Update `mill-merge-in/SKILL.md`'s documented consumption of
-  the finalize envelope to read `pre_merge_head` for conflicts mode, and update
-  the existing unit tests in `test-millpy-merge-in-subagent.py` that currently
-  assert `commit_sha` on this path (at minimum `test_15_stage_finalize_conflicts`,
-  `test_19_finalize_conflicts_accepts_parity_flags`,
-  `test_2x_stage_finalize_conflicts_reaches_gate`).
+  and is unaffected. A grep of `plugins/mill/skills/` for `commit_sha` found no
+  file that documents consuming this specific conflicts-finalize field by name
+  (confirmed during this discussion round — see Technical context), so there is
+  no doc line to update for this rename. A grep of
+  `test-millpy-merge-in-subagent.py` for `commit_sha` likewise found no existing
+  test that asserts the field on *output* (every occurrence is in an input
+  fixture's self-reported JSON, which `_forward_output` already discards
+  regardless of field name) — so no existing test needs editing either; only the
+  new regression test named in Testing below is required.
 - Rationale: Root-caused by reading `millpy-merge-in-subagent.py`'s
   `--stage finalize`/`--mode conflicts` branch (~line 397-424): on a
   self-reported success that passes the conflict-marker gate, it falls through
@@ -213,16 +220,20 @@ GitHub issues can stay closed against this task with an accurate paper trail.
   this call site during planning; the Decisions section above named the
   finalize branch as primary because that's where #953 was observed, but full
   mode has the identical root cause and should not be left inconsistent.
-- `plugins/mill/skills/mill-merge-in/SKILL.md` documents the conflicts-mode flow
-  or is referenced by it — the note that the orchestrator must run
-  `git -c core.editor=true merge --continue` after finalize (per #953's own
-  report) lives there or in a sibling skill; whichever file documents consuming
-  the finalize envelope's SHA field needs its field name updated to
-  `pre_merge_head` for conflicts mode.
-- `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py` has multiple
-  existing tests asserting `commit_sha` in the conflicts-finalize JSON (see
-  Technical scope list above for named tests) — these are fixture updates, not
-  new test design, but must not be missed or CI goes red.
+- A grep of `plugins/mill/skills/` for `commit_sha` (run during this discussion
+  round) found no file that documents consuming the conflicts-finalize
+  envelope's SHA field by name — `mill-merge-in`'s skill file mentions the
+  `merge --continue` follow-up step but not this field. There is no confirmed
+  doc-update target for the rename; do not add a doc-update line item to the
+  plan on spec, and drop it unless planning turns up a target this discussion
+  round missed.
+- `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`: grepped for
+  `commit_sha` during this discussion round — every occurrence is inside an
+  input fixture's self-reported JSON string (e.g. `test_15_stage_finalize_conflicts`,
+  `test_19_finalize_conflicts_accepts_parity_flags`); none of them assert
+  `commit_sha` on the *output* JSON. No existing test needs editing for the
+  field-rename — only the new regression test named in Testing below is
+  required.
 - `plugins/mill/templates/implementer-brief.md`'s `## Report` section is
   the single edit site for both #978 and #944 — they're adjacent paragraphs in
   the same section, so this can likely be one focused edit pass rather than two
@@ -250,14 +261,15 @@ output, no `sed`, verify-command `PYTHONPATH=` prefix for Python projects).
   name, the fallback success path's SHA appears under that key and NOT under
   `commit_sha`; when omitted, behavior is unchanged (existing tests as
   regression coverage for the default case).
-- `test-millpy-merge-in-subagent.py`: update the named existing tests (see
-  Decisions > rename-conflicts-finalize-field) to assert `pre_merge_head`
-  instead of `commit_sha` for conflicts-mode success envelopes (both full-mode
-  and finalize-mode call sites per the Technical context note above). Add one
-  new test asserting the field is `pre_merge_head` specifically when
-  `merge --continue` has NOT yet been run (i.e., `.git/MERGE_HEAD` still
-  present, or HEAD unchanged from a pre-recorded pre-merge value) — this is the
-  regression test that directly pins down #953's reported scenario.
+- `test-millpy-merge-in-subagent.py`: no existing test needs editing (see
+  Decisions > rename-conflicts-finalize-field and Technical context — grepped
+  during this discussion round, none assert `commit_sha` on output). Add one
+  new test asserting the conflicts-mode success envelope carries
+  `pre_merge_head` (not `commit_sha`) for both the full-mode and finalize-mode
+  call sites, specifically when `merge --continue` has NOT yet been run (i.e.,
+  `.git/MERGE_HEAD` still present, or HEAD unchanged from a pre-recorded
+  pre-merge value) — this is the regression test that directly pins down
+  #953's reported scenario.
 - `_implementer_common.py` / `_is_valid_commit_sha`: add one small regression
   test to `test-implementer-common.py` that feeds a 39-char self-reported
   `commit_sha` through `_forward_output` on a success path and asserts the
