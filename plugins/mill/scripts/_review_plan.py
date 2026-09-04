@@ -1068,21 +1068,34 @@ def run(
             holistic_mode = "tool-use" if holistic_spec.get("tooluse") else "bulk"
             tool_rule = build_tool_rule(holistic_mode)
 
-            manifest = build_manifest_section([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk])
+            run_hol_roots = DisplayRoots(project_root=project_root, git_root=git_root, wiki_root=wiki_root)
+
+            manifest = build_manifest_section(
+                [overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk],
+                roots=run_hol_roots,
+            )
 
             if holistic_mode == "tool-use":
-                batch_list = "\n".join(f"- `{p}`" for p in batch_files) or "(none)"
-                read_list = "\n".join(f"- `{p}`" for p in [*all_reads, *all_creates_on_disk, *run_hol_moves_on_disk]) or "(none)"
+                batch_list = "\n".join(f"- `{run_hol_roots.render(p)}`" for p in batch_files) or "(none)"
+                read_list = "\n".join(
+                    f"- `{run_hol_roots.render(p)}`"
+                    for p in [*all_reads, *all_creates_on_disk, *run_hol_moves_on_disk]
+                ) or "(none)"
                 artefact_section = (
                     f"{manifest}\n\n"
                     f"## Plan files to review\n"
-                    f"- Overview: `{overview_path}`\n"
+                    f"- Overview: `{run_hol_roots.render(overview_path)}`\n"
                     f"- Batches:\n{batch_list}\n\n"
                     f"Read the overview and every batch listed above. Then read the "
-                    f"source files referenced across all batches:\n{read_list}"
+                    f"source files referenced across all batches:\n{read_list}\n\n"
+                    f"Every path listed above is relative to the root stated in the "
+                    f"`## Path roots` block above and must be resolved against it before reading."
                 )
             else:
-                bulked_all = bulk_files([overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk])
+                bulked_all = bulk_files(
+                    [overview_path, *batch_files, *all_reads, *all_creates_on_disk, *run_hol_moves_on_disk],
+                    roots=run_hol_roots,
+                )
                 artefact_section = (
                     f"{manifest}\n\n"
                     f"## Plan content (overview + all batches + referenced files + cross-batch ancestor creates)\n"
