@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: _mill/plan
@@ -24,4 +24,17 @@ plan-fix-r2  '2026-09-04T09:07:19Z'
 plan-fix-r3  '2026-09-04T09:14:35Z'
 plan-fix-r4  '2026-09-04T09:21:43Z'
 planned  '2026-09-04T09:25:41Z'
+implementing  '2026-09-04T09:26:19Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-go-base-doc-fixes
+    state: pending
+  - name: mill-descope-batch
+    state: pending
+  - name: mill-go-base-scope-and-numbering-fixes
+    state: pending
 ```
