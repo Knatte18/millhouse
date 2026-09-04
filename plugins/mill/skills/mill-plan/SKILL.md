@@ -61,13 +61,21 @@ Derive:
    - If `revise_requested` is set but neither of the two conditions above is met (`phase` is neither `"planned"` with `approved == true` nor `"blocked"`): halt with an explicit message naming the current `phase:` value and stating that revising a plan mill-go has already started executing, that has not yet been approved, or that is not currently blocked, is unsupported — do not silently force-flip `phase: planning` onto a task with committed/approved batches.
    - When `revise_requested` is not set, skip this entire pre-check and fall through to the existing table exactly as it is today.
 
+   **`--approve` pre-check.** This pre-check runs whenever `approve_requested` is set (from Step 0.5's argument parsing).
+   It is mutually exclusive with the `--revise` pre-check above by construction — Step 0.5 already halts if both `--revise` and `--approve` appear anywhere in `$ARGUMENTS`.
+   Read `phase = _status.read_full(status_path)["yaml"].get("phase")` and `blocked_reason = _status.read_full(status_path)["yaml"].get("blocked_reason")`, using the same `_status.read_full` call the `--revise` pre-check above already uses.
+   - If **both** `phase == "blocked"` **and** `blocked_reason` starts with `"max-rounds exhausted"`: first parse `plan/00-overview.md`'s fenced-yaml frontmatter via the existing extraction pattern already used elsewhere in this file for the `approved:` field, and halt with an explicit message if `approved:` already reads the literal boolean `true` (a defensive guard — this state should not occur while `phase: blocked`, checked before any mutation).
+     Otherwise, flip `approved: true` in `plan/00-overview.md`'s frontmatter via the same direct-`Edit` convention already used elsewhere in this file for that field, commit **alone** on the task branch (`git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: --approve operator override for {slug} (max-rounds exhausted, outstanding findings accepted by operator)"`), push, then fall through directly into Phase: Handoff unmodified — its own guard re-reads `approved:`, now `true`, passes, and it appends the `"planned"` phase, commits, and reports exactly as it does for a normally-converged plan.
+   - If `approve_requested` is set but the condition above is not met (`phase` is not `"blocked"`, or `blocked_reason` does not start with `"max-rounds exhausted"`): halt with an explicit message naming the current `phase:`/`blocked_reason` and stating that `--approve` only applies to a plan blocked on max-rounds exhaustion.
+   - When `approve_requested` is not set, skip this pre-check entirely and fall through to the table below exactly as today.
+
    | state | action |
    | --- | --- |
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
    | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
-   | `phase: blocked` | surface `blocked_reason` from status.md and tell the operator to re-run `/mill-plan --revise` to resume plan review (or resolve manually); halt. This row is reached only when `--revise` was NOT passed — the `--revise` pre-check above already intercepts the `phase: blocked` case when `--revise` is set. |
+   | `phase: blocked` | surface `blocked_reason` from status.md and tell the operator to re-run `/mill-plan --revise` to resume plan review, or (when `blocked_reason` starts with `"max-rounds exhausted"`) `/mill-plan --approve` to accept the plan as-is without another review round, or resolve manually; halt. This row is reached only when neither `--revise` nor `--approve` was passed — the `--revise` pre-check intercepts `phase: blocked` when `--revise` is set, and the `--approve` pre-check above intercepts it when `--approve` is set. |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
 ### Entry-gate wait for upstream mill-start
