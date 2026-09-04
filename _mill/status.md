@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: plan-validate-context-completeness-missing-symbol-refs
 branch: hanf/plan-validate-context-completeness-missing-symbol-refs
-plan: null
+plan: _mill/plan
 parent: main
 task: '_plan_validate.py context-completeness check: misses bare symbol/identifier references entirely, only matches path tokens'
 task_description: |
@@ -21,4 +21,5 @@ discussion-fix-r6  '2026-09-04T08:31:48Z'
 discussion-fix-r7  '2026-09-04T08:36:49Z'
 blocked  '2026-09-04T08:46:33Z'
 discussed  '2026-09-04T09:20:23Z'
+planning  '2026-09-04T09:30:08Z'
 ```
