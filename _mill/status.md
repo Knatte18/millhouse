@@ -39,7 +39,9 @@ batches:
     commit_sha: f24506053ba6ef01bd9d14d654f80b812bea224d
     verify_baseline_failures: []
   - name: plan-review-wiring
-    state: pending
+    state: running
+    implementer_session: b26ed942-856e-4f08-8f05-dc20fc69862b
+    start_sha: 344a31bea0548bb51bc02f4b3c022a600b3c880d
     verify_baseline_failures: ['--- FAIL test-review-plan-flow.py (2.3s) ---', 'FAIL -- 1 of 1 in 2.3s: [''test-review-plan-flow.py'']',
   '--- FAIL test-review-plan-flow.py (2.4s) ---', 'FAIL -- 1 of 1 in 2.4s: [''test-review-plan-flow.py'']']
   - name: code-review-wiring
