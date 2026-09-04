@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -23,4 +23,17 @@ plan-fix-r1  '2026-09-04T10:04:28Z'
 plan-review-r2  '2026-09-04T10:09:36Z'
 plan-fix-r2  '2026-09-04T10:10:09Z'
 planned  '2026-09-04T10:10:18Z'
+implementing  '2026-09-04T10:10:46Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: validator-checks
+    state: pending
+  - name: validator-tests
+    state: pending
+  - name: fix-table-docs
+    state: pending
 ```
