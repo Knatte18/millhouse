@@ -53,7 +53,10 @@ gate failure, where the validator returns zero findings on a plan that is genuin
 - Two new entries in `_CITATION_MARKERS` exempting an inline-signature citation from
   `context-completeness`.
 - Module docstring check-list updates in `_plan_validate.py` (both the header list and `run()`'s
-  docstring).
+  docstring), adding **only** the two new entries -- see the `docstring-backfill-out-of-scope`
+  Decision.
+- The "Check coverage" docstring at the top of `plugins/mill/unit_tests/test-plan-validate.py`
+  (line ~26) gains `verify-batch-mismatch`.
 - `plugins/mill/skills/mill-plan/SKILL.md` Step 1.5 fix-table: a new `verify-batch-mismatch` row, a
   rewritten `requirements-quote-indent-drift` row covering both directions, and cross-references on
   the `batch-oversized` and `context-completeness` rows documenting the inline-signature remedy.
@@ -69,6 +72,9 @@ gate failure, where the validator returns zero findings on a plan that is genuin
   token estimator. #920 is resolved by an exemption plus documentation, not by moving the cap.
 - Any change to `_check_context_completeness`'s core resolution logic beyond appending markers.
 - Splitting the 7369-line `test-plan-validate.py` into smaller files.
+- Backfilling the check names already missing from `run()`'s docstring and from
+  `test-plan-validate.py`'s "Check coverage" docstring -- see the `docstring-backfill-out-of-scope`
+  Decision.
 - Reopening or re-triaging the four source issues (all already CLOSED).
 
 ## Decisions
@@ -226,6 +232,24 @@ gate failure, where the validator returns zero findings on a plan that is genuin
   helpers to reuse. The file's size is a separate concern, deliberately out of scope here.
 - Rejected: a new test file (splits the check's tests across two files with no offsetting benefit).
 
+### docstring-backfill-out-of-scope
+
+- Decision: the plan adds exactly the new entries to the three docstrings it touches --
+  `verify-batch-mismatch` to `_plan_validate.py`'s header check list and to `run()`'s docstring
+  check enumeration, the widened both-directions wording to the header list's
+  `requirements-quote-indent-drift` entry, and `verify-batch-mismatch` to
+  `test-plan-validate.py`'s "Check coverage" docstring. Check names that are *already* missing from
+  those docstrings before this task starts (`run()`'s docstring omits `depends-on-batch-mismatch`,
+  `context-completeness`, `requirements-quote-indent-drift`, `plugin-manifest-context-missing`,
+  `verify-not-isolated`, `verify-full-suite`, `verify-malformed-cwd`; the test file's docstring is
+  likewise incomplete) are left exactly as they are.
+- Rationale: the pre-existing staleness is a separate, larger clean-up with its own review surface;
+  folding it in would widen a targeted three-gap fix into an unrelated docs sweep and inflate the
+  diff a plan reviewer has to check. Stating it explicitly removes the guess.
+- Rejected: backfilling every omission while the file is open (scope creep, and the omissions are
+  not what any of the four issues report); leaving the question unstated (the plan writer would have
+  to guess, which is what the review flagged).
+
 ## Technical context
 
 - `plugins/mill/scripts/_plan_validate.py` (3039 lines) is the whole checker. Structure: module
@@ -265,7 +289,7 @@ gate failure, where the validator returns zero findings on a plan that is genuin
   `verify-batch-mismatch` row with the other `verify-*` rows.
 - `plugins/mill/unit_tests/test-plan-validate.py` is 7369 lines with a manual `tests = [...]`
   registry in `main()`. Its module docstring (line ~26) lists the covered check names and should gain
-  `verify-batch-mismatch`.
+  `verify-batch-mismatch` (adding only that name -- see `docstring-backfill-out-of-scope`).
 - The two source repos in the issues (loomyard, millhouse) are only provenance -- no cross-repo work.
 
 ## Constraints
