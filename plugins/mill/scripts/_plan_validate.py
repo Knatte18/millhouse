@@ -1824,17 +1824,38 @@ def _check_context_completeness(
     git_root: Path | None = None,
 ) -> list[dict]:
     """
-    Flag a card's Requirements: prose citing a file absent from its own refs.
+    Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
 
-    A ``Requirements:`` field frequently prose-references a file the implementer must read or reason
-    about;
+    A ``Requirements:`` field frequently prose-references a file (or a symbol declared in exactly
+    one file) the implementer must read or reason about;
     when that file is a genuine dependency it belongs in the card's own ``Context:``/``Edits:`` (or
     ``Creates:``/``Deletes:``/``Moves:``) so a bulk-mode reviewer actually sees it.
-    This check heuristically detects the gap: for each card, every backtick-quoted, path-shaped
-    token in ``Requirements:`` that independently resolves to a real file (on disk, or a plan-wide
-    ``Creates:``/``Deletes:``/Moves-target reference) must also appear in that same card's own
+    This check heuristically detects the gap in two branches:
+
+    Path branch (unchanged): for each card, every backtick-quoted, path-shaped token in
+    ``Requirements:`` (contains ``/`` or ends with a recognized source extension) that
+    independently resolves to a real file (on disk, or a plan-wide ``Creates:``/``Deletes:``/
+    Moves-target reference) must also appear in that same card's own
     Context:/Edits:/Creates:/Deletes:/Moves:-source set.
-    Three exemptions prevent false positives:
+
+    Symbol branch: a backtick token that is NOT path-shaped is first gated by
+    ``_symbol_candidate_shape`` -- it must look like a bare or dotted identifier (``SaveState``,
+    ``reedengine.New``) that is not just an ordinary lowercase English word, else it is silently
+    ignored (same as today's behavior for non-path tokens).
+    A token that passes the shape gate is resolved via ``_resolve_symbol_files``: a first-match-wins
+    filesystem walk (memoized per ``run()`` call) that finds every file, under the highest-precedence
+    candidate root that has any match at all, whose text contains a case-sensitive whole-word
+    occurrence of the search key.
+    Zero or more-than-one matching file means the reference is unresolvable-with-confidence and is
+    never flagged;
+    exactly one match is canonicalized back to a root-relative path and checked against the card's
+    own refs exactly like the path branch.
+    The emitted ``message`` for a symbol-branch finding has a fixed format --
+    ``"...which resolves to '<path>' -- not in this card's ..."`` -- that a downstream fixer-doc
+    check (batch 2 of this task) parses to distinguish the symbol case from the path case;
+    this wording must not drift.
+
+    Three exemptions prevent false positives (apply to both branches):
 
     1. Prohibition-marker sentences (e.g. "forbid touching `x.py`") name a file the card must NOT
     act on, not an unlisted dependency.
@@ -1844,8 +1865,9 @@ def _check_context_completeness(
     ``Requirements:``, not just the declaring card's own -- mirrors how ``creates_union``/
     ``deletes_union`` are already plan-wide.
 
-    Non-path-shaped or unresolvable tokens (JSON keys, function names, sentinel strings) are never
-    flagged -- only genuine file references that this validator can independently confirm exist.
+    Not-shaped-at-all or unresolvable tokens (JSON keys, ordinary lowercase words, sentinel strings)
+    are never flagged -- only genuine file/symbol references that this validator can independently
+    confirm exist.
 
     Note: markdown's double-backtick-escape convention (`` `path` ``) is not detected by this regex;
     future citations needing that format should be aware they won't be checked by
@@ -1869,6 +1891,9 @@ def _check_context_completeness(
     """
     errors: list[dict] = []
     backtick_re = re.compile(r"`([^`]+)`")
+    # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
+    # recurring across the plan is only walked once (see _resolve_symbol_files's memoization).
+    search_cache: dict[str, tuple[list[Path], Path | None]] = {}
 
     for batch_path in batch_files:
         text = batch_path.read_text(encoding="utf-8")
@@ -1884,9 +1909,13 @@ def _check_context_completeness(
 
             for line in requirements_lines:
                 for token in backtick_re.findall(line):
-                    # Path-candidate shape only: contains a separator or ends with a recognized source-file extension.
-                    if "/" not in token and not token.endswith(_PATH_CANDIDATE_EXTENSIONS):
-                        continue
+                    # Shape gate: path-shaped tokens fall through unconditionally; non-path tokens
+                    # fall through only when they look like a bare/dotted symbol candidate.
+                    is_path_shaped = "/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)
+                    if not is_path_shaped:
+                        search_key = _symbol_candidate_shape(token)
+                        if search_key is None:
+                            continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
                     lowered_line = line.lower()
@@ -1897,42 +1926,70 @@ def _check_context_completeness(
                     if any(marker in lowered_line for marker in _CITATION_MARKERS):
                         continue
 
-                    # Strip a trailing line-range suffix before testing resolvability and matching;
-                    # the ORIGINAL token is kept for the emitted error's "path" field.
-                    stripped_token = _RE_LINE_RANGE.sub("", token)
+                    if is_path_shaped:
+                        # Strip a trailing line-range suffix before testing resolvability and matching;
+                        # the ORIGINAL token is kept for the emitted error's "path" field.
+                        stripped_token = _RE_LINE_RANGE.sub("", token)
 
-                    existing = resolve_existing_paths(
-                        [stripped_token], project_root, root,
-                        wiki_root=wiki_root, git_root=git_root,
-                    )
-                    existing_files = [p for p in existing if p.is_file()]
-                    resolvable = (
-                        bool(existing_files)
-                        or stripped_token in creates_union
-                        or stripped_token in deletes_union
-                        or stripped_token in moves_targets
-                    )
-                    if not resolvable:
-                        continue
+                        existing = resolve_existing_paths(
+                            [stripped_token], project_root, root,
+                            wiki_root=wiki_root, git_root=git_root,
+                        )
+                        existing_files = [p for p in existing if p.is_file()]
+                        resolvable = (
+                            bool(existing_files)
+                            or stripped_token in creates_union
+                            or stripped_token in deletes_union
+                            or stripped_token in moves_targets
+                        )
+                        if not resolvable:
+                            continue
 
-                    if own_refs is None:
-                        own_refs = _card_own_reference_set(card_text)
+                        if own_refs is None:
+                            own_refs = _card_own_reference_set(card_text)
 
-                    if _covered_by_own_refs(stripped_token, own_refs, moves_sources):
-                        continue
+                        if _covered_by_own_refs(stripped_token, own_refs, moves_sources):
+                            continue
 
-                    errors.append({
-                        "check": "context-completeness",
-                        "batch": batch_path.stem,
-                        "card": card_num,
-                        "path": token,
-                        "message": (
-                            f"card {card_num}'s Requirements: references '{token}' "
-                            f"which is not in this card's "
-                            f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
-                        ),
-                        "line": line.strip(),
-                    })
+                        errors.append({
+                            "check": "context-completeness",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": token,
+                            "message": (
+                                f"card {card_num}'s Requirements: references '{token}' "
+                                f"which is not in this card's "
+                                f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
+                            ),
+                            "line": line.strip(),
+                        })
+                    else:
+                        matches, producing_root = _resolve_symbol_files(
+                            search_key, project_root, root, git_root, search_cache
+                        )
+                        if len(matches) != 1:
+                            continue
+
+                        canonical = matches[0].relative_to(producing_root).as_posix()
+
+                        if own_refs is None:
+                            own_refs = _card_own_reference_set(card_text)
+
+                        if _covered_by_own_refs(canonical, own_refs, moves_sources):
+                            continue
+
+                        errors.append({
+                            "check": "context-completeness",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": token,
+                            "message": (
+                                f"card {card_num}'s Requirements: references symbol '{token}', "
+                                f"which resolves to '{canonical}' -- not in this card's "
+                                f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
+                            ),
+                            "line": line.strip(),
+                        })
 
     return errors
 
