@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-finalize-discussion-citation-scan
+phase: approved-resolve-scope-cwd-anchor
 slug: mill-merge-finalize-codeguide-bugs
 branch: hanf/mill-merge-finalize-codeguide-bugs
 plan: _mill/plan
@@ -34,6 +34,7 @@ planned  '2026-09-04T10:51:47Z'
 implementing  '2026-09-04T10:52:16Z'
 approved-mill-merge-in-parent-and-baseline  '2026-09-04T10:56:25Z'
 approved-mill-finalize-discussion-citation-scan  '2026-09-04T10:58:38Z'
+approved-resolve-scope-cwd-anchor  '2026-09-04T11:00:58Z'
 ```
 
 ## Batches
@@ -51,8 +52,9 @@ batches:
     start_sha: 40abb9a227565360cd254a77690ea1902c7e306a
     commit_sha: 1c13018abfe79e7c4a6887c93a52cb6b993a611c
   - name: resolve-scope-cwd-anchor
-    state: running
+    state: approved
     implementer_session: c5c1db80-f882-413a-91ac-6944664c84bc
     start_sha: 8871fc7f71b11630bc1c818194d72c24c9cb51d5
+    commit_sha: 3f02c2e026a21ffd5a13a3cb7564d8b31f089a88
     verify_baseline_failures: []
 ```
