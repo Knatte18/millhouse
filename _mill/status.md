@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-forward-verify-baselines-millpy-fix  '2026-09-04T12:51:59Z'
 approved-fresh-session-after-self-resolve  '2026-09-04T12:57:31Z'
 holistic-reviewing  '2026-09-04T12:58:06Z'
 holistic-fixing  '2026-09-04T13:04:24Z'
+holistic-reviewing  '2026-09-04T13:07:19Z'
 ```
 
 ## Batches
