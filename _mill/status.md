@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-hygiene-fixes
+phase: holistic-reviewing
 slug: mill-start-discussion-review-timeline-and-orch-review-hygiene
 branch: hanf/mill-start-discussion-review-timeline-and-orch-review-hygiene
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-09-04T10:23:23Z'
 planned  '2026-09-04T10:23:41Z'
 implementing  '2026-09-04T12:33:21Z'
 approved-review-hygiene-fixes  '2026-09-04T12:36:53Z'
+holistic-reviewing  '2026-09-04T12:37:27Z'
 ```
 
 ## Batches
