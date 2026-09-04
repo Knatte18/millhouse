@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
 plan: null
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-04T09:42:49Z'
 discussion-fix-r1  '2026-09-04T09:56:44Z'
 discussion-fix-r2  '2026-09-04T10:01:09Z'
+discussed  '2026-09-04T10:04:24Z'
 ```
