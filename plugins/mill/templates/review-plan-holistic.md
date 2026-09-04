@@ -66,6 +66,14 @@ The overview's module-wide `verify:` field (if set) must stay a cheap compile/ve
 - **Context completeness** — BLOCKING if `Requirements:` mentions a function, class, or constant from a file not listed in `Context:` or `Edits:`.
   The implementer may only read files in `Context:`;
   a missing entry means cold-start exploration.
+  This is NOT a finding when the path falls into one of the following exemptions: a path named on a same-line prohibition;
+  a path named on a citation, contrast, or escape-marker line, including the markers `signature inlined`, `no file read needed`, and `mentioned, not read`;
+  a path inside quoted material — a fenced block or a blockquote line — within `Requirements:`;
+  a git-ignored path;
+  a path outside the repository, including absolute and home-relative literals;
+  a trailing-slash directory reference;
+  or a forward reference to a path a later card in the plan declares as its own `Creates:` target.
+  Do not raise a finding for any of these — the remedy you would otherwise ask for, adding the path to `Context:`, is either impossible or actively wrong.
 - **Global step numbering** — unique, sequential, no gaps across batches.
 - **All Files Touched scope** — the overview's `## All Files Touched` section lists the union of `Edits:`/`Creates:`/Move-target paths across all batches;
   `Deletes:` tokens and Move-source paths are excluded by convention.
