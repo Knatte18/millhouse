@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: mill-plan-entry-gate-and-misc-bugs
 branch: hanf/mill-plan-entry-gate-and-misc-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-04T10:25:33Z'
 approved-mill-plan-discussion-drift-and-interpreter-naming  '2026-09-04T10:29:21Z'
 approved-mill-start-fork-guardrail  '2026-09-04T10:31:11Z'
 holistic-reviewing  '2026-09-04T10:31:46Z'
+holistic-approved  '2026-09-04T10:35:26Z'
 ```
 
 ## Batches
