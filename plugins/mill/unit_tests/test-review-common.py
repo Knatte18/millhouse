@@ -101,6 +101,7 @@ def _make_run_result(
 from _review_common import (  # noqa: E402
     RE_BATCH,
     RE_SIMPLE,
+    DisplayRoots,
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
@@ -110,6 +111,7 @@ from _review_common import (  # noqa: E402
     apply_cost_metadata,
     build_deletes_section,
     build_manifest_section,
+    build_path_roots_section,
     build_reattached_section,
     build_tool_rule,
     bulk_files,
@@ -1855,6 +1857,123 @@ def main() -> int:
         result = compute_deletes_union(plan_dir)
         assert result == {"real-token"}, f"Got {result}"
         print("PASS: compute_deletes_union 00-overview.md excluded")
+
+    # ---------------------------------------------------------------------------
+    # DisplayRoots.render
+    # ---------------------------------------------------------------------------
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        base = Path(tmpdir).resolve()
+        project_root = base / "project"
+        git_root = base / "git"
+        wiki_root = base / "wiki"
+        for d in (project_root, git_root, wiki_root):
+            d.mkdir()
+
+        # Path directly under project_root -> bare relative POSIX string.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "sub" / "file.py"
+        result = roots.render(p)
+        assert result == "sub/file.py", f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under project_root -> bare relative")
+
+        # Path under wiki_root -> `wiki/` prefix.
+        roots = DisplayRoots(project_root=project_root, wiki_root=wiki_root)
+        p = wiki_root / "task" / "discussion.md"
+        result = roots.render(p)
+        assert result == "wiki/task/discussion.md", f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under wiki_root -> wiki/ prefix")
+
+        # Path under both a git_root and a deeper project_root -> renders against the longer root.
+        deeper_project_root = git_root / "sub_project"
+        deeper_project_root.mkdir()
+        roots = DisplayRoots(project_root=deeper_project_root, git_root=git_root)
+        p = deeper_project_root / "nested" / "file.py"
+        result = roots.render(p)
+        assert result == "nested/file.py", f"Got {result!r}"
+        print(
+            "PASS: DisplayRoots.render path under git_root and deeper project_root -> longer root wins"
+        )
+
+        # Path under both a wiki_root and a deeper project_root -> wiki form wins (rule 1 short-circuits rule 2).
+        deeper_project_under_wiki = wiki_root / "sub_project"
+        deeper_project_under_wiki.mkdir()
+        roots = DisplayRoots(
+            project_root=deeper_project_under_wiki, wiki_root=wiki_root
+        )
+        p = deeper_project_under_wiki / "nested" / "file.py"
+        result = roots.render(p)
+        assert result == "wiki/sub_project/nested/file.py", f"Got {result!r}"
+        print(
+            "PASS: DisplayRoots.render path under wiki_root and deeper project_root -> wiki/ wins"
+        )
+
+        # Path under no root -> unchanged absolute string.
+        roots = DisplayRoots(project_root=project_root)
+        outside = base / "outside" / "file.py"
+        result = roots.render(outside)
+        assert result == str(outside), f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under no root -> unchanged absolute")
+
+        # Nested path -> forward slashes.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "a" / "b" / "c.py"
+        result = roots.render(p)
+        assert "/" in result and "\\" not in result, f"Got {result!r}"
+        assert result == "a/b/c.py", f"Got {result!r}"
+        print("PASS: DisplayRoots.render nested path -> forward slashes")
+
+        # git_root=None and wiki_root=None -> no raise, falls back to project_root then absolute.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "x.py"
+        result = roots.render(p)
+        assert result == "x.py", f"Got {result!r}"
+        outside2 = base / "elsewhere.py"
+        result2 = roots.render(outside2)
+        assert result2 == str(outside2), f"Got {result2!r}"
+        print("PASS: DisplayRoots.render git_root=None wiki_root=None does not raise")
+
+    # ---------------------------------------------------------------------------
+    # build_path_roots_section
+    # ---------------------------------------------------------------------------
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        base = Path(tmpdir).resolve()
+        project_root = base / "project"
+        git_root = base / "git"
+        wiki_root = base / "wiki"
+        for d in (project_root, git_root, wiki_root):
+            d.mkdir()
+
+        # project-root-only -> heading, no wiki/ bullet, no git_root bullet.
+        roots = DisplayRoots(project_root=project_root)
+        result = build_path_roots_section(roots)
+        assert result.startswith("## Path roots"), f"Got {result!r}"
+        assert "wiki/" not in result, f"Unexpected wiki/ bullet: {result!r}"
+        assert "git_root" not in result, f"Unexpected git_root bullet: {result!r}"
+        print("PASS: build_path_roots_section project-root-only -> no extra bullets")
+
+        # wiki_root set -> wiki/ bullet.
+        roots = DisplayRoots(project_root=project_root, wiki_root=wiki_root)
+        result = build_path_roots_section(roots)
+        assert "wiki/" in result, f"Missing wiki/ bullet: {result!r}"
+        print("PASS: build_path_roots_section wiki_root set -> wiki/ bullet")
+
+        # git_root equal to project_root -> no git_root bullet.
+        roots = DisplayRoots(project_root=project_root, git_root=project_root)
+        result = build_path_roots_section(roots)
+        assert "git_root" not in result, f"Unexpected git_root bullet: {result!r}"
+        print("PASS: build_path_roots_section git_root == project_root -> no bullet")
+
+        # git_root differing from project_root -> one git_root bullet.
+        roots = DisplayRoots(project_root=project_root, git_root=git_root)
+        result = build_path_roots_section(roots)
+        assert result.count("git_root") == 1, f"Got {result!r}"
+        print("PASS: build_path_roots_section git_root != project_root -> one bullet")
+
+        # No trailing newline, matching neighbouring builders' convention.
+        assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
+        print("PASS: build_path_roots_section no trailing newline")
 
     # ---------------------------------------------------------------------------
     # build_manifest_section

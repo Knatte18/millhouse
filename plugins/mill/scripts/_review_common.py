@@ -9,6 +9,10 @@ Public API:
     ReviewerOverstepError — raised by worktree_snapshot_guard when a reviewer mutates HEAD or
     working tree
     ReviewResult — dataclass; serialised to the CLI's stdout JSON
+    DisplayRoots — dataclass; single rendering authority for turning an absolute path into the
+    short form a review prompt shows (wiki-first, then longest-match, then absolute)
+    build_path_roots_section() — return a `## Path roots` markdown block naming the roots a
+    DisplayRoots renders against
     RE_SIMPLE — regex matching simple review filenames
     RE_BATCH — regex matching plan-batch review filenames
     find_active_slug() — branch-based slug detection;
@@ -370,6 +374,98 @@ class ReviewResult:
             "findings": self.findings,
             "reviews": self.reviews,
         }
+
+
+@dataclass(frozen=True)
+class DisplayRoots:
+    """The set of filesystem roots a review prompt renders paths against.
+
+    Every absolute ``Path`` a review backend bulks into a prompt is resolved against one of
+    ``project_root``, ``git_root``, or ``wiki_root`` before it reaches the reviewer as text --
+    ``render`` is the single method every display site calls to do that, so the longest-match and
+    wiki-first rules live in exactly one place instead of being re-implemented at each of the
+    display helpers below.
+
+    Instance variables:
+        project_root: The plan's root -- the root every unprefixed rendered path is relative to.
+        git_root: The repository root, when it differs from ``project_root`` (e.g. the plan
+            overview declares a non-empty ``root:`` sub-path). ``None`` when there is no separate
+            git root to consider.
+        wiki_root: The wiki clone root. ``None`` when the caller has no wiki context (e.g. code
+            review, which never touches wiki files).
+    """
+
+    project_root: Path
+    git_root: Path | None = None
+    wiki_root: Path | None = None
+
+    def render(self, p: Path) -> str:
+        """
+        Render one absolute path to the short display form a reviewer prompt shows.
+
+        Applies the wiki-first, then-longest-match, then-absolute rule (see the plan's
+        rendering-rule Shared Decision): a path under ``wiki_root`` renders as ``wiki/<rel>``
+        regardless of whether it also sits under ``project_root`` or ``git_root``; otherwise the
+        path renders relative to whichever of ``project_root`` / ``git_root`` is both an ancestor
+        and has the most path parts after resolution; otherwise the path renders unchanged.
+
+        Every ancestor test and relative_to call is performed on resolved copies of the root and
+        ``p`` so that a symlinked or junctioned root still matches -- the relative remainder is
+        identical either way.
+        """
+        p_resolved = p.resolve()
+        if self.wiki_root is not None:
+            wiki_resolved = self.wiki_root.resolve()
+            if p_resolved.is_relative_to(wiki_resolved):
+                return "wiki/" + p_resolved.relative_to(wiki_resolved).as_posix()
+
+        best_root: Path | None = None
+        best_part_count = -1
+        for root in (self.project_root, self.git_root):
+            if root is None:
+                continue
+            root_resolved = root.resolve()
+            if not p_resolved.is_relative_to(root_resolved):
+                continue
+            part_count = len(root_resolved.parts)
+            if part_count > best_part_count:
+                best_root = root_resolved
+                best_part_count = part_count
+        if best_root is not None:
+            return p_resolved.relative_to(best_root).as_posix()
+
+        return str(p)
+
+
+def build_path_roots_section(roots: DisplayRoots) -> str:
+    """
+    Return a `## Path roots` markdown block naming the roots `DisplayRoots.render` resolved against.
+
+    Output shape (no trailing newline):
+
+        ## Path roots
+
+        Every unprefixed path below is relative to `<project_root>`.
+        - `wiki/` paths are relative to `<wiki_root>`
+        - `git_root`: `<git_root>`
+
+    The `wiki/` bullet is emitted only when `wiki_root` is not `None`. The `git_root` bullet is
+    emitted only when `git_root` is not `None` and its resolved value differs from the resolved
+    `project_root` -- a `git_root` identical to `project_root` carries no new information for the
+    reviewer.
+    This block is prepended by `build_manifest_section` so every review template inherits it for
+    free, without a template-level edit at each of the five call sites.
+    """
+    lines = [
+        "## Path roots",
+        "",
+        f"Every unprefixed path below is relative to `{roots.project_root}`.",
+    ]
+    if roots.wiki_root is not None:
+        lines.append(f"- `wiki/` paths are relative to `{roots.wiki_root}`")
+    if roots.git_root is not None and roots.git_root.resolve() != roots.project_root.resolve():
+        lines.append(f"- `git_root`: `{roots.git_root}`")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
