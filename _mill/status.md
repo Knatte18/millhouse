@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -23,4 +23,23 @@ planning  '2026-09-04T08:36:32Z'
 plan-review-r1  '2026-09-04T08:41:58Z'
 plan-fix-r1  '2026-09-04T08:43:19Z'
 planned  '2026-09-04T08:43:32Z'
+implementing  '2026-09-04T08:44:05Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: done-gate-run-gate
+    state: pending
+  - name: mill-pause-agent-dispatch
+    state: pending
+  - name: cleanliness-pycache-allowlist
+    state: pending
+  - name: handoff-pre-done-gate-and-lock-release
+    state: pending
+  - name: cleanliness-gate-dead-parent-recovery
+    state: pending
+  - name: step-5-5-liveness-probe
+    state: pending
 ```
