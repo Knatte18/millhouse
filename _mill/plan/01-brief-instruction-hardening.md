@@ -35,10 +35,11 @@ new interface for a later batch to consume — this batch has no code dependents
 - **Moves:** none
 - **Requirements:**
   In the `## Report` section, immediately after the existing paragraph that ends
-  `never write an unqualified "all complete"/"all done" claim without having
-  actually verified the count this way.` (the end of the "Card-count self-check"
-  paragraph) and before the paragraph beginning `Your last line of output (after
-  all work and commits) MUST be a single JSON object:`, insert a new paragraph:
+  `independent of whatever the machine-readable JSON status line below says.`
+  (the true end of the "Card-count self-check" paragraph — it continues one
+  more sentence past the "never write an unqualified... claim" sentence) and
+  before the paragraph beginning `Your last line of output (after all work and
+  commits) MUST be a single JSON object:`, insert a new paragraph:
 
   ```
   **Never restate `commit_sha` in prose.** Your free-text summary may say the

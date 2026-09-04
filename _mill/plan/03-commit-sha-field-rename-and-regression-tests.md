@@ -65,8 +65,25 @@ Card 3's new parameter existing.
   branch (this is the block directly preceded by the comment beginning `# The
   corrective git rev-parse HEAD / _is_valid_commit_sha block below only ever
   applies to a self-reported status: success`). Change that one line from
-  `parsed["commit_sha"] = result.stdout.strip()` to
-  `parsed[commit_sha_field_name] = result.stdout.strip()`.
+  `parsed["commit_sha"] = result.stdout.strip()` to two lines:
+
+  ```
+  if commit_sha_field_name != "commit_sha":
+      parsed.pop("commit_sha", None)
+  parsed[commit_sha_field_name] = result.stdout.strip()
+  ```
+
+  The `pop` is required, not cosmetic: `parsed` is the implementer's own
+  self-reported JSON, which already contains a literal `"commit_sha"` key from
+  the agent's report (e.g. the conflicts-mode self-report
+  `{"status":"success","commit_sha":"xyz"}`). Without the pop, a non-default
+  `commit_sha_field_name` would leave that stale self-reported key sitting
+  alongside the new one instead of renaming it, which defeats #953's whole
+  point (stop emitting a misleading `commit_sha`) and would fail Card 5's Case
+  78 and Card 6's `test_20`/`test_21`, both of which assert `"commit_sha" not
+  in data`. When `commit_sha_field_name` is the default `"commit_sha"`, the
+  guard skips the pop and the line below overwrites the same key in place —
+  byte-for-byte the same behavior as today for every existing caller.
 
   Do not modify any other `commit_sha`-writing site in this file — not
   `_attach_commit_sha`, not the verify/transient/incomplete gate-result sites
