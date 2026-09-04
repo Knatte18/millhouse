@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r3
+phase: discussed
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: null
@@ -16,4 +16,6 @@ task_description: |
 ```text
 discussing  '2026-09-04T07:57:13Z'
 discussion-fix-r3  '2026-09-04T08:18:35Z'
+discussion-fix-r7  '2026-09-04T08:35:48Z'
+discussed  '2026-09-04T08:35:48Z'
 ```
