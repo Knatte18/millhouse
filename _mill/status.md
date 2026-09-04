@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-context-completeness-missing-symbol-refs
 branch: hanf/plan-validate-context-completeness-missing-symbol-refs
 plan: _mill/plan
@@ -26,4 +26,15 @@ plan-fix-r1  '2026-09-04T09:37:06Z'
 plan-fix-r2  '2026-09-04T09:43:49Z'
 plan-fix-r3  '2026-09-04T09:48:40Z'
 planned  '2026-09-04T09:49:04Z'
+implementing  '2026-09-04T09:49:36Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: symbol-reference-check
+    state: pending
+  - name: mill-plan-fixer-doc-update
+    state: pending
 ```
