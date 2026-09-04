@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -22,4 +22,5 @@ plan-review-r1  '2026-09-04T10:03:43Z'
 plan-fix-r1  '2026-09-04T10:04:28Z'
 plan-review-r2  '2026-09-04T10:09:36Z'
 plan-fix-r2  '2026-09-04T10:10:09Z'
+planned  '2026-09-04T10:10:18Z'
 ```
