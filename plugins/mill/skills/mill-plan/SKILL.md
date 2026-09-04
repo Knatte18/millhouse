@@ -144,6 +144,7 @@ Report the current phase to the user at each transition.
 ### Phase: Plan
 
 Read `_mill/discussion.md` in full.
+Immediately capture `discussion_sha = git -C <git_root> rev-parse HEAD:_mill/discussion.md` (or the config-derived relative path from `cfg['paths']['discussion_file']` if it differs) — this pins the exact committed content this plan is written against, before any further reads, forks, or file writes that could race with a concurrent rewrite.
 Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exists()`).
 Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
@@ -286,6 +287,8 @@ Fix any findings using the Step 1.5 fix table below, then re-run, before committ
 
 **Persist `skip_checks` for Phase: Plan Review.** When `skip_checks` (computed above, after applying the `wiki-config-mutation`, `verify-full-suite`, and `out-of-worktree-target` skip-check overrides) is non-empty, write it into `00-overview.md`'s fenced-yaml frontmatter as a new `skip_checks:` list field (parallel to the existing `approved:` field, e.g. `skip_checks: ["wiki-config-mutation"]`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Omit the field entirely (do not write `skip_checks: []`) when the frozenset is empty, matching the template's convention of omitting optional frontmatter keys that don't apply. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
 
+**Persist `discussion_sha` for drift detection.** Write the `discussion_sha` captured above into `00-overview.md`'s fenced-yaml frontmatter as a new `discussion_sha:` field (parallel to `approved:`/`skip_checks:`), via the same direct-`Edit` convention already used elsewhere in this file for the `approved:` field. Unlike `skip_checks:`, this field is never optional — write it unconditionally on every Phase: Plan run, since every Phase: Plan Review dispatch site (see that phase's own drift-guard subsection, added in batch 1 card 3) depends on it being present. Include this edit in the same 'Commit on the task branch' step below — no separate commit.
+
 `signature: _status.read(status_path: Path) -> dict`
 
 **Update `_mill/status.md`.**
@@ -294,6 +297,8 @@ Fix any findings using the Step 1.5 fix table below, then re-run, before committ
   write path).
 - `_status.update_field(status_path, "plan", cfg['paths']['plan_dir'].rstrip('/'))` — pointer to the plan dir (worktree-relative).
 - `_status.append_phase(status_path, "planning", _timestamp.now_utc_iso())`.
+
+**Pre-commit drift check.** Immediately before committing, re-run `git -C <git_root> rev-parse HEAD:_mill/discussion.md` and compare against the `discussion_sha` captured at the top of this phase. On a mismatch: discard the written-but-uncommitted plan files (`git -C <worktree> clean -fd <plan_dir>`, since nothing under `plan_dir` has been added/committed yet), halt via `_status.set_blocked(status_path, "discussion.md changed after Phase: Plan entry (blob sha drift)", timestamp=_timestamp.now_utc_iso())`, commit that status change alone on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (discussion.md blob sha drift) for {slug}"`), push, and halt with: `BLOCKED: discussion.md changed after Phase: Plan entry (blob sha drift). Delete _mill/plan/ and re-run /mill-plan for a fresh plan against the current discussion.md.` Do not proceed to commit the plan when this fires.
 
 **Commit on the task branch.** `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "mill-plan: write plan for {slug}"`.
 Push.
