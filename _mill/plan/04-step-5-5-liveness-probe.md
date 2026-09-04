@@ -17,8 +17,7 @@ Applies `SKILL.md` step 3(b)/(c)'s existing `TaskOutput(task_id: <agentId>, bloc
 
 ### Card 8: Apply the step 3(b)/(c) liveness probe to step 5.5's warm-resume branch
 
-- **Context:**
-  - `plugins/mill/skills/mill-go-base/handoff.md`
+- **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:** none

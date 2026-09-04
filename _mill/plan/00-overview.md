@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go: done-gate halt path and cleanliness-gate recovery are under-documented"
 slug: "mill-go-done-gate-halt-and-cleanliness-recovery"
-approved: false
+approved: true
 started: "20260904-083204"
 parent: "main"
 root: ""
