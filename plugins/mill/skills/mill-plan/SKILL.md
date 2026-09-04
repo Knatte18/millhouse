@@ -561,6 +561,8 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
    - Apply fixes to plan files.
    - Write a fixer report at `<reviews_dir>/<YYYYMMDD-HHMMSS>-plan-fix-r<N>.md` with two sections: `## Fixed` (each fixed finding, one-line reference to the review file + quoted finding title) and `## Pushed Back` (each rejected finding, same format + reason citing code/doc/scope).
    - Re-validate the plan DAG: read `overview_text = (plan_dir / "00-overview.md").read_text(encoding="utf-8")`, call `batches = _plan_dag.extract_batch_index(overview_text)`, then `_plan_dag.validate(batches, sorted(p.name for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"))`. `signature: _plan_dag.validate(batches: list[dict], batch_files: list[str]) -> None`
+   - Run the identical full-validate gate step 4b's own full-validate gate uses — call `_plan_validate.run` with the same 7 kwargs, apply Step 1.5's mechanical-fix table and retry once on error, and on a second consecutive failure call `_status.set_blocked(status_path, "plan-fix-r{N} validate non-progress", timestamp=_timestamp.now_utc_iso())`, commit, push, and halt with `BLOCKED: plan-fix-r{N} validate non-progress`, exactly as step 4b's own full-validate gate does — see step 4b above for the full mechanics.
+     Only after this gate passes clean does 4d proceed to the two bullets that follow (the `_status.append_phase` call and the commit).
    - `_status.append_phase(status_path, f"plan-fix-r{N}", iso_ts)`.
    - Commit on the task branch: `git -C <worktree> add <plan_dir> <reviews_dir> <status_path> _mill/briefs/ && git -C <worktree> commit -m "mill-plan: plan-fix round {N} for {slug}"`.
      Push.
