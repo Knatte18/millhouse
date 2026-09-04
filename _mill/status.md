@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-plan-verdict-envelope-model-bugs
 branch: hanf/review-plan-verdict-envelope-model-bugs
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-09-04T08:10:15Z'
 planning  '2026-09-04T08:12:36Z'
 plan-review-r1  '2026-09-04T08:14:34Z'
 planned  '2026-09-04T08:14:58Z'
+implementing  '2026-09-04T08:15:32Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mechanism-claim-rule
+    state: pending
 ```
