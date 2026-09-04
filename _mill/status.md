@@ -51,6 +51,8 @@ batches:
     start_sha: 40abb9a227565360cd254a77690ea1902c7e306a
     commit_sha: 1c13018abfe79e7c4a6887c93a52cb6b993a611c
   - name: resolve-scope-cwd-anchor
-    state: pending
+    state: running
+    implementer_session: c5c1db80-f882-413a-91ac-6944664c84bc
+    start_sha: 8871fc7f71b11630bc1c818194d72c24c9cb51d5
     verify_baseline_failures: []
 ```
