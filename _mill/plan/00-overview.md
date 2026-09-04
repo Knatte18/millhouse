@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-start: discussion-review timeline gaps and stray orch-review.md scratch file'
 slug: mill-start-discussion-review-timeline-and-orch-review-hygiene
-approved: false
+approved: true
 started: 20260904-101002
 parent: main
 root: ""
