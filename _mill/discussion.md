@@ -116,7 +116,25 @@ the existing mechanism is confirmed insufficient, not merely unshipped.
   long-lived build-server lock; the reports show the orphaned directory is currently never reclaimed
   by any later gate. A sweep-based safety net bounds worst-case disk cruft to "until the next
   mill-cleanup run" instead of "forever."
-- Rejected: no safety net (matches current behavior — leaves the exact leak the 4 issues report).
+- Verification (detection criterion): "no longer registered in `git worktree list`" is deregistered
+  by `git worktree remove --force` itself, independent of whether `_worktree.remove_safe`'s own
+  trailing `git worktree prune` call ever runs. Empirically confirmed by reproduction (a worktree
+  whose directory is made undeletable, so `git worktree remove --force` exits 255 exactly like the
+  reported WinError145 case): the `.git/worktrees/<id>` administrative entry is removed and
+  `git worktree list` stops showing the worktree even though the command's own exit code is
+  non-zero and the physical directory survives on disk. This matches #918's and #909's explicit
+  field reports ("no longer shows up in `git worktree list`", "an orphaned directory git itself has
+  forgotten about") verbatim. `remove_safe`'s own `prune` call (skipped when `WorktreeLockedError`
+  is raised, since the raise unwinds before reaching it) is therefore not the deregistration
+  mechanism for this leak and its skip is irrelevant to the safety net's detection criterion —
+  `git worktree remove --force` already deregisters internally, before it ever attempts to delete
+  the working directory, regardless of the deletion's own success or failure. mill-plan should treat
+  "not in `git worktree list`" as the correct, verified detection criterion, not merely an assumed
+  one.
+- Rejected: no safety net (matches current behavior — leaves the exact leak the 4 issues report);
+  an mtime/age-based or remove-then-check-registration heuristic instead of registration alone (the
+  registration criterion is already correct per the verification above, so an alternative heuristic
+  would add complexity without fixing anything).
 
 ### bg-liveness-probe-fix
 
