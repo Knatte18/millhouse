@@ -5455,6 +5455,100 @@ def main() -> int:
             print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 78: commit_sha_field_name="pre_merge_head" -> the corrective SHA is attached under
+    # the override key, and the default "commit_sha" key must not appear at all (#953).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=None,
+                commit_sha_field_name="pre_merge_head",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert "commit_sha" not in data, (
+                f"expected no commit_sha key (renamed), got {data}"
+            )
+            assert data["pre_merge_head"] == new_head, (
+                f"expected pre_merge_head={new_head}, got {data}"
+            )
+            print(
+                "PASS: case 78 - commit_sha_field_name override renames the fallback"
+                " SHA field and drops the stale self-reported commit_sha key"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 78 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 79 (#932 regression): a truncated self-reported commit_sha (39 chars, one short of
+    # the real 40-char SHA) on the default field-name path must be discarded and replaced by the
+    # real git rev-parse HEAD value, not passed through.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"' + new_head[:-1]
+            + '","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=None,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data["commit_sha"] == new_head, (
+                f"expected commit_sha={new_head} (full, not truncated), got {data}"
+            )
+            print(
+                "PASS: case 79 - #932 truncated self-reported commit_sha is discarded and"
+                " replaced by the real git rev-parse HEAD value"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 79 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

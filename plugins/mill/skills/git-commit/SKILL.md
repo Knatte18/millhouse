@@ -65,6 +65,13 @@ Either way, the `codeguide-update` skill re-resolves per file and handles inline
   Do not create the branch.
 - **If on `main`/`master` and `--onmain` is in the argument:** proceed normally.
 - Stage files individually: `git add file1 file2` — never `git add .` or `git add -A`.
+- **Verify the stage before committing.** After staging, run `git diff
+  --quiet -- <the same paths just staged>`. A non-zero exit means the
+  working tree still has changes beyond what was staged for those paths --
+  the add/edit race this step exists to catch (a `git mv`/edit not yet
+  reflected in the index at stage time). On a non-zero exit, re-run `git add`
+  for those exact paths once and re-check; if the second check is still
+  non-zero, halt and report the mismatch instead of committing.
 - Commit with title + bullet-point format (title summarizes the task, bullets explain key decisions).
 - Push to remote.
   Set upstream if needed: `git push --set-upstream origin <branch>`.
