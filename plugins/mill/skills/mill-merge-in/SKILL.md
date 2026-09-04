@@ -178,17 +178,24 @@ This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` s
 
 ### 5.5. Commit dispatch briefs
 
-If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them.
-Use a guarded `git status --porcelain` check to avoid an empty commit:
+If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them alongside anything step 5 already staged.
+Staging is unconditional on `_mill/briefs` existing, but the commit is gated on whether anything is actually STAGED, never on unscoped `git status --porcelain`:
 
 ```bash
-if [ -d <worktree>/_mill/briefs ] && [ -n "$(git -C <worktree> status --porcelain -- _mill/briefs)" ]; then
-  git -C <worktree> add _mill/briefs/ && git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
+if [ -d <worktree>/_mill/briefs ]; then
+  git -C <worktree> add <worktree>/_mill/briefs/
+fi
+if [ -n "$(git -C <worktree> diff --cached --name-only)" ]; then
+  git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
 fi
 ```
 
-This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief commit is intentionally outside rollback scope and captures successful state.
-Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written (the `git status --porcelain` guard returns empty).
+**Why staged-only, not unscoped porcelain:** `git status --porcelain` also reports unrelated unstaged/untracked worktree state that may already exist when `mill-merge-in` is invoked -- state this skill's own earlier steps had no part in creating -- and gating on that would either sweep foreign dirt into this commit or, worse, pass the non-empty check while nothing is actually staged, making `git commit` fail with "nothing to commit" even though the guard said there was something to commit. Checking `git diff --cached` (staged-only) avoids both failure modes, since briefs (if added above) and codeguide docs (already staged by `codeguide_commit.py --mode inline` in Step 5) are the only two things this step ever stages or expects to find staged.
+
+This also now picks up Step 5's inline-mode codeguide docs -- already `git add`-staged by `codeguide_commit.py --mode inline` back in Step 5, before this step runs -- which the prior `_mill/briefs`-scoped guard silently dropped whenever `_mill/briefs/` did not exist (#946).
+
+This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief/codeguide-doc commit is intentionally outside rollback scope and captures successful state.
+Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written AND no codeguide docs were staged either -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
 
 ### 6. Report
 
