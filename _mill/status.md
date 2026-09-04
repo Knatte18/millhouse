@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: code-comments-skill-consumer-enumeration-rule
 branch: hanf/code-comments-skill-consumer-enumeration-rule
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-04T12:34:14Z'
+discussed  '2026-09-04T16:16:16Z'
 ```
