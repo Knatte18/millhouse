@@ -1,0 +1,98 @@
+# Discussion: mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff
+
+```yaml
+task: mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff
+slug: mill-go-execution-and-bookkeeping-bugs
+status: discussing
+parent: main
+```
+
+## Problem
+
+Seven previously-filed, previously-closed GitHub issues (#927, #936, #973, #906, #905, #980, #941) were folded into one wiki task because they all land in the same subsystem — `mill-go`'s execution loop and its `mill-go-base` orchestrator skill. Each issue was observed during a real mill-go run and describes either a concurrency hazard, a silently-ignored signal, a missing operational mechanism, a bookkeeping collision, an environment-mismatch false-negative, or a documentation ordering/accuracy bug. None of them were fixed when originally filed — they're being addressed now as a batch since they share files and reviewers benefit from seeing them together.
+
+## Scope
+
+**In:**
+- **#927** — Add an explicit warning to `plugins/mill/skills/mill-go-base/SKILL.md`'s "Why not fork?" section (currently lines 431-440) against using `Agent(subagent_type: "fork")` for *any* purpose mid-orchestration — including a narrowly-scoped "just read this file" directive — whenever the fork's inherited conversation context includes live task-state-mutating instructions. A fork can act on inherited context instead of the narrower directive it was given; a fresh `Agent()` call cannot, since it starts with no such context.
+- **#936** — Surface the implementer finalize envelope's `scope_violations` field (produced by `_cleanliness.compute_scope_violations`, populated at `_implementer_common.py:1886-1888`, `:2007-2021`, `:2113-2123`, `:2272-2279`) in the per-batch Execute flow (`SKILL.md` "### 2. Parse implementer report" / "### 2b. Cleanliness gate", currently lines 643-691), mirroring how the fixer envelope's `scope_violations` is already surfaced per the "Scope violations handling note" in `plugins/mill/skills/mill-go-base/handoff.md:90-93`.
+- **#973** — New `_status.remove_batch(status_path: Path, name: str) -> None` helper in `plugins/mill/scripts/_status.py` (alongside the existing `init_batches`/`set_batch_field`/`set_batch_fields` at lines 933/946/980) plus a new skill `plugins/mill/skills/mill-descope-batch/SKILL.md`, invoked as `/mill-descope-batch <batch-name>`, that: edits the Batch Index in `00-overview.md` to drop the named entry, moves the orphaned `NN-<batch_name>.md` card file out of `plan_dir` into a non-glob-matching location (so `_plan_dag.validate()`'s `_check_file_refs`, `_plan_dag.py:240`, stays satisfied), prunes the batch's entry from status.md's `## Batches` block via the new helper, and records an audit-trail Decision + commit.
+- **#906** — Wire `_plan_validate.py`'s existing `_check_card_numbering(batch_files)` (lines 908-962, already scans every batch file and detects a card number reused across batches) into both self-resolve occurrences: `SKILL.md`'s per-batch "### Stuck escalation" `verify`/`logic` (first occurrence) branch (currently lines 853-856) and the equivalent occurrence in `plugins/mill/skills/mill-go-base/holistic-review.md` (currently lines 185-189), so the Builder scans all batch plan files' existing card numbers before assigning a new card number during a self-resolve insertion.
+- **#905** — Document, in `mill-go-base/SKILL.md` (near the existing finalize-verify-replay timeout note at lines 375-377), that finalize's verify replay (`_run_verify_gate` in `_implementer_common.py:878-884`, confirmed to pass no `env=` override and to invoke via a non-login shell either way — `_posix_shell_run_args`, lines 609-632, uses `[bash, "-c", cmd]` or `shell=True`, never `-l`/`-lc`) inherits the **orchestrator's** shell PATH, not the implementer subagent's — so GOPATH/bin-style toolchain directories (e.g. `$HOME/go/bin`) must be exported in the orchestrator's shell before running mill-go, or finalize's regression replay can spuriously report `stuck_type: verify` even when the implementer's own run passed.
+- **#980** — Reorder `mill-go-base/SKILL.md`'s Entry section steps 1-3 (currently lines 51-54) so `wiki_path` (current step 2) and `cfg` (current step 3) resolve before step 1's `slug_from_branch(git_root, wiki_path, cfg)` call, removing the forward reference.
+- **#941** — No functional fix (confirmed not an in-repo bug — see Decisions). Add a one-line clarifying comment near the "Path variable rule" (`SKILL.md:41-45`) noting that `${CLAUDE_PLUGIN_ROOT}` resolution happens entirely in the external harness's Skill-tool-loading mechanism, not in this repo, so a future reporter doesn't re-file the same non-actionable report.
+
+**Out:**
+- mill-start's own fork usage (Explore phase) — already governed by its own "Fork echo caution" section; #927's fix is scoped to mill-go-base only.
+- Any change to how the Agent tool itself resolves `${CLAUDE_PLUGIN_ROOT}` or renders SKILL.md — confirmed to be outside this repo's control (see #941 Decision).
+- Cascading/auto-descoping a removed batch's dependents for #973 — the new helper refuses removal instead (see #973 Decision below); building automatic cascade is out of scope.
+- Capturing or forwarding the implementer subagent's actual resolved PATH for #905 — no mechanism exists anywhere in this codebase for an Agent-dispatched subagent to report its own shell environment back to the orchestrator; documenting the requirement is the fix, not building that plumbing.
+
+## Decisions
+
+### fold-all-seven-into-one-task
+
+- Decision: fix all 7 issues in this single task rather than splitting #973 out or deferring #941.
+- Rationale: all 7 live in the same subsystem (mill-go-base and its scripts), several touch the same files (`SKILL.md`), and a reviewer benefits from seeing them together. #973 is the largest (new helper + new skill) but not large enough to justify separate task overhead.
+- Rejected: splitting #973 into its own task (unnecessary coordination cost); deferring #941 entirely (better to close the loop with a documented non-fix than leave it dangling).
+
+### 941-is-not-an-in-repo-bug
+
+- Decision: #941 gets no functional code change — only a clarifying comment.
+- Rationale: exploration confirmed the literal `${CLAUDE_PLUGIN_ROOT}` string is unresolved on disk in `SKILL.md` (verified at multiple line numbers: 38, 41, 70, 483, 492, 510, 546, 548, 554, 574, 598, 603, 607, 622, 624-626, 780, 864). A repo-wide grep found no build/render/packaging script that does template substitution on SKILL.md before install — `update-plugins.ps1` does a byte-for-byte `robocopy` mirror into the plugin cache, no text substitution. The pre-resolution the original reporter observed happens purely in the external Claude Code harness's Skill-tool-loading mechanism, which this repo does not control.
+- Rejected: attempting an in-repo templating fix (there is nothing in-repo to fix); silently closing with no trace (a future session could re-investigate and re-file the same non-actionable report without this note).
+
+### 973-remove-batch-refuses-on-live-dependents
+
+- Decision: `_status.remove_batch()` raises/refuses if any remaining batch's `depends-on` still names the batch being removed, rather than auto-cascading or silently stripping the dependency link.
+- Rationale: silently cascading or stripping risks removing or reshaping more of the DAG than the operator intended; a hard refusal forces an explicit, visible second action (descope the dependent too, or edit its `depends-on`) — consistent with `_plan_dag.validate()`'s existing fail-closed posture on file-ref mismatches.
+- Rejected: auto-cascade (removes scope the operator didn't ask to remove); auto-strip the dependency link (silently changes the DAG's semantics — a batch that depended on the removed one now has one fewer prerequisite without anyone deciding that was safe).
+
+### 906-reuse-existing-plan-validate-helper
+
+- Decision: wire the existing `_plan_validate._check_card_numbering` cross-batch scan into the self-resolve card-numbering step, rather than writing new prose-only instructions or a new helper.
+- Rationale: the helper already does exactly the needed check (`card_to_batches: dict[int, set[str]]` built across every batch file) but isn't referenced anywhere under `plugins/mill/skills/mill-go-base/` today — confirmed via grep. Reusing tested logic beats a new prose instruction the Builder could interpret loosely or skip.
+- Rejected: a purely textual instruction ("check other batch files for used numbers") without invoking the helper — same failure mode as today, just with more words.
+
+### 905-document-not-plumb-path
+
+- Decision: fix #905 via documentation (export required PATH dirs before running mill-go) rather than building implementer-PATH-capture-and-forward plumbing.
+- Rationale: the implementer runs as a separate Agent-dispatched subagent, not a subprocess mill directly spawns with a knowable environment — there is no existing mechanism anywhere in this codebase for a subagent to introspect and report its own shell PATH back to the orchestrator, and building one is materially larger than this bug warrants. `_run_verify_gate` already inherits `os.environ` from whatever process invokes it (`_implementer_common.py:878-884`, no `env=` override), so the fix is ensuring that process — the orchestrator's own Bash-tool shell — has the right PATH, which is the operator's/session's environment setup, not mill's code.
+- Rejected: implementer self-reports resolved PATH in its JSON envelope, finalize passes it as `env=` — assumes a capability (subagent PATH introspection/reporting) that doesn't exist and would need new implementer-brief instructions plus envelope-schema changes for a narrow environment-parity gain.
+
+## Technical context
+
+- All 7 fixes but #973 touch `plugins/mill/skills/mill-go-base/SKILL.md` directly (and #906 also touches `plugins/mill/skills/mill-go-base/holistic-review.md`); #973 additionally touches `plugins/mill/scripts/_status.py` (new function) and adds a new skill directory `plugins/mill/skills/mill-descope-batch/`.
+- Relevant existing helpers to reuse, not reimplement:
+  - `_plan_validate._check_card_numbering(batch_files)` — `plugins/mill/scripts/_plan_validate.py:908-962` — cross-batch card-number collision scan (#906).
+  - `_cleanliness.compute_scope_violations(project_root, git_root)` — `plugins/mill/scripts/_cleanliness.py:57-110` — already computes the untracked-file scope_violations list; #936 only needs to consume the field the implementer envelope already carries, not compute anything new.
+  - `_plan_dag.extract_batch_index` / `_plan_dag.validate` / `_check_file_refs` — `plugins/mill/scripts/_plan_dag.py:68`, `:240`, `:656` — the two-way Batch-Index-to-disk-files check `remove_batch`'s companion skill must keep satisfied when it moves the orphaned card file out of `plan_dir`.
+  - `_status.init_batches` / `set_batch_field` / `set_batch_fields` — `plugins/mill/scripts/_status.py:933/946/980` — existing batch-mutation helpers `remove_batch` sits alongside; note none of them currently support deletion (`set_batch_field` raises `ValueError` if the name is absent, confirming no removal path exists today).
+- `plugins/mill/skills/mill-go-base/handoff.md:90-93` already documents the fixer-envelope `scope_violations` handling — the #936 fix is explicitly a mirror of this existing text applied to the implementer envelope's Execute-flow path, not new design.
+- `_posix_shell_run_args` (`_implementer_common.py:609-632`) confirms no login-shell invocation exists anywhere in the verify-replay path (Windows: `[bash, "-c", cmd]`; other platforms: `shell=True`) — this rules out "make the replay use a login shell" as a fix for #905, since neither the implementer's nor the finalize's shell would source profile files either way; the actual variable is which process's already-inherited `os.environ` gets used.
+
+## Constraints
+
+No `CONSTRAINTS.md` present at the hub root — none beyond the project's standing conventions (see root `CLAUDE.md`): `mill-config.yaml`/template sync, no `sed`, ASCII-only `print()`/`_log()` output, `Never use fork for role dispatch` (already documented; #927 extends this to non-role-dispatch fork usage too).
+
+## Testing
+
+- **`_status.remove_batch`** (#973) — TDD candidate. Unit test in `plugins/mill/unit_tests/` per existing `_status.py` test conventions: removing an existing batch drops it from `## Batches`; removing a nonexistent batch raises the same style of `ValueError` `set_batch_field` already raises; removing a batch that a remaining entry's `depends-on` still names raises/refuses per the Decision above.
+- **`_check_card_numbering` wiring** (#906) — cover with a unit test asserting the self-resolve path's new card-number selection actually calls the cross-batch scan and picks a number absent from every batch file, not just the current one. Existing `_check_card_numbering` unit coverage (if any — check `plugins/mill/unit_tests/` for existing `_plan_validate` tests) should already cover the helper itself; new coverage is for the wiring, not the helper's own logic.
+- **scope_violations surfacing** (#936) — unit test asserting the Execute flow's step 2/2b branches on a non-empty `scope_violations` field from an implementer finalize envelope the same way it already would for a fixer envelope.
+- **#927, #980, #941** — documentation-only changes; verify by re-reading the rendered `SKILL.md` section for correctness (no forward references remain for #980, the fork warning reads clearly for #927, the harness-boundary note is accurate for #941). No automated test applies.
+- **#905** — documentation-only; no automated test applies (there is nothing in-repo to assert against an external shell PATH). Manual verification: confirm the new note appears adjacent to the existing finalize-timeout note and correctly names the mechanism (`_run_verify_gate` inherits orchestrator env).
+
+## Q&A log
+
+- **Q:** Fix all 7 issues in this task, or split/defer any? **A:** [auto-pick] Fix all 7. **Why:** same subsystem, small individually, no cross-issue conflict found.
+- **Q:** How to handle #941 given it's not reproducible as an in-repo bug? **A:** [auto-pick] No code fix; add a clarifying comment near the Path variable rule. **Why:** leaves a breadcrumb without pretending there's a fix to make in-repo.
+- **Q:** #973 — build a real descope mechanism or just document a hand-edit carve-out? **A:** [auto-pick] Build `_status.remove_batch()` + `/mill-descope-batch` skill. **Why:** a hand-edit carve-out re-legitimizes the anti-pattern Board discipline exists to prevent.
+- **Q:** #906 — wire in the existing `_check_card_numbering` helper, or add new prose instructions? **A:** [auto-pick] Wire in the existing helper. **Why:** reuses tested logic instead of a skippable prose instruction.
+- **Q:** #905 — document the PATH requirement, or build PATH-capture-and-forward plumbing? **A:** [auto-pick] Document only. **Why:** no mechanism exists for a subagent to report its own shell PATH; building one is out of proportion to the bug.
+- **Q:** #936 — surface scope_violations as a blocking/logic branch, or just log it? **A:** [auto-pick] Surface as a branch mirroring the fixer path. **Why:** issue reports the silent-ignore itself as the bug; log-only reproduces the same "caught by luck" problem.
+- **Q:** #927 — narrow warning in mill-go-base only, or also touch mill-start's fork usage? **A:** [auto-pick] mill-go-base only. **Why:** task is scoped to mill-go execution bugs; mill-start already has its own fork-caution section.
+- **Q:** #980 — reorder the Entry steps, or add a note instead? **A:** [auto-pick] Reorder. **Why:** removes the forward reference outright.
+- **Q:** Testing approach — unit tests for testable logic, or doc-only everywhere? **A:** [auto-pick] Unit tests for `_status.remove_batch`, the scope_violations branch, and the card-numbering wiring; doc-only fixes verified by re-reading. **Why:** matches which fixes are actually code vs. documentation.
+- **Q:** #973 skill name/shape? **A:** [auto-pick] `plugins/mill/skills/mill-descope-batch/SKILL.md`, invoked as `/mill-descope-batch <batch-name>`. **Why:** matches the issue's own suggested name.
+- **Q:** #973 — what happens to a descoped batch's dependents? **A:** [auto-pick] Refuse removal if any remaining batch still depends on it. **Why:** avoids silently corrupting the DAG; forces an explicit second action.
