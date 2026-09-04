@@ -31,13 +31,20 @@ implementing  '2026-09-04T09:22:57Z'
 ```yaml
 batches:
   - name: worktree-teardown-retry
-    state: pending
+    state: running
+    implementer_session: 39607fe2-a0d3-4135-8b0e-5b3484863e96
+    start_sha: 88805ece0a83210e5d691014514adf8d184ce80c
+    verify_baseline_failures: []
   - name: cleanup-orphan-baseline-sweep
     state: pending
+    verify_baseline_failures: []
   - name: bg-liveness-windows-probe
     state: pending
+    verify_baseline_failures: []
   - name: baseline-undercount-corroboration
     state: pending
+    verify_baseline_failures: []
   - name: baseline-undercount-corroboration-tests
     state: pending
+    verify_baseline_failures: []
 ```
