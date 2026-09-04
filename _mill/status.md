@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: plan-validate-context-completeness-false-positive-exemptions
 branch: hanf/plan-validate-context-completeness-false-positive-exemptions
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-reviewer-and-docs-sync  '2026-09-04T17:29:32Z'
 approved-lexical-exemption-tests  '2026-09-04T17:38:04Z'
 holistic-reviewing  '2026-09-04T17:38:52Z'
 holistic-fixing  '2026-09-04T17:46:36Z'
+holistic-reviewing  '2026-09-04T17:49:04Z'
 ```
 
 ## Batches
