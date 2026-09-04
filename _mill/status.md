@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-merge-finalize-codeguide-bugs
 branch: hanf/mill-merge-finalize-codeguide-bugs
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-merge-in/mill-finalize/codeguide-update: cleanup-ordering and path-resolution bugs'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-04T09:42:39Z'
 discussion-fix-r3  '2026-09-04T10:07:17Z'
 discussed  '2026-09-04T10:07:17Z'
+planning  '2026-09-04T10:11:51Z'
 ```
