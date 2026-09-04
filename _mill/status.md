@@ -45,7 +45,9 @@ batches:
     commit_sha: 7d613fd798fe83f2b71981b69faeb15e2fde8ec4
     verify_baseline_failures: []
   - name: bg-liveness-windows-probe
-    state: pending
+    state: running
+    implementer_session: 2f7c95c2-cde0-40cc-97b8-2c875d50635d
+    start_sha: 6fb2e010b557b5a93fe10f91d6877271164af8de
     verify_baseline_failures: []
   - name: baseline-undercount-corroboration
     state: pending
