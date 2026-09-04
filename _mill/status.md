@@ -44,6 +44,8 @@ batches:
     start_sha: 94566c95c163b2fd0ce9de8c8899788a3a7b8349
     commit_sha: 213001096c05dc5730b6f8097e9e91280cced197
   - name: commit-sha-field-rename-and-regression-tests
-    state: pending
+    state: running
+    implementer_session: 6185138d-491d-4ee4-a8ec-29f9948d261c
+    start_sha: 3b8652c5be567f625f3d0453f40892c4f7790c5c
     verify_baseline_failures: []
 ```
