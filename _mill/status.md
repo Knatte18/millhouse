@@ -44,7 +44,9 @@ batches:
     start_sha: 2c0d8ba03c0ad204957f7456e1075ba57618fc43
     commit_sha: c0af6a13916233217ad1cfa860cbe4620176d346
   - name: cleanliness-pycache-allowlist
-    state: pending
+    state: running
+    implementer_session: 2b274987-f125-4fda-921e-6a9de05cb778
+    start_sha: 5f197e1d5adedbe0d93afa63c9e0f401054b5557
     verify_baseline_failures: []
   - name: handoff-pre-done-gate-and-lock-release
     state: pending
