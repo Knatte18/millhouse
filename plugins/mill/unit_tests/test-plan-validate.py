@@ -6187,7 +6187,7 @@ def test_verify_batch_mismatch_clean_batch_malformed_mapping_no_double_report() 
 
 
 def test_verify_batch_mismatch_clean_overview_batches_unparseable() -> int:
-    """Clean (for this check): the overview's `## Batches` fenced yaml is unparseable -> zero verify-batch-mismatch findings (check 4 already records the parse error; this check silently defers)."""
+    """Clean (for this check): the overview's Batch Index fenced yaml is unparseable -> zero verify-batch-mismatch findings (check 4 already records the parse error; this check silently defers)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
