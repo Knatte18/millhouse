@@ -2341,13 +2341,16 @@ def _check_context_completeness(
                     if _is_prohibition_exempt(lowered_line):
                         continue
 
-                    # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
-                    if any(marker in lowered_line for marker in _CITATION_MARKERS):
+                    # Non-dependency negation phrasing exemption: the line positions this specific
+                    # occurrence of the token as explicitly not-involved. This runs immediately
+                    # after the prohibition-marker check and before the citation-marker check
+                    # (rather than alongside it) so that it matches the exemption's own numbered
+                    # enumeration order in the docstring above.
+                    if _is_non_dependency_negation_exempt(lowered_line, match.start(1), match.end(1)):
                         continue
 
-                    # Non-dependency negation phrasing exemption: the line positions this specific
-                    # occurrence of the token as explicitly not-involved.
-                    if _is_non_dependency_negation_exempt(lowered_line, match.start(1), match.end(1)):
+                    # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
+                    if any(marker in lowered_line for marker in _CITATION_MARKERS):
                         continue
 
                     # Contrast-citation exemption: this occurrence shares a clause with "rather
