@@ -75,7 +75,7 @@ Derive:
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
    | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
-   | `phase: blocked` | surface `blocked_reason` from status.md and tell the operator to re-run `/mill-plan --revise` to resume plan review, or (when `blocked_reason` starts with `"max-rounds exhausted"`) `/mill-plan --approve` to accept the plan as-is without another review round, or resolve manually; halt. This row is reached only when neither `--revise` nor `--approve` was passed — the `--revise` pre-check intercepts `phase: blocked` when `--revise` is set, and the `--approve` pre-check above intercepts it when `--approve` is set. |
+   | `phase: blocked` | this row's literal action is superseded: the "Entry: resuming after a max-rounds block" procedure below runs **instead** whenever the phase-table lookup lands here, so the text below never executes verbatim — it summarizes that procedure's real behavior for readers scanning the table. For a `blocked_reason` that does NOT start with `"max-rounds exhausted"`: surface `blocked_reason` from status.md and halt; the operator resolves manually or re-runs `/mill-plan --revise` (the `--revise` pre-check above resumes any blocked state regardless of `blocked_reason`). For a `blocked_reason` that DOES start with `"max-rounds exhausted"`: plan review resumes **automatically**, with no halt — a bare `/mill-plan` re-invocation is sufficient; the operator does not need `--approve` for this. `/mill-plan --approve` is a separate, explicit choice (see the `--approve` pre-check above) to skip straight to Handoff and accept the plan as-is instead of running another review round. This row is reached only when neither `--revise` nor `--approve` was passed — the `--revise` pre-check intercepts `phase: blocked` when `--revise` is set, and the `--approve` pre-check above intercepts it when `--approve` is set. |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
 ### Entry-gate wait for upstream mill-start
@@ -414,6 +414,9 @@ converged = (round >= min_review_rounds)
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
+
+   > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this and every remaining round.
+
    If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
@@ -460,6 +463,8 @@ converged = (round >= min_review_rounds)
 
    > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
 
+   > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below for this and every remaining round; it supersedes the `local_max_review_rounds` reminder above if both would otherwise apply.
+
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
        --slug plan-review-r<N> -- \
@@ -491,6 +496,8 @@ converged = (round >= min_review_rounds)
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
+   > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this retry too — the Step 3.5 retry is explicitly included in that override's dispatch sites.
+
    **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
@@ -503,6 +510,8 @@ converged = (round >= min_review_rounds)
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
    > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below; omit it on every other round.
+
+   > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to the inner `millpy-review-plan.py` invocation below for this retry too; it supersedes the `local_max_review_rounds` reminder above if both would otherwise apply.
 
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
