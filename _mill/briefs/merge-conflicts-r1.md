@@ -1,0 +1,294 @@
+# Conflict Resolution Brief
+
+Your sole job is to resolve git conflict markers in the listed files, stage each resolved file, and report success.
+Do NOT commit.
+Do NOT run `git merge --continue` — the SKILL does that after receiving `{"status":"success"}`.
+
+## Task intent
+
+These excerpts describe what THIS branch is trying to accomplish.
+When the merge introduces a parent-side change that conflicts with this branch's intent, the resolution preserves THIS branch's intent.
+In particular: if a file appears under a batch's `Deletes:` list and the merge introduces a modified version of that file from the parent, the resolution is to delete the file (your branch's intent overrides).
+Stage the deletion with `git -C /home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs rm <file>`.
+
+### From discussion.md
+
+# Discussion: mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff
+
+```yaml
+task: mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff
+slug: mill-go-execution-and-bookkeeping-bugs
+status: discussing
+parent: main
+```
+
+## Problem
+
+Seven previously-filed, previously-closed GitHub issues (#927, #936, #973, #906, #905, #980, #941) were folded into one wiki task because they all land in the same subsystem — `mill-go`'s execution loop and its `mill-go-base` orchestrator skill. Each issue was observed during a real mill-go run and describes either a concurrency hazard, a silently-ignored signal, a missing operational mechanism, a bookkeeping collision, an environment-mismatch false-negative, or a documentation ordering/accuracy bug. None of them were fixed when originally filed — they're being addressed now as a batch since they share files and reviewers benefit from seeing them together.
+
+## Scope
+
+**In:**
+- **#927** — Add an explicit warning to `plugins/mill/skills/mill-go-base/SKILL.md`'s "Why not fork?" section (currently lines 431-440) against using `Agent(subagent_type: "fork")` for *any* purpose mid-orchestration — including a narrowly-scoped "just read this file" directive — whenever the fork's inherited conversation context includes live task-state-mutating instructions. A fork can act on inherited context instead of the narrower directive it was given; a fresh `Agent()` call cannot, since it starts with no such context.
+- **#936** — Surface the implementer finalize envelope's `scope_violations` field (produced by `_cleanliness.compute_scope_violations`, populated at `_implementer_common.py:1886-1888`, `:2007-2021`, `:2113-2123`, `:2272-2279`) in the per-batch Execute flow (`SKILL.md` "### 2. Parse implementer report" / "### 2b. Cleanliness gate", currently lines 643-691), mirroring how the fixer envelope's `scope_violations` is already surfaced per the "Scope violations handling note" in `plugins/mill/skills/mill-go-base/handoff.md:90-93`.
+- **#973** — New `_status.remove_batch(status_path: Path, name: str) -> None` helper in `plugins/mill/scripts/_status.py` (alongside the existing `init_batches`/`set_batch_field`/`set_batch_fields` at lines 933/946/980) — this helper is scoped to status.md only: it pops the named entry from the `## Batches` block and has no visibility into `depends-on` (which lives solely in the plan overview's Batch Index, not status.md — `_status.py`'s batch-entry schema has no `depends-on` field). The **dependent-scan itself lives in the new skill, not in `_status.remove_batch`**: `plugins/mill/skills/mill-descope-batch/SKILL.md`, invoked as `/mill-descope-batch <batch-name>`, first reads `00-overview.md` via `_plan_dag.extract_batch_index(overview_text)` and checks whether any *other* entry's `depends-on` still names the batch being removed — refusing with a clear message if so (see Decision `973-remove-batch-refuses-on-live-dependents`) — and only calls `_status.remove_batch` once that check passes. The skill then: edits the Batch Index in `00-overview.md` to drop the named entry, moves the orphaned `NN-<batch_name>.md` card file out of `plan_dir` into `_mill/descoped/<batch_name>.md` (a location outside `plan_dir`, so it can never match `plan_dir.glob("??-*.md")` and `_plan_dag.validate()`'s `_check_file_refs`, `_plan_dag.py:240`, stays satisfied without needing any glob-exclusion pattern), prunes the batch's entry from status.md's `## Batches` block via the new helper, and records the audit trail via **the existing `_status.append_phase(status_path, f"descoped-{batch_name}", timestamp)` call** (the same phase-log mechanism already used throughout mill-go-base for exactly this purpose — e.g. `"approved-{batch_name}"`, `"self-resolved-verify-logic"` — reused here rather than inventing a new "Decision"-object concept; no new `_status.py` helper or status.md section is needed for this), plus the git commit message itself as the durable record of what changed and why. (Nothing is written to `discussion.md` at runtime — "Decision" stays this document's own discussion-phase vocabulary, not a runtime artifact.)
+- **#906** — This is **new self-resolve behavior**, not a wire-in to an existing numbering mechanic: today, `SKILL.md`'s per-batch "### Stuck escalation" `verify`/`logic` (first occurrence) branch (currently lines 853-856) and the equivalent occurrence in `plugins/mill/skills/mill-go-base/holistic-review.md` (currently lines 185-189) both say only "edit the plan file(s) ... if the failure traces to an ambiguous or incorrect card" — neither file currently contains any card-insertion or number-assignment instruction at all (confirmed: zero hits for "card number" in either file). The fix adds, to both passages, an explicit new instruction, with the two occurrences differing only in target-batch selection:
+  - **Per-batch occurrence** (`SKILL.md:853-856`): the target batch is unambiguous — it's the batch currently self-resolving.
+  - **Holistic occurrence** (`holistic-review.md:185-189`): its own existing text (line 186, unchanged by this discussion) already notes the stuck-JSON reason may name "a specific batch, span several, or none at all." Card insertion applies **only** when the reason names exactly one batch; when it names zero or multiple batches, self-resolve falls back to the existing plain-bullet `## Prior failure` log only — no card insertion is attempted, since there is no single target batch to insert into.
+  - In both occurrences, once a single target batch is identified: when self-resolve determines a new implementable card is warranted (distinct from — and in addition to — the existing plain-bullet failure log already written to `## Prior failure`), the Builder appends a new `### Card N:` heading to the target batch's own `## Cards` list (not inside `## Prior failure`, which stays a plain audit-trail bullet log). `N` is computed as the target batch's own `max(existing card numbers in that batch) + 1` (preserving that batch's gap-free/sequential numbering, which `_plan_validate._check_card_numbering`'s within-batch check, lines 924-955, requires). **Validation happens before any disk write, in this exact order, using `_plan_validate._parse_cards` — not `_check_card_numbering` — as the read primitive:** `_check_card_numbering(batch_files)` (lines 908-974) returns only an `errors` list built from numbers *already* duplicated across batches on disk; since the candidate `N` is not yet written anywhere before insertion, it can never appear as a cross-batch duplicate in that function's unmodified-on-disk input, so it structurally cannot answer "does N already belong to a different batch" — that check needs the actual per-batch number sets, which `_check_card_numbering` computes internally but never returns. So instead: (1) for every batch file, call the lower-level `_plan_validate._parse_cards(batch_text) -> list[tuple[int, list[str]]]` (already used internally by `_check_card_numbering` itself, lines 908-920) to build `used_numbers: dict[str, set[int]]` mapping each batch name to its own card numbers — pure read, no write; (2) compute `N` from `used_numbers[target_batch]` as described above; (3) check whether `N` is present in `used_numbers[other_batch]` for any `other_batch != target_batch`; (4) only if no other batch already claims `N` does the Builder write the `### Card N:` heading to the target batch file, then re-run `_check_card_numbering(batch_files)` once more as a post-write defensive check (this correctly detects a genuine duplicate now that the write has happened, catching any race the pre-write check missed) before proceeding. **If `N` is already claimed by a different batch** (a genuine numbering-range collision in the plan itself — batches are expected to occupy disjoint numeric ranges at plan-write time, so this indicates the plan's ranges already overlap), the Builder makes **no write at all** to the target batch file — self-resolve does not improvise a replacement number, since silently picking a different number would either break the target batch's own gap-free requirement or require renumbering another batch's existing cards, both larger changes than a self-resolve insertion should make unsupervised. Instead, report `stuck_type: logic` with the collision described and let it escalate normally — no revert step is ever needed because nothing was written on the collision path. This is a target-batch-relative-then-globally-checked rule, not a bare global-minimum-unused search: a global minimum could land on a number that violates the target batch's own gap-free requirement (e.g. batch A already spans {1,2,3}, batch B spans {10,11} — the globally-lowest-absent number 4 would violate batch A's contiguity if inserted there).
+- **#905** — Document, in `mill-go-base/SKILL.md` (near the existing finalize-verify-replay timeout note at lines 375-377), that finalize's verify replay (`_run_verify_gate` in `_implementer_common.py:878-884`, confirmed to pass no `env=` override and to invoke via a non-login shell either way — `_posix_shell_run_args`, lines 609-632, uses `[bash, "-c", cmd]` or `shell=True`, never `-l`/`-lc`) inherits the **orchestrator's** shell PATH, not the implementer subagent's — so GOPATH/bin-style toolchain directories (e.g. `$HOME/go/bin`) must be exported in the orchestrator's shell before running mill-go, or finalize's regression replay can spuriously report `stuck_type: verify` even when the implementer's own run passed.
+- **#980** — Step 1's `slug_from_branch(git_root, wiki_path, cfg)` call (currently `SKILL.md:51`) has **three** forward-referenced variables, not two: `wiki_path` and `cfg` resolve in steps 2-3 (lines 53-54, matching the originally-filed issue), but `git_root` itself is never assigned anywhere before step 4.5's `git_root = _paths.resolve_git_root()` (line 77) — step 2's own body calls `_paths.resolve_git_root()` internally but assigns the result to `wiki_path`, not to a `git_root` variable, so no `git_root` binding exists in scope even after step 2 runs. The fix reorders steps 1-3 (so `wiki_path`/`cfg` resolve before the `slug_from_branch` call, per the original issue) **and** additionally inserts `git_root = _paths.resolve_git_root()` ahead of that same call (mirroring the existing inline-resolution pattern step 2 already uses for `wiki_path`) — reordering alone still leaves `git_root` undefined at the call site.
+- **#941** — No functional fix (confirmed not an in-repo bug — see Decisions). Add a one-line clarifying comment near the "Path variable rule" (`SKILL.md:41-45`) noting that `${CLAUDE_PLUGIN_ROOT}` resolution happens entirely in the external harness's Skill-tool-loading mechanism, not in this repo, so a future reporter doesn't re-file the same non-actionable report.
+
+**Out:**
+- mill-start's own fork usage (Explore phase) — already governed by its own "Fork echo caution" section; #927's fix is scoped to mill-go-base only.
+- Any change to how the Agent tool itself resolves `${CLAUDE_PLUGIN_ROOT}` or renders SKILL.md — confirmed to be outside this repo's control (see #941 Decision).
+- Cascading/auto-descoping a removed batch's dependents for #973 — the new helper refuses removal instead (see #973 Decision below); building automatic cascade is out of scope.
+- Capturing or forwarding the implementer subagent's actual resolved PATH for #905 — no mechanism exists anywhere in this codebase for an Agent-dispatched subagent to report its own shell environment back to the orchestrator; documenting the requirement is the fix, not building that plumbing.
+
+## Decisions
+
+### fold-all-seven-into-one-task
+
+- Decision: fix all 7 issues in this single task rather than splitting #973 out or deferring #941.
+- Rationale: all 7 live in the same subsystem (mill-go-base and its scripts), several touch the same files (`SKILL.md`), and a reviewer benefits from seeing them together. #973 is the largest (new helper + new skill) but not large enough to justify separate task overhead.
+- Rejected: splitting #973 into its own task (unnecessary coordination cost); deferring #941 entirely (better to close the loop with a documented non-fix than leave it dangling).
+
+### 941-is-not-an-in-repo-bug
+
+- Decision: #941 gets no functional code change — only a clarifying comment.
+- Rationale: exploration confirmed the literal `${CLAUDE_PLUGIN_ROOT}` string is unresolved on disk in `SKILL.md` (verified at multiple line numbers: 38, 41, 70, 483, 492, 510, 546, 548, 554, 574, 598, 603, 607, 622, 624-626, 780, 864). A repo-wide grep found no build/render/packaging script that does template substitution on SKILL.md before install — `update-plugins.ps1` does a byte-for-byte `robocopy` mirror into the plugin cache, no text substitution. The pre-resolution the original reporter observed happens purely in the external Claude Code harness's Skill-tool-loading mechanism, which this repo does not control.
+- Rejected: attempting an in-repo templating fix (there is nothing in-repo to fix); silently closing with no trace (a future session could re-investigate and re-file the same non-actionable report without this note).
+
+### 973-remove-batch-refuses-on-live-dependents
+
+- Decision: the `/mill-descope-batch` skill (not `_status.remove_batch` itself — that helper has no visibility into `depends-on`, which lives only in the plan overview, not status.md) reads `00-overview.md`'s Batch Index via `_plan_dag.extract_batch_index` and refuses to proceed if any remaining batch's `depends-on` still names the batch being removed, rather than auto-cascading or silently stripping the dependency link. `_status.remove_batch` itself is called only after this check passes, and unconditionally pops the entry — it performs no dependent-awareness of its own.
+- Rationale: silently cascading or stripping risks removing or reshaping more of the DAG than the operator intended; a hard refusal forces an explicit, visible second action (descope the dependent too, or edit its `depends-on`) — consistent with `_plan_dag.validate()`'s existing fail-closed posture on file-ref mismatches. Splitting the check into the skill layer (which has both status.md and overview access) rather than the status.py helper (which only ever sees status.md) keeps `_status.py`'s existing single-file-scope convention intact — every other function in that module (`init_batches`, `set_batch_field`, `set_batch_fields`) only ever reads/writes status.md, never `00-overview.md`.
+- Rejected: auto-cascade (removes scope the operator didn't ask to remove); auto-strip the dependency link (silently changes the DAG's semantics — a batch that depended on the removed one now has one fewer prerequisite without anyone deciding that was safe).
+
+### 906-reuse-existing-plan-validate-helper
+
+- Decision: reuse existing `_plan_validate.py` primitives for the self-resolve card-numbering step, rather than writing new prose-only instructions or a new module-level helper — but reuse `_parse_cards` (the per-batch card-number reader) for pre-write collision detection, not `_check_card_numbering` directly. `_check_card_numbering` was the first candidate but is structurally unusable for this purpose: it returns only an `errors` list of numbers *already* duplicated across batches on disk, and a not-yet-written candidate number can never appear as a duplicate in that check's unmodified-on-disk input — the per-batch number sets it needs for the "does N belong to another batch" check are computed internally but never returned. `_parse_cards`, the lower-level primitive `_check_card_numbering` itself calls internally (lines 908-920) to build those sets, is reused instead for the pre-write check; `_check_card_numbering` is still reused as-is for a post-write defensive re-check (see Scope #906), since after the write it correctly detects a genuine on-disk duplicate.
+- Rationale: `_parse_cards` already does exactly the needed per-batch enumeration (it's what `_check_card_numbering` itself is built on) but isn't referenced anywhere under `plugins/mill/skills/mill-go-base/` today — confirmed via grep. Reusing tested logic beats a new prose instruction the Builder could interpret loosely or skip, and reusing the correct primitive (rather than one that returns the wrong shape of answer) avoids building a check that silently never fires.
+- Rejected: a purely textual instruction ("check other batch files for used numbers") without invoking the helper — same failure mode as today, just with more words.
+
+### 905-document-not-plumb-path
+
+- Decision: fix #905 via documentation (export required PATH dirs before running mill-go) rather than building implementer-PATH-capture-and-forward plumbing.
+- Rationale: the implementer runs as a separate Agent-dispatched subagent, not a subprocess mill directly spawns with a knowable environment — there is no existing mechanism anywhere in this codebase for a subagent to introspect and report its own shell PATH back to the orchestrator, and building one is materially larger than this bug warrants. `_run_verify_gate` already inherits `os.environ` from whatever process invokes it (`_implementer_common.py:878-884`, no `env=` override), so the fix is ensuring that process — the orchestrator's own Bash-tool shell — has the right PATH, which is the operator's/session's environment setup, not mill's code.
+- Rejected: implementer self-reports resolved PATH in its JSON envelope, finalize passes it as `env=` — assumes a capability (subagent PATH introspection/reporting) that doesn't exist and would need new implementer-brief instructions plus envelope-schema changes for a narrow environment-parity gain.
+
+## Technical context
+
+- All 7 fixes but #973 touch `plugins/mill/skills/mill-go-base/SKILL.md` directly (and #906 also touches `plugins/mill/skills/mill-go-base/holistic-review.md`); #973 additionally touches `plugins/mill/scripts/_status.py` (new function) and adds a new skill directory `plugins/mill/skills/mill-descope-batch/`.
+- Relevant existing helpers to reuse, not reimplement:
+  - `_plan_validate._parse_cards(batch_text)` — `plugins/mill/scripts/_plan_validate.py:132` — per-batch card-number enumeration, reused pre-write to build the collision-check's `used_numbers` set (#906). `_plan_validate._check_card_numbering(batch_files)` — `:908-974` — reused as a post-write defensive re-check only (it cannot detect a pre-write candidate's collision, since it only flags numbers already duplicated on disk — see Decision `906-reuse-existing-plan-validate-helper`).
+  - `_cleanliness.compute_scope_violations(project_root, git_root)` — `plugins/mill/scripts/_cleanliness.py:57-110` — already computes the untracked-file scope_violations list; #936 only needs to consume the field the implementer envelope already carries, not compute anything new.
+  - `_plan_dag.extract_batch_index` / `_check_file_refs` / `_plan_dag.validate` — `plugins/mill/scripts/_plan_dag.py:68`, `:240`, `:647` (`validate` calls `_check_file_refs` internally at line 656) — the two-way Batch-Index-to-disk-files check `remove_batch`'s companion skill must keep satisfied when it moves the orphaned card file out of `plan_dir` into `_mill/descoped/`.
+  - `_status.init_batches` / `set_batch_field` / `set_batch_fields` — `plugins/mill/scripts/_status.py:933/946/980` — existing batch-mutation helpers `remove_batch` sits alongside; note none of them currently support deletion (`set_batch_field` raises `ValueError` if the name is absent, confirming no removal path exists today).
+- `plugins/mill/skills/mill-go-base/handoff.md:90-93` already documents the fixer-envelope `scope_violations` handling — the #936 fix is explicitly a mirror of this existing text applied to the implementer envelope's Execute-flow path, not new design.
+- `_posix_shell_run_args` (`_implementer_common.py:609-632`) confirms no login-shell invocation exists anywhere in the verify-replay path (Windows: `[bash, "-c", cmd]`; other platforms: `shell=True`) — this rules out "make the replay use a login shell" as a fix for #905, since neither the implementer's nor the finalize's shell would source profile files either way; the actual variable is which process's already-inherited `os.environ` gets used.
+
+## Constraints
+
+No `CONSTRAINTS.md` present at the hub root — none beyond the project's standing conventions (see root `CLAUDE.md`): `mill-config.yaml`/template sync, no `sed`, ASCII-only `print()`/`_log()` output, and the existing "Why not fork?" prose in `mill-go-base/SKILL.md` steering role dispatch away from `fork` (paraphrased, not a verbatim rule anywhere in-repo; #927 extends this same steering to non-role-dispatch fork usage too).
+
+## Testing
+
+- **`_status.remove_batch`** (#973) — TDD candidate. Unit test in `plugins/mill/unit_tests/` per existing `_status.py` test conventions: removing an existing batch drops it from `## Batches`; removing a nonexistent batch raises the same style of `ValueError` `set_batch_field` already raises. The `depends-on` refusal check itself is a separate test at the `/mill-descope-batch` skill layer (or its backing helper function, if plan-writing extracts one), since `_status.remove_batch` has no `depends-on` visibility — see the corrected `973-remove-batch-refuses-on-live-dependents` Decision.
+- **Card-number selection wiring** (#906) — cover with a unit test asserting the self-resolve path's new card-number selection: (a) picks the target batch's own `max+1`; (b) correctly detects a pre-write collision against another batch's existing numbers (built via `_parse_cards`, not `_check_card_numbering` — a test using only `_check_card_numbering` on unmodified fixtures would pass even with the original, broken design, so the test must exercise the actual `used_numbers`-set-membership check); (c) makes no write to the target batch file on a detected collision. Existing `_parse_cards`/`_check_card_numbering` unit coverage (if any — check `plugins/mill/unit_tests/` for existing `_plan_validate` tests) should already cover those helpers' own logic; new coverage here is for the wiring and the collision/no-write behavior.
+- **scope_violations surfacing** (#936) — unit test asserting the Execute flow's step 2/2b branches on a non-empty `scope_violations` field from an implementer finalize envelope the same way it already would for a fixer envelope.
+- **#927, #980, #941** — documentation-only changes; verify by re-reading the rendered `SKILL.md` section for correctness (no forward references remain for #980, the fork warning reads clearly for #927, the harness-boundary note is accurate for #941). No automated test applies.
+- **#905** — documentation-only; no automated test applies (there is nothing in-repo to assert against an external shell PATH). Manual verification: confirm the new note appears adjacent to the existing finalize-timeout note and correctly names the mechanism (`_run_verify_gate` inherits orchestrator env).
+
+## Q&A log
+
+- **Q:** Fix all 7 issues in this task, or split/defer any? **A:** [auto-pick] Fix all 7. **Why:** same subsystem, small individually, no cross-issue conflict found.
+- **Q:** How to handle #941 given it's not reproducible as an in-repo bug? **A:** [auto-pick] No code fix; add a clarifying comment near the Path variable rule. **Why:** leaves a breadcrumb without pretending there's a fix to make in-repo.
+- **Q:** #973 — build a real descope mechanism or just document a hand-edit carve-out? **A:** [auto-pick] Build `_status.remove_batch()` + `/mill-descope-batch` skill. **Why:** a hand-edit carve-out re-legitimizes the anti-pattern Board discipline exists to prevent.
+- **Q:** #906 — wire in the existing `_check_card_numbering` helper, or add new prose instructions? **A:** [auto-pick] Wire in the existing helper. **Why:** reuses tested logic instead of a skippable prose instruction.
+- **Q:** #905 — document the PATH requirement, or build PATH-capture-and-forward plumbing? **A:** [auto-pick] Document only. **Why:** no mechanism exists for a subagent to report its own shell PATH; building one is out of proportion to the bug.
+- **Q:** #936 — surface scope_violations as a blocking/logic branch, or just log it? **A:** [auto-pick] Surface as a branch mirroring the fixer path. **Why:** issue reports the silent-ignore itself as the bug; log-only reproduces the same "caught by luck" problem.
+- **Q:** #927 — narrow warning in mill-go-base only, or also touch mill-start's fork usage? **A:** [auto-pick] mill-go-base only. **Why:** task is scoped to mill-go execution bugs; mill-start already has its own fork-caution section.
+- **Q:** #980 — reorder the Entry steps, or add a note instead? **A:** [auto-pick] Reorder. **Why:** removes the forward reference outright.
+- **Q:** Testing approach — unit tests for testable logic, or doc-only everywhere? **A:** [auto-pick] Unit tests for `_status.remove_batch`, the scope_violations branch, and the card-numbering wiring; doc-only fixes verified by re-reading. **Why:** matches which fixes are actually code vs. documentation.
+- **Q:** #973 skill name/shape? **A:** [auto-pick] `plugins/mill/skills/mill-descope-batch/SKILL.md`, invoked as `/mill-descope-batch <batch-name>`. **Why:** matches the issue's own suggested name.
+- **Q:** #973 — what happens to a descoped batch's dependents? **A:** [auto-pick] Refuse removal if any remaining batch still depends on it. **Why:** avoids silently corrupting the DAG; forces an explicit second action.
+
+
+### From _mill/plan/00-overview.md
+
+
+```yaml
+task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
+slug: mill-go-execution-and-bookkeeping-bugs
+approved: true
+started: 20260904-084117
+parent: main
+root: ""
+verify: null
+```
+
+### From _mill/plan/01-mill-go-base-doc-fixes.md
+
+
+```yaml
+task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
+batch: mill-go-base-doc-fixes
+number: 1
+cards: 4
+verify: null
+depends-on: []
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/02-mill-go-base-scope-and-numbering-fixes.md
+
+
+```yaml
+task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
+batch: mill-go-base-scope-and-numbering-fixes
+number: 2
+cards: 3
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-plan-validate-card-numbering.py
+depends-on: [1]
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_plan_validate.py`
+- **Creates:**
+  - `plugins/mill/unit_tests/test-plan-validate-card-numbering.py`
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+  - `plugins/mill/skills/mill-go-base/holistic-review.md`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/03-mill-descope-batch.md
+
+
+```yaml
+task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
+batch: mill-descope-batch
+number: 3
+cards: 3
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-plan-dag.py
+depends-on: []
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/unit_tests/test-status.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_plan_dag.py`
+  - `plugins/mill/unit_tests/test-plan-dag.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `SKILLS.md`
+- **Creates:**
+  - `plugins/mill/scripts/millpy-descope-batch.py`
+  - `plugins/mill/skills/mill-descope-batch/SKILL.md`
+- **Deletes:** none
+
+## Conflicting files
+
+- `plugins/mill/skills/mill-go-base/SKILL.md`
+
+## Instructions
+
+For each file listed above:
+
+1. Read the file and locate every conflict block (`<<<<<<<`, `=======`, `>>>>>>>`).
+2. Understand both sides of the conflict — what each branch intended.
+3. Write a resolution that preserves the intent of both sides.
+   When both sides modify **different, non-overlapping parts** of the same conflict region — for example, different columns of one table row, different keys of one object, or disjoint lines of a prose block — **combine both edits** into a single resolved structure.
+   Do NOT pick one side wholesale just because the region overlaps syntactically;
+   picking one side wholesale is correct only when the two changes are genuinely mutually exclusive (e.g. the same key is renamed to two different values).
+   Worked example: if `ours` changes column A and `theirs` changes column B of the same table row, the resolution keeps both column changes in a single row — it does not discard either.
+4. Before keeping content from either side inside a conflict hunk, search the rest of the file (outside the hunk) for that same content.
+   This judgment call is scoped narrowly — it applies only when a hunk's content might be a moved duplicate of content living elsewhere in the file;
+   it does NOT apply to every ordinary step-3 disjoint-region combine (e.g. the column-A/column-B worked example above), which remains today's silent, high-confidence success path.
+   Two branches:
+   - **Confident case:** if the content clearly already exists elsewhere and the surrounding context makes it unambiguous that this is the same item having been moved (not two independent, separately-intended copies) — do not re-add it in the hunk;
+     keep only the other side's unrelated edit.
+     Worked example: one side moves a roadmap item from `## Planned` to `## Done`, while the other side makes an unrelated edit elsewhere in the file.
+     The resolution keeps the item only under `## Done`;
+     it is not re-added under `## Planned`.
+   - **Ambiguous case:** if you cannot confidently tell whether this is the same moved content or a legitimate independent duplication — fall back to step 3's default (keep both) rather than guessing, and report the ambiguity via the `discarded` field (see Report section) with the description `"kept both sides of a conflict, ambiguous move-vs-duplicate"`.
+     Worked example: a similarly-worded item appears in two different sections and you cannot tell whether it is the same item moved or a legitimate second, independently-added item.
+     The resolution keeps both occurrences and reports the ambiguity via `discarded`.
+5. Run `git -C /home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs add <file>` to stage the resolved file.
+6. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C /home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs rm <file>` instead of editing;
+   that stages the intentional deletion.
+7. For UD conflicts — files this branch **modified** that the parent branch **deleted**: do not silently keep the modification.
+   Instead: a. Run `git log --diff-filter=D --oneline MERGE_HEAD -- <file>` to find the deletion commit on the parent. b. Run `git show <deletion-commit>` to inspect context. c. If the deletion commit message mentions a replacement file (e.g. "replaced by", "moved to", "consolidated into"),
+   or the commit also adds a file in the same directory with overlapping content: stage the deletion — `git -C /home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs rm <file>`. d. If detection is inconclusive: report `{"status":"stuck","stuck_type":"logic","reason":"modify/delete conflict on <file>: cannot determine if parent deletion is a replacement -- operator must decide"}` and halt.
+   Do NOT silently keep the modification.
+8. Before reporting `{"status":"success"}` (with or without `discarded`), re-read each file listed in Conflicting files in full and explicitly verify no contradictory losing-side claims survive the resolution — e.g. a stale value from one side of the conflict left alongside the correct value from the other side, or a claim that only made sense before the other side's edit was applied.
+   If you find a contradiction you missed, fix it before reporting.
+   If you find a contradiction you cannot confidently resolve, report `{"status":"stuck","stuck_type":"logic","reason":"self-verification found an unresolved contradiction in <file>: <description>"}` instead of `{"status":"success"}`.
+
+Never use `git checkout --ours` or `git checkout --theirs` — they silently discard one side of the conflict.
+
+## Report
+
+Your last output line MUST be a bare JSON object (no code fence, no backticks):
+
+On success (nothing discarded):
+
+{"status":"success"}
+
+On success with discarded content — if you had to drop content from one side (e.g. two sides made mutually exclusive changes and only one could survive), list each dropped item:
+
+{"status":"success","discarded":["<short description of what was dropped from which side>"]}
+
+An empty or absent `discarded` field means nothing was lost.
+If anything was discarded, you MUST list it;
+an empty list when content was actually dropped is a protocol violation. `discarded` also carries the step 4 ambiguous-case entry `"kept both sides of a conflict, ambiguous move-vs-duplicate"` — even though nothing was technically dropped in that case, the field's purpose is to surface anything the operator should double-check before `git merge --continue`, which covers both a genuine drop and a kept-both ambiguity.
+The `mill-merge-in` frontend reads this field and surfaces any losses (or ambiguities) to the operator before continuing, rather than silently running `git merge --continue`.
+
+If you cannot resolve one or more conflicts:
+
+{"status":"stuck","stuck_type":"logic","reason":"<one-line description of what you could not resolve>"}
+
+Anything other than this JSON object on the last line is a protocol violation;
+the merge-in dispatcher treats that as stuck_type: logic with reason "no structured report" — your work is lost.
+Do not wrap the JSON in a code fence;
+do not add commentary after it.
+
+## Tools
+
+Available: Read, Edit, Write, Bash, Grep, Glob.
+Use `git -C /home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs` for any git commands;
+do not `cd`.
+Worktree cwd is `/home/knatte/Code/millhouse/wts/mill-go-execution-and-bookkeeping-bugs`.
