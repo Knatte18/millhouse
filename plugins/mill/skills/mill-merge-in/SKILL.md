@@ -105,14 +105,29 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 ### 3.5. Baseline recompute
 
-Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins:
+Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins.
+
+This call does not go through Agent-mode dispatch.
+Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+Instead of a capped foreground call, it is background-dispatched and polled via the same `millpy-bg.py --slug <name> -- ...` pattern `mill-go-base/SKILL.md`'s `### 0.5. Baseline pre-flight` section uses:
+
+> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree (this is the first `millpy-bg` call site in `mill-merge-in/SKILL.md` or `mill-merge/SKILL.md` — see `mill-go-base/SKILL.md`'s 0.5/0.6 sections for the callout's precedent). If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), this is the one deliberate divergence from the imported callout's wording: rather than halting the skill, treat this specific call exactly like the `"dead"` branch below -- log the reason (ASCII-only) and continue past this step. Step 3.5 is fail-safe by design (an error here degrades to a `baseline: "error"` result, not a merge failure), so a cwd-mismatch on the dispatch attempt itself is scoped to the dispatch attempt only, not a new halt condition for this step.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --recompute-baseline
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+    --slug merge-in-baseline-recompute -- \
+    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --recompute-baseline
 ```
 
-- This call is synchronous and does not go through Agent-mode dispatch.
-  Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until the line `[mill-bg] EXIT` appears, running the same `_bg.check_bg_status` liveness-check loop `mill-go-base/SKILL.md`'s 0.5 section uses:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+```
+
+Parse the JSON result and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> log the reason (ASCII-only) and continue -- never halt, matching this step's own "It never blocks or fails the merge" contract below.
+Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the result, exactly as `mill-go-base/SKILL.md`'s 0.5 section does.
+
 - It never blocks or fails the merge: on any internal error it prints a `baseline: "error"` result and returns exit 0 (fail-safe).
   This step never triggers the Rollback section.
 - If step 1's no-op check already exited early ("Nothing to merge"), this step never runs at all — the "## No-op guarantee" section's promise ("this skill touches nothing" when there was nothing to merge) continues to hold.
