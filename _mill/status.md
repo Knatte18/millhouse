@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -22,4 +22,5 @@ discussed  '2026-09-04T08:29:20Z'
 planning  '2026-09-04T08:36:32Z'
 plan-review-r1  '2026-09-04T08:41:58Z'
 plan-fix-r1  '2026-09-04T08:43:19Z'
+planned  '2026-09-04T08:43:32Z'
 ```
