@@ -23,7 +23,7 @@ The result is that every review prompt (and every persisted review artefact) rep
 - `build_manifest_section()` -- render each entry relative to the matching root.
 - `bulk_files()` and `bulk_files_with_diff()` -- relativize the `--- FILE: ... ---`, `--- END FILE: ... ---`, `--- DIFF: ... ---`, `--- END DIFF: ... ---` delimiters.
 - `_review_plan.py` prompt assembly: the `read_list` / `batch_list` / `Overview:` / `Batch:` lines at the four sites (batch-mode ~lines 232-253, second batch-mode block ~lines 505-526, holistic ~lines 614-635, run-holistic ~lines 1045-1066).
-- `_review_code.py` `build_artefact_section()` (~lines 158-188): `batch_list`, `read_list`, `Overview:` line.
+- `_review_code.py` `_build_artefact_section()` (defined at line 136; the interpolation sites are ~lines 158-188): `batch_list`, `read_list`, `Overview:` line.
 - Emitting the `## Path roots` header once per artefact section so the absolute roots are still stated exactly once.
 - Unit tests for the new helper and flow-level assertions that assembled prompts carry no absolute-root prefix.
 
@@ -43,7 +43,7 @@ The result is that every review prompt (and every persisted review artefact) rep
 
 - Decision: relativization is a **display-only** layer applied at prompt-assembly time. `resolve_ref_paths()` and `resolve_existing_paths()` keep their current signature and keep returning absolute `list[Path]`.
 - Rationale: those absolute paths are load-bearing -- they are handed to `_read_for_bulk()`, to `git diff` invocations, and to `Path.exists()` checks. Changing the return type would touch every one of the 10+ call sites and risk breaking file reads for a purely cosmetic gain. The leak is at the render boundary, so the fix belongs at the render boundary.
-- Rejected: (a) returning `(path, display)` tuples or a `ResolvedRef` dataclass from the resolvers -- much larger blast radius, and callers that only want the path now have to unpack; (b) relativizing inside each template renderer -- duplicates the same longest-match logic at six sites and guarantees drift.
+- Rejected: (a) returning `(path, display)` tuples or a `ResolvedRef` dataclass from the resolvers -- much larger blast radius, and callers that only want the path now have to unpack; (b) relativizing inside each template renderer -- duplicates the same longest-match logic at all five `build_manifest_section` assembly sites (four in `_review_plan.py`, one in `_review_code.py`) and guarantees drift.
 
 ### display-roots-value-type
 
@@ -125,7 +125,7 @@ Everything lives under `plugins/mill/scripts/`.
 
 Note the inconsistency to preserve-or-normalise deliberately: the per-batch `read_list` uses `f"- {p}"` (no backticks) while the holistic `batch_list`/`read_list` use `f"- \`{p}\`"`. Backticking is cosmetic and orthogonal to this task -- keep each site's existing backtick convention, change only the path rendering.
 
-**`_review_code.py`** -- one assembly site, `build_artefact_section()` at ~lines 130-190: `all_bulked` -> `build_manifest_section` (158), tool-use `batch_list` (161) / `read_list` (162), bulk-mode `bulk_files` / `bulk_files_with_diff` (~173-177), deletes (188). Its `prepare()` (line ~196) already takes `project_root`, `wiki_root`, `git_root` -- `build_artefact_section` currently receives only an optional `project_root`, so it needs the new `roots` argument threaded in from `prepare`.
+**`_review_code.py`** -- one assembly site, the module-private `_build_artefact_section()` (defined at line 136, called once at line 349): `all_bulked` -> `build_manifest_section` (158), tool-use `batch_list` (161) / `read_list` (162), bulk-mode `bulk_files` / `bulk_files_with_diff` (~173-177), deletes (188). Its `prepare()` (line ~196) already takes `project_root`, `wiki_root`, `git_root` -- `_build_artefact_section` currently receives only an optional `project_root`, so it needs the new `roots` argument threaded in from `prepare` at the line-349 call.
 
 **Review templates** (`plugins/mill/templates/review-{plan,code}-{batch,holistic}.md`) reference `--- FILE: <path> ---` in their source-grounding rule prose. That prose stays valid verbatim -- the delimiter shape is unchanged, only the `<path>` inside it gets shorter. No template edits.
 
@@ -163,8 +163,8 @@ Note the inconsistency to preserve-or-normalise deliberately: the per-batch `rea
 
 **Flow-level tests (the real guard against a missed call site):**
 
-7. In `plugins/mill/unit_tests/test-review-plan-flow.py`: for each of the four assembly paths (per-batch bulk, per-batch tool-use, holistic, run-holistic), assert the generated `prompt_text` contains **no occurrence of `str(project_root)`** and does contain the expected relative token (e.g. `path/a`) and the `## Path roots` heading.
-8. In `plugins/mill/unit_tests/test-review-code-flow.py`: same two assertions for `build_artefact_section` in both `bulk` and `tool-use` reviewer modes.
+7. In `plugins/mill/unit_tests/test-review-plan-flow.py`: cover the **four canonical `_review_plan.py` assembly sites** named in Scope and Technical context -- batch-mode (`_review_one_batch`, manifest at line 232), second batch-mode block (inside `prepare()`, manifest at line 505), holistic (manifest at 614), run-holistic (manifest at 1045). These are four *sites in two different functions* (`_review_one_batch` at line 134; `prepare()` at 382-661), not bulk/tool-use mode variants of one site -- the two per-batch blocks are near-duplicates and it is exactly the kind of pair where one gets updated and the other missed. For each site assert the generated `prompt_text` contains **no occurrence of `str(project_root)`**, does contain the expected relative token (e.g. `path/a`), and contains the `## Path roots` heading. Additionally exercise both `bulk` and `tool-use` reviewer modes at whichever sites support both, so the `read_list` / `batch_list` interpolations are covered as well as the manifest and the `--- FILE: ---` delimiters. If the existing test harness cannot reach one of the four sites directly, that is itself a finding for mill-plan to solve -- do not drop the site from coverage, since the flow-level assertion is the only guard against a production call site left on the defaulted-`None` `roots` path.
+8. In `plugins/mill/unit_tests/test-review-code-flow.py`: same three assertions for `_build_artefact_section` in both `bulk` and `tool-use` reviewer modes.
 9. `millpy-merge-in-subagent.py` verification: an assertion (or, if no natural home exists, a documented manual check recorded in the plan) that `conflicting_files` renders the `--files` argument verbatim -- pinning that repo-relative input stays repo-relative and that this file needs no change.
 
 **Scenarios that must be covered:** empty manifest (`N=0`, `(no files)` unchanged); a plan with a non-empty `root:` sub-path; a manifest mixing project-root, wiki-root, and outside-any-root paths in one list; tool-use mode and bulk mode for both plan and code reviews.
@@ -173,7 +173,7 @@ Run the suite via `plugins/mill/unit_tests/run-all.py` with a `PYTHONPATH=` (emp
 
 ## Q&A log
 
-- **Q:** Where should relativization happen -- display-only layer, resolve-time return-type change, or per-template? **A:** [auto-pick] Display-only layer in `_review_common.py`. **Why:** the resolvers' absolute paths are load-bearing for file reads and `git diff`; the leak is purely at the render boundary, so fixing it there keeps the blast radius to the six assembly sites.
+- **Q:** Where should relativization happen -- display-only layer, resolve-time return-type change, or per-template? **A:** [auto-pick] Display-only layer in `_review_common.py`. **Why:** the resolvers' absolute paths are load-bearing for file reads and `git diff`; the leak is purely at the render boundary, so fixing it there keeps the blast radius to the five assembly sites.
 - **Q:** How should multiple roots (project, git, wiki) be rendered? **A:** [auto-pick] `DisplayRoots` dataclass with longest-match-wins and a `wiki/` prefix for wiki-routed paths. **Why:** `wiki/<rel>` is exactly the token form the plan card wrote, so the manifest round-trips to the plan text; longest-match handles `root:` sub-path plans correctly.
 - **Q:** Should the new `roots` parameter be optional or required on the shared helpers? **A:** [auto-pick] Keyword-only, defaulting to `None` (absolute, today's behaviour). **Why:** keeps the existing `test-review-common.py` helper tests green and the diff focused; the flow-level prompt assertions are what actually catch a missed production call site.
 - **Q:** Should tool-use `read_list` / `batch_list` also go relative, given the reviewer must `Read` those paths itself? **A:** [auto-pick] Yes, relative, with the `## Path roots` header stating the absolute root once. **Why:** tool-use reviewers run with cwd at the task worktree so relative Reads resolve; a relative manifest sitting directly above an absolute read-list would be confusing.
