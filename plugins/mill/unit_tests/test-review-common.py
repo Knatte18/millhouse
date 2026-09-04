@@ -2081,6 +2081,35 @@ def main() -> int:
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_deletes_section no trailing newline")
 
+    # Regression pin: build_deletes_section is fed raw plan-relative deletes_union tokens
+    # (never resolved absolute Paths), so it is already correct and must NOT gain a
+    # roots parameter -- this pins that a future change cannot silently regress it.
+    empty_result = build_deletes_section([])
+    assert empty_result == "", f"Expected empty string for empty input, got {empty_result!r}"
+    print("PASS: pin_build_deletes_section_tokens_already_relative empty-list -> empty string")
+
+    relative_tokens = [
+        "plugins/mill/scripts/_review_common.py",
+        "old_module.py",
+        "wiki/task/discussion.md",
+    ]
+    result = build_deletes_section(relative_tokens)
+    assert result.startswith(f"## Intentionally deleted (N={len(relative_tokens)})"), (
+        f"Wrong heading: {result!r}"
+    )
+    lines = result.split("\n")
+    bullet_lines = lines[2:]
+    assert len(bullet_lines) == len(relative_tokens), f"Got {bullet_lines!r}"
+    for token, bullet_line in zip(relative_tokens, bullet_lines):
+        assert bullet_line == f"- {token}", f"Got {bullet_line!r} for token {token!r}"
+    assert not any(line.startswith("/") for line in bullet_lines), (
+        f"No absolute path prefix should appear anywhere in the output: {result!r}"
+    )
+    assert "\\" not in result, f"No absolute path prefix should appear anywhere: {result!r}"
+    print(
+        "PASS: pin_build_deletes_section_tokens_already_relative verbatim tokens, no absolute prefix"
+    )
+
     # ---------------------------------------------------------------------------
     # resolve_existing_paths
     # ---------------------------------------------------------------------------
