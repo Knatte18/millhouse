@@ -21,6 +21,8 @@ Checks performed (check keys):
     depends-on-unknown — (#10 check 4) depends-on entries referencing unknown batch names
     depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview Batch Index
         depends-on for the same batch
+    verify-batch-mismatch — a batch's overview Batch Index verify: disagrees with that batch file's
+        own frontmatter verify: (command or cwd)
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both modifying the same file
         (includes Move endpoints)
     reads-not-backtick-path — (#10 check 6) Context:/Edits:/Creates: entries not in backtick-only
@@ -3019,8 +3021,8 @@ def run(
     plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd,
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
-    move-source-missing, move-target-collision, move-mechanic-missing), and
-    cross-batch-creates-no-depends-on.
+    move-source-missing, move-target-collision, move-mechanic-missing),
+    cross-batch-creates-no-depends-on, and verify-batch-mismatch.
 
 
     Args:
@@ -3082,6 +3084,7 @@ def run(
     errors.extend(_check_card_numbering(batch_files))
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
+    errors.extend(_check_verify_batch_mismatch(batch_files, overview_text, project_root))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
