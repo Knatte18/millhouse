@@ -45,6 +45,8 @@ batches:
     commit_sha: a909a04dd54e07d98ea4e4d34440862635769a15
     verify_baseline_failures: []
   - name: mill-go-base-scope-and-numbering-fixes
-    state: pending
+    state: running
+    implementer_session: b3ff973e-ed96-4bb1-82cd-0697d428c4bf
+    start_sha: dec05f845c6d1af357035939fb4f8fc085f39575
     verify_baseline_failures: []
 ```
