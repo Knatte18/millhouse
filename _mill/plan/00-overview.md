@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-merge-in/mill-finalize/codeguide-update: cleanup-ordering and path-resolution bugs"
 slug: "mill-merge-finalize-codeguide-bugs"
-approved: false
+approved: true
 started: "20260904-101011"
 parent: "main"
 root: ""
