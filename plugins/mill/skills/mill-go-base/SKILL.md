@@ -878,6 +878,23 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   Never re-fire with a fresh `start_sha`.
 - `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
   **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text.
+  When self-resolve determines a new implementable card is warranted (distinct from, and in addition to, the `## Prior failure` bullet logged above), first derive `target_batch_file` — `compute_next_card_number`'s `used_numbers` dict is keyed by file stem (e.g. `01-mill-go-base-doc-fixes`, always including the `NN-` prefix), never by the bare `name:` field `batch_name` already holds here (e.g. `mill-go-base-doc-fixes`, from `order`'s `_plan_dag.topo_order` list) — via inline Python:
+  ```python
+  overview_text = overview_path.read_text(encoding="utf-8")
+  batches = _plan_dag.extract_batch_index(overview_text)
+  target_batch_file = Path(next(e["file"] for e in batches if e["name"] == batch_name)).stem
+  ```
+  Passing `batch_name` straight through as `target_batch_file` without this derivation would make `compute_next_card_number` always raise (no `used_numbers` key would ever match), so this derivation step is not optional.
+  Only once `target_batch_file` is derived, call:
+  ```python
+  next_card = _plan_validate.compute_next_card_number(plan_dir, target_batch_file)
+  ```
+  `signature: _plan_validate.compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int`
+
+  On success (no exception), append a new `### Card N:` heading (using the returned number) to the target batch's own `## Cards` list (not inside `## Prior failure`), following this file's existing card-field conventions (`Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`/`Requirements:`/`Commit:` per `plugins/mill/templates/plan-batch.md`), then re-run `_check_card_numbering` (imported from `_plan_validate`) once more as a post-write defensive re-check, passing `batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")` (the same glob-and-filter expression `compute_next_card_number` uses internally, re-globbed fresh so the just-written card is included) — `signature: _check_card_numbering(batch_files: list[Path]) -> list[dict]` — before proceeding to the "record the self-resolve... re-fire" steps below unchanged.
+
+  On `PlanDAGError` (a genuine numbering-range collision — batches are expected to occupy disjoint numeric ranges at plan-write time), make no write to the target batch file at all and instead route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked*) — a card-numbering collision means self-resolve itself cannot safely proceed, so it escalates immediately rather than attempting the retry-then-escalate cycle the rest of this bullet uses for implementer-reported failures.
+
   Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck ({batch_name})"`.
   Then re-fire the implementer fresh for this batch.
   If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
