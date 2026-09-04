@@ -1,2 +1,0 @@
-- `phase: blocked` row's `--approve`/`--revise` text is dead prose: **Location:** `plugins/mill/skills/mill-plan/SKILL.md:78` vs `:117-138` ("### Entry: resuming after a max-rounds block")
-- Live round-cap override not wired at any concrete dispatch site: **Location:** `plugins/mill/skills/mill-plan/SKILL.md:316` vs dispatch sites `:417-421`, `:457-475` (esp. `:461`), `:494-495`, `:501-514` (esp. `:505`)
