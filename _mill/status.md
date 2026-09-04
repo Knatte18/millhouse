@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: review-plan-verdict-envelope-model-bugs
 branch: hanf/review-plan-verdict-envelope-model-bugs
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-04T08:10:15Z'
 discussed  '2026-09-04T08:10:15Z'
 planning  '2026-09-04T08:12:36Z'
 plan-review-r1  '2026-09-04T08:14:34Z'
+planned  '2026-09-04T08:14:58Z'
 ```
