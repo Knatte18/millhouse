@@ -7,7 +7,8 @@ each review round).
 
 Public API:
     run(plan_dir, project_root, *, root=None, wiki_root=None, git_root=None, skip_checks=frozenset(),
-        max_cards_per_batch=10, max_batch_context_tokens=120000, parent_branch=None) -> list[dict]
+        max_cards_per_batch=10, max_batch_context_tokens=120000, parent_branch=None,
+        done_gate=None) -> list[dict]
     Validate plan files in plan_dir. Returns a sorted list of error dicts.
     Each error dict has keys: {check, batch, card, path, message}.
 
