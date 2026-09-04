@@ -38,7 +38,9 @@ batches:
     commit_sha: e7395be72fff9f0642048aec008816e8a8bc11ae
     verify_baseline_failures: []
   - name: validator-tests
-    state: pending
+    state: running
+    implementer_session: e51fd9f0-bdae-453c-bbf9-77410fa7d9de
+    start_sha: 10a4d27be34bae8c32a6da9e37e6ff4bb0e4bf28
     verify_baseline_failures: []
   - name: fix-table-docs
     state: pending
