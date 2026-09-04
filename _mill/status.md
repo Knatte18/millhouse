@@ -38,7 +38,9 @@ batches:
     start_sha: 1a4ffc423b141ed17d9da601588e187ce31c2c96
     commit_sha: 98acdf6bb376659e58b1449f39d774a852ab9d8e
   - name: git-commit-staging-verification
-    state: pending
+    state: running
+    implementer_session: 8f928731-294a-4000-b4a0-3d98615084ca
+    start_sha: 94566c95c163b2fd0ce9de8c8899788a3a7b8349
   - name: commit-sha-field-rename-and-regression-tests
     state: pending
     verify_baseline_failures: []
