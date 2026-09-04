@@ -401,7 +401,7 @@ If not `converged` and `round >= max_review_rounds`: run the branch's full termi
    NIT fixes fold into the same round's write and commit as the gap resolutions: no separate commit, no separate fixer report,
    and the Q&A log is not used for NITs (gaps are Q&A-logged;
    NITs are not).
-   When the final batch in this round is answered, write `<discussion_path>`, commit on the task branch (`git -C <worktree> add <discussion_path> <reviews_dir>/ _mill/briefs/ && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`), push, and start round N+1.
+   When the final batch in this round is answered, write `<discussion_path>`, call `_status.append_phase(status_path, f"discussion-gap-fix-r{N}", _timestamp.now_utc_iso())`, commit on the task branch (`git -C <worktree> add <discussion_path> <reviews_dir>/ _mill/briefs/ <status_path> && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`), push, and start round N+1.
    If a gap is genuinely impossible to answer (operator does not know yet), the operator may pick the recommended option and add a follow-up note inline — that is the same fallback as Phase: Discuss.
 
 If unresolved gaps remain after `max_review_rounds`: present them to the user for an explicit override ("ignore gap X for now") or more-info decision.
