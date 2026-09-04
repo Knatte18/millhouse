@@ -57,7 +57,9 @@ batches:
     start_sha: 0d56aa48592784175236ce561c0ea98e87809bdd
     commit_sha: 53182d1ed537fda8e297ce682dfce37956da3272
   - name: cleanliness-gate-dead-parent-recovery
-    state: pending
+    state: running
+    implementer_session: b1496602-e12f-4c4d-a810-54a962aff09f
+    start_sha: 15ac85a49813bb288b1f83b550f71331a0cbb7c2
   - name: step-5-5-liveness-probe
     state: pending
 ```
