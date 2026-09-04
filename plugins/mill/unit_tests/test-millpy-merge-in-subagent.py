@@ -591,6 +591,65 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             f"Expected no discarded field or empty list, got: {discarded!r}",
         )
 
+    def test_2x_conflicts_finalize_emits_pre_merge_head(self):
+        """--stage finalize conflicts mode: the corrective SHA is emitted as pre_merge_head, not
+        commit_sha (#953) -- HEAD at this point in the flow is still the pre-merge commit.
+        """
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz"}\n',
+            encoding="utf-8"
+        )
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_run, \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main([
+                "--mode", "conflicts",
+                "--files", "f.py",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        self.assertNotIn("commit_sha", data)
+        self.assertEqual(data["pre_merge_head"], "a" * 40)
+
+    def test_2x_conflicts_full_mode_emits_pre_merge_head(self):
+        """Full-mode conflicts success: the corrective SHA is emitted as pre_merge_head, not
+        commit_sha (#953), at the second conflicts-mode call site (_run_conflicts's own
+        _forward_output return).
+        """
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=(
+                '{"status":"success"}\n',
+                "fake-session",
+            ),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        self.assertNotIn("commit_sha", data)
+        self.assertEqual(data["pre_merge_head"], "a" * 40)
+
     def test_18_stage_finalize_verify_fix_reruns_verify(self):
         """--stage finalize verify-fix mode: re-runs verify, returns success if it passes."""
         agent_output_path = self.tmp_path / "agent-output.txt"
