@@ -2179,6 +2179,143 @@ SESSION_ID equals retained session.
         self.assertEqual(batch_entry["start_sha"], original_start_sha)
         self.assertEqual(batch_entry["implementer_session"], original_session)
 
+    def _write_running_batch_status(self, *, timeline_last_row, batch_extra_yaml=""):
+        """Write a status.md fixture with a "running" test-batch and a custom Timeline tail row.
+
+        Mirrors ``_make_fixture``'s status.md shape but lets each self-resolve test control the
+        most recent timeline row (an ordinary phase vs. a self-resolve marker) and any extra
+        per-batch yaml (e.g. a pre-existing ``self_resolve_remint_at``).
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        status_path.write_text(
+            "```yaml\n"
+            "phase: implementing\n"
+            "slug: test-slug\n"
+            "task: Test Task\n"
+            "branch: test-branch\n"
+            "parent: main\n"
+            "```\n\n"
+            "## Timeline\n\n"
+            "```text\n"
+            "implementing  2026-01-01T00:00:00Z\n"
+            f"{timeline_last_row}\n"
+            "```\n\n"
+            "## Batches\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    state: running\n"
+            "    start_sha: reuse_start_sha_123\n"
+            "    implementer_session: reuse-session-uuid-456\n"
+            f"{batch_extra_yaml}"
+            "```\n",
+            encoding="utf-8",
+        )
+        return status_path
+
+    def test_prepare_mints_fresh_session_after_unreacted_self_resolve(self):
+        """Card 10 (#956): a prepare re-fire after an unreacted self-resolve marker mints fresh
+        session_id/start_sha instead of reusing the stale ones from the original stuck attempt,
+        and records self_resolve_remint_at with the self-resolve row's own timestamp.
+        """
+        status_path = self._write_running_batch_status(
+            timeline_last_row="self-resolved-verify-logic  '2026-06-01T09:00:00Z'",
+        )
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertNotEqual(data["session_id"], "reuse-session-uuid-456")
+        self.assertNotEqual(data["start_sha"], "reuse_start_sha_123")
+
+        batches = millpy_implement._status.read_batches(status_path)
+        batch_entry = next(b for b in batches if b["name"] == "test-batch")
+        self.assertEqual(batch_entry["self_resolve_remint_at"], "2026-06-01T09:00:00Z")
+
+    def test_prepare_reuses_session_when_last_timeline_row_is_not_self_resolve(self):
+        """Regression guard for #625/#635/#643: an ordinary (non-self-resolve) most-recent timeline
+        row must still reuse the recorded session_id/start_sha, exactly as before Card 10's change.
+        """
+        self._write_running_batch_status(
+            timeline_last_row="coding  '2026-03-01T00:00:00Z'",
+        )
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            with unittest.mock.patch.object(millpy_implement._subprocess_util, "git_commit") as mock_git_commit:
+                rc, out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["session_id"], "reuse-session-uuid-456")
+        self.assertEqual(data["start_sha"], "reuse_start_sha_123")
+        mock_git_commit.assert_not_called()
+
+    def test_prepare_second_call_after_remint_reuses_bounded_to_one_remint(self):
+        """Compounding-retry regression: a second prepare re-fire against the just-fresh-minted
+        session (simulating a transient-retry re-dispatch of that fresh session) must reuse the
+        fresh mint's own session_id/start_sha rather than minting a third distinct pair -- proving
+        the self-resolve marker's remint effect is bounded to exactly one fresh mint.
+        """
+        self._write_running_batch_status(
+            timeline_last_row="self-resolved-verify-logic  '2026-06-01T09:00:00Z'",
+        )
+
+        # Two distinct UUIDs so a buggy second re-mint would be visibly distinguishable from a
+        # correct reuse of the first fresh mint's session_id.
+        self.mock_uuid4.side_effect = [
+            uuid.UUID("00000000-0000-0000-0000-0000000000a1"),
+            uuid.UUID("00000000-0000-0000-0000-0000000000a2"),
+        ]
+        # Two distinct rev-parse HEAD results so a buggy second re-mint would also be visibly
+        # distinguishable from a correct reuse of the first fresh mint's start_sha -- the reuse
+        # path never calls rev-parse HEAD at all, so a correct second call sees no new value.
+        rev_parse_calls = []
+
+        def routing_fn(argv, **kw):
+            if argv[1] == "rev-parse":
+                rev_parse_calls.append(1)
+                sha = f"{'0' * 39}{len(rev_parse_calls)}"
+                return subprocess.CompletedProcess(args=argv, returncode=0, stdout=sha + "\n", stderr="")
+            if argv[1] == "diff":
+                return subprocess.CompletedProcess(args=argv, returncode=1, stdout="", stderr="")
+            return subprocess.CompletedProcess(args=argv, returncode=0, stdout="abc1234\n", stderr="")
+
+        self.mock_subprocess_run.side_effect = routing_fn
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc1, out1 = self._run_main(["test-batch", "--stage", "prepare"])
+            rc2, out2 = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc1, 0)
+        self.assertEqual(rc2, 0)
+        data1 = json.loads(out1.strip())
+        data2 = json.loads(out2.strip())
+        self.assertEqual(data2["session_id"], data1["session_id"])
+        self.assertEqual(data2["start_sha"], data1["start_sha"])
+        # Exactly one rev-parse HEAD call happened -- the first (fresh-mint) call. The second call
+        # took the reuse path and never captured a new HEAD.
+        self.assertEqual(len(rev_parse_calls), 1)
+
+    def test_prepare_fresh_mint_after_self_resolve_does_not_touch_phase_field(self):
+        """Phase-field isolation: the fresh-mint branch's set_batch_fields call must never touch
+        status.md's top-level phase: value -- that field is reserved for
+        mill-go-base/SKILL.md's phase-gate crash-recovery table, distinct from this batch-scoped
+        self_resolve_remint_at marker.
+        """
+        status_path = self._write_running_batch_status(
+            timeline_last_row="self-resolved-verify-logic  '2026-06-01T09:00:00Z'",
+        )
+        phase_before = millpy_implement._status.read_full(status_path)["yaml"]["phase"]
+
+        with unittest.mock.patch.object(millpy_implement._render, "render", return_value="Brief text"):
+            rc, _out = self._run_main(["test-batch", "--stage", "prepare"])
+
+        self.assertEqual(rc, 0)
+        phase_after = millpy_implement._status.read_full(status_path)["yaml"]["phase"]
+        self.assertEqual(phase_after, phase_before)
+
     def test_prepare_stage_push_failure_nonfatal_but_commit_failure_still_fatal(self):
         """Card 3 (#626): a failed git push is non-fatal (warning + envelope still emitted);
     a failed git commit remains fatal (return 1, no envelope).
