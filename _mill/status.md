@@ -53,6 +53,8 @@ batches:
     commit_sha: 0288f17b0c40579ff8f963d68b0348f39148de86
     verify_baseline_failures: []
   - name: lexical-exemption-tests
-    state: pending
+    state: running
+    implementer_session: aeb3bd80-04a1-4702-8a0f-fc1840477a0f
+    start_sha: f7e21f52a6d858195790de12b781b3a937379393
     verify_baseline_failures: []
 ```
