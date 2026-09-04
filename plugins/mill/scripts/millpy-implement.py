@@ -750,6 +750,8 @@ def main(argv=None) -> int:
             git_root=git_root,
             cwd_override=cwd_override,
             module_wide_cwd_override=module_wide_cwd_override,
+            git_name=git_name,
+            git_email=git_email,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
