@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-code-review-wiring
+phase: holistic-reviewing
 slug: review-manifest-listings-full-path-clutter
 branch: hanf/review-manifest-listings-full-path-clutter
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-09-04T16:50:50Z'
 approved-display-layer  '2026-09-04T16:58:01Z'
 approved-plan-review-wiring  '2026-09-04T17:11:20Z'
 approved-code-review-wiring  '2026-09-04T17:18:15Z'
+holistic-reviewing  '2026-09-04T17:18:53Z'
 ```
 
 ## Batches
