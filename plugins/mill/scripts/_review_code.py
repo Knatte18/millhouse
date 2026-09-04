@@ -52,6 +52,7 @@ from _llm_common import LLMError
 from _plan_dag import PlanDAGError, extract_batch_index
 import _status
 from _review_common import (
+    DisplayRoots,
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
@@ -144,6 +145,7 @@ def _build_artefact_section(
     start_sha: str | None = None,
     diff_threshold: float = 0.25,
     project_root: Path | None = None,
+    roots: DisplayRoots | None = None,
 ) -> str:
     """Return the ``<ARTEFACT_SECTION>`` block for the prompt.
 
@@ -153,31 +155,45 @@ def _build_artefact_section(
     holds cross-batch creates that already exist on disk;
     they are appended to the bulk so the reviewer can verify cross-batch contracts.
     ``deletes_union`` appends an ``## Intentionally deleted`` section when non-empty.
+
+    When ``roots`` is not ``None``, every displayed path (manifest bullets, tool-use lists, bulk
+    delimiters) is rendered relative via ``roots.render`` instead of as a raw absolute path, and the
+    tool-use branch's instruction sentence tells the reviewer to resolve each listed path against
+    the root stated in the ``## Path roots`` block.
     """
     all_bulked = [overview_path, *batch_files, *source_files, *ancestors_on_disk]
-    manifest = build_manifest_section(all_bulked)
+    manifest = build_manifest_section(all_bulked, roots=roots)
 
     if reviewer_mode == "tool-use":
-        batch_list = "\n".join(f"  - `{p}`" for p in batch_files) or "  (none)"
-        read_list = "\n".join(f"- `{p}`" for p in [*source_files, *ancestors_on_disk]) or "(none)"
+        render = roots.render if roots is not None else str
+        batch_list = "\n".join(f"  - `{render(p)}`" for p in batch_files) or "  (none)"
+        read_list = "\n".join(
+            f"- `{render(p)}`" for p in [*source_files, *ancestors_on_disk]
+        ) or "(none)"
         body = (
             f"{manifest}\n\n"
             "## Plan + source files to review\n"
-            f"- Overview: `{overview_path}`\n"
+            f"- Overview: `{render(overview_path)}`\n"
             f"- Batch file(s):\n{batch_list}\n\n"
             "Read the overview and every batch file above. Then read every "
             "source file listed below for full context (includes cross-batch "
-            f"ancestor creates already on disk):\n{read_list}"
+            f"ancestor creates already on disk):\n{read_list}\n\n"
+            "Every path listed above is relative to the root stated in the "
+            "`## Path roots` block above and must be resolved against it before reading."
         )
     else:
         # Always bulk overview + batch files + ancestors at full content.
         # source_files use diff-scoping if start_sha is set.
         plan_and_ancestors = [overview_path, *batch_files, *ancestors_on_disk]
         if start_sha is not None and project_root is not None:
-            scoped_sources = bulk_files_with_diff(source_files, start_sha, project_root, diff_threshold)
-            bulked = bulk_files(plan_and_ancestors) + ("\n\n" + scoped_sources if scoped_sources else "")
+            scoped_sources = bulk_files_with_diff(
+                source_files, start_sha, project_root, diff_threshold, roots=roots
+            )
+            bulked = bulk_files(plan_and_ancestors, roots=roots) + (
+                "\n\n" + scoped_sources if scoped_sources else ""
+            )
         else:
-            bulked = bulk_files(all_bulked)
+            bulked = bulk_files(all_bulked, roots=roots)
         body = (
             f"{manifest}\n\n"
             "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
@@ -346,12 +362,14 @@ def prepare(
     template_name = "review-code-batch" if scope else "review-code-holistic"
     mode = "tool-use" if spec.get("tooluse") else "bulk"
     tool_rule = build_tool_rule(mode, agent_mode)
+    roots = DisplayRoots(project_root=project_root, git_root=git_root, wiki_root=wiki_root)
     artefact_section = _build_artefact_section(
         mode, overview_path, batch_files, source_files, ancestors_on_disk,
         deletes_union,
         start_sha=start_sha,
         diff_threshold=diff_threshold,
         project_root=project_root,
+        roots=roots,
     )
 
     # Build prior-nonblocking digest: read file if provided and readable, else "(none)".
@@ -766,8 +784,11 @@ def run(
                 missing_raw, project_root, root, wiki_root=wiki_root, git_root=git_root
             )
             if missing_paths:
+                roots = DisplayRoots(
+                    project_root=project_root, git_root=git_root, wiki_root=wiki_root
+                )
                 retry_prompt = (
-                    build_reattached_section(missing_paths)
+                    build_reattached_section(missing_paths, roots=roots)
                     + "\n\n"
                     + "Please continue your review using the re-attached files above. "
                     + "The original prompt is already in your session context."

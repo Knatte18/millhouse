@@ -101,6 +101,7 @@ def _make_run_result(
 from _review_common import (  # noqa: E402
     RE_BATCH,
     RE_SIMPLE,
+    DisplayRoots,
     ReviewError,
     ReviewResult,
     _load_root_from_overview,
@@ -110,6 +111,7 @@ from _review_common import (  # noqa: E402
     apply_cost_metadata,
     build_deletes_section,
     build_manifest_section,
+    build_path_roots_section,
     build_reattached_section,
     build_tool_rule,
     bulk_files,
@@ -922,6 +924,27 @@ def main() -> int:
         print(
             "PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)"
         )
+
+    # bulk_files: roots supplied -> relative FILE/END FILE delimiters
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        p1 = project_root / "a.py"
+        p1.write_text("content-a", encoding="utf-8")
+        roots = DisplayRoots(project_root=project_root)
+        result = bulk_files([p1], roots=roots)
+        assert "--- FILE: a.py ---" in result, f"Got {result!r}"
+        assert "--- END FILE: a.py ---" in result, f"Got {result!r}"
+        assert str(project_root) not in result, f"Unexpected absolute prefix: {result!r}"
+        print("PASS: bulk_files with roots -> relative FILE/END FILE delimiters")
+
+    # bulk_files: roots omitted -> absolute delimiters unchanged (back-compat)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        p1 = Path(tmpdir) / "a.py"
+        p1.write_text("content-a", encoding="utf-8")
+        result = bulk_files([p1])
+        assert f"--- FILE: {p1} ---" in result, f"Got {result!r}"
+        assert f"--- END FILE: {p1} ---" in result, f"Got {result!r}"
+        print("PASS: bulk_files without roots -> absolute delimiters (back-compat)")
 
     # render_prompt: missing template -> FileNotFoundError
     try:
@@ -1857,6 +1880,123 @@ def main() -> int:
         print("PASS: compute_deletes_union 00-overview.md excluded")
 
     # ---------------------------------------------------------------------------
+    # DisplayRoots.render
+    # ---------------------------------------------------------------------------
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        base = Path(tmpdir).resolve()
+        project_root = base / "project"
+        git_root = base / "git"
+        wiki_root = base / "wiki"
+        for d in (project_root, git_root, wiki_root):
+            d.mkdir()
+
+        # Path directly under project_root -> bare relative POSIX string.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "sub" / "file.py"
+        result = roots.render(p)
+        assert result == "sub/file.py", f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under project_root -> bare relative")
+
+        # Path under wiki_root -> `wiki/` prefix.
+        roots = DisplayRoots(project_root=project_root, wiki_root=wiki_root)
+        p = wiki_root / "task" / "discussion.md"
+        result = roots.render(p)
+        assert result == "wiki/task/discussion.md", f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under wiki_root -> wiki/ prefix")
+
+        # Path under both a git_root and a deeper project_root -> renders against the longer root.
+        deeper_project_root = git_root / "sub_project"
+        deeper_project_root.mkdir()
+        roots = DisplayRoots(project_root=deeper_project_root, git_root=git_root)
+        p = deeper_project_root / "nested" / "file.py"
+        result = roots.render(p)
+        assert result == "nested/file.py", f"Got {result!r}"
+        print(
+            "PASS: DisplayRoots.render path under git_root and deeper project_root -> longer root wins"
+        )
+
+        # Path under both a wiki_root and a deeper project_root -> wiki form wins (rule 1 short-circuits rule 2).
+        deeper_project_under_wiki = wiki_root / "sub_project"
+        deeper_project_under_wiki.mkdir()
+        roots = DisplayRoots(
+            project_root=deeper_project_under_wiki, wiki_root=wiki_root
+        )
+        p = deeper_project_under_wiki / "nested" / "file.py"
+        result = roots.render(p)
+        assert result == "wiki/sub_project/nested/file.py", f"Got {result!r}"
+        print(
+            "PASS: DisplayRoots.render path under wiki_root and deeper project_root -> wiki/ wins"
+        )
+
+        # Path under no root -> unchanged absolute string.
+        roots = DisplayRoots(project_root=project_root)
+        outside = base / "outside" / "file.py"
+        result = roots.render(outside)
+        assert result == str(outside), f"Got {result!r}"
+        print("PASS: DisplayRoots.render path under no root -> unchanged absolute")
+
+        # Nested path -> forward slashes.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "a" / "b" / "c.py"
+        result = roots.render(p)
+        assert "/" in result and "\\" not in result, f"Got {result!r}"
+        assert result == "a/b/c.py", f"Got {result!r}"
+        print("PASS: DisplayRoots.render nested path -> forward slashes")
+
+        # git_root=None and wiki_root=None -> no raise, falls back to project_root then absolute.
+        roots = DisplayRoots(project_root=project_root)
+        p = project_root / "x.py"
+        result = roots.render(p)
+        assert result == "x.py", f"Got {result!r}"
+        outside2 = base / "elsewhere.py"
+        result2 = roots.render(outside2)
+        assert result2 == str(outside2), f"Got {result2!r}"
+        print("PASS: DisplayRoots.render git_root=None wiki_root=None does not raise")
+
+    # ---------------------------------------------------------------------------
+    # build_path_roots_section
+    # ---------------------------------------------------------------------------
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        base = Path(tmpdir).resolve()
+        project_root = base / "project"
+        git_root = base / "git"
+        wiki_root = base / "wiki"
+        for d in (project_root, git_root, wiki_root):
+            d.mkdir()
+
+        # project-root-only -> heading, no wiki/ bullet, no git_root bullet.
+        roots = DisplayRoots(project_root=project_root)
+        result = build_path_roots_section(roots)
+        assert result.startswith("## Path roots"), f"Got {result!r}"
+        assert "wiki/" not in result, f"Unexpected wiki/ bullet: {result!r}"
+        assert "git_root" not in result, f"Unexpected git_root bullet: {result!r}"
+        print("PASS: build_path_roots_section project-root-only -> no extra bullets")
+
+        # wiki_root set -> wiki/ bullet.
+        roots = DisplayRoots(project_root=project_root, wiki_root=wiki_root)
+        result = build_path_roots_section(roots)
+        assert "wiki/" in result, f"Missing wiki/ bullet: {result!r}"
+        print("PASS: build_path_roots_section wiki_root set -> wiki/ bullet")
+
+        # git_root equal to project_root -> no git_root bullet.
+        roots = DisplayRoots(project_root=project_root, git_root=project_root)
+        result = build_path_roots_section(roots)
+        assert "git_root" not in result, f"Unexpected git_root bullet: {result!r}"
+        print("PASS: build_path_roots_section git_root == project_root -> no bullet")
+
+        # git_root differing from project_root -> one git_root bullet.
+        roots = DisplayRoots(project_root=project_root, git_root=git_root)
+        result = build_path_roots_section(roots)
+        assert result.count("git_root") == 1, f"Got {result!r}"
+        print("PASS: build_path_roots_section git_root != project_root -> one bullet")
+
+        # No trailing newline, matching neighbouring builders' convention.
+        assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
+        print("PASS: build_path_roots_section no trailing newline")
+
+    # ---------------------------------------------------------------------------
     # build_manifest_section
     # ---------------------------------------------------------------------------
 
@@ -1879,6 +2019,29 @@ def main() -> int:
     # No trailing newline
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_manifest_section no trailing newline")
+
+    # roots supplied -> relative bullets, result starts with ## Path roots
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        paths = [project_root / "a.py", project_root / "sub" / "b.py"]
+        roots = DisplayRoots(project_root=project_root)
+        result = build_manifest_section(paths, roots=roots)
+        assert result.startswith("## Path roots"), f"Got {result!r}"
+        assert "- a.py" in result, f"Missing relative bullet: {result!r}"
+        assert "- sub/b.py" in result, f"Missing relative bullet: {result!r}"
+        assert str(project_root) not in result.split("## Files included")[1], (
+            f"Bullets should not carry absolute prefix: {result!r}"
+        )
+        print("PASS: build_manifest_section with roots -> relative bullets and Path roots header")
+
+    # roots omitted -> back-compat pin: still absolute bullets and ## Files included first
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        paths = [project_root / "a.py"]
+        result = build_manifest_section(paths)
+        assert result.startswith("## Files included (N="), f"Got {result!r}"
+        assert f"- {paths[0]}" in result, f"Expected absolute bullet: {result!r}"
+        print("PASS: build_manifest_section without roots -> absolute bullets (back-compat)")
 
     # ---------------------------------------------------------------------------
     # build_deletes_section
@@ -1917,6 +2080,35 @@ def main() -> int:
     result = build_deletes_section(["x.py"])
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_deletes_section no trailing newline")
+
+    # Regression pin: build_deletes_section is fed raw plan-relative deletes_union tokens
+    # (never resolved absolute Paths), so it is already correct and must NOT gain a
+    # roots parameter -- this pins that a future change cannot silently regress it.
+    empty_result = build_deletes_section([])
+    assert empty_result == "", f"Expected empty string for empty input, got {empty_result!r}"
+    print("PASS: pin_build_deletes_section_tokens_already_relative empty-list -> empty string")
+
+    relative_tokens = [
+        "plugins/mill/scripts/_review_common.py",
+        "old_module.py",
+        "wiki/task/discussion.md",
+    ]
+    result = build_deletes_section(relative_tokens)
+    assert result.startswith(f"## Intentionally deleted (N={len(relative_tokens)})"), (
+        f"Wrong heading: {result!r}"
+    )
+    lines = result.split("\n")
+    bullet_lines = lines[2:]
+    assert len(bullet_lines) == len(relative_tokens), f"Got {bullet_lines!r}"
+    for token, bullet_line in zip(relative_tokens, bullet_lines):
+        assert bullet_line == f"- {token}", f"Got {bullet_line!r} for token {token!r}"
+    assert not any(line.startswith("/") for line in bullet_lines), (
+        f"No absolute path prefix should appear anywhere in the output: {result!r}"
+    )
+    assert "\\" not in result, f"No absolute path prefix should appear anywhere: {result!r}"
+    print(
+        "PASS: pin_build_deletes_section_tokens_already_relative verbatim tokens, no absolute prefix"
+    )
 
     # ---------------------------------------------------------------------------
     # resolve_existing_paths
@@ -2278,6 +2470,31 @@ def main() -> int:
             "fa should appear before fb"
         )
         print("PASS: build_reattached_section two paths -> both delimiters in order")
+
+    # roots supplied -> relative delimiters, heading still present
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        f = project_root / "foo.py"
+        f.write_text("content")
+        roots = DisplayRoots(project_root=project_root)
+        result = build_reattached_section([f], roots=roots)
+        assert "## Re-attached files (you said these were missing)" in result, (
+            f"Missing heading in: {result!r}"
+        )
+        assert "--- FILE: foo.py ---" in result, f"Got {result!r}"
+        assert str(project_root) not in result, f"Unexpected absolute prefix: {result!r}"
+        assert "## Path roots" not in result, (
+            f"Path roots header must not be repeated on resume turn: {result!r}"
+        )
+        print("PASS: build_reattached_section with roots -> relative delimiters")
+
+    # roots omitted -> delimiters still absolute (back-compat)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        f = Path(tmpdir) / "foo.py"
+        f.write_text("content")
+        result = build_reattached_section([f])
+        assert f"--- FILE: {f} ---" in result, f"Got {result!r}"
+        print("PASS: build_reattached_section without roots -> absolute delimiters (back-compat)")
 
     # ---------------------------------------------------------------------------
     # parse_blocking_count
@@ -2973,6 +3190,69 @@ def main() -> int:
             f"expected no DIFF delimiter, got: {result[:200]!r}"
         )
         print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
+
+    # Test F — roots supplied relativizes both FILE and DIFF delimiter pairs;
+    # git-diff scoping still resolves (rel_path stays project_root-relative independent of roots).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo = Path(tmpdir).resolve()
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        src = repo / "src"
+        src.mkdir()
+        (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
+        (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        with open(src / "a.py", "a", encoding="utf-8") as fh:
+            fh.write("y\n" * 10)
+        (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "change"],
+            check=True,
+            capture_output=True,
+        )
+        roots = DisplayRoots(project_root=repo)
+        result = bulk_files_with_diff(
+            [src / "a.py", src / "b.py"], start_sha, repo, 0.25, roots=roots
+        )
+        assert "--- DIFF: src/a.py " in result, f"Got {result[:200]!r}"
+        assert "--- END DIFF: src/a.py ---" in result, f"Got {result[:200]!r}"
+        assert "--- FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
+        assert "--- END FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
+        assert str(repo) not in result, f"Unexpected absolute prefix: {result[:200]!r}"
+        print(
+            "PASS: bulk_files_with_diff with roots -> relative FILE and DIFF delimiters"
+        )
 
     # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
     with _test_helpers.safe_temp_dir() as tmpdir:

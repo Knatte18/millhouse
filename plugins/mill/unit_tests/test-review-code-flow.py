@@ -1565,16 +1565,16 @@ def main() -> int:
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
-            # File-content delimiters bulk the *resolved absolute* path, not the raw plan-relative token.
+            # File-content delimiters bulk the display-rendered (plan-relative) path, not the resolved absolute path.
             # docs/old-name.md still appears as literal text inside beta's own bulked batch-file content (its Moves: declaration names both sides of the relocation) -- that is expected and not what this assertion is about.
             # What must NOT happen is a bulked "file contents" delimiter for the moved-away source, which is what resolve_ref_paths would have produced had it not suppressed the stale ref (and what a hard-fail ReviewError would have pre-empted entirely before any prompt was ever built).
             old_path = project_root / "docs" / "old-name.md"
-            new_path = project_root / "docs" / "new-name.md"
+            new_rel = "docs/new-name.md"
             assert f"--- FILE: {old_path} ---" not in first_prompt, (
                 "moved-away source path must be suppressed from the resolved "
                 "source-file list, not bulked in as its own FILE section"
             )
-            assert f"--- FILE: {new_path} ---" in first_prompt, (
+            assert f"--- FILE: {new_rel} ---" in first_prompt, (
                 "move target should still be resolved onto disk and bulked normally"
             )
             print("PASS test23: Moves: source suppresses a stale cross-batch Context: ref (#686)")
@@ -2008,6 +2008,211 @@ def main() -> int:
             print(f"FAIL test31 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             stub.run = original_run
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 32 — prepare() batch-mode bulk prompt (no start_sha) carries no
+    # absolute project_root prefix, states the Context: token plan-relative,
+    # and opens with a ## Path roots block.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            result = prepare(
+                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() batch-mode bulk prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "src/a.py" in prompt_text, (
+                "prepare() batch-mode bulk prompt is missing the plan-relative Context: token"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() batch-mode bulk prompt is missing the ## Path roots header"
+            )
+            print("PASS test32: prepare() batch-mode bulk prompt (no start_sha) is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test32: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test32 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 33 — prepare() batch-mode bulk prompt WITH a start_sha-bearing
+    # fixture: exercises the diff-scoped branch's own bulk_files(plan_and_ancestors)
+    # call, not just the else branch's single bulk_files(all_bulked) call that
+    # test32 covers. Asserts no absolute project_root prefix while both a
+    # --- DIFF: and a --- FILE: delimiter are present, so both bulking calls
+    # on the diff-scoped branch are covered by the one assertion.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "config", "user.name", "T"],
+                check=True, capture_output=True,
+            )
+            (project_root / "src" / "a.py").write_text("x\n" * 2000, encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
+                check=True, capture_output=True,
+            )
+            start_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            with open(project_root / "src" / "a.py", "a", encoding="utf-8") as fh:
+                fh.write("y\n" * 5)
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "src/a.py"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "small change"],
+                check=True, capture_output=True,
+            )
+            (project_root / "_mill").mkdir(exist_ok=True)
+            (project_root / "_mill" / "status.md").write_text(
+                "# Status\n\n"
+                "```yaml\n"
+                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
+                "plan: plan\nparent: main\ntask: test\n"
+                "```\n\n"
+                "## Batches\n\n"
+                "```yaml\n"
+                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            result = prepare(
+                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() batch-mode diff-scoped prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "--- DIFF:" in prompt_text, (
+                "expected a diff-scoped DIFF delimiter (bulk_files_with_diff branch) in prompt"
+            )
+            assert "--- FILE:" in prompt_text, (
+                "expected a plain FILE delimiter (bulk_files(plan_and_ancestors) branch) in prompt"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() batch-mode diff-scoped prompt is missing the ## Path roots header"
+            )
+            print(
+                "PASS test33: prepare() batch-mode diff-scoped prompt (start_sha set) is"
+                " plan-relative on both the DIFF and FILE bulking calls"
+            )
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test33: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test33 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 34 — prepare() batch-mode tool-use prompt: the read_list bullets,
+    # Overview:/Batch file(s): lines, and resolve-against-root instruction
+    # sentence are all plan-relative with no absolute project_root prefix.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        cfg["roles"]["code-review"]["batch"]["reviewer"] = "test_stub_tooluse"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _test_helpers.write_local_overlay(
+                mill_dir,
+                test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
+            )
+            result = prepare(
+                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() batch-mode tool-use prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "- `src/a.py`" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the plan-relative read_list bullet"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the ## Path roots header"
+            )
+            assert "relative to the root stated in the" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the resolve-against-stated-root instruction"
+            )
+            print("PASS test34: prepare() batch-mode tool-use prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test34: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test34 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 35 — NEED_CONTEXT re-attachment (build_reattached_section) carries
+    # no absolute project_root prefix in the resume retry_prompt. Extends
+    # test5's existing NEED_CONTEXT resume-retry fixture with the
+    # no-absolute-prefix assertion.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        stub.seed([
+            (NEED_CONTEXT_TEXT, "sid-1"),
+            (APPROVE_TEXT,      "sid-2"),
+        ])
+        try:
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
+            retry_text = prompts[1][0]
+            assert retry_text.startswith("## Re-attached files"), (
+                f"retry prompt must start with '## Re-attached files', got: {retry_text[:80]!r}"
+            )
+            assert str(project_root) not in retry_text, (
+                "_review_code NEED_CONTEXT retry_prompt leaks an absolute project_root path"
+            )
+            print("PASS test35: NEED_CONTEXT re-attachment retry_prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test35: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test35 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------

@@ -9,6 +9,10 @@ Public API:
     ReviewerOverstepError — raised by worktree_snapshot_guard when a reviewer mutates HEAD or
     working tree
     ReviewResult — dataclass; serialised to the CLI's stdout JSON
+    DisplayRoots — dataclass; single rendering authority for turning an absolute path into the
+    short form a review prompt shows (wiki-first, then longest-match, then absolute)
+    build_path_roots_section() — return a `## Path roots` markdown block naming the roots a
+    DisplayRoots renders against
     RE_SIMPLE — regex matching simple review filenames
     RE_BATCH — regex matching plan-batch review filenames
     find_active_slug() — branch-based slug detection;
@@ -370,6 +374,98 @@ class ReviewResult:
             "findings": self.findings,
             "reviews": self.reviews,
         }
+
+
+@dataclass(frozen=True)
+class DisplayRoots:
+    """The set of filesystem roots a review prompt renders paths against.
+
+    Every absolute ``Path`` a review backend bulks into a prompt is resolved against one of
+    ``project_root``, ``git_root``, or ``wiki_root`` before it reaches the reviewer as text --
+    ``render`` is the single method every display site calls to do that, so the longest-match and
+    wiki-first rules live in exactly one place instead of being re-implemented at each of the
+    display helpers below.
+
+    Instance variables:
+        project_root: The plan's root -- the root every unprefixed rendered path is relative to.
+        git_root: The repository root, when it differs from ``project_root`` (e.g. the plan
+            overview declares a non-empty ``root:`` sub-path). ``None`` when there is no separate
+            git root to consider.
+        wiki_root: The wiki clone root. ``None`` when the caller has no wiki context (e.g. code
+            review, which never touches wiki files).
+    """
+
+    project_root: Path
+    git_root: Path | None = None
+    wiki_root: Path | None = None
+
+    def render(self, p: Path) -> str:
+        """
+        Render one absolute path to the short display form a reviewer prompt shows.
+
+        Applies the wiki-first, then-longest-match, then-absolute rule (see the plan's
+        rendering-rule Shared Decision): a path under ``wiki_root`` renders as ``wiki/<rel>``
+        regardless of whether it also sits under ``project_root`` or ``git_root``; otherwise the
+        path renders relative to whichever of ``project_root`` / ``git_root`` is both an ancestor
+        and has the most path parts after resolution; otherwise the path renders unchanged.
+
+        Every ancestor test and relative_to call is performed on resolved copies of the root and
+        ``p`` so that a symlinked or junctioned root still matches -- the relative remainder is
+        identical either way.
+        """
+        p_resolved = p.resolve()
+        if self.wiki_root is not None:
+            wiki_resolved = self.wiki_root.resolve()
+            if p_resolved.is_relative_to(wiki_resolved):
+                return "wiki/" + p_resolved.relative_to(wiki_resolved).as_posix()
+
+        best_root: Path | None = None
+        best_part_count = -1
+        for root in (self.project_root, self.git_root):
+            if root is None:
+                continue
+            root_resolved = root.resolve()
+            if not p_resolved.is_relative_to(root_resolved):
+                continue
+            part_count = len(root_resolved.parts)
+            if part_count > best_part_count:
+                best_root = root_resolved
+                best_part_count = part_count
+        if best_root is not None:
+            return p_resolved.relative_to(best_root).as_posix()
+
+        return str(p)
+
+
+def build_path_roots_section(roots: DisplayRoots) -> str:
+    """
+    Return a `## Path roots` markdown block naming the roots `DisplayRoots.render` resolved against.
+
+    Output shape (no trailing newline):
+
+        ## Path roots
+
+        Every unprefixed path below is relative to `<project_root>`.
+        - `wiki/` paths are relative to `<wiki_root>`
+        - `git_root`: `<git_root>`
+
+    The `wiki/` bullet is emitted only when `wiki_root` is not `None`. The `git_root` bullet is
+    emitted only when `git_root` is not `None` and its resolved value differs from the resolved
+    `project_root` -- a `git_root` identical to `project_root` carries no new information for the
+    reviewer.
+    This block is prepended by `build_manifest_section` so every review template inherits it for
+    free, without a template-level edit at each of the five call sites.
+    """
+    lines = [
+        "## Path roots",
+        "",
+        f"Every unprefixed path below is relative to `{roots.project_root}`.",
+    ]
+    if roots.wiki_root is not None:
+        lines.append(f"- `wiki/` paths are relative to `{roots.wiki_root}`")
+    if roots.git_root is not None and roots.git_root.resolve() != roots.project_root.resolve():
+        lines.append(f"- `git_root`: `{roots.git_root}`")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1170,10 +1266,15 @@ def _read_for_bulk(p: Path) -> str:
         return p.read_text(encoding="utf-8", errors="replace")
 
 
-def bulk_files(file_paths: list[Path]) -> str:
+def bulk_files(file_paths: list[Path], *, roots: DisplayRoots | None = None) -> str:
     """Concatenate file contents with '--- FILE: <path> ---' delimiters.
 
-    Paths that do not exist are skipped with a stderr warning.
+    Paths that do not exist are skipped with a stderr warning -- the warning always names the
+    absolute path, since it is a diagnostic for the operator rather than prompt text.
+
+    When ``roots`` is not ``None``, the ``--- FILE: ... ---`` / ``--- END FILE: ... ---`` delimiters
+    use `roots.render(p)` instead of the raw absolute path.
+    Defaults to ``None`` so existing callers keep emitting today's absolute delimiters unchanged.
     """
     parts: list[str] = []
     for p in file_paths:
@@ -1185,7 +1286,8 @@ def bulk_files(file_paths: list[Path]) -> str:
                 file=sys.stderr,
             )
             continue
-        parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
+        display = roots.render(p) if roots is not None else str(p)
+        parts.append(f"--- FILE: {display} ---\n{contents}\n--- END FILE: {display} ---")
     return "\n\n".join(parts)
 
 
@@ -1194,6 +1296,8 @@ def bulk_files_with_diff(
     start_sha: str,
     project_root: Path,
     threshold: float,
+    *,
+    roots: DisplayRoots | None = None,
 ) -> str:
     """Like bulk_files but substitutes git diff output for small-diff files.
 
@@ -1201,6 +1305,17 @@ def bulk_files_with_diff(
     include the diff instead of full content.
     Files with no diff (unchanged between start_sha and HEAD) are included at full content so the
     reviewer has all context.
+
+    When ``roots`` is not ``None``, every ``--- FILE: ... ---`` / ``--- END FILE: ... ---`` /
+    ``--- DIFF: ... ---`` / ``--- END DIFF: ... ---`` delimiter uses `roots.render(p)` instead of the
+    raw absolute path.
+    Defaults to ``None`` so existing callers keep emitting today's absolute delimiters unchanged.
+    The stderr warnings on a missing/unreadable path or a failed git diff always name the absolute
+    path -- those are operator diagnostics, not prompt text.
+    The ``rel_path`` local used to scope the ``git diff`` invocation is computed independently of
+    the display string: it is always relative to ``project_root``, because the git invocation needs
+    a path relative to the repository it runs ``git -C`` against, which is not necessarily the root
+    the display helper selects.
     """
     parts: list[str] = []
     for p in file_paths:
@@ -1217,6 +1332,8 @@ def bulk_files_with_diff(
             rel_path = p.relative_to(project_root).as_posix()
         except ValueError:
             rel_path = str(p)
+
+        display = roots.render(p) if roots is not None else str(p)
 
         result = _subprocess_util.run(
             [
@@ -1235,30 +1352,38 @@ def bulk_files_with_diff(
                 f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file",
                 file=sys.stderr,
             )
-            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+            parts.append(
+                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+            )
             continue
 
         diff_text = result.stdout
 
         if not diff_text:
-            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+            parts.append(
+                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+            )
             continue
 
         if len(diff_text) < threshold * len(file_content):
             parts.append(
-                f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {p} ---"
+                f"--- DIFF: {display} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {display} ---"
             )
             continue
 
-        parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+        parts.append(
+            f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+        )
 
     return "\n\n".join(parts)
 
 
-def build_manifest_section(file_paths: list[Path]) -> str:
+def build_manifest_section(
+    file_paths: list[Path], *, roots: DisplayRoots | None = None
+) -> str:
     """Return a `## Files included` markdown block listing every bulked file.
 
-    Output shape (no trailing newline):
+    Output shape (no trailing newline), when ``roots`` is ``None``:
 
         ## Files included (N=<count>)
 
@@ -1266,16 +1391,40 @@ def build_manifest_section(file_paths: list[Path]) -> str:
         - <path-2>
         ...
 
+    When ``roots`` is not ``None``, the output additionally opens with the ``## Path roots`` block
+    from `build_path_roots_section`, followed by a blank line, ahead of the ``## Files included``
+    heading, and every bullet is `roots.render(p)` instead of the raw absolute path:
+
+        ## Path roots
+        ...
+
+        ## Files included (N=<count>)
+
+        - <relative-path-1>
+        - <relative-path-2>
+        ...
+
     The manifest is the FIRST thing the reviewer reads inside the artefact section.
     Its job is to remove the long-context haystack effect: the reviewer scans this list, then can
     answer "is file X provided?"
     in O(1) instead of scanning a 200k-char bulk for the matching `--- FILE: X ---` delimiter.
+
+    ``roots`` defaults to ``None`` so every existing caller keeps emitting today's absolute-path
+    output until it is threaded through explicitly.
     """
     if not file_paths:
-        return "## Files included (N=0)\n\n(no files)"
-    count = len(file_paths)
-    bullets = "\n".join(f"- {p}" for p in file_paths)
-    return f"## Files included (N={count})\n\n{bullets}"
+        body = "## Files included (N=0)\n\n(no files)"
+    else:
+        count = len(file_paths)
+        if roots is not None:
+            bullets = "\n".join(f"- {roots.render(p)}" for p in file_paths)
+        else:
+            bullets = "\n".join(f"- {p}" for p in file_paths)
+        body = f"## Files included (N={count})\n\n{bullets}"
+
+    if roots is None:
+        return body
+    return f"{build_path_roots_section(roots)}\n\n{body}"
 
 
 def build_deletes_section(deletes_tokens: list[str]) -> str:
@@ -1354,7 +1503,9 @@ def parse_missing_context(review_text: str) -> list[str]:
     return paths
 
 
-def build_reattached_section(file_paths: list[Path]) -> str:
+def build_reattached_section(
+    file_paths: list[Path], *, roots: DisplayRoots | None = None
+) -> str:
     """Return a `## Re-attached files (you said these were missing)` block with the listed files
     inlined via bulk_files.
 
@@ -1362,11 +1513,17 @@ def build_reattached_section(file_paths: list[Path]) -> str:
     re-attached at the top of the new prompt so the reviewer cannot claim absence again without
     contradicting itself.
     The section is appended to the existing artefact section.
+
+    ``roots`` is forwarded to `bulk_files` unchanged, so the delimiters inside the bulked body are
+    relative when ``roots`` is supplied.
+    Deliberately does NOT prepend a ``## Path roots`` block here (unlike `build_manifest_section`):
+    this section is spliced into a short resume-turn ``retry_prompt``, and the roots were already
+    stated in the original prompt of the same reviewer session.
     """
     if not file_paths:
         return ""
     return "## Re-attached files (you said these were missing)\n\n" + bulk_files(
-        file_paths
+        file_paths, roots=roots
     )
 
 
@@ -2755,12 +2912,16 @@ def load_config(hub_root: Path, mill_dir: Path, *, git_root: Path | None = None)
         hub_root: Absolute path to the hub directory.
         mill_dir: Absolute path to the .millhouse directory. Always used for the stale-
             ``review:``-key peek (``mill_dir / config.local.yaml``), regardless of ``git_root``.
-        git_root: Optional. When provided, used instead of ``mill_dir.parent`` as the delegate's
-            ``worktree_root`` argument (governing the merge-order stub/real config layers) --
-            ``mill_dir.parent`` is always a hub-anchored path, while callers with a nested-hub
-            layout (``hub_root != git_root``) may need the git-repository-root stub layer
-            instead. When omitted (the default), behavior is unchanged from before this
-            parameter existed.
+        git_root: Optional. When provided AND ``git_root / ".millhouse" / "config.local.yaml"``
+            exists, used instead of ``mill_dir.parent`` as the delegate's ``worktree_root``
+            argument (governing the merge-order stub/real config layers) -- ``mill_dir.parent``
+            is always a hub-anchored path, while callers with a nested-hub layout
+            (``hub_root != git_root``) may need the git-repository-root stub layer instead when
+            that stub carries the real overrides (mill-spawn's worktree-root stub).
+            When ``git_root`` has no local-config file of its own (mill-claim's in-place layout,
+            where the stub lives only at the hub), ``mill_dir.parent`` is used so the hub's own
+            ``config.local.yaml`` is not skipped over. When omitted (the default), behavior is
+            unchanged from before this parameter existed.
 
     Returns:
         Merged configuration dict, as produced by ``_config.load_config``.
@@ -2768,7 +2929,10 @@ def load_config(hub_root: Path, mill_dir: Path, *, git_root: Path | None = None)
     Raises:
         ReviewError: If neither the plugin template nor a repo-layer mill-config.yaml source exists.
     """
-    worktree_root = git_root if git_root is not None else mill_dir.parent
+    worktree_root = mill_dir.parent
+    if git_root is not None and git_root != worktree_root:
+        if (git_root / ".millhouse" / "config.local.yaml").exists():
+            worktree_root = git_root
 
     # Missing-source check, independent of the delegate's return value: an empty dict from the delegate does not distinguish "nothing found" from "a source was found but happened to be empty".
     template_path = resolve_plugin_template_path("mill-config.yaml")
