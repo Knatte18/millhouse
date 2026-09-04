@@ -1,0 +1,16 @@
+MILL_REVIEW_BEGIN
+# Review: millpy-implement/bg: Windows baseline-worktree teardown (WinError 145) and stale liveness reporting — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewer_self_id: claude-sonnet-5
+reviewed_file: plan/
+date: 2026-09-04
+```
+
+## Verdict
+
+APPROVE
+All five batches are internally consistent, DAG-valid, and verified line-for-line against the actual source files they edit.
+MILL_REVIEW_END

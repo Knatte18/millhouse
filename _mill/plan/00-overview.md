@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-implement/bg: Windows baseline-worktree teardown (WinError 145) and stale liveness reporting'
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
-approved: false
+approved: true
 started: 20260904-083401
 parent: main
 root: ""
