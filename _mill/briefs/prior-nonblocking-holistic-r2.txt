@@ -1,0 +1,1 @@
+- cwd-rejection callout borrows the "dead" branch's action but not its detection mechanism: Location: plugins/mill/skills/mill-merge-in/SKILL.md:114 (Step 3.5 callout)
