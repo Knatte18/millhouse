@@ -24,6 +24,16 @@ Only emit `verdict: NEED_CONTEXT` for paths that are NOT in the manifest, and ex
 The orchestrator will re-fire the review with those files added.
 Fabricating file contents — or inferring them from filename / position alone — is a worse failure than halting honestly.
 
+**Mechanism claims must be source-verified.**
+A finding that rests on a claim about how the target repo's production code behaves — which branch executes, what a predicate selects, which value survives a mutation — must name the file and the function/method/construct it was verified against, in the finding's own text.
+Do not assert a mechanism claim from memory, naming convention, or plausible-sounding inference.
+If you cannot verify the claim against source in your context (not bulked into this prompt, and not Read-able in bulk mode), do not assert it: downgrade the finding to a question under `## Missing context`, or drop it — never write an unverified mechanism claim into a BLOCKING or NIT finding as fact.
+Tool-use-mode reviewers may Read/Grep the target repo's source directly to verify a mechanism claim even when the relevant file was not bulked into this prompt; bulk-mode reviewers have no such option and must rely on this rule alone.
+
+## Overview verify: scope rule
+
+The overview's module-wide `verify:` field (if set) must stay a cheap compile/vet/smoke command, per `plan-overview.md`'s own documented intent — never a full test-suite run. Do not suggest, as a fix for any finding, converting it into an unscoped full-test command (e.g. `go test ./...`, `dotnet test`, `pytest`) — `_plan_validate`'s `verify-full-suite` check will reject that on the plan's very next validation pass, costing a review round for nothing.
+
 ## Criteria (apply to the plan as a whole)
 
 - **Constraint violations** — BLOCKING.

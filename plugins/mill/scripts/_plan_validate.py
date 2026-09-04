@@ -7,7 +7,8 @@ each review round).
 
 Public API:
     run(plan_dir, project_root, *, root=None, wiki_root=None, git_root=None, skip_checks=frozenset(),
-        max_cards_per_batch=10, max_batch_context_tokens=120000, parent_branch=None) -> list[dict]
+        max_cards_per_batch=10, max_batch_context_tokens=120000, parent_branch=None,
+        done_gate=None) -> list[dict]
     Validate plan files in plan_dir. Returns a sorted list of error dicts.
     Each error dict has keys: {check, batch, card, path, message}.
 
@@ -972,6 +973,51 @@ def _check_card_numbering(batch_files: list[Path]) -> list[dict]:
                 })
 
     return errors
+
+
+def compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int:
+    """
+    Compute the next unused card number for a target batch, before that card
+    is ever written to disk.
+
+    Unlike ``_check_card_numbering``, which can only ever detect a duplicate
+    number that already exists on disk, this is a pure read-only computation
+    over the already-written batch files that a caller can run *before*
+    appending a new card -- so a self-resolve flow can safely pick the next
+    number without risking a collision with another batch's numeric range.
+
+    Args:
+        plan_dir: Directory containing the ``NN-<batch-slug>.md`` batch files
+            (and ``00-overview.md``, which is excluded from consideration).
+        target_batch_file: The batch file's stem (e.g. ``01-alpha``, matching
+            ``Path(...).stem`` -- no ``.md`` suffix and no directory).
+
+    Returns:
+        The next unused card number for ``target_batch_file`` (one past the
+        highest card number already present in that batch), guaranteed not
+        to collide with any other batch's card numbers.
+    """
+    batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")
+
+    used_numbers: dict[str, set[int]] = {}
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        used_numbers[batch_path.stem] = {n for n, _ in cards}
+
+    if target_batch_file not in used_numbers:
+        raise PlanDAGError(f"batch file stem {target_batch_file!r} not found under {plan_dir}")
+
+    candidate = max(used_numbers[target_batch_file], default=0) + 1
+
+    for stem, nums in used_numbers.items():
+        if stem != target_batch_file and candidate in nums:
+            raise PlanDAGError(
+                f"card {candidate} already used by batch {stem!r}; "
+                f"{target_batch_file!r} and {stem!r} occupy overlapping numeric ranges"
+            )
+
+    return candidate
 
 
 # ---------------------------------------------------------------------------
@@ -2360,15 +2406,32 @@ def _check_verify_excludes_edited_tagged_test(
 # verify-full-suite check
 # ---------------------------------------------------------------------------
 
+# Splits a verify: command on shell-operator boundaries so each invocation in a compound
+# command is scoped independently (fixes #961: a later segment's ./... wrongly attributed
+# to an earlier go test invocation).
+_RE_SHELL_OPERATOR = re.compile(r"&&|\|\||;")
+
+# Matches a `go test` invocation, allowing the Go 1.20+ `-C <dir>` flag (which must precede
+# the subcommand) between `go` and `test` (fixes #933: `go -C <dir> test ./...` was never
+# matched by the old literal `\bgo test\b` pattern). Deliberately narrow -- a generic
+# "any flags between go and test" pattern would misfire on unrelated commands like
+# `go get test/pkg`.
+_RE_GO_TEST_INVOCATION = re.compile(r"\bgo\s+(?:-C\s+\S+\s+)?test\b")
+
+
 def _check_verify_full_suite(
     batch_files: list[Path],
     project_root: Path,
     overview_path: Path,
+    *,
+    done_gate: str | None = None,
 ) -> list[dict]:
     """
     Flag verify: commands that invoke an unscoped full-suite runner: run-all.py without
     -k/--only (Python/mill), go test ./... without -run (Go), dotnet test without --filter
     (C#), or bare pytest/python -m pytest with no path or -k filter (Python, non-mill).
+    A verify command that exactly equals `done_gate` (when supplied) is exempt from every
+    sub-check below.
 
     Applies to every batch file's frontmatter plus the overview's own module-wide ``verify:``,
     mirroring ``_check_verify_not_isolated``'s string-vs-mapping handling and malformed-mapping
@@ -2384,6 +2447,9 @@ def _check_verify_full_suite(
                 string is needed, not the resolved cwd.
         overview_path: Path to the plan's ``00-overview.md``, whose own frontmatter ``verify:`` is
             checked alongside the per-batch loop.
+        done_gate: The hub's configured repo-wide gate command (pipeline.done_gate), or None.
+            When a frontmatter's verify command exactly equals this string, no verify-full-suite
+            finding is reported for it, regardless of which sub-check would otherwise match.
 
     Returns:
         List of error dicts, one per unscoped full-suite invocation.
@@ -2399,6 +2465,8 @@ def _check_verify_full_suite(
             return None
         if command is None:
             return None
+        if done_gate is not None and command == done_gate:
+            return None
         if "run-all.py" in command and "-k " not in command and "--only " not in command:
             return {
                 "check": "verify-full-suite",
@@ -2410,17 +2478,22 @@ def _check_verify_full_suite(
                     "use '-k <pattern>' or '--only <files>' to scope the run"
                 ),
             }
-        if re.search(r"\bgo test\b.*\./\.\.\.", command) and "-run " not in command:
-            return {
-                "check": "verify-full-suite",
-                "batch": batch_label,
-                "card": None,
-                "path": command,
-                "message": (
-                    "verify command invokes 'go test ./...' without a -run <pattern> filter; "
-                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
-                ),
-            }
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if (
+                _RE_GO_TEST_INVOCATION.search(segment)
+                and "./..." in segment
+                and "-run " not in segment
+            ):
+                return {
+                    "check": "verify-full-suite",
+                    "batch": batch_label,
+                    "card": None,
+                    "path": command,
+                    "message": (
+                        "verify command invokes 'go test ./...' without a -run <pattern> filter; "
+                        "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                    ),
+                }
         if "dotnet test" in command and "--filter" not in command:
             return {
                 "check": "verify-full-suite",
@@ -2880,6 +2953,7 @@ def run(
     max_cards_per_batch: int = 10,
     max_batch_context_tokens: int = 120000,
     parent_branch: str | None = None,
+    done_gate: str | None = None,
 ) -> list[dict]:
     """Validate plan files in plan_dir.
 
@@ -2911,6 +2985,8 @@ def run(
             verify-unrelated-test-file. ``None`` (the default) makes that check a no-op -- callers
             that cannot resolve a parent branch (e.g.
             the standalone millpy-validate-plan.py CLI) simply skip it.
+        done_gate: The hub's configured pipeline.done_gate command, or None. Threaded to
+            _check_verify_full_suite (see that function's own done_gate documentation).
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -2954,7 +3030,7 @@ def run(
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
-    errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))
+    errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path, done_gate=done_gate))
     errors.extend(_check_verify_malformed_cwd(batch_files, overview_path, project_root))
     errors.extend(_check_verify_mixed_cwd(batch_files, overview_text, project_root, effective_git_root))
     errors.extend(_check_verify_unrelated_test_files(

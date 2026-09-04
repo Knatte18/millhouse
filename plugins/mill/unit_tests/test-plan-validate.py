@@ -4613,6 +4613,162 @@ def test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok() -> int:
         return 0
 
 
+def test_check_verify_full_suite_go_test_compound_command_scoped_dotdotdot_is_ok() -> int:
+    """Clean: compound command where ./... belongs to a later go vet invocation, not the earlier go test -> no verify-full-suite error (#961)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "go test ./internal/quarryengine/lsp/ && go vet -tags lsp ./...",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(
+                f"FAIL test_check_verify_full_suite_go_test_compound_command_scoped_dotdotdot_is_ok: "
+                f"unexpected: {check_full_suite}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_verify_full_suite_go_test_compound_command_scoped_dotdotdot_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_go_dash_c_test_dotdotdot_without_run_is_error() -> int:
+    """Dirty: 'go -C <dir> test ./...' (Go 1.20+ nested-module form) without a -run filter -> one verify-full-suite error (#933)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text("alpha", "go -C plugins/prowler test ./...")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            assert "go test ./..." in check_full_suite[0]["message"], (
+                f"message should mention go test ./...: {check_full_suite[0]['message']!r}"
+            )
+            print("PASS test_check_verify_full_suite_go_dash_c_test_dotdotdot_without_run_is_error")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_go_dash_c_test_dotdotdot_without_run_is_error: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_go_dash_c_test_dotdotdot_with_run_is_ok() -> int:
+    """Clean: 'go -C <dir> test ./...' with a -run filter -> no verify-full-suite error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text("alpha", "go -C plugins/prowler test ./... -run TestFoo")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(
+                f"FAIL test_check_verify_full_suite_go_dash_c_test_dotdotdot_with_run_is_ok: unexpected: {check_full_suite}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_verify_full_suite_go_dash_c_test_dotdotdot_with_run_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_done_gate_exact_match_is_ok() -> int:
+    """Clean: verify command exactly equals the configured done_gate -> no verify-full-suite error even though it would otherwise match the go-test branch (#950)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        done_gate = "go test ./... && go test -tags integration ./..."
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text("alpha", done_gate)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, done_gate=done_gate)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(
+                f"FAIL test_check_verify_full_suite_done_gate_exact_match_is_ok: unexpected: {check_full_suite}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_verify_full_suite_done_gate_exact_match_is_ok")
+        return 0
+
+
+def test_check_verify_full_suite_done_gate_subset_still_flagged() -> int:
+    """Dirty: verify command is a scoped SUBSET of done_gate, not an exact match -> still flagged (exact-match only, not prefix/subset)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text("alpha", "go test ./...")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, project_root, done_gate="go test ./... && golangci-lint run",
+        )
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        try:
+            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+            print("PASS test_check_verify_full_suite_done_gate_subset_still_flagged")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_verify_full_suite_done_gate_subset_still_flagged: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_verify_full_suite_done_gate_exact_match_overview_level_is_ok() -> int:
+    """Clean: overview's own module-wide verify: exactly equals done_gate -> no verify-full-suite error with batch: None (the exemption applies to the overview-level call path too, not just the per-batch loop)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        done_gate = "go test ./... && go test -tags integration ./..."
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}],
+            overview_verify=done_gate,
+        )
+        batch = _make_batch_file("alpha")  # per-batch verify: null, clean
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root, done_gate=done_gate)
+        check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
+        if check_full_suite:
+            print(
+                f"FAIL test_check_verify_full_suite_done_gate_exact_match_overview_level_is_ok: "
+                f"unexpected: {check_full_suite}",
+                file=sys.stderr,
+            )
+            return 1
+        print("PASS test_check_verify_full_suite_done_gate_exact_match_overview_level_is_ok")
+        return 0
+
+
 def test_check_verify_full_suite_dotnet_test_without_filter_is_error() -> int:
     """Dirty: verify invokes 'dotnet test' without --filter -> one verify-full-suite error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -7123,6 +7279,13 @@ def main() -> int:
         test_check_verify_full_suite_pytest_with_k_filter_is_ok,
         test_check_verify_full_suite_pytest_with_path_is_ok,
         test_check_verify_full_suite_bare_pytest_no_python_marker_clean,
+        # verify-full-suite: segment scoping + done_gate exemption (#933, #950, #961)
+        test_check_verify_full_suite_go_test_compound_command_scoped_dotdotdot_is_ok,
+        test_check_verify_full_suite_go_dash_c_test_dotdotdot_without_run_is_error,
+        test_check_verify_full_suite_go_dash_c_test_dotdotdot_with_run_is_ok,
+        test_check_verify_full_suite_done_gate_exact_match_is_ok,
+        test_check_verify_full_suite_done_gate_subset_still_flagged,
+        test_check_verify_full_suite_done_gate_exact_match_overview_level_is_ok,
         # verify cwd mapping form (Cards 23-25 / #604)
         test_check_verify_not_isolated_mapping_form_dirty,
         test_check_verify_not_isolated_mapping_form_clean,

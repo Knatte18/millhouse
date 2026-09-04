@@ -21,6 +21,10 @@ Public API:
     resolve.
     parse_commit_none_card_ids(batch_text) -> set[int] Return the card numbers in a batch file whose
     ``Commit:`` field is the literal ``none`` sentinel (verification-only cards).
+    find_dependents(batches, batch_name) -> list[str] Return every batch name whose resolved
+    ``depends-on:`` still names ``batch_name``.
+    remove_batch_from_index(overview_text, batch_name) -> str Return ``overview_text`` with
+    ``batch_name`` removed from the Batch Index yaml block.
 
 Structure expected inside the fenced block:
 
@@ -235,6 +239,87 @@ def resolve_deps_as_names(batches: list[dict]) -> dict[str, list[str]]:
                 deps.append(dep)
         result[name] = deps
     return result
+
+
+def find_dependents(batches: list[dict], batch_name: str) -> list[str]:
+    """Return every batch name whose resolved ``depends-on:`` still names ``batch_name``.
+
+    Resolves ``depends-on:`` entries (int-by-``number:`` or str-by-``name:``) via
+    :func:`resolve_deps_as_names` first, so callers never need to care whether a dependent batch
+    referenced ``batch_name`` by its number or its name.
+
+    Used by ``/mill-descope-batch`` as the safety guard against removing a batch other batches
+    still rely on: a non-empty result means ``batch_name`` cannot be safely descoped until those
+    dependents are descoped first or their ``depends-on:`` edited.
+
+    Returns:
+        Sorted list of dependent batch names, for deterministic output.
+        Empty list when nothing depends on ``batch_name`` (including when it is a leaf batch or
+        the name is not present in ``batches`` at all).
+    """
+    deps_by_name = resolve_deps_as_names(batches)
+    return sorted(name for name, deps in deps_by_name.items() if batch_name in deps)
+
+
+def _serialise_batch_index(batches: list[dict]) -> str:
+    """Return a deterministic ``batches:`` yaml block body for the plan overview's Batch Index.
+
+    Mirrors ``_status._serialise_batches``'s layout conventions (fixed key order, ``"  - "``
+    prefix on the first key and ``"    "`` on subsequent keys, list-valued fields rendered as an
+    inline flow sequence) but deliberately diverges on one point: the Batch Index's on-disk format
+    always writes ``verify:`` explicitly for every entry -- including the literal ``null`` when the
+    value is ``None`` -- unlike ``_serialise_batches``, which omits ``None``-valued keys entirely to
+    keep ``status.md``'s ``## Batches`` entries visually compact.
+    """
+    order = ["number", "name", "file", "depends-on", "verify"]
+    parts = ["batches:"]
+    for entry in batches:
+        first = True
+        for key in order:
+            value = entry.get(key)
+            prefix = "  - " if first else "    "
+            if key == "verify":
+                # Batch Index always writes verify: explicitly, even when None -- never omitted.
+                rendered = "null" if value is None else value
+                parts.append(f"{prefix}{key}: {rendered}")
+            elif isinstance(value, list):
+                flow_value = yaml.safe_dump(value, default_flow_style=True).strip()
+                parts.append(f"{prefix}{key}: {flow_value}")
+            else:
+                parts.append(f"{prefix}{key}: {value}")
+            first = False
+    return "\n".join(parts) + "\n"
+
+
+def remove_batch_from_index(overview_text: str, batch_name: str) -> str:
+    """Return ``overview_text`` with ``batch_name`` removed from the Batch Index yaml block.
+
+    Used by ``/mill-descope-batch`` to drop a not-yet-started batch from the plan's DAG. Callers
+    are expected to have already confirmed via :func:`find_dependents` that no surviving batch
+    still depends on ``batch_name`` -- this function performs no dependent check of its own.
+
+    Args:
+        overview_text: Full contents of ``00-overview.md``.
+        batch_name: The ``name:`` value of the batch entry to remove.
+
+    Returns:
+        The full overview text with the Batch Index's fenced yaml block replaced by the
+        serialised remaining batches (see :func:`_serialise_batch_index`), everything else
+        byte-for-byte unchanged.
+
+    Raises:
+        PlanDAGError: ``batch_name`` is not present in the Batch Index.
+    """
+    batches = extract_batch_index(overview_text)
+    remaining = [b for b in batches if b["name"] != batch_name]
+    if len(remaining) == len(batches):
+        raise PlanDAGError(f"batch {batch_name!r} not present in Batch Index")
+    new_body = _serialise_batch_index(remaining)
+    # A plain-string replacement passed directly to re.sub would have backslash sequences
+    # (\1, \g<name>) in new_body interpreted as backreferences; wrapping it in a lambda forces
+    # re.sub to treat the return value as a literal string instead.
+    replacement = "```yaml\n" + new_body.rstrip("\n") + "\n```"
+    return _BATCHES_BLOCK_RE.sub(lambda _m: replacement, overview_text, count=1)
 
 
 def _check_file_refs(batches: list[dict], batch_files: list[str]) -> None:
