@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-descope-batch
+phase: approved-mill-go-base-scope-and-numbering-fixes
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-09-04T09:25:41Z'
 implementing  '2026-09-04T09:26:19Z'
 approved-mill-go-base-doc-fixes  '2026-09-04T09:30:37Z'
 approved-mill-descope-batch  '2026-09-04T09:36:30Z'
+approved-mill-go-base-scope-and-numbering-fixes  '2026-09-04T09:40:54Z'
 ```
 
 ## Batches
@@ -45,8 +46,9 @@ batches:
     commit_sha: a909a04dd54e07d98ea4e4d34440862635769a15
     verify_baseline_failures: []
   - name: mill-go-base-scope-and-numbering-fixes
-    state: running
+    state: approved
     implementer_session: b3ff973e-ed96-4bb1-82cd-0697d428c4bf
     start_sha: dec05f845c6d1af357035939fb4f8fc085f39575
+    commit_sha: 573066b7d6199881b2da16c68bb96f3ce5c4dcd0
     verify_baseline_failures: []
 ```
