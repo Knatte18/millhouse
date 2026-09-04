@@ -1266,10 +1266,15 @@ def _read_for_bulk(p: Path) -> str:
         return p.read_text(encoding="utf-8", errors="replace")
 
 
-def bulk_files(file_paths: list[Path]) -> str:
+def bulk_files(file_paths: list[Path], *, roots: DisplayRoots | None = None) -> str:
     """Concatenate file contents with '--- FILE: <path> ---' delimiters.
 
-    Paths that do not exist are skipped with a stderr warning.
+    Paths that do not exist are skipped with a stderr warning -- the warning always names the
+    absolute path, since it is a diagnostic for the operator rather than prompt text.
+
+    When ``roots`` is not ``None``, the ``--- FILE: ... ---`` / ``--- END FILE: ... ---`` delimiters
+    use `roots.render(p)` instead of the raw absolute path.
+    Defaults to ``None`` so existing callers keep emitting today's absolute delimiters unchanged.
     """
     parts: list[str] = []
     for p in file_paths:
@@ -1281,7 +1286,8 @@ def bulk_files(file_paths: list[Path]) -> str:
                 file=sys.stderr,
             )
             continue
-        parts.append(f"--- FILE: {p} ---\n{contents}\n--- END FILE: {p} ---")
+        display = roots.render(p) if roots is not None else str(p)
+        parts.append(f"--- FILE: {display} ---\n{contents}\n--- END FILE: {display} ---")
     return "\n\n".join(parts)
 
 
@@ -1290,6 +1296,8 @@ def bulk_files_with_diff(
     start_sha: str,
     project_root: Path,
     threshold: float,
+    *,
+    roots: DisplayRoots | None = None,
 ) -> str:
     """Like bulk_files but substitutes git diff output for small-diff files.
 
@@ -1297,6 +1305,17 @@ def bulk_files_with_diff(
     include the diff instead of full content.
     Files with no diff (unchanged between start_sha and HEAD) are included at full content so the
     reviewer has all context.
+
+    When ``roots`` is not ``None``, every ``--- FILE: ... ---`` / ``--- END FILE: ... ---`` /
+    ``--- DIFF: ... ---`` / ``--- END DIFF: ... ---`` delimiter uses `roots.render(p)` instead of the
+    raw absolute path.
+    Defaults to ``None`` so existing callers keep emitting today's absolute delimiters unchanged.
+    The stderr warnings on a missing/unreadable path or a failed git diff always name the absolute
+    path -- those are operator diagnostics, not prompt text.
+    The ``rel_path`` local used to scope the ``git diff`` invocation is computed independently of
+    the display string: it is always relative to ``project_root``, because the git invocation needs
+    a path relative to the repository it runs ``git -C`` against, which is not necessarily the root
+    the display helper selects.
     """
     parts: list[str] = []
     for p in file_paths:
@@ -1313,6 +1332,8 @@ def bulk_files_with_diff(
             rel_path = p.relative_to(project_root).as_posix()
         except ValueError:
             rel_path = str(p)
+
+        display = roots.render(p) if roots is not None else str(p)
 
         result = _subprocess_util.run(
             [
@@ -1331,22 +1352,28 @@ def bulk_files_with_diff(
                 f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file",
                 file=sys.stderr,
             )
-            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+            parts.append(
+                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+            )
             continue
 
         diff_text = result.stdout
 
         if not diff_text:
-            parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+            parts.append(
+                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+            )
             continue
 
         if len(diff_text) < threshold * len(file_content):
             parts.append(
-                f"--- DIFF: {p} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {p} ---"
+                f"--- DIFF: {display} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {display} ---"
             )
             continue
 
-        parts.append(f"--- FILE: {p} ---\n{file_content}\n--- END FILE: {p} ---")
+        parts.append(
+            f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
+        )
 
     return "\n\n".join(parts)
 

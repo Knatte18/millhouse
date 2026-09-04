@@ -925,6 +925,27 @@ def main() -> int:
             "PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)"
         )
 
+    # bulk_files: roots supplied -> relative FILE/END FILE delimiters
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        p1 = project_root / "a.py"
+        p1.write_text("content-a", encoding="utf-8")
+        roots = DisplayRoots(project_root=project_root)
+        result = bulk_files([p1], roots=roots)
+        assert "--- FILE: a.py ---" in result, f"Got {result!r}"
+        assert "--- END FILE: a.py ---" in result, f"Got {result!r}"
+        assert str(project_root) not in result, f"Unexpected absolute prefix: {result!r}"
+        print("PASS: bulk_files with roots -> relative FILE/END FILE delimiters")
+
+    # bulk_files: roots omitted -> absolute delimiters unchanged (back-compat)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        p1 = Path(tmpdir) / "a.py"
+        p1.write_text("content-a", encoding="utf-8")
+        result = bulk_files([p1])
+        assert f"--- FILE: {p1} ---" in result, f"Got {result!r}"
+        assert f"--- END FILE: {p1} ---" in result, f"Got {result!r}"
+        print("PASS: bulk_files without roots -> absolute delimiters (back-compat)")
+
     # render_prompt: missing template -> FileNotFoundError
     try:
         render_prompt("nonexistent-template-xyz")
@@ -3115,6 +3136,69 @@ def main() -> int:
             f"expected no DIFF delimiter, got: {result[:200]!r}"
         )
         print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
+
+    # Test F — roots supplied relativizes both FILE and DIFF delimiter pairs;
+    # git-diff scoping still resolves (rel_path stays project_root-relative independent of roots).
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo = Path(tmpdir).resolve()
+        subprocess.run(
+            ["git", "-C", str(repo), "init"], check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "config", "user.name", "T"],
+            check=True,
+            capture_output=True,
+        )
+        src = repo / "src"
+        src.mkdir()
+        (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
+        (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "init"],
+            check=True,
+            capture_output=True,
+        )
+        start_sha = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        with open(src / "a.py", "a", encoding="utf-8") as fh:
+            fh.write("y\n" * 10)
+        (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "commit", "-m", "change"],
+            check=True,
+            capture_output=True,
+        )
+        roots = DisplayRoots(project_root=repo)
+        result = bulk_files_with_diff(
+            [src / "a.py", src / "b.py"], start_sha, repo, 0.25, roots=roots
+        )
+        assert "--- DIFF: src/a.py " in result, f"Got {result[:200]!r}"
+        assert "--- END DIFF: src/a.py ---" in result, f"Got {result[:200]!r}"
+        assert "--- FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
+        assert "--- END FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
+        assert str(repo) not in result, f"Unexpected absolute prefix: {result[:200]!r}"
+        print(
+            "PASS: bulk_files_with_diff with roots -> relative FILE and DIFF delimiters"
+        )
 
     # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
     with _test_helpers.safe_temp_dir() as tmpdir:
