@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanup-orphan-baseline-sweep
+phase: approved-bg-liveness-windows-probe
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-09-04T09:22:25Z'
 implementing  '2026-09-04T09:22:57Z'
 approved-worktree-teardown-retry  '2026-09-04T09:27:42Z'
 approved-cleanup-orphan-baseline-sweep  '2026-09-04T09:31:32Z'
+approved-bg-liveness-windows-probe  '2026-09-04T09:34:25Z'
 ```
 
 ## Batches
@@ -45,9 +46,10 @@ batches:
     commit_sha: 7d613fd798fe83f2b71981b69faeb15e2fde8ec4
     verify_baseline_failures: []
   - name: bg-liveness-windows-probe
-    state: running
+    state: approved
     implementer_session: 2f7c95c2-cde0-40cc-97b8-2c875d50635d
     start_sha: 6fb2e010b557b5a93fe10f91d6877271164af8de
+    commit_sha: 31d1f40fc01932c0ae5a448a4930c7477fdf4ab7
     verify_baseline_failures: []
   - name: baseline-undercount-corroboration
     state: pending
