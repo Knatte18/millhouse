@@ -661,6 +661,28 @@ The implementer's last output line must be JSON:
 
 ### 2b. Cleanliness gate
 
+**Scope violations check (implementer success envelope).**
+Inspect step 2's already-parsed JSON report for a non-empty `scope_violations` field — present on a `status: success` envelope when the implementer left untracked out-of-scope files on disk.
+This is a self-reported field the implementer's own JSON already carries, distinct from the fixer's `scope_violations` handling documented in `plugins/mill/skills/mill-go-base/handoff.md`'s "Scope violations handling note", which is already folded into the fixer's own `stuck_type: logic` envelope and needs no change here.
+
+If `scope_violations` is non-empty, call:
+
+```python
+import _cleanliness
+removed_paths, blocking_paths = _cleanliness.clean_ephemeral_scope_violations(worktree_root, git_root)
+```
+
+`signature: _cleanliness.clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[list[str], list[str]]`
+
+If `blocking_paths` is non-empty (a path could not be confidently classified against the plan):
+- `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+- `_status.set_batch_field(status_path, batch_name, "blocked_reason", f"out-of-scope untracked file(s): {blocking_paths}")`
+- `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+- Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — out-of-scope untracked files"`
+- Go to *Blocked*.
+
+If `blocking_paths` is empty (whether or not anything was removed), fall through unchanged into the dirt-computation flow below.
+
 After a `success` report: Before the dirt computation, resolve the parent branch and revert out-of-scope drift.
 
 Inline Python (in step 2b, before compute_new_dirt):
