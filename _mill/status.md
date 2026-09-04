@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-validator-checks
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-09-04T10:09:36Z'
 plan-fix-r2  '2026-09-04T10:10:09Z'
 planned  '2026-09-04T10:10:18Z'
 implementing  '2026-09-04T10:10:46Z'
+approved-validator-checks  '2026-09-04T10:16:04Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-09-04T10:10:46Z'
 ```yaml
 batches:
   - name: validator-checks
-    state: running
+    state: approved
     implementer_session: a5522f43-8d9b-405b-b9fb-93b4d8e92900
     start_sha: 9752c350674588ee0c02e7ef5edd37c935b8196e
+    commit_sha: e7395be72fff9f0642048aec008816e8a8bc11ae
     verify_baseline_failures: []
   - name: validator-tests
     state: pending
