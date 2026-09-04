@@ -454,6 +454,8 @@ def main(argv=None) -> int:
             nits_scope=nits_scope,
             git_root=git_root,
             cwd_override=cwd_override,
+            git_name=git_name,
+            git_email=git_email,
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
