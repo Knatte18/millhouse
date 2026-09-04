@@ -29,6 +29,8 @@ strengthened retry automatically) rather than a bespoke rmtree call.
 
 - **Context:**
   - `plugins/mill/scripts/_worktree.py`
+  - `plugins/mill/scripts/_junction.py`
+  - `plugins/mill/scripts/_verify_baseline.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-cleanup.py`
 - **Creates:** none
