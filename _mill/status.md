@@ -57,6 +57,8 @@ batches:
     commit_sha: 08a5b765885111f8b4b88cf365812a995949a910
     verify_baseline_failures: []
   - name: fresh-session-after-self-resolve
-    state: pending
+    state: running
+    implementer_session: 00a0f8dc-6425-421a-9c4b-306a4afb21c2
+    start_sha: 6f8e70e14890698282f39a65da68d8d41c19ecf6
     verify_baseline_failures: []
 ```
