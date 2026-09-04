@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py: Batch Index/batch-file verify: drift, flattened-fence, and large-file-citation gaps'
 slug: 'plan-validate-batch-index-drift-and-misc-checks'
-approved: false
+approved: true
 started: '20260904-095646'
 parent: 'main'
 root: ""
@@ -58,9 +58,9 @@ batches:
 
 - **Decision:** each docstring this plan touches gains only the new entries this task introduces.
   Check names already missing from `run()`'s docstring (`depends-on-batch-mismatch`,
-  `context-completeness`, `requirements-quote-indent-drift`, `plugin-manifest-context-missing`,
-  `verify-not-isolated`, `verify-full-suite`, `verify-malformed-cwd`) and from the unit-test file's
-  own "Check coverage" docstring stay exactly as they are.
+  `context-completeness`, `requirements-quote-indent-drift`) and from the unit-test file's own
+  "Check coverage" docstring (`depends-on-batch-mismatch`, `requirements-quote-indent-drift`,
+  `plugin-manifest-context-missing`) stay exactly as they are.
 - **Rationale:** the pre-existing staleness is a separate clean-up with its own review surface;
   folding it in would turn a targeted three-gap fix into an unrelated docs sweep.
 - **Applies to:** all batches
