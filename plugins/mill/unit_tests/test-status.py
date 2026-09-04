@@ -30,6 +30,7 @@ from _status import (
     read_full,
     read_slug,
     read_status,
+    remove_batch,
     render_initial,
     set_batch_field,
     set_batch_fields,
@@ -414,6 +415,25 @@ def main() -> int:
                 "'clean baseline' from 'field never computed'"
             )
             print("PASS: set_batch_field round-trips empty verify_baseline_failures list, not dropped")
+
+            before_removal = read_batches(sp)
+            foundation_entry = next(b for b in before_removal if b["name"] == "foundation")
+            remove_batch(sp, "reviewers")
+            assert read_batches(sp) == [foundation_entry], (
+                "remove_batch should drop only the named entry, leaving foundation untouched"
+            )
+            print("PASS: remove_batch drops the named entry only")
+
+            try:
+                remove_batch(sp, "reviewers")
+            except ValueError as exc:
+                assert "not present" in str(exc)
+                print("PASS: remove_batch rejects an already-removed batch name")
+
+            contents = sp.read_text(encoding="utf-8")
+            assert "phase: discussed" in contents, "remove_batch damaged top yaml"
+            assert "discussed  '2026-04-22T15:00:00Z'" in contents, "remove_batch damaged timeline"
+            print("PASS: remove_batch preserves top yaml + timeline")
 
         # --- read_status tests ---
         ts = "2026-04-22T14:32:05Z"
