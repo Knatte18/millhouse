@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan: entry-gate, timeline, and script-portability bugs'
 slug: mill-plan-entry-gate-and-misc-bugs
-approved: false
+approved: true
 started: 20260904-101521
 parent: main
 root: ""
