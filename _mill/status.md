@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-mill-go-base-doc-fixes
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r3  '2026-09-04T09:14:35Z'
 plan-fix-r4  '2026-09-04T09:21:43Z'
 planned  '2026-09-04T09:25:41Z'
 implementing  '2026-09-04T09:26:19Z'
+approved-mill-go-base-doc-fixes  '2026-09-04T09:30:37Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-09-04T09:26:19Z'
 ```yaml
 batches:
   - name: mill-go-base-doc-fixes
-    state: running
+    state: approved
     implementer_session: 811519f8-b185-4c9a-a811-75b0d1be4848
     start_sha: 4eea6a9c45d7f10e0d8d64e15e7bd4c5fb180e45
+    commit_sha: c43e64fbaa96838d626f15a24cbfa20f84fc1f57
   - name: mill-descope-batch
     state: pending
     verify_baseline_failures: []
