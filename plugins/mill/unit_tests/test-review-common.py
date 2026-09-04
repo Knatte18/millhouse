@@ -1999,6 +1999,29 @@ def main() -> int:
     assert not result.endswith("\n"), f"Expected no trailing newline, got {result!r}"
     print("PASS: build_manifest_section no trailing newline")
 
+    # roots supplied -> relative bullets, result starts with ## Path roots
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        paths = [project_root / "a.py", project_root / "sub" / "b.py"]
+        roots = DisplayRoots(project_root=project_root)
+        result = build_manifest_section(paths, roots=roots)
+        assert result.startswith("## Path roots"), f"Got {result!r}"
+        assert "- a.py" in result, f"Missing relative bullet: {result!r}"
+        assert "- sub/b.py" in result, f"Missing relative bullet: {result!r}"
+        assert str(project_root) not in result.split("## Files included")[1], (
+            f"Bullets should not carry absolute prefix: {result!r}"
+        )
+        print("PASS: build_manifest_section with roots -> relative bullets and Path roots header")
+
+    # roots omitted -> back-compat pin: still absolute bullets and ## Files included first
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        paths = [project_root / "a.py"]
+        result = build_manifest_section(paths)
+        assert result.startswith("## Files included (N="), f"Got {result!r}"
+        assert f"- {paths[0]}" in result, f"Expected absolute bullet: {result!r}"
+        print("PASS: build_manifest_section without roots -> absolute bullets (back-compat)")
+
     # ---------------------------------------------------------------------------
     # build_deletes_section
     # ---------------------------------------------------------------------------

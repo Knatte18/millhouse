@@ -1351,10 +1351,12 @@ def bulk_files_with_diff(
     return "\n\n".join(parts)
 
 
-def build_manifest_section(file_paths: list[Path]) -> str:
+def build_manifest_section(
+    file_paths: list[Path], *, roots: DisplayRoots | None = None
+) -> str:
     """Return a `## Files included` markdown block listing every bulked file.
 
-    Output shape (no trailing newline):
+    Output shape (no trailing newline), when ``roots`` is ``None``:
 
         ## Files included (N=<count>)
 
@@ -1362,16 +1364,40 @@ def build_manifest_section(file_paths: list[Path]) -> str:
         - <path-2>
         ...
 
+    When ``roots`` is not ``None``, the output additionally opens with the ``## Path roots`` block
+    from `build_path_roots_section`, followed by a blank line, ahead of the ``## Files included``
+    heading, and every bullet is `roots.render(p)` instead of the raw absolute path:
+
+        ## Path roots
+        ...
+
+        ## Files included (N=<count>)
+
+        - <relative-path-1>
+        - <relative-path-2>
+        ...
+
     The manifest is the FIRST thing the reviewer reads inside the artefact section.
     Its job is to remove the long-context haystack effect: the reviewer scans this list, then can
     answer "is file X provided?"
     in O(1) instead of scanning a 200k-char bulk for the matching `--- FILE: X ---` delimiter.
+
+    ``roots`` defaults to ``None`` so every existing caller keeps emitting today's absolute-path
+    output until it is threaded through explicitly.
     """
     if not file_paths:
-        return "## Files included (N=0)\n\n(no files)"
-    count = len(file_paths)
-    bullets = "\n".join(f"- {p}" for p in file_paths)
-    return f"## Files included (N={count})\n\n{bullets}"
+        body = "## Files included (N=0)\n\n(no files)"
+    else:
+        count = len(file_paths)
+        if roots is not None:
+            bullets = "\n".join(f"- {roots.render(p)}" for p in file_paths)
+        else:
+            bullets = "\n".join(f"- {p}" for p in file_paths)
+        body = f"## Files included (N={count})\n\n{bullets}"
+
+    if roots is None:
+        return body
+    return f"{build_path_roots_section(roots)}\n\n{body}"
 
 
 def build_deletes_section(deletes_tokens: list[str]) -> str:
