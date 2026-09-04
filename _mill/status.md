@@ -31,5 +31,7 @@ implementing  '2026-09-04T08:42:08Z'
 ```yaml
 batches:
   - name: mill-plan-skill-round-cap-and-skip-check-fixes
-    state: pending
+    state: running
+    implementer_session: db078049-2f4e-4543-9f2d-27eb4225bad7
+    start_sha: aca58a68ca485858357ca16fb8eaa5abb94fa3f0
 ```
