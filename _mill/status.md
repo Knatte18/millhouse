@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-context-completeness-false-positive-exemptions
 branch: hanf/plan-validate-context-completeness-false-positive-exemptions
 plan: _mill/plan
@@ -24,4 +24,19 @@ plan-fix-r1  '2026-09-04T16:51:43Z'
 plan-review-r2  '2026-09-04T17:00:15Z'
 plan-fix-r2  '2026-09-04T17:01:06Z'
 planned  '2026-09-04T17:01:16Z'
+implementing  '2026-09-04T17:01:56Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: validator-exemptions
+    state: pending
+  - name: structural-exemption-tests
+    state: pending
+  - name: reviewer-and-docs-sync
+    state: pending
+  - name: lexical-exemption-tests
+    state: pending
 ```
