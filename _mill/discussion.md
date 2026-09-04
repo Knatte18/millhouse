@@ -1,0 +1,99 @@
+# Discussion: millpy-implement/fix.py: stuck-type false positives and session-hygiene gaps
+
+```yaml
+task: millpy-implement/fix.py: stuck-type false positives and session-hygiene gaps
+slug: millpy-implement-fix-stuck-type-false-positives
+status: discussing
+parent: main
+```
+
+## Problem
+
+Four related bugs in `millpy-implement.py`/`millpy-fix.py`'s finalize/prepare machinery were reported from two real mill-go runs (issues #954, #916, #956, #955). Together they cause the stuck-escalation machinery to misfire — flagging batches as stuck for reasons that have nothing to do with the implementer's actual work (its own bookkeeping writes, a missing baseline forward), silently corrupting session bookkeeping on legitimate self-resolve retries, and leaving a background baseline pre-flight failure undiagnosable after the fact. None of these are behavioral regressions the implementer caused — they are gaps in the orchestration/finalize layer that surface as false `stuck_type` classifications or silent state corruption, both of which cost operator time chasing phantom failures.
+
+This task is deliberately sequenced *after* two other bug clusters (mill-go-execution-and-bookkeeping-bugs' PATH bug, merged at `def97c8c`; millpy-implement/bg Windows teardown/liveness fixes, merged at `1c61b831`) because both touch the same finalize verify-replay/baseline-dispatch code paths this task edits — landing on top of both avoids racing them.
+
+## Scope
+
+**In:**
+- `_implementer_common.py`: fix `_in_scope_dirty_stuck`/`_run_verify_gates` ordering so finalize's own uncommitted `verify_baseline_failures` write to `status.md` never trips its own dirty-tree gate (#954).
+- `millpy-fix.py`: forward `batch_verify_baseline`/`module_verify_baseline`/`batch_name` into `finalize_from_output` for both `--scope batch` and `--scope holistic` (#916).
+- `millpy-implement.py`: narrow the `_prepare_reuse_entry` session/start_sha reuse heuristic so a self-resolve-after-stuck re-fire always mints fresh `session_id`/`start_sha`, while a genuine transient-dispatch-failure re-fire still reuses them (#956).
+- `millpy-bg.py`: add a heartbeat write to the worker log so a hard-killed background worker leaves a last-known-alive timestamp in the log (#955).
+
+**Out:**
+- `millpy-fix.py`'s missing `task_dir`/`parent_branch` wiring (which disables the in-scope dirty-tree gate entirely for fixer dispatches) — a related gap found while reading `finalize_from_output`'s call site, but not named by any of the four sourced issues. Flagged as a follow-up candidate, not fixed here.
+- Any change to the `_in_scope_dirty_stuck` `_mill/briefs/` exclusion (already fixed under #885) — unaffected by this task.
+- Any change to the transient-retry / `incomplete` / infrastructure stuck-escalation paths in `mill-go-base/SKILL.md` — this task only fixes the false-positive-producing code millpy-implement.py/millpy-fix.py call, not the orchestrator's escalation policy itself.
+- Adding new CLI flags (e.g. an explicit `--resume` distinct from `--resume-incomplete`) — the #956 fix uses an existing signal (the phase timeline) instead of a new flag surface.
+
+## Decisions
+
+### 954-commit-baseline-write-before-dirty-check
+
+- Decision: In `_run_verify_gates`'s corroboration-waiver branch (`_implementer_common.py:1180-1189`), after `_status.set_batch_field(status_path, batch_name, "verify_baseline_failures", expanded)` succeeds, immediately `git add`+commit `status_path` on the task branch — mirroring the existing idiom already used in `millpy-implement.py:857` ("commit... so the subsequent finalize in-scope dirty gate does not trip on the uncommitted session write"). This runs before `_in_scope_dirty_stuck` is reached later in the same `finalize_from_output` call (line 1975), so the write is never observed as dirt.
+- Rationale: The root cause is a write-then-check-without-commit race entirely internal to one `finalize_from_output` call, not a scope or exclusion problem — `status.md` legitimately needs to reflect the expanded baseline set for later batches, so excluding it from the dirty check (rather than committing it) would silently mask genuinely dirty `status.md` states caused by something else. The codebase already has a working precedent for this exact pattern at `millpy-implement.py:857`, so reusing it keeps the fix consistent with existing conventions rather than introducing a new one.
+- Rejected: Blanket-excluding `status.md` from `_in_scope_dirty_stuck`'s scope (loses real-dirt detection for other causes of a dirty `status.md`). Reordering the dirty-check before the corroboration write (the corroboration write's whole purpose is to persist the expanded baseline for correctness *before* finalize returns; deferring it past the dirty-check would either lose the persist on a dirty-tree abort or require duplicating the write, more invasive than a commit-after-write).
+
+### 916-forward-verify-baselines-both-scopes
+
+- Decision: In `millpy-fix.py`'s single `--stage finalize` branch (lines 415-457, shared by `--scope batch` and `--scope holistic`), read and forward `batch_verify_baseline` and `batch_name` for both scopes, and `module_verify_baseline` for both scopes. For `--scope batch`, read `verify_baseline_failures` from the batch's status entry the same way `millpy-implement.py:728` does. For `--scope holistic`, union (concatenate + dedupe) the per-batch `verify_baseline_failures` for every batch contributing to the holistic verify command (per the issue's own fix suggestion), keyed by the same `batch_verifies` list already computed by `_plan_dag.iter_batch_verifies` at line 436.
+- Rationale: Issue #916 names holistic scope specifically (that was the reproduced failure), but the finalize branch is one shared code path for both scopes — fixing only holistic would leave batch-scope fixer dispatches carrying the identical latent bug, undetected until someone hits it. Since the fix touches the same call site regardless, extending it to both scopes is not scope creep, it's fixing the actual shared bug.
+- Rejected: Fixing holistic scope only, exactly matching the issue title — leaves a known-identical bug in the batch-scope path deliberately unfixed in code that a reader/reviewer will immediately notice is inconsistent.
+
+### 956-fresh-session-after-self-resolve
+
+- Decision: Narrow the `_prepare_reuse_entry` gate (`millpy-implement.py:764-775`) with an additional condition: reuse only when the most recent entry in `status.md`'s `## Timeline` phase history is *not* one of the self-resolve markers (`self-resolved-verify-logic`, `self-resolved-dead-parent`) recorded since this batch's `implementer_session` was minted. When the most recent phase entry is a self-resolve marker, fall through to the fresh-mint branch (new `session_id`, current-HEAD `start_sha`) even though `state == "running"`.
+- Rationale: Per `mill-go-base/SKILL.md:905,924-925`, self-resolve-after-stuck (`verify`/`logic` first occurrence) only appends a `self-resolved-verify-logic` phase entry and commits a plan edit — it never changes the batch's `state` field away from `"running"`, and `implementer_session` stays set. That makes a self-resolved re-fire structurally indistinguishable from a genuine transient-dispatch-failure re-fire to the current `state == "running"` heuristic, even though SKILL.md documents self-resolve re-fire as "fresh" (`"Then re-fire the implementer fresh for this batch"`, line 925). The phase timeline already carries the exact signal needed to tell the two cases apart, since `append_phase` is called at the moment of self-resolve — no new state or flag is needed.
+- Rejected: Removing the `_prepare_reuse_entry` heuristic outright (it exists specifically to prevent a second "mill-go: start batch" commit and session_id churn on legitimate transient-retry re-dispatch — see the code comment citing #625/#635/#643; removing it reintroduces that regression). Adding a new explicit `--resume`-style flag distinct from `--resume-incomplete` (adds CLI surface and a new decision point to `mill-go-base/SKILL.md`'s already-complex stuck-escalation branching, when the existing phase timeline already disambiguates the two cases without any new API).
+
+### 956-timeline-reader-needed
+
+- Decision: `_status.py` has no existing helper to read the phase timeline back (only `append_phase`, which writes). The 956 fix needs a small reader — either a new `_status.read_phases(status_path) -> list[dict]` (mirroring `read_batches`'s pattern of parsing a known markdown section) returning entries in file order (last entry = most recent), or, if a reader already exists elsewhere under a name not surfaced by this discussion's exploration, reuse it instead of duplicating.
+- Rationale: mill-plan needs to know this doesn't come for free — a batch for #956 must include adding (or locating) this reader before the `_prepare_reuse_entry` gate can consult it.
+- Rejected: Parsing the `## Timeline` text block ad hoc inline inside `millpy-implement.py` instead of a shared `_status.py` helper — every other status.md structured-section read in this codebase goes through `_status.py` (see `read_batches`), and duplicating parsing logic outside it breaks that convention for no benefit.
+
+### 955-heartbeat-for-diagnosability
+
+- Decision: In `millpy-bg.py`'s `_worker_main` (worker fast-path, lines 34-89), start a lightweight background thread before calling `subprocess.run(cmd, ...)` that appends a `[mill-bg] HEARTBEAT <ISO-8601 UTC timestamp>` line to the log file at a fixed interval (e.g. every 30s) for as long as the inner subprocess runs, and stop/join the thread in the existing `finally` block before the `[mill-bg] EXIT` write.
+- Rationale: The observed failure mode (log has only the `WORKER PID=... START` line, no `WORKER ERROR`, no `EXIT`) means the worker process was killed hard enough that neither the `except Exception` nor the `finally` block ever ran — confirmed by the module's own docstring, which already documents this as unrecoverable in-process ("does NOT survive a hard process kill"). A heartbeat can't catch the kill itself, but it narrows the diagnostic window: the last heartbeat timestamp before the gap tells the operator roughly when the process died, rather than leaving total silence.
+- Rejected: No code change, documenting the limitation only (the issue explicitly asks for "enough in its log... to diagnose the failure without re-running" — a pure doc note doesn't satisfy that). Wrapping in a supervisor/watchdog process instead of a heartbeat thread (much larger surface change — new process, new IPC — for a diagnostic improvement that a heartbeat achieves more cheaply).
+
+### 954-916-956-out-of-scope-dirty-gate-gap
+
+- Decision: Do not add `task_dir`/`parent_branch` wiring to `millpy-fix.py`'s finalize call in this task, even though their absence disables `_in_scope_dirty_stuck` entirely for both fixer scopes.
+- Rationale: Not named by any of the four sourced issues (#954/#916/#956/#955); expanding scope to an adjacent-but-unrequested gate risks scope creep and delays landing the four confirmed fixes. Recorded here so it isn't silently lost.
+- Rejected: Fixing it now since the code is adjacent — rejected per YAGNI/scope discipline; this task fixes what was reported, not everything found nearby.
+
+## Technical context
+
+- `_implementer_common.py` (2424 lines) is the shared finalize/verify-gate module:
+  - `_in_scope_dirty_stuck` (line 417): the in-scope dirty-tree gate. Computes `owned_paths` from `git diff --name-only start_sha` intersected with `git status --porcelain`, excluding `_mill/briefs/` (already fixed under #885 — do not touch that exclusion).
+  - `_run_verify_gates` (line 1042): runs batch-level then module-wide verify gates; the corroboration-waiver branch (~1163-1190) is where the uncommitted `verify_baseline_failures` write happens (#954's root cause).
+  - `finalize_from_output` (line 1618) / `_forward_output` (line 1768): the shared finalize entry point both `millpy-implement.py` and `millpy-fix.py` call. `_run_verify_gates` runs at line ~1865, `_in_scope_dirty_stuck` at line 1975 — strictly after, confirming the ordering root cause for #954.
+- `millpy-fix.py`'s `--stage finalize` branch is lines 415-457; the scope-specific verify-cmd resolution (batch vs. holistic) happens just above it (424-443) but none of that scope-specific data flows into the `finalize_from_output` call itself for baselines.
+- `millpy-implement.py`'s `--stage finalize` branch (lines 710-753) is the reference implementation for correct baseline forwarding — `batch_verify_baseline = batch_status.get("verify_baseline_failures")` (line 728), passed alongside `module_verify_baseline`, `batch_name`, `task_dir`, `parent_branch`. Use this as the template for #916's `millpy-fix.py` fix.
+- `millpy-implement.py`'s prepare-stage three-way branch (lines 760-828: resume-after-incomplete / prepare-reuse / fresh-mint) is where #956 lives. `_prepare_reuse_entry` is set at lines 764-775, gated only on `args.stage == "prepare" and not args.resume_incomplete` plus `state == "running" and implementer_session` truthy — no awareness of self-resolve history.
+- `_status.py`: `_BATCH_STATES` includes `"blocked"` as a distinct state from `"running"` (line 522-528) — self-resolve does not use `"blocked"`, so state alone can't disambiguate #956; the phase timeline (`append_phase`, line 429; consumed nowhere currently — no reader exists) is the available signal instead.
+- `millpy-bg.py`: worker fast-path is stdlib-only (no mill imports, by design — see module comment at line 28) and lives in the same file as the launcher path (which does import mill modules). Any heartbeat implementation must stay within that stdlib-only constraint for the worker path.
+- `_bg.py`'s `check_bg_status`/`_probe_liveness` (the consumer side, used by mill-go's Step 0.5 polling and by mill-start's own discussion-review background polling) needs no change for #955 — a heartbeat line doesn't affect its resolution order, since heartbeats never match `_EXIT_RE`/`_EXIT_CODE_RE` and `_has_valid_json_result` already only looks at `{`-prefixed lines.
+
+## Constraints
+
+No `CONSTRAINTS.md` present at the hub root — none beyond the project-wide conventions in `CLAUDE.md` (ASCII-only `print()`/`_log()` output; ` PYTHONPATH=` verify-command prefix requirement; no `sed`).
+
+## Testing
+
+- **`_implementer_common.py` (#954):** `plugins/mill/unit_tests/test-implementer-common.py`. TDD candidate: a test that drives `finalize_from_output` through the corroboration-waiver path (baseline present, replay failure a subset of the corroborated control) with a `status_path`/`task_dir`/`parent_branch` wired for the dirty gate, and asserts the resulting envelope is `success`, not `stuck/logic` — i.e. the regression test is "corroboration write must not self-trip the dirty gate," which was not previously exercised (the existing dirty-gate tests presumably test unrelated dirt, and the existing corroboration tests presumably don't wire the dirty gate at all).
+- **`millpy-fix.py` (#916):** `plugins/mill/unit_tests/test-fix-finalize.py` and/or `test-millpy-fix.py`. TDD candidates: one test per scope (`batch`, `holistic`) asserting `finalize_from_output` is invoked with non-`None` `batch_verify_baseline` when the corresponding status/plan fixture has a stored baseline; a holistic-specific test asserting the forwarded baseline is the union of multiple contributing batches' stored `verify_baseline_failures`, not just one batch's.
+- **`millpy-implement.py` (#956):** `plugins/mill/unit_tests/test-millpy-implement.py`. TDD candidates: (a) a fixture where a batch's status entry has `state: running`, a set `implementer_session`, and the most recent timeline phase is `self-resolved-verify-logic` — assert a `--stage prepare` (no `--resume-incomplete`) call mints a fresh `session_id`/`start_sha`, not the recorded ones; (b) the existing "prepare-reuse" happy path (state running, no self-resolve marker as the most recent phase) must still reuse — a regression test guarding #625/#635/#643 isn't reintroduced.
+- **`millpy-bg.py` (#955):** `plugins/mill/unit_tests/test-bg-launcher.py` and/or `test-millpy-bg.py`. TDD candidate: run the worker path against a long-enough-running inner command with a short heartbeat interval override (or mock the interval) and assert at least one `[mill-bg] HEARTBEAT` line appears in the log before completion; a fast-exiting command should not break the existing `EXIT` sentinel assertions already in these test files.
+- Follow `python:python-testing` conventions; no live git/LLM calls needed for any of these — all four are exercisable with in-memory/tempfile fixtures per the existing unit_tests pattern (`_daemon`/subprocess mocking already established in `test-bg-launcher.py`/`test-millpy-bg.py` for the worker-process case).
+
+## Q&A log
+
+- **Q:** For #954, should the fix commit the corroboration's status.md write immediately (matching the existing `millpy-implement.py:857` idiom), exclude status.md from the dirty gate entirely, or reorder the dirty-check before the write? **A:** [auto-pick] Commit the write immediately, mirroring the existing idiom. **Why:** the root cause is a write-then-check-without-commit race internal to one call, not a scope problem; a blanket exclusion would mask genuinely dirty status.md states from unrelated causes, and the codebase already has a working precedent for the commit-after-write pattern.
+- **Q:** For #916, should the verify-baseline-forwarding fix cover both `--scope batch` and `--scope holistic` in `millpy-fix.py`, or holistic only as the issue title states? **A:** [auto-pick] Fix both scopes. **Why:** both scopes share the exact same finalize call site and the exact same bug; fixing only holistic leaves a known-identical latent bug in the batch-scope path.
+- **Q:** For #956, how should prepare distinguish a safe transient-retry reuse from an unsafe self-resolve-after-stuck reuse, given both leave `state == "running"`? **A:** [auto-pick] Consult the phase timeline's most recent entry for a self-resolve marker; fall through to fresh-mint when found. **Why:** `mill-go-base/SKILL.md` already records `self-resolved-verify-logic` via `append_phase` at the exact self-resolve moment — that's an existing signal, not a new one, so no new flag or state value is needed.
+- **Q:** For #955, is a heartbeat write sufficient given the process can still be killed hard enough to skip even the `finally` block? **A:** [auto-pick] Yes — add the heartbeat as a diagnostic-window narrower, not a full fix; a hard kill is documented as inherently unrecoverable in-process, and the issue asks only for "enough... to diagnose... without re-running," which a last-heartbeat timestamp satisfies better than nothing. **Why:** matches the issue's actual ask (diagnosability, not guaranteed capture) without an outsized watchdog/supervisor redesign.
+- **Q:** Should this task also fix `millpy-fix.py`'s missing `task_dir`/`parent_branch` wiring (disabling the dirty gate for fixer dispatches), found while reading the code but not named by any sourced issue? **A:** [auto-pick] No — out of scope, recorded as a follow-up candidate. **Why:** not requested by #954/#916/#956/#955; avoids scope creep beyond the four confirmed, reported bugs.
