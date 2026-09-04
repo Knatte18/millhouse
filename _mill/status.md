@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r2
+phase: plan-fix-r2
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
 plan: _mill/plan
@@ -22,4 +22,5 @@ planning  '2026-09-04T10:09:36Z'
 plan-review-r1  '2026-09-04T10:13:46Z'
 plan-fix-r1  '2026-09-04T10:14:42Z'
 plan-review-r2  '2026-09-04T10:19:06Z'
+plan-fix-r2  '2026-09-04T10:20:09Z'
 ```

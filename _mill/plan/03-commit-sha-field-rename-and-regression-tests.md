@@ -43,7 +43,11 @@ Card 3's new parameter existing.
   In `_forward_output`'s signature, add a new keyword-only parameter
   `commit_sha_field_name: str = "commit_sha",` immediately after the existing
   last parameter `batch_verify_baseline: list[str] | None = None,` (i.e. it
-  becomes the new last parameter before the closing `) -> int:`).
+  becomes the new last parameter before the closing `) -> int:`). Add a
+  one-line docstring sentence for it in `_forward_output`'s own docstring,
+  mirroring the per-parameter documentation style already used for its sibling
+  parameters (e.g. `batch_verify_baseline`'s own docstring sentence) — do not
+  leave it as the one undocumented parameter in that docstring.
 
   In `finalize_from_output`'s signature, add the identical parameter
   `commit_sha_field_name: str = "commit_sha",` in the same position (immediately
@@ -80,7 +84,7 @@ Card 3's new parameter existing.
   `commit_sha_field_name` would leave that stale self-reported key sitting
   alongside the new one instead of renaming it, which defeats #953's whole
   point (stop emitting a misleading `commit_sha`) and would fail Card 5's Case
-  78 and Card 6's `test_20`/`test_21`, both of which assert `"commit_sha" not
+  78 and Card 6's two `test_2x_` tests, both of which assert `"commit_sha" not
   in data`. When `commit_sha_field_name` is the default `"commit_sha"`, the
   guard skips the pop and the line below overwrites the same key in place —
   byte-for-byte the same behavior as today for every existing caller.
@@ -175,10 +179,14 @@ Card 3's new parameter existing.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Add two new test methods to `TestMillpyMergeInSubagent`, following this
-  file's existing naming convention (e.g. `test_20_...`, `test_21_...`).
+  Add two new test methods to `TestMillpyMergeInSubagent`. `test_20_` is
+  already taken (`test_20_recompute_baseline_missing_status_md`, verified in
+  the current file) — use the file's `test_2x_` prefix instead, already used
+  for this file's other grouped/un-numbered additions (e.g.
+  `test_2x_stage_full_conflicts_reaches_gate`,
+  `test_2x_marker_gate_residual_markers_staged`).
 
-  **`test_20_conflicts_finalize_emits_pre_merge_head`**: model this on the
+  **`test_2x_conflicts_finalize_emits_pre_merge_head`**: model this on the
   existing `test_15_stage_finalize_conflicts` method exactly (same
   `agent_output_path` fixture writing `'{"status":"success","commit_sha":"xyz"}\n'`,
   same `unittest.mock.patch.object(millpy_merge_in_subagent._implementer_claude,
@@ -192,7 +200,7 @@ Card 3's new parameter existing.
   returns `"a" * 40 + "\n"` for every `git rev-parse` call, per its own
   docstring, so that is the value the fallback block attaches.
 
-  **`test_21_conflicts_full_mode_emits_pre_merge_head`**: model this on the
+  **`test_2x_conflicts_full_mode_emits_pre_merge_head`**: model this on the
   existing `test_17_conflicts_success_no_discarded_is_clean` method exactly
   (same `unittest.mock.patch.object(millpy_merge_in_subagent._render, "render",
   return_value="rendered")`, same

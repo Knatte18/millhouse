@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-implementer: commit_sha transcription/truncation and final-status-line reliability'
 slug: implementer-commit-sha-and-status-line-reliability
-approved: false
+approved: true
 started: 20260904-100640
 parent: main
 root: ""
