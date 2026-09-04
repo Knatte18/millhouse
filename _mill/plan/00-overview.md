@@ -29,6 +29,12 @@ batches:
 - **Rationale:** `plugins/mill/unit_tests/test-phase-wait.py` and `mill-go-base/SKILL.md`'s "Entry-gate wait for upstream mill-plan" section already hard-code and test for exactly this pattern (`^discussion-gap-fix-r\d+$`) as a distinct, already-anticipated phase string. It is the only label that makes that existing consumer's pattern reachable.
 - **Applies to:** review-hygiene-fixes (Card 1).
 
+### Decision: gap-fix-commit-pathspec
+
+- **Decision:** `<status_path>` is added to step 5's final commit pathspec, producing `git -C <worktree> add <discussion_path> <reviews_dir>/ _mill/briefs/ <status_path> && git commit -m "mill-start: discussion-gap-fix round {N} for {slug}"`.
+- **Rationale:** The phase-append (`gap-fix-timeline-label`, above) writes to `status.md`; the append must land in the same commit as the discussion/review changes it's paired with, matching step 4b's existing four-pathspec pattern (`<discussion_path>`, `<reviews_dir>/`, `<status_path>`, `_mill/briefs/`).
+- **Applies to:** review-hygiene-fixes (Card 1).
+
 ### Decision: orch-review-scratch-location
 
 - **Decision:** The `--orch` hand-off file moves from `<worktree>/_mill/orch-review.md` to `<worktree>/.scratch/orch-review.md`, in both the write side (`orch-review/SKILL.md`) and the read side (`orch-wait/SKILL.md`).
