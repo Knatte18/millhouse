@@ -39,9 +39,12 @@ implementing  '2026-09-04T10:52:16Z'
 ```yaml
 batches:
   - name: mill-merge-in-parent-and-baseline
-    state: pending
+    state: running
+    implementer_session: 0fb93a5a-852b-465b-bca1-1419c3a9c8fb
+    start_sha: 4261fd9eb21119eda869cba2b60c34e94ffbc811
   - name: mill-finalize-discussion-citation-scan
     state: pending
   - name: resolve-scope-cwd-anchor
     state: pending
+    verify_baseline_failures: []
 ```
