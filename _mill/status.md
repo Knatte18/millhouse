@@ -32,9 +32,13 @@ implementing  '2026-09-04T09:26:19Z'
 ```yaml
 batches:
   - name: mill-go-base-doc-fixes
-    state: pending
+    state: running
+    implementer_session: 811519f8-b185-4c9a-a811-75b0d1be4848
+    start_sha: 4eea6a9c45d7f10e0d8d64e15e7bd4c5fb180e45
   - name: mill-descope-batch
     state: pending
+    verify_baseline_failures: []
   - name: mill-go-base-scope-and-numbering-fixes
     state: pending
+    verify_baseline_failures: []
 ```
