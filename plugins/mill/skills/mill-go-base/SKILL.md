@@ -43,6 +43,7 @@ Do NOT read or memorize its value.
 Write the variable reference;
 the shell expands it at runtime.
 The full absolute path must never appear in a command string.
+`${CLAUDE_PLUGIN_ROOT}` substitution into a literal path happens entirely inside the external Claude Code harness's Skill-tool-loading mechanism, not in any script or template in this repo — a mismatch between the SKILL.md-delivered literal and the real `$CLAUDE_PLUGIN_ROOT` environment variable is a harness-side rendering issue, not something fixable by editing this file.
 
 **Step 0b: Load `mill:conversation`.**
 Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
