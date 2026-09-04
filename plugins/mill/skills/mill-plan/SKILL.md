@@ -311,6 +311,8 @@ Use this variable for all review file path references in this phase.
 
 **Read persisted `skip_checks` from Phase: Plan.** Parse `00-overview.md`'s fenced-yaml frontmatter (the same extraction pattern already used elsewhere in this file for the `approved:` field) and read `plan_skip_checks = <parsed skip_checks: list, or [] if the key is absent>`. This is the `skip_checks` frozenset Phase: Plan already justified via the `wiki-config-mutation` / `verify-full-suite` two-condition tests — thread it into every round's CLI dispatch below as `--skip-check <name>` per entry (repeatable flag, one `--skip-check` per list entry), so Phase: Plan Review's own validator gate does not re-flag a finding Phase: Plan already resolved and committed against.
 
+**Discussion drift guard (reused at every LLM-dispatch site in this phase).** Parse `00-overview.md`'s fenced-yaml frontmatter (same extraction pattern used for `approved:`/`skip_checks:`) and read `plan_discussion_sha = <parsed discussion_sha: field>`. Before every point in this phase where an LLM is actually dispatched or re-dispatched — in both Agent-mode and subprocess/psmux-mode, with no exception for a call that doesn't consume the round counter — re-run `git -C <git_root> rev-parse HEAD:_mill/discussion.md` and compare against `plan_discussion_sha`. Known dispatch points today (audit this file's current LLM-dispatch call sites at implementation time if this file has changed since this plan was written): step 2's initial per-round dispatch (both branches); Step 1.5's validator-fix re-invocation, in both its Agent-mode form ('Agent-mode prepare-envelope handling', the re-render-brief/call-Agent/finalize cycle) and its subprocess/psmux form (the `millpy-bg` re-run under slug `plan-validator-fix`); and step 3.5's ERROR-only-aggregate retry re-dispatch (both branches). On a mismatch at any of these: halt via `_status.set_blocked(status_path, "discussion.md changed after Phase: Plan entry (blob sha drift)", timestamp=_timestamp.now_utc_iso())`, commit that status change alone on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (discussion.md blob sha drift) for {slug}"`), push, and halt with: `BLOCKED: discussion.md changed after Phase: Plan entry (blob sha drift). Delete _mill/plan/ and re-run /mill-plan for a fresh plan against the current discussion.md.` Do not proceed with the dispatch about to happen. Recovery is manual, matching this file's own pattern for every non-max-rounds blocked state — neither a bare `/mill-plan` re-run (hard-stopped by the Entry table's `phase: blocked` row) nor `/mill-plan --revise` (which resumes the existing plan without recapturing `discussion_sha`) reaches Phase: Plan again on its own; the operator must delete `plan_dir` and start fresh.
+
 When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
 
 When `revise_requested` is set **and `revise_from_blocked` is not set** (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
@@ -355,7 +357,7 @@ Each round:
      No review file is written;
      no LLM token is spent;
      no review round is consumed.
-   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then run `grep '^{' <log-path> | tail -1` to extract the JSON line.
+   - On validator-failure exit, mill-plan parses the JSON and applies one mechanical fix per error dict, per the mapping table below. Run the discussion drift guard (see 'Discussion drift guard' above) now, before this re-run. After fixes, mill-plan re-runs the review CLI via millpy-bg (slug `plan-validator-fix`; still no round consumed). Poll `cat <log-path>` until `[mill-bg] EXIT`, then run `grep '^{' <log-path> | tail -1` to extract the JSON line.
    - **Two-pass cap:** if the validator fails again on the second pass, immediately before halting, call `_status.set_blocked(status_path, "plan-validate non-progress", timestamp=_timestamp.now_utc_iso())`; commit on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-plan: blocked (plan-validate non-progress) for {slug}"`) and push. Then mill-plan halts with `BLOCKED: plan-validate non-progress` and writes the unresolved errors to the user.
      Do NOT auto-retry beyond the second pass.
      The two-pass cap matches the `roles.implementer.self_fix_rounds` self-fix pattern.
@@ -420,6 +422,7 @@ converged = (round >= min_review_rounds)
 2. **Waiting is never a decision point.**
    Waiting on this dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — both the max-rounds escape (step 6) and the non-progress check (step 5) resolve by halting via `_status.set_blocked`, never by prompting.
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
 
@@ -442,6 +445,7 @@ converged = (round >= min_review_rounds)
      Parse the JSON and apply one mechanical fix per error dict, using the fix table in Step 1.5 below as the source of truth for all fix semantics.
      After fixes, commit on the task branch: `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: validator-fix pass for {slug}"`.
      Push.
+     Run the discussion drift guard (see 'Discussion drift guard' above) now, before this re-invocation.
      Then re-invoke the prepare stage via the same three-step Agent-mode dispatch (re-render brief, call Agent, finalize;
      the same cycle repeats).
      Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
@@ -466,6 +470,8 @@ converged = (round >= min_review_rounds)
    Print this round's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
 
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
+
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before invoking `millpy-bg`.
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
@@ -501,6 +507,7 @@ converged = (round >= min_review_rounds)
 
    When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from step 2 has a non-empty `reviews[]` array AND at least one remaining entry's `verdict` is `"ERROR"`, OR when no JSON line appears in the bg log (no `^{` summary line after `[mill-bg] EXIT`, indicating the worker died before printing — e.g. killed, OOM), skip steps 4a/4b/4c/4d entirely and immediately re-run:
 
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
@@ -514,6 +521,8 @@ converged = (round >= min_review_rounds)
    Print this retry's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
+
+   Run the discussion drift guard (see 'Discussion drift guard' above) now, before invoking `millpy-bg`.
 
    > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
 
