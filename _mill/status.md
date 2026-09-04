@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-cleanliness-gate-dead-parent-recovery  '2026-09-04T08:58:50Z'
 approved-step-5-5-liveness-probe  '2026-09-04T09:00:15Z'
 holistic-reviewing  '2026-09-04T09:00:49Z'
 holistic-approved  '2026-09-04T09:04:31Z'
+done  '2026-09-04T09:04:55Z'
 ```
 
 ## Batches
