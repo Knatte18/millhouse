@@ -31,9 +31,13 @@ implementing  '2026-09-04T08:33:23Z'
 ```yaml
 batches:
   - name: verify-full-suite-check-fixes
-    state: pending
+    state: running
+    implementer_session: 8125a945-86f9-4c4d-a210-d641fc75bc29
+    start_sha: 0152837760e019014cbbfd2d0ef89637f83cd97e
+    verify_baseline_failures: []
   - name: verify-full-suite-unit-tests
     state: pending
+    verify_baseline_failures: []
   - name: docs-and-reviewer-guardrail
     state: pending
 ```
