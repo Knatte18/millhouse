@@ -1,0 +1,81 @@
+# Discussion: mill-plan: entry-gate, timeline, and script-portability bugs
+
+```yaml
+task: mill-plan: entry-gate, timeline, and script-portability bugs
+slug: mill-plan-entry-gate-and-misc-bugs
+status: discussing
+parent: main
+```
+
+## Problem
+
+Four independently-filed bugs (GitHub #914, #938, #919, #939), all already CLOSED as fixed in a sibling repo/branch, need the equivalent fixes ported into this repo's own copies of `plugins/mill/skills/mill-plan/SKILL.md` and `plugins/mill/skills/mill-start/SKILL.md`. Investigation during this discussion round showed the two repos have since diverged independently: two of the four bugs are **already fixed** in this repo's current SKILL.md text (apparently by unrelated prior work), one is **partially** addressed, and one is **still fully present**. This task is scoped to closing the remaining gaps, not blindly re-applying the issues' original patches.
+
+## Scope
+
+**In:**
+- Verify and, where still needed, fix each of the four issues below against this repo's current `mill-plan/SKILL.md` / `mill-start/SKILL.md`.
+- #938: add a blob-sha drift guard to mill-plan's Phase: Plan / Phase: Plan Review so a `discussion.md` rewritten after mill-plan started reading it is detected and halted on, rather than silently planned against.
+- #919: port mill-plan's existing "Fork scope guardrail" (prompt-level Edit/Write/mutating-Bash prohibition + pre/post `git status --porcelain` diff check) into mill-start's Phase: Explore "Sub-investigation guidance" section, and correct the section's now-disproven "no tool restriction to lose" claim.
+- #939: add one explicit interpreter-naming instruction to mill-plan's Phase: Plan so the narrated `_plan_dag.*` / `_plan_validate.run` / `_status.*` Python calls are unambiguously understood to run via `"$MILL_PYTHON"`, never bare `python3`.
+
+**Out:**
+- #914 — no code change. Already fixed (see Decisions below); this task only documents that it's a verification-only item so a fresh mill-plan session doesn't try to re-diagnose or re-patch it.
+- Any change to mill-start's phase-transition mechanics beyond the fork guardrail (e.g. redesigning when `phase: discussed` is written, or forcing `_status.append_phase` calls into the interactive gap-fix fallback) — the drift-guard fix for #938 lives entirely in mill-plan, not mill-start, so mill-start's Phase: Discussion Review flow is untouched by this task.
+- Rewriting every individual narrative Python-call site across the whole SKILL.md file for #939 — only Phase: Plan's two flagged snippet sites plus one clarifying instruction, not a file-wide sweep.
+- Any bug not in {#914, #938, #919, #939}, even if discovered incidentally while reading these files.
+
+## Decisions
+
+### timeline-rows-914-already-fixed
+
+- Decision: no code change for #914. `mill-plan/SKILL.md`'s Phase: Plan Review already has an "Unconditional round-recorded append" step (currently ~line 534) that calls `_status.append_phase(status_path, f"plan-review-r{N}", ...)` and commits it *before* branching into 4a/4b/4c/4d, for every round that produced a reviewable verdict — this already guarantees one `plan-review-r{N}` timeline row per genuinely-reviewed round regardless of which verdict branch (4a/4b/4c/4d) subsequently fires. This is exactly the fix the issue asked for.
+- Rationale: verified by reading the current file; the asymmetry the issue describes (only 4d appending both rows) no longer exists in the branching logic itself — the append now happens unconditionally, upstream of the branch.
+- Rejected: touching the branch logic anyway "to be safe" — risks reintroducing the old asymmetry or double-appending a row for the same round.
+
+### discussion-drift-guard-938
+
+- Decision: mill-plan gains a blob-sha drift guard for `_mill/discussion.md`. At Phase: Plan entry, immediately after reading the file, capture `discussion_sha = git -C <git_root> rev-parse HEAD:_mill/discussion.md` (or the config-derived relative path from `cfg['paths']['discussion_file']` if it differs). Before committing the plan at the end of Phase: Plan, and before dispatching each Phase: Plan Review round, re-run the same `rev-parse` and compare. On a mismatch: halt via `_status.set_blocked(status_path, "discussion.md changed after Phase: Plan entry (blob sha drift)", timestamp=_timestamp.now_utc_iso())`, commit that status change on the task branch, push, and stop — do not commit the plan, do not proceed with the review round. Message to the operator: the plan may have been written or reviewed against a stale copy; re-run `/mill-plan` to pick up the current `discussion.md`.
+- Rationale: investigation confirmed the specific repro is still live — mill-start's interactive Phase: Discussion Review has an "unresolved gaps after max_review_rounds" fallback (the paragraph right after step 5, before Phase: Handoff) that can rewrite `discussion.md` without ever calling `_status.append_phase`, meaning `phase:` can stay `discussed` across that rewrite. mill-plan's entry-gate wait only watches `phase:` (via `_phase_wait.matches_wait_trigger`), so it structurally cannot see a rewrite that leaves phase unchanged. A content-identity check (blob sha) is the only guard that catches this regardless of *why* the phase field didn't move — including future edge cases neither this task nor the original issue anticipated. mill-plan is also the skill this task's scope is centered on, so putting the fix here is a single point of control rather than reaching into a second skill's Phase: Discussion Review flow.
+- Rejected: hardening mill-start to forbid any `discussion.md` write after `phase: discussed` is committed — correct in spirit, but it's a second skill's surface, expands this task beyond its four filed bugs, and doesn't protect against *other* future causes of late rewrites the way a receiver-side content check does. Doing both was considered and rejected for the same reason (YAGNI — the mill-plan-side guard alone fully closes the reported failure mode).
+
+### fork-guardrail-919
+
+- Decision: port mill-plan's "Fork scope guardrail" section (`mill-plan/SKILL.md` ~lines 150-159) into mill-start's Phase: Explore, attached to the existing "Sub-investigation guidance" subsection, adapted for Explore-phase scope: the fork's prompt must explicitly forbid Edit/Write calls and mutating Bash commands, and forbid touching `discussion_path`, `status_path`, or any `mill-config.yaml`/`config.local.yaml` (the mill-start-phase equivalents of mill-plan's `plan_dir`/`status_path`). Immediately before dispatching a research fork, capture a `git status --porcelain` baseline; immediately after it returns, diff against that baseline and treat any newly-appeared entry as a scope violation — revert it before trusting the fork's report. Serial dispatch only (no parallel fork research), matching mill-plan's own rule. Also correct the existing sentence claiming "none of the three fork disqualifiers... apply here" / "no tool restriction to lose" — that claim is what the current text uses to justify skipping a guardrail, and the #919 incident (a fork inherited full session context under `--auto` and autonomously ran the entire downstream pipeline — wrote+committed discussion.md, a full plan, a plan-fix round, and dispatched a live reviewer, all pushed to origin) directly disproves it.
+- Rationale: this is exactly mill-plan's existing, working pattern for the identical problem (an inherited-context fork with unrestricted tool access operating near shared task-state files); reusing it keeps the two skills' fork-safety posture symmetric instead of inventing a second mechanism.
+- Rejected: a lighter fix (just adding a warning sentence, no mechanical diff check) — the incident was a real live-fire event with pushed commits, not a hypothetical; a warning alone doesn't stop an in-context fork from deciding to "just run the skill," which is precisely what happened once already.
+
+### mill-python-naming-939
+
+- Decision: add one explicit instruction near the top of Phase: Plan (before "Self-validate the DAG") stating that this phase's narrated Python calls (`_plan_dag.*`, `_plan_validate.run`, `_status.*`) are executed by the orchestrator via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON"` — never bare `python3` — matching CLAUDE.md's `## Script invocation` convention and the way every `millpy-bg`/`millpy-review-plan.py` invocation elsewhere in the same file already names `$MILL_PYTHON` explicitly.
+- Rationale: the file already narrates dozens of `_status.*`/`_plan_validate.*` calls in this same prose-Python-call style throughout, without issue, everywhere except here — the actual repro only needs the interpreter named once, unambiguously, at the point a fresh orchestrator with no other context would first try to execute one of these calls and reach for ambient `python3`.
+- Rejected: rewriting every individual snippet site (the `_yaml_writer`/`_render.render` blocks under "Write the files," the `_plan_validate.run` call block, etc.) with the full bash wrapper repeated each time — redundant with a single phase-level instruction and inconsistent with how the rest of the file already treats these as narrative Python-API references, not literal standalone scripts.
+
+## Technical context
+
+- `plugins/mill/skills/mill-plan/SKILL.md` — Entry step 4 (phase-table + `--revise`/`--approve` pre-checks), "Entry-gate wait for upstream mill-start" (~lines 81-115), Phase: Plan (~line 144 onward, "Fork scope guardrail" ~150-159, "Self-validate the DAG"/"Self-run the validator gate" ~243-284), Phase: Plan Review (~line 299 onward, "Unconditional round-recorded append" ~534, verdict branches 4a/4b/4c/4d ~538-600).
+- `plugins/mill/skills/mill-start/SKILL.md` — Phase: Explore (~line 155 onward), "Sub-investigation guidance" (~188), "Fork echo caution" (~199), Phase: Discussion Review (interactive step 5's REQUEST_CHANGES gap-prompt path and its trailing "If unresolved gaps remain after max_review_rounds" fallback, which precedes Phase: Handoff), Phase: Handoff.
+- `_phase_wait.matches_wait_trigger(phase, {"discussing"}, [r"^discussion-fix-r\d+$"])` — mill-plan's entry-gate wait trigger; watches `phase:` only, has no content-identity awareness of `discussion.md` itself. This is why the drift guard must live as a separate blob-sha check, not an extension of this trigger.
+- `_status.set_blocked` / `_status.append_phase` — existing helpers already used throughout mill-plan for halting and phase-recording; the #938 fix reuses `_status.set_blocked` with the same commit/push/halt shape mill-plan already uses for its other blocked states (e.g. "plan-fix-r{N} validate non-progress").
+- `git -C <git_root> rev-parse HEAD:<relative-path>` is the standard way to read a committed blob's sha without touching the working tree; `<relative-path>` should come from `cfg['paths']['discussion_file']` (already resolved elsewhere in mill-plan's Path Setup) rather than being hardcoded, so the drift guard tracks whatever path the config actually points at.
+- mill-plan's existing "Fork scope guardrail" (Phase: Plan, ~lines 150-159) is the direct template for the #919 port — same shape, different path list (`discussion_path`/`status_path` instead of `plan_dir`/`status_path`).
+- CLAUDE.md's `## Script invocation` section is the canonical statement of the `"$MILL_PYTHON"` convention this repo already follows everywhere else; the #939 fix is purely closing a documentation gap in one phase, not introducing new mechanics.
+
+## Constraints
+
+None beyond the existing project-wide conventions in CLAUDE.md (`## Script invocation`, `## Hard constraints`, `## Path invariants`) — no CONSTRAINTS.md is present in this worktree.
+
+## Testing
+
+- No unit-test suite exercises SKILL.md prose directly (these are markdown instruction files, not executable code) — verification is by careful reading/diffing against the four issues' repro descriptions, which is what this discussion round already did.
+- For #938 (drift guard): the plan should describe the guard's exact insertion points (Phase: Plan entry capture, pre-plan-commit check, pre-review-round check) precisely enough that a reviewer can confirm by reading that every write/dispatch site downstream of the capture point is covered, with no gap where a plan could still be committed or reviewed against a stale `discussion.md`.
+- For #919 (fork guardrail): confirm the ported guardrail text is structurally parallel to mill-plan's own (same forbidden-actions list, same pre/post diff-check shape, same serial-dispatch rule) and that the "no tool restriction to lose" claim is either removed or corrected to no longer contradict the guardrail that now exists beside it.
+- For #939: confirm the added instruction is placed where a fresh orchestrator reading Phase: Plan top-to-bottom would see it before reaching the first narrated Python call, and that it doesn't duplicate/conflict with CLAUDE.md's existing wording.
+- For #914: no test needed — verification-only, already covered by reading the current "Unconditional round-recorded append" step.
+
+## Q&A log
+
+- **Q:** #914 — is a code change needed, or is this already fixed upstream? **A:** [auto-pick] No code change — mark as already-fixed, verification-only. **Why:** the "Unconditional round-recorded append" step already appends `plan-review-r{N}` before any of 4a/4b/4c/4d branch, for every genuinely-reviewed round — exactly the fix the issue asked for.
+- **Q:** #938 — where should the fix for the stale-discussion.md race live: mill-plan (blob-sha drift guard), mill-start (forbid post-`discussed` writes), or both? **A:** [auto-pick] mill-plan blob-sha drift guard only. **Why:** single point of control in the skill this task owns; catches drift regardless of cause, including future causes neither this task nor the original issue anticipated; a mill-start behavior change would be a second skill's surface and scope creep.
+- **Q:** #919 — port mill-plan's full fork guardrail (prompt prohibition + git-status diff check) into mill-start, or add a lighter warning-only fix? **A:** [auto-pick] Full port, adapted to Explore-phase scope. **Why:** the incident already happened live with real pushed commits; a warning sentence doesn't mechanically stop an in-context fork from deciding to run the whole downstream pipeline, which is exactly what occurred once already.
+- **Q:** #939 — rewrite every individual bare-python snippet site, or add one phase-level interpreter-naming instruction? **A:** [auto-pick] One phase-level instruction near the top of Phase: Plan. **Why:** the file already treats these as narrative Python-API references everywhere else without issue; the repro only needs the interpreter named once, unambiguously, before the orchestrator reaches the first call site.
