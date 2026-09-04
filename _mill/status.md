@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-implementer: commit_sha transcription/truncation and final-status-line reliability'
 task_description: |
@@ -18,4 +18,5 @@ discussing  '2026-09-04T09:42:49Z'
 discussion-fix-r1  '2026-09-04T09:56:44Z'
 discussion-fix-r2  '2026-09-04T10:01:09Z'
 discussed  '2026-09-04T10:04:24Z'
+planning  '2026-09-04T10:09:36Z'
 ```
