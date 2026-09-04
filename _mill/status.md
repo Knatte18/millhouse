@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-corroboration-write-commit
+phase: approved-forward-verify-baselines-millpy-fix
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-04T12:33:19Z'
 approved-commit-baseline-write-before-dirty-check  '2026-09-04T12:38:32Z'
 approved-bg-heartbeat-diagnosability  '2026-09-04T12:41:28Z'
 approved-test-corroboration-write-commit  '2026-09-04T12:46:37Z'
+approved-forward-verify-baselines-millpy-fix  '2026-09-04T12:51:59Z'
 ```
 
 ## Batches
@@ -50,9 +51,10 @@ batches:
     commit_sha: 5b2d5fc4d8679ba6fee3083cab0f9efe2c6b2b2a
     verify_baseline_failures: []
   - name: forward-verify-baselines-millpy-fix
-    state: running
+    state: approved
     implementer_session: 5c2c65d3-c31f-4008-b5f7-4b06ba2bcf83
     start_sha: ab803683325a2aa4fd2792fc933b8d2ae3ae833b
+    commit_sha: 08a5b765885111f8b4b88cf365812a995949a910
     verify_baseline_failures: []
   - name: fresh-session-after-self-resolve
     state: pending
