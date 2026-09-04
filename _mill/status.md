@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-done-gate-run-gate
+phase: approved-mill-pause-agent-dispatch
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r1  '2026-09-04T08:43:19Z'
 planned  '2026-09-04T08:43:32Z'
 implementing  '2026-09-04T08:44:05Z'
 approved-done-gate-run-gate  '2026-09-04T08:47:57Z'
+approved-mill-pause-agent-dispatch  '2026-09-04T08:49:21Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     commit_sha: 7e1fb88000ba8cbe71d7657d46d32d1df1f3a3e8
     verify_baseline_failures: []
   - name: mill-pause-agent-dispatch
-    state: running
+    state: approved
     implementer_session: b989b085-f2a2-45f0-a966-284fdc57f92a
     start_sha: 2c0d8ba03c0ad204957f7456e1075ba57618fc43
+    commit_sha: c0af6a13916233217ad1cfa860cbe4620176d346
   - name: cleanliness-pycache-allowlist
     state: pending
     verify_baseline_failures: []
