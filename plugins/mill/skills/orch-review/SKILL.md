@@ -6,7 +6,7 @@ argument-hint: "<slug> [<slug>...]"
 
 # orch-review
 
-Companion to `mill-start`'s `--orch` flag. A worker running `/mill-start --orch` pauses before discussion-review round 1's automated reviewer dispatch, waiting for a file named `orch-review.md` to appear next to `discussion.md`. This skill is what **this session** (the orchestrator/driver, not the worker) loads to actually write that file — it is the human-in-the-loop substitute for round 1's automated reviewer.
+Companion to `mill-start`'s `--orch` flag. A worker running `/mill-start --orch` pauses before discussion-review round 1's automated reviewer dispatch, waiting for a file named `orch-review.md` to appear at `.scratch/orch-review.md`. This skill is what **this session** (the orchestrator/driver, not the worker) loads to actually write that file — it is the human-in-the-loop substitute for round 1's automated reviewer.
 
 **The `discussion.md` wait runs in this session, not in a fork.** A fork that arms a `Monitor` wait and then produces no further output is treated as finished and torn down — the monitor trigger has nothing left to wake up, so a fork left waiting on one never resumes. Only this top-level session reliably survives an armed `Monitor` wait and gets woken back up when it fires. So: **this session owns every `Monitor` wait, one per slug; a fork is only launched per slug after that slug's `discussion.md` is already confirmed to exist** — the fork only ever does the (non-blocking) read/review/write work, which is what still needs to stay out of this session's own context.
 
@@ -62,7 +62,7 @@ When a fork's completion notification arrives (a later turn, not this one), rela
 
 ### Step 1 — Read the discussion in full
 
-Read `<worktree>/_mill/discussion.md` in full — do not skim. If `<worktree>/_mill/orch-review.md` already exists, halt and ask whether to overwrite (a stale file from a prior round may still be awaiting pickup).
+Read `<worktree>/_mill/discussion.md` in full — do not skim. If `<worktree>/.scratch/orch-review.md` already exists, halt and ask whether to overwrite (a stale file from a prior round may still be awaiting pickup).
 
 ### Step 2 — Review it
 
@@ -72,7 +72,7 @@ Severity and class vocabulary are closed, per `plugins/mill/templates/review-out
 
 ### Step 3 — Write `orch-review.md`
 
-Write `<worktree>/_mill/orch-review.md` (next to `discussion.md`, never inside `_mill/reviews/` — that directory is reserved for the canonical, timestamped files the worker's `finalize()` call produces) in the exact format `plugins/mill/templates/review-output.schema.md` documents:
+Write `<worktree>/.scratch/orch-review.md` (gitignored ephemeral scratch space per `mill:conversation`'s convention — never inside `_mill/` at all, and specifically never inside `_mill/reviews/`, which is reserved for the canonical, timestamped files the worker's `finalize()` call produces) in the exact format `plugins/mill/templates/review-output.schema.md` documents:
 
 ```markdown
 # Review: <task title>
@@ -104,7 +104,7 @@ Omit `## Findings` entirely (write `(no findings)`) if there are none. `duration
 End with a short final message this fork's own turn — this becomes the text the orchestrator's Step 4 relays as a summary, e.g.:
 
 ```
-Wrote _mill/orch-review.md for <slug>. The waiting worker polls every few seconds and will
+Wrote .scratch/orch-review.md for <slug>. The waiting worker polls every few seconds and will
 pick this up, apply the mill-start review-fix decision tree, and resume mill-start --orch
 on its own — no further action needed here.
 ```
@@ -112,7 +112,7 @@ on its own — no further action needed here.
 ## Rules
 
 - **This session owns every `Monitor` wait — never a fork.** A fork that ends its turn on an armed `Monitor` wait with nothing left to do is torn down as "finished" before the monitor ever fires; only this session survives that. Forking happens only after a slug's `discussion.md` is already confirmed present.
-- **One file, one purpose, per fork.** Each fork's entire footprint is writing its own `_mill/orch-review.md`. No fork reads or writes `status.md`, `_mill/reviews/`, or anything under the wiki. No fork waits on anything.
+- **One file, one purpose, per fork.** Each fork's entire footprint is writing its own `.scratch/orch-review.md`. No fork reads or writes `status.md`, `_mill/reviews/`, or anything under the wiki. No fork waits on anything.
 - **Never used for round 2+.** `mill-start --orch` only waits for this file on discussion-review round 1; any later round in the same task reverts to the normal configured automated reviewer. Re-running this skill against a task past round 1 has no effect (nothing is waiting for the file).
 - **Ground every finding.** Same source-grounding rule the automated reviewer prompt carries: never fabricate file contents or discussion.md sections not actually read.
 - **Don't peek.** The orchestrator never reads a fork's transcript/output_file mid-flight — trust the completion notification per this session's own fork guidance.

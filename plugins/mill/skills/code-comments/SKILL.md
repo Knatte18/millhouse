@@ -65,3 +65,7 @@ See the per-language skill for how that language's tooling renders consecutive c
   If code needs a "what" comment, refactor instead.
 - **No measured-result or design-rationale narrative** — a doc comment must not contain measured numeric deltas, rejected-alternative trails, or reproduction/incident narrative.
   That belongs in an inline why-comment, `_codeguide/` module docs, or a `Doc/` design-decision note.
+- **No enumerated-consumer lists** — don't name every current caller, writer, consumer, or implementer of a shared symbol or resource when the comment's point doesn't depend on which ones currently do
+  (e.g. "the logger, reed, shuttle, and burler all write it").
+  That list goes stale whenever a subsystem is added or removed, turning an unrelated change elsewhere in the codebase into a forced edit here.
+  Write "several of `<component>`'s own subsystems" or similar instead, unless the specific names are themselves load-bearing to the point being made.

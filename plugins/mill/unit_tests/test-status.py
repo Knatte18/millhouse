@@ -696,6 +696,18 @@ def main() -> int:
             assert entry["start_sha"] == "abc", f"start_sha mismatch: {entry['start_sha']!r}"
         print("PASS: set_batch_fields writes multiple fields atomically")
 
+        # self_resolve_remint_at round-trips through set_batch_fields
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            set_batch_fields(sp, "foundation", {"self_resolve_remint_at": "2026-09-04T10:49:08Z"})
+            entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert entry["self_resolve_remint_at"] == "2026-09-04T10:49:08Z", (
+                f"self_resolve_remint_at mismatch: {entry['self_resolve_remint_at']!r}"
+            )
+        print("PASS: set_batch_fields writes and round-trips self_resolve_remint_at")
+
         # Unknown key raises ValueError
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"

@@ -518,6 +518,7 @@ _BATCH_ALLOWED_KEYS = {
     "review_file",
     "blocked_reason",
     "verify_baseline_failures",
+    "self_resolve_remint_at",
 }
 _BATCH_STATES = {
     "pending",
@@ -593,6 +594,7 @@ def _serialise_batches(batches: list[dict]) -> str:
         "review_file",
         "blocked_reason",
         "verify_baseline_failures",
+        "self_resolve_remint_at",
     ]
     parts = ["batches:"]
     for entry in batches:
