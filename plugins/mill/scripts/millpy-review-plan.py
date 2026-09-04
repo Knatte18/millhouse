@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_checks=frozenset(args.skip_checks),
                     max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
                     max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                    done_gate=cfg.get("pipeline", {}).get("done_gate"),
                     parent_branch=parent_branch,
                 )
                 if errors:
@@ -327,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                     skip_checks=frozenset(args.skip_checks),
                     max_cards_per_batch=cfg.get("pipeline", {}).get("max_cards_per_batch", 10),
                     max_batch_context_tokens=cfg.get("pipeline", {}).get("max_batch_context_tokens", 120000),
+                    done_gate=cfg.get("pipeline", {}).get("done_gate"),
                     parent_branch=parent_branch,
                 )
                 if errors:

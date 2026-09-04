@@ -2907,6 +2907,7 @@ def run(
     max_cards_per_batch: int = 10,
     max_batch_context_tokens: int = 120000,
     parent_branch: str | None = None,
+    done_gate: str | None = None,
 ) -> list[dict]:
     """Validate plan files in plan_dir.
 
@@ -2938,6 +2939,8 @@ def run(
             verify-unrelated-test-file. ``None`` (the default) makes that check a no-op -- callers
             that cannot resolve a parent branch (e.g.
             the standalone millpy-validate-plan.py CLI) simply skip it.
+        done_gate: The hub's configured pipeline.done_gate command, or None. Threaded to
+            _check_verify_full_suite (see that function's own done_gate documentation).
     """
     overview_path = plan_dir / "00-overview.md"
     if not overview_path.exists():
@@ -2981,7 +2984,7 @@ def run(
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
-    errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path))
+    errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path, done_gate=done_gate))
     errors.extend(_check_verify_malformed_cwd(batch_files, overview_path, project_root))
     errors.extend(_check_verify_mixed_cwd(batch_files, overview_text, project_root, effective_git_root))
     errors.extend(_check_verify_unrelated_test_files(
