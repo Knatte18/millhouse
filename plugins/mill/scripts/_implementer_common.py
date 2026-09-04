@@ -1668,6 +1668,7 @@ def finalize_from_output(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
+    commit_sha_field_name: str = "commit_sha",
     batch_name: str | None = None,
     git_name: str | None = None,
     git_email: str | None = None,
@@ -1722,6 +1723,8 @@ def finalize_from_output(
         for the subset-diff waiver rule this enables.
             Defaults to None
         (run strictly, as before this parameter existed).
+        commit_sha_field_name: JSON key the corrective SHA is attached under on the success
+            fallback path; defaults to "commit_sha".
         batch_name: This batch's name, forwarded unchanged to _forward_output's _run_verify_gates
             calls.
             See _run_verify_gates for the self-healing persist this enables.
@@ -1769,6 +1772,7 @@ def finalize_from_output(
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
         batch_verify_baseline=batch_verify_baseline,
+        commit_sha_field_name=commit_sha_field_name,
         batch_name=batch_name,
         git_name=git_name,
         git_email=git_email,
@@ -1828,6 +1832,7 @@ def _forward_output(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
+    commit_sha_field_name: str = "commit_sha",
     batch_name: str | None = None,
     git_name: str | None = None,
     git_email: str | None = None,
@@ -1886,6 +1891,11 @@ def _forward_output(
     cached, task-scoped stored signature set for this batch's own verify command, enabling the
     subset-diff waiver rule documented on _run_verify_gates.
     Defaults to None (run strictly, as before this parameter existed).
+    commit_sha_field_name is the JSON key the corrective SHA is attached under on the success
+    fallback block below (the unconditional `git rev-parse HEAD` correction); defaults to
+    "commit_sha", which preserves today's behavior for every existing caller. A non-default value
+    also pops any stale self-reported "commit_sha" key from parsed before attaching the corrected
+    SHA under the new key name, so the two never coexist.
     batch_name is forwarded unchanged to every _run_verify_gates call site below, alongside the
     already-present start_sha and status_path parameters, enabling the self-healing persist
     documented on _run_verify_gates.
@@ -2066,7 +2076,9 @@ def _forward_output(
                 cwd=project_root,
             )
             if result.returncode == 0 and _is_valid_commit_sha(result.stdout.strip()):
-                parsed["commit_sha"] = result.stdout.strip()
+                if commit_sha_field_name != "commit_sha":
+                    parsed.pop("commit_sha", None)
+                parsed[commit_sha_field_name] = result.stdout.strip()
                 violations = _cleanliness.compute_scope_violations(project_root, git_root)
                 if violations:
                     parsed["scope_violations"] = violations

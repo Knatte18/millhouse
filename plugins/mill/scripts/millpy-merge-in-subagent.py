@@ -421,6 +421,7 @@ def main(argv=None) -> int:
             start_sha=None,
             snapshot_path=None,
             session_id=None,
+            commit_sha_field_name="pre_merge_head",
         )
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
@@ -487,7 +488,7 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
             print(json.dumps(gate_result))
             return 0
 
-    return _forward_output(output, project_root)
+    return _forward_output(output, project_root, commit_sha_field_name="pre_merge_head")
 
 
 def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None, stage: str = "full") -> int:

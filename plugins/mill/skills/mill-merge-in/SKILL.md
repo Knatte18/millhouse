@@ -13,20 +13,29 @@ This skill does not acquire the merge lock — only the calling `mill-merge` (or
 
 1. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError` → halt with "this worktree was not created by mill-spawn".
-2. Resolve the parent branch.
-   **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True, expected_slug=slug)` where `status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")` and `slug` is already resolved in Entry step 1 via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
-   Config does not carry a parent-branch override (YAGNI as of v2.0).
-   If `mill-merge-in` is being called from `mill-merge`'s auto-merge path, pass `interactive=False` and propagate the raised `ParentBranchError` -- `expected_slug=slug` applies in both the interactive and non-interactive forms of the call.
+2. Bind `status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")` unconditionally, before the branch check below.
+   This hoist is required because the "Liveness check (#817)" paragraph's dead-parent rebind (`_status.update_field(status_path, "parent", resolved_branch)`) needs `status_path` bound regardless of which of the two paths below is taken.
+3. Resolve the parent branch. Check whether the caller supplied the optional positional `<branch>` argument (the pre-existing ad-hoc override for syncing from some other branch than the task's declared parent, AND the caller-handoff use where a calling skill — e.g. `mill-merge` — passes its own already-resolved parent branch to avoid a redundant/unreachable `status.md` read):
+   - **If supplied:** bind `parent_branch` to that value directly and skip the `resolve(...)` call entirely.
+   - **If not supplied:** fall through exactly as today. **Source of truth is `_mill/status.md`'s `parent:` row** — call `_parent_branch.resolve(status_path, interactive=True, expected_slug=slug)`, reading the `status_path` hoisted in step 2 above (no longer computed inline here).
+     `slug` is already resolved in Entry step 1 via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
+     Config does not carry a parent-branch override (YAGNI as of v2.0).
+     `mill-merge` can no longer reach this fallback branch bare: as of the Card 1 fix (`mill-merge/SKILL.md` Step 2), `mill-merge` always passes its own already-resolved `<parent_branch>` as the positional override, landing in the "If supplied" branch above instead. The remaining bare (no-argument) caller is `mill-finalize`'s PR Step 1 ("Invoke the `mill-merge-in` skill (no arguments...)"), which does not currently override `interactive` -- it reaches this fallback branch with `interactive=True` as written above. If a future caller needs to invoke `mill-merge-in` bare from a non-interactive context, it must pass `interactive=False` explicitly and propagate the raised `ParentBranchError` -- `expected_slug=slug` applies in both the interactive and non-interactive forms of the call.
 
-   **Liveness check (#817):** after `resolve(...)` above returns a `parent_branch` successfully, first run the preflight guard `` import _preflight; exit(_preflight.check_helpers(['_parent_branch:check_liveness'])) `` , then verify it is still live: `_parent_branch.check_liveness(parent_branch, git_root)` (same call `mill-merge/SKILL.md` Entry Step 4 makes — see that step's own "Liveness check (#817)" paragraph for the exact bash invocation and the JSON shape returned).
+   **Liveness check (#817):** in both branches above, once `parent_branch` is bound, first run the preflight guard `` import _preflight; exit(_preflight.check_helpers(['_parent_branch:check_liveness'])) `` , then verify it is still live: `_parent_branch.check_liveness(parent_branch, git_root)` (same call `mill-merge/SKILL.md` Entry Step 4 makes — see that step's own "Liveness check (#817)" paragraph for the exact bash invocation and the JSON shape returned).
+   This read-only liveness check (a `git ls-remote`) itself runs unconditionally in both branches and is harmless regardless of which branch produced `parent_branch` — this is a deliberately *broader* exemption than `mill-merge/SKILL.md` Entry Step 4's own precedent, not a mirror of it: Step 4 skips its liveness check *entirely* for its `status_path`-absent fallback branch ("This liveness check applies only to the `status_path.exists()` True branch"), whereas here the read-only check runs unconditionally in both branches and only the rebind *write* below is exempted.
    If alive, continue as before.
-   If dead, call `_parent_branch.resolve_dead_parent(parent_branch, git_root, cfg)` and apply the identical halt/report/confirm/rebind behavior documented in `mill-merge/SKILL.md` Entry Step 4's "Liveness check (#817)" paragraph: report the `resolved` or `fallback` outcome and require operator confirmation before continuing (the `cycle` outcome always halts outright, no confirmation prompt), then on confirmation rebind `status.md`'s `parent:` row via `_status.update_field(status_path, "parent", resolved_branch)`, commit, push, and use `resolved_branch` as `parent_branch` for the remainder of this run.
-   "Identical" above describes the operator-facing halt/report/confirm/rebind protocol, not the `status_path` derivation mechanism: this rebind reuses the same `status_path` already bound at the top of this Entry step (`_paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")`) rather than deriving a fresh one, and that is safe here even though `mill-merge/SKILL.md` Entry Step 4 warns against the same `resolve_hub_path()` + literal-path pattern for its own rebind — that warning exists because `mill-merge` must reconcile cwd against a separately-tracked worktree location (its `mode == 'inplace'` vs `'worktree'` disambiguation, where cwd can legitimately be the main hub while the active slug's tracked worktree lives elsewhere).
+   If dead, call `_parent_branch.resolve_dead_parent(parent_branch, git_root, cfg)` and apply the identical halt/report/confirm operator-facing protocol documented in `mill-merge/SKILL.md` Entry Step 4's "Liveness check (#817)" paragraph: report the `resolved` or `fallback` outcome and require operator confirmation before continuing (the `cycle` outcome always halts outright, no confirmation prompt).
+   On confirmation, branch on `status_path.exists()` before writing the rebind:
+   - **If `status_path.exists()` is `False`:** this reordering is what newly makes the override branch reach the liveness check with a possibly-absent `status_path` (the exact #977 scenario: `mill-merge`'s Card 1 passes its own `status_path`-absent `cfg.git.base_branch` fallback, which `mill-merge` never liveness-checks itself). Skip the rebind write (and its commit/push) entirely — there is nothing to persist to — report the resolved/fallback outcome to the operator as informational only, and proceed using that resolved branch for the remainder of this run.
+   - **If `status_path.exists()` is `True`** (the pre-existing case, and the override-supplied case when a task's status.md still exists): rebind `status.md`'s `parent:` row via `_status.update_field(status_path, "parent", resolved_branch)`, commit, push, and use `resolved_branch` as `parent_branch` for the remainder of this run, exactly as documented today.
+
+   **Caller propagation (#977 follow-up):** whichever sub-case above ran, once the `if dead` branch above fires and the operator confirms, record `substituted_parent_branch = resolved_branch` (distinct from the ordinary `<parent-branch>` this file's own `## Steps` use) for this run. Step 6's Report below must surface this value. Resolving a successor here only ever affects `mill-merge-in`'s own remainder-of-run `parent_branch` (and, in the `True` sub-case, the persisted `status.md` row) — it never itself updates a calling skill's already-bound variables. When this skill is invoked as `mill-merge`'s own Step 2 (see `mill-merge/SKILL.md` Step 2), that caller's `parent_branch`/`<parent-path>` were resolved and bound before this call and are reused verbatim through its own Step 5 onward, so the caller must read `substituted_parent_branch` back out of this skill's Report and rebind its own variables from it before continuing past its Step 2 — this file cannot do that rebind on the caller's behalf.
+
+   This rebind reuses the same `status_path` hoisted in step 2 above (`_paths.resolve_task_path(_paths.resolve_hub_path(), "_mill/status.md")`) rather than deriving a fresh one, and that is safe here even though `mill-merge/SKILL.md` Entry Step 4 warns against the same `resolve_hub_path()` + literal-path pattern for its own rebind — that warning exists because `mill-merge` must reconcile cwd against a separately-tracked worktree location (its `mode == 'inplace'` vs `'worktree'` disambiguation, where cwd can legitimately be the main hub while the active slug's tracked worktree lives elsewhere).
    `mill-merge-in` has no such ambiguity: it always operates on "the current branch" from within that branch's own worktree (it is never dispatched against a different slug's worktree from some other cwd), so `resolve_hub_path()`'s cwd-walk necessarily lands on the same hub a slug-driven `resolve_active_hub()` lookup would return for that slug.
-   This mirrors the identical `resolve_hub_path()`-based derivation this file's own Step 4 (Verify) already uses (`hub_root = _paths.resolve_hub_path()`), so Card 7's rebind is consistent with the rest of this file, not a one-off exception to it.
-   This check runs identically whether `mill-merge-in` is invoked standalone or dispatched from `mill-merge`'s Step 2 — `mill-merge-in` reads the same `status_path` independently via its own `resolve()` call, and must not skip this check just because `mill-merge`'s own Entry Step 4 may have already performed it moments earlier for its own call site. The redundancy is harmless: `check_liveness` is a single read-only `git ls-remote`.
-3. Optional positional argument: `<branch>` from the user's invocation overrides both status.md and the prompt.
-   This is for ad-hoc syncing from some other branch than the task's declared parent.
+   This mirrors the identical `resolve_hub_path()`-based derivation this file's own Step 4 (Verify) already uses (`hub_root = _paths.resolve_hub_path()`), so this rebind is consistent with the rest of this file, not a one-off exception to it.
+   This check runs identically whether `mill-merge-in` is invoked standalone or dispatched from `mill-merge`'s Step 2 — `mill-merge-in` reads the same `status_path` independently, and must not skip this check just because `mill-merge`'s own Entry Step 4 may have already performed it moments earlier for its own call site. The redundancy is harmless: `check_liveness` is a single read-only `git ls-remote`.
 
 ## Steps
 
@@ -98,14 +107,29 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 
 ### 3.5. Baseline recompute
 
-Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins:
+Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins.
+
+This call does not go through Agent-mode dispatch.
+Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+Instead of a capped foreground call, it is background-dispatched and polled via the same `millpy-bg.py --slug <name> -- ...` pattern `mill-go-base/SKILL.md`'s `### 0.5. Baseline pre-flight` section uses:
+
+> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree (this is the first `millpy-bg` call site in `mill-merge-in/SKILL.md` or `mill-merge/SKILL.md` — see `mill-go-base/SKILL.md`'s 0.5/0.6 sections for the callout's precedent). If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), this is the one deliberate divergence from the imported callout's wording: rather than halting the skill, log the reason (ASCII-only) and continue past this step -- the same log-and-continue *action* the `"dead"` branch below takes, but not its *detection mechanism*. The `"dead"` outcome below is discovered by polling `_bg.check_bg_status` against an already-created `<log-path>`; a cwd rejection here is discovered synchronously, from `millpy-bg.py`'s own stderr on the failed Bash call itself (it exits 1 before ever printing `pid=<N> log=<abs-path>`, so there is no log file yet to poll). Capture that stderr directly from the failed Bash call as the logged reason, rather than attempting a `_bg.check_bg_status` poll against a log path that was never created. Step 3.5 is fail-safe by design (an error here degrades to a `baseline: "error"` result, not a merge failure), so a cwd-mismatch on the dispatch attempt itself is scoped to the dispatch attempt only, not a new halt condition for this step.
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --recompute-baseline
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
+    --slug merge-in-baseline-recompute -- \
+    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --recompute-baseline
 ```
 
-- This call is synchronous and does not go through Agent-mode dispatch.
-  Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until the line `[mill-bg] EXIT` appears, running the same `_bg.check_bg_status` liveness-check loop `mill-go-base/SKILL.md`'s 0.5 section uses:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
+```
+
+Parse the JSON result and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> log the reason (ASCII-only) and continue -- never halt, matching this step's own "It never blocks or fails the merge" contract below.
+Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the result, exactly as `mill-go-base/SKILL.md`'s 0.5 section does.
+
 - It never blocks or fails the merge: on any internal error it prints a `baseline: "error"` result and returns exit 0 (fail-safe).
   This step never triggers the Rollback section.
 - If step 1's no-op check already exited early ("Nothing to merge"), this step never runs at all — the "## No-op guarantee" section's promise ("this skill touches nothing" when there was nothing to merge) continues to hold.
@@ -116,7 +140,7 @@ This mirrors the batch-1 pre-flight rule exactly: the parent's dependency manife
 ### 4. Verify
 
 Replay exactly the tests that ran during implementation.
-Resolve `hub_root = _paths.resolve_hub_path()` and `status_path = _paths.resolve_task_path(hub_root, "_mill/status.md")` (the same resolution Entry step 2 already uses).
+Resolve `hub_root = _paths.resolve_hub_path()` and `status_path = _paths.resolve_task_path(hub_root, "_mill/status.md")` (the same resolution Entry step 2 already uses to hoist `status_path`).
 Call `_plan_dag.iter_batch_verifies(plan_dir, hub_root, git_root, status_path=status_path)` where `plan_dir = _paths.resolve_task_path(hub_root, "_mill/plan/")`.
 That yields `(batch_name, verify_cmd, cwd)` triples in DAG order, skipping batches with `verify: null`, batches that have not reached `"approved"` state yet, and batches whose verify target a later-approved batch's `Deletes:`/`Moves:` declares removed.
 
@@ -171,17 +195,24 @@ This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` s
 
 ### 5.5. Commit dispatch briefs
 
-If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them.
-Use a guarded `git status --porcelain` check to avoid an empty commit:
+If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them alongside anything step 5 already staged.
+Staging is unconditional on `_mill/briefs` existing, but the commit is gated on whether anything is actually STAGED, never on unscoped `git status --porcelain`:
 
 ```bash
-if [ -d <worktree>/_mill/briefs ] && [ -n "$(git -C <worktree> status --porcelain -- _mill/briefs)" ]; then
-  git -C <worktree> add _mill/briefs/ && git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
+if [ -d <worktree>/_mill/briefs ]; then
+  git -C <worktree> add _mill/briefs/
+fi
+if [ -n "$(git -C <worktree> diff --cached --name-only)" ]; then
+  git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
 fi
 ```
 
-This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief commit is intentionally outside rollback scope and captures successful state.
-Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written (the `git status --porcelain` guard returns empty).
+**Why staged-only, not unscoped porcelain:** `git status --porcelain` also reports unrelated unstaged/untracked worktree state that may already exist when `mill-merge-in` is invoked -- state this skill's own earlier steps had no part in creating -- and gating on that would either sweep foreign dirt into this commit or, worse, pass the non-empty check while nothing is actually staged, making `git commit` fail with "nothing to commit" even though the guard said there was something to commit. Checking `git diff --cached` (staged-only) avoids both failure modes, since briefs (if added above) and codeguide docs (already staged by `codeguide_commit.py --mode inline` in Step 5) are the only two things this step ever stages or expects to find staged.
+
+This also now picks up Step 5's inline-mode codeguide docs -- already `git add`-staged by `codeguide_commit.py --mode inline` back in Step 5, before this step runs -- which the prior `_mill/briefs`-scoped guard silently dropped whenever `_mill/briefs/` did not exist (#946).
+
+This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief/codeguide-doc commit is intentionally outside rollback scope and captures successful state.
+Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written AND no codeguide docs were staged either -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
 
 ### 6. Report
 
@@ -189,6 +220,12 @@ Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so 
 Merged <parent-branch> into <current-branch>. <N> commits integrated.
 Verify: <ran> batch tests ran.
 Checkpoint: <CHK> (delete manually once you are confident the merge is stable).
+```
+
+If `substituted_parent_branch` was recorded during this run (Entry's "Liveness check (#817)" paragraph, `if dead` branch), append one more line to the report, after the `Checkpoint:` line:
+
+```
+Substituted parent branch: <parent-branch> -> <substituted_parent_branch> (dead; not persisted to status.md unless status_path.exists() was True above). If this skill was called from mill-merge Step 2, that caller must rebind its own parent_branch/<parent-path> to <substituted_parent_branch> before continuing to Step 3.
 ```
 
 Build the `Verify:` line by starting with `Verify: <ran> batch tests ran` and appending one clause per nonzero skip counter, in this fixed order -- allowlisted, not-approved, target-removed -- each included only when its own count is nonzero: `, <skipped> skipped (allowlisted as known-broken)` when `skipped >= 1`;
