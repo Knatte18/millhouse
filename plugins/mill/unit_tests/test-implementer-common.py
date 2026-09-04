@@ -5455,6 +5455,276 @@ def main() -> int:
             print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 78: #954 regression -- the explicit-JSON-success path, with the corroboration-waiver
+    # firing (a subset-diff mismatch that reproduces against a start_sha checkout), must not
+    # self-trip the in-scope dirty-tree gate on the very status.md write the waiver itself makes.
+    # git_name/git_email supplied -> batch 1's fix commits that write before the dirty-tree gate
+    # runs later in this same _forward_output call, so the batch reaches success cleanly.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        status_path = project_root / "_mill" / "status.md"
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.write_text(
+            _status.render_initial(
+                "Test Task",
+                "test",
+                "2026-01-01T00:00:00Z",
+                "main",
+                "test-slug",
+                "test-branch",
+            ),
+            encoding="utf-8",
+        )
+        _status.init_batches(status_path, ["01-test-batch"])
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/status.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add status.md"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        # A genuine content commit for this batch, distinct from both start_sha and any
+        # batch-start housekeeping commit, so the no-content-commit gate lets the report
+        # through to the verify/dirty-tree gates this case actually exercises.
+        marker = project_root / "_mill" / "marker.txt"
+        marker.write_text("card-5 content commit", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-5 commit"],
+            check=True,
+            capture_output=True,
+        )
+        verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        agent_output = json.dumps(
+            {"status": "success", "session_id": "case78", "cards_done": [5]}
+        )
+        captured = ""
+        try:
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=batch_start_sha,
+                    verify_cmd=verify_cmd,
+                    session_id="case78",
+                    task_dir=project_root / "_mill",
+                    parent_branch="main",
+                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                    git_name="Test",
+                    git_email="test@test.com",
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 78: expected success once the corroboration-waiver fires, got {data}"
+            )
+            print(
+                "PASS: case 78 - #954: explicit-JSON-success path with the corroboration-waiver"
+                " commits its status.md write before the dirty-tree gate, so the batch does not"
+                " self-trip"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 78 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 79: #954 regression -- same corroboration-waiver, driven through one of the three
+    # no-JSON-inference call sites in _forward_output (no parseable status JSON, snapshot_path
+    # omitted, forcing the inferred-success branch). This is the discriminating assertion for
+    # these call sites: none of them reach _in_scope_dirty_stuck, so "success not stuck" alone
+    # would not prove git_name/git_email were actually threaded through -- only the absence of
+    # an uncommitted status.md diff afterward proves the persist-commit actually ran here too.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        status_path = project_root / "_mill" / "status.md"
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.write_text(
+            _status.render_initial(
+                "Test Task",
+                "test",
+                "2026-01-01T00:00:00Z",
+                "main",
+                "test-slug",
+                "test-branch",
+            ),
+            encoding="utf-8",
+        )
+        _status.init_batches(status_path, ["01-test-batch"])
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/status.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add status.md"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        marker = project_root / "_mill" / "marker.txt"
+        marker.write_text("card-5 content commit", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-5 commit"],
+            check=True,
+            capture_output=True,
+        )
+        verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        captured = ""
+        try:
+            # snapshot_path omitted (defaults to None) -> the "elif start_sha is not None and
+            # snapshot_path is None" inference branch, with no parseable status JSON in output.
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    "no structured status here, just log noise",
+                    project_root,
+                    start_sha=batch_start_sha,
+                    verify_cmd=verify_cmd,
+                    session_id="case79",
+                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                    git_name="Test",
+                    git_email="test@test.com",
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 79: expected inferred success once corroborated, got {data}"
+            )
+            status_diff = _subprocess_util.run(
+                ["git", "status", "--porcelain", "_mill/status.md"],
+                cwd=project_root,
+            )
+            assert status_diff.stdout.strip() == "", (
+                "case 79: status.md must have no uncommitted diff after the corroboration"
+                f" persist-commit, got {status_diff.stdout!r}"
+            )
+            print(
+                "PASS: case 79 - #954: a no-JSON-inference call site also commits its"
+                " corroboration-waiver status.md write, leaving no uncommitted diff behind"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 79 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 80: git_name/git_email both omitted (None, the default) -- the corroboration-waiver
+    # itself must still succeed (the safe no-op degrades only the persist-commit, matching every
+    # other optional-parameter-absent behavior in this module), but no commit is attempted for
+    # the status.md write, which is left as an uncommitted diff.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        status_path = project_root / "_mill" / "status.md"
+        status_path.parent.mkdir(parents=True, exist_ok=True)
+        status_path.write_text(
+            _status.render_initial(
+                "Test Task",
+                "test",
+                "2026-01-01T00:00:00Z",
+                "main",
+                "test-slug",
+                "test-branch",
+            ),
+            encoding="utf-8",
+        )
+        _status.init_batches(status_path, ["01-test-batch"])
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/status.md"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "add status.md"],
+            check=True,
+            capture_output=True,
+        )
+        batch_start_sha = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        marker = project_root / "_mill" / "marker.txt"
+        marker.write_text("card-5 content commit", encoding="utf-8")
+        subprocess.run(
+            ["git", "-C", str(project_root), "add", "_mill/marker.txt"],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "-m", "card-5 commit"],
+            check=True,
+            capture_output=True,
+        )
+        verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        agent_output = json.dumps(
+            {"status": "success", "session_id": "case80", "cards_done": [5]}
+        )
+        captured = ""
+        try:
+            # task_dir/parent_branch deliberately omitted here -- the dirty-tree gate this
+            # module's fix guards against is Card 1's own scope (covered by case 78 above);
+            # this case isolates whether the corroboration-waiver itself still fires safely
+            # when the persist-commit's identity parameters are absent.
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=batch_start_sha,
+                    verify_cmd=verify_cmd,
+                    session_id="case80",
+                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"case 80: expected success once corroborated, even with git identity absent,"
+                f" got {data}"
+            )
+            status_diff = _subprocess_util.run(
+                ["git", "status", "--porcelain", "_mill/status.md"],
+                cwd=project_root,
+            )
+            assert status_diff.stdout.strip() != "", (
+                "case 80: with git_name/git_email omitted, the status.md write must be a safe"
+                " no-op commit-wise -- left uncommitted, not silently attempted"
+            )
+            print(
+                "PASS: case 80 - git_name/git_email omitted: corroboration-waiver still"
+                " succeeds, but the persist-commit safely no-ops rather than raising"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 80 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
