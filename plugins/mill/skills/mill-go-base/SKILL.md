@@ -48,10 +48,8 @@ The full absolute path must never appear in a command string.
 Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
 this skill is loaded defensively in case a future addition needs its numbered-options convention.
 
-1. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
-   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
-2. Resolve the wiki path: `wiki_path = _paths.resolve_wiki_path(_paths.resolve_git_root())`.
-3. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
+1. Resolve `git_root` and `wiki_path` together: `git_root = _paths.resolve_git_root()`, then `wiki_path = _paths.resolve_wiki_path(git_root)` (reusing the now-bound `git_root` instead of calling `_paths.resolve_git_root()` a second time).
+2. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.
    Read these keys:
    - `pipeline.auto_merge` — whether to invoke mill-finalize after success.
    - `pipeline.auto_report` — whether to auto-fire mill-self-report at end-of-work. mill-go fires it at `plugins/mill/skills/mill-go-base/handoff.md` step 6, AFTER any `/mill-merge` invocation in step 5 — including after PR-pending halts.
@@ -65,6 +63,8 @@ this skill is loaded defensively in case a future addition needs its numbered-op
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
+3. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
+   On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 4. Acquire the builder lock:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" acquire <slug>
