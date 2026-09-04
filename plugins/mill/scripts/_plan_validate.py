@@ -1664,7 +1664,7 @@ def _is_prohibition_exempt(lowered_line: str) -> bool:
         _PROHIBITION_VERB_RE.search(lowered_line)
     )
 
-# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging.
+# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging. "signature inlined" and "no file read needed" additionally cover the case where a Requirements: line inlines a cited symbol's full signature and therefore needs no file read, which is why naming the defining file on that line is not an unlisted read dependency.
 _CITATION_MARKERS = (
     "as an example",
     "as examples",
@@ -1673,6 +1673,8 @@ _CITATION_MARKERS = (
     "such as",
     "cited as",
     "citing",
+    "signature inlined",
+    "no file read needed",
 )
 
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
@@ -1784,6 +1786,9 @@ def _check_context_completeness(
     act on, not an unlisted dependency.
     2. Citation-marker sentences (e.g. naming `x.py` as an example) cite a file for illustration,
     not as an unlisted read dependency.
+    This also covers a Requirements: line that inlines a cited symbol's full signature (e.g.
+    "signature inlined" or "no file read needed") -- naming the defining file on that line is not
+    an unlisted read dependency, since no file read is needed to act on the inlined signature.
     3. A token matching the plan-wide ``moves_sources`` set is exempt in any later card's
     ``Requirements:``, not just the declaring card's own -- mirrors how ``creates_union``/
     ``deletes_union`` are already plan-wide.
