@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-verify-full-suite-check-fixes
 slug: plan-validate-verify-command-validation-bugs
 branch: hanf/plan-validate-verify-command-validation-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-09-04T08:32:36Z'
 plan-fix-r2  '2026-09-04T08:32:47Z'
 planned  '2026-09-04T08:32:59Z'
 implementing  '2026-09-04T08:33:23Z'
+approved-verify-full-suite-check-fixes  '2026-09-04T08:37:26Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-09-04T08:33:23Z'
 ```yaml
 batches:
   - name: verify-full-suite-check-fixes
-    state: running
+    state: approved
     implementer_session: 8125a945-86f9-4c4d-a210-d641fc75bc29
     start_sha: 0152837760e019014cbbfd2d0ef89637f83cd97e
+    commit_sha: f7fc54107b5ed795f0070ca61746c13425322510
     verify_baseline_failures: []
   - name: verify-full-suite-unit-tests
     state: pending
