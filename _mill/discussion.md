@@ -1,0 +1,102 @@
+# Discussion: _plan_validate.py context-completeness check: misses bare symbol/identifier references entirely, only matches path tokens
+
+```yaml
+task: _plan_validate.py context-completeness check: misses bare symbol/identifier references entirely, only matches path tokens
+slug: plan-validate-context-completeness-missing-symbol-refs
+status: discussing
+parent: main
+```
+
+## Problem
+
+`_plan_validate.py`'s `context-completeness` check (`_check_context_completeness`, `plugins/mill/scripts/_plan_validate.py:1654`) exists to catch a card whose `Requirements:` prose relies on a file the card itself doesn't list in `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:` — since `Context:` is a hard allowlist for the implementer, an unlisted dependency is a real plan defect. Today the check only fires for **path-shaped** backtick tokens: it requires the token to contain `/` or end in a recognized source extension (`_PATH_CANDIDATE_EXTENSIONS`, line 1575) before it even considers flagging it. A `Requirements:` line naming a **bare symbol** — a function, type, or constant, e.g. `` `SaveState` `` or `` `RemapZone` `` — never enters the check at all; the path-shape gate at line 1728 skips it before resolution is attempted.
+
+**Why now:** this is not a hypothetical gap. Four separate GitHub issues (#942, #947, #966, #969) independently reported the exact same failure mode across three different repos and two different languages (Go — loomyard ×3, C# — Models), each describing the holistic plan reviewer catching this class of gap as BLOCKING in 2–4 separate review rounds per run, while `_plan_validate.run()` returned zero findings every time. This is pure wasted reviewer wall-clock (one issue estimates ~13 minutes of reviewer time across 2 rounds) for a defect a mechanical check should be able to catch outright.
+
+## Scope
+
+**In:**
+- Extend `_check_context_completeness` to also flag bare-symbol-shaped backtick tokens in a card's `Requirements:` whose sole resolvable declaring file (found via unambiguous, single-file text search) is absent from that card's own `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`-source set.
+- Reuse the same `context-completeness` check name, the same error dict shape, and the same three existing exemptions (prohibition-marker, citation-marker, plan-wide `moves_sources`).
+- New symbol-shape detection, resolvability search, and ambiguity handling as specified under Decisions below.
+
+**Out:**
+- Full semantic/AST-based symbol resolution (real Go/Python/C# parsing, import-aware scoping, overload resolution). This is a heuristic mechanical gate, not a language server.
+- Any change to check severity/routing. `_plan_validate.run()`'s output is a single flat list; the caller (`millpy-review-plan.py`) already halts (`return 1`) on any non-empty result before the LLM reviewer runs, regardless of check. The new symbol finding is exactly as hard-blocking as the existing path finding — no new severity tier, no advisory-only mode (issue #969 floated "weaker advisory finding" as an option, but the validator architecture has no mechanism for that; introducing one is out of scope for this task).
+- A new `skip_checks` entry / new check name. This extends `context-completeness`, it doesn't add a sibling check.
+- Repo-wide symbol *index* building, caching, or persistence across validator runs.
+
+## Decisions
+
+### Symbol-candidate shape
+
+- Decision: After stripping a trailing line-range suffix (existing `_RE_LINE_RANGE`) and a new trailing call/generic suffix (`()`, `(args...)`, `[T]` — best-effort balanced-bracket strip), a backtick token that is NOT already path-shaped (doesn't contain `/`, doesn't end in `_PATH_CANDIDATE_EXTENSIONS`) is a symbol candidate only if it matches strict identifier shape — `^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$` (a bare identifier, optionally with **one** dotted segment for `pkg.Symbol` / `Type.Method` style) — AND shows at least one "looks like code" signal: an uppercase letter after position 0 (CamelCase/mixedCase), an underscore, or the one allowed dot.
+- Rationale: Covers every example from the four issues verbatim — `SaveState`, `RemapZone`, `AddStrand`, `LinearInterpolator`, `requiredSubcommands` (camelCase), `zone.SourceCellsWithCoverage` / `reedengine.New` (dotted), `cell.CenterVerticalDepth` — while excluding plain all-lowercase single words with no underscore/dot (`example`, `config`, `true`), which are far more likely to be ordinary prose than a real symbol reference.
+- Rejected: A broader shape plus a maintained English-word exclusion list — more coverage but ongoing list maintenance with no clear payoff, since the resolvability gate below (exactly-one-file match) already suppresses common words organically. Restricting to dotted `pkg.Symbol` shape only — rejected because it misses plain CamelCase-only symbols, which are the majority of the issue evidence.
+
+### Call/generic-suffix handling
+
+- Decision: Strip a trailing `()`, `(args)`, or `[T]` suffix before shape-matching and resolution, but keep the **original** token text (suffix included) in the emitted error's `path` field — mirrors how the existing `_RE_LINE_RANGE` suffix is stripped for matching but the original token is preserved in the error.
+- Rationale: Issue #966's own repro example writes the symbol as a call site (`reedengine.New(reedengine.Config{}, reedengine.Geometry{...})`), and Requirements prose commonly phrases symbols this way (`` `NewFoo()` ``, `` `SaveState()` ``). Without stripping, the identifier-shape regex never matches and the check silently misses exactly the phrasing the issues use.
+- Rejected: Requiring exact bare-identifier tokens only (no call-site phrasing) — cheaper but misses realistic prose straight out of the linked issues.
+
+### Resolvability gate
+
+- Decision: A symbol candidate is only "resolvable" (worth checking against the card's own refs) if a whole-word, case-sensitive text search across the project's source tree turns up the token in **exactly one** distinct file. Search implementation: a plain recursive filesystem walk rooted at the same `git_root/root` → `project_root/root` precedence the existing path-resolution helpers already use (see `resolve_existing_paths`, `_review_common.py:1023`), restricted to files with an extension in `_PATH_CANDIDATE_EXTENSIONS`'s code subset (`.py`, `.go`, `.cs`, `.ts`), skipping a small fixed denylist of noise directories (`.git`, `node_modules`, `vendor`, `__pycache__`, `dist`, `build`, `.venv`). Zero matches anywhere → skip (likely a typo, a non-code word, or a symbol from a dependency outside the repo — not something this validator can confirm). More than one distinct file → skip (ambiguous; flagging with false certainty about which file the card "should" have listed is worse than staying silent).
+- Rationale: Mirrors the existing path branch's requirement that a token must independently resolve to something real (on disk, or a plan-wide `Creates:`/`Deletes:`/Moves-target) before it's eligible to be flagged — this is the same "only flag genuine, independently-confirmable references" principle, just for symbols instead of paths. The exactly-one-file requirement is also what keeps this check honest: issue #942 itself proposes "flagging backticked identifiers that resolve to exactly one declaring file in the repo" as the cheap heuristic. A useful emergent property: this ambiguity gate also organically suppresses common keywords (`nil`, `true`, `false`, `null`) without any hand-maintained exclusion list, since those tokens appear in many files in any real codebase and therefore fail the "exactly one file" test.
+- Rejected: (a) Matching only against the card's own already-listed files' content, with no repo-wide search — flags unconditionally whenever absent, including typos and generic words; much higher false-positive rate. (b) Full language-aware declaration-pattern matching (`func X`, `def x`, `class X` per language) — most precise, but highest implementation and maintenance cost across at least four languages, disproportionate to a heuristic mechanical gate. (c) Shelling out to `git grep`/`git ls-files` for the tracked-file search — rejected in favor of a plain filesystem walk so this check's unit tests stay git-free like the large majority of `test-plan-validate.py`'s existing fixtures (real git is only used today by `verify-unrelated-test-file`, which inherently needs `git diff` against a parent branch; this check has no such inherent git dependency).
+
+### Membership check against the card's own refs
+
+- Decision: When a symbol candidate resolves to exactly one file, that file's path is checked for membership in the card's own reference set exactly the way the existing path branch already does — via `_card_own_reference_set` (line 1602) plus its existing basename-fallback comparison (lines 1765–1768), and against the plan-wide `moves_sources` exemption. If the resolved file is present in any of those, no flag (already covered); if absent, emit a `context-completeness` finding with a message adapted for the symbol case (distinct wording from the path case's message, e.g. naming the resolved declaring file).
+- Rationale: Reuses the exact same "own refs" machinery the path branch already relies on — no new membership-comparison logic, no new plan-wide unions beyond what already exists (`creates_union`, `deletes_union`, `moves_sources`, `moves_targets` all already thread into `_check_context_completeness`'s signature).
+- Rejected: A parallel, symbol-specific reference-set computation — would duplicate `_card_own_reference_set` for no behavioral difference.
+
+### Check identity and exemptions
+
+- Decision: Extend the existing `context-completeness` check (same check name, same error dict shape: `{check, batch, card, path, message, line}`) rather than introducing a new check name. The existing prohibition-marker and citation-marker line-level exemptions (`_is_prohibition_exempt`, `_CITATION_MARKERS`) apply identically to symbol candidates — they're already line-scoped, not token-shape-scoped, so no change needed there.
+- Rationale: All four source issues frame this as "the existing check misses X," not "add a new check." Keeping one check name means no new `skip_checks` surface to document, and a plan author can't accidentally disable only the (more heuristic) symbol variant while leaving the well-established path variant on — which would be a confusing partial-opt-out anyway.
+- Rejected: A new check name (e.g. `context-completeness-symbol`) so projects could opt out of just the symbol variant — rejected as unneeded surface area; if a project's plans hit unacceptable false-positive rates from the symbol variant specifically, that's a signal to tune the heuristic, not to add an escape hatch.
+
+## Technical context
+
+- Primary target: `_check_context_completeness` and its helpers in `plugins/mill/scripts/_plan_validate.py` (function starts at line 1654; module docstring's check-key summary at line 47 needs its one-line description updated to mention symbol references, not just path tokens).
+- Existing building blocks to reuse directly:
+  - `_parse_cards` (line 132), `_extract_requirements_text` (line 1578), `_card_own_reference_set` (line 1602) — card/requirements parsing, unchanged.
+  - `_RE_LINE_RANGE` (line 108), `_PATH_CANDIDATE_EXTENSIONS` (line 1575) — extend the extension tuple's *code subset* concept (reuse the same 4 language extensions for the new search's file filter) rather than redefining a separate list.
+  - `resolve_existing_paths` (`_review_common.py:1023`) — mirrors the `git_root/root` → `project_root/root` resolution precedence the new filesystem-walk search should follow, though the walk itself is new code (this helper resolves single known paths, not a content search).
+  - `_is_prohibition_exempt`, `_CITATION_MARKERS` — apply unchanged to the new branch.
+  - `creates_union`, `deletes_union`, `moves_sources`, `moves_targets` — already threaded into `_check_context_completeness`'s parameter list; the new branch consults the same plan-wide sets.
+- No existing symbol/identifier resolution utility exists anywhere in the mill scripts today (confirmed via grep) — this is new code, not a wiring change onto something pre-built.
+- Call site is unchanged: `run()` at line 2970 already passes every argument the extended check needs.
+- Consider (implementation-level, not a design decision): caching each unique token's file-search result within a single `run()` invocation, since the same symbol may appear in multiple cards' `Requirements:` across a plan — avoids redundant filesystem walks. Left to the implementer's judgment; not required for correctness.
+
+## Constraints
+
+- Must stay purely mechanical/deterministic (regex + filesystem search) — no LLM calls. `_plan_validate.run()` is invoked as a synchronous pre-gate before the LLM reviewer even dispatches (`millpy-review-plan.py`); it must remain fast and offline.
+- Must not introduce a new hard dependency on `git` subprocess calls for this specific check, to keep the new check's unit tests git-free (existing convention: `plugins/mill/unit_tests/` uses in-memory/tempfile fixtures with no real git, except the one check — `verify-unrelated-test-file` — that inherently needs `git diff`; this check has no equivalent inherent need).
+- Must not change `_plan_validate.run()`'s public signature or return shape — same `list[dict]` of `{check, batch, card, path, message}` (plus this check's existing `line` key).
+- Print/log output within the touched module stays ASCII-only per project convention (existing code already complies; no new non-ASCII should be introduced).
+
+## Testing
+
+- Extend `plugins/mill/unit_tests/test-plan-validate.py` (existing `context-completeness` test block starts at line 1750) with new cases mirroring the existing path-token test structure (`_make_overview`, `_make_batch_file`, `_write_plan` fixture helpers; plain `tempfile.TemporaryDirectory`-based `project_root`, no real git needed per the Constraints above):
+  - **Clean, symbol in own Context:** a card's `Requirements:` names `` `SaveState` ``, `Context:` lists the one file containing `SaveState`'s definition → no finding.
+  - **Dirty, symbol resolvable but absent from own refs:** `` `SaveState` `` appears in exactly one on-disk file, that file is not in the card's own refs → one `context-completeness` finding.
+  - **Clean, symbol resolves to zero files:** a backtick token that's identifier-shaped but appears nowhere in the fixture project → no finding (unresolvable, not flagged).
+  - **Clean, symbol resolves to more than one file:** the same identifier-shaped token appears in two distinct fixture files → no finding (ambiguous, not flagged) — this is the test that also stands in for the "no keyword exclusion list needed" decision (e.g. use a token appearing in many files, confirm it's silently skipped).
+  - **Call-site phrasing:** `` `SaveState()` `` and `` `reedengine.New(...)` ``-style dotted-call phrasing both strip correctly and resolve/flag the same as their bare-identifier form.
+  - **Path-shape tokens unaffected:** an existing path-shaped test (already covered) continues to pass through the untouched original branch — confirms the new branch doesn't regress path-token handling.
+  - **All-lowercase single word not a candidate:** a token like `` `config` `` with no CamelCase/underscore/dot, absent from own refs — not flagged, even if it happens to resolve to exactly one file (shape gate excludes it before the resolvability search runs).
+  - **Prohibition/citation exemptions extend to symbols:** a Requirements: line naming a resolvable, absent symbol inside a prohibition-marker or citation-marker sentence → no finding, same as the existing path-branch exemption tests.
+- TDD candidate: the symbol-shape regex + suffix-stripping helper (likely a small pure function, e.g. `_symbol_candidate_shape(token) -> str | None`) is the cleanest unit to write test-first, since its correctness is independently verifiable against the shape rules in Decisions without needing filesystem fixtures.
+- The filesystem-walk resolvability search is the second TDD candidate — test it directly (given a fixture directory tree, does it return the right zero/one/many-file classification) before wiring it into the full check.
+
+## Q&A log
+
+- **Q:** How should a `Requirements:` backtick token be identified as a "symbol candidate" distinct from the existing path-shaped branch and from ordinary prose? **A:** [auto-pick] Strict identifier-shape regex (bare identifier, optional one dotted segment) plus a "looks like code" signal (CamelCase, underscore, or the dot) after stripping call/generic suffixes; bare all-lowercase single words excluded. **Why:** covers every example across all four source issues while excluding plain prose words; broader shape + exclusion-list alternative rejected as unnecessary given the resolvability gate already suppresses common words.
+- **Q:** When is a symbol candidate "resolvable" enough to check against the card's own refs? **A:** [auto-pick] Whole-word text search across the project's source tree (filtered to `.py`/`.go`/`.cs`/`.ts`, denylisting noise dirs); resolvable only on an unambiguous exactly-one-file match; zero or multiple matches are skipped. **Why:** mirrors the existing path branch's "must independently resolve to something real" principle; matches issue #942's own proposed cheap heuristic; the ambiguity gate incidentally suppresses generic keywords (`nil`/`true`/etc.) with no separate exclusion list needed.
+- **Q:** Should the resolvability search shell out to `git grep`/`git ls-files`, or use a plain filesystem walk? **A:** [auto-pick] Plain filesystem walk, no git subprocess. **Why:** keeps the new check's unit tests git-free, consistent with the large majority of `test-plan-validate.py`'s existing fixtures; the one existing check that does use real git (`verify-unrelated-test-file`) has an inherent need (`git diff` against a parent branch) that this check doesn't share.
+- **Q:** Should Requirements prose written as a call site (`` `NewFoo()` ``, `` `reedengine.New(...)` ``) be recognized, given issue #966's repro uses exactly this phrasing? **A:** [auto-pick] Yes — strip a trailing `()`/`(...)`/`[...]` suffix before shape/resolution matching, but preserve the original token text in the emitted error. **Why:** without stripping, the check would silently miss the exact phrasing the source issues use to demonstrate the bug.
+- **Q:** New check name, or extend the existing `context-completeness` check? **A:** [auto-pick] Extend the existing check — same name, same error shape. **Why:** all four issues frame this as a gap in the existing check, not a request for a new one; avoids adding a confusing partial-opt-out `skip_checks` entry.
+- **Q:** Does the new symbol finding need a different severity/advisory tier than the existing hard-blocking path finding (issue #969 floated "weaker advisory")? **A:** [auto-pick] No — same severity as the existing check. **Why:** `_plan_validate.run()`'s output is architecturally a single flat error list; the caller already halts on any non-empty result before the LLM reviewer runs, and introducing a new severity tier is out of scope for this task.
