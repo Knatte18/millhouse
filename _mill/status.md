@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanliness-pycache-allowlist
+phase: approved-handoff-pre-done-gate-and-lock-release
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-09-04T08:44:05Z'
 approved-done-gate-run-gate  '2026-09-04T08:47:57Z'
 approved-mill-pause-agent-dispatch  '2026-09-04T08:49:21Z'
 approved-cleanliness-pycache-allowlist  '2026-09-04T08:51:28Z'
+approved-handoff-pre-done-gate-and-lock-release  '2026-09-04T08:55:26Z'
 ```
 
 ## Batches
@@ -51,9 +52,10 @@ batches:
     commit_sha: 3e3bbb270ea4cd5783c44c97e22e656c7ba8c9d0
     verify_baseline_failures: []
   - name: handoff-pre-done-gate-and-lock-release
-    state: running
+    state: approved
     implementer_session: bec226ac-470d-426f-83ea-223db19fafc5
     start_sha: 0d56aa48592784175236ce561c0ea98e87809bdd
+    commit_sha: 53182d1ed537fda8e297ce682dfce37956da3272
   - name: cleanliness-gate-dead-parent-recovery
     state: pending
   - name: step-5-5-liveness-probe
