@@ -32,9 +32,12 @@ implementing  '2026-09-04T10:20:38Z'
 ```yaml
 batches:
   - name: brief-instruction-hardening
-    state: pending
+    state: running
+    implementer_session: 360d0cc3-e00a-4416-a308-5db54aa5fb35
+    start_sha: 1a4ffc423b141ed17d9da601588e187ce31c2c96
   - name: git-commit-staging-verification
     state: pending
   - name: commit-sha-field-rename-and-regression-tests
     state: pending
+    verify_baseline_failures: []
 ```
