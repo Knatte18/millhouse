@@ -3,7 +3,7 @@
 ```yaml
 task: "_plan_validate.py context-completeness check: misses bare symbol/identifier references entirely, only matches path tokens"
 slug: plan-validate-context-completeness-missing-symbol-refs
-approved: false
+approved: true
 started: "20260904-092721"
 parent: main
 root: ""
