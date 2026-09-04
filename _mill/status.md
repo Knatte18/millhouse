@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
-plan: null
+plan: _mill/plan
 parent: main
 task: 'millpy-implement/fix.py: stuck-type false positives and session-hygiene gaps'
 task_description: |
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-04T09:55:36Z'
 discussed  '2026-09-04T10:49:08Z'
+planning  '2026-09-04T11:00:06Z'
 ```
