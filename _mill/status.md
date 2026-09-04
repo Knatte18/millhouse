@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: mill-merge-finalize-codeguide-bugs
 branch: hanf/mill-merge-finalize-codeguide-bugs
 plan: _mill/plan
@@ -39,6 +39,7 @@ holistic-reviewing  '2026-09-04T11:01:19Z'
 holistic-fixing  '2026-09-04T11:07:07Z'
 holistic-reviewing  '2026-09-04T11:10:16Z'
 holistic-fixing  '2026-09-04T11:16:54Z'
+holistic-reviewing  '2026-09-04T11:19:31Z'
 ```
 
 ## Batches
