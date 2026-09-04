@@ -1,0 +1,36 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: Claude Sonnet 5 (self-reported; per-session best-effort assessment)
+reviewed_file: plan/
+date: 2026-09-04
+```
+
+## Findings
+
+### [BLOCKING:scope] Card 2 (#905) names `_run_verify_gate`/`_implementer_common.py` outside Context
+**Location:** Batch 1, Card 2. **Issue:** Requirements documents `_run_verify_gate` in `_implementer_common.py`'s PATH-inheritance behavior, but `_implementer_common.py` is not in Card 2's `Context:` (`none`) or `Edits:` (`SKILL.md` only) — the implementer must trust the card's claim about that function's internals with no read access to verify it. **Fix:** Add `plugins/mill/scripts/_implementer_common.py` to Card 2's `Context:`.
+
+### [BLOCKING:scope] Card 9 names `_serialise_batches`/`_status.py` outside Context
+**Location:** Batch 3, Card 9. **Issue:** Requirements instructs `_serialise_batch_index` to "mirror `_status.py`'s `_serialise_batches` convention exactly," but `_status.py` is absent from Card 9's `Context:` (`none`) and `Edits:` (`_plan_dag.py`, `test-plan-dag.py`) — this is the textbook Context-completeness gap the criteria's own example describes. **Fix:** Add `plugins/mill/scripts/_status.py` to Card 9's `Context:`.
+
+### [BLOCKING:scope] Card 10's pending-state safety guard has no "batch not yet in status.md" branch
+**Location:** Batch 3, Card 10, step 5. **Issue:** `_status.read_batches(status_path)` returns `[]` until mill-go's own Coding-phase `init_batches` call seeds `## Batches` (confirmed in `mill-go-base/SKILL.md` line 210-212) — a very plausible entry point for `/mill-descope-batch` (pruning a batch from a freshly-approved plan before `/mill-go` ever runs). The step only specifies behavior for a found entry whose `state` isn't `pending`; it never specifies what happens when no entry matches `batch_name` at all, risking an unhandled crash instead of a clean `sys.exit`. **Fix:** Add an explicit branch: no matching status-batches entry → proceed as if `pending` (or a dedicated clean error), not an implicit `None`-dereference.
+
+### [BLOCKING:consistency] Card 10 hardcodes `_mill/descoped` instead of routing through `_paths`
+**Location:** Batch 3, Card 10, step 8. **Issue:** `descoped_dir = active_hub / "_mill" / "descoped"` is a literal inline path, while `plan_dir`/`status_path` in the same card correctly go through `_paths.resolve_task_path`, which has a documented `_mill/`→`task/` compat fallback for in-flight/legacy worktrees (`plugins/mill/scripts/_paths.py` `resolve_task_path`). In a worktree currently on the `task/` fallback, `plan_dir` would resolve under `task/` while `descoped_dir` stays hardcoded under `_mill/`, splitting the descoped file across an inconsistent root relative to the rest of the task. **Fix:** Derive `descoped_dir` from `plan_dir.parent / "descoped"` (or an equivalent `_paths`-routed expression), not a fresh `_mill/` literal.
+
+### [NIT:consistency] Card 8's file-layout parenthetical is backwards
+**Location:** Batch 3, Card 8. **Issue:** "placed immediately after `set_batch_fields` (the function ending just before `_serialise_batches`)" is wrong — in `_status.py`, `_serialise_batches` (line 579) is defined well *before* `set_batch_fields` (line 980), not after it. The primary anchor ("immediately after `set_batch_fields`") is unambiguous on its own, so this doesn't block, but the landmark could send an implementer searching in the wrong place. **Fix:** Drop or correct the parenthetical.
+
+### [NIT:consistency] Card 10's SKILLS.md placement hint omits the true adjacent neighbor
+**Location:** Batch 3, Card 10. **Issue:** "`mill-descope-batch` sorts between `mill-cleanup` and `mill-finalize`" is true but imprecise — `mill-color` (SKILLS.md line 52) also sits alphabetically between those two and is `mill-descope-batch`'s actual immediate predecessor. The card's controlling instruction ("inserted in alphabetical order") is correct and rescues this from causing a real misplacement. **Fix:** Say "between `mill-color` and `mill-finalize`" for precision.
+
+## Verdict
+
+REQUEST_CHANGES
+Three Context-completeness/edge-case gaps and one hardcoded-path constraint issue in Batches 1/3 need fixing before approval.
+MILL_REVIEW_END

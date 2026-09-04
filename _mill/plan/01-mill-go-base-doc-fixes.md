@@ -28,7 +28,8 @@ This batch fixes four of the task's seven folded issues (#927, #905, #980, #941)
 
 ### Card 2: #905 — document finalize verify replay's PATH inheritance
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/scripts/_implementer_common.py`
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:** none
