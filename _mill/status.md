@@ -38,7 +38,9 @@ batches:
     start_sha: 4eea6a9c45d7f10e0d8d64e15e7bd4c5fb180e45
     commit_sha: c43e64fbaa96838d626f15a24cbfa20f84fc1f57
   - name: mill-descope-batch
-    state: pending
+    state: running
+    implementer_session: 7056e28c-bb6d-49c4-a07e-53aa87b419dd
+    start_sha: 5f827f12043cb659d3aacab78f7d9aa15bbadbd3
     verify_baseline_failures: []
   - name: mill-go-base-scope-and-numbering-fixes
     state: pending
