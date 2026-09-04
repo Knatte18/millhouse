@@ -20,6 +20,7 @@ Fixes #916: `millpy-fix.py --stage finalize` never forwards `batch_verify_baseli
 - **Context:**
   - `plugins/mill/scripts/_plan_dag.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-fix.py`
 - **Creates:** none
