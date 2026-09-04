@@ -24,6 +24,10 @@ Only emit `verdict: NEED_CONTEXT` for paths that are NOT in the manifest, and ex
 The orchestrator will re-fire the review with those files added.
 Fabricating file contents — or inferring them from filename / position alone — is a worse failure than halting honestly.
 
+## Overview verify: scope rule
+
+The overview's module-wide `verify:` field (if set) must stay a cheap compile/vet/smoke command, per `plan-overview.md`'s own documented intent — never a full test-suite run. Do not suggest, as a fix for any finding, converting it into an unscoped full-test command (e.g. `go test ./...`, `dotnet test`, `pytest`) — `_plan_validate`'s `verify-full-suite` check will reject that on the plan's very next validation pass, costing a review round for nothing.
+
 ## Criteria (apply to the plan as a whole)
 
 - **Constraint violations** — BLOCKING.
