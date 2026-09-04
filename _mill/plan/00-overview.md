@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-implement/fix.py: stuck-type false positives and session-hygiene gaps'
 slug: millpy-implement-fix-stuck-type-false-positives
-approved: false
+approved: true
 started: 20260904-105216
 parent: main
 root: ""
