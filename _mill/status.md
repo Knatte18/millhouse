@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-plan-entry-gate-and-misc-bugs
 branch: hanf/mill-plan-entry-gate-and-misc-bugs
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-09-04T09:43:09Z'
 discussion-fix-r4  '2026-09-04T10:10:18Z'
 discussed  '2026-09-04T10:12:59Z'
 planning  '2026-09-04T10:18:39Z'
+plan-review-r1  '2026-09-04T10:23:49Z'
 ```
