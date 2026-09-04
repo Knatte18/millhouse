@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-plan-review-round-cap-and-skip-check-threading
 branch: hanf/mill-plan-review-round-cap-and-skip-check-threading
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-09-04T07:58:12Z'
 discussion-fix-r2  '2026-09-04T08:19:23Z'
 discussed  '2026-09-04T08:19:23Z'
 planning  '2026-09-04T08:24:04Z'
+plan-review-r1  '2026-09-04T08:31:52Z'
 ```
