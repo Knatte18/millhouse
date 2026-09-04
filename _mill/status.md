@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: code-comments-skill-consumer-enumeration-rule
 branch: hanf/code-comments-skill-consumer-enumeration-rule
 plan: _mill/plan
@@ -20,4 +20,13 @@ planning  '2026-09-04T16:17:56Z'
 plan-review-r1  '2026-09-04T16:19:27Z'
 plan-fix-r1  '2026-09-04T16:20:10Z'
 planned  '2026-09-04T16:20:19Z'
+implementing  '2026-09-04T16:20:50Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: enumerated-consumer-rule
+    state: pending
 ```
