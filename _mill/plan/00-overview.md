@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-go: concurrency, silently-ignored fields, and bookkeeping bugs in execution/handoff'
 slug: mill-go-execution-and-bookkeeping-bugs
-approved: false
+approved: true
 started: 20260904-084117
 parent: main
 root: ""
