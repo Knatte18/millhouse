@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-done-gate-run-gate
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r1  '2026-09-04T08:41:58Z'
 plan-fix-r1  '2026-09-04T08:43:19Z'
 planned  '2026-09-04T08:43:32Z'
 implementing  '2026-09-04T08:44:05Z'
+approved-done-gate-run-gate  '2026-09-04T08:47:57Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-09-04T08:44:05Z'
 ```yaml
 batches:
   - name: done-gate-run-gate
-    state: running
+    state: approved
     implementer_session: 19c81086-e9f2-421a-b64f-3ed6ce9f365c
     start_sha: f26136215f75c30c411ecc4c0ee1c16da3b5d0b2
+    commit_sha: 7e1fb88000ba8cbe71d7657d46d32d1df1f3a3e8
     verify_baseline_failures: []
   - name: mill-pause-agent-dispatch
     state: pending
