@@ -268,7 +268,8 @@ def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[li
             source directory (e.g.
         extensionless 'sandbox' corroborated by tools/sandbox/main.go declaring package main).
     3. Basename matches the fixed allowlist: 'coverage.out',
-        or suffix in {.test, .test.exe, .prof, .cover}.
+        or suffix in {.test, .test.exe, .prof, .cover, .pyc},
+        or the violation path has '__pycache__' as one of its path components.
 
     For allowlisted files: os.remove is called, FileNotFoundError is swallowed and the path is still
     reported as removed, OSError is reported as blocking instead.
@@ -310,6 +311,8 @@ def clean_ephemeral_scope_violations(hub_root: Path, git_root: Path) -> tuple[li
                 or basename.endswith(".test")
                 or basename.endswith(".prof")
                 or basename.endswith(".cover")
+                or basename.endswith(".pyc")
+                or "__pycache__" in violation.split("/")
             )
 
         if is_allowlisted:
