@@ -3,7 +3,7 @@
 ```yaml
 task: 'millpy-review-plan: verdict/envelope disagreement and reviewer_model mis-recording'
 slug: 'review-plan-verdict-envelope-model-bugs'
-approved: false
+approved: true
 started: '20260904-081054'
 parent: 'main'
 root: ""
