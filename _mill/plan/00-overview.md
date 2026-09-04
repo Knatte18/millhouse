@@ -27,7 +27,7 @@ batches:
   - number: 3
     name: docs-and-reviewer-guardrail
     file: 03-docs-and-reviewer-guardrail.md
-    depends-on: []
+    depends-on: [1]
     verify: null
 ```
 

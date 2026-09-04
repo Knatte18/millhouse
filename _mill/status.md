@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: plan-validate-verify-command-validation-bugs
 branch: hanf/plan-validate-verify-command-validation-bugs
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-04T08:10:12Z'
 discussed  '2026-09-04T08:10:12Z'
 planning  '2026-09-04T08:18:06Z'
 plan-review-r1  '2026-09-04T08:25:54Z'
+plan-fix-r1  '2026-09-04T08:26:02Z'
 ```

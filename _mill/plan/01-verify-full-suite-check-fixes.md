@@ -75,22 +75,22 @@ This batch fixes `_check_verify_full_suite`'s Go-test detection (compound-comman
   with the segment-scoped version:
 
   ```python
-          for segment in _RE_SHELL_OPERATOR.split(command):
-              if (
-                  _RE_GO_TEST_INVOCATION.search(segment)
-                  and "./..." in segment
-                  and "-run " not in segment
-              ):
-                  return {
-                      "check": "verify-full-suite",
-                      "batch": batch_label,
-                      "card": None,
-                      "path": command,
-                      "message": (
-                          "verify command invokes 'go test ./...' without a -run <pattern> filter; "
-                          "scope it or document the cross-cutting-helper justification in ## Batch Tests"
-                      ),
-                  }
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if (
+                _RE_GO_TEST_INVOCATION.search(segment)
+                and "./..." in segment
+                and "-run " not in segment
+            ):
+                return {
+                    "check": "verify-full-suite",
+                    "batch": batch_label,
+                    "card": None,
+                    "path": command,
+                    "message": (
+                        "verify command invokes 'go test ./...' without a -run <pattern> filter; "
+                        "scope it or document the cross-cutting-helper justification in ## Batch Tests"
+                    ),
+                }
   ```
 
   Leave the `run-all.py`, `dotnet test`, and bare-pytest branches unchanged (both their code and their `message` text) — only the go-test branch changes shape, and only the exemption check is new above it.

@@ -6,12 +6,12 @@ batch: docs-and-reviewer-guardrail
 number: 3
 cards: 3
 verify: null
-depends-on: []
+depends-on: [1]
 ```
 
 ## Batch Scope
 
-This batch is doc/prompt-only — no executable surface, so `verify: null` (per the template's "state why" convention for a `verify: null` batch). It wires the `overview-level-escape-hatch`, `fix-table-runner-agnostic-remedy`, `reviewer-prompt-guardrail`, and `config-doc-fix` Shared Decisions into `mill-plan/SKILL.md`, `review-plan-holistic.md`, and the template `mill-config.yaml`. It also updates `mill-plan/SKILL.md`'s self-run call block to pass the new `done_gate` keyword argument that batch 1 added to `_plan_validate.run`'s signature — this batch does not depend on batch 1 at the file level (different files, no shared code), but both must agree on the parameter name `done_gate`, which this plan fixes as the single source of truth for both batches.
+This batch is doc/prompt-only — no executable surface, so `verify: null` (per the template's "state why" convention for a `verify: null` batch). It wires the `overview-level-escape-hatch`, `fix-table-runner-agnostic-remedy`, `reviewer-prompt-guardrail`, and `config-doc-fix` Shared Decisions into `mill-plan/SKILL.md`, `review-plan-holistic.md`, and the template `mill-config.yaml`. It also updates `mill-plan/SKILL.md`'s self-run call block to pass the new `done_gate` keyword argument that batch 1 added to `_plan_validate.run`'s signature. `depends-on: [1]`: Card 4's edit is a live call site (mill-plan's own self-run of `_plan_validate.run`, actually executed on this self-hosted repo), not prose, so this batch must land after batch 1 introduces the `done_gate` parameter — merging or implementing it first would make mill-plan's own self-run raise `TypeError: run() got an unexpected keyword argument 'done_gate'`.
 
 ## Cards
 
@@ -95,6 +95,7 @@ This mirrors `millpy-review-plan.py`'s own step-1.5 gate exactly — same seven 
 
 - **Context:**
   - `CLAUDE.md`
+  - `plugins/mill/scripts/_plan_validate.py`
 - **Edits:**
   - `plugins/mill/templates/mill-config.yaml`
 - **Creates:** none
