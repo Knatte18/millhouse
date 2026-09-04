@@ -3,7 +3,7 @@
 ```yaml
 task: "Review prompt/output file listings resolve plan-relative paths to absolute before display, instead of keeping them relative"
 slug: "review-manifest-listings-full-path-clutter"
-approved: false
+approved: true
 started: "20260904-163712"
 parent: "main"
 root: ""
