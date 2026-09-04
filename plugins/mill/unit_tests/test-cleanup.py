@@ -250,15 +250,26 @@ def test_apply_orphan_baseline_dir() -> None:
         (wiki_path / "Home.md").write_text("", encoding="utf-8")
 
         stderr_locked = io.StringIO()
+        locked_calls: list = []
+
+        def _fake_remove_safe_locked(path, **kwargs):
+            locked_calls.append((path, kwargs))
+            raise _worktree.WorktreeLockedError("locked")
+
         with patch(
             "mill_cleanup._worktree.remove_safe",
-            side_effect=_worktree.WorktreeLockedError("locked"),
+            side_effect=_fake_remove_safe_locked,
         ):
             with contextlib.redirect_stderr(stderr_locked):
                 apply_plan(plan, wiki_path, wt_path, {})
         stderr_text_locked = stderr_locked.getvalue()
         assert "REPORT:" in stderr_text_locked, f"expected REPORT: line, got {stderr_text_locked!r}"
         assert str(dir_path) in stderr_text_locked, f"expected {dir_path} in stderr, got {stderr_text_locked!r}"
+        assert len(locked_calls) == 1, f"expected 1 remove_safe call, got {locked_calls}"
+        assert locked_calls[0][1].get("cwd") == wt_path, (
+            f"expected apply_plan's own dir_path.parent.parent derivation to pass cwd={wt_path!r}, "
+            f"got {locked_calls[0][1]!r}"
+        )
         print("PASS apply_plan — orphan baseline dir removal raises WorktreeLockedError -> REPORT:, no propagation")
 
     # apply_plan must not propagate plain WorktreeError (the base class) either -- this is the actual
@@ -276,15 +287,26 @@ def test_apply_orphan_baseline_dir() -> None:
         (wiki_path / "Home.md").write_text("", encoding="utf-8")
 
         stderr_base = io.StringIO()
+        base_calls: list = []
+
+        def _fake_remove_safe_base(path, **kwargs):
+            base_calls.append((path, kwargs))
+            raise _worktree.WorktreeError("unrecognized git failure")
+
         with patch(
             "mill_cleanup._worktree.remove_safe",
-            side_effect=_worktree.WorktreeError("unrecognized git failure"),
+            side_effect=_fake_remove_safe_base,
         ):
             with contextlib.redirect_stderr(stderr_base):
                 apply_plan(plan, wiki_path, wt_path, {})
         stderr_text_base = stderr_base.getvalue()
         assert "REPORT:" in stderr_text_base, f"expected REPORT: line, got {stderr_text_base!r}"
         assert str(dir_path) in stderr_text_base, f"expected {dir_path} in stderr, got {stderr_text_base!r}"
+        assert len(base_calls) == 1, f"expected 1 remove_safe call, got {base_calls}"
+        assert base_calls[0][1].get("cwd") == wt_path, (
+            f"expected apply_plan's own dir_path.parent.parent derivation to pass cwd={wt_path!r}, "
+            f"got {base_calls[0][1]!r}"
+        )
         print("PASS apply_plan — orphan baseline dir removal raises plain WorktreeError -> REPORT:, no propagation")
 
 
