@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: plan-fix-r4
 slug: mill-go-execution-and-bookkeeping-bugs
 branch: hanf/mill-go-execution-and-bookkeeping-bugs
 plan: _mill/plan
@@ -22,4 +22,5 @@ planning  '2026-09-04T08:51:34Z'
 plan-fix-r1  '2026-09-04T08:59:40Z'
 plan-fix-r2  '2026-09-04T09:07:19Z'
 plan-fix-r3  '2026-09-04T09:14:35Z'
+plan-fix-r4  '2026-09-04T09:21:43Z'
 ```
