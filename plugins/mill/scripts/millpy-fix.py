@@ -417,10 +417,26 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
+        # Module-wide verify derivation, mirroring millpy-implement.py's main(): read the
+        # overview's own verify field and the already-cached module-scoped baseline so the
+        # fixer's live verify replay can apply the same subset-diff waiver the implementer
+        # dispatch already gets. Without this, forwarding module_verify_baseline alone would
+        # be inert -- _run_verify_gates short-circuits the module-wide gate whenever
+        # module_wide_verify_cmd is None.
+        overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
+        module_wide_verify_cmd, module_wide_cwd_override = _plan_dag.parse_verify_field(
+            overview_frontmatter, project_root, git_root
+        )
+        module_verify_baseline = _status.get_module_verify_baseline(status_path)
+
         # Resolve verify command for batch/holistic fixes.
         # cwd_override is pre-initialized to None here (before branching on args.scope) because the batch-scope read below is nested inside `if batch_entry is not None:` and the holistic-scope read inside `if batch_verifies:` -- either guard can be false, leaving the pre-initialized None value, exactly matching pre-#604 behavior.
         verify_cmd = None
         cwd_override = None
+        # batch_verify_baseline must be defined unconditionally (both scope arms below only
+        # reassign it inside their own guard), since it is read regardless of scope when
+        # building the finalize_from_output call below.
+        batch_verify_baseline = None
         if args.scope == "batch":
             batch_entry = next(
                 (b for b in batches if b["name"] == args.batch_name), None
@@ -431,6 +447,13 @@ def main(argv=None) -> int:
                 verify_cmd, cwd_override = _plan_dag.parse_verify_field(
                     batch_frontmatter, project_root, git_root
                 )
+            batch_status = next(
+                (b for b in _status.read_batches(status_path) if b.get("name") == args.batch_name),
+                None,
+            )
+            batch_verify_baseline = (
+                batch_status.get("verify_baseline_failures") if batch_status is not None else None
+            )
         elif args.scope == "holistic":
             # Derive concatenated verify_cmd from all batch verify commands in DAG order
             batch_verifies = _plan_dag.iter_batch_verifies(
@@ -441,6 +464,16 @@ def main(argv=None) -> int:
             )
             if batch_verifies:
                 verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
+            # Union every contributing batch's cached verify-baseline failure set, so the
+            # holistic waiver covers pre-existing/unrelated failures from any batch this
+            # fix round spans -- not just one arbitrarily-chosen batch's baseline.
+            _all_batches_status = _status.read_batches(status_path)
+            _union_baseline: set[str] = set()
+            for _bv_name, _bv_cmd, _bv_cwd in batch_verifies:
+                _bv_status = next((b for b in _all_batches_status if b.get("name") == _bv_name), None)
+                if _bv_status is not None and _bv_status.get("verify_baseline_failures"):
+                    _union_baseline.update(_bv_status["verify_baseline_failures"])
+            batch_verify_baseline = sorted(_union_baseline) if _union_baseline else None
         nits_scope = args.batch_name if args.scope == "batch" else "holistic"
         return finalize_from_output(
             Path(args.agent_output),
@@ -454,6 +487,13 @@ def main(argv=None) -> int:
             nits_scope=nits_scope,
             git_root=git_root,
             cwd_override=cwd_override,
+            git_name=git_name,
+            git_email=git_email,
+            module_wide_verify_cmd=module_wide_verify_cmd,
+            module_wide_cwd_override=module_wide_cwd_override,
+            module_verify_baseline=module_verify_baseline,
+            batch_verify_baseline=batch_verify_baseline,
+            batch_name=args.batch_name,
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
@@ -711,6 +751,8 @@ def main(argv=None) -> int:
         nits_scope=nits_scope,
         git_root=git_root,
         cwd_override=cwd_override,
+        git_name=git_name,
+        git_email=git_email,
     )
 
 

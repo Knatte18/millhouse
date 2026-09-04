@@ -432,6 +432,94 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL (p) worker-KeyboardInterrupt ({type(exc).__name__}): {exc}")
 
+    # (q) heartbeat line appears in log before the EXIT sentinel
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-heartbeat.log"
+            with unittest.mock.patch.object(_worker_mod, "_HEARTBEAT_INTERVAL_S", 0.05):
+                ret = _worker_main([
+                    "--log", str(log_path), "--",
+                    sys.executable, "-c", "import time; time.sleep(0.2)",
+                ])
+            assert ret == 0, f"expected 0, got {ret}"
+            log_text = log_path.read_text(encoding="utf-8")
+            heartbeat_pattern = re.compile(
+                r"^\[mill-bg\] HEARTBEAT \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\n?$",
+                re.MULTILINE,
+            )
+            heartbeat_lines = [
+                ln for ln in log_text.splitlines() if heartbeat_pattern.match(ln + "\n")
+            ]
+            assert len(heartbeat_lines) >= 1, (
+                f"no HEARTBEAT line found in log: {log_text!r}"
+            )
+            exit_index = log_text.index("[mill-bg] EXIT 0")
+            heartbeat_index = log_text.index(heartbeat_lines[0])
+            assert heartbeat_index < exit_index, (
+                "HEARTBEAT line did not appear before [mill-bg] EXIT 0"
+            )
+            stripped = log_text.rstrip()
+            assert stripped.endswith("[mill-bg] EXIT 0"), (
+                f"log does not end with '[mill-bg] EXIT 0'; last 60 chars: {stripped[-60:]!r}"
+            )
+        print("PASS (q): heartbeat line present before EXIT sentinel")
+    except AssertionError as exc:
+        failures.append(f"FAIL (q) heartbeat presence: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (q) heartbeat presence ({type(exc).__name__}): {exc}")
+
+    # (r) heartbeat writes through the single already-open log handle, never a second handle
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-heartbeat-handle.log"
+            with unittest.mock.patch.object(_worker_mod, "_HEARTBEAT_INTERVAL_S", 0.05), \
+                 unittest.mock.patch("builtins.open", wraps=open) as mock_open:
+                ret = _worker_main([
+                    "--log", str(log_path), "--",
+                    sys.executable, "-c", "import time; time.sleep(0.2)",
+                ])
+            assert ret == 0, f"expected 0, got {ret}"
+            log_path_calls = [
+                call for call in mock_open.call_args_list
+                if call.args and str(call.args[0]) == str(log_path)
+            ]
+            assert len(log_path_calls) == 2, (
+                f"expected exactly 2 opens of log_path (\"w\" + \"a\"), got "
+                f"{len(log_path_calls)}: {log_path_calls}"
+            )
+        print("PASS (r): heartbeat writes through the single open log handle")
+    except AssertionError as exc:
+        failures.append(f"FAIL (r) single log handle: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (r) single log handle ({type(exc).__name__}): {exc}")
+
+    # (s) heartbeat thread stop/join is clean -- no exception escapes to threading.excepthook
+    try:
+        import threading
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-heartbeat-join.log"
+            escaped: list = []
+            prior_hook = threading.excepthook
+            threading.excepthook = lambda args: escaped.append(args)
+            try:
+                with unittest.mock.patch.object(_worker_mod, "_HEARTBEAT_INTERVAL_S", 0.05):
+                    ret = _worker_main([
+                        "--log", str(log_path), "--",
+                        sys.executable, "-c", "import time; time.sleep(0.2)",
+                    ])
+            finally:
+                threading.excepthook = prior_hook
+            assert ret == 0, f"expected 0, got {ret}"
+            assert escaped == [], (
+                f"heartbeat thread raised an uncaught exception: {escaped}"
+            )
+        print("PASS (s): heartbeat thread stop/join leaves no escaped exception")
+    except AssertionError as exc:
+        failures.append(f"FAIL (s) clean heartbeat join: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (s) clean heartbeat join ({type(exc).__name__}): {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)

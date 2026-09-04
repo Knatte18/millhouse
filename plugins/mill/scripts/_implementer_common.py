@@ -1052,6 +1052,8 @@ def _run_verify_gates(
     start_sha: str | None = None,
     status_path: Path | None = None,
     batch_name: str | None = None,
+    git_name: str | None = None,
+    git_email: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1136,6 +1138,12 @@ def _run_verify_gates(
         batch_name: This batch's name,
             forwarded to _status.set_batch_field alongside status_path.
             Defaults to None, which disables the self-healing persist exactly like status_path=None.
+        git_name: Git commit identity (user.name) used to persist an expanded
+            verify_baseline_failures corroboration result to status.md.
+            Defaults to None, which disables the persist-commit.
+        git_email: Git commit identity (user.email) used to persist an expanded
+            verify_baseline_failures corroboration result to status.md.
+            Defaults to None, which disables the persist-commit.
 
     Returns:
         A stuck dict on the first gate that fails,
@@ -1187,6 +1195,30 @@ def _run_verify_gates(
                                 )
                             except Exception:
                                 pass
+                            else:
+                                # Commit the status.md write immediately so the in-scope dirty-tree
+                                # gate (which runs later in the same finalize_from_output
+                                # invocation) never observes this write as uncommitted dirt (#954).
+                                # Best-effort: a commit failure here must never crash finalize --
+                                # the pre-existing dirty-tree gate is the fallback authority.
+                                if git_name is not None and git_email is not None:
+                                    try:
+                                        _subprocess_util.run(
+                                            [
+                                                "git",
+                                                "add",
+                                                status_path.relative_to(project_root).as_posix(),
+                                            ],
+                                            cwd=project_root,
+                                        )
+                                        _subprocess_util.git_commit(
+                                            project_root,
+                                            f"mill-go: persist corroborated verify baseline for {batch_name}",
+                                            name=git_name,
+                                            email=git_email,
+                                        )
+                                    except Exception:
+                                        pass
                         batch_result = None
         if batch_result is not None:
             return batch_result
@@ -1638,6 +1670,8 @@ def finalize_from_output(
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
     batch_name: str | None = None,
+    git_name: str | None = None,
+    git_email: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1695,6 +1729,12 @@ def finalize_from_output(
             calls.
             See _run_verify_gates for the self-healing persist this enables.
             Defaults to None (persist disabled, as before this parameter existed).
+        git_name: Git commit identity (user.name) forwarded unchanged to _forward_output's
+            _run_verify_gates calls.
+            Defaults to None (persist-commit disabled).
+        git_email: Git commit identity (user.email) forwarded unchanged to _forward_output's
+            _run_verify_gates calls.
+            Defaults to None (persist-commit disabled).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1734,6 +1774,8 @@ def finalize_from_output(
         batch_verify_baseline=batch_verify_baseline,
         commit_sha_field_name=commit_sha_field_name,
         batch_name=batch_name,
+        git_name=git_name,
+        git_email=git_email,
     )
 
 
@@ -1792,6 +1834,8 @@ def _forward_output(
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
     batch_name: str | None = None,
+    git_name: str | None = None,
+    git_email: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1856,6 +1900,10 @@ def _forward_output(
     already-present start_sha and status_path parameters, enabling the self-healing persist
     documented on _run_verify_gates.
     Defaults to None (persist disabled, as before this parameter existed).
+    git_name and git_email are forwarded unchanged to every _run_verify_gates call site below: the
+    git commit identity used to persist an expanded verify_baseline_failures corroboration result to
+    status.md.
+    Both default to None, which disables the persist-commit.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -1884,6 +1932,8 @@ def _forward_output(
                 start_sha=start_sha,
                 status_path=status_path,
                 batch_name=batch_name,
+                git_name=git_name,
+                git_email=git_email,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
@@ -2112,6 +2162,8 @@ def _forward_output(
                                         start_sha=start_sha,
                                         status_path=status_path,
                                         batch_name=batch_name,
+                                        git_name=git_name,
+                                        git_email=git_email,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
@@ -2222,6 +2274,8 @@ def _forward_output(
                         start_sha=start_sha,
                         status_path=status_path,
                         batch_name=batch_name,
+                        git_name=git_name,
+                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
@@ -2332,6 +2386,8 @@ def _forward_output(
                         start_sha=start_sha,
                         status_path=status_path,
                         batch_name=batch_name,
+                        git_name=git_name,
+                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
