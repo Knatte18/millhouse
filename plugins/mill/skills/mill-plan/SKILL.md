@@ -672,6 +672,7 @@ Never hand-write or guess a date.
   A path inside a fenced block or on a blockquote (`>`) line within `Requirements:` is exempt — quoting a docs excerpt or another card's example this way is never read as the card's own claim about a dependency.
   A git-ignored path, an out-of-repository literal (including absolute and home-relative paths), and a trailing-slash directory reference are exempt automatically and need no phrasing accommodation — the check recognizes these structurally.
   A forward reference to a path a later card in the plan declares as its own `Creates:` target is exempt, since that later card is the one responsible for the dependency; a backward reference to an earlier card's target is NOT exempt — it is a genuine dependency the planner must declare in this card's own `Context:`/`Edits:`.
+  A not-involved mention is exempt only when phrased as one of three clause-scoped templates (not a bare "no"/"not" anywhere on the line): "no `foo.py` is involved", "without `foo.py`" (the token immediately following "without", no intervening words), or "`foo.py` is not involved"/"is not needed"/"is not required"/"is not used". Phrasing outside these three exact templates is not recognized and must instead go through `Context:`.
 
 ## Board discipline
 
