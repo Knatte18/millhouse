@@ -581,7 +581,7 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
    Do not escape-hatch — non-progress means the planner and reviewer are stuck in a stable disagreement;
    user intervention is required.
 
-6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, AND non-progress did not fire): `_status.set_blocked(status_path, f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain", timestamp=ts)`;
+6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, non-progress did not fire, AND the operator has not given a live step-6-waiver instruction — see "Live operator waiver of step 6" above; when that instruction was given, the implicit-approve-at-cap path documented there fires instead of this halt): `_status.set_blocked(status_path, f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain", timestamp=ts)`;
    commit and push;
    halt with "Plan blocked after {N} rounds, the last round's {M} BLOCKING finding(s) were acted on (fixed or pushed back) but not yet re-reviewed.
    Task left as [active] for manual review." `{M}` is `result["blocking_count"]` from the most recent CLI invocation — do not re-count manually.
