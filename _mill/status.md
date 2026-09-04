@@ -51,7 +51,9 @@ batches:
     commit_sha: 3e3bbb270ea4cd5783c44c97e22e656c7ba8c9d0
     verify_baseline_failures: []
   - name: handoff-pre-done-gate-and-lock-release
-    state: pending
+    state: running
+    implementer_session: bec226ac-470d-426f-83ea-223db19fafc5
+    start_sha: 0d56aa48592784175236ce561c0ea98e87809bdd
   - name: cleanliness-gate-dead-parent-recovery
     state: pending
   - name: step-5-5-liveness-probe
