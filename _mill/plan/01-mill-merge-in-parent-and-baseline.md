@@ -41,7 +41,8 @@ Fixes three bugs that all live in the `mill-merge` -> `mill-merge-in` call chain
 
 ### Card 3: mill-merge-in Step 5.5 — commit codeguide docs alongside briefs
 
-- **Context:** none
+- **Context:**
+  - `plugins/codeguide/scripts/codeguide_commit.py`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Creates:** none
