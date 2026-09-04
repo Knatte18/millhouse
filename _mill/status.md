@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-git-commit-staging-verification
+phase: approved-commit-sha-field-rename-and-regression-tests
 slug: implementer-commit-sha-and-status-line-reliability
 branch: hanf/implementer-commit-sha-and-status-line-reliability
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-09-04T10:20:17Z'
 implementing  '2026-09-04T10:20:38Z'
 approved-brief-instruction-hardening  '2026-09-04T10:23:18Z'
 approved-git-commit-staging-verification  '2026-09-04T10:24:47Z'
+approved-commit-sha-field-rename-and-regression-tests  '2026-09-04T10:29:15Z'
 ```
 
 ## Batches
@@ -44,8 +45,9 @@ batches:
     start_sha: 94566c95c163b2fd0ce9de8c8899788a3a7b8349
     commit_sha: 213001096c05dc5730b6f8097e9e91280cced197
   - name: commit-sha-field-rename-and-regression-tests
-    state: running
+    state: approved
     implementer_session: 6185138d-491d-4ee4-a8ec-29f9948d261c
     start_sha: 3b8652c5be567f625f3d0453f40892c4f7790c5c
+    commit_sha: db6e7cba382a0113d60957fbaddc4daeb50581bd
     verify_baseline_failures: []
 ```
