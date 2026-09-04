@@ -44,15 +44,18 @@ strengthened retry automatically) rather than a bespoke rmtree call.
   glob `wt_path / ".scratch"` for entries matching `verify-baseline-*` (skip entirely, returning
   `[]`, when `wt_path / ".scratch"` does not exist or is not a directory — mirror
   `_scan_orphan_portals`'s own `if not portals_dir.is_dir(): return []` guard). For each matching
-  directory, resolve its absolute path. Run `git -C <wt_path> worktree list --porcelain` via
-  `_subprocess_util.run` (already imported in this file) and parse every `worktree <path>` line
-  (each such line's path, resolved) into a `set[Path]` of currently-registered worktree paths for
-  that repo. Return the list of matched `.scratch/verify-baseline-*` directories whose resolved path
-  is NOT in that registered set (i.e., orphaned — deregistered by a `git worktree remove --force`
-  that failed only on the physical directory deletion, per this batch's Batch Scope). When the `git
-  worktree list --porcelain` call itself fails (non-zero exit), return `[]` for that worktree (fail
-  safe toward "sweep nothing" rather than risk misclassifying a still-registered, in-progress
-  baseline computation as orphaned).
+  directory, resolve its absolute path. Get the set of currently-registered worktree paths for that
+  repo by calling `_worktree.list_worktrees(wt_path)` (already imported in this file — `millpy-cleanup.py`
+  already uses this exact helper the same way at its own `_worktree.list_worktrees(hub_root)` call
+  site) wrapped in `try: ... except _worktree.WorktreeError: return []` (fail safe toward "sweep
+  nothing" rather than risk misclassifying a still-registered, in-progress baseline computation as
+  orphaned, when the underlying `git worktree list` call itself fails) — build a `set[Path]` from
+  each returned dict's `"path"` value, resolved. Return the list of matched
+  `.scratch/verify-baseline-*` directories whose resolved path is NOT in that registered set (i.e.,
+  orphaned — deregistered by a `git worktree remove --force` that failed only on the physical
+  directory deletion, per this batch's Batch Scope). Do not hand-roll `git worktree list --porcelain`
+  parsing — `_worktree.list_worktrees` already provides exactly this parsing and this file already
+  depends on it.
 
   In `build_plan`, declare `orphan_baseline_dirs: list[Path] = []` alongside the other accumulator
   lists near the top of the function (with `to_remove_done`, `to_remove_abandoned`, etc.). Inside the
@@ -109,13 +112,13 @@ strengthened retry automatically) rather than a bespoke rmtree call.
 
   `test_scan_orphan_baseline_dirs`: using a `tempfile.TemporaryDirectory()` as a fixture worktree
   root, (a) no `.scratch/` dir at all -> `[]`. (b) `.scratch/verify-baseline-<hash>/` exists on disk
-  but `git -C <wt_path> worktree list --porcelain` is mocked (patch
-  `mod._subprocess_util.run`) to return output whose `worktree <path>` lines do NOT include that
-  directory's resolved path -> the directory is returned (orphaned). (c) same setup but the mocked
-  `worktree list --porcelain` output DOES include that directory's resolved path as a `worktree
-  <path>` line -> `[]` (still a live, registered worktree — not orphaned, must never be swept out
-  from under an in-progress baseline computation). (d) the mocked `git worktree list --porcelain`
-  call itself returns non-zero -> `[]` (fail-safe: sweep nothing rather than misclassify).
+  but `mod._worktree.list_worktrees` is mocked (patch) to return a list of dicts whose `"path"`
+  values do NOT include that directory's resolved path -> the directory is returned (orphaned).
+  (c) same setup but the mocked `list_worktrees` return value DOES include that directory's resolved
+  path as one entry's `"path"` -> `[]` (still a live, registered worktree — not orphaned, must never
+  be swept out from under an in-progress baseline computation). (d) the mocked
+  `mod._worktree.list_worktrees` raises `mod._worktree.WorktreeError` -> `[]` (fail-safe: sweep
+  nothing rather than misclassify).
 
   `test_apply_orphan_baseline_dir`: patch `mod._worktree.remove_safe` and assert
   `_apply_orphan_baseline_dir(dir_path, wt_path)` calls it with
@@ -130,5 +133,5 @@ strengthened retry automatically) rather than a bespoke rmtree call.
 
 `verify:` runs `test-cleanup.py` directly (single file, matches this batch's sole edited module).
 Card 4's new cases exercise both the detection function (`_scan_orphan_baseline_dirs`, via mocked
-`git worktree list --porcelain` output) and the apply path (`_apply_orphan_baseline_dir`/`apply_plan`,
+`_worktree.list_worktrees` output) and the apply path (`_apply_orphan_baseline_dir`/`apply_plan`,
 via mocked `_worktree.remove_safe`) — no real git worktree, no real filesystem deletion.

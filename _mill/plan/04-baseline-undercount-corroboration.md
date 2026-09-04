@@ -181,7 +181,7 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   docs.
 - **Commit:** `fix(implementer): corroborate a baseline subset-diff mismatch against a start_sha checkout`
 
-### Card 8: Thread `batch_name` from `millpy-implement.py`'s two call sites
+### Card 8: Thread `batch_name` and `status_path` from `millpy-implement.py`'s two call sites
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
@@ -193,22 +193,29 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
 - **Requirements:**
   In `millpy-implement.py`'s `--stage finalize` branch, the existing call
   `return finalize_from_output(Path(args.agent_output), project_root, start_sha=start_sha, ...)`
-  (the finalize-stage call already passing `batch_verify_baseline=batch_verify_baseline,`) — add a
-  new `batch_name=args.batch_name,` keyword argument to this call, placed immediately after the
-  existing `batch_verify_baseline=batch_verify_baseline,` line. `args.batch_name` is already read
-  and validated earlier in this same `if args.stage == "finalize":` branch (used to look up
-  `batch_status` from `_status.read_batches(status_path)`), so no new variable is needed.
+  (the finalize-stage call already passing `batch_verify_baseline=batch_verify_baseline,` and
+  `task_dir=status_path.parent,`, but **not** `status_path=status_path,` itself) — add two new
+  keyword arguments to this call, placed immediately after the existing
+  `batch_verify_baseline=batch_verify_baseline,` line: `batch_name=args.batch_name,` and
+  `status_path=status_path,`. Both are critical — `_run_verify_gates`'s new self-healing persist
+  (Card 7) only fires when both are non-`None`; passing `batch_name` alone without `status_path`
+  would silently disable the corroboration self-healing this batch exists to add, even though the
+  corroboration waiver itself would still work. `args.batch_name` is already read and validated
+  earlier in this same `if args.stage == "finalize":` branch (used to look up `batch_status` from
+  `_status.read_batches(status_path)`); `status_path` is already a local variable in scope throughout
+  `main()`. Neither is a new variable.
 
   In the `--stage full` branch's `return _forward_output(output, project_root, start_sha=start_sha,
   ...)` call (the one immediately following the `batch_verify_baseline = (...)` computation that
-  reads `_full_stage_batch_entry`), add the same `batch_name=args.batch_name,` keyword argument,
-  placed immediately after the existing `batch_verify_baseline=batch_verify_baseline,` line in that
-  call.
+  reads `_full_stage_batch_entry` — this call also already has `task_dir=status_path.parent,` but not
+  `status_path=status_path,`), add the same two keyword arguments, placed immediately after the
+  existing `batch_verify_baseline=batch_verify_baseline,` line in that call:
+  `batch_name=args.batch_name,` and `status_path=status_path,`.
 
   Do not modify any other call in this file (the `--resume-incomplete` handling, or any other stage,
   are unaffected — only these two calls pass `batch_verify_baseline` today, per this batch's Batch
   Scope note that `millpy-fix.py` never does).
-- **Commit:** `fix(implement): pass batch_name through to the verify-gate corroboration path`
+- **Commit:** `fix(implement): pass batch_name and status_path through to the verify-gate corroboration path`
 
 ### Card 9: Unit tests for the corroboration path
 
@@ -222,11 +229,14 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
 - **Moves:** none
 - **Requirements:**
   Add new test cases to `test-implementer-common.py`, placed immediately after the existing "Case 72
-  -- _run_verify_gates batch_verify_baseline subset-diff matrix" cases (72a-72d, using the same
-  `_setup_fixture(project_root)` real-git-repo helper already defined in this file, which inits a
-  repo with a seed base commit and returns that commit's SHA).
+  -- _run_verify_gates batch_verify_baseline subset-diff matrix" cases — this matrix actually has
+  five existing sub-cases today, 72a through 72e (72e: "a stuck dict with no 'signatures' key must
+  never be waived"), not four; insert the new cases after 72e and before the following, unrelated
+  "Case 73" (a dirty-tree regression test), using the same `_setup_fixture(project_root)` real-git-repo
+  helper already defined in this file, which inits a repo with a seed base commit and returns that
+  commit's SHA.
 
-  New case "72e — corroboration succeeds: a start_sha checkout reproduces the same mismatch ->
+  New case "72f — corroboration succeeds: a start_sha checkout reproduces the same mismatch ->
   waived + baseline persisted". Setup: call `base_sha = _setup_fixture(project_root)`. Use a
   `verify_cmd` whose failure is content-independent (reproduces identically regardless of repo
   content, e.g. `"echo '--- FAIL: TestNew (0.00s)' && exit 1"`, matching case 72b's own
@@ -242,7 +252,7 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   `verify_baseline_failures` now includes both the original `"--- FAIL: TestOld (1.11s)"` entry and
   the new `"--- FAIL: TestNew (0.00s)"` signature (self-healing persisted).
 
-  New case "72f — corroboration fails to reproduce: still blocks". Setup: call `base_sha =
+  New case "72g — corroboration fails to reproduce: still blocks". Setup: call `base_sha =
   _setup_fixture(project_root)`, then create and commit a new file in `project_root` (e.g.
   `(project_root / "marker.txt").write_text("x")` + `git add` + `git commit`) so `project_root`'s
   current `HEAD` differs from `base_sha` — this simulates "the batch's own commit". Use a
@@ -254,7 +264,7 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   result is not `None` and `result["stuck_type"] == "verify"` (still blocks — the control run at
   `base_sha` passed, so the mismatch was not corroborated as pre-existing).
 
-  New case "72g — backward compatibility: omitting start_sha never attempts corroboration". Re-run
+  New case "72h — backward compatibility: omitting start_sha never attempts corroboration". Re-run
   case 72b's exact scenario (a replay signature absent from baseline, `verify_cmd = "echo '--- FAIL:
   TestNew (0.00s)' && exit 1"`, `baseline = ["--- FAIL: TestFoo (9.99s)"]`) but this time patch
   `_implementer_common._corroborate_batch_failure` (via `unittest.mock.patch`) to raise
