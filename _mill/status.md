@@ -45,7 +45,9 @@ batches:
     start_sha: 4261fd9eb21119eda869cba2b60c34e94ffbc811
     commit_sha: ed0464c485c7dbc043b983ed5e0a6b6dc639add3
   - name: mill-finalize-discussion-citation-scan
-    state: pending
+    state: running
+    implementer_session: 6fe8cc89-cb17-4110-9c25-69a3729952ab
+    start_sha: 40abb9a227565360cd254a77690ea1902c7e306a
   - name: resolve-scope-cwd-anchor
     state: pending
     verify_baseline_failures: []
