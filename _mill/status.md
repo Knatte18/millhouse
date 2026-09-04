@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-done-gate-halt-and-cleanliness-recovery
 branch: hanf/mill-go-done-gate-halt-and-cleanliness-recovery
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-go: done-gate halt path and cleanliness-gate recovery are under-documented'
 task_description: |
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-04T08:11:55Z'
 discussion-fix-r3  '2026-09-04T08:20:57Z'
 discussion-fix-r4  '2026-09-04T08:26:12Z'
 discussed  '2026-09-04T08:29:20Z'
+planning  '2026-09-04T08:36:32Z'
 ```
