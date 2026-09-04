@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 from pathlib import Path
 
@@ -53,17 +54,52 @@ def _has_valid_json_result(text: str) -> bool:
     return False
 
 
+def _win_pid_alive(pid: int) -> bool | None:
+    """Probe a PID's liveness on Windows without ever signaling or terminating it.
+
+    Unlike os.kill(pid, 0) on Windows -- which CPython implements as OpenProcess +
+    TerminateProcess(handle, 0) and therefore actually kills the probed process -- this queries the
+    process's exit-code state via OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION) +
+    GetExitCodeProcess, taking no destructive action.
+
+    Returns True if the process is running, False if it has confirmed-exited or does not exist, or
+    None if the query was inconclusive (caller falls back to log-mtime staleness).
+    """
+    import ctypes
+    import ctypes.wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    STILL_ACTIVE = 259
+
+    hproc = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not hproc:
+        # OpenProcess failed. ERROR_ACCESS_DENIED (5) means the process exists but the query was
+        # denied -- direct port of _probe_liveness's POSIX PermissionError -> affirmative-alive
+        # branch, not a new decision axis. Any other error (most commonly ERROR_INVALID_PARAMETER,
+        # 87, for a PID that no longer exists) means the process does not exist.
+        return ctypes.windll.kernel32.GetLastError() == 5
+    try:
+        exit_code = ctypes.wintypes.DWORD()
+        if not ctypes.windll.kernel32.GetExitCodeProcess(hproc, ctypes.byref(exit_code)):
+            # Query failed despite a valid handle -- inconclusive.
+            return None
+        return exit_code.value == STILL_ACTIVE
+    finally:
+        ctypes.windll.kernel32.CloseHandle(hproc)
+
+
 def _probe_liveness(log_path: Path) -> tuple[str, int | None]:
     """Probe worker liveness without collapsing affirmative vs assumed alive.
 
     Reads the worker log for [mill-bg] WORKER PID=N and [mill-bg] EXIT sentinel.
-    Probes the PID via os.kill(pid, 0) with fallback to log mtime staleness.
+    Probes the PID via os.kill(pid, 0) on POSIX, or _win_pid_alive on Windows, with fallback to log
+    mtime staleness.
 
     Returns (state, pid_or_None) where state is one of:
       - "exit" -> [mill-bg] EXIT sentinel present
-      - "affirmative-alive" -> os.kill(pid, 0) succeeded or raised PermissionError
-      - "assumed-alive" -> os.kill raised inconclusive OSError/SystemError, mtime is fresh
-      (<=_STALE_LOG_SECONDS)
+      - "affirmative-alive" -> os.kill(pid, 0) succeeded or raised PermissionError (POSIX), or
+      _win_pid_alive returned True (Windows)
+      - "assumed-alive" -> liveness probe was inconclusive, mtime is fresh (<=_STALE_LOG_SECONDS)
       - "dead" -> no PID line, mtime stale, or no log file
     """
     if not log_path.exists():
@@ -75,17 +111,28 @@ def _probe_liveness(log_path: Path) -> tuple[str, int | None]:
     pid = int(m.group(1))
     if _EXIT_RE.search(text):
         return ("exit", pid)
-    try:
-        os.kill(pid, 0)
-        return ("affirmative-alive", pid)
-    except ProcessLookupError:
-        return ("dead", pid)
-    except PermissionError:
-        return ("affirmative-alive", pid)
-    except (OSError, SystemError) as exc:
-        # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
-        _logger.debug("_probe_liveness: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
-        pass
+    if sys.platform == "win32":
+        result = _win_pid_alive(pid)
+        if result is True:
+            return ("affirmative-alive", pid)
+        if result is False:
+            return ("dead", pid)
+        # result is None -- inconclusive, fall through to mtime fallback.
+        _logger.debug(
+            "_probe_liveness: _win_pid_alive(%s) was inconclusive -- falling back to log-mtime staleness", pid
+        )
+    else:
+        try:
+            os.kill(pid, 0)
+            return ("affirmative-alive", pid)
+        except ProcessLookupError:
+            return ("dead", pid)
+        except PermissionError:
+            return ("affirmative-alive", pid)
+        except (OSError, SystemError) as exc:
+            # Unknown errno from os.kill (Windows-specific or transient) -- fall through to mtime fallback.
+            _logger.debug("_probe_liveness: os.kill(%s, 0) raised %r -- falling back to log-mtime staleness", pid, exc)
+            pass
     mtime = log_path.stat().st_mtime
     if (time.time() - mtime) > _STALE_LOG_SECONDS:
         return ("dead", pid)

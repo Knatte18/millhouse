@@ -46,6 +46,7 @@ class CleanupPlan:
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
     orphan_portals: list[Path] = field(default_factory=list)
+    orphan_baseline_dirs: list[Path] = field(default_factory=list)
     # Slugs whose Home.md marker is exactly "active" but have no worktree on disk, no local branch, and no portal junction -- safe to auto-reset to unclaimed. "ready-to-merge" and "pr-pending" are live PR states and are never auto-reset.
     to_reset_unclaimed: list[str] = field(default_factory=list)
 
@@ -117,6 +118,42 @@ def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path
     return stale
 
 
+def _scan_orphan_baseline_dirs(wt_path: Path) -> list[Path]:
+    """
+    Find `.scratch/verify-baseline-*` directories under `wt_path` that are no longer registered
+    as a git worktree.
+
+    `git worktree remove --force` deregisters the `.git/worktrees/<id>` administrative entry
+    internally before it ever attempts to delete the working directory, regardless of the
+    deletion's own exit code -- so a WinError-145-blocked teardown on Windows can leave the
+    physical `.scratch/verify-baseline-<hash>/` checkout behind forever with no registry entry
+    pointing at it.
+    This scan finds exactly those orphans.
+
+    Returns:
+        The list of matched `.scratch/verify-baseline-*` directories whose resolved path is not
+        in `wt_path`'s current `git worktree list` output.
+        Returns `[]` when `.scratch` is absent/not-a-directory, or when `git worktree list` itself
+        fails -- fail safe toward "sweep nothing" rather than risk misclassifying a still-registered,
+        in-progress baseline computation as orphaned.
+    """
+    scratch_dir = wt_path / ".scratch"
+    if not scratch_dir.is_dir():
+        return []
+
+    candidates = [entry.resolve() for entry in scratch_dir.glob("verify-baseline-*")]
+    if not candidates:
+        return []
+
+    try:
+        registered = _worktree.list_worktrees(wt_path)
+    except _worktree.WorktreeError:
+        return []
+    registered_paths: set[Path] = {Path(entry["path"]).resolve() for entry in registered}
+
+    return [candidate for candidate in candidates if candidate not in registered_paths]
+
+
 def build_plan(
     active_worktrees: list[Path],
     home_tasks: list[dict],
@@ -154,6 +191,7 @@ def build_plan(
     to_report: list[str] = []
     to_reap_pr: list[SlugRecord] = []
     to_reset_unclaimed: list[str] = []
+    orphan_baseline_dirs: list[Path] = []
 
     for wt_path in active_worktrees:
         branch_proc = _subprocess_util.run(
@@ -169,6 +207,7 @@ def build_plan(
             continue
 
         active_slugs.add(slug)
+        orphan_baseline_dirs.extend(_scan_orphan_baseline_dirs(wt_path))
         phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
             # status.md absent -- mill-merge deletes _mill/ before squash merge.
@@ -336,11 +375,12 @@ def build_plan(
         to_reap_pr=to_reap_pr,
         orphan_portals=orphan_portals,
         to_reset_unclaimed=to_reset_unclaimed,
+        orphan_baseline_dirs=orphan_baseline_dirs,
     )
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals, plan.to_reset_unclaimed]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals, plan.to_reset_unclaimed, plan.orphan_baseline_dirs]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -362,6 +402,8 @@ def _print_plan(plan: CleanupPlan) -> None:
         print(f"REPORT: {line}")
     for p in plan.orphan_portals:
         print(f"ORPHAN-PORTAL:     {p.name}  [target gone or not in Home.md]")
+    for p in plan.orphan_baseline_dirs:
+        print(f"ORPHAN-BASELINE-DIR: {p}  [not registered in git worktree list]")
 
 
 def _resolve_inplace_mode(
@@ -456,6 +498,21 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
 def _apply_orphan_portal(portal_path: Path) -> None:
     _junction.remove(portal_path)
     print(f"[cleanup] removed orphan portal: {portal_path}", file=sys.stderr)
+
+
+def _apply_orphan_baseline_dir(dir_path: Path, wt_path: Path) -> None:
+    """
+    Remove one orphaned `.scratch/verify-baseline-*` directory.
+
+    Delegates to `_worktree.remove_safe` (junction-safe, picks up batch 1's strengthened retry
+    automatically) rather than a bespoke rmtree call -- `_link_dependency_dirs` may have junctioned
+    `.venv` / `node_modules` / etc. into the orphaned checkout, and `remove_safe`'s internal
+    `_junction.strip_all_in_worktree` call strips those unconditionally regardless of
+    `junctions_cfg`'s contents, so an empty `junctions_cfg` here matches
+    `_verify_baseline.compute_baseline`'s own equivalent call.
+    """
+    _worktree.remove_safe(dir_path, cwd=wt_path, junctions_cfg={})
+    print(f"[cleanup] removed orphan baseline dir: {dir_path}", file=sys.stderr)
 
 
 def _apply_inplace_record(
@@ -733,6 +790,23 @@ def apply_plan(
 
     for portal_path in plan.orphan_portals:
         _apply_orphan_portal(portal_path)
+
+    for dir_path in plan.orphan_baseline_dirs:
+        try:
+            # dir_path is always <wt_path>/.scratch/verify-baseline-<hash>, so .parent.parent
+            # recovers wt_path without threading a second parallel list of worktree roots.
+            _apply_orphan_baseline_dir(dir_path, dir_path.parent.parent)
+        except _worktree.WorktreeError as exc:
+            # Base class, not the narrower WorktreeLockedError subclass -- a
+            # .scratch/verify-baseline-* dir is never a registered git worktree, so
+            # remove_safe's initial `git worktree remove` call is likely to hit an
+            # "unrecognized git failure" shape and raise plain WorktreeError. A single
+            # stubborn lock must never abort the rest of apply_plan.
+            print(
+                f"REPORT: orphan baseline dir removal failed ({dir_path}): {exc}",
+                file=sys.stderr,
+            )
+            continue
 
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():

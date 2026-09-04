@@ -16,9 +16,11 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _plan_dag import (  # noqa: E402
     PlanDAGError,
     extract_batch_index,
+    find_dependents,
     iter_batch_verifies,
     parse_commit_none_card_ids,
     parse_verify_field,
+    remove_batch_from_index,
     topo_order,
     validate,
 )
@@ -857,6 +859,103 @@ def test_iter_batch_verifies_decision2_x_decision4_composition() -> None:
         )
 
 
+def test_find_dependents_none() -> None:
+    batches = extract_batch_index("""
+```yaml
+batches:
+  - name: a
+    file: 01-a.md
+    depends-on: []
+  - name: b
+    file: 02-b.md
+    depends-on: [a]
+```
+""")
+    assert find_dependents(batches, "b") == [], "leaf batch b should have no dependents"
+    print("PASS: find_dependents returns [] for a leaf batch")
+
+
+def test_find_dependents_one() -> None:
+    batches = extract_batch_index("""
+```yaml
+batches:
+  - name: a
+    file: 01-a.md
+    depends-on: []
+  - name: b
+    file: 02-b.md
+    depends-on: [a]
+```
+""")
+    assert find_dependents(batches, "a") == ["b"], "b depends on a"
+    print("PASS: find_dependents returns the single dependent of a")
+
+
+def test_find_dependents_multiple_sorted() -> None:
+    batches = extract_batch_index("""
+```yaml
+batches:
+  - name: a
+    file: 01-a.md
+    depends-on: []
+  - name: b
+    file: 02-b.md
+    depends-on: [a]
+  - name: c
+    file: 03-c.md
+    depends-on: [a]
+```
+""")
+    assert find_dependents(batches, "a") == ["b", "c"], "both b and c depend on a, sorted"
+    print("PASS: find_dependents returns multiple dependents sorted")
+
+
+def test_remove_batch_from_index_success() -> None:
+    overview = """# Plan
+
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: []
+    verify: pytest tests/a -q
+  - number: 2
+    name: b
+    file: 02-b.md
+    depends-on: []
+    verify: null
+```
+
+## Shared Decisions
+"""
+    new_text = remove_batch_from_index(overview, "b")
+    remaining = extract_batch_index(new_text)
+    assert [b["name"] for b in remaining] == ["a"], remaining
+    assert "## Shared Decisions" in new_text, "text outside the fenced block must survive"
+    print("PASS: remove_batch_from_index drops the named entry and re-parses cleanly")
+
+
+def test_remove_batch_from_index_unknown_raises() -> None:
+    overview = """
+```yaml
+batches:
+  - number: 1
+    name: a
+    file: 01-a.md
+    depends-on: []
+    verify: null
+```
+"""
+    try:
+        remove_batch_from_index(overview, "ghost")
+    except PlanDAGError as exc:
+        assert "not present" in str(exc), str(exc)
+        print(f"PASS: remove_batch_from_index rejects an unknown batch name -- {exc}")
+        return
+    raise AssertionError("unknown batch name was not rejected")
+
+
 def main() -> int:
     try:
         test_good_plan_accepted()
@@ -887,6 +986,11 @@ def main() -> int:
         test_iter_batch_verifies_no_batches_section_with_status_path_returns_empty()
         test_iter_batch_verifies_malformed_batches_block_returns_empty()
         test_iter_batch_verifies_decision2_x_decision4_composition()
+        test_find_dependents_none()
+        test_find_dependents_one()
+        test_find_dependents_multiple_sorted()
+        test_remove_batch_from_index_success()
+        test_remove_batch_from_index_unknown_raises()
         print("All _plan_dag unit tests passed.")
         return 0
     except AssertionError as exc:
