@@ -975,6 +975,51 @@ def _check_card_numbering(batch_files: list[Path]) -> list[dict]:
     return errors
 
 
+def compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int:
+    """
+    Compute the next unused card number for a target batch, before that card
+    is ever written to disk.
+
+    Unlike ``_check_card_numbering``, which can only ever detect a duplicate
+    number that already exists on disk, this is a pure read-only computation
+    over the already-written batch files that a caller can run *before*
+    appending a new card -- so a self-resolve flow can safely pick the next
+    number without risking a collision with another batch's numeric range.
+
+    Args:
+        plan_dir: Directory containing the ``NN-<batch-slug>.md`` batch files
+            (and ``00-overview.md``, which is excluded from consideration).
+        target_batch_file: The batch file's stem (e.g. ``01-alpha``, matching
+            ``Path(...).stem`` -- no ``.md`` suffix and no directory).
+
+    Returns:
+        The next unused card number for ``target_batch_file`` (one past the
+        highest card number already present in that batch), guaranteed not
+        to collide with any other batch's card numbers.
+    """
+    batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")
+
+    used_numbers: dict[str, set[int]] = {}
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        cards = _parse_cards(text)
+        used_numbers[batch_path.stem] = {n for n, _ in cards}
+
+    if target_batch_file not in used_numbers:
+        raise PlanDAGError(f"batch file stem {target_batch_file!r} not found under {plan_dir}")
+
+    candidate = max(used_numbers[target_batch_file], default=0) + 1
+
+    for stem, nums in used_numbers.items():
+        if stem != target_batch_file and candidate in nums:
+            raise PlanDAGError(
+                f"card {candidate} already used by batch {stem!r}; "
+                f"{target_batch_file!r} and {stem!r} occupy overlapping numeric ranges"
+            )
+
+    return candidate
+
+
 # ---------------------------------------------------------------------------
 # Check 4 — depends-on-unknown
 # ---------------------------------------------------------------------------

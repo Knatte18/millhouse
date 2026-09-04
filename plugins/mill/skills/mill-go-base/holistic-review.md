@@ -184,6 +184,25 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
      If still transient after it: set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
    - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
      **Regardless of whether a plan edit was made**, append a `## Prior failure` section to `00-overview.md` (placed immediately after its frontmatter, before `## Batch Index` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text, regardless of whether the reason names a specific batch, spans several, or names none at all.
+     When the stuck-JSON `reason` names exactly one batch, identify that batch's name by reading the `reason` text against the known batch names (a judgment call, since `reason` is free text; this matches the existing judgment already required by "edit the plan file(s) if the failure traces to an ambiguous or incorrect card" above) and consider a new implementable card warranted (distinct from, and in addition to, the `## Prior failure` bullet logged above).
+     Once a single `batch_name` is identified this way, this flow has no `batches`/`overview_text` binding already in scope (unlike the per-batch occurrence in `plugins/mill/skills/mill-go-base/SKILL.md`'s "### Stuck escalation", which is inside the `for batch in order` loop) — load them fresh via the identical inline Python:
+     ```python
+     overview_text = overview_path.read_text(encoding="utf-8")
+     batches = _plan_dag.extract_batch_index(overview_text)
+     target_batch_file = Path(next(e["file"] for e in batches if e["name"] == batch_name)).stem
+     ```
+     Only once `target_batch_file` is derived, call:
+     ```python
+     next_card = _plan_validate.compute_next_card_number(plan_dir, target_batch_file)
+     ```
+     `signature: _plan_validate.compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int`
+
+     On success (no exception), append a new `### Card N:` heading (using the returned number) to the target batch's own `## Cards` list (not inside `## Prior failure`), following this file's existing card-field conventions (`Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`/`Requirements:`/`Commit:` per `plugins/mill/templates/plan-batch.md`), then re-run `_check_card_numbering` (imported from `_plan_validate`) once more as a post-write defensive re-check, passing `batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")` (the same glob-and-filter expression `compute_next_card_number` uses internally, re-globbed fresh so the just-written card is included) — `signature: _check_card_numbering(batch_files: list[Path]) -> list[dict]` — before proceeding to the "record the self-resolve... re-invoke" steps below unchanged.
+
+     On `PlanDAGError` (a genuine numbering-range collision — batches are expected to occupy disjoint numeric ranges at plan-write time), make no write to the target batch file at all and instead route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked*) — a card-numbering collision means self-resolve itself cannot safely proceed, so it escalates immediately rather than attempting the retry-then-escalate cycle the rest of this bullet uses for fixer-reported failures.
+
+     When the `reason` names zero batches or more than one, self-resolve falls back to the plain-bullet `## Prior failure` log only (already appended to `00-overview.md` above) — no card insertion is attempted, since there is no single unambiguous target batch to insert into.
+
      Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck (holistic)"`.
      Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round.
      If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
