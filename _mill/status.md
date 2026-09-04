@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-validator-tests
+phase: approved-fix-table-docs
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -26,6 +26,7 @@ planned  '2026-09-04T10:10:18Z'
 implementing  '2026-09-04T10:10:46Z'
 approved-validator-checks  '2026-09-04T10:16:04Z'
 approved-validator-tests  '2026-09-04T10:26:05Z'
+approved-fix-table-docs  '2026-09-04T10:28:45Z'
 ```
 
 ## Batches
@@ -45,7 +46,8 @@ batches:
     commit_sha: f645799b95246fc107d5cafb9fa7437e42fa2fa9
     verify_baseline_failures: []
   - name: fix-table-docs
-    state: running
+    state: approved
     implementer_session: 72ecef4f-49e4-49c3-855a-a46a1ebac359
     start_sha: ed9da5630d2790f213f540300378e2bf59046ced
+    commit_sha: 509cc0d8a307683085d959103dba2c9dad18a740
 ```
