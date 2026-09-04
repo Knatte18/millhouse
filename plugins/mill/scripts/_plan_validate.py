@@ -44,8 +44,9 @@ Checks performed (check keys):
         risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
         but plugin.json is not in that batch's Context: or Edits:
-    context-completeness — a card's Requirements: references a resolvable file-path-shaped backtick
-        token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
+    context-completeness — a card's Requirements: references a resolvable file-path-shaped or
+        symbol-shaped backtick token absent from that card's own Context:/Edits:/Creates:/Deletes:/
+        Moves:-source
     requirements-quote-indent-drift — a card's Requirements: fenced block quoting exact source text
         that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent
         (list-continuation-indentation bug signature)
@@ -1574,6 +1575,18 @@ _CITATION_MARKERS = (
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
 _PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json")
 
+# Source-code extensions searched when resolving a symbol-shaped (not path-shaped) backtick token.
+# A standalone tuple rather than a slice of _PATH_CANDIDATE_EXTENSIONS, so this list never silently
+# drifts if that constant's ordering or membership changes for unrelated (path-branch) reasons.
+_SYMBOL_SEARCH_EXTENSIONS = (".py", ".go", ".cs", ".ts")
+
+# Directory basenames pruned (never descended into) while walking a candidate root for symbol
+# resolution -- build artifacts and dependency trees that would otherwise dominate the search and
+# produce false ambiguous-matches.
+_SYMBOL_SEARCH_DENYLIST_DIRS = frozenset(
+    {".git", "node_modules", "vendor", "__pycache__", "dist", "build", ".venv"}
+)
+
 
 def _extract_requirements_text(card_text: str) -> str | None:
     """Return the body text of a card's ``Requirements:`` field, or ``None``.
@@ -1649,6 +1662,153 @@ def _card_own_reference_set(card_text: str) -> set[str]:
             k += 1
 
     return tokens
+
+
+# Trailing balanced-bracket groups stripped (repeatedly, from the end) when detecting a symbol-shaped
+# token's call/generic suffix -- e.g. "GetItems<T>()" strips to "GetItems" via two passes (the "()"
+# group, then the "<T>" group).
+_RE_TRAILING_PAREN_GROUP = re.compile(r"\([^()]*\)$")
+_RE_TRAILING_BRACKET_GROUP = re.compile(r"\[[^\[\]]*\]$")
+_RE_TRAILING_ANGLE_GROUP = re.compile(r"<[^<>]*>$")
+_RE_TRAILING_GROUPS = (
+    _RE_TRAILING_PAREN_GROUP,
+    _RE_TRAILING_BRACKET_GROUP,
+    _RE_TRAILING_ANGLE_GROUP,
+)
+
+# A bare-or-dotted identifier shape: one or two dot-separated `\w`-segments, each starting with a
+# letter or underscore. Matched AFTER line-range and call/generic-suffix stripping.
+_RE_SYMBOL_SHAPE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$")
+
+
+def _symbol_candidate_shape(token: str) -> str | None:
+    """Return the symbol search key for a NOT-path-shaped Requirements: backtick token, or None.
+
+    ``token`` is an original backtick-quoted token the caller has already confirmed is not
+    path-shaped (no ``/``, doesn't end in a recognized source extension) -- this function does not
+    re-check that.
+    Strips a trailing ``:line-range`` suffix and any trailing call/generic suffix (one or more
+    trailing balanced ``()``/``[...]``/``<...>`` groups, e.g. ``GetItems<T>()`` -> ``GetItems``),
+    then requires what remains to look like a bare identifier (``SaveState``) or a dotted
+    qualifier.identifier pair (``reedengine.New``).
+    A bare or trailing-segment identifier only "qualifies" as a symbol candidate -- as opposed to an
+    ordinary lowercase English word like ``config`` -- when it is not entirely lowercase (contains an
+    uppercase letter, including possibly its first character) or contains an underscore;
+    for a dotted pair, only the trailing (second) segment's own qualification matters, since the
+    trailing segment is the only part ever used as the filesystem search key.
+
+    Returns:
+        The search key (the bare identifier, or the dotted pair's trailing segment) when the token
+        is symbol-shaped and qualifies, else None.
+    """
+    base = _RE_LINE_RANGE.sub("", token)
+    while True:
+        stripped_any = False
+        for group_re in _RE_TRAILING_GROUPS:
+            match = group_re.search(base)
+            if match:
+                base = base[: match.start()]
+                stripped_any = True
+                break
+        if not stripped_any:
+            break
+
+    if not _RE_SYMBOL_SHAPE.match(base):
+        return None
+
+    segments = base.split(".")
+
+    def qualifies(segment: str) -> bool:
+        return segment != segment.lower() or "_" in segment
+
+    if len(segments) == 1:
+        return base if qualifies(base) else None
+
+    trailing_segment = segments[-1]
+    return trailing_segment if qualifies(trailing_segment) else None
+
+
+def _resolve_symbol_files(
+    search_key: str,
+    project_root: Path,
+    root: str | None,
+    git_root: Path | None,
+    cache: dict[str, tuple[list[Path], Path | None]],
+) -> tuple[list[Path], Path | None]:
+    """Resolve ``search_key`` to its declaring file(s) via a first-match-wins filesystem walk.
+
+    Walks candidate roots in the same precedence order as ``resolve_existing_paths``
+    (``_review_common.py``'s "Resolution order (first match wins)"): (1) ``git_root / root`` when
+    both are set, (2) ``project_root / root`` (or bare ``project_root`` when ``root`` is None), (3)
+    bare ``git_root`` when set (tried unconditionally, mirroring that same precedence's own
+    unconditional trailing ``git_root`` candidate).
+    For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
+    basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS`` -- and case-sensitive whole-word-matches
+    ``search_key`` against the text of every file whose suffix is in ``_SYMBOL_SEARCH_EXTENSIONS``.
+    Stops at the first candidate root that yields one or more matching files -- a later root in the
+    precedence order is never walked, even if the winning root had more than one match.
+
+    Memoized via ``cache`` (keyed by ``search_key``): a repeated call with the same key returns the
+    cached result without walking again, since a symbol name commonly recurs across many cards/
+    batches in one ``run()`` invocation.
+
+    Returns:
+        ``(matching_file_paths, winning_root)`` -- ``winning_root`` is the candidate root that
+        produced the match (needed by the caller to canonicalize the match back to a relative path);
+        ``([], None)`` when no candidate root yields any match.
+    """
+    if search_key in cache:
+        return cache[search_key]
+
+    candidate_roots: list[Path] = []
+    if root is not None and git_root is not None:
+        candidate_roots.append(git_root / root)
+    candidate_roots.append(project_root / root if root is not None else project_root)
+    if git_root is not None:
+        candidate_roots.append(git_root)
+
+    word_re = re.compile(r"\b" + re.escape(search_key) + r"\b")
+
+    for candidate_root in candidate_roots:
+        if not candidate_root.exists():
+            continue
+        matches: list[Path] = []
+        for dirpath, dirnames, filenames in os.walk(candidate_root):
+            dirnames[:] = [d for d in dirnames if d not in _SYMBOL_SEARCH_DENYLIST_DIRS]
+            for filename in filenames:
+                file_path = Path(dirpath) / filename
+                if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
+                    continue
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    # Broken symlink, permission-denied, or any other unreadable-file condition
+                    # under an arbitrary real-world project tree -- skip it, don't crash the run.
+                    continue
+                if word_re.search(content):
+                    matches.append(file_path)
+        if matches:
+            cache[search_key] = (matches, candidate_root)
+            return cache[search_key]
+
+    cache[search_key] = ([], None)
+    return cache[search_key]
+
+
+def _covered_by_own_refs(candidate: str, own_refs: set[str], moves_sources: set[str]) -> bool:
+    """Return True when ``candidate`` is already covered by a card's own declared refs.
+
+    Covered when ``candidate`` is in ``own_refs`` directly, is a plan-wide ``Moves:`` source, or (for
+    a bare filename with no ``/``) shares its basename with some entry in ``own_refs``.
+    """
+    return (
+        candidate in own_refs
+        or candidate in moves_sources
+        or (
+            "/" not in candidate
+            and any(Path(candidate).name == Path(entry).name for entry in own_refs)
+        )
+    )
 
 
 def _check_context_completeness(
@@ -1758,13 +1918,7 @@ def _check_context_completeness(
                     if own_refs is None:
                         own_refs = _card_own_reference_set(card_text)
 
-                    if stripped_token in own_refs:
-                        continue
-                    if stripped_token in moves_sources:
-                        continue
-                    if "/" not in stripped_token and any(
-                        Path(stripped_token).name == Path(entry).name for entry in own_refs
-                    ):
+                    if _covered_by_own_refs(stripped_token, own_refs, moves_sources):
                         continue
 
                     errors.append({
