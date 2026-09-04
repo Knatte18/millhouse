@@ -1,0 +1,22 @@
+MILL_REVIEW_BEGIN
+# Review: mill-start: discussion-review timeline gaps and stray orch-review.md scratch file — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-04
+```
+
+## Findings
+
+### [NIT:scope] Card 1's literal edit has no dedicated regression lock
+**Location:** `plugins/mill/skills/mill-start/SKILL.md:404`
+**Issue:** The new `_status.append_phase(status_path, f"discussion-gap-fix-r{N}", ...)` call and `<status_path>` pathspec addition are correctly present, but no test asserts this literal text exists — `test-phase-wait.py` only exercises `_phase_wait.matches_wait_trigger` against an already-anticipated regex (unaffected by this batch), and `test-brief-commit.py` only checks `_mill/briefs/` proximity to the commit message, not the `append_phase` call itself. Card 3 gives Card 2's path migration an explicit text-regression lock; Card 1 gets no equivalent.
+**Fix:** None required for this round — plan explicitly scopes verification this way and the change is correct on inspection; a future batch could add a targeted text-lock test for symmetry with Card 3.
+
+## Verdict
+
+APPROVE
+All three cards match their plan requirements verbatim; no stray `_mill/orch-review.md` references remain; touched-files list is exact.
+MILL_REVIEW_END
