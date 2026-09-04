@@ -43,14 +43,29 @@ If an operator instead completes or verifies a NIT-fix pass manually, outside th
 If the list is empty, proceed to terminal cleanliness gate.
 
 **Terminal cleanliness gate.**
-Resolve the parent branch and check for in-scope uncommitted changes:
+Resolve the parent branch, verify it is still live, and check for in-scope uncommitted changes:
 
 ```python
 parent_branch = _parent_branch.resolve(status_path, interactive=False)
+parent_is_live = _parent_branch.check_liveness(parent_branch, git_root)
+```
+
+`signature: _parent_branch.check_liveness(branch: str, git_root: Path) -> bool`
+
+If `parent_is_live` is `False` (the recorded parent branch no longer exists -- e.g. it was squash-merged and its branch deleted): call `_parent_branch.resolve_dead_parent(parent_branch, git_root, cfg)`.
+
+`signature: _parent_branch.resolve_dead_parent(dead_branch: str, git_root: Path, cfg: dict, *, max_hops: int = 10) -> dict`
+
+- If the returned dict's `outcome` is `"resolved"`: auto-rebind non-interactively -- `_status.update_field(status_path, "parent", resolved_branch)` (reading `resolved_branch` from the returned dict's `branch` field) plus `_status.append_phase(status_path, "self-resolved-dead-parent", _timestamp.now_utc_iso())`, folded into one commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: rebind dead parent branch at task completion"` (no push -- matches this section's existing no-push-mid-batch convention). Set `parent_branch = resolved_branch` for the remainder of this gate, then continue below to the terminal-dirt computation.
+- If the returned dict's `outcome` is `"fallback"` or `"cycle"`: this halts earlier than the pre-existing `in_scope_dirt is None` halt below (before `compute_terminal_dirt` is ever called), so it is a textually and control-flow distinct site -- write a fresh `_notify.notify("<VARIANT_LABEL>.blocked", "cannot determine in-scope dirt at task completion", slug=slug)` call and a fresh `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release` call directly above this new halt (same shape as the pair above the `in_scope_dirt is None` halt below, not a shared call). Then halt with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent branch <parent_branch> no longer exists; <fallback: no archive-tag chain resolved a successor (<reason>)> | <cycle: archive-tag chain walk hit its hop cap without resolving a live parent>. Investigate the parent branch and retry.` (reading `reason` from the returned dict's `reason` field for the `fallback` case). Do NOT set `phase: done`.
+
+If `parent_is_live` is `True`, or after a `"resolved"` auto-rebind above (using the rebound `parent_branch`), compute in-scope terminal dirt:
+
+```python
 in_scope_dirt = _cleanliness.compute_terminal_dirt(worktree_root, task_dir, parent_branch)
 ```
 
-If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists), `_notify.notify("<VARIANT_LABEL>.blocked", "cannot determine in-scope dirt at task completion", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt immediately with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent diff unresolvable (parent branch: <parent_branch>). Investigate the parent branch and retry.` Do NOT fall through to the self-resolve step below -- with the owned-path scope itself unknown, there is no safe file list to commit.
+If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists; this can also be the "resolved"-outcome retry above still failing to resolve a diff -- fall through unchanged, do not loop further), `_notify.notify("<VARIANT_LABEL>.blocked", "cannot determine in-scope dirt at task completion", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt immediately with: `BLOCKED: cannot determine in-scope dirt at task completion -- parent diff unresolvable (parent branch: <parent_branch>). Investigate the parent branch and retry.` Do NOT fall through to the self-resolve step below -- with the owned-path scope itself unknown, there is no safe file list to commit.
 
 If `in_scope_dirt` is non-empty (and not `None`), self-resolve once: this is the agent's own uncommitted work on the task branch, so commit it directly — `_status.append_phase(status_path, "self-resolved-terminal-dirt", _timestamp.now_utc_iso())`, then `git -C <worktree> add <in_scope_dirt files> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: commit in-scope work at task completion"` (folding the status.md append into the same commit as the audit trail, per Shared Decision `audit-trail-via-status-timeline`;
 no push — matches every other Builder-owned Handoff-phase commit in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Board discipline").
