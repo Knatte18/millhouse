@@ -58,6 +58,12 @@ Two independent bugs in mill-start's discussion-review machinery, folded into on
 - Rationale: Even though `.scratch/` files are already invisible to cleanliness gates, `orch-review`'s Fork-side Step 1 has its own "if `orch-review.md` already exists, halt and ask whether to overwrite" check — a leftover file from a prior round would falsely trip that check on the next round. Deleting after consumption keeps that check meaningful.
 - Rejected: Dropping the delete step now that gitignore handles cleanliness-gate invisibility — would still break the stale-file guard in `orch-review`.
 
+### bug2-regression-test
+
+- Decision: mill-plan schedules a new unit test, `plugins/mill/unit_tests/test-orch-review-scratch-path.py`, as its own card alongside the Bug 2 SKILL.md edits — text-regression-lock style, asserting `.scratch/orch-review.md` appears in both `orch-review/SKILL.md` and `orch-wait/SKILL.md`, and that `_mill/orch-review.md` no longer appears in either file.
+- Rationale: The repo already has direct precedent for locking exactly this class of change (a path/string moved inside a SKILL.md prompt document) with a small text-assertion test — `test-brief-commit.py` and `test-phase-wait.py` both do this for Bug 1's phase-label change. Leaving Bug 2 untested by the same convention would be an inconsistency, not a deliberate scope cut.
+- Rejected: Leaving the decision open for mill-plan to judge case-by-case — flagged as a NIT in discussion-review round 1 for reading as non-committal; resolved here instead.
+
 ## Technical context
 
 - `plugins/mill/skills/mill-start/SKILL.md` step 5 (~line 404 in the current worktree source) is the sole edit site for Bug 1. Compare against step 4b (~lines 371-386) for the exact `_status.append_phase` / commit-pathspec pattern to mirror.
@@ -80,7 +86,7 @@ Two independent bugs in mill-start's discussion-review machinery, folded into on
 ## Testing
 
 - `plugins/mill/unit_tests/test-phase-wait.py` and `plugins/mill/unit_tests/test-brief-commit.py` already encode the expected shape for Bug 1's fix — run both (`uv run --project plugins/mill python plugins/mill/unit_tests/test-phase-wait.py` and the `test-brief-commit.py` equivalent, or via the suite's `run-all.py`) after editing `mill-start/SKILL.md` and confirm both still pass (they should now pass for the *intended* reason — the pattern they test is reachable — rather than passing vacuously).
-- No existing unit test covers Bug 2's file path directly (grep confirmed no `orch-review`/`orch_review` hits under `_mill/` path assertions elsewhere). This is a text-only change to two SKILL.md files with no Python execution to test — mill-plan should judge whether a lightweight text-regression-lock test (mirroring `test-brief-commit.py`'s style: assert `.scratch/orch-review.md` appears in `orch-review/SKILL.md` and `orch-wait/SKILL.md`, assert `_mill/orch-review.md` no longer does) is worth adding, given the existing precedent of locking SKILL.md text shape via `test-brief-commit.py` and `test-phase-wait.py`.
+- No existing unit test covers Bug 2's file path directly (grep confirmed no `orch-review`/`orch_review` hits under `_mill/` path assertions elsewhere). Decision: add one — a new `plugins/mill/unit_tests/test-orch-review-scratch-path.py`, mirroring `test-brief-commit.py`'s text-regression-lock style: assert `.scratch/orch-review.md` appears in both `orch-review/SKILL.md` and `orch-wait/SKILL.md`, and assert the literal string `_mill/orch-review.md` no longer appears in either file. This is not left open for mill-plan to decide — the existing precedent (`test-brief-commit.py`, `test-phase-wait.py`) of locking this class of SKILL.md path/text change with a dedicated test is directly applicable and cheap to write; mill-plan should schedule it as its own card in the same batch as the Bug 2 SKILL.md edits.
 - No TDD candidates in the traditional sense — these are prompt-document edits, not executable logic; "testing" here means grep-level regression locks per the existing test suite's own pattern for this exact class of change (SKILL.md text assertions), plus running the two named existing tests to confirm no regression.
 
 ## Q&A log
