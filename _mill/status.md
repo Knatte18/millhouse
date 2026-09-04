@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-mill-merge-in-parent-and-baseline
 slug: mill-merge-finalize-codeguide-bugs
 branch: hanf/mill-merge-finalize-codeguide-bugs
 plan: _mill/plan
@@ -32,6 +32,7 @@ plan-review-r6  '2026-09-04T10:51:22Z'
 plan-fix-r6  '2026-09-04T10:51:32Z'
 planned  '2026-09-04T10:51:47Z'
 implementing  '2026-09-04T10:52:16Z'
+approved-mill-merge-in-parent-and-baseline  '2026-09-04T10:56:25Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ implementing  '2026-09-04T10:52:16Z'
 ```yaml
 batches:
   - name: mill-merge-in-parent-and-baseline
-    state: running
+    state: approved
     implementer_session: 0fb93a5a-852b-465b-bca1-1419c3a9c8fb
     start_sha: 4261fd9eb21119eda869cba2b60c34e94ffbc811
+    commit_sha: ed0464c485c7dbc043b983ed5e0a6b6dc639add3
   - name: mill-finalize-discussion-citation-scan
     state: pending
   - name: resolve-scope-cwd-anchor
