@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-symbol-reference-check
 slug: plan-validate-context-completeness-missing-symbol-refs
 branch: hanf/plan-validate-context-completeness-missing-symbol-refs
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r2  '2026-09-04T09:43:49Z'
 plan-fix-r3  '2026-09-04T09:48:40Z'
 planned  '2026-09-04T09:49:04Z'
 implementing  '2026-09-04T09:49:36Z'
+approved-symbol-reference-check  '2026-09-04T09:59:10Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-09-04T09:49:36Z'
 ```yaml
 batches:
   - name: symbol-reference-check
-    state: running
+    state: approved
     implementer_session: fc8b2a94-287a-4809-b4a4-de38d92a799a
     start_sha: cfb05d6b181d54260cf919ca8234761337b6175e
+    commit_sha: 41591862fa161645cc04e299ee429d0eefebead7
     verify_baseline_failures: []
   - name: mill-plan-fixer-doc-update
     state: pending
