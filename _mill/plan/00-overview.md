@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-plan: review-round cap and skip-check threading bugs"
 slug: "mill-plan-review-round-cap-and-skip-check-threading"
-approved: false
+approved: true
 started: "20260904-082053"
 parent: "main"
 root: ""
