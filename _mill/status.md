@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-review-round-cap-and-skip-check-threading
 branch: hanf/mill-plan-review-round-cap-and-skip-check-threading
 plan: _mill/plan
@@ -23,4 +23,13 @@ plan-fix-r1  '2026-09-04T08:33:39Z'
 plan-review-r2  '2026-09-04T08:40:16Z'
 plan-fix-r2  '2026-09-04T08:41:09Z'
 planned  '2026-09-04T08:41:38Z'
+implementing  '2026-09-04T08:42:08Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-plan-skill-round-cap-and-skip-check-fixes
+    state: pending
 ```
