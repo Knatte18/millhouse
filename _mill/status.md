@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-plan-review-round-cap-and-skip-check-threading
 branch: hanf/mill-plan-review-round-cap-and-skip-check-threading
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-09-04T08:57:12Z'
 holistic-fixing  '2026-09-04T09:01:15Z'
 nits-fixed-holistic  '2026-09-04T09:02:10Z'
 holistic-approved  '2026-09-04T09:02:16Z'
+done  '2026-09-04T09:02:45Z'
 ```
 
 ## Batches
