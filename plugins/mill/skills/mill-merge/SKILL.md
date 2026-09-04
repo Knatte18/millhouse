@@ -278,7 +278,20 @@ a failed step is reported with its name so the user can re-run from that step (S
 
 ### 4. Cleanup commit
 
-On the task branch (current cwd), remove the state directory that belongs to the task lifecycle, not to production code:
+On the task branch (current cwd), remove the state directory that belongs to the task lifecycle, not to production code.
+
+**Citation scan (non-blocking, #930).** Before removing `<task_dir>`, scan for permanent-doc citations of `_mill/discussion.md` that this deletion is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts this step under any outcome:
+
+```bash
+git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \
+    ':!<task_dir>' ':!plugins/**/SKILL.md' ':!plugins/**/unit_tests/**' ':!plugins/**/integration_tests/**'
+```
+
+```bash
+git -C <wiki_path> grep -InE '\]\([./]*_mill/discussion\.md\)' -- .
+```
+
+`git grep` exits 1 with empty stdout when nothing matches — that is the expected common case, not an error. If either part produces any output (non-zero line count), print a warning to the operator (ASCII-only) listing the citing files/wiki pages: unlike `mill-finalize`'s Step 3 (which has a restore branch for stacked branches), `mill-merge`'s Step 4 always deletes `<task_dir>` outright — so the warning always says the link "is about to go dead", never the "silently repoints" variant. This scan never halts this step — it only warns.
 
 ```bash
 git -C <worktree> rm -r <task_dir>
