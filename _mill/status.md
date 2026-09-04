@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: plan-validate-batch-index-drift-and-misc-checks
 branch: hanf/plan-validate-batch-index-drift-and-misc-checks
 plan: _mill/plan
@@ -31,6 +31,7 @@ holistic-reviewing  '2026-09-04T10:29:33Z'
 holistic-fixing  '2026-09-04T10:33:31Z'
 nits-fixed-holistic  '2026-09-04T10:35:13Z'
 holistic-approved  '2026-09-04T10:35:21Z'
+done  '2026-09-04T10:35:50Z'
 ```
 
 ## Batches
