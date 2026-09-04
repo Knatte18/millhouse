@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py context-completeness check: false positives across gitignored/quoted/negated/citation/cross-reference prose'
 slug: plan-validate-context-completeness-false-positive-exemptions
-approved: false
+approved: true
 started: '20260904-164017'
 parent: main
 root: ""
