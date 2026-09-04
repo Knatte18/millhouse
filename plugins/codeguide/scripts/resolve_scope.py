@@ -12,8 +12,8 @@ Scope-resolution chain
     --verify --quiet <token>^{commit}`` (a literal trailing ``..HEAD`` suffix is stripped before the
     check) uses ``git diff --name-only <resolved>..HEAD``.
     This subsumes hex SHAs, ``HEAD``, ``HEAD~N``, and branch/tag names.
-4. **Explicit paths** (anything else): treat each token as a path, resolve relative to git toplevel,
-    emit deduped absolute paths.
+4. **Explicit paths** (anything else): treat each token as a path, resolve relative to invocation
+    cwd, emit deduped absolute paths.
     No git invocation.
 
 Parent detection ----------------
@@ -196,8 +196,8 @@ def _head_rev_scope(toplevel: pathlib.Path, token: str) -> tuple[list[pathlib.Pa
     return paths, summary
 
 
-def _explicit_scope(toplevel: pathlib.Path, tokens: list[str]) -> tuple[list[pathlib.Path], dict]:
-    paths = _dedup([toplevel / token for token in tokens])
+def _explicit_scope(cwd_path: pathlib.Path, tokens: list[str]) -> tuple[list[pathlib.Path], dict]:
+    paths = _dedup([cwd_path / token for token in tokens])
     summary = {
         "mode": "explicit",
         "parent": None,
@@ -251,7 +251,7 @@ def enumerate_scope(
         if resolved is not None:
             return _head_rev_scope(toplevel, resolved)
 
-    return _explicit_scope(toplevel, args)
+    return _explicit_scope(cwd_path, args)
 
 
 def _cli(argv: list[str]) -> int:

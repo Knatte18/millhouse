@@ -289,6 +289,29 @@ def main() -> int:
             assert summary["mode"] == "explicit", f"expected mode=explicit, got {summary['mode']}"
             print("PASS: single-token path with no colliding ref name still routes to explicit mode")
 
+        # Scenario 19: explicit paths in a nested-hub-root layout (hub root nested below git
+        # toplevel) must anchor to the invocation cwd, not the git toplevel. Uses a two-token
+        # call so the len(args) == 1 single-token ref-check dispatch in enumerate_scope is never
+        # reached, per the module docstring's note that multi-token calls never hit the ref check.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            _make_repo(tmp, with_origin=False)
+            nested = tmp / "hub-root"
+            nested.mkdir()
+            _commit(tmp, {"hub-root/data.py": "x"}, "init")
+            paths, summary = enumerate_scope(["data.py", "extra.py"], cwd=nested)
+            path_names = {p.name for p in paths}
+            assert "data.py" in path_names, f"expected data.py in {path_names}"
+            assert "extra.py" in path_names, f"expected extra.py in {path_names}"
+            assert summary["mode"] == "explicit", f"expected mode=explicit, got {summary['mode']}"
+            data_path = [p for p in paths if p.name == "data.py"][0]
+            assert data_path == nested / "data.py", \
+                f"expected {nested / 'data.py'}, got {data_path}"
+            extra_path = [p for p in paths if p.name == "extra.py"][0]
+            assert extra_path == nested / "extra.py", \
+                f"expected {nested / 'extra.py'}, got {extra_path}"
+            print("PASS: explicit paths in nested-hub-root layout anchor to invocation cwd, not git toplevel")
+
         print("All resolve_scope unit tests passed.")
         return 0
 
