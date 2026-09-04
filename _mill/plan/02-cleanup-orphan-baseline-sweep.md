@@ -84,7 +84,11 @@ strengthened retry automatically) rather than a bespoke rmtree call.
   `dir_path`, call `_apply_orphan_baseline_dir(dir_path, dir_path.parent.parent)` (the dir is always
   `<wt_path>/.scratch/verify-baseline-<hash>`, so `.parent.parent` recovers `wt_path` without
   threading a second parallel list of worktree roots) wrapped in a
-  `try: ... except _worktree.WorktreeLockedError as exc: ...` that prints
+  `try: ... except _worktree.WorktreeError as exc: ...` (the base class, not the narrower
+  `WorktreeLockedError` subclass — a `.scratch/verify-baseline-*` dir is never a registered git
+  worktree, so `remove_safe`'s initial `git worktree remove` call is likely to hit an "unrecognized
+  git failure" shape and raise plain `WorktreeError`, not `WorktreeLockedError`; catching only the
+  subclass would let that case propagate uncaught and abort the rest of `apply_plan`) that prints
   `f"REPORT: orphan baseline dir removal failed ({dir_path}): {exc}"` to stderr and continues to the
   next entry — mirroring `apply_plan`'s existing `except _worktree.WorktreeError as exc:` handling
   for `_apply_worktree_record` (a single stubborn lock must never abort the rest of the cleanup run).
@@ -122,11 +126,16 @@ strengthened retry automatically) rather than a bespoke rmtree call.
 
   `test_apply_orphan_baseline_dir`: patch `mod._worktree.remove_safe` and assert
   `_apply_orphan_baseline_dir(dir_path, wt_path)` calls it with
-  `(dir_path, cwd=wt_path, junctions_cfg={})`. Separately, make the patched `remove_safe` raise
-  `_worktree.WorktreeLockedError("locked")` and assert `apply_plan` (constructed with a `CleanupPlan`
-  whose `orphan_baseline_dirs` is a one-item list) does not propagate the exception — it prints a
-  `REPORT:` line to stderr (capture via `contextlib.redirect_stderr`/`io.StringIO`, matching this
-  file's existing stderr-capture convention used elsewhere in this file) and returns normally.
+  `(dir_path, cwd=wt_path, junctions_cfg={})`. Separately, for EACH of the two exception cases below,
+  assert `apply_plan` (constructed with a `CleanupPlan` whose `orphan_baseline_dirs` is a one-item
+  list) does not propagate the exception — it prints a `REPORT:` line to stderr (capture via
+  `contextlib.redirect_stderr`/`io.StringIO`, matching this file's existing stderr-capture convention
+  used elsewhere in this file) and returns normally: (i) the patched `remove_safe` raises
+  `_worktree.WorktreeLockedError("locked")` (the subclass); (ii) the patched `remove_safe` raises
+  plain `_worktree.WorktreeError("unrecognized git failure")` (the base class — this is the actual
+  bug scenario the round-2 plan review caught: a narrower `except WorktreeLockedError` would let this
+  case propagate uncaught and abort the rest of `apply_plan`, so this case must be covered
+  separately from the subclass case, not assumed equivalent).
 - **Commit:** `test(cleanup): cover the orphaned verify-baseline dir sweep`
 
 ## Batch Tests

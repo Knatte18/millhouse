@@ -35,8 +35,9 @@ caller needs any edit.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  Add `import time` to `_worktree.py`'s existing import block (after `import subprocess`, before
-  `import sys`, matching the existing alphabetical stdlib-import ordering).
+  Add `import time` to `_worktree.py`'s existing import block, after `import sys` (the block is
+  currently `shutil, subprocess, sys`, already alphabetical — `time` sorts after `sys`, so it goes
+  last, producing `shutil, subprocess, sys, time`).
 
   In `remove_safe`, the current WinError145 handling (inside the `except OSError as exc:` branch
   that follows the first `_safe_rmtree.safe_rmtree(path, allowed_root=path)` call at line ~330) is:
@@ -105,31 +106,56 @@ caller needs any edit.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
+  First, update the two existing WinError145-retry tests in this file (currently titled via inline
+  comments `# --- remove_safe retries safe_rmtree once after WinError 145 and succeeds ---` and
+  `# --- remove_safe raises WorktreeLockedError when retry also raises WinError 145 ---`) so they
+  match Card 1's new up-to-3-attempts behavior instead of the old single-retry (2-attempts-total)
+  behavior they currently assert:
+  - The "retries once and succeeds" test's `patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc,
+    None])` (2 items: fails once, succeeds on the 1st retry) needs **no change** — under the new loop
+    this still succeeds on the 2nd total attempt, exactly as today, so its existing
+    `mock_rmtree.call_count == 2` and `mock_dotnet_run.call_count == 1` assertions remain correct
+    unmodified.
+  - The "raises WorktreeLockedError when retry also raises" test's
+    `patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2])` (only 2 items) MUST
+    be extended to 3 items (add a `lock_exc_3 = OSError("[WinError 145] The directory is not empty")`
+    with `lock_exc_3.winerror = 145`, appended to the side_effect list) — under the new loop, a 3rd
+    `_safe_rmtree.shutil.rmtree` call is attempted before giving up, and a `side_effect` list with
+    only 2 items raises `StopIteration` (uncaught by `remove_safe`'s `except OSError`/`except
+    PermissionError` handlers) on that 3rd call instead of the expected `WorktreeLockedError` — this
+    test would fail with an unhandled `StopIteration` today if Card 1 landed without this update.
+    Update its `mock_rmtree.call_count == 2` assertion to `== 3` (matching the now-3-item side_effect
+    list) to keep asserting the exact final call count, not just "no error."
+
   Add new test cases to `test-worktree.py` covering `remove_safe`'s strengthened WinError145 retry
-  loop from Card 1. Follow this file's existing fixture/mocking conventions (read the file's current
-  tests for `remove_safe`'s WinError145 fallback path before writing new ones, to match its exact
-  mocking style — patching `_subprocess_util.run` for the `git worktree remove`/`prune` calls,
-  `_safe_rmtree.safe_rmtree` for the rmtree attempts, and the module-level `subprocess.run` in
-  `_worktree.py` for the `dotnet build-server shutdown` call).
+  loop from Card 1. Match this file's existing mocking convention for the WinError145 fallback path
+  exactly (confirmed from the existing tests immediately above, not `_safe_rmtree.safe_rmtree` as a
+  whole): patch `_subprocess_util.run` for the `git worktree remove`/`prune` calls, patch
+  `_safe_rmtree.shutil.rmtree` (not `_safe_rmtree.safe_rmtree`) for the rmtree attempts themselves,
+  patch `_safe_rmtree._blacklist_for` with `return_value=[]` alongside it (both existing tests always
+  patch these two together), patch `_worktree.kill_stale_holders` (a no-op), and patch
+  `_worktree.subprocess.run` for the `dotnet build-server shutdown` call.
 
   New cases:
-  1. `_safe_rmtree.safe_rmtree` raises a WinError145-shaped `OSError` (`winerror=145` attribute, or a
-     matching message when simulating on a non-Windows test host — mirror whatever pattern the
-     existing WinError145 test in this file already uses) on its first two calls, then succeeds on
-     the 3rd call. Assert `remove_safe` returns normally (no exception) and that the module-level
-     `subprocess.run` mock (the `dotnet build-server shutdown` call) was invoked exactly twice — once
-     before each of the two retries, matching "once per retry, not just once total".
-  2. `_safe_rmtree.safe_rmtree` raises the same WinError145 `OSError` on all 3 calls. Assert
-     `remove_safe` raises `WorktreeLockedError` (matching the existing message format
-     `"worktree is locked via rmtree fallback (path=...)"`), and that the `dotnet build-server
-     shutdown` mock was invoked exactly twice (once per retry — the first attempt at line ~330 does
-     not call it).
-  3. `_safe_rmtree.safe_rmtree` raises a non-WinError145 `OSError` on its first call (e.g. a plain
+  1. `_safe_rmtree.shutil.rmtree` (via `patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1,
+     lock_exc_2, None])`, alongside `patch("_safe_rmtree._blacklist_for", return_value=[])`) raises a
+     WinError145-shaped `OSError` (`winerror=145` attribute, matching the existing tests' pattern) on
+     its first two calls, then succeeds (`None`) on the 3rd call. Assert `remove_safe` returns
+     normally (no exception) and that the `_worktree.subprocess.run` mock (the `dotnet build-server
+     shutdown` call) was invoked exactly twice — once before each of the two retries, matching "once
+     per retry, not just once total".
+  2. `_safe_rmtree.shutil.rmtree` raises the same WinError145 `OSError` on all 3 calls (a 3-item
+     `side_effect` list, all WinError145). Assert `remove_safe` raises `WorktreeLockedError` (matching
+     the existing message format `"worktree is locked via rmtree fallback (path=...)"`), and that the
+     `_worktree.subprocess.run` mock was invoked exactly twice (once per retry — the first attempt at
+     line ~330 does not call it).
+  3. `_safe_rmtree.shutil.rmtree` raises a non-WinError145 `OSError` on its first call (e.g. a plain
      `OSError("some other error")` with no `winerror` attribute and a message that does not match
-     `_is_dir_not_empty_error`). Assert `remove_safe` re-raises that same `OSError` directly (not
-     `WorktreeLockedError`) and that the retry loop / `dotnet build-server shutdown` mock was never
-     invoked (0 calls) — confirming the non-WinError145 guard still short-circuits before the new
-     loop, exactly as today's `if not _is_dir_not_empty_error(exc): raise` behavior.
+     `_is_dir_not_empty_error`, mirroring the existing "re-raises a non-145 OSError... (no retry)"
+     test's own `plain_exc` fixture). Assert `remove_safe` re-raises that same `OSError` directly (not
+     `WorktreeLockedError`) and that the `_worktree.subprocess.run` mock was never invoked (0 calls) —
+     confirming the non-WinError145 guard still short-circuits before the new loop, exactly as today's
+     `if not _is_dir_not_empty_error(exc): raise` behavior.
   4. Assert `time.sleep` (patch `_worktree.time.sleep`) is called with `0.5` before the first retry
      and `1.5` before the second retry, in case 1 above (the two-failures-then-success case) —
      confirms the backoff schedule, not just the retry count.

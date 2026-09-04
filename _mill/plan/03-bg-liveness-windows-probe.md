@@ -106,28 +106,73 @@ POSIX `os.kill(pid, 0)` path is untouched.
   `unittest.TestCase`/`unittest.mock` style (matching e.g. `test_log_with_exit`'s fixture shape: a
   `tempfile.TemporaryDirectory()` with a hand-written `[mill-bg] WORKER PID=...` log file).
 
+  **Mocking mechanism (mandatory — read before writing any case below).** Card 5's `_win_pid_alive`
+  does `import ctypes` and `import ctypes.wintypes` **inside its own function body** (matching
+  `_vscode_processes.py`'s existing inside-function-import convention). This means `patch("_bg.ctypes...
+  ")`/`patch("ctypes.windll...")`-style attribute patching CANNOT work here: `_bg` has no
+  module-level `ctypes` name to patch (the import is local to the function, re-executed on every
+  call), and on this Linux test host `ctypes.windll` does not exist as a real attribute at all — it
+  is conditionally defined only under `if sys.platform.startswith("win")` inside `ctypes/__init__.py`
+  itself, so any `patch()` call whose target string tries to resolve through `ctypes.windll` raises
+  `AttributeError` before a mock is ever installed, regardless of where `ctypes` is imported.
+
+  Instead, install fake modules into `sys.modules` before calling `_win_pid_alive` — because the
+  `import` statements are function-local, they re-resolve against `sys.modules` on every call, so
+  `unittest.mock.patch.dict(sys.modules, {...})` swaps what those `import` statements bind to for
+  the duration of the `with` block:
+  ```python
+  import types
+  import unittest.mock
+
+  def _make_fake_ctypes(kernel32):
+      fake_windll = types.SimpleNamespace(kernel32=kernel32)
+      fake_ctypes = types.ModuleType("ctypes")
+      fake_ctypes.windll = fake_windll
+      fake_ctypes.byref = lambda x: x  # identity: pass the DWORD object straight through
+      fake_wintypes = types.ModuleType("ctypes.wintypes")
+
+      class _FakeDWORD:
+          def __init__(self):
+              self.value = 0
+
+      fake_wintypes.DWORD = _FakeDWORD
+      fake_ctypes.wintypes = fake_wintypes  # set explicitly; do not rely on import-machinery auto-set for a synthetic module
+      return fake_ctypes, fake_wintypes
+  ```
+  Each case below wraps its call to `_bg._win_pid_alive(1234)` in:
+  ```python
+  kernel32 = unittest.mock.MagicMock()
+  # ... configure kernel32.OpenProcess / .GetExitCodeProcess / .GetLastError / .CloseHandle here ...
+  fake_ctypes, fake_wintypes = _make_fake_ctypes(kernel32)
+  with unittest.mock.patch.dict(
+      sys.modules, {"ctypes": fake_ctypes, "ctypes.wintypes": fake_wintypes}
+  ):
+      result = _bg._win_pid_alive(1234)
+  ```
+  (place `_make_fake_ctypes` as a module-level helper in the test file, or a `staticmethod`/local
+  helper on the test class — match whichever this file's existing convention prefers for shared
+  fixture helpers.)
+
   New test class `TestWinPidAlive` (or new methods on the existing `TestBgLiveness` class — match
   whichever grouping convention the rest of this file already uses for helper-function-level tests
-  as opposed to `is_bg_worker_alive`-level tests):
-  1. Mock `_bg.ctypes.windll.kernel32.OpenProcess` to return a nonzero handle, and
-     `_bg.ctypes.windll.kernel32.GetExitCodeProcess` to write `259` (`STILL_ACTIVE`) into its
-     out-param and return a truthy value — assert `_bg._win_pid_alive(1234)` returns `True`.
-     `GetExitCodeProcess` is mocked with a `side_effect` callable that sets
-     `args[1]._obj.value = 259` (or equivalent) on the passed `ctypes.byref(exit_code)` argument,
-     mirroring however this codebase's existing ctypes-mocking tests (if any exist elsewhere in the
-     suite) set an out-param through a mock; if none exist, use a plain callable side_effect that
-     inspects and mutates the `DWORD` object reachable from the `byref` argument.
-  2. Same `OpenProcess` mock, but `GetExitCodeProcess` writes a non-`259` value (e.g. `0`) — assert
-     `_bg._win_pid_alive(1234)` returns `False`.
-  3. Mock `OpenProcess` to return `0` (falsy) and `GetLastError` to return `5`
+  as opposed to `is_bg_worker_alive`-level tests), using the mocking mechanism above for every case:
+  1. `kernel32.OpenProcess.return_value = 12345` (nonzero handle) and
+     `kernel32.GetExitCodeProcess.side_effect = <callable that sets its 2nd positional arg's
+     `.value` to `259` (STILL_ACTIVE) and returns 1>` — assert `_bg._win_pid_alive(1234)` returns
+     `True`. Because `fake_ctypes.byref` is the identity function above, the `exit_code` `_FakeDWORD`
+     instance itself is passed as `GetExitCodeProcess`'s 2nd positional argument, so the side_effect
+     callable can mutate `args[1].value` directly.
+  2. Same `OpenProcess` mock, but the `GetExitCodeProcess` side_effect sets `.value` to a non-`259`
+     value (e.g. `0`) and returns `1` — assert `_bg._win_pid_alive(1234)` returns `False`.
+  3. `kernel32.OpenProcess.return_value = 0` (falsy) and `kernel32.GetLastError.return_value = 5`
      (`ERROR_ACCESS_DENIED`) — assert `_bg._win_pid_alive(1234)` returns `True`.
-  4. Mock `OpenProcess` to return `0` and `GetLastError` to return `87`
+  4. `kernel32.OpenProcess.return_value = 0` and `kernel32.GetLastError.return_value = 87`
      (`ERROR_INVALID_PARAMETER`) — assert `_bg._win_pid_alive(1234)` returns `False`.
-  5. Mock `OpenProcess` to return a nonzero handle and `GetExitCodeProcess` to return `0` (falsy,
-     call itself failed) — assert `_bg._win_pid_alive(1234)` returns `None`.
-  6. Assert `CloseHandle` is called exactly once in every one of cases 1, 2, and 5 above (the handle
-     is always closed when `OpenProcess` succeeded), and never called in cases 3/4 (no handle was
-     ever opened).
+  5. `kernel32.OpenProcess.return_value = 12345` and `kernel32.GetExitCodeProcess.return_value = 0`
+     (falsy — the call itself failed) — assert `_bg._win_pid_alive(1234)` returns `None`.
+  6. Assert `kernel32.CloseHandle` is called exactly once in every one of cases 1, 2, and 5 above (the
+     handle is always closed when `OpenProcess` succeeded), and never called in cases 3/4 (no handle
+     was ever opened).
 
   New test(s) for the platform-gated branch in `_probe_liveness`: patch `_bg.sys.platform = "win32"`
   (via `unittest.mock.patch.object(_bg.sys, "platform", "win32")` or equivalent) together with a

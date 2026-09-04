@@ -118,8 +118,15 @@ to the implementer's own verify gate, not the fixer's; this batch does not chang
   ```
   Add an `else:` clause after the `if normalized_replay.issubset(normalized_baseline):` block (same
   indentation level as that `if`), so the mismatch case now attempts corroboration before falling
-  through to the unchanged `if batch_result is not None: return batch_result` below it:
+  through to the unchanged `if batch_result is not None: return batch_result` below it. Guard the
+  corroboration attempt on `start_sha is not None` at this call site itself — do not rely solely on
+  `_corroborate_batch_failure`'s own internal `None` check (Card 9's test 72h patches
+  `_corroborate_batch_failure` itself to assert it is never called when `start_sha` is omitted; a
+  mocked replacement bypasses that function's own internal guard entirely, so the call site must not
+  invoke it at all in that case):
   ```python
+          elif start_sha is None:
+              pass
           else:
               control_result = _corroborate_batch_failure(
                   project_root, git_root, start_sha, verify_cmd, cwd_override
