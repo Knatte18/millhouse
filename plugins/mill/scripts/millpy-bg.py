@@ -29,7 +29,14 @@ import sys
 if "--_worker" in sys.argv:
     import os
     import subprocess
+    import threading
     from datetime import datetime, timezone
+
+    # How often the worker appends a "[mill-bg] HEARTBEAT" line to the log while
+    # the inner subprocess runs. Narrows the diagnostic window when the worker
+    # process is hard-killed (SIGKILL/TerminateProcess) before its own
+    # except/finally handlers can run -- see module docstring.
+    _HEARTBEAT_INTERVAL_S = 30
 
     def _worker_main(args: list[str]) -> int:
         try:
@@ -60,13 +67,31 @@ if "--_worker" in sys.argv:
                     f"[mill-bg] WORKER PID={os.getpid()} START "
                     f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
                 )
-                result = subprocess.run(
-                    cmd,
-                    stdout=log_f,
-                    stderr=subprocess.STDOUT,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                )
-                exit_code = result.returncode
+                _heartbeat_stop = threading.Event()
+
+                def _heartbeat() -> None:
+                    while not _heartbeat_stop.wait(_HEARTBEAT_INTERVAL_S):
+                        try:
+                            log_f.write(
+                                f"[mill-bg] HEARTBEAT "
+                                f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+                            )
+                        except Exception:
+                            return
+
+                _heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
+                _heartbeat_thread.start()
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        stdout=log_f,
+                        stderr=subprocess.STDOUT,
+                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    )
+                    exit_code = result.returncode
+                finally:
+                    _heartbeat_stop.set()
+                    _heartbeat_thread.join()
             return 0
         except Exception as exc:
             try:
