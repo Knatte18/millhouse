@@ -28,5 +28,8 @@ implementing  '2026-09-04T08:15:32Z'
 ```yaml
 batches:
   - name: mechanism-claim-rule
-    state: pending
+    state: running
+    implementer_session: 4a657dfd-333c-4d6e-8a76-8ff6b5b52d6f
+    start_sha: dca692878860afb68782d52fe9e1f5cf6077248b
+    verify_baseline_failures: []
 ```
