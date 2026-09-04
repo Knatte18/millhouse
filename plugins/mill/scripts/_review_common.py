@@ -1503,7 +1503,9 @@ def parse_missing_context(review_text: str) -> list[str]:
     return paths
 
 
-def build_reattached_section(file_paths: list[Path]) -> str:
+def build_reattached_section(
+    file_paths: list[Path], *, roots: DisplayRoots | None = None
+) -> str:
     """Return a `## Re-attached files (you said these were missing)` block with the listed files
     inlined via bulk_files.
 
@@ -1511,11 +1513,17 @@ def build_reattached_section(file_paths: list[Path]) -> str:
     re-attached at the top of the new prompt so the reviewer cannot claim absence again without
     contradicting itself.
     The section is appended to the existing artefact section.
+
+    ``roots`` is forwarded to `bulk_files` unchanged, so the delimiters inside the bulked body are
+    relative when ``roots`` is supplied.
+    Deliberately does NOT prepend a ``## Path roots`` block here (unlike `build_manifest_section`):
+    this section is spliced into a short resume-turn ``retry_prompt``, and the roots were already
+    stated in the original prompt of the same reviewer session.
     """
     if not file_paths:
         return ""
     return "## Re-attached files (you said these were missing)\n\n" + bulk_files(
-        file_paths
+        file_paths, roots=roots
     )
 
 

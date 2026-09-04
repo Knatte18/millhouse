@@ -2442,6 +2442,31 @@ def main() -> int:
         )
         print("PASS: build_reattached_section two paths -> both delimiters in order")
 
+    # roots supplied -> relative delimiters, heading still present
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        project_root = Path(tmpdir).resolve()
+        f = project_root / "foo.py"
+        f.write_text("content")
+        roots = DisplayRoots(project_root=project_root)
+        result = build_reattached_section([f], roots=roots)
+        assert "## Re-attached files (you said these were missing)" in result, (
+            f"Missing heading in: {result!r}"
+        )
+        assert "--- FILE: foo.py ---" in result, f"Got {result!r}"
+        assert str(project_root) not in result, f"Unexpected absolute prefix: {result!r}"
+        assert "## Path roots" not in result, (
+            f"Path roots header must not be repeated on resume turn: {result!r}"
+        )
+        print("PASS: build_reattached_section with roots -> relative delimiters")
+
+    # roots omitted -> delimiters still absolute (back-compat)
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        f = Path(tmpdir) / "foo.py"
+        f.write_text("content")
+        result = build_reattached_section([f])
+        assert f"--- FILE: {f} ---" in result, f"Got {result!r}"
+        print("PASS: build_reattached_section without roots -> absolute delimiters (back-compat)")
+
     # ---------------------------------------------------------------------------
     # parse_blocking_count
     # ---------------------------------------------------------------------------
