@@ -36,6 +36,8 @@ batches:
     commit_sha: 1e8ec476b085d9c4ad97f958f0f001ea561cf867
     verify_baseline_failures: []
   - name: mill-start-fork-guardrail
-    state: pending
+    state: running
+    implementer_session: 9284e9a2-d9e1-4420-8993-85f244de8812
+    start_sha: 33484670d876d4cb0fa04bfcf7490b08f42d3de7
     verify_baseline_failures: []
 ```
