@@ -12,17 +12,17 @@ This skill assumes `mill-start`'s Entry and Path Setup have already run — `slu
 
 ## Step 1 — Announce the wait
 
-Report to the log/status: `"Waiting for orchestrator review -- write _mill/orch-review.md next to discussion.md to resume."` No operator is present in this worker's own conversation to prompt.
+Report to the log/status: `"Waiting for orchestrator review -- write .scratch/orch-review.md to resume."` No operator is present in this worker's own conversation to prompt.
 
 ## Step 2 — Blocking wait for the file
 
-Same idiom as the entry-gate wait in `mill-go-base/SKILL.md` (`Monitor` tool, persistent bash poll, not a fixed `sleep`): poll every 30 seconds for `<worktree_root>/_mill/orch-review.md` to exist, giving up after the configured `pipeline.entry_wait_timeout_minutes` (read from config the same way `mill-go-base`'s entry-gate wait does, rather than hardcoding).
+Same idiom as the entry-gate wait in `mill-go-base/SKILL.md` (`Monitor` tool, persistent bash poll, not a fixed `sleep`): poll every 30 seconds for `<worktree_root>/.scratch/orch-review.md` to exist, giving up after the configured `pipeline.entry_wait_timeout_minutes` (read from config the same way `mill-go-base`'s entry-gate wait does, rather than hardcoding).
 
 On timeout: `_status.set_blocked(status_path, "auto: awaiting orchestrator review (orch-review.md) timed out after <N>h", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: orchestrator review timeout) for <slug>" && git -C <worktree> push`, then halt. Do not retry. This halt message must read differently from `--auto`'s own "discussion review gaps unresolved after N rounds" halt, so an operator reading `status.md` later can tell which condition fired.
 
 ## Step 3 — Consume the file
 
-Read `<worktree_root>/_mill/orch-review.md` in full as `raw_text`, then run it through the same backend `finalize()` call the normal Step 2 Agent-mode dispatch would otherwise reach — this reuses the blocking-class ceiling, verdict parsing, and canonical file-naming/writing `_review_discussion.finalize` already implements, so round 1's envelope shape needs no hand-derivation:
+Read `<worktree_root>/.scratch/orch-review.md` in full as `raw_text`, then run it through the same backend `finalize()` call the normal Step 2 Agent-mode dispatch would otherwise reach — this reuses the blocking-class ceiling, verdict parsing, and canonical file-naming/writing `_review_discussion.finalize` already implements, so round 1's envelope shape needs no hand-derivation:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
@@ -35,7 +35,7 @@ worktree_root = _paths.resolve_hub_path()
 cfg = _config.load_config(worktree_root, git_root)
 wiki_path = _paths.resolve_wiki_path(git_root)
 reviews_dir = worktree_root / cfg['paths']['reviews_dir']
-raw_text = open(worktree_root / '_mill/orch-review.md', encoding='utf-8').read()
+raw_text = open(worktree_root / '.scratch/orch-review.md', encoding='utf-8').read()
 
 result = finalize(
     cfg, '<slug>', raw_text,
@@ -51,7 +51,7 @@ print(json.dumps(dataclasses.asdict(result)))
 
 ## Step 4 — Remove the trigger file
 
-`<worktree_root>/_mill/orch-review.md` is ephemeral and never committed — delete it now that `finalize()` produced the canonical copy, so it can't be mistaken for a fresh one on a later task.
+`<worktree_root>/.scratch/orch-review.md` is ephemeral, gitignored, and never committed — delete it now that `finalize()` produced the canonical copy, so it can't be mistaken for a fresh one on a later task.
 
 ## Step 5 — Cost line
 
