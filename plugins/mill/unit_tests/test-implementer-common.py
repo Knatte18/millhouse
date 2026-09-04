@@ -5020,6 +5020,143 @@ def main() -> int:
             print(f"FAIL: case 72e ({exc})", file=sys.stderr)
             errors += 1
 
+    # (f) corroboration succeeds: a start_sha checkout reproduces the same mismatch -> waived + baseline persisted.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            status_path = project_root / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                _status.render_initial(
+                    "Test Task",
+                    "test",
+                    "2026-01-01T00:00:00Z",
+                    "main",
+                    "test-slug",
+                    "test-branch",
+                ),
+                encoding="utf-8",
+            )
+            _status.init_batches(status_path, ["01-test-batch"])
+            result = _run_verify_gates(
+                project_root,
+                verify_cmd,
+                None,
+                batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
+                start_sha=base_sha,
+                status_path=status_path,
+                batch_name="01-test-batch",
+            )
+            assert result is None, (
+                f"case 72f: expected waiver (None) once corroborated, got {result}"
+            )
+            batches = _status.read_batches(status_path)
+            entry = next(b for b in batches if b["name"] == "01-test-batch")
+            persisted = entry.get("verify_baseline_failures") or []
+            assert "--- FAIL: TestOld (1.11s)" in persisted, (
+                f"case 72f: original baseline entry must survive the persist, got {persisted}"
+            )
+            assert "--- FAIL: TestNew (0.00s)" in persisted, (
+                f"case 72f: corroborated new signature must be self-healed into the"
+                f" baseline, got {persisted}"
+            )
+            print(
+                "PASS: case 72f - a start_sha checkout reproducing the same mismatch"
+                " waives the batch and persists the expanded baseline"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72f ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (g) corroboration fails to reproduce: still blocks.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            marker = project_root / "marker.txt"
+            marker.write_text("x", encoding="utf-8")
+            subprocess.run(
+                ["git", "-C", str(project_root), "add", "marker.txt"],
+                check=True,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "-m", "add marker"],
+                check=True,
+                capture_output=True,
+            )
+            verify_cmd = (
+                "test -f marker.txt && echo '--- FAIL: TestNew (0.00s)' && exit 1"
+                " || exit 0"
+            )
+            status_path = project_root / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                _status.render_initial(
+                    "Test Task",
+                    "test",
+                    "2026-01-01T00:00:00Z",
+                    "main",
+                    "test-slug",
+                    "test-branch",
+                ),
+                encoding="utf-8",
+            )
+            _status.init_batches(status_path, ["01-test-batch"])
+            result = _run_verify_gates(
+                project_root,
+                verify_cmd,
+                None,
+                batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
+                start_sha=base_sha,
+                status_path=status_path,
+                batch_name="01-test-batch",
+            )
+            assert result is not None, (
+                "case 72g: a control run that passes at start_sha must not be"
+                " corroborated -- the batch must still block"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72g: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72g - a start_sha checkout that does NOT reproduce the"
+                " mismatch leaves the batch blocked"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72g ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (h) backward compatibility: omitting start_sha never attempts corroboration.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            baseline = ["--- FAIL: TestFoo (9.99s)"]
+            with unittest.mock.patch(
+                "_implementer_common._corroborate_batch_failure",
+                side_effect=AssertionError("should not be called"),
+            ):
+                result = _run_verify_gates(
+                    project_root, verify_cmd, None, batch_verify_baseline=baseline
+                )
+            assert result is not None, (
+                "case 72h: a non-baseline signature with no start_sha must still block"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 72h: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 72h - omitting start_sha short-circuits corroboration,"
+                " matching every pre-existing caller's behavior"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 72h ({exc})", file=sys.stderr)
+            errors += 1
+
     # Case 73: #825 regression -- a prior batch's committed file, touched again by later
     # activity but currently reading back its earlier (start_sha-identical) content, must
     # NOT trip the dirty-tree gate: `git diff --name-only start_sha` is a pure content
@@ -5316,6 +5453,100 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 78: commit_sha_field_name="pre_merge_head" -> the corrective SHA is attached under
+    # the override key, and the default "commit_sha" key must not appear at all (#953).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=None,
+                commit_sha_field_name="pre_merge_head",
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert "commit_sha" not in data, (
+                f"expected no commit_sha key (renamed), got {data}"
+            )
+            assert data["pre_merge_head"] == new_head, (
+                f"expected pre_merge_head={new_head}, got {data}"
+            )
+            print(
+                "PASS: case 78 - commit_sha_field_name override renames the fallback"
+                " SHA field and drops the stale self-reported commit_sha key"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 78 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 79 (#932 regression): a truncated self-reported commit_sha (39 chars, one short of
+    # the real 40-char SHA) on the default field-name path must be discarded and replaced by the
+    # real git rev-parse HEAD value, not passed through.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
+        _cleanliness.capture_snapshot(project_root, snapshot_path)
+        subprocess.run(
+            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
+            check=True,
+            capture_output=True,
+        )
+        new_head = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        agent_output = (
+            '{"status":"success","commit_sha":"' + new_head[:-1]
+            + '","session_id":"test-session"}\n'
+        )
+        rc, captured = _capture_stdout(
+            lambda: _forward_output(
+                agent_output,
+                project_root,
+                start_sha=base_sha,
+                snapshot_path=snapshot_path,
+                verify_cmd=None,
+            )
+        )
+        try:
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", f"expected status=success, got {data}"
+            assert data["commit_sha"] == new_head, (
+                f"expected commit_sha={new_head} (full, not truncated), got {data}"
+            )
+            print(
+                "PASS: case 79 - #932 truncated self-reported commit_sha is discarded and"
+                " replaced by the real git rev-parse HEAD value"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 79 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     if errors:

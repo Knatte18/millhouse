@@ -256,9 +256,11 @@ def main() -> int:
             lock_exc_1.winerror = 145
             lock_exc_2 = OSError("[WinError 145] The directory is not empty")
             lock_exc_2.winerror = 145
+            lock_exc_3 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_3.winerror = 145
             raised_locked = False
             with patch("_worktree._subprocess_util.run", return_value=mock_result):
-                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2]) as mock_rmtree:
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2, lock_exc_3]) as mock_rmtree:
                     with patch("_safe_rmtree._blacklist_for", return_value=[]):
                         with patch("_worktree.kill_stale_holders"):
                             with patch("_worktree.subprocess.run", return_value=MagicMock()):
@@ -267,8 +269,111 @@ def main() -> int:
                                 except WorktreeLockedError:
                                     raised_locked = True
             assert raised_locked, "expected WorktreeLockedError when retry also raises WinError 145"
-            assert mock_rmtree.call_count == 2, "expected safe_rmtree to be called twice (initial attempt + one retry, not more)"
+            assert mock_rmtree.call_count == 3, "expected safe_rmtree to be called three times (initial attempt + two retries, not more)"
             print("PASS: remove_safe raises WorktreeLockedError when retry also raises WinError 145")
+
+        # --- remove_safe retries safe_rmtree twice after WinError 145 and succeeds on the 3rd attempt ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc_1 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_1.winerror = 145
+            lock_exc_2 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_2.winerror = 145
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2, None]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()) as mock_dotnet_run:
+                                remove_safe(path, cwd=cwd, junctions_cfg={})
+            assert mock_rmtree.call_count == 3, "expected safe_rmtree to be called three times (initial attempt + two retries)"
+            assert mock_dotnet_run.call_count == 2, "expected exactly two dotnet build-server shutdown calls (once per retry)"
+            print("PASS: remove_safe retries safe_rmtree twice after WinError 145 and succeeds on the 3rd attempt")
+
+        # --- remove_safe raises WorktreeLockedError after exhausting all 3 attempts on WinError 145 ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc_1 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_1.winerror = 145
+            lock_exc_2 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_2.winerror = 145
+            lock_exc_3 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_3.winerror = 145
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2, lock_exc_3]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()) as mock_dotnet_run:
+                                try:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                                except WorktreeLockedError:
+                                    raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError after all 3 attempts raise WinError 145"
+            assert mock_rmtree.call_count == 3, "expected safe_rmtree to be called three times (initial attempt + two retries)"
+            assert mock_dotnet_run.call_count == 2, "expected exactly two dotnet build-server shutdown calls (once per retry, not once per attempt)"
+            print("PASS: remove_safe raises WorktreeLockedError after exhausting all 3 attempts on WinError 145")
+
+        # --- remove_safe re-raises a non-145 OSError from a retry attempt unchanged (no further retry) ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            plain_exc = OSError("some other error")
+            raised = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=plain_exc) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()) as mock_dotnet_run:
+                                try:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                                except OSError as exc:
+                                    raised = True
+                                    assert exc is plain_exc, "expected the original OSError instance to propagate unchanged"
+            assert raised, "expected a non-145 OSError to propagate uncaught past remove_safe"
+            assert mock_dotnet_run.call_count == 0, "expected the non-145 guard to short-circuit before the retry loop's dotnet call"
+            print("PASS: remove_safe re-raises a non-145 OSError from a retry attempt unchanged (no further retry)")
+
+        # --- remove_safe's WinError 145 retry loop backs off 0.5s then 1.5s between attempts ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc_1 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_1.winerror = 145
+            lock_exc_2 = OSError("[WinError 145] The directory is not empty")
+            lock_exc_2.winerror = 145
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2, None]):
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()):
+                                with patch("_worktree.time.sleep") as mock_sleep:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+            assert mock_sleep.call_count == 2, "expected time.sleep to be called once per retry"
+            assert mock_sleep.call_args_list[0].args == (0.5,), "expected 0.5s backoff before the 1st retry"
+            assert mock_sleep.call_args_list[1].args == (1.5,), "expected 1.5s backoff before the 2nd retry"
+            print("PASS: remove_safe's WinError 145 retry loop backs off 0.5s then 1.5s between attempts")
 
         # --- remove_safe re-raises a non-145 OSError from rmtree fallback unchanged (no retry) ---
         with tempfile.TemporaryDirectory() as tmp:

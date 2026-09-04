@@ -962,6 +962,83 @@ def _run_verify_gate(
     return None
 
 
+def _corroborate_batch_failure(
+    project_root: Path,
+    git_root: Path | None,
+    start_sha: str | None,
+    verify_cmd: str | None,
+    cwd_override: Path | None,
+) -> dict | None:
+    """
+    Corroborate a batch-level subset-diff mismatch against a fresh checkout of the batch's own
+    pre-implementer start_sha.
+
+    When the live replay's failure signatures are NOT a subset of the cached
+    verify_baseline_failures (the subset-diff waiver in _run_verify_gates already failed), this is
+    the fallback control check: re-run the exact failing verify_cmd once more in a transient
+    checkout of start_sha -- the commit the live replay's own worktree started from, before this
+    batch's implementer made any commits.
+    A reproduction there means the failure predates this batch's own changes and should be treated
+    as pre-existing rather than a genuine regression.
+
+    Args:
+        project_root: Absolute path to the task worktree root (where gitignored dependency dirs are
+            probed for reuse).
+        git_root: Absolute path to the repo root `git` commands run against.
+            Falls back to project_root when None.
+        start_sha: The commit SHA this batch's implementer started from,
+            or None when unavailable -- in which case corroboration cannot be attempted and this
+            function returns None immediately.
+        verify_cmd: The batch-level verify command to re-run against the start_sha checkout,
+            or None -- in which case corroboration cannot be attempted and this function returns
+            None immediately.
+        cwd_override: Explicit verify cwd for the batch-level gate (see _run_verify_gate),
+            re-anchored to the equivalent path inside the transient start_sha checkout when
+            possible.
+
+    Returns:
+        The control run's own stuck dict (with a "signatures" field) on failure, or None on a clean
+        pass, or when corroboration could not be attempted (start_sha/verify_cmd missing, or any
+        infrastructure failure -- e.g. a failed `git worktree add`, a junction error -- degrades to
+        "not corroborated" rather than propagating, matching this module's existing
+        None-means-fail-safe-strict convention).
+    """
+    if start_sha is None or verify_cmd is None:
+        return None
+
+    import _verify_baseline
+    import _worktree
+
+    effective_git_root = git_root or project_root
+
+    try:
+        tmp_path = _verify_baseline._checkout_parent_branch(
+            project_root, effective_git_root, start_sha
+        )
+        try:
+            effective_tmp_path = tmp_path
+            if cwd_override is not None:
+                try:
+                    rel = cwd_override.relative_to(effective_git_root)
+                except ValueError:
+                    rel = None
+                if rel is not None:
+                    effective_tmp_path = tmp_path / rel
+
+            _verify_baseline._link_dependency_dirs(project_root, effective_tmp_path)
+
+            return _run_verify_gate(
+                effective_tmp_path, verify_cmd, git_root=None, cwd_override=None
+            )
+        finally:
+            try:
+                _worktree.remove_safe(tmp_path, cwd=effective_git_root, junctions_cfg={})
+            except Exception:
+                pass
+    except Exception:
+        return None
+
+
 def _run_verify_gates(
     project_root: Path,
     verify_cmd: str | None,
@@ -972,6 +1049,9 @@ def _run_verify_gates(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
+    start_sha: str | None = None,
+    status_path: Path | None = None,
+    batch_name: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1044,6 +1124,18 @@ def _run_verify_gates(
         infrastructure failures alike.
             Defaults to None (run strictly, as
         before this parameter existed).
+        start_sha: The commit SHA this batch's implementer started from,
+            forwarded to _corroborate_batch_failure when a subset-diff mismatch occurs.
+            Defaults to None, which disables corroboration entirely (fully backward-compatible with
+            every existing caller that does not pass it).
+        status_path: Path to the task's status.md,
+            forwarded to _status.set_batch_field to persist an expanded verify_baseline_failures set
+            when corroboration succeeds.
+            Defaults to None, which disables the self-healing persist (corroboration can still waive
+            the batch for this call, but the expanded signature set is not saved for later batches).
+        batch_name: This batch's name,
+            forwarded to _status.set_batch_field alongside status_path.
+            Defaults to None, which disables the self-healing persist exactly like status_path=None.
 
     Returns:
         A stuck dict on the first gate that fails,
@@ -1068,6 +1160,34 @@ def _run_verify_gates(
             if normalized_replay.issubset(normalized_baseline):
                 # Waived: fall through to the module-wide gate below exactly as the batch_result is None path already does.
                 batch_result = None
+            elif start_sha is None:
+                pass
+            else:
+                control_result = _corroborate_batch_failure(
+                    project_root, git_root, start_sha, verify_cmd, cwd_override
+                )
+                if control_result is not None:
+                    normalized_control = {
+                        _normalize_failure_signature(line)
+                        for line in (control_result.get("signatures") or [])
+                    }
+                    if normalized_replay.issubset(normalized_control):
+                        # Corroborated: this exact failure set also reproduces in a checkout that
+                        # predates this batch's own changes -- treat as pre-existing, waive, and
+                        # persist the expanded signature set so later batches in this task don't
+                        # re-pay the same false block.
+                        expanded = sorted(set(batch_verify_baseline) | set(replay_signatures))
+                        if status_path is not None and batch_name is not None:
+                            try:
+                                _status.set_batch_field(
+                                    status_path,
+                                    batch_name,
+                                    "verify_baseline_failures",
+                                    expanded,
+                                )
+                            except Exception:
+                                pass
+                        batch_result = None
         if batch_result is not None:
             return batch_result
 
@@ -1516,6 +1636,8 @@ def finalize_from_output(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
+    commit_sha_field_name: str = "commit_sha",
+    batch_name: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1567,6 +1689,12 @@ def finalize_from_output(
         for the subset-diff waiver rule this enables.
             Defaults to None
         (run strictly, as before this parameter existed).
+        commit_sha_field_name: JSON key the corrective SHA is attached under on the success
+            fallback path; defaults to "commit_sha".
+        batch_name: This batch's name, forwarded unchanged to _forward_output's _run_verify_gates
+            calls.
+            See _run_verify_gates for the self-healing persist this enables.
+            Defaults to None (persist disabled, as before this parameter existed).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1604,6 +1732,8 @@ def finalize_from_output(
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
         batch_verify_baseline=batch_verify_baseline,
+        commit_sha_field_name=commit_sha_field_name,
+        batch_name=batch_name,
     )
 
 
@@ -1660,6 +1790,8 @@ def _forward_output(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
+    commit_sha_field_name: str = "commit_sha",
+    batch_name: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1715,6 +1847,15 @@ def _forward_output(
     cached, task-scoped stored signature set for this batch's own verify command, enabling the
     subset-diff waiver rule documented on _run_verify_gates.
     Defaults to None (run strictly, as before this parameter existed).
+    commit_sha_field_name is the JSON key the corrective SHA is attached under on the success
+    fallback block below (the unconditional `git rev-parse HEAD` correction); defaults to
+    "commit_sha", which preserves today's behavior for every existing caller. A non-default value
+    also pops any stale self-reported "commit_sha" key from parsed before attaching the corrected
+    SHA under the new key name, so the two never coexist.
+    batch_name is forwarded unchanged to every _run_verify_gates call site below, alongside the
+    already-present start_sha and status_path parameters, enabling the self-healing persist
+    documented on _run_verify_gates.
+    Defaults to None (persist disabled, as before this parameter existed).
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -1740,6 +1881,9 @@ def _forward_output(
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
                 batch_verify_baseline=batch_verify_baseline,
+                start_sha=start_sha,
+                status_path=status_path,
+                batch_name=batch_name,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
@@ -1882,7 +2026,9 @@ def _forward_output(
                 cwd=project_root,
             )
             if result.returncode == 0 and _is_valid_commit_sha(result.stdout.strip()):
-                parsed["commit_sha"] = result.stdout.strip()
+                if commit_sha_field_name != "commit_sha":
+                    parsed.pop("commit_sha", None)
+                parsed[commit_sha_field_name] = result.stdout.strip()
                 violations = _cleanliness.compute_scope_violations(project_root, git_root)
                 if violations:
                     parsed["scope_violations"] = violations
@@ -1963,6 +2109,9 @@ def _forward_output(
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
                                         batch_verify_baseline=batch_verify_baseline,
+                                        start_sha=start_sha,
+                                        status_path=status_path,
+                                        batch_name=batch_name,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
@@ -2070,6 +2219,9 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
+                        start_sha=start_sha,
+                        status_path=status_path,
+                        batch_name=batch_name,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
@@ -2177,6 +2329,9 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
+                        start_sha=start_sha,
+                        status_path=status_path,
+                        batch_name=batch_name,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
