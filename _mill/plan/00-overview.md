@@ -3,7 +3,7 @@
 ```yaml
 task: "_plan_validate.py verify: command validation: false positives, missing escape hatches, and a doc/enforcement mismatch"
 slug: plan-validate-verify-command-validation-bugs
-approved: false
+approved: true
 started: "20260904-081228"
 parent: main
 root: ""
