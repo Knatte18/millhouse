@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-commit-baseline-write-before-dirty-check
+phase: approved-bg-heartbeat-diagnosability
 slug: millpy-implement-fix-stuck-type-false-positives
 branch: hanf/millpy-implement-fix-stuck-type-false-positives
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-review-r2  '2026-09-04T11:12:06Z'
 planned  '2026-09-04T11:12:27Z'
 implementing  '2026-09-04T12:33:19Z'
 approved-commit-baseline-write-before-dirty-check  '2026-09-04T12:38:32Z'
+approved-bg-heartbeat-diagnosability  '2026-09-04T12:41:28Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: b079b8b19e0cb3e24c0d11deab80ffa092269105
     verify_baseline_failures: []
   - name: bg-heartbeat-diagnosability
-    state: running
+    state: approved
     implementer_session: eeec3588-0eb8-4c12-9f3a-06ddba77207c
     start_sha: 922a1a2dfaf10dc1ce6c88f92d83a7682ab803e9
+    commit_sha: f3f22f32191fa440d6437c77299e4440d027d37f
     verify_baseline_failures: []
   - name: test-corroboration-write-commit
     state: pending
