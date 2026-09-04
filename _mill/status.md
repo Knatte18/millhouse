@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-undercount-corroboration-tests
+phase: holistic-reviewing
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-cleanup-orphan-baseline-sweep  '2026-09-04T09:31:32Z'
 approved-bg-liveness-windows-probe  '2026-09-04T09:34:25Z'
 approved-baseline-undercount-corroboration  '2026-09-04T09:38:23Z'
 approved-baseline-undercount-corroboration-tests  '2026-09-04T09:40:45Z'
+holistic-reviewing  '2026-09-04T09:41:13Z'
 ```
 
 ## Batches
