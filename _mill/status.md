@@ -34,7 +34,11 @@ implementing  '2026-09-04T09:49:36Z'
 ```yaml
 batches:
   - name: symbol-reference-check
-    state: pending
+    state: running
+    implementer_session: fc8b2a94-287a-4809-b4a4-de38d92a799a
+    start_sha: cfb05d6b181d54260cf919ca8234761337b6175e
+    verify_baseline_failures: []
   - name: mill-plan-fixer-doc-update
     state: pending
+    verify_baseline_failures: []
 ```
