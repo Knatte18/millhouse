@@ -200,7 +200,7 @@ Staging is unconditional on `_mill/briefs` existing, but the commit is gated on 
 
 ```bash
 if [ -d <worktree>/_mill/briefs ]; then
-  git -C <worktree> add <worktree>/_mill/briefs/
+  git -C <worktree> add _mill/briefs/
 fi
 if [ -n "$(git -C <worktree> diff --cached --name-only)" ]; then
   git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"

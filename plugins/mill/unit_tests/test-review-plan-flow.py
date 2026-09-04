@@ -3112,6 +3112,393 @@ def main() -> int:
             errors += 1
             print(f"FAIL test52 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
 
+    # ------------------------------------------------------------------
+    # Test 53 — site 1 (_review_one_batch, bulk mode): the per-batch prompt
+    # dispatched from run()'s ThreadPoolExecutor carries no absolute
+    # project_root prefix, states the fixture's own Context: token
+    # plan-relative, and opens with a ## Path roots block.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(1)
+            plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root,
+                git_root=project_root, no_holistic=True,
+            )
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, f"expected 1 prompt (no_holistic), got {len(prompts)}"
+            prompt_text, _ = prompts[0]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "batch-mode _review_one_batch prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "src/a.py" in prompt_text, (
+                "batch-mode _review_one_batch prompt is missing the plan-relative Context: token"
+            )
+            assert "## Path roots" in prompt_text, (
+                "batch-mode _review_one_batch prompt is missing the ## Path roots header"
+            )
+            print("PASS test53: _review_one_batch bulk-mode prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test53: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test53 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 54 — site 1 (_review_one_batch, tool-use mode): the read_list
+    # bullets, Overview:/Batch: lines, and resolve-against-root instruction
+    # sentence are all plan-relative with no absolute project_root prefix.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = "test_stub_tooluse"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            write_local_overlay(
+                mill_dir,
+                test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
+            )
+            _seed_approve(1)
+            plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root,
+                git_root=project_root, no_holistic=True,
+            )
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, f"expected 1 prompt (no_holistic), got {len(prompts)}"
+            prompt_text, _ = prompts[0]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "tool-use _review_one_batch prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "- src/a.py" in prompt_text, (
+                "tool-use _review_one_batch prompt is missing the plan-relative read_list bullet"
+            )
+            assert "## Path roots" in prompt_text, (
+                "tool-use _review_one_batch prompt is missing the ## Path roots header"
+            )
+            assert (
+                "relative to the root stated in the" in prompt_text
+                and "## Path roots" in prompt_text.split("relative to the root stated in the")[-1]
+            ), "tool-use _review_one_batch prompt is missing the resolve-against-stated-root instruction"
+            print("PASS test54: _review_one_batch tool-use prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test54: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test54 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 55 — site 2 (prepare()'s batch-mode block, bulk mode): reached
+    # via prepare(scope=<batch stem>).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            result = plan_prepare(
+                cfg, SLUG, scope="01-alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() batch-mode prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "src/a.py" in prompt_text, (
+                "prepare() batch-mode prompt is missing the plan-relative Context: token"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() batch-mode prompt is missing the ## Path roots header"
+            )
+            print("PASS test55: prepare() batch-mode bulk prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test55: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test55 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 56 — site 2 (prepare()'s batch-mode block, tool-use mode).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["batch"]["reviewer"] = "test_stub_tooluse"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            write_local_overlay(
+                mill_dir,
+                test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
+            )
+            result = plan_prepare(
+                cfg, SLUG, scope="01-alpha", mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() batch-mode tool-use prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "- src/a.py" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the plan-relative read_list bullet"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the ## Path roots header"
+            )
+            assert "relative to the root stated in the" in prompt_text, (
+                "prepare() batch-mode tool-use prompt is missing the resolve-against-stated-root instruction"
+            )
+            print("PASS test56: prepare() batch-mode tool-use prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test56: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test56 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 57 — site 3 (prepare()'s holistic block, bulk mode): reached
+    # via prepare(scope=None).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            result = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() holistic prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "src/a.py" in prompt_text, (
+                "prepare() holistic prompt is missing the plan-relative Context: token"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() holistic prompt is missing the ## Path roots header"
+            )
+            print("PASS test57: prepare() holistic bulk prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test57: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test57 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 58 — site 3 (prepare()'s holistic block, tool-use mode): the
+    # batch_list and read_list bullets carry no absolute project_root
+    # prefix, and the resolve-against-root instruction is present.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub_tooluse"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            write_local_overlay(
+                mill_dir,
+                test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
+            )
+            result = plan_prepare(
+                cfg, SLUG, scope=None, mill_dir=mill_dir, project_root=project_root,
+                wiki_root=wiki_root, git_root=project_root,
+            )
+            prompt_text = result["prompt_text"]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "prepare() holistic tool-use prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "- `plan/01-alpha.md`" in prompt_text, (
+                "prepare() holistic tool-use prompt is missing the plan-relative batch_list bullet"
+            )
+            assert "- `src/a.py`" in prompt_text, (
+                "prepare() holistic tool-use prompt is missing the plan-relative read_list bullet"
+            )
+            assert "## Path roots" in prompt_text, (
+                "prepare() holistic tool-use prompt is missing the ## Path roots header"
+            )
+            assert "relative to the root stated in the" in prompt_text, (
+                "prepare() holistic tool-use prompt is missing the resolve-against-stated-root instruction"
+            )
+            print("PASS test58: prepare() holistic tool-use prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test58: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test58 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 59 — site 4 (run()'s inline holistic block, bulk mode): reached
+    # via run(holistic_only=True).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            _seed_approve(1)
+            plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root,
+                git_root=project_root, holistic_only=True,
+            )
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, f"expected 1 prompt (holistic_only), got {len(prompts)}"
+            prompt_text, _ = prompts[0]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "run() holistic prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "src/a.py" in prompt_text, (
+                "run() holistic prompt is missing the plan-relative Context: token"
+            )
+            assert "## Path roots" in prompt_text, (
+                "run() holistic prompt is missing the ## Path roots header"
+            )
+            print("PASS test59: run() holistic bulk prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test59: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test59 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 60 — site 4 (run()'s inline holistic block, tool-use mode).
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "test_stub_tooluse"
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            write_local_overlay(
+                mill_dir,
+                test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
+            )
+            _seed_approve(1)
+            plan_run(
+                cfg, SLUG, mill_dir, wiki_root, project_root,
+                git_root=project_root, holistic_only=True,
+            )
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 1, f"expected 1 prompt (holistic_only), got {len(prompts)}"
+            prompt_text, _ = prompts[0]
+            files_section = prompt_text.split("## Files included", 1)[-1]
+            assert str(project_root) not in files_section, (
+                "run() holistic tool-use prompt leaks an absolute project_root path"
+                " beyond the ## Path roots header"
+            )
+            assert "- `plan/01-alpha.md`" in prompt_text, (
+                "run() holistic tool-use prompt is missing the plan-relative batch_list bullet"
+            )
+            assert "- `src/a.py`" in prompt_text, (
+                "run() holistic tool-use prompt is missing the plan-relative read_list bullet"
+            )
+            assert "## Path roots" in prompt_text, (
+                "run() holistic tool-use prompt is missing the ## Path roots header"
+            )
+            assert "relative to the root stated in the" in prompt_text, (
+                "run() holistic tool-use prompt is missing the resolve-against-stated-root instruction"
+            )
+            print("PASS test60: run() holistic tool-use prompt is plan-relative")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test60: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test60 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
+    # ------------------------------------------------------------------
+    # Test 61 — NEED_CONTEXT re-attachment (build_reattached_section) carries
+    # no absolute project_root prefix in the resume retry_prompt. Covers both
+    # the _review_one_batch and run()-holistic resume-retry call sites.
+    # ------------------------------------------------------------------
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        batch_specs = [("alpha", "01-alpha.md", ["src/a.py"], [])]
+        mill_dir, wiki_root, project_root, cfg = _make_plan_fixture(tmpdir, batch_specs)
+        orig_dir = os.getcwd()
+        os.chdir(project_root)
+        try:
+            # alpha: NEED_CONTEXT -> retry APPROVE; holistic: NEED_CONTEXT -> retry APPROVE.
+            stub.seed([
+                (NEED_CONTEXT_TEXT, "sid-1"),  # alpha first call
+                (APPROVE_TEXT,      "sid-2"),  # alpha retry
+                (NEED_CONTEXT_TEXT, "sid-3"),  # holistic first call
+                (APPROVE_TEXT,      "sid-4"),  # holistic retry
+            ])
+            r = plan_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
+            prompts = stub.captured_prompts()
+            assert len(prompts) == 4, f"expected 4 captured prompts, got {len(prompts)}"
+            batch_retry_text, _ = prompts[1]
+            holistic_retry_text, _ = prompts[3]
+            assert batch_retry_text.startswith("## Re-attached files"), (
+                f"batch retry prompt must start with '## Re-attached files': {batch_retry_text[:80]!r}"
+            )
+            assert str(project_root) not in batch_retry_text, (
+                "_review_one_batch NEED_CONTEXT retry_prompt leaks an absolute project_root path"
+            )
+            assert holistic_retry_text.startswith("## Re-attached files"), (
+                f"holistic retry prompt must start with '## Re-attached files': {holistic_retry_text[:80]!r}"
+            )
+            assert str(project_root) not in holistic_retry_text, (
+                "run() holistic NEED_CONTEXT retry_prompt leaks an absolute project_root path"
+            )
+            print("PASS test61: NEED_CONTEXT re-attachment retry_prompt is plan-relative (batch + holistic)")
+        except AssertionError as exc:
+            errors += 1
+            print(f"FAIL test61: {exc}", file=sys.stderr)
+        except Exception as exc:
+            errors += 1
+            print(f"FAIL test61 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
+        finally:
+            os.chdir(orig_dir)
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1
