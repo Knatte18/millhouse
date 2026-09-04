@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r4
+phase: plan-fix-r5
 slug: mill-go-windows-baseline-teardown-and-bg-liveness
 branch: hanf/mill-go-windows-baseline-teardown-and-bg-liveness
 plan: _mill/plan
@@ -21,4 +21,5 @@ plan-fix-r1  '2026-09-04T08:46:04Z'
 plan-fix-r2  '2026-09-04T08:56:26Z'
 plan-fix-r3  '2026-09-04T09:04:33Z'
 plan-fix-r4  '2026-09-04T09:10:34Z'
+plan-fix-r5  '2026-09-04T09:18:28Z'
 ```
