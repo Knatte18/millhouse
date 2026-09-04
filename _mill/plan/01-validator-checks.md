@@ -66,8 +66,7 @@ the overview's Shared Decisions: none.
   Absent, explicit-null, and blank-string `verify:` all normalize to `None` through the shared
   normalizer, so those three spellings compare equal to one another and produce no finding.
   Give the function a module-style docstring covering the sole-reporter split for malformed values,
-  the raw-cwd-key rationale, and the `{check, batch, card, path, message}` error-dict shape. ASCII
-  only in all new comments and docstrings.
+  the raw-cwd-key rationale, and the `{check, batch, card, path, message}` error-dict shape.
 - **Commit:** `feat(plan-validate): add verify-batch-mismatch check`
 
 ### Card 2: Wire `verify-batch-mismatch` into `run()` and the docstrings
@@ -107,7 +106,7 @@ the overview's Shared Decisions: none.
   `_strip_n_leading_spaces` -- a fixed per-line add, not a re-indent -- and explaining the
   `include_blank` split: a real nested source excerpt usually has genuinely empty separator lines
   (editors strip trailing whitespace), so the default reproduces the true source, while
-  `include_blank=True` covers a source that keeps whitespace-only indented lines. ASCII only.
+  `include_blank=True` covers a source that keeps whitespace-only indented lines.
 - **Commit:** `feat(plan-validate): add _add_n_leading_spaces helper`
 
 ### Card 4: Detect under-indented Requirements fences
@@ -143,7 +142,7 @@ the overview's Shared Decisions: none.
   (a fence cannot legitimately match both ways, so preserving the incumbent ordering keeps every
   currently-emitted message stable), and the non-blank-then-all-lines variant order. Also widen the
   module header docstring's `requirements-quote-indent-drift` entry so it describes drift in either
-  direction rather than a strip-only match. ASCII only.
+  direction rather than a strip-only match.
 - **Commit:** `fix(plan-validate): detect under-indented Requirements fences`
 
 ### Card 5: Exempt inline-signature citations from context-completeness
@@ -162,7 +161,7 @@ the overview's Shared Decisions: none.
   which is why naming the defining file on that line is not an unlisted read dependency. Extend
   exemption item 2 in `_check_context_completeness`'s own docstring the same way, so the docstring
   and the tuple stay consistent. Do not widen the marker set further and do not change the matching
-  mechanism. ASCII only.
+  mechanism.
 - **Commit:** `feat(plan-validate): exempt inline-signature citations from context-completeness`
 
 ## Batch Tests

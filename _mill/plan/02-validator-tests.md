@@ -17,7 +17,9 @@ the same fixture helpers already defined there. It consumes batch 1's external i
 the `verify-batch-mismatch` check key, the two directional `requirements-quote-indent-drift`
 messages, and the two new citation markers. Batch-local decision beyond the overview's Shared
 Decisions: each new test function must be appended to the manual `tests = [...]` registry inside
-`main()` -- that registry is not auto-discovered, so an unregistered test silently never runs.
+`main()` -- that registry is not auto-discovered, so an unregistered test silently never runs. Card 6
+additionally extends the shared `_make_overview` fixture helper with a backward-compatible per-entry
+`verify` override; every existing caller keeps today's `verify: null` output.
 
 ## Cards
 
@@ -33,9 +35,17 @@ Decisions: each new test function must be appended to the manual `tests = [...]`
 - **Requirements:** Append test functions covering the new `verify-batch-mismatch` check, following
   the file's established style: build a temporary plan directory with a `00-overview.md` plus batch
   files, call `_plan_validate.run(...)`, filter the returned list by `e["check"]`, print a `FAIL`
-  line and return `1` on mismatch, return `0` on success. Reuse whichever tmp-plan fixture helper the
-  file already defines for the sibling `depends-on-batch-mismatch` and `verify-mixed-cwd` tests
-  rather than writing a new fixture. Cover, one test function per scenario: identical plain-string
+  line and return `1` on mismatch, return `0` on success. Most scenarios below need the *Batch Index
+  entry's* own `verify:` set to a non-null value, which the file's `_make_overview` helper cannot
+  express today: it hardcodes the literal line `    verify: null` for every entry it renders and
+  offers no override. Extend `_make_overview` for this: when a batch dict passed in its `batches`
+  argument carries a `verify` key, render that key's value as the entry's `verify:` line verbatim
+  (the caller supplies the raw YAML text, so a plain string, a `{cwd: ..., command: ...}` mapping, or
+  an omitted line are all expressible); when the key is absent, keep emitting `    verify: null`
+  exactly as today, so every existing caller is unaffected. Do not introduce a second
+  overview-building helper. The batch files' own frontmatter continues to be hand-rolled per
+  scenario, the same way the sibling `depends-on-batch-mismatch` and `verify-mixed-cwd` tests already
+  hand-roll theirs. Cover, one test function per scenario: identical plain-string
   `verify:` on both sides is clean; the overview naming a real command while the batch file carries
   `verify: null` produces exactly one finding naming that batch; two commands differing by a trailing
   clause produce one finding; `verify:` absent on one side and explicitly `null` on the other is
