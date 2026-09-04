@@ -1906,6 +1906,30 @@ def _strip_n_leading_spaces(text: str, n: int) -> str:
     return "\n".join(stripped_lines)
 
 
+def _add_n_leading_spaces(text: str, n: int, *, include_blank: bool = False) -> str:
+    """Prepend exactly ``n`` space characters to every line of ``text``.
+
+    This is the exact inverse of ``_strip_n_leading_spaces`` -- a fixed per-line add, not a
+    re-indent.
+    For each line (split via ``.splitlines()``), ``n`` space characters are prepended and the
+    lines are rejoined with ``"\\n"``.
+
+    When ``include_blank`` is ``False`` (the default), a line whose ``.strip()`` is empty is
+    emitted unchanged rather than padded: a real nested source excerpt usually has genuinely empty
+    separator lines, since editors strip trailing whitespace, so the default reproduces the true
+    source.
+    ``include_blank=True`` covers the less common case of a source that keeps whitespace-only
+    indented lines instead of collapsing them to empty ones.
+    """
+    added_lines = []
+    for line in text.splitlines():
+        if not include_blank and not line.strip():
+            added_lines.append(line)
+        else:
+            added_lines.append(" " * n + line)
+    return "\n".join(added_lines)
+
+
 def _card_edits_tokens(card_text: str) -> list[str]:
     """Return this card's own ``Edits:`` backtick tokens, in declaration order.
 
