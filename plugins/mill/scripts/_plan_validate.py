@@ -50,8 +50,8 @@ Checks performed (check keys):
     context-completeness — a card's Requirements: references a resolvable file-path-shaped backtick
         token absent from that card's own Context:/Edits:/Creates:/Deletes:/Moves:-source
     requirements-quote-indent-drift — a card's Requirements: fenced block quoting exact source text
-        that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent
-        (list-continuation-indentation bug signature)
+        that only byte-matches its own Edits: file(s) after stripping OR adding a fixed per-line
+        indent, in either direction (list-continuation-indentation bug signature)
     move-format — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
     move-source-missing — Move source does not exist on disk and is not created/relocated by an
@@ -2019,23 +2019,35 @@ def _check_requirements_quote_indent_drift(
 ) -> list[dict]:
     """
     Flag a card's Requirements: fence that only byte-matches its own Edits: file(s) after stripping
-    a fixed per-line indent.
+    or adding a fixed per-line indent.
 
     This is the list-continuation-indentation bug's exact signature: a ``Requirements:`` fence meant
-    to quote exact source text as Edit-tool ``old_string`` bait silently picks up a uniform per-line
-    indent from the surrounding Markdown list-continuation nesting, so the quoted text no longer
-    byte-matches the real source file even though it "looks right" to a human or LLM reviewer.
+    to quote exact source text as Edit-tool ``old_string`` bait silently picks up (or loses) a
+    uniform per-line indent from the surrounding Markdown list-continuation nesting, so the quoted
+    text no longer byte-matches the real source file even though it "looks right" to a human or LLM
+    reviewer.
+    Drift can go either direction: the fence may carry MORE indent than the source (over-indent, the
+    strip case) or LESS indent than the source (under-indent, the add case).
 
     For each card with a non-empty Edits: field and a Requirements: field containing at least one
     fenced code block: for each fence, if the raw (unstripped) fence content is already a literal
     substring of some resolved Edits: file's content, the fence is clean -- no error.
-    If not, search ascending strip amounts N = 1..40 (a fixed per-line leading-space strip, NOT
-    textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces) for the first N whose
-    stripped fence content IS a literal substring of some resolved Edits: file (walked in the card's
-    own Edits: declaration order, first match wins on ties).
-    The first match wins and stops the search;
-    a fence matching no N in range is an illustrative snippet showing new/desired-state code, not a
-    drifted quote, and is silently skipped -- never flagged.
+    Otherwise the strip pass runs first: search ascending strip amounts N = 1..40 (a fixed per-line
+    leading-space strip, NOT textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces)
+    for the first N whose stripped fence content IS a literal substring of some resolved Edits: file
+    (walked in the card's own Edits: declaration order, first match wins on ties).
+    The strip pass runs before the add pass because a fence cannot legitimately match both
+    directions at once, so preserving the incumbent strip-first ordering keeps every
+    currently-emitted message byte-for-byte stable.
+    Only when the strip pass finds nothing does the add pass run, over the same ascending N = 1..40
+    range: for each N, ``_add_n_leading_spaces(fence_body, n)`` (blank lines left unpadded) is tried
+    first across every resolved Edits: file in declaration order, and only if that fails is
+    ``_add_n_leading_spaces(fence_body, n, include_blank=True)`` (blank lines padded too) tried the
+    same way -- the non-blank-then-all-lines ordering matches the common case (editors strip
+    trailing whitespace from blank lines) before the less common one.
+    Either pass's first match wins and stops the search;
+    a fence matching in neither direction at any N in range is an illustrative snippet showing
+    new/desired-state code, not a drifted quote, and is silently skipped -- never flagged.
 
     Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are
     compared against (never Context:, Creates:, or other cards' files) -- those files already exist
@@ -2103,6 +2115,7 @@ def _check_requirements_quote_indent_drift(
                 ):
                     continue
 
+                matched = False
                 for n in range(1, 41):
                     stripped = _strip_n_leading_spaces(fence_body, n)
                     matched_token = None
@@ -2119,6 +2132,38 @@ def _check_requirements_quote_indent_drift(
                             "message": (
                                 f"card {card_num}'s Requirements: fence {fence_idx} "
                                 f"matches '{matched_token}' after stripping {n} "
+                                f"leading spaces per line (found N={n})"
+                            ),
+                        })
+                        matched = True
+                        break
+                if matched:
+                    continue
+
+                # The strip pass found nothing: this fence may instead be under-indented relative
+                # to its source (the opposite drift direction), so run the symmetric add pass over
+                # the same ascending N range.
+                for n in range(1, 41):
+                    matched_token = None
+                    for candidate in (
+                        _add_n_leading_spaces(fence_body, n),
+                        _add_n_leading_spaces(fence_body, n, include_blank=True),
+                    ):
+                        for token in ordered_resolved_tokens:
+                            if candidate in resolved_contents[token]:
+                                matched_token = token
+                                break
+                        if matched_token is not None:
+                            break
+                    if matched_token is not None:
+                        errors.append({
+                            "check": "requirements-quote-indent-drift",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": matched_token,
+                            "message": (
+                                f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"matches '{matched_token}' after adding {n} "
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
