@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: review-manifest-listings-full-path-clutter
 branch: hanf/review-manifest-listings-full-path-clutter
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-04T16:19:43Z'
 discussion-fix-r2  '2026-09-04T16:23:11Z'
 discussed  '2026-09-04T16:34:44Z'
 planning  '2026-09-04T16:40:21Z'
+plan-review-r1  '2026-09-04T16:45:03Z'
 ```
