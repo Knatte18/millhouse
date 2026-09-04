@@ -21,6 +21,8 @@ Checks performed (check keys):
     depends-on-unknown — (#10 check 4) depends-on entries referencing unknown batch names
     depends-on-batch-mismatch — per-batch file's depends-on disagrees with overview Batch Index
         depends-on for the same batch
+    verify-batch-mismatch — a batch's overview Batch Index verify: disagrees with that batch file's
+        own frontmatter verify: (command or cwd)
     parallel-modifies-overlap — (#10 check 5) Parallel-eligible batches both modifying the same file
         (includes Move endpoints)
     reads-not-backtick-path — (#10 check 6) Context:/Edits:/Creates: entries not in backtick-only
@@ -49,8 +51,8 @@ Checks performed (check keys):
         symbol-shaped backtick token absent from that card's own Context:/Edits:/Creates:/Deletes:/
         Moves:-source
     requirements-quote-indent-drift — a card's Requirements: fenced block quoting exact source text
-        that only byte-matches its own Edits: file(s) after stripping a fixed per-line indent
-        (list-continuation-indentation bug signature)
+        that only byte-matches its own Edits: file(s) after stripping OR adding a fixed per-line
+        indent, in either direction (list-continuation-indentation bug signature)
     move-format — Moves: sub-bullet does not match the `src` -> `dst` grammar
     move-redundant — a path is both a Move endpoint and in Creates:/Deletes: of the same batch
     move-source-missing — Move source does not exist on disk and is not created/relocated by an
@@ -1320,6 +1322,107 @@ def _check_depends_on_batch_mismatch(
 
 
 # ---------------------------------------------------------------------------
+# Check 5c — verify-batch-mismatch
+# ---------------------------------------------------------------------------
+
+def _check_verify_batch_mismatch(
+    batch_files: list[Path],
+    overview_text: str,
+    project_root: Path,
+) -> list[dict]:
+    """
+    Flag a batch whose overview Batch Index ``verify:`` disagrees with its own frontmatter ``verify:``.
+
+    Mirrors ``_check_depends_on_batch_mismatch``'s structure, but compares the ``verify:`` field
+    instead of ``depends-on:``. A malformed ``verify:`` mapping is reported by exactly one of the two
+    sides, never both:
+
+    - On the overview side, this check IS the sole reporter -- ``_check_verify_malformed_cwd``
+    inspects batch-file and overview *frontmatter* only, never Batch Index entries, so a malformed
+    ``verify:`` on an index entry would otherwise go unreported.
+    - On the batch-file side, ``_check_verify_malformed_cwd`` is already the documented sole
+    reporter, so this check silently skips a batch-side parse failure to avoid double-reporting.
+
+    Each side's raw ``cwd:`` key (the un-resolved string, not the normalizer's resolved ``Path``) is
+    compared independently of the normalized command, because both root arguments are passed as
+    ``project_root`` here -- passing the same value for both roots means ``cwd: hub`` and ``cwd:
+    git_root`` would otherwise resolve to the identical ``Path``, silently hiding a real drift between
+    the two spellings. Absent, explicit-null, and blank-string ``verify:`` all normalize to ``None``
+    through the shared normalizer, so those three spellings compare equal to one another and produce
+    no finding.
+
+    Error dict shape: ``{check, batch, card, path, message}``.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+        project_root: Root of the project;
+            passed as both the ``hub_root`` and ``git_root`` argument to
+                ``_plan_dag.parse_verify_field`` since only the command/cwd-key pair matters here,
+                never the resolved ``Path``.
+
+    Returns:
+        List of error dicts, one per batch whose two `verify:` sides disagree.
+    """
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+
+    errors: list[dict] = []
+    for entry in batches:
+        stem = Path(entry.get("file", "")).stem
+        batch_path = stem_to_path.get(stem)
+        if batch_path is None:
+            continue
+
+        try:
+            overview_command, _ = _plan_dag.parse_verify_field(entry, project_root, project_root)
+        except ValueError as exc:
+            errors.append({
+                "check": "verify-batch-mismatch",
+                "batch": entry["name"],
+                "card": None,
+                "path": None,
+                "message": f"overview Batch Index verify: is malformed: {exc}",
+            })
+            continue
+        raw_overview_verify = entry.get("verify")
+        overview_cwd_key = (
+            raw_overview_verify.get("cwd") if isinstance(raw_overview_verify, dict) else None
+        )
+
+        batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+        try:
+            batch_command, _ = _plan_dag.parse_verify_field(
+                batch_frontmatter, project_root, project_root
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+        raw_batch_verify = batch_frontmatter.get("verify")
+        batch_cwd_key = raw_batch_verify.get("cwd") if isinstance(raw_batch_verify, dict) else None
+
+        if (overview_command, overview_cwd_key) != (batch_command, batch_cwd_key):
+            errors.append({
+                "check": "verify-batch-mismatch",
+                "batch": entry["name"],
+                "card": None,
+                "path": None,
+                "message": (
+                    f"per-batch file verify: command={batch_command!r} cwd={batch_cwd_key!r} "
+                    f"disagrees with overview Batch Index "
+                    f"verify: command={overview_command!r} cwd={overview_cwd_key!r}"
+                ),
+            })
+
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Check 6 — reads-not-backtick-path
 # ---------------------------------------------------------------------------
 
@@ -1607,7 +1710,7 @@ def _is_prohibition_exempt(lowered_line: str) -> bool:
         _PROHIBITION_VERB_RE.search(lowered_line)
     )
 
-# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging.
+# Citation-marker substrings: a Requirements: sentence containing one of these (lowercased) names a file as an illustrative example or citation, not as an unlisted read dependency, so a backtick token on that line is exempt from flagging. "signature inlined" and "no file read needed" additionally cover the case where a Requirements: line inlines a cited symbol's full signature and therefore needs no file read, which is why naming the defining file on that line is not an unlisted read dependency.
 _CITATION_MARKERS = (
     "as an example",
     "as examples",
@@ -1616,6 +1719,8 @@ _CITATION_MARKERS = (
     "such as",
     "cited as",
     "citing",
+    "signature inlined",
+    "no file read needed",
 )
 
 # A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
@@ -1907,6 +2012,9 @@ def _check_context_completeness(
     act on, not an unlisted dependency.
     2. Citation-marker sentences (e.g. naming `x.py` as an example) cite a file for illustration,
     not as an unlisted read dependency.
+    This also covers a Requirements: line that inlines a cited symbol's full signature (e.g.
+    "signature inlined" or "no file read needed") -- naming the defining file on that line is not
+    an unlisted read dependency, since no file read is needed to act on the inlined signature.
     3. A token matching the plan-wide ``moves_sources`` set is exempt in any later card's
     ``Requirements:``, not just the declaring card's own -- mirrors how ``creates_union``/
     ``deletes_union`` are already plan-wide.
@@ -2065,6 +2173,30 @@ def _strip_n_leading_spaces(text: str, n: int) -> str:
     return "\n".join(stripped_lines)
 
 
+def _add_n_leading_spaces(text: str, n: int, *, include_blank: bool = False) -> str:
+    """Prepend exactly ``n`` space characters to every line of ``text``.
+
+    This is the exact inverse of ``_strip_n_leading_spaces`` -- a fixed per-line add, not a
+    re-indent.
+    For each line (split via ``.splitlines()``), ``n`` space characters are prepended and the
+    lines are rejoined with ``"\\n"``.
+
+    When ``include_blank`` is ``False`` (the default), a line whose ``.strip()`` is empty is
+    emitted unchanged rather than padded: a real nested source excerpt usually has genuinely empty
+    separator lines, since editors strip trailing whitespace, so the default reproduces the true
+    source.
+    ``include_blank=True`` covers the less common case of a source that keeps whitespace-only
+    indented lines instead of collapsing them to empty ones.
+    """
+    added_lines = []
+    for line in text.splitlines():
+        if not include_blank and not line.strip():
+            added_lines.append(line)
+        else:
+            added_lines.append(" " * n + line)
+    return "\n".join(added_lines)
+
+
 def _card_edits_tokens(card_text: str) -> list[str]:
     """Return this card's own ``Edits:`` backtick tokens, in declaration order.
 
@@ -2154,23 +2286,35 @@ def _check_requirements_quote_indent_drift(
 ) -> list[dict]:
     """
     Flag a card's Requirements: fence that only byte-matches its own Edits: file(s) after stripping
-    a fixed per-line indent.
+    or adding a fixed per-line indent.
 
     This is the list-continuation-indentation bug's exact signature: a ``Requirements:`` fence meant
-    to quote exact source text as Edit-tool ``old_string`` bait silently picks up a uniform per-line
-    indent from the surrounding Markdown list-continuation nesting, so the quoted text no longer
-    byte-matches the real source file even though it "looks right" to a human or LLM reviewer.
+    to quote exact source text as Edit-tool ``old_string`` bait silently picks up (or loses) a
+    uniform per-line indent from the surrounding Markdown list-continuation nesting, so the quoted
+    text no longer byte-matches the real source file even though it "looks right" to a human or LLM
+    reviewer.
+    Drift can go either direction: the fence may carry MORE indent than the source (over-indent, the
+    strip case) or LESS indent than the source (under-indent, the add case).
 
     For each card with a non-empty Edits: field and a Requirements: field containing at least one
     fenced code block: for each fence, if the raw (unstripped) fence content is already a literal
     substring of some resolved Edits: file's content, the fence is clean -- no error.
-    If not, search ascending strip amounts N = 1..40 (a fixed per-line leading-space strip, NOT
-    textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces) for the first N whose
-    stripped fence content IS a literal substring of some resolved Edits: file (walked in the card's
-    own Edits: declaration order, first match wins on ties).
-    The first match wins and stops the search;
-    a fence matching no N in range is an illustrative snippet showing new/desired-state code, not a
-    drifted quote, and is silently skipped -- never flagged.
+    Otherwise the strip pass runs first: search ascending strip amounts N = 1..40 (a fixed per-line
+    leading-space strip, NOT textwrap.dedent's common-minimum-strip -- see _strip_n_leading_spaces)
+    for the first N whose stripped fence content IS a literal substring of some resolved Edits: file
+    (walked in the card's own Edits: declaration order, first match wins on ties).
+    The strip pass runs before the add pass because a fence cannot legitimately match both
+    directions at once, so preserving the incumbent strip-first ordering keeps every
+    currently-emitted message byte-for-byte stable.
+    Only when the strip pass finds nothing does the add pass run, over the same ascending N = 1..40
+    range: for each N, ``_add_n_leading_spaces(fence_body, n)`` (blank lines left unpadded) is tried
+    first across every resolved Edits: file in declaration order, and only if that fails is
+    ``_add_n_leading_spaces(fence_body, n, include_blank=True)`` (blank lines padded too) tried the
+    same way -- the non-blank-then-all-lines ordering matches the common case (editors strip
+    trailing whitespace from blank lines) before the less common one.
+    Either pass's first match wins and stops the search;
+    a fence matching in neither direction at any N in range is an illustrative snippet showing
+    new/desired-state code, not a drifted quote, and is silently skipped -- never flagged.
 
     Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are
     compared against (never Context:, Creates:, or other cards' files) -- those files already exist
@@ -2238,6 +2382,7 @@ def _check_requirements_quote_indent_drift(
                 ):
                     continue
 
+                matched = False
                 for n in range(1, 41):
                     stripped = _strip_n_leading_spaces(fence_body, n)
                     matched_token = None
@@ -2254,6 +2399,38 @@ def _check_requirements_quote_indent_drift(
                             "message": (
                                 f"card {card_num}'s Requirements: fence {fence_idx} "
                                 f"matches '{matched_token}' after stripping {n} "
+                                f"leading spaces per line (found N={n})"
+                            ),
+                        })
+                        matched = True
+                        break
+                if matched:
+                    continue
+
+                # The strip pass found nothing: this fence may instead be under-indented relative
+                # to its source (the opposite drift direction), so run the symmetric add pass over
+                # the same ascending N range.
+                for n in range(1, 41):
+                    matched_token = None
+                    for candidate in (
+                        _add_n_leading_spaces(fence_body, n),
+                        _add_n_leading_spaces(fence_body, n, include_blank=True),
+                    ):
+                        for token in ordered_resolved_tokens:
+                            if candidate in resolved_contents[token]:
+                                matched_token = token
+                                break
+                        if matched_token is not None:
+                            break
+                    if matched_token is not None:
+                        errors.append({
+                            "check": "requirements-quote-indent-drift",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": matched_token,
+                            "message": (
+                                f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"matches '{matched_token}' after adding {n} "
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
@@ -3180,8 +3357,8 @@ def run(
     plugin-manifest-context-missing, verify-not-isolated, verify-full-suite, verify-malformed-cwd,
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
-    move-source-missing, move-target-collision, move-mechanic-missing), and
-    cross-batch-creates-no-depends-on.
+    move-source-missing, move-target-collision, move-mechanic-missing),
+    cross-batch-creates-no-depends-on, and verify-batch-mismatch.
 
 
     Args:
@@ -3243,6 +3420,7 @@ def run(
     errors.extend(_check_card_numbering(batch_files))
     errors.extend(_check_depends_on_unknown(overview_text, overview_path))
     errors.extend(_check_depends_on_batch_mismatch(batch_files, overview_text))
+    errors.extend(_check_verify_batch_mismatch(batch_files, overview_text, project_root))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
