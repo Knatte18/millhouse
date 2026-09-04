@@ -39,7 +39,9 @@ batches:
     commit_sha: 505cd83ada453ba43759fece1100cf988aecea0f
     verify_baseline_failures: []
   - name: structural-exemption-tests
-    state: pending
+    state: running
+    implementer_session: b7c3b2d1-4bd4-4331-9c67-4089e9a077ea
+    start_sha: f4de74d1780a95fc0cdb62ba465e3762ce535db9
     verify_baseline_failures: []
   - name: reviewer-and-docs-sync
     state: pending
