@@ -32,11 +32,17 @@ implementing  '2026-09-04T17:01:56Z'
 ```yaml
 batches:
   - name: validator-exemptions
-    state: pending
+    state: running
+    implementer_session: e889f65a-32a3-42a3-b6ea-918bbdb27951
+    start_sha: 0b98f5850aa1ace15f7edbbb676de31b6d9b7d87
+    verify_baseline_failures: []
   - name: structural-exemption-tests
     state: pending
+    verify_baseline_failures: []
   - name: reviewer-and-docs-sync
     state: pending
+    verify_baseline_failures: []
   - name: lexical-exemption-tests
     state: pending
+    verify_baseline_failures: []
 ```
