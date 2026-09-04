@@ -46,7 +46,9 @@ batches:
     commit_sha: f52804ad3577f34035e1c58164d67f8561d4de27
     verify_baseline_failures: []
   - name: reviewer-and-docs-sync
-    state: pending
+    state: running
+    implementer_session: 3cd9cba9-92a0-43cc-9447-76f70cdc24fb
+    start_sha: 113f4a31346979d1999d6af73b34e68352653632
     verify_baseline_failures: []
   - name: lexical-exemption-tests
     state: pending
