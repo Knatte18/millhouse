@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-review-hygiene-fixes
 slug: mill-start-discussion-review-timeline-and-orch-review-hygiene
 branch: hanf/mill-start-discussion-review-timeline-and-orch-review-hygiene
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-04T10:19:31Z'
 plan-review-r2  '2026-09-04T10:23:23Z'
 planned  '2026-09-04T10:23:41Z'
 implementing  '2026-09-04T12:33:21Z'
+approved-review-hygiene-fixes  '2026-09-04T12:36:53Z'
 ```
 
 ## Batches
@@ -30,8 +31,9 @@ implementing  '2026-09-04T12:33:21Z'
 ```yaml
 batches:
   - name: review-hygiene-fixes
-    state: running
+    state: approved
     implementer_session: 3c47873a-1013-4c0c-9782-144208249c53
     start_sha: 8f4150d0b906f152566740f3d19bb9c044944bcc
+    commit_sha: 13c5df3d1ae4aac452f89ec0984990940d3252ca
     verify_baseline_failures: []
 ```
