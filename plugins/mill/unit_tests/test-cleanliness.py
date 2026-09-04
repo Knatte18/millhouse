@@ -977,6 +977,89 @@ def main() -> int:
     except Exception as exc:
         failures.append(f"FAIL: clean_ephemeral_scope_violations nested layout ({type(exc).__name__}): {exc}")
 
+    # CESV-11.
+    # clean_ephemeral_scope_violations: a .pyc file nested under a __pycache__ directory is removed and reported -- matches #975's real 13-file scenario (pygit2's status() reports untracked files individually, unlike plain git status --porcelain's directory collapsing).
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            pycache_dir = tmp_path / "foo" / "__pycache__"
+            pycache_dir.mkdir(parents=True, exist_ok=True)
+            pyc_file = pycache_dir / "bar.cpython-311.pyc"
+            pyc_file.write_bytes(b"")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["foo/__pycache__/bar.cpython-311.pyc"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
+            assert removed == ["foo/__pycache__/bar.cpython-311.pyc"], (
+                f"expected ['foo/__pycache__/bar.cpython-311.pyc'] in removed, got {removed!r}"
+            )
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not pyc_file.exists(), "nested .pyc file should have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: nested __pycache__/.pyc file allowlisted and removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations __pycache__ nested .pyc: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations __pycache__ nested .pyc ({type(exc).__name__}): {exc}")
+
+    # CESV-12.
+    # clean_ephemeral_scope_violations: a bare .pyc file with no __pycache__ ancestor is removed and reported -- confirms the .pyc-suffix clause works independently of the __pycache__-path-component clause.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            pyc_file = tmp_path / "something.pyc"
+            pyc_file.write_bytes(b"")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["something.pyc"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
+            assert removed == ["something.pyc"], f"expected ['something.pyc'] in removed, got {removed!r}"
+            assert blocking == [], f"expected [] in blocking, got {blocking!r}"
+            assert not pyc_file.exists(), "bare .pyc file should have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: bare .pyc file (no __pycache__ ancestor) allowlisted and removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare .pyc: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations bare .pyc ({type(exc).__name__}): {exc}")
+
+    # CESV-13 (regression guard).
+    # clean_ephemeral_scope_violations: a non-pycache, non-.pyc Python source file is still reported as blocking and NOT removed -- confirms the new clauses do not over-broadly allowlist arbitrary Python files, only .pyc artifacts and __pycache__ contents.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            subprocess.run(
+                ["git", "init", str(tmp_path)],
+                check=True,
+                capture_output=True,
+            )
+            (tmp_path / "foo").mkdir(parents=True, exist_ok=True)
+            py_file = tmp_path / "foo" / "scratch.py"
+            py_file.write_text("print('hi')", encoding="utf-8")
+            with unittest.mock.patch(
+                "_cleanliness.compute_scope_violations",
+                return_value=["foo/scratch.py"]
+            ):
+                removed, blocking = clean_ephemeral_scope_violations(tmp_path, tmp_path)
+            assert removed == [], f"expected [] in removed, got {removed!r}"
+            assert blocking == ["foo/scratch.py"], f"expected ['foo/scratch.py'] in blocking, got {blocking!r}"
+            assert py_file.exists(), "scratch.py should NOT have been deleted from disk"
+        print("PASS: clean_ephemeral_scope_violations: non-pycache .py file still blocking, not removed")
+    except AssertionError as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations non-pycache .py regression: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: clean_ephemeral_scope_violations non-pycache .py regression ({type(exc).__name__}): {exc}")
+
     # CRLF-1.
     # capture_snapshot writes LF-only bytes (no \r\n) on disk This is the regression test for the Windows text-mode CRLF translation bug: without newline="" in write_text, Python rewrites \n as \r\n on Windows, causing the snapshot itself to appear as a dirty file in git status.
     try:

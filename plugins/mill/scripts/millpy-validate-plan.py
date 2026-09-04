@@ -48,7 +48,13 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_config(project_root, mill_dir)
         slug = find_active_slug(project_root, wiki_root, cfg)
         plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-        errors = _plan_validate.run(plan_dir, project_root, wiki_root=wiki_root, skip_checks=frozenset(args.skip_checks))
+        errors = _plan_validate.run(
+            plan_dir,
+            project_root,
+            wiki_root=wiki_root,
+            skip_checks=frozenset(args.skip_checks),
+            done_gate=cfg.get("pipeline", {}).get("done_gate"),
+        )
     except ReviewError as exc:
         print(str(exc), file=sys.stderr)
         return 1

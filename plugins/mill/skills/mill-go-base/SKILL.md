@@ -389,7 +389,13 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       ```
       SendMessage(to: <agentId>, "Finish any remaining cards in this batch, run verify, then emit the required JSON report as your final line.")
       ```
-      Wait for the resulting `<task-notification>`, write its message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
+      Wait for the resulting `<task-notification>`.
+      **Liveness probe:** if that notification is non-clean-terminal in the same sense step 3(b)/(c) already define (the `<status>` tag is present and its value is not `completed`, OR the value is `completed` but the message contains no valid JSON `status` report) — call `TaskOutput(task_id: <agentId>, block: false)` using the same `agentId` retained from the original dispatch (per step 2's existing "Record the `agentId`..." documentation).
+      - If the probe reports the agent is still running: take no action this turn (no `.out.md` write, no finalize call) and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as step 3(c)'s probe already does — this wait is unbounded, matching that existing contract; no bounded re-check loop is added here.
+      - If the probe reports the agent is no longer running, or the probe call itself errors: proceed as documented below.
+      If the notification IS clean-terminal (status `completed` with a valid JSON report) on first receipt, the probe never fires at all — proceed straight to the step below; this changes nothing about the already-working clean-completion path.
+
+      Write the notification's message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
       The warm-`SendMessage` path **bypasses prepare entirely**, so status.md's original `start_sha` and `implementer_session` are untouched — finalize's completeness recount runs from the original baseline and counts every content commit (the partial ones plus any new ones).
       Re-capturing `start_sha` here would under-count a now-finished batch and loop `incomplete` forever.
    2. **`--resume-incomplete` fallback (cold re-dispatch).**
@@ -683,22 +689,42 @@ If `blocking_paths` is non-empty (a path could not be confidently classified aga
 
 If `blocking_paths` is empty (whether or not anything was removed), fall through unchanged into the dirt-computation flow below.
 
-After a `success` report: Before the dirt computation, resolve the parent branch and revert out-of-scope drift.
+After a `success` report: Before the dirt computation, resolve the parent branch, verify it is still live, and revert out-of-scope drift.
 
 Inline Python (in step 2b, before compute_new_dirt):
 ```python
 import _parent_branch, _cleanliness
 parent_branch = _parent_branch.resolve(status_path, interactive=False)
+parent_is_live = _parent_branch.check_liveness(parent_branch, git_root)
+```
+
+`signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
+`signature: _parent_branch.check_liveness(branch: str, git_root: Path) -> bool`
+
+If `parent_is_live` is `False` (the recorded parent branch no longer exists -- e.g. it was squash-merged and its branch deleted): call `_parent_branch.resolve_dead_parent(parent_branch, git_root, cfg)`.
+
+`signature: _parent_branch.resolve_dead_parent(dead_branch: str, git_root: Path, cfg: dict, *, max_hops: int = 10) -> dict`
+
+- If the returned dict's `outcome` is `"resolved"`: auto-rebind non-interactively -- `_status.update_field(status_path, "parent", resolved_branch)` (reading `resolved_branch` from the returned dict's `branch` field) plus `_status.append_phase(status_path, "self-resolved-dead-parent", _timestamp.now_utc_iso())`, folded into one commit: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: rebind dead parent branch for <batch_name>"` (no push -- matches this section's existing no-push-mid-batch convention). Set `parent_branch = resolved_branch` for the remainder of this gate, then continue below to the out-of-scope-drift computation.
+- If the returned dict's `outcome` is `"fallback"` or `"cycle"`: route through this section's own existing batch-blocked mechanism --
+  - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+  - `_status.set_batch_field(status_path, batch_name, "blocked_reason", <fallback-text> | <cycle-text>)` -- for `fallback`, use `f"parent branch {parent_branch} no longer exists; no archive-tag chain resolved a successor ({reason})"` (reading `reason` from the returned dict's `reason` field); for `cycle`, use `"parent branch archive-tag chain walk hit its hop cap without resolving a live parent"`
+  - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+  - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — parent branch dead, no resolution"`
+  - Go to *Blocked* (its existing `_notify.notify` + builder-lock release already cover this halt -- do not add a second, redundant release/notify call here).
+
+If `parent_is_live` is `True`, or after a `"resolved"` auto-rebind above (using the rebound `parent_branch`), compute out-of-scope drift:
+
+```python
 reverted_paths, remaining_in_scope_lines = _cleanliness.revert_out_of_scope_drift(
     worktree_root, task_dir, parent_branch, git_root
 )
 in_scope_dirt = remaining_in_scope_lines
 ```
 
-`signature: _parent_branch.resolve(status_path: Path, *, interactive: bool = True) -> str`
 `signature: _cleanliness.revert_out_of_scope_drift(worktree: Path, task_dir: Path, parent_branch: str, git_root: Path | None = None) -> tuple[list[str], list[str] | None]`
 
-If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists -- so `reverted_paths` is `[]` and nothing was safely revertable):
+If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent branch ref no longer exists -- so `reverted_paths` is `[]` and nothing was safely revertable; this can also be the "resolved"-outcome retry above still failing to resolve a diff -- fall through unchanged, do not loop further):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "parent diff unresolvable -- cannot determine in-scope drift")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`

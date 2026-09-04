@@ -139,6 +139,18 @@ def test_plan_criteria_bullets_present() -> None:
     print("PASS test_plan_criteria_bullets_present")
 
 
+def test_plan_mechanism_claim_rule_present() -> None:
+    """The mechanism-claim source-verification rule (#949) is present verbatim in both
+    plan-review templates' raw source.
+"""
+    for name in ["review-plan-holistic", "review-plan-batch"]:
+        source = _read_template_source(name)
+        assert "Mechanism claims must be source-verified." in source, (
+            f"{name} missing the mechanism-claim-verification rule"
+        )
+    print("PASS test_plan_mechanism_claim_rule_present")
+
+
 def test_no_output_file_token() -> None:
     """No template names the report destination via an <OUTPUT_FILE> token."""
     for name in TEMPLATE_NAMES:
@@ -200,6 +212,7 @@ def main() -> int:
         test_deleted_prose_stays_deleted,
         test_kept_prose_stays_kept,
         test_plan_criteria_bullets_present,
+        test_plan_mechanism_claim_rule_present,
         test_no_output_file_token,
         test_unified_vocabulary_and_class_taxonomy,
     ]
