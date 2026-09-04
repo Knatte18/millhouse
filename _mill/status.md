@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-verify-command-validation-bugs
 branch: hanf/plan-validate-verify-command-validation-bugs
 plan: _mill/plan
@@ -23,4 +23,17 @@ plan-fix-r1  '2026-09-04T08:26:02Z'
 plan-review-r2  '2026-09-04T08:32:36Z'
 plan-fix-r2  '2026-09-04T08:32:47Z'
 planned  '2026-09-04T08:32:59Z'
+implementing  '2026-09-04T08:33:23Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: verify-full-suite-check-fixes
+    state: pending
+  - name: verify-full-suite-unit-tests
+    state: pending
+  - name: docs-and-reviewer-guardrail
+    state: pending
 ```
