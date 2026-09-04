@@ -30,5 +30,8 @@ implementing  '2026-09-04T12:33:21Z'
 ```yaml
 batches:
   - name: review-hygiene-fixes
-    state: pending
+    state: running
+    implementer_session: 3c47873a-1013-4c0c-9782-144208249c53
+    start_sha: 8f4150d0b906f152566740f3d19bb9c044944bcc
+    verify_baseline_failures: []
 ```
