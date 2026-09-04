@@ -1,7 +1,7 @@
 ---
 name: mill-plan
 description: In a spawned worktree with a committed discussion.md, autonomously write a batch-based implementation plan, self-review it via mill-review-plan, and hand off to mill-go.
-argument-hint: "[--revise]"
+argument-hint: "[--revise|--approve]"
 ---
 
 # mill-plan
@@ -21,11 +21,12 @@ this skill is loaded defensively in case a future addition needs its numbered-op
 Read `$ARGUMENTS`. Token-walk left-to-right:
 
 - `--revise` — set a local `revise_requested = True`. May appear at most once.
+- `--approve` — set a local `approve_requested = True`. May appear at most once. Halt with a usage error if both `--revise` and `--approve` appear anywhere in `$ARGUMENTS` — the two are mutually exclusive.
 - Any other token: halt with usage hint:
 
   > Unknown argument: `<token>` in `$ARGUMENTS`
   >
-  > usage: `/mill-plan [--revise]`
+  > usage: `/mill-plan [--revise|--approve]`
 
 Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` itself, since `status_path` isn't resolved until "Path Setup" (which runs after Entry steps 1-3) and `plan_dir` isn't derived during Entry at all today; the actual `--revise` validation is Entry step 4's new pre-check row, which already has both values in scope.
 
