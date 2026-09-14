@@ -13,9 +13,9 @@ Your job is to turn `discussion.md` into an implementation plan detailed enough 
 
 ## Entry
 
-**Step 0: Load `mill:conversation`.**
-Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
-this skill is loaded defensively in case a future addition needs its numbered-options convention.
+**Step 0: Load `mill:prose`, then `mill:conversation`.**
+Load both skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `mill:conversation` builds on `mill:prose`, so load it first. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
+these skills are loaded defensively in case a future addition needs `mill:conversation`'s numbered-options convention or `mill:prose`'s writing rules.
 
 **Step 0.5 — Parse arguments.**
 Read `$ARGUMENTS`. Token-walk left-to-right:

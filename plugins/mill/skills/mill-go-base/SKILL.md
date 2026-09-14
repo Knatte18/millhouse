@@ -45,9 +45,9 @@ the shell expands it at runtime.
 The full absolute path must never appear in a command string.
 `${CLAUDE_PLUGIN_ROOT}` substitution into a literal path happens entirely inside the external Claude Code harness's Skill-tool-loading mechanism, not in any script or template in this repo — a mismatch between the SKILL.md-delivered literal and the real `$CLAUDE_PLUGIN_ROOT` environment variable is a harness-side rendering issue, not something fixable by editing this file.
 
-**Step 0b: Load `mill:conversation`.**
-Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
-this skill is loaded defensively in case a future addition needs its numbered-options convention.
+**Step 0b: Load `mill:prose`, then `mill:conversation`.**
+Load both skills via the Skill tool, unconditionally, immediately after Step 0 and before any other Entry step or phase; `mill:conversation` builds on `mill:prose`, so load it first. mill-go no longer surfaces any operator-facing prompt (the former `### Stuck escalation` prompts and the holistic-rounds-exhausted prompt are now unconditional self-resolve-then-escalate or halt paths — see `### Stuck escalation` and `plugins/mill/skills/mill-go-base/holistic-review.md`);
+these skills are loaded defensively in case a future addition needs `mill:conversation`'s numbered-options convention or `mill:prose`'s writing rules.
 
 1. Resolve `git_root` and `wiki_path` together: `git_root = _paths.resolve_git_root()`, then `wiki_path = _paths.resolve_wiki_path(git_root)` (reusing the now-bound `git_root` instead of calling `_paths.resolve_git_root()` a second time).
 2. Load config — load `mill-config.yaml` from the hub root, merged with `.millhouse/config.local.yaml`, via `_review_common.load_config(_paths.resolve_hub_path(), _paths.resolve_hub_path() / ".millhouse")`.

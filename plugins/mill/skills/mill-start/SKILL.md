@@ -78,8 +78,8 @@ Round 1 under `--orch` is a human substitute, not the automated reviewer `min_ro
 
 ## Entry
 
-**Step 0: Load `mill:conversation`.**
-Load the `mill:conversation` skill via the Skill tool, unconditionally, immediately — before any other Entry step or phase.
+**Step 0: Load `mill:prose`, then `mill:conversation`.**
+Load both skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `mill:conversation` builds on `mill:prose`, so load it first.
 Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before the first prompt can be built.
 
 1. Resolve and bind the path variables:

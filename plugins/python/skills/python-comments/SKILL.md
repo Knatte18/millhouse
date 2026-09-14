@@ -136,7 +136,7 @@ df = df[df['price_inc_debt'] != 0]
 Raw Python docstrings preserve literal newlines, so tools like `help()`, `pydoc`, and IDE tooltips display sentence-per-line text as short lines rather than reflowing it into one paragraph.
 This is a display difference only — the text stays fully readable,
 and the addressing/diff-locality benefit holds regardless of how it renders.
-See the `code-comments` skill for the full line-wrap rule.
+See the `prose` skill for the full line-wrap rule.
 
 ### Good vs bad examples
 

@@ -41,7 +41,7 @@ namespace Checkout
 ## Line-wrap style
 
 XML-doc tooling collapses consecutive `///` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
-See the `code-comments` skill for the full line-wrap rule.
+See the `prose` skill for the full line-wrap rule.
 
 **Bad example:**
 

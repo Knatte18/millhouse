@@ -25,6 +25,7 @@ Use the appropriate skill based on the current activity:
 | When writing or reviewing tests | `@mill:testing` (+ language-specific `{lang}-testing`) |
 | For language-specific build, test, or comments | Detect language, then use `@{lang}:{lang}-*` (see below) |
 | For all git operations | `@mill:git-workflow` |
+| For writing style — any text output | `@mill:prose` |
 | For response style guidelines | `@mill:conversation` |
 
 ---

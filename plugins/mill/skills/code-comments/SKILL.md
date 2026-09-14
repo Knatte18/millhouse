@@ -7,6 +7,8 @@ description: Language-agnostic code comment and documentation rules. Use when wr
 
 Guidelines for code comments and documentation.
 Language-agnostic — each language's own `{lang}-comments` skill covers syntax and mechanics on top of this.
+Covers comment *content*;
+see `prose` for how to write it — terse, no padding, no empty intensifiers, semantic line breaks.
 
 ---
 
@@ -42,17 +44,9 @@ Comments go on their own line, above the code they describe — never at the end
 An aligned end-of-line comment in a grouped block forces every sibling line to realign (and shows up in the diff) whenever one identifier's length changes;
 an above-line comment avoids that.
 
-## Line-wrap style — semantic line breaks, not fixed-column wrapping
+## Line-wrap style
 
-Do not hard-wrap a multi-line comment at a fixed column.
-Write one sentence per line instead — a semantic line break — so a diff or review citation lands on the sentence that changed, not the whole comment block.
-Break also inside a long sentence, at an internal independent-clause boundary: a comma followed by a coordinating conjunction ("but", "and", "or"),
-or a semicolon, where what follows has its own subject and verb.
-A comma followed by a coordinating conjunction that joins a list item or a compound predicate does not trigger a break.
-
-When sentence-ending punctuation is ambiguous — for example a period inside a URL, or an abbreviation like "e.g." or "etc." — do not force a break there.
-Readability wins over mechanical rule compliance in that edge case.
-
+See `prose`'s Line-breaks rule — semantic line breaks, never fixed-column hard-wrap, applied here to multi-line comments and docstrings.
 See the per-language skill for how that language's tooling renders consecutive comment lines.
 
 ## Prohibited patterns

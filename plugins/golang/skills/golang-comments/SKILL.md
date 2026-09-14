@@ -175,7 +175,7 @@ func (b *Buffer) Write(p []byte) (int, error) {
 ## Line-wrap style
 
 Godoc collapses consecutive `//` comment lines into one rendered paragraph, the same way CommonMark does for markdown, so a semantic line break is invisible to a reader of the rendered doc.
-See the `code-comments` skill for the full line-wrap rule.
+See the `prose` skill for the full line-wrap rule.
 
 **Bad example:**
 
