@@ -55,7 +55,7 @@ batches:
   - name: agent-dispatch-liveness
     state: running
     implementer_session: b8fbadb8-5f12-41e1-acfc-4ba4c99fbbaf
-    start_sha: 7b51cf13ac7440379e8dd486585dee5659941c6b
+    start_sha: 257b94723ece8d308fd6bdc634696c262ecef80e
     verify_baseline_failures: []
     self_resolve_remint_at: '2026-09-18T19:21:21Z'
   - name: handoff-worktree-guard
