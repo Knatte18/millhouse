@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-status-helpers-core
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -31,6 +31,7 @@ plan-fix-r5  '2026-09-18T19:03:01Z'
 plan-review-r6  '2026-09-18T19:07:45Z'
 planned  '2026-09-18T19:08:11Z'
 implementing  '2026-09-18T19:09:55Z'
+approved-status-helpers-core  '2026-09-18T19:14:15Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ implementing  '2026-09-18T19:09:55Z'
 ```yaml
 batches:
   - name: status-helpers-core
-    state: running
+    state: approved
     implementer_session: 3c6d481d-1664-45c5-b05b-b7ac20327428
     start_sha: 343e489ece58bda77d420270cf2390c7452e87f5
+    commit_sha: 5f977af1218b649faf7494d563e8ccdda749bb98
     verify_baseline_failures: []
   - name: status-helpers-baseline
     state: pending
