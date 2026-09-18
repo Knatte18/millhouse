@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: review-cap-auto-approve
 branch: hanf/review-cap-auto-approve
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r2  '2026-09-18T17:52:46Z'
 discussed  '2026-09-18T17:52:46Z'
 planning  '2026-09-18T17:57:34Z'
 plan-review-r1  '2026-09-18T18:02:21Z'
+plan-fix-r1  '2026-09-18T18:04:01Z'
 ```

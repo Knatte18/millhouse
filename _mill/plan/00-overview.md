@@ -3,7 +3,7 @@
 ```yaml
 task: "Auto-approve on review-round cap"
 slug: review-cap-auto-approve
-approved: false
+approved: true
 started: "20260918-175506"
 parent: main
 root: ""
@@ -34,7 +34,7 @@ batches:
   - number: 4
     name: mill-go-base-holistic-auto-approve-wiring
     file: 04-mill-go-base-holistic-auto-approve-wiring.md
-    depends-on: [1]
+    depends-on: [1, 3]
     verify: null
 ```
 

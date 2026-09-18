@@ -6,7 +6,7 @@ batch: "mill-go-base-holistic-auto-approve-wiring"
 number: 4
 cards: 2
 verify: null
-depends-on: [1]
+depends-on: [1, 3]
 ```
 
 ## Batch Scope
@@ -20,10 +20,15 @@ Wires the new `roles.code-review.holistic.auto_approve_on_cap` config key (added
 - **Context:** none
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/holistic-review.md`
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Near the top of the file, immediately after the existing line `` `min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`. `` (which itself follows `` `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`. ``, both preceding the "Loop variable `H` starts at 1." sentence), add a new line: `` `auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap", False)`. `` Do not change the "Convergence gate (min_rounds + demoted predicate)" section that follows — untouched by this task (see `_mill/discussion.md`'s "This flag never touches the `min_rounds`/demoted-predicate convergence gate" Decision).
+- **Requirements:** Two edits.
+
+  1. In `plugins/mill/skills/mill-go-base/holistic-review.md`, near the top of the file, immediately after the existing line `` `min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`. `` (which itself follows `` `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`. ``, both preceding the "Loop variable `H` starts at 1." sentence), add a new line: `` `auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap", False)`. `` Do not change the "Convergence gate (min_rounds + demoted predicate)" section that follows — untouched by this task (see `_mill/discussion.md`'s "This flag never touches the `min_rounds`/demoted-predicate convergence gate" Decision).
+
+  2. In `plugins/mill/skills/mill-go-base/SKILL.md`, `## Entry` step 2's "Read these keys:" bulleted inventory, immediately after the existing bullet `` - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`. ``, add a new bullet: `` - `roles.code-review.holistic.auto_approve_on_cap` — when `true`, a round-cap exhausted with `REQUEST_CHANGES` still returned is treated as an implicit approval instead of a halt (default `false` when absent). See step 7 "Rounds exhausted" in `plugins/mill/skills/mill-go-base/holistic-review.md`. `` This is an inventory-list-only addition — no named local variable is bound at Entry itself, consistent with the Shared Decision "config key shape"'s "no separate Entry-step variable binding for mill-go-base." This batch depends on batch 3 (see `depends-on:` in this file's frontmatter and the overview's Batch Index), so batch 3's own new bullet (`roles.code-review.batch.auto_approve_on_cap`) is already present immediately above this insertion point when this card runs — insert this bullet immediately after it, preserving both.
 - **Commit:** `mill-go-base: read auto_approve_on_cap config key in holistic Code Review loop`
 
 ### Card 9: Wire `auto_approve_on_cap` into step 7's "Rounds exhausted"
