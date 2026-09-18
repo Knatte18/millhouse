@@ -121,6 +121,18 @@ these skills are loaded defensively in case a future addition needs `mill:conver
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
    | any other | surface + halt |
 
+**`blocked`-row halt message fallback.** The top-level `blocked_reason` read above is populated only by `_status.set_blocked`-based task-level halts (e.g. a discussion-review or plan-review halt) — when it IS present, the halt message uses it exactly as written, unchanged. Every batch-level blocking call site in this file's own `### Stuck escalation` and Handoff-gate sections (e.g. the cleanliness gate, the scope-violations gate, the "review rounds exhausted" path) instead calls `_status.set_batch_field(status_path, batch_name, "blocked_reason", ...)` and `_status.append_phase(status_path, "blocked", ...)` directly, never `_status.set_blocked` — so the task-level top-yaml `blocked_reason:` field is never populated for these, the most common, block reasons, and the top-level read above returns empty/`None`. When that happens, call `_status.read_batches(status_path)` and scan for the entry whose `state == "blocked"`; if found, surface THAT entry's own `blocked_reason` field (plus its batch `name`) in the halt message instead of an empty string.
+
+### Entry: resuming a blocked batch after external fix
+
+This is the documented recovery path for a `blocked` batch entry (see the fallback above) that the operator has fixed externally — for example, by hand-editing a file the implementer got wrong, or resolving an infrastructure issue that made a worker die. It is a deliberate, explicit operator action: re-running `/mill-go` after confirming the external fix landed, never an automatic on-restart resume. `resume_batch` is only ever invoked by this documented procedure, never called speculatively.
+
+1. Call `_status.read_batches(status_path)` and locate the entry whose `state == "blocked"`. If none is found, this is a task-level (`_status.set_blocked`-based) halt, not a batch-level one — this procedure does not apply; the operator must resolve the underlying cause named in the halt message and there is no batch to resume via `resume_batch`.
+2. Decide `preserve_start_sha`: inspect the located batch's `commit_sha` field (and/or run `git -C <worktree> log --oneline <start_sha>..HEAD -- <files the batch's cards touch>` if `commit_sha` alone is ambiguous) to determine whether any of this batch's cards already committed. If yes (partial progress exists), `preserve_start_sha = True`; if no commits exist yet, `preserve_start_sha = False`.
+3. Call `_status.resume_batch(status_path, batch_name, timestamp=_timestamp.now_utc_iso(), preserve_start_sha=<decided above>)`.
+4. Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: resume {batch_name} after external fix"`. Push.
+5. Re-run `/mill-go`. The phase is now `implementing` with the resumed batch at `state: pending` and no other batch entry non-terminal, so the Entry phase gate's existing "Mid-execution phase-gate widening" → `## Resume` (`resume.md`) routing picks it up unchanged — no further edit needed to that routing logic.
+
 ### Mid-execution phase-gate widening
 
 Whenever the phase-table lookup above lands on the widened `implementing`/`reviewing`/`fixing` row, compute the match to determine which of the seven branches fired:
