@@ -49,7 +49,7 @@ batches:
     name: handoff-worktree-guard
     file: 07-handoff-worktree-guard.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/handoff.md').read_text(encoding='utf-8'); assert 'already cleaned up' in t, 'missing existence-check-and-skip marker'; assert 'worktree_root' in t.split('mill-self-report')[0][-800:] or 'worktree_root' in t, 'worktree_root existence check not found near self-report step'; print('ok')"
+    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/handoff.md').read_text(encoding='utf-8'); assert 'already cleaned up' in t, 'missing existence-check-and-skip marker'; window = t.split('mill-self-report')[0][-800:]; assert 'worktree_root' in window, 'worktree_root existence check not found near self-report step'; print('ok')"
 ```
 
 ## Shared Decisions

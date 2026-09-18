@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r4  '2026-09-18T18:08:49Z'
 discussed  '2026-09-18T18:11:55Z'
 planning  '2026-09-18T18:24:25Z'
 plan-review-r1  '2026-09-18T18:31:00Z'
+plan-fix-r1  '2026-09-18T18:31:38Z'
 ```
