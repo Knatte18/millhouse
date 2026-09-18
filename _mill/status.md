@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
 plan: _mill/plan
@@ -21,4 +21,13 @@ planning  '2026-09-18T17:50:30Z'
 plan-review-r1  '2026-09-18T17:52:35Z'
 plan-fix-r1  '2026-09-18T17:53:15Z'
 planned  '2026-09-18T17:53:35Z'
+implementing  '2026-09-18T17:54:13Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fork-echo-fallback
+    state: pending
 ```
