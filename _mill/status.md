@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-agent-dispatch-liveness
+phase: approved-handoff-worktree-guard
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -35,6 +35,7 @@ approved-status-helpers-core  '2026-09-18T19:14:15Z'
 approved-status-helpers-baseline  '2026-09-18T19:17:41Z'
 self-resolved-verify-logic  '2026-09-18T19:21:21Z'
 approved-agent-dispatch-liveness  '2026-09-18T19:24:14Z'
+approved-handoff-worktree-guard  '2026-09-18T19:25:36Z'
 ```
 
 ## Batches
@@ -61,9 +62,10 @@ batches:
     verify_baseline_failures: []
     self_resolve_remint_at: '2026-09-18T19:21:21Z'
   - name: handoff-worktree-guard
-    state: running
+    state: approved
     implementer_session: f43cc4ae-a87b-42c7-b858-2eb8ed9aaf37
     start_sha: 44cd841f8382dfe92de706d05e107c687667a110
+    commit_sha: a6e790dc96d32fda06cddec7fc3dca8b576a8993
     verify_baseline_failures: []
   - name: blocked-batch-resume
     state: pending
