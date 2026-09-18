@@ -38,17 +38,26 @@ implementing  '2026-09-18T19:09:55Z'
 ```yaml
 batches:
   - name: status-helpers-core
-    state: pending
+    state: running
+    implementer_session: 3c6d481d-1664-45c5-b05b-b7ac20327428
+    start_sha: 343e489ece58bda77d420270cf2390c7452e87f5
+    verify_baseline_failures: []
   - name: status-helpers-baseline
     state: pending
+    verify_baseline_failures: []
   - name: agent-dispatch-liveness
     state: pending
+    verify_baseline_failures: []
   - name: handoff-worktree-guard
     state: pending
+    verify_baseline_failures: []
   - name: blocked-batch-resume
     state: pending
+    verify_baseline_failures: []
   - name: review-loop-fixes
     state: pending
+    verify_baseline_failures: []
   - name: entry-gate-parallel-baseline
     state: pending
+    verify_baseline_failures: []
 ```
