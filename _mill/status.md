@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: review-output-reliability-and-attribution-bugs
 branch: hanf/review-output-reliability-and-attribution-bugs
 plan: _mill/plan
@@ -18,4 +18,6 @@ discussing  '2026-09-18T17:28:39Z'
 discussion-fix-r1  '2026-09-18T17:51:09Z'
 discussed  '2026-09-18T17:52:53Z'
 planning  '2026-09-18T17:58:09Z'
+plan-fix-r1  '2026-09-18T18:01:32Z'
+plan-review-r1  '2026-09-18T18:01:02Z'
 ```

@@ -33,7 +33,7 @@ their tests").
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** Delete the sentence (and one adjacent blank line, so exactly one blank line
-  remains between the preceding `Class governs who decides…` bullet paragraph and the following
+  remains between the preceding `Decisions` criteria bullet and the following
   `## Output format — STRICT` heading):
 ```
 Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
@@ -96,8 +96,9 @@ Independently state, in the `reviewer_self_id:` field below, what model/version 
 - **Requirements:** Three edits to this one file:
   1. In the `## File format` fenced-markdown example near the top of the file, delete the line
      `reviewer_self_id: <optional, reviewer-reported self-identification>` from the illustrative
-     yaml block (it sits directly below `reviewer_model: <reviewer name from config, e.g.
-     sonnetmax>`) — leave every other line in that block unchanged.
+     yaml block (it sits directly below `cost_usd: <reported dollar cost of the round>`, three
+     lines after `reviewer_model: <reviewer name from config, e.g. sonnetmax>`) — leave every
+     other line in that block unchanged.
   2. In the "Metadata block fields" table, delete the entire row naming the removed field:
 ```
 | `reviewer_self_id` | string | no | optional, reviewer-self-reported model identification; unverified |
