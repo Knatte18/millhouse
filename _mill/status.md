@@ -29,5 +29,8 @@ implementing  '2026-09-18T18:03:47Z'
 ```yaml
 batches:
   - name: review-output-attribution-reliability
-    state: pending
+    state: running
+    implementer_session: a66c2348-edc7-4fcf-8712-c3b1336a4493
+    start_sha: b6ada463c64b76850fd7f2b925646d37bf6fdb72
+    verify_baseline_failures: []
 ```
