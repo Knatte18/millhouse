@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py: subprocess trace noise, batch-oversized TDD cap, unrelated-test-file and fence-unaware parser bugs'
 slug: plan-validate-misc-check-and-perf-bugs
-approved: false
+approved: true
 started: '20260918-175420'
 parent: main
 root: ""
