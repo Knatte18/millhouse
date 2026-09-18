@@ -13,7 +13,8 @@ Public API:
     build_wait_command(status_path, ready_phase, poll_interval_s, giveup_s) -> str
     Render a bash poll script that watches ``status_path`` for
     ``phase: <ready_phase>`` or ``phase: blocked``, giving up after
-    ``giveup_s`` seconds.
+    ``giveup_s`` seconds. Accepts an optional ``clean_tree_root``/``clean_tree_paths``
+    pair that additionally withholds ``READY`` until a git tree is clean.
     matches_wait_trigger(phase, exact, regex_patterns) -> bool
     Return whether ``phase`` should trigger entry into the wait, per an
     exact-match set and a list of full-match regex patterns.
@@ -29,9 +30,15 @@ def build_wait_command(
     ready_phase: str,
     poll_interval_s: int,
     giveup_s: int,
+    *,
+    clean_tree_root: Path | None = None,
+    clean_tree_paths: list[Path] | None = None,
 ) -> str:
     """
     Render a bash script that polls ``status_path`` until it reaches ``ready_phase`` or times out.
+
+    Optionally also gates ``READY`` on a clean git tree for a set of paths, via
+    ``clean_tree_root``/``clean_tree_paths``.
 
     A ``blocked`` phase on the upstream task is NOT terminal for this wait: ``blocked`` means the
     upstream task needs operator attention, not that it has given up, and an operator can resolve it
@@ -79,18 +86,41 @@ def build_wait_command(
         giveup_s: Total seconds to wait before giving up.
             Substituted as a plain integer;
             this function performs no unit conversion.
+        clean_tree_root: Absolute path to a git repository root to check for a clean tree,
+            before ``READY`` is echoed.
+            Must be provided together with ``clean_tree_paths``, or both omitted.
+            When omitted (the default), reproduces today's behavior exactly -- no clean-tree gating.
+        clean_tree_paths: Paths (relative to ``clean_tree_root`` or absolute) passed to
+            ``git status --porcelain --`` as the pathspec to check for a clean tree.
+            Must be provided together with ``clean_tree_root``, or both omitted.
 
     Returns:
         A bash script, as a single string, printing exactly one of ``READY`` / ``TIMEOUT after ...``
         and exiting with the corresponding code (0 / 2).
     """
+    if (clean_tree_root is None) != (clean_tree_paths is None):
+        raise ValueError(
+            "build_wait_command: clean_tree_root and clean_tree_paths must both be "
+            "provided together, or both omitted"
+        )
     quoted_path = f'"{status_path}"'
+    if clean_tree_root is not None and clean_tree_paths is not None:
+        quoted_clean_tree_root = f'"{clean_tree_root}"'
+        quoted_clean_tree_paths = " ".join(f'"{path}"' for path in clean_tree_paths)
+        ready_block = (
+            f'    if [ -z "$(git -C {quoted_clean_tree_root} status --porcelain -- '
+            f'{quoted_clean_tree_paths})" ]; then\n'
+            '      echo "READY"\n'
+            "      exit 0\n"
+            "    fi\n"
+        )
+    else:
+        ready_block = '    echo "READY"\n    exit 0\n'
     return (
         "elapsed=0\n"
         "while true; do\n"
         f"  if tr -d '\\r' < {quoted_path} | grep -q \"^phase: {ready_phase}$\"; then\n"
-        '    echo "READY"\n'
-        "    exit 0\n"
+        f"{ready_block}"
         "  fi\n"
         f'  if [ "$elapsed" -ge {int(giveup_s)} ]; then\n'
         f'    echo "TIMEOUT after ${{elapsed}}s waiting for phase: {ready_phase}"\n'
