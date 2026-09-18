@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: review-output-reliability-and-attribution-bugs
 branch: hanf/review-output-reliability-and-attribution-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-09-18T18:02:28Z'
 implementing  '2026-09-18T18:03:47Z'
 approved-review-output-attribution-reliability  '2026-09-18T18:07:38Z'
 holistic-reviewing  '2026-09-18T18:08:00Z'
+holistic-approved  '2026-09-18T18:09:46Z'
 ```
 
 ## Batches
