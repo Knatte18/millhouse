@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: millpy-implement-and-done-gate-cli-bugs
 branch: hanf/millpy-implement-and-done-gate-cli-bugs
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussed  '2026-09-18T17:55:19Z'
 planning  '2026-09-18T18:00:34Z'
 plan-review-r1  '2026-09-18T18:05:01Z'
 plan-fix-r1  '2026-09-18T18:05:52Z'
+planned  '2026-09-18T18:06:07Z'
 ```
