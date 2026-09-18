@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -40,6 +40,7 @@ approved-blocked-batch-resume  '2026-09-18T19:27:18Z'
 approved-review-loop-fixes  '2026-09-18T19:29:21Z'
 approved-entry-gate-parallel-baseline  '2026-09-18T19:31:35Z'
 holistic-reviewing  '2026-09-18T19:32:01Z'
+holistic-fixing  '2026-09-18T19:34:31Z'
 ```
 
 ## Batches
