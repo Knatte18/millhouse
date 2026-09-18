@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: review-cap-auto-approve
 branch: hanf/review-cap-auto-approve
 plan: _mill/plan
@@ -21,4 +21,19 @@ planning  '2026-09-18T17:57:34Z'
 plan-review-r1  '2026-09-18T18:02:21Z'
 plan-fix-r1  '2026-09-18T18:04:01Z'
 planned  '2026-09-18T18:04:21Z'
+implementing  '2026-09-18T18:05:05Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-schema-auto-approve-on-cap
+    state: pending
+  - name: mill-plan-auto-approve-wiring
+    state: pending
+  - name: mill-go-base-batch-auto-approve-wiring
+    state: pending
+  - name: mill-go-base-holistic-auto-approve-wiring
+    state: pending
 ```
