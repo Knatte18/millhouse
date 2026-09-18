@@ -61,7 +61,9 @@ batches:
     verify_baseline_failures: []
     self_resolve_remint_at: '2026-09-18T19:21:21Z'
   - name: handoff-worktree-guard
-    state: pending
+    state: running
+    implementer_session: f43cc4ae-a87b-42c7-b858-2eb8ed9aaf37
+    start_sha: 44cd841f8382dfe92de706d05e107c687667a110
     verify_baseline_failures: []
   - name: blocked-batch-resume
     state: pending
