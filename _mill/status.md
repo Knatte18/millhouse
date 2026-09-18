@@ -52,7 +52,9 @@ batches:
     commit_sha: 81ff62854018eed6b9428d13aa9725c9ba9afa23
     verify_baseline_failures: []
   - name: agent-dispatch-liveness
-    state: pending
+    state: running
+    implementer_session: a0dad511-12c1-454e-ad4c-0914258589ba
+    start_sha: 257b94723ece8d308fd6bdc634696c262ecef80e
     verify_baseline_failures: []
   - name: handoff-worktree-guard
     state: pending
