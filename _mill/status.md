@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-18T17:54:13Z'
 approved-fork-echo-fallback  '2026-09-18T17:56:03Z'
 holistic-reviewing  '2026-09-18T17:56:18Z'
 holistic-approved  '2026-09-18T17:57:37Z'
+done  '2026-09-18T17:58:05Z'
 ```
 
 ## Batches
