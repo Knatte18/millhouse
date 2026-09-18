@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: millpy-implement-and-done-gate-cli-bugs
 branch: hanf/millpy-implement-and-done-gate-cli-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-worktree-winerror32-retry  '2026-09-18T18:11:40Z'
 approved-done-gate-reason-priority  '2026-09-18T18:14:12Z'
 approved-implement-finalize-start-sha  '2026-09-18T18:16:44Z'
 holistic-reviewing  '2026-09-18T18:17:06Z'
+holistic-approved  '2026-09-18T18:19:17Z'
 ```
 
 ## Batches
