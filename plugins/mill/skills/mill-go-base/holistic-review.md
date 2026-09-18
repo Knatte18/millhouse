@@ -211,7 +211,8 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
-   commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push;
-   halt with "Holistic review exhausted {max_holistic_rounds} round(s).
-   Task left as [active] for manual review."
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned):
+
+   **If `auto_approve_on_cap` is `True`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"` — where `<review_file_path>` is the `file` field from the most recently completed round's `reviews[0]` (round `H = max_holistic_rounds`), same convention as step 4's own commit. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`) — do NOT halt.
+
+   **Otherwise** (flag is `False`, unchanged today's behavior): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push; halt with "Holistic review exhausted {max_holistic_rounds} round(s). Task left as [active] for manual review."
