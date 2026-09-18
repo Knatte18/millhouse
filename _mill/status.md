@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-start Explore: Agent(subagent_type: fork) dispatch fails to perform assigned investigation'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-18T17:27:54Z'
 discussion-fix-r1  '2026-09-18T17:46:43Z'
 discussed  '2026-09-18T17:48:25Z'
+planning  '2026-09-18T17:50:30Z'
 ```
