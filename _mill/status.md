@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-entry-gate-wait-fixes
+phase: holistic-reviewing
 slug: mill-plan-entry-gate-wait-trigger-gaps
 branch: hanf/mill-plan-entry-gate-wait-trigger-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-18T17:59:49Z'
 planned  '2026-09-18T18:00:13Z'
 implementing  '2026-09-18T18:01:17Z'
 approved-entry-gate-wait-fixes  '2026-09-18T18:05:42Z'
+holistic-reviewing  '2026-09-18T18:06:02Z'
 ```
 
 ## Batches
