@@ -37,6 +37,8 @@ batches:
     commit_sha: 9ee1e838883d5721f2ee32995b8e79bf63e2115f
     verify_baseline_failures: []
   - name: resolve-symbol-tests
-    state: pending
+    state: running
+    implementer_session: 8ea88b5f-169a-4e90-b8fc-2a0e06ae799a
+    start_sha: f11f2573c5f40f4b2fb90d6e0f4831d83fab8214
     verify_baseline_failures: []
 ```
