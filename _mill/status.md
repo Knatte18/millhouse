@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: review-output-reliability-and-attribution-bugs
 branch: hanf/review-output-reliability-and-attribution-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-18T17:28:39Z'
+discussion-fix-r1  '2026-09-18T17:51:09Z'
 ```

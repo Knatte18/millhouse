@@ -63,10 +63,20 @@ be fixed.
   `plugins/mill/templates/review-plan-holistic.md` (line ~85, ~107),
   `plugins/mill/templates/review-plan-batch.md` (line ~85, ~107).
   `review-code-holistic.md` and `review-code-batch.md` never had the field — nothing to remove
-  there. Also remove the field's row and explanatory paragraph from
-  `plugins/mill/templates/review-output.schema.md`'s "Metadata block fields" section (the
-  `reviewer_self_id` row in the table, and the paragraph starting "`reviewer_self_id` is
-  unverified and reviewer-reported…").
+  there. Also update `plugins/mill/templates/review-output.schema.md`'s "Metadata block fields"
+  section: remove the `reviewer_self_id` row from the field table, and edit — not delete — the
+  explanatory paragraph at line ~59. That paragraph is two sentences sharing one line: the first
+  ("`reviewer_self_id` is unverified and reviewer-reported…own best-effort claim about what
+  model/version it is…") is entirely about the removed field and must go; the second ("This is
+  distinct from `reviewer_model`, which is orchestrator-supplied… and which
+  `apply_actual_model_override()`… can rewrite after the fact.") documents `reviewer_model` /
+  `apply_actual_model_override()` and stays — reworded to stand alone as its own sentence (it no
+  longer needs "this is distinct from" framing once there is nothing left to distinguish it from),
+  e.g. "`reviewer_model` is orchestrator-supplied — dictated to the reviewer up front — and
+  `apply_actual_model_override()` (invoked via the CLIs' `--actual-model` flag) can rewrite it
+  after the fact." Delete only the first sentence; keep and reword the second. This is the only
+  place in the schema doc that documents `apply_actual_model_override()`'s role, so a whole-
+  paragraph deletion would silently lose that.
 - Rationale: #989's own repro showed the same fixed reviewer alias giving five different
   self-identifications across five rounds, one naming the wrong model generation outright — the
   field is asking an LLM to introspect something it structurally cannot observe reliably.
@@ -202,9 +212,11 @@ Templates, `plugins/mill/templates/`:
 - `review-code-holistic.md`, `review-code-batch.md` — currently lack the mechanism-claim paragraph;
   to receive it, appended directly after their existing "Fabricating file contents…" sentence.
 - `review-output.schema.md` — documents `reviewer_self_id` in the field table (~line 19, ~55) and in
-  an explanatory paragraph (~line 59); rows/paragraph to be removed. Also documents
-  `apply_actual_model_override()`'s role (~line 59) — this text is already accurate and does not
-  need to change.
+  an explanatory paragraph (~line 59); table row to be removed, and the paragraph's first sentence
+  (the `reviewer_self_id` explanation) deleted. The same paragraph's second sentence documents
+  `apply_actual_model_override()`'s role — that content is already accurate and stays, reworded to
+  stand alone as its own sentence per the `reviewer-self-id-removed` Decision above; it is not a
+  net "no change" to the line, only to that sentence's content.
 
 Orchestrator SKILLs (read-only verification, no edits expected):
 - `plugins/mill/skills/mill-go-base/SKILL.md` — `## Agent-mode dispatch`, step 5 (~line 351-363):
