@@ -29,5 +29,8 @@ implementing  '2026-09-18T18:01:17Z'
 ```yaml
 batches:
   - name: entry-gate-wait-fixes
-    state: pending
+    state: running
+    implementer_session: f4af82f4-0c2b-4299-a426-6f257b72c8b8
+    start_sha: c525dac098f4788aa541db1e0dbcb88e1de3df0e
+    verify_baseline_failures: []
 ```
