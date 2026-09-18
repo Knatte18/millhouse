@@ -1,0 +1,23 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go-base: orchestration robustness gaps — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: Claude Sonnet 5 (claude-sonnet-5, per system metadata)
+reviewed_file: plan/
+date: 2026-09-18
+```
+
+## Findings
+
+### [BLOCKING:consistency] New test-status.py tests are added as dead code, never executed
+**Location:** Batch 1 Cards 1 and 2; Batch 2 Card 3.
+**Issue:** Verified against `plugins/mill/unit_tests/test-status.py`: the file contains exactly one `def` at module scope — `def main() -> int:` — with every existing test as an inline `assert`/`print("PASS: ...")` block inside that single function, ending `if __name__ == "__main__": sys.exit(main())`. No standalone `def test_xxx()` functions exist anywhere in the file. Both this plan's verify paths only ever invoke that entrypoint: batch 1's `verify:` runs `python plugins/mill/unit_tests/test-status.py` directly, and batch 2's `verify:` (`run-all.py --only test-status.py ...`) itself does `subprocess.run([sys.executable, str(test)])` (confirmed in `run-all.py`) — i.e. also just executes the file as a script, hitting only `main()`. Cards 1, 2 (batch 1) and Card 3 (batch 2) each instruct adding standalone, individually-named test functions (`test_phase_entry_timestamp_latest_returns_last_matching_occurrence`, `test_phase_entry_timestamp_latest_none_when_no_match`, `test_resume_batch_resets_state_and_clears_blocked_reason`, `test_resume_batch_preserve_start_sha_true_keeps_existing_sha`, `test_resume_batch_preserve_start_sha_false_clears_sha`, `test_resume_batch_appends_implementing_phase_and_clears_top_level_blocked_reason`, `test_set_baseline_preflight_log_insert_and_overwrite`, `test_clear_baseline_preflight_log_removes_row`), each citing "that file's existing fixture conventions" as the model to follow. But the file's actual, sole convention is one linear `main()` — not a function-per-test layout (contrast with `test-millpy-implement.py`, which genuinely does use `unittest.TestCase` + `unittest.main()` auto-discovery, confirmed at its line 2653 — Card 4's identically-shaped instruction for that file is correct). If Cards 1/2/3 are implemented literally, the new `def test_xxx():` functions are defined but never called by anything, so batch 1's and batch 2's `verify:` gates pass with "All _status unit tests passed" printed while never once exercising the new `latest=True` mode, `resume_batch`, or `baseline_preflight_log` behavior — a false-green verify gate for two full batches.
+**Fix:** Reword Cards 1, 2, and 3's Requirements to add the new assertions as additional inline blocks appended inside `main()`'s existing sequence (matching the file's real convention), or explicitly instruct wiring any new `def test_xxx()` helper into `main()`'s call sequence so `sys.exit(main())` actually reaches them.
+
+## Verdict
+
+REQUEST_CHANGES
+Cards 1/2 (batch 1) and Card 3 (batch 2) add test-status.py tests as functions main() never calls, so they never run.
+MILL_REVIEW_END
