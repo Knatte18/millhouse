@@ -42,7 +42,7 @@ So the single corrective retry the SKILL currently prescribes is not a reliable 
 
 ### Fallback destination: reuse existing cold-agent options, don't invent a new path
 
-- Decision: On fallback, dispatch a cold agent using the same choice already documented one paragraph earlier in "Sub-investigation guidance" — `Explore` for a read-only investigation, `general-purpose` if the investigation needs a tool beyond `Explore`'s read-only grant. No new agent type or dispatch mechanism.
+- Decision: On fallback, dispatch a cold agent — `Explore` for a read-only investigation (already named in the same phase's "Sub-investigation guidance" bullet), or `general-purpose` if the investigation needs a tool beyond `Explore`'s read-only grant (a new addition to mill-start, borrowed from mill-plan's "Fork scope guardrail" precedent — mill-start's own "Sub-investigation guidance" bullet currently names only `Explore`, not `general-purpose`). No new agent type or dispatch mechanism.
 - Rationale: `mill-go-base/SKILL.md`'s "Why not fork?" paragraph already documents that a fresh `Agent()` call is the reliable default nearly everywhere else in mill; mill-plan's own "Fork scope guardrail" already prefers cold agents by default for the identical reason (fork's inherited tool access, ignored `model` override). Reusing the same two options keeps this fix consistent with the rest of the codebase instead of adding a third fork-adjacent pattern that would need its own justification.
 - Rejected: "do the reads inline" (the issue reporter's own workaround) as the *documented* fallback — inlining is always implicitly available (per the existing "Small question … just explore inline" guidance) and doesn't need restating; documenting a *delegated* fallback (cold agent) is the more useful addition because it's the option that wasn't previously available once forking was ruled out.
 
@@ -64,7 +64,7 @@ So the single corrective retry the SKILL currently prescribes is not a reliable 
 
 - This is a natural-language SKILL.md instruction, not executable code — no unit test applies (`plugins/mill/unit_tests/` covers `_*.py` helpers, not skill prose).
 - Verification is read-through: confirm the new fallback sentence(s) (a) don't contradict "Fork scope guardrail" or `mill-go-base/SKILL.md`'s "Why not fork?" paragraph, (b) use the same cold-agent vocabulary as the "Sub-investigation guidance" bullet in the same phase, and (c) read correctly in place — a fresh reader following "Fork echo caution" top-to-bottom reaches an actionable next step even when the corrective retry itself fails, instead of running out of guidance as the current text does.
-- No `verify:` command is meaningful for this change (plan's batch, if any, should mark verification as a manual read-through rather than a `PYTHONPATH=` test invocation).
+- No `verify:` command is meaningful for this change — plan's batch, if any, should leave the `verify:` field **absent/null**, not a descriptive string (e.g. not `verify: "manual read-through"`). This repo is a Python project, so `_plan_validate.py`'s `verify-not-isolated` check treats any non-blank `verify:` string as a real command requiring the `PYTHONPATH=` prefix; only an absent/null/blank field skips that check (the established convention for pure-docs batches). Verification itself stays a manual read-through, per the paragraph above — only the plan batch's `verify:` field must be left unset.
 
 ## Q&A log
 
