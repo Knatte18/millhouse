@@ -16,7 +16,6 @@ reviewer_model: <reviewer name from config, e.g. sonnetmax>
 duration_s: <wall-clock seconds for the whole round, including any resume-retry or fast-fail-retry>
 tool_calls: <tool-use blocks the reviewer made, or the CLI's native turn count when it reports one>
 cost_usd: <reported dollar cost of the round>
-reviewer_self_id: <optional, reviewer-reported self-identification>
 reviewed_file: <path to the artefact that was reviewed>
 date: <UTC YYYY-MM-DD>
 ```
@@ -52,11 +51,10 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 | `duration_s` | number | no | wall-clock seconds for the whole round, including any resume-retry or fast-fail-retry |
 | `tool_calls` | integer | no | tool-use blocks the reviewer made, or the CLI's native turn count when it reports one |
 | `cost_usd` | number | no | reported dollar cost of the round |
-| `reviewer_self_id` | string | no | optional, reviewer-self-reported model identification; unverified |
 | `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
 
-`reviewer_self_id` is unverified and reviewer-reported: it is the reviewer's own best-effort claim about what model/version it is, present only in the discussion and plan review templates, and it is never validated by `parse_verdict()`. This is distinct from `reviewer_model`, which is orchestrator-supplied — dictated to the reviewer up front — and which `apply_actual_model_override()` (invoked via the CLIs' `--actual-model` flag) can rewrite after the fact.
+`reviewer_model` is orchestrator-supplied — dictated to the reviewer up front — and `apply_actual_model_override()` (invoked via the CLIs' `--actual-model` flag) can rewrite it after the fact.
 
 `duration_s`, `tool_calls`, and `cost_usd` are orchestrator-supplied like `reviewer_model` — written into the persisted yaml header via the review CLIs' `--duration-s`/`--tool-calls`/`--cost-usd` finalize flags, not reported by the reviewer itself. `tool_calls` and `cost_usd` are absent under agent-mode and psmux dispatch, and for the gemini provider — those paths carry no such signal. Files written before this feature existed carry none of the three. Readers must treat all three fields as optional.
 
