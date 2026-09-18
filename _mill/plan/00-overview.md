@@ -24,7 +24,7 @@ batches:
     name: status-helpers-baseline
     file: 02-status-helpers-baseline.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-verify-baseline.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-millpy-implement.py
   - number: 3
     name: entry-gate-parallel-baseline
     file: 03-entry-gate-parallel-baseline.md
@@ -80,5 +80,5 @@ batches:
 - `plugins/mill/skills/mill-go-base/handoff.md`
 - `plugins/mill/skills/mill-go-base/holistic-review.md`
 - `plugins/mill/skills/mill-go-base/resume.md`
+- `plugins/mill/unit_tests/test-millpy-implement.py`
 - `plugins/mill/unit_tests/test-status.py`
-- `plugins/mill/unit_tests/test-verify-baseline.py`
