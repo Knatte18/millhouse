@@ -2072,8 +2072,9 @@ def _is_confirmed_git_ignored(
     that order, skipping any that is ``None``) it is relative to;
     when none matches, the candidate is out-of-repo and this returns False without running any
     subprocess -- the out-of-repo-literal exemption has already handled that case upstream.
-    Otherwise runs ``git -C <source_root> check-ignore -q <candidate>`` and treats returncode 0 as
-    ignored;
+    Otherwise runs ``git -C <source_root> check-ignore -q <candidate>`` (with ``quiet_nonzero=True``,
+    since exit 1 -- "not ignored" -- is this probe's own routine, non-error outcome) and treats
+    returncode 0 as ignored;
     any exception whatsoever, including a non-git source root, is swallowed and treated as
     not-confirmed-ignored, mirroring the ``soft_fail_gitignored`` branch of ``resolve_ref_paths`` in
     ``_review_common.py``.
@@ -2104,7 +2105,8 @@ def _is_confirmed_git_ignored(
 
     try:
         result = _subprocess_util.run(
-            ["git", "-C", str(source_root), "check-ignore", "-q", str(resolved_candidate)]
+            ["git", "-C", str(source_root), "check-ignore", "-q", str(resolved_candidate)],
+            quiet_nonzero=True,
         )
         ignored = result.returncode == 0
     except Exception:
