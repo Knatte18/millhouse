@@ -42,6 +42,8 @@ batches:
     commit_sha: 0b6ad19b34675861e2cf2d7a32eb8756007e021e
     verify_baseline_failures: []
   - name: implement-finalize-start-sha
-    state: pending
+    state: running
+    implementer_session: 2c407718-a4b2-414a-8aff-7b9606618ee2
+    start_sha: b960e0f5f02671f4abd0b9e20b998053f5e47a50
     verify_baseline_failures: []
 ```
