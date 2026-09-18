@@ -82,8 +82,6 @@ The overview's module-wide `verify:` field (if set) must stay a cheap compile/ve
   but the claim was accepted without checking that file.
   Tool-use-mode reviewers may Read `plugin.json`/platform docs directly even when not bulked.
 
-Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
-
 ## Output format — STRICT
 
 Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line.
@@ -104,7 +102,6 @@ MILL_REVIEW_BEGIN
 ```yaml
 verdict: APPROVE | REQUEST_CHANGES | NEED_CONTEXT
 reviewer_model: <REVIEWER_MODEL>
-reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: plan/
 date: <UTC YYYY-MM-DD>
 ```
