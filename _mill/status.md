@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-09-18T17:48:25Z'
 planning  '2026-09-18T17:50:30Z'
 plan-review-r1  '2026-09-18T17:52:35Z'
 plan-fix-r1  '2026-09-18T17:53:15Z'
+planned  '2026-09-18T17:53:35Z'
 ```
