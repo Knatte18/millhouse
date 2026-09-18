@@ -28,7 +28,11 @@ implementing  '2026-09-18T18:14:43Z'
 ```yaml
 batches:
   - name: plan-validate-fixes
-    state: pending
+    state: running
+    implementer_session: e5ea7f7b-0fb9-4472-a47b-f110bea814d2
+    start_sha: de510ec97ca09b3ad5050c2d360093416f0f33ad
+    verify_baseline_failures: []
   - name: plan-validate-tests
     state: pending
+    verify_baseline_failures: []
 ```
