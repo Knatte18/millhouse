@@ -818,24 +818,33 @@ def read_parent_branch(status_path: Path) -> str | None:
 
 
 def phase_entry_timestamp(
-    status_path: Path, phase: str, *, occurrence: int = 1
+    status_path: Path, phase: str, *, occurrence: int = 1, latest: bool = False
 ) -> str | None:
-    """Return the timestamp of the occurrence-th matching phase entry from timeline.
+    """Return the timestamp of a matching phase entry from timeline.
 
     Reads the timeline and searches for entries with phase name matching ``phase``.
-    Returns the timestamp of the ``occurrence``-th match (1-indexed).
+    When ``latest`` is ``False`` (the default), returns the timestamp of the
+    ``occurrence``-th match (1-indexed).
     When fewer than ``occurrence`` matches are found,
     or the matched row has no timestamp, returns ``None`` without raising.
+    When ``latest`` is ``True``, ``occurrence`` is ignored entirely and the
+    timestamp of the LAST matching row in the timeline is returned instead --
+    ``None`` if there are zero matches.
 
     Args:
         status_path: Absolute path to the status.md file.
         phase: Phase name to search for in the timeline.
         occurrence: Which matching phase entry to return (1-indexed).
         Defaults to 1.
+        latest: When ``True``, return the timestamp of the last matching row
+        instead of the ``occurrence``-th one.
+        ``latest`` and ``occurrence`` are mutually exclusive in effect --
+        ``latest=True`` takes precedence over ``occurrence`` when both are passed.
+        Defaults to ``False``.
 
     Returns:
         The ISO-8601 timestamp string (with surrounding quotes stripped),
-        or ``None`` if fewer than ``occurrence`` matches are found, the matched row has no timestamp
+        or ``None`` if no qualifying match is found, the matched row has no timestamp
         field, or ``status_path`` does not exist.
 
     Raises:
@@ -847,6 +856,27 @@ def phase_entry_timestamp(
     except ValueError:
         raise
     timeline = full["timeline"]
+
+    if latest:
+        # Scan every matching row, keeping the last one seen rather than
+        # returning on first match.
+        last_timestamp: str | None = None
+        for row in timeline:
+            parts = row.split(None, 1)
+            if not parts:
+                continue
+            phase_token = parts[0]
+
+            if phase_token == phase:
+                if len(parts) < 2:
+                    # No timestamp field on this row
+                    last_timestamp = None
+                    continue
+                timestamp_field = parts[1]
+                # Strip surrounding quotes (single or double)
+                last_timestamp = timestamp_field.strip("'\"")
+
+        return last_timestamp
 
     count = 0
     for row in timeline:
@@ -1011,6 +1041,54 @@ def set_batch_fields(
             _write_batches(status_path, batches)
             return
     raise ValueError(f"Batch {name!r} not present in {_BATCHES_HEADING}")
+
+
+def resume_batch(
+    status_path: Path,
+    batch_name: str,
+    *,
+    timestamp: str,
+    preserve_start_sha: bool,
+) -> None:
+    """
+    Transition a blocked batch back to ``pending`` so mill-go can re-dispatch it.
+
+    This is the documented recovery path for a batch an operator has fixed externally while it was
+    ``state: blocked`` (see the "Resume after external fix" subsection in
+    ``mill-go-base/SKILL.md``).
+    Four mutations happen, built entirely from ``set_batch_field`` and ``append_phase`` — no new
+    low-level file-mutation logic:
+
+    1. ``set_batch_field(status_path, batch_name, "state", "pending")``.
+    2. ``set_batch_field(status_path, batch_name, "blocked_reason", None)`` — clears the field via
+        ``set_batch_field``'s existing ``None``-value convention.
+    3. When ``preserve_start_sha`` is ``False``, also clear ``commit_sha`` and ``start_sha`` on the
+        batch entry (both set to ``None`` via ``set_batch_field``).
+        When ``preserve_start_sha`` is ``True``, both fields are left exactly as they are on disk.
+    4. ``append_phase(status_path, "implementing", timestamp)`` — this call's own existing behavior
+        already auto-clears any top-level ``blocked_reason:`` row in the yaml block when the new
+        phase is not ``"blocked"``, so no separate top-level-field-clearing step is added here.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        batch_name: Name of the batch entry to resume.
+        timestamp: ISO-8601 UTC timestamp for the new ``implementing`` timeline row,
+            passed through unchanged to ``append_phase``.
+        preserve_start_sha: When ``True``, keep the batch's existing ``commit_sha`` and
+            ``start_sha`` fields untouched.
+            When ``False``, clear both — use this when the fix invalidates the prior attempt's
+                start point.
+
+    Raises:
+        ValueError: propagated unchanged from ``set_batch_field`` / ``append_phase``,
+            e.g. when ``batch_name`` does not exist in ``## Batches``.
+    """
+    set_batch_field(status_path, batch_name, "state", "pending")
+    set_batch_field(status_path, batch_name, "blocked_reason", None)
+    if not preserve_start_sha:
+        set_batch_field(status_path, batch_name, "commit_sha", None)
+        set_batch_field(status_path, batch_name, "start_sha", None)
+    append_phase(status_path, "implementing", timestamp)
 
 
 def remove_batch(status_path: Path, name: str) -> None:
