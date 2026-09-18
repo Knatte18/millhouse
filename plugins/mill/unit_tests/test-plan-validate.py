@@ -9861,6 +9861,102 @@ def test_check_card_missing_field_fence_guard_real_boundary_still_detected() -> 
             return 1
 
 
+def test_check_card_missing_field_indented_delimiter_column_zero_heading_clean() -> int:
+    """Regression guard for #992: a fence-opening delimiter indented two spaces, whose fenced
+    content (a ### heading) sits at column zero, must still toggle the fence-tracking state -- the
+    column-zero content must not be mistaken for a real card-boundary heading."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "### Some Heading\n"
+            "  ```\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert check == [], (
+                f"expected no card-missing-field findings for an indented fence delimiter with "
+                f"column-zero content, got: {check}"
+            )
+            print("PASS test_check_card_missing_field_indented_delimiter_column_zero_heading_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_card_missing_field_indented_delimiter_column_zero_heading_clean: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence() -> int:
+    """Regression guard for #992: the context-completeness field-body extraction's own
+    independent fence-tracking must also tolerate an indented fence delimiter whose fenced content
+    (a field-header-shaped line) sits at column zero -- the reference after the fence closes must
+    still be collected and flagged."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+        (project_root / "sibling.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Quote a field-header-shaped line from another source file, at its own original "
+            "column:\n"
+            "  ```markdown\n"
+            "- **Commit:** fake, not a real field\n"
+            "  ```\n"
+            "  Also reference `sibling.py` for the existing pattern.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        missing_field_hits = [e for e in result if e["check"] == "card-missing-field"]
+        context_hits = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert missing_field_hits == [], (
+                f"expected no card-missing-field findings, got: {missing_field_hits}"
+            )
+            assert len(context_hits) == 1, (
+                f"expected 1 context-completeness finding, got: {context_hits}"
+            )
+            assert context_hits[0]["path"] == "sibling.py", (
+                f"wrong path: {context_hits[0]['path']!r}"
+            )
+            print(
+                "PASS "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+                f": {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # verify-excludes-edited-tagged-test check (#724)
 # ---------------------------------------------------------------------------
@@ -10740,6 +10836,8 @@ def main() -> int:
         test_check_cards_legend_in_comment_not_parsed_as_refs,
         test_check_card_missing_field_fence_guard_clean,
         test_check_card_missing_field_fence_guard_real_boundary_still_detected,
+        test_check_card_missing_field_indented_delimiter_column_zero_heading_clean,
+        test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence,
         # verify-excludes-edited-tagged-test check (#724)
         test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
         test_verify_excludes_edited_tagged_test_tags_integration_clean,
