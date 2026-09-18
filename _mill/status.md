@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-worktree-winerror32-retry
+phase: approved-done-gate-reason-priority
 slug: millpy-implement-and-done-gate-cli-bugs
 branch: hanf/millpy-implement-and-done-gate-cli-bugs
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r1  '2026-09-18T18:05:52Z'
 planned  '2026-09-18T18:06:07Z'
 implementing  '2026-09-18T18:06:56Z'
 approved-worktree-winerror32-retry  '2026-09-18T18:11:40Z'
+approved-done-gate-reason-priority  '2026-09-18T18:14:12Z'
 ```
 
 ## Batches
@@ -35,9 +36,10 @@ batches:
     commit_sha: 450f4adcecbabbd637938f25f4150c5687a4b2f1
     verify_baseline_failures: []
   - name: done-gate-reason-priority
-    state: running
+    state: approved
     implementer_session: 7ddc944d-adf6-42ef-8546-5d9f44c7fef5
     start_sha: c748490d4b12ee4747a81ea0bfa06240c25c2f0c
+    commit_sha: 0b6ad19b34675861e2cf2d7a32eb8756007e021e
     verify_baseline_failures: []
   - name: implement-finalize-start-sha
     state: pending
