@@ -21,7 +21,7 @@ Public API:
     read_parent_branch(status_path) -> str | None
     read_slug(status_path) -> str
     read_branch(status_path, *, cfg, slug) -> str
-    phase_entry_timestamp(status_path, phase, *, occurrence=1) -> str | None
+    phase_entry_timestamp(status_path, phase, *, occurrence=1, latest=False) -> str | None
     update_field(status_path, key, value) -> None
     set_blocked(status_path, reason, *, timestamp) -> None
     append_phase(status_path, phase, timestamp) -> None
@@ -30,6 +30,7 @@ Public API:
     set_batch_fields(status_path, name, fields) -> None
     remove_batch(status_path, name) -> None
     read_batches(status_path) -> list[dict]
+    resume_batch(status_path, batch_name, *, timestamp, preserve_start_sha) -> None
     read_status(status_path) -> dict
     get_module_verify_baseline(status_path) -> str | None
     set_module_verify_baseline(status_path, value) -> None
