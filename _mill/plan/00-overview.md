@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan: entry-gate wait for upstream mill-start misses discussion-gap-fix-r{N} and races the pinning commit'
 slug: mill-plan-entry-gate-wait-trigger-gaps
-approved: false
+approved: true
 started: 20260918-175252
 parent: main
 root: ""

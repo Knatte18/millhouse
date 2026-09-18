@@ -1,0 +1,21 @@
+MILL_REVIEW_BEGIN
+# Review: mill-plan: entry-gate wait for upstream mill-start misses discussion-gap-fix-r{N} and races the pinning commit — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewer_self_id: claude-sonnet-5
+reviewed_file: plan/
+date: 2026-09-18
+```
+
+## Findings
+
+### [NIT:design] Card 3 Case 17 is a tautological regression check
+**Location:** batch 01, card 3 (Case 17) **Issue:** Case 17 calls `build_wait_command` with the same four positional args as the module-level `cmd` variable (built earlier in `main()` by the identical call) and asserts equality — since the function is pure with no side effects, this assertion cannot fail regardless of whether the additive-extension guarantee actually holds; any implementation bug that broke it would already crash the earlier `cmd = build_wait_command(...)` line at line 17 first. **Fix:** assert `cmd` (or the fresh call's result) against a hardcoded golden string, or reuse the existing literal-content assertions Cases 1–7 already perform, so the case actually discriminates a regression.
+
+## Verdict
+
+APPROVE
+Plan faithfully implements both discussion decisions with source-verified mechanism claims and correct sequencing; only a minor test-quality NIT found.
+MILL_REVIEW_END
