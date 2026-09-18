@@ -35,6 +35,8 @@ batches:
     commit_sha: b19894aa99eafa68d1903293c673310f2272e24b
     verify_baseline_failures: []
   - name: plan-validate-tests
-    state: pending
+    state: running
+    implementer_session: e11ad63b-b9a3-4f65-a834-2d4769e20484
+    start_sha: 51045da2709b2ac03b511fcf2931e2bc6c388171
     verify_baseline_failures: []
 ```
