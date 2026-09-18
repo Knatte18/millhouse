@@ -44,7 +44,7 @@ batches:
     name: agent-dispatch-liveness
     file: 06-agent-dispatch-liveness.md
     depends-on: []
-    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); n = t.count('must never be read, logged, or otherwise acted on'); assert n >= 3, f'expected >=3 write-only warnings, found {n}'; assert 'already confirmed the agent is no longer running' in t, 'missing #1001 fallback-trigger rewording marker'; print('ok')"
+    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); n = t.count('must never be read, logged, or otherwise acted on'); assert n >= 3, f'expected >=3 write-only warnings, found {n}'; assert 'already confirmed the agent is no longer running' in t, 'missing issue-1001 fallback-trigger rewording marker'; print('ok')"
   - number: 7
     name: handoff-worktree-guard
     file: 07-handoff-worktree-guard.md

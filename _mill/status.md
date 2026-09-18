@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-helpers-baseline
+phase: self-resolved-verify-logic
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -33,6 +33,7 @@ planned  '2026-09-18T19:08:11Z'
 implementing  '2026-09-18T19:09:55Z'
 approved-status-helpers-core  '2026-09-18T19:14:15Z'
 approved-status-helpers-baseline  '2026-09-18T19:17:41Z'
+self-resolved-verify-logic  '2026-09-18T19:21:21Z'
 ```
 
 ## Batches

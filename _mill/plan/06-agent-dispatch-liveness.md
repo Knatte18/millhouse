@@ -5,9 +5,13 @@ task: "mill-go-base: orchestration robustness gaps"
 batch: agent-dispatch-liveness
 number: 6
 cards: 2
-verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); n = t.count('must never be read, logged, or otherwise acted on'); assert n >= 3, f'expected >=3 write-only warnings, found {n}'; assert 'already confirmed the agent is no longer running' in t, 'missing #1001 fallback-trigger rewording marker'; print('ok')"
+verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); n = t.count('must never be read, logged, or otherwise acted on'); assert n >= 3, f'expected >=3 write-only warnings, found {n}'; assert 'already confirmed the agent is no longer running' in t, 'missing issue-1001 fallback-trigger rewording marker'; print('ok')"
 depends-on: []
 ```
+
+## Prior failure
+
+- Round 1: verify failed with `/bin/sh: 1: Syntax error: Unterminated quoted string`. Root cause: the batch's `verify:` frontmatter value contained `#1001` preceded by a space (` #1001`), which YAML's comment syntax (`#` preceded by whitespace, even inside an unquoted plain scalar) truncated mid-value when the plan file's frontmatter was parsed — silently dropping the trailing `print('ok')"` and leaving an unterminated double-quote for the shell to choke on. Self-resolved by rewording the assertion's failure message from `'missing #1001 fallback-trigger rewording marker'` to `'missing issue-1001 fallback-trigger rewording marker'` (no `#` character), in both this file's frontmatter and the mirrored entry in `00-overview.md`. No code change was needed — the implementer's own commit (cards 9 and 10) was already correct; only the plan's `verify:` string was defective.
 
 ## Batch Scope
 
