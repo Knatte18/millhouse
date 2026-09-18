@@ -68,7 +68,9 @@ batches:
     commit_sha: a6e790dc96d32fda06cddec7fc3dca8b576a8993
     verify_baseline_failures: []
   - name: blocked-batch-resume
-    state: pending
+    state: running
+    implementer_session: 5846c67a-2c22-4526-8b4f-efb88867628c
+    start_sha: 5202f6df08ce6659a999f3e378ef74f25a879649
     verify_baseline_failures: []
   - name: review-loop-fixes
     state: pending
