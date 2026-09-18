@@ -1404,6 +1404,96 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(per_batch["cached"], [])
         self.assertEqual(per_batch["errored"], {})
 
+    def test_baseline_stage_module_wide_only_skips_per_batch_loop(self):
+        """
+        --module-wide-only on --stage baseline bypasses the entire per-batch computation path
+        (no enumeration, no shared checkout) and runs only the module-wide substage standalone,
+        even when a batch file on disk declares a non-null verify: command and status.md has no
+        `## Batches` section at all -- simulating a speculative early launch before `## Prepare`.
+        """
+        plan_dir = self.tmp_path / "task" / "plan"
+        (plan_dir / "01-batch-a.md").write_text(
+            "```yaml\nbatch: batch-a\nverify: echo a\n```\n\n# Batch: batch-a\n",
+            encoding="utf-8",
+        )
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch-a\n"
+            "    file: 01-batch-a.md\n"
+            "    depends-on: []\n"
+            "    verify: echo a\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
+
+        # status.md with NO `## Batches` section -- the pre-`## Prepare` scenario.
+        status_path = self.tmp_path / "task" / "status.md"
+        status_path.write_text(
+            "```yaml\n"
+            "phase: implementing\n"
+            "slug: test-slug\n"
+            "task: Test Task\n"
+            "branch: test-branch\n"
+            "parent: main\n"
+            "```\n\n"
+            "## Timeline\n\n"
+            "```text\n"
+            "implementing  2026-01-01T00:00:00Z\n"
+            "```\n",
+            encoding="utf-8",
+        )
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
+            ) as mock_compute_baseline,
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_checkout_parent_branch"
+            ) as mock_checkout_parent_branch,
+        ):
+            rc, out = self._run_main(["--stage", "baseline", "--module-wide-only"])
+
+        self.assertEqual(rc, 0)
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        module_wide = json.loads(lines[0])
+        per_batch = json.loads(lines[1])
+        self.assertEqual(
+            module_wide,
+            {"stage": "baseline", "substage": "module_wide", "result": "computed", "value": "clean"},
+        )
+        self.assertEqual(
+            per_batch,
+            {"stage": "baseline", "substage": "per_batch", "computed": [], "cached": [], "errored": {}},
+        )
+        # The Case-B fallthrough this fix closes would have reached the shared checkout despite
+        # nothing per-batch ever actually needing to run -- assert it never fires.
+        mock_checkout_parent_branch.assert_not_called()
+        # The module-wide substage's own result is still written to status.md's
+        # `module_verify_baseline:` field, confirming it is genuinely unaffected by
+        # --module-wide-only. get_module_verify_baseline was mocked above only for the duration
+        # of the `with` block (to force the "needs computing" branch); outside it, the real
+        # function reads back what _run_module_wide_standalone persisted.
+        mock_compute_baseline.assert_called_once()
+        self.assertEqual(
+            millpy_implement._status.get_module_verify_baseline(status_path), "clean"
+        )
+
     def test_baseline_stage_per_batch_idempotency_skips_already_cached_batch(self):
         """batch-a already has a stored baseline -> not recomputed; batch-b computed."""
         self._write_two_batch_fixture(batch_a_verify_baseline=[])
