@@ -48,5 +48,7 @@ batches:
     start_sha: 8e416403a83c451aef305c12e4e483a4551117e4
     commit_sha: 8d2555b7c0c50d78ca6412e930ac733ae5f68348
   - name: mill-go-base-holistic-auto-approve-wiring
-    state: pending
+    state: running
+    implementer_session: 99a63c78-a824-43c0-a7e8-9ea9e06ebf5d
+    start_sha: 1dfe70edd19e9e8b88f22edece787f5a8d1219a3
 ```
