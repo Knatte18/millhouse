@@ -29,7 +29,10 @@ implementing  '2026-09-18T18:05:05Z'
 ```yaml
 batches:
   - name: config-schema-auto-approve-on-cap
-    state: pending
+    state: running
+    implementer_session: c5df5282-9478-45ea-9c65-6d992a3dcbf6
+    start_sha: c5c0a208643684e47b28b426db23c17b631a0ec5
+    verify_baseline_failures: []
   - name: mill-plan-auto-approve-wiring
     state: pending
   - name: mill-go-base-batch-auto-approve-wiring
