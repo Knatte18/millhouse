@@ -30,7 +30,11 @@ implementing  '2026-09-18T18:12:34Z'
 ```yaml
 batches:
   - name: resolve-symbol-engine
-    state: pending
+    state: running
+    implementer_session: f1b26928-7ec7-4101-8adc-91ef6f4592ca
+    start_sha: a111147ac3d1093df072f6c886abed06f807ac2c
+    verify_baseline_failures: []
   - name: resolve-symbol-tests
     state: pending
+    verify_baseline_failures: []
 ```
