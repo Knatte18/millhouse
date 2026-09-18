@@ -23,13 +23,13 @@ batches:
   - number: 2
     name: status-helpers-baseline
     file: 02-status-helpers-baseline.md
-    depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-millpy-implement.py
+    depends-on: []
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-implement.py
   - number: 3
     name: entry-gate-parallel-baseline
     file: 03-entry-gate-parallel-baseline.md
     depends-on: [2, 5]
-    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); assert 'baseline_preflight_log' in t, 'missing baseline_preflight_log marker'; assert '--module-wide-only' in t, 'missing --module-wide-only marker'; assert 'Restart/orphan reconciliation' in t, 'missing restart/orphan reconciliation marker'; print('ok')"
+    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/SKILL.md').read_text(encoding='utf-8'); assert 'baseline-preflight-log.txt' in t, 'missing baseline-preflight-log.txt marker'; assert '--module-wide-only' in t, 'missing --module-wide-only marker'; assert 'Restart/orphan reconciliation' in t, 'missing restart/orphan reconciliation marker'; print('ok')"
   - number: 4
     name: blocked-batch-resume
     file: 04-blocked-batch-resume.md
@@ -56,8 +56,8 @@ batches:
 
 ### Decision: seven independent robustness fixes, batched by shared-file/shared-dependency locality
 
-- **Decision:** Two foundation batches (1, 2) add pure-Python helpers to `_status.py`/`millpy-implement.py`; five downstream batches (3-7) edit `mill-go-base`'s prose skill files (`SKILL.md`, `holistic-review.md`, `handoff.md`, `resume.md`), each fixing one or two of the seven source issues (#1031, #1013, #1005, #1001, #997, #995, #990 — see `_mill/discussion.md` for full per-issue analysis). Batch 3 depends on batch 2 (needs the new `baseline_preflight_log` helpers and `--module-wide-only` flag); batches 4 and 5 depend on batch 1 (need `resume_batch` and the `latest=True` mode respectively). Batches 6 and 7 have no Python dependency and are root batches.
-- **Rationale:** `_status.py` (61,222 bytes) and its own test file `test-status.py` (74,099 bytes) are both large enough that a card citing both in `Edits:` costs ~33,830 estimated context tokens; `SKILL.md` (106,797 bytes) alone costs ~26,700 tokens per citing card. Splitting the Python additions into two smaller batches (rather than one batch with 4+ cards each repeating these large files) and keeping each prose batch to 1-2 cards keeps every batch comfortably under `pipeline.max_batch_context_tokens` (120,000) — see each batch's own Batch Scope for its estimate.
+- **Decision:** Two foundation batches (1, 2) add pure-Python helpers to `_status.py` and `millpy-implement.py` respectively (no longer sharing any file, after a plan-review round moved batch 2's speculative-launch state out of `_status.py` entirely — see the `1031-parallel-entry-baseline` Decision in `_mill/discussion.md`); five downstream batches (3-7) edit `mill-go-base`'s prose skill files (`SKILL.md`, `holistic-review.md`, `handoff.md`, `resume.md`), each fixing one or two of the seven source issues (#1031, #1013, #1005, #1001, #997, #995, #990 — see `_mill/discussion.md` for full per-issue analysis). Batch 3 depends on batch 2 (needs the new `--module-wide-only` flag); batches 4 and 5 depend on batch 1 (need `resume_batch` and the `latest=True` mode respectively). Batches 6 and 7 have no Python dependency and are root batches.
+- **Rationale:** `_status.py` (61,222 bytes) and its own test file `test-status.py` (74,099 bytes) are both large enough that a card citing both in `Edits:` costs ~33,830 estimated context tokens; `SKILL.md` (106,797 bytes) alone costs ~26,700 tokens per citing card. Splitting the Python additions into two smaller batches (rather than one batch with cards repeating these large files) and keeping each prose batch to 1-2 cards keeps every batch comfortably under `pipeline.max_batch_context_tokens` (120,000) — see each batch's own Batch Scope for its estimate.
 - **Applies to:** all batches.
 
 ### Decision: prose-only batches verify via exact-marker grep/python assertions, not a test suite

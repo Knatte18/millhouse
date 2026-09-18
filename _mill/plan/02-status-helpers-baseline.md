@@ -4,35 +4,16 @@
 task: "mill-go-base: orchestration robustness gaps"
 batch: status-helpers-baseline
 number: 2
-cards: 2
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py test-millpy-implement.py
-depends-on: [1]
+cards: 1
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-millpy-implement.py
+depends-on: []
 ```
 
 ## Batch Scope
 
-Adds the two pure-Python primitives batch 3 (fixing #1031) needs: a small `status.md` persistence trio (`set_baseline_preflight_log`/`get_baseline_preflight_log`/`clear_baseline_preflight_log`) in `_status.py`, and a `--module-wide-only` flag on `millpy-implement.py --stage baseline` that skips the per-batch substage entirely. Grouped into one batch (rather than two) because both serve the same downstream fix (#1031) and together stay well under the context cap: card 3 costs ≈33,830 tokens (`_status.py` + `test-status.py`), card 4 costs ≈42,772 tokens (`millpy-implement.py` + `test-millpy-implement.py` — the file already carrying the matching `--stage baseline` CLI-invocation fixture convention; `test-verify-baseline.py`, not this batch's concern, tests `_verify_baseline`'s lower-level functions directly and has no such convention), total ≈76,602, still comfortably under the 120,000 cap. `depends-on: [1]` is not a real feature dependency (this batch's cards are independent of batch 1's) — it exists purely to serialize the two batches, since both edit `_status.py` and `test-status.py`; the validator's `parallel-modifies-overlap` check requires an explicit edge whenever two DAG-parallel-eligible batches touch the same file.
+Adds the one pure-Python primitive batch 3 (fixing #1031) needs from this batch: a `--module-wide-only` flag on `millpy-implement.py --stage baseline` that skips the per-batch substage entirely. (An earlier version of this batch also added a `status.md`-backed `baseline_preflight_log` persistence trio to `_status.py`; a later plan-review round found that speculatively writing and `git commit`-ing to `status.md` during mill-go's entry-gate wait can race a concurrently active mill-plan session in the same worktree, so batch 3's Card 5 now persists that state as a plain local `.millhouse/`-rooted file instead — no `status.md` involvement, no new `_status.py` function needed. See `_mill/discussion.md`'s `1031-parallel-entry-baseline` Decision for the full history.) `depends-on: []` — this batch no longer shares any file with batch 1 (it touches only `millpy-implement.py` and `test-millpy-implement.py`), so no serialization edge is needed. Single card; estimated context: `millpy-implement.py` (50,657 bytes) + `test-millpy-implement.py` (120,432 bytes) ≈ 42,772 tokens, comfortably under the cap.
 
 ## Cards
-
-### Card 3: `baseline_preflight_log` persistence helpers
-
-- **Context:** none
-- **Edits:**
-  - `plugins/mill/scripts/_status.py`
-  - `plugins/mill/unit_tests/test-status.py`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:** Add three functions to `_status.py`, mirroring the existing `set_module_verify_baseline`/`get_module_verify_baseline` pair (same file) as the direct template for shape and mechanics:
-  - `set_baseline_preflight_log(status_path: Path, log_path: str) -> None` — writes a `baseline_preflight_log:` row in the top yaml block (value quoted via the same `quote_scalar` helper `set_module_verify_baseline` already uses). If the row already exists, rewrite it in place; otherwise insert a new row immediately after the `parent:` row — reuse `set_module_verify_baseline`'s existing insert-in-place-or-after-`parent:` scan logic as the template, adapted to the new field name. Unlike `set_module_verify_baseline`, this function takes no restricted-value-set check — `log_path` is an arbitrary path string, not a two-state enum.
-  - `get_baseline_preflight_log(status_path: Path) -> str | None` — reads the `baseline_preflight_log:` row back (quotes stripped), returning `None` if the row is absent. Mirror `get_module_verify_baseline`'s existing read pattern.
-  - `clear_baseline_preflight_log(status_path: Path) -> None` — deletes the `baseline_preflight_log:` row from the top yaml block if present; a no-op (no exception) if the row is already absent. Mirror `clear_module_verify_baseline`'s existing implementation (same file) as the direct template — it already has the identical contract for a standalone top-level scalar field (remove-if-present, no-op-if-absent, "safe to call unconditionally" per its own docstring); adapt only the field name (`baseline_preflight_log:` instead of `module_verify_baseline:`).
-  Add docstrings for all three modeled on `set_module_verify_baseline`/`get_module_verify_baseline`'s existing docstring shape and level of detail, noting these persist the log path of a speculatively-launched "0.5. Baseline pre-flight" job across a `/mill-go` session restart (see batch 3's edit to `mill-go-base/SKILL.md`'s "Entry-gate wait for upstream mill-plan" section).
-  `plugins/mill/unit_tests/test-status.py` has exactly ONE top-level test function, `def main() -> int:` (spanning nearly the whole file) — every existing test is an inline `assert`/`print("PASS: ...")` block sequenced inside that single function body, grouped under `# --- <thing> tests ---` markers (e.g. the existing `# --- module_verify_baseline tests ---` section). This is NOT a function-per-test file. Add two new inline `assert`/`print("PASS: ...")` blocks directly inside `main()`'s existing sequence, appended immediately after the existing `# --- module_verify_baseline tests ---` section's last block (immediately before the next section marker) — NOT as standalone `def test_xxx():` functions. Reuse the same fixture-building helpers `set_module_verify_baseline`/`get_module_verify_baseline`'s existing blocks in that section already use:
-  - A block: call `set_baseline_preflight_log` on a fixture with no existing row; assert `get_baseline_preflight_log` returns the written value. Call `set_baseline_preflight_log` again with a different value on the same fixture; assert the row was overwritten in place (still exactly one `baseline_preflight_log:` row in the file, not two). End with `print("PASS: set_baseline_preflight_log inserts and overwrites the row")`.
-  - A block: set a value, call `clear_baseline_preflight_log`, assert `get_baseline_preflight_log` now returns `None`. Call `clear_baseline_preflight_log` again on the now-absent row and assert no exception is raised. End with `print("PASS: clear_baseline_preflight_log removes the row and is a no-op when absent")`.
-- **Commit:** `status: add baseline_preflight_log persistence helpers`
 
 ### Card 4: `--module-wide-only` flag for `--stage baseline`
 
@@ -52,4 +33,4 @@ Adds the two pure-Python primitives batch 3 (fixing #1031) needs: a small `statu
 
 ## Batch Tests
 
-`verify:` runs `run-all.py --only test-status.py test-millpy-implement.py` — the two files this batch's cards touch (card 3 adds tests to `test-status.py`; card 4 adds a test to `test-millpy-implement.py`), scoped per the "Multiple files" `--only` pattern rather than the unbounded full suite.
+`verify:` runs `plugins/mill/unit_tests/test-millpy-implement.py` directly (a single test file, per the "Single test file" scoping pattern) — the one file this batch's card touches.
