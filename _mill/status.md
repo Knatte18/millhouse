@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-plan-entry-gate-wait-trigger-gaps
 branch: hanf/mill-plan-entry-gate-wait-trigger-gaps
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-18T17:28:30Z'
 discussion-fix-r1  '2026-09-18T17:48:55Z'
+discussed  '2026-09-18T17:51:17Z'
 ```
