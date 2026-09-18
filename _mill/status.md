@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: plan-validate-context-completeness-symbol-branch-bugs
 branch: hanf/plan-validate-context-completeness-symbol-branch-bugs
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussion-fix-r3  '2026-09-18T17:57:56Z'
 discussed  '2026-09-18T17:57:56Z'
 planning  '2026-09-18T18:04:41Z'
 plan-review-r1  '2026-09-18T18:10:50Z'
+plan-fix-r1  '2026-09-18T18:11:29Z'
 ```

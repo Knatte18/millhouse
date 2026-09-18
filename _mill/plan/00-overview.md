@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py _resolve_symbol_files: naive whole-file text search, no declaration-form check'
 slug: plan-validate-context-completeness-symbol-branch-bugs
-approved: false
+approved: true
 started: 20260918-180120
 parent: main
 root: ""
