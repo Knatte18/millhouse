@@ -7189,6 +7189,132 @@ def test_batch_oversized_defaults_applied() -> int:
             return 1
 
 
+def test_batch_oversized_per_card_two_cards_each_under_cap_clean() -> int:
+    """Clean: two cards, each own context estimate under the cap, but their summed estimate
+    over the cap -> zero batch-oversized 'tokens' errors, proving the check is evaluated per card
+    rather than as the old whole-batch aggregate (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Each file is 28000 "x" characters -> 7000-token estimate, under the 10000 cap on its own.
+        half_a = project_root / "src" / "half_a.py"
+        half_a.parent.mkdir(parents=True)
+        half_a.write_text("x" * 28000, encoding="utf-8")
+        half_b = project_root / "src" / "half_b.py"
+        half_b.write_text("x" * 28000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_a.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_b.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert oversized_errs == [], (
+                f"expected 0 batch-oversized 'tokens' errors, got: {oversized_errs}"
+            )
+            print("PASS test_batch_oversized_per_card_two_cards_each_under_cap_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_two_cards_each_under_cap_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_batch_oversized_per_card_one_card_over_cap_dirty() -> int:
+    """Dirty: one card's own context estimate is over the cap on its own -> exactly one
+    batch-oversized 'tokens' error, attributed to that specific card, not the whole batch (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # 44000 "x" characters -> 11000-token estimate, over the 10000 cap on its own.
+        big = project_root / "src" / "big.py"
+        big.parent.mkdir(parents=True)
+        big.write_text("x" * 44000, encoding="utf-8")
+        tiny = project_root / "src" / "tiny.py"
+        tiny.write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/big.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/tiny.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert len(oversized_errs) == 1, (
+                f"expected 1 batch-oversized 'tokens' error, got: {oversized_errs}"
+            )
+            assert oversized_errs[0]["card"] == 1, (
+                f"expected the finding attributed to card 1, got: {oversized_errs[0]['card']!r}"
+            )
+            print("PASS test_batch_oversized_per_card_one_card_over_cap_dirty")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_one_card_over_cap_dirty: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # verify-full-suite check
 # ---------------------------------------------------------------------------
@@ -10446,6 +10572,8 @@ def main() -> int:
         test_batch_oversized_context_tokens_clean,
         test_batch_oversized_context_tokens_dirty,
         test_batch_oversized_defaults_applied,
+        test_batch_oversized_per_card_two_cards_each_under_cap_clean,
+        test_batch_oversized_per_card_one_card_over_cap_dirty,
         # verify-full-suite check
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
