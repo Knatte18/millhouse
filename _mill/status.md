@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-resolve-symbol-engine
+phase: approved-resolve-symbol-tests
 slug: plan-validate-context-completeness-symbol-branch-bugs
 branch: hanf/plan-validate-context-completeness-symbol-branch-bugs
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r1  '2026-09-18T18:11:29Z'
 planned  '2026-09-18T18:11:46Z'
 implementing  '2026-09-18T18:12:34Z'
 approved-resolve-symbol-engine  '2026-09-18T18:17:16Z'
+approved-resolve-symbol-tests  '2026-09-18T18:26:10Z'
 ```
 
 ## Batches
@@ -37,8 +38,9 @@ batches:
     commit_sha: 9ee1e838883d5721f2ee32995b8e79bf63e2115f
     verify_baseline_failures: []
   - name: resolve-symbol-tests
-    state: running
+    state: approved
     implementer_session: 8ea88b5f-169a-4e90-b8fc-2a0e06ae799a
     start_sha: f11f2573c5f40f4b2fb90d6e0f4831d83fab8214
+    commit_sha: 9d5b2d0556884482c564c97cae138d5e098b785c
     verify_baseline_failures: []
 ```
