@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: plan-validate-misc-check-and-perf-bugs
 branch: hanf/plan-validate-misc-check-and-perf-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ approved-plan-validate-fixes  '2026-09-18T18:19:53Z'
 approved-plan-validate-tests  '2026-09-18T18:24:46Z'
 holistic-reviewing  '2026-09-18T18:25:04Z'
 holistic-approved  '2026-09-18T18:27:47Z'
+done  '2026-09-18T18:28:11Z'
 ```
 
 ## Batches
