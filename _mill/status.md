@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-entry-gate-wait-fixes
 slug: mill-plan-entry-gate-wait-trigger-gaps
 branch: hanf/mill-plan-entry-gate-wait-trigger-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-18T17:59:13Z'
 plan-fix-r1  '2026-09-18T17:59:49Z'
 planned  '2026-09-18T18:00:13Z'
 implementing  '2026-09-18T18:01:17Z'
+approved-entry-gate-wait-fixes  '2026-09-18T18:05:42Z'
 ```
 
 ## Batches
@@ -29,8 +30,9 @@ implementing  '2026-09-18T18:01:17Z'
 ```yaml
 batches:
   - name: entry-gate-wait-fixes
-    state: running
+    state: approved
     implementer_session: f4af82f4-0c2b-4299-a426-6f257b72c8b8
     start_sha: c525dac098f4788aa541db1e0dbcb88e1de3df0e
+    commit_sha: 0eac59dcd2a4767e83d4eeb67947a0103f5352dc
     verify_baseline_failures: []
 ```
