@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -30,4 +30,25 @@ plan-review-r5  '2026-09-18T19:02:53Z'
 plan-fix-r5  '2026-09-18T19:03:01Z'
 plan-review-r6  '2026-09-18T19:07:45Z'
 planned  '2026-09-18T19:08:11Z'
+implementing  '2026-09-18T19:09:55Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-helpers-core
+    state: pending
+  - name: status-helpers-baseline
+    state: pending
+  - name: agent-dispatch-liveness
+    state: pending
+  - name: handoff-worktree-guard
+    state: pending
+  - name: blocked-batch-resume
+    state: pending
+  - name: review-loop-fixes
+    state: pending
+  - name: entry-gate-parallel-baseline
+    state: pending
 ```
