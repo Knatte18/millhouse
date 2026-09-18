@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-context-completeness-symbol-branch-bugs
 branch: hanf/plan-validate-context-completeness-symbol-branch-bugs
 plan: _mill/plan
@@ -22,4 +22,15 @@ planning  '2026-09-18T18:04:41Z'
 plan-review-r1  '2026-09-18T18:10:50Z'
 plan-fix-r1  '2026-09-18T18:11:29Z'
 planned  '2026-09-18T18:11:46Z'
+implementing  '2026-09-18T18:12:34Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: resolve-symbol-engine
+    state: pending
+  - name: resolve-symbol-tests
+    state: pending
 ```
