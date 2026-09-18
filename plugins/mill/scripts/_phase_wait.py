@@ -35,9 +35,8 @@ def build_wait_command(
     clean_tree_paths: list[Path] | None = None,
 ) -> str:
     """
-    Render a bash script that polls ``status_path`` until it reaches ``ready_phase`` or times out.
-
-    Optionally also gates ``READY`` on a clean git tree for a set of paths, via
+    Render a bash script that polls ``status_path`` until it reaches ``ready_phase`` or times out,
+    optionally also gating ``READY`` on a clean git tree for a set of paths via
     ``clean_tree_root``/``clean_tree_paths``.
 
     A ``blocked`` phase on the upstream task is NOT terminal for this wait: ``blocked`` means the
