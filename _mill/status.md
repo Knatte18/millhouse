@@ -29,5 +29,7 @@ implementing  '2026-09-18T17:54:13Z'
 ```yaml
 batches:
   - name: fork-echo-fallback
-    state: pending
+    state: running
+    implementer_session: 7e053b10-378f-4bfb-ab93-cf0ba93105e2
+    start_sha: 63beedb33a88be195bf6d102ccf0654be9d4d797
 ```
