@@ -42,7 +42,9 @@ batches:
     start_sha: 8a8c71ef1d1fd1d9b6c88849d867a731d6ccdaea
     commit_sha: 8ac04aa16c54276a440099c8fe7c654ee7defce8
   - name: mill-go-base-batch-auto-approve-wiring
-    state: pending
+    state: running
+    implementer_session: 1a7b5fd0-0e07-4acb-a167-b34302aa62b1
+    start_sha: 8e416403a83c451aef305c12e4e483a4551117e4
   - name: mill-go-base-holistic-auto-approve-wiring
     state: pending
 ```
