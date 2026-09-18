@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-go-base: orchestration robustness gaps'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-18T17:27:36Z'
 discussion-fix-r4  '2026-09-18T18:08:49Z'
 discussed  '2026-09-18T18:11:55Z'
+planning  '2026-09-18T18:24:25Z'
 ```
