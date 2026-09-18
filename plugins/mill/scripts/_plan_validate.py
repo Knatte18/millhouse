@@ -1829,6 +1829,11 @@ _SYMBOL_SEARCH_DENYLIST_DIRS = frozenset(
     {".git", "node_modules", "vendor", "__pycache__", "dist", "build", ".venv"}
 )
 
+# Directory basenames (matched case-insensitively) treated as conventionally out-of-solution and
+# pruned alongside _SYMBOL_SEARCH_DENYLIST_DIRS -- e.g. a real declaration sitting inside a
+# `Deprecated/` C# tree should not count as a live match for the solution.
+_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS = frozenset({"deprecated", "legacy", "obsolete", "archive"})
+
 
 def _extract_requirements_text(card_text: str) -> str | None:
     """Return the body text of a card's ``Requirements:`` field, or ``None``.
@@ -1985,8 +1990,14 @@ def _resolve_symbol_files(
     bare ``git_root`` when set (tried unconditionally, mirroring that same precedence's own
     unconditional trailing ``git_root`` candidate).
     For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
-    basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS`` -- and case-sensitive whole-word-matches
-    ``search_key`` against the text of every file whose suffix is in ``_SYMBOL_SEARCH_EXTENSIONS``.
+    basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS``, or whose lowercased basename is in
+    ``_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`` (a conventional out-of-solution marker such as
+    ``deprecated``/``legacy``) -- and, for every file whose suffix is in
+    ``_SYMBOL_SEARCH_EXTENSIONS``, checks whether any line of its text matches a declaration-form
+    pattern for that extension (a top-level or grouped-block declaration for ``.go``, a type/member
+    declaration for ``.cs``, a ``def``/``class``/module-level-assignment for ``.py``, or a
+    function/class/interface/type/enum/const/let/var declaration for ``.ts``) -- a bare usage site,
+    comment, or string/template-literal occurrence of ``search_key`` no longer counts.
     Stops at the first candidate root that yields one or more matching files -- a later root in the
     precedence order is never walked, even if the winning root had more than one match.
 
@@ -2009,14 +2020,76 @@ def _resolve_symbol_files(
     if git_root is not None:
         candidate_roots.append(git_root)
 
-    word_re = re.compile(r"\b" + re.escape(search_key) + r"\b")
+    sym = re.escape(search_key)
+
+    # .go: a top-level `func`/`type`/`const`/`var` declaration line, or a member line inside an
+    # unclosed `const (` / `var (` / `type (` grouped-declaration block.
+    go_top_level_re = re.compile(
+        r"^(?:func\s+(?:\([^)]*\)\s*)?" + sym + r"\s*[(\[]|(?:type|const|var)\s+" + sym + r"\b)"
+    )
+    go_group_open_re = re.compile(r"^(const|var|type)\s*\($")
+    go_group_close_re = re.compile(r"^\)\s*$")
+    go_group_member_re = re.compile(r"^\s*" + sym + r"\b")
+
+    # .cs: a type-level declaration, or a member-level declaration guarded by an access modifier.
+    cs_type_re = re.compile(r"\b(?:class|struct|interface|enum|record)\s+" + sym + r"\b")
+    cs_member_re = re.compile(
+        r"\b(?:public|private|protected|internal)\b.*\b" + sym + r"\b\s*[({;=]"
+    )
+
+    # .py: a `def`/`class` declaration, or a module-level (column-0) assignment/annotation.
+    py_def_re = re.compile(r"^\s*(?:def|class)\s+" + sym + r"\b")
+    py_module_assign_re = re.compile(r"^" + sym + r"\s*(?::\s*\S.*)?=")
+
+    # .ts: a type-level declaration, or an (optionally exported) const/let/var declaration.
+    ts_type_re = re.compile(r"\b(?:function|class|interface|type|enum)\s+" + sym + r"\b")
+    ts_var_re = re.compile(r"\b(?:export\s+)?(?:const|let|var)\s+" + sym + r"\b")
+
+    def _has_declaration(file_path: Path, content: str) -> bool:
+        """Return True when at least one line of ``content`` is a declaration-form match.
+
+        Which pattern(s) apply is determined by ``file_path``'s suffix.
+        """
+        suffix = file_path.suffix
+        if suffix == ".go":
+            in_go_group = False
+            for line in content.splitlines():
+                if go_top_level_re.match(line):
+                    return True
+                if go_group_open_re.match(line):
+                    in_go_group = True
+                    continue
+                if in_go_group and go_group_close_re.match(line):
+                    in_go_group = False
+                    continue
+                if in_go_group and go_group_member_re.match(line):
+                    return True
+            return False
+        if suffix == ".cs":
+            return any(
+                cs_type_re.search(line) or cs_member_re.search(line)
+                for line in content.splitlines()
+            )
+        if suffix == ".py":
+            return any(
+                py_def_re.match(line) or py_module_assign_re.match(line)
+                for line in content.splitlines()
+            )
+        # suffix == ".ts" (the only remaining member of _SYMBOL_SEARCH_EXTENSIONS)
+        return any(
+            ts_type_re.search(line) or ts_var_re.search(line) for line in content.splitlines()
+        )
 
     for candidate_root in candidate_roots:
         if not candidate_root.exists():
             continue
         matches: list[Path] = []
         for dirpath, dirnames, filenames in os.walk(candidate_root):
-            dirnames[:] = [d for d in dirnames if d not in _SYMBOL_SEARCH_DENYLIST_DIRS]
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in _SYMBOL_SEARCH_DENYLIST_DIRS
+                and d.lower() not in _SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS
+            ]
             for filename in filenames:
                 file_path = Path(dirpath) / filename
                 if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
@@ -2027,7 +2100,7 @@ def _resolve_symbol_files(
                     # Broken symlink, permission-denied, or any other unreadable-file condition
                     # under an arbitrary real-world project tree -- skip it, don't crash the run.
                     continue
-                if word_re.search(content):
+                if _has_declaration(file_path, content):
                     matches.append(file_path)
         if matches:
             cache[search_key] = (matches, candidate_root)
