@@ -111,6 +111,16 @@ def test_deleted_prose_stays_deleted() -> None:
     print("PASS test_deleted_prose_stays_deleted")
 
 
+def test_reviewer_self_id_removed_from_templates() -> None:
+    """reviewer_self_id was removed from the three templates that used to carry it (#989)."""
+    for name in ["review-discussion", "review-plan-holistic", "review-plan-batch"]:
+        source = _read_template_source(name)
+        assert "reviewer_self_id" not in source, (
+            f"{name} still contains reviewer_self_id"
+        )
+    print("PASS test_reviewer_self_id_removed_from_templates")
+
+
 def test_kept_prose_stays_kept() -> None:
     """The MILL_REVIEW markers and the REPORT-not-fix instruction survive the edit."""
     for name in TEMPLATE_NAMES:
@@ -140,10 +150,15 @@ def test_plan_criteria_bullets_present() -> None:
 
 
 def test_plan_mechanism_claim_rule_present() -> None:
-    """The mechanism-claim source-verification rule (#949) is present verbatim in both
-    plan-review templates' raw source.
+    """The mechanism-claim source-verification rule (#949) is present verbatim in all four
+    plan- and code-review templates' raw source.
 """
-    for name in ["review-plan-holistic", "review-plan-batch"]:
+    for name in [
+        "review-plan-holistic",
+        "review-plan-batch",
+        "review-code-holistic",
+        "review-code-batch",
+    ]:
         source = _read_template_source(name)
         assert "Mechanism claims must be source-verified." in source, (
             f"{name} missing the mechanism-claim-verification rule"
@@ -231,6 +246,7 @@ def main() -> int:
     tests = [
         test_all_templates_render,
         test_deleted_prose_stays_deleted,
+        test_reviewer_self_id_removed_from_templates,
         test_kept_prose_stays_kept,
         test_plan_criteria_bullets_present,
         test_plan_mechanism_claim_rule_present,
