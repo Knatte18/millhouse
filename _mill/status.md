@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-entry-gate-wait-trigger-gaps
 branch: hanf/mill-plan-entry-gate-wait-trigger-gaps
 plan: _mill/plan
@@ -21,4 +21,13 @@ planning  '2026-09-18T17:54:46Z'
 plan-review-r1  '2026-09-18T17:59:13Z'
 plan-fix-r1  '2026-09-18T17:59:49Z'
 planned  '2026-09-18T18:00:13Z'
+implementing  '2026-09-18T18:01:17Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: entry-gate-wait-fixes
+    state: pending
 ```
