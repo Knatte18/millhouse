@@ -3,7 +3,7 @@
 ```yaml
 task: "millpy-implement.py / _done_gate.py: Windows baseline teardown, truncated failure reason, ignored --start-sha"
 slug: millpy-implement-and-done-gate-cli-bugs
-approved: false
+approved: true
 started: "20260918-175826"
 parent: main
 root: ""
