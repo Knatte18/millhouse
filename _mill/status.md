@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-resolve-symbol-tests
+phase: holistic-reviewing
 slug: plan-validate-context-completeness-symbol-branch-bugs
 branch: hanf/plan-validate-context-completeness-symbol-branch-bugs
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-09-18T18:11:46Z'
 implementing  '2026-09-18T18:12:34Z'
 approved-resolve-symbol-engine  '2026-09-18T18:17:16Z'
 approved-resolve-symbol-tests  '2026-09-18T18:26:10Z'
+holistic-reviewing  '2026-09-18T18:26:25Z'
 ```
 
 ## Batches
