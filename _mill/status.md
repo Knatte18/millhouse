@@ -45,7 +45,9 @@ batches:
     commit_sha: 5f977af1218b649faf7494d563e8ccdda749bb98
     verify_baseline_failures: []
   - name: status-helpers-baseline
-    state: pending
+    state: running
+    implementer_session: 82ec5059-6dc1-424f-960b-17848848d81e
+    start_sha: 22051e4562b30124420111cbfd591c398c2f41f9
     verify_baseline_failures: []
   - name: agent-dispatch-liveness
     state: pending
