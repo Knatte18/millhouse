@@ -38,6 +38,42 @@ import platform
 import subprocess
 from pathlib import Path
 
+from _implementer_common import _extract_failure_signatures
+
+
+def _build_truncated_reason(out: str) -> str:
+    """
+    Build the captured-output `reason` string for a failed gate run.
+
+    Mirrors `_implementer_common._run_verify_gate`'s existing truncation-enrichment shape:
+    when `out` fits within the 2000-character tail kept for the human-facing reason, it is returned
+    unchanged.
+    Otherwise the omitted prefix is scanned for failure-marker lines (via
+    `_extract_failure_signatures`) so a failure line pushed out of a blind tail-truncation by later
+    passing-noise (e.g. alphabetically-earlier `ok` package lines in a `go test ./...` run) is still
+    recoverable, per GitHub #1020.
+
+    Args:
+        out: The stripped, combined stdout+stderr of a failed gate run.
+
+    Returns:
+        `out` unchanged when its length is at most 2000 characters.
+        Otherwise an omitted-content marker -- naming the omitted character count, plus up to 20
+        extracted failure-marker lines recovered from the omitted portion when any exist -- followed
+        by the last 2000 characters of `out`.
+    """
+    if len(out) <= 2000:
+        return out
+
+    tail = out[-2000:]
+    omitted = out[:-2000]
+    fail_lines = _extract_failure_signatures(omitted)[:20]
+    marker = f"[... {len(omitted)} earlier chars omitted"
+    if fail_lines:
+        marker += "; earlier failures:\n" + "\n".join(fail_lines)
+    marker += " ...]\n"
+    return marker + tail
+
 
 def run_preflight(gate_cmd: str | None, git_root: Path) -> dict:
     """
@@ -46,9 +82,9 @@ def run_preflight(gate_cmd: str | None, git_root: Path) -> dict:
     Mirrors the exact subprocess-invocation shape already used inline in mill-go SKILL.md's
     Handoff-time "0.
     Pre-done gate" block -- `subprocess.run(gate_cmd, cwd=git_root, shell=True, capture_output=True,
-    text=True)` -- including that block's stdout+stderr concatenation and 2000-character tail
-    truncation of the captured output, so both call sites (this pre-flight and the Handoff-time
-    gate) treat the same `gate_cmd` identically.
+    text=True)` -- including that block's stdout+stderr concatenation and enriched truncation of the
+    captured output, so both call sites (this pre-flight and the Handoff-time gate) treat the same
+    `gate_cmd` identically.
 
     This function never raises. `gate_cmd is None` is reported as `skipped` rather than run at all;
     a non-zero exit is reported as `blocked` with the captured output;
@@ -66,7 +102,10 @@ def run_preflight(gate_cmd: str | None, git_root: Path) -> dict:
     Returns:
         One of:
             {"result": "skipped", "reason": "no done_gate configured"} {"result": "ok"} {"result":
-            "blocked", "reason": <captured output, tail-truncated to 2000 chars>}
+            "blocked", "reason": <captured output; when it exceeds 2000 characters, an
+            omitted-content marker naming the omitted character count and up to 20 extracted
+            failure-marker lines recovered from the omitted portion, followed by the last 2000
+            characters>}
     """
     # No done_gate configured for this task -- nothing to pre-flight.
     if gate_cmd is None:
@@ -82,10 +121,10 @@ def run_preflight(gate_cmd: str | None, git_root: Path) -> dict:
         return {"result": "blocked", "reason": str(exc)}
 
     if result.returncode != 0:
-        # Same stdout+stderr concatenation and 2000-char tail truncation as the Handoff-time "0.
+        # Same stdout+stderr concatenation and enriched-truncation shape as the Handoff-time "0.
         # Pre-done gate" block, so a caller reading either result's "reason" sees output shaped the same way.
         out = (result.stdout + result.stderr).strip()
-        reason = out[-2000:] if len(out) > 2000 else out
+        reason = _build_truncated_reason(out)
         return {"result": "blocked", "reason": reason}
 
     return {"result": "ok"}
@@ -96,7 +135,7 @@ def run_gate(gate_cmd: str, git_root: Path) -> dict:
     Run the configured `done_gate` command once as the Handoff-time gate.
 
     Mirrors `run_preflight`'s subprocess-invocation shape and never-raise contract exactly --
-    including its stdout+stderr concatenation and 2000-character tail truncation on failure.
+    including its stdout+stderr concatenation and its enriched-truncation shape on failure.
     This is the call site `handoff.md`'s "0.
     Pre-done gate" block now uses in place of its own inline `subprocess.run`.
     Unlike `run_preflight`, `gate_cmd` here is assumed to already be a non-null string --
@@ -121,8 +160,10 @@ def run_gate(gate_cmd: str, git_root: Path) -> dict:
 
     Returns:
         One of:
-            {"result": "ok"} {"result": "blocked", "reason": <captured output, tail-truncated to
-            2000 chars>}
+            {"result": "ok"} {"result": "blocked", "reason": <captured output; when it exceeds 2000
+            characters, an omitted-content marker naming the omitted character count and up to 20
+            extracted failure-marker lines recovered from the omitted portion, followed by the last
+            2000 characters>}
     """
     try:
         result = subprocess.run(
@@ -134,9 +175,9 @@ def run_gate(gate_cmd: str, git_root: Path) -> dict:
         return {"result": "blocked", "reason": str(exc)}
 
     if result.returncode != 0:
-        # Same stdout+stderr concatenation and 2000-char tail truncation as run_preflight.
+        # Same stdout+stderr concatenation and enriched-truncation shape as run_preflight.
         out = (result.stdout + result.stderr).strip()
-        reason = out[-2000:] if len(out) > 2000 else out
+        reason = _build_truncated_reason(out)
         return {"result": "blocked", "reason": reason}
 
     # Best-effort Windows-only cleanup: release dotnet build-server process locks before
