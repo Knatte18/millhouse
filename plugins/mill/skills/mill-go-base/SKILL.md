@@ -876,8 +876,10 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
    The two-pass cap mirrors mill-plan's existing step 3.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
 
 5. **Max-rounds exhaustion.**
-   After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`.
-   Go to *Blocked* below.
+   After `roles.code-review.batch.rounds` rounds without APPROVE: branch on the most recently completed round's verdict (round `N = roles.code-review.batch.rounds`, already read at step 3/4 for that round).
+
+   - **If `auto_approve_on_cap` is `True` AND that round's verdict was `REQUEST_CHANGES`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — set batch state → `approved`, `review_file: <path>` (using the `file` field from that round's `reviews[0]` as `<review_file_path>`, same as step 4's own convention); `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"`. Also emit `_notify.notify("<VARIANT_LABEL>.review-exhausted-auto-approved", f"batch {batch_name}", slug=slug, rounds=N)` so the auto-approval is still observable, not silent. Continue to the next batch — do NOT go to *Blocked*.
+   - **Otherwise** (flag is `False`, or that round's verdict was `NEED_CONTEXT`): `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
