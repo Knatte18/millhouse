@@ -28,9 +28,14 @@ implementing  '2026-09-18T18:06:56Z'
 ```yaml
 batches:
   - name: worktree-winerror32-retry
-    state: pending
+    state: running
+    implementer_session: 418007bf-3897-4c6f-889d-7d6471cd57a9
+    start_sha: d8af40d375e0b36446a794e524436d75756ad758
+    verify_baseline_failures: []
   - name: done-gate-reason-priority
     state: pending
+    verify_baseline_failures: []
   - name: implement-finalize-start-sha
     state: pending
+    verify_baseline_failures: []
 ```
