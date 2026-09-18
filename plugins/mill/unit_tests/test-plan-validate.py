@@ -32,6 +32,8 @@ Check coverage:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -4150,6 +4152,65 @@ def test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling() 
         except AssertionError as exc:
             print(
                 "FAIL test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb() -> int:
+    """Regression guard for #1040: the routine 'confirmed not git-ignored' outcome (`git
+    check-ignore` exit 1) must not print a [subprocess] breadcrumb to stderr, since that call site
+    passes quiet_nonzero=True."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "scratch_ignored/\n", "add gitignore")
+        (project_root / "scratch_not_ignored").mkdir()
+        (project_root / "scratch_not_ignored" / "artifact.py").write_text(
+            "# not ignored scratch artifact", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  See `scratch_not_ignored/artifact.py` for the existing scratch conventions.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            result = _plan_validate.run(plan_dir, project_root)
+        stderr_out = buf.getvalue()
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "scratch_not_ignored/artifact.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            assert "[subprocess]" not in stderr_out, (
+                f"expected no [subprocess] breadcrumb, got stderr: {stderr_out!r}"
+            )
+            print(
+                "PASS "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb: "
                 f"{exc}",
                 file=sys.stderr,
             )
@@ -10310,6 +10371,7 @@ def main() -> int:
         test_check_context_completeness_dirty_out_of_repo_wiki_prefix_still_flagged,
         test_check_context_completeness_clean_gitignored_path_present,
         test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling,
+        test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb,
         test_check_context_completeness_clean_gitignored_path_absent_from_disk,
         test_check_context_completeness_clean_forward_creates_reference,
         test_check_context_completeness_dirty_forward_creates_reverse_direction,
