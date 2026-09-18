@@ -3473,6 +3473,11 @@ def _check_verify_unrelated_test_files(
     and any subprocess or resolution failure for an individual token is treated as "cannot confirm
     identical, don't flag" rather than a crash.
 
+    A ``--only`` token naming the convention-derived test file for one of the batch's own touched
+    source files is exempt exactly like a directly-touched test file: Python ``test-<stem>.py`` for
+    ``<stem>.py`` (stripping any leading underscore and converting remaining underscores to hyphens),
+    or Go ``<stem>_test.go`` for ``<stem>.go``.
+
     Error dict shape: ``{check, batch, card, path, message}``.
 
     Args:
@@ -3528,9 +3533,19 @@ def _check_verify_unrelated_test_files(
         except Exception:
             touched = set()
         touched_basenames = {Path(t).name for t in touched}
+        derived_test_basenames: set[str] = set()
+        for t in touched:
+            basename = Path(t).name
+            if basename.endswith(".py") and not basename.startswith("test-"):
+                stem = Path(t).stem.lstrip("_").replace("_", "-")
+                derived_test_basenames.add(f"test-{stem}.py")
+            elif basename.endswith(".go") and not basename.endswith("_test.go"):
+                derived_test_basenames.add(f"{Path(t).stem}_test.go")
 
         for token in candidates:
             if Path(token).name in touched_basenames:
+                continue
+            if Path(token).name in derived_test_basenames:
                 continue
             try:
                 resolved = resolve_existing_paths(
