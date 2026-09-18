@@ -32,7 +32,7 @@ Fix each independently — they touch different, mostly non-overlapping sections
 - No broader rewrite of the `## Agent-mode dispatch` pattern — each fix is a targeted, local change.
 - No new lock mechanism to prevent `mill-cleanup` from ever racing a live Handoff (rejected for #990 — see Decisions; the existence-check-and-skip guard is sufficient and far lower blast radius).
 - No general auto-resume-from-blocked automation for #1013 — the operator's out-of-band fix must still be explicitly re-armed, never silently assumed.
-- No CLI-internals changes to `millpy-review-discussion.py` / `millpy-review-code.py` / `millpy-implement.py` beyond what #1005 needs (none — that fix is a `_status.py` helper change plus one call-site edit).
+- #1005 needs no CLI-internals changes to `millpy-review-discussion.py` / `millpy-review-code.py` / `millpy-implement.py` — its fix is a `_status.py` helper change plus one call-site edit. (`millpy-implement.py` DOES still gain the new `--module-wide-only` flag, but that's #1031's Decision below, not #1005's — this bullet scopes only the #1005 fix.)
 - `mill-go2`'s own `## Dispatch overrides` are untouched; since it loads this same `mill-go-base` skill, all seven fixes apply to it automatically without any mill-go2-specific edit.
 - No change to `pipeline.entry_wait` / `pipeline.entry_wait_timeout_minutes` semantics for #1031 — the fix only changes when the baseline job is *launched*, not the wait's own timeout/give-up behavior.
 
