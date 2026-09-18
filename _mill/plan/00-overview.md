@@ -39,7 +39,7 @@ batches:
     name: review-loop-fixes
     file: 05-review-loop-fixes.md
     depends-on: [1, 4]
-    verify: null
+    verify: PYTHONPATH= uv run --project plugins/mill python -c "import pathlib; t = pathlib.Path('plugins/mill/skills/mill-go-base/holistic-review.md').read_text(encoding='utf-8'); assert 'latest=True' in t, 'missing latest=True marker (card 7)'; print('ok')"
   - number: 6
     name: agent-dispatch-liveness
     file: 06-agent-dispatch-liveness.md
@@ -56,7 +56,7 @@ batches:
 
 ### Decision: seven independent robustness fixes, batched by shared-file/shared-dependency locality
 
-- **Decision:** Two foundation batches (1, 2) add pure-Python helpers to `_status.py` and `millpy-implement.py` respectively (no longer sharing any file, after a plan-review round moved batch 2's speculative-launch state out of `_status.py` entirely — see the `1031-parallel-entry-baseline` Decision in `_mill/discussion.md`); five downstream batches (3-7) edit `mill-go-base`'s prose skill files (`SKILL.md`, `holistic-review.md`, `handoff.md`, `resume.md`), each fixing one or two of the seven source issues (#1031, #1013, #1005, #1001, #997, #995, #990 — see `_mill/discussion.md` for full per-issue analysis). Batch 3 depends on batch 2 (needs the new `--module-wide-only` flag); batches 4 and 5 depend on batch 1 (need `resume_batch` and the `latest=True` mode respectively). Batches 6 and 7 have no Python dependency and are root batches.
+- **Decision:** Two foundation batches (1, 2) add pure-Python helpers to `_status.py` and `millpy-implement.py` respectively (no longer sharing any file, after a plan-review round moved batch 2's speculative-launch state out of `_status.py` entirely — see the `1031-parallel-entry-baseline` Decision in `_mill/discussion.md`); five downstream batches (3-7) edit `mill-go-base`'s prose skill files (`SKILL.md`, `holistic-review.md`, `handoff.md`, `resume.md`), each fixing one or two of the seven source issues (#1031, #1013, #1005, #1001, #997, #995, #990 — see `_mill/discussion.md` for full per-issue analysis). Batch 3 depends on batch 2 (needs the new `--module-wide-only` flag); batches 4 and 5 depend on batch 1 (need `resume_batch` and the `latest=True` mode respectively). Batches 6 and 7 have no Python dependency and are root batches. **Card numbering note:** the same rework that moved batch 2's speculative-launch state out of `_status.py` deleted an entire card — the plan originally had a `Card 3: baseline_preflight_log persistence helpers` in batch 2, since removed in full. Global card numbers are NOT renumbered after this removal (cards 1, 2, 4, 5, 6, 7, 8, 9, 10, 11 — `3` is retired, not reused) — every card citation elsewhere in this plan, every fixer report, and every review file already on record cites cards by these exact numbers, and renumbering after the fact would silently invalidate that history for no benefit. `3` will never be reassigned to a different card in this plan.
 - **Rationale:** `_status.py` (61,222 bytes) and its own test file `test-status.py` (74,099 bytes) are both large enough that a card citing both in `Edits:` costs ~33,830 estimated context tokens; `SKILL.md` (106,797 bytes) alone costs ~26,700 tokens per citing card. Splitting the Python additions into two smaller batches (rather than one batch with cards repeating these large files) and keeping each prose batch to 1-2 cards keeps every batch comfortably under `pipeline.max_batch_context_tokens` (120,000) — see each batch's own Batch Scope for its estimate.
 - **Applies to:** all batches.
 
