@@ -74,8 +74,10 @@ def main() -> int:
         print(f"FAIL: case 3 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 4: mocked exit 1 with output longer than 2000 chars -- reason is tail-truncated to exactly 2000 chars, same truncation shape as the existing Handoff-time "0.
-    # Pre-done gate" block.
+    # Case 4: mocked exit 1 with output longer than 2000 chars, no failure markers anywhere in it --
+    # reason is an omitted-content marker (naming the omitted char count, no "earlier failures"
+    # suffix since none exist) followed by the last 2000 chars, matching
+    # _implementer_common._run_verify_gate's enrichment shape.
     try:
         long_output = "x" * 3000
         with patch(
@@ -84,14 +86,18 @@ def main() -> int:
         ):
             result = run_preflight("false", git_root)
         assert result["result"] == "blocked", f"expected result=blocked, got {result!r}"
-        assert len(result["reason"]) == 2000, (
-            f"expected reason truncated to 2000 chars, got {len(result['reason'])}"
+        assert result["reason"].startswith("[... 1000 earlier chars omitted"), (
+            f"expected reason to start with an omitted-content marker, got {result['reason']!r}"
         )
-        assert result["reason"] == long_output[-2000:], (
-            "expected reason to be the tail (last 2000 chars) of the captured output"
+        assert "; earlier failures:" not in result["reason"], (
+            "expected no earlier-failures suffix since the omitted portion has no failure markers"
+        )
+        assert result["reason"].endswith(long_output[-2000:]), (
+            "expected reason to end with the tail (last 2000 chars) of the captured output"
         )
         print(
-            "PASS: mocked exit 1 with long output -> reason tail-truncated to 2000 chars"
+            "PASS: mocked exit 1 with long output, no failure markers -> "
+            "reason is omitted-content marker plus tail"
         )
     except AssertionError as exc:
         print(f"FAIL: case 4 ({exc})", file=sys.stderr)
@@ -190,8 +196,9 @@ def main() -> int:
         print(f"FAIL: case 8 ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 9: run_gate failure with output longer than 2000 chars -- reason is tail-truncated to
-    # exactly 2000 chars, the same truncation shape as run_preflight's own Case 4.
+    # Case 9: run_gate failure with output longer than 2000 chars, no failure markers anywhere in
+    # it -- reason is an omitted-content marker followed by the tail, the same enrichment shape as
+    # run_preflight's own Case 4.
     try:
         long_output = "x" * 3000
         with patch(
@@ -200,17 +207,72 @@ def main() -> int:
         ):
             result = run_gate("false", git_root)
         assert result["result"] == "blocked", f"expected result=blocked, got {result!r}"
-        assert len(result["reason"]) == 2000, (
-            f"expected reason truncated to 2000 chars, got {len(result['reason'])}"
+        assert result["reason"].startswith("[... 1000 earlier chars omitted"), (
+            f"expected reason to start with an omitted-content marker, got {result['reason']!r}"
         )
-        assert result["reason"] == long_output[-2000:], (
-            "expected reason to be the tail (last 2000 chars) of the captured output"
+        assert "; earlier failures:" not in result["reason"], (
+            "expected no earlier-failures suffix since the omitted portion has no failure markers"
+        )
+        assert result["reason"].endswith(long_output[-2000:]), (
+            "expected reason to end with the tail (last 2000 chars) of the captured output"
         )
         print(
-            "PASS: run_gate exit 1 with long output -> reason tail-truncated to 2000 chars"
+            "PASS: run_gate exit 1 with long output, no failure markers -> "
+            "reason is omitted-content marker plus tail"
         )
     except AssertionError as exc:
         print(f"FAIL: case 9 ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 10: run_preflight failure whose output puts a Go per-test failure-marker line in the
+    # omitted (non-tail) portion -- direct regression case for #1020: a failure line pushed out of a
+    # blind tail-truncation by later passing-noise must still surface in `reason`.
+    try:
+        long_output = "--- FAIL: TestEarly (0.01s)\n" + ("ok  \tpkg/passing\t0.01s\n" * 150)
+        assert len(long_output) > 2000 + len("--- FAIL: TestEarly (0.01s)\n"), (
+            "fixture too short to push the failure line out of the kept 2000-char tail"
+        )
+        with patch(
+            "_done_gate.subprocess.run",
+            return_value=MagicMock(returncode=1, stdout=long_output, stderr=""),
+        ):
+            result = run_preflight("false", git_root)
+        assert result["result"] == "blocked", f"expected result=blocked, got {result!r}"
+        assert "--- FAIL: TestEarly (0.01s)" in result["reason"], (
+            f"expected the earlier failure line to survive truncation, got {result['reason']!r}"
+        )
+        print(
+            "PASS: run_preflight surfaces an earlier failure-marker line pushed out of the tail "
+            "by later passing noise"
+        )
+    except AssertionError as exc:
+        print(f"FAIL: case 10 ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 11: identical scenario to Case 10 but via run_gate -- confirms both call sites share the
+    # identical enriched-reason shape per their docstrings' "both call sites treat the same
+    # gate_cmd identically" promise. gate_cmd has no 'dotnet' in it so the Windows
+    # dotnet-build-server-shutdown branch does not interfere.
+    try:
+        long_output = "--- FAIL: TestEarly (0.01s)\n" + ("ok  \tpkg/passing\t0.01s\n" * 150)
+        assert len(long_output) > 2000 + len("--- FAIL: TestEarly (0.01s)\n"), (
+            "fixture too short to push the failure line out of the kept 2000-char tail"
+        )
+        with patch(
+            "_done_gate.subprocess.run",
+            return_value=MagicMock(returncode=1, stdout=long_output, stderr=""),
+        ):
+            result = run_gate("false", git_root)
+        assert result["result"] == "blocked", f"expected result=blocked, got {result!r}"
+        assert "--- FAIL: TestEarly (0.01s)" in result["reason"], (
+            f"expected the earlier failure line to survive truncation, got {result['reason']!r}"
+        )
+        print(
+            "PASS: run_gate surfaces an earlier failure-marker line pushed out of the tail by "
+            "later passing noise"
+        )
+    except AssertionError as exc:
+        print(f"FAIL: case 11 ({exc})", file=sys.stderr)
         errors += 1
 
     if errors:
