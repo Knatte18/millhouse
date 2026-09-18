@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-schema-auto-approve-on-cap
 slug: review-cap-auto-approve
 branch: hanf/review-cap-auto-approve
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-18T18:02:21Z'
 plan-fix-r1  '2026-09-18T18:04:01Z'
 planned  '2026-09-18T18:04:21Z'
 implementing  '2026-09-18T18:05:05Z'
+approved-config-schema-auto-approve-on-cap  '2026-09-18T18:08:08Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-09-18T18:05:05Z'
 ```yaml
 batches:
   - name: config-schema-auto-approve-on-cap
-    state: running
+    state: approved
     implementer_session: c5df5282-9478-45ea-9c65-6d992a3dcbf6
     start_sha: c5c0a208643684e47b28b426db23c17b631a0ec5
+    commit_sha: 2deaf337d52e58f8153c230827514ba2fc8fe73b
     verify_baseline_failures: []
   - name: mill-plan-auto-approve-wiring
     state: pending
