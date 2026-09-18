@@ -36,7 +36,9 @@ batches:
     commit_sha: 2deaf337d52e58f8153c230827514ba2fc8fe73b
     verify_baseline_failures: []
   - name: mill-plan-auto-approve-wiring
-    state: pending
+    state: running
+    implementer_session: 1330c67b-9243-40a5-a040-d6ba5ad48d07
+    start_sha: 8a8c71ef1d1fd1d9b6c88849d867a731d6ccdaea
   - name: mill-go-base-batch-auto-approve-wiring
     state: pending
   - name: mill-go-base-holistic-auto-approve-wiring
