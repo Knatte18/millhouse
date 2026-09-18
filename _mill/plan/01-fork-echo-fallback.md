@@ -19,6 +19,7 @@ Single-card batch: extend `plugins/mill/skills/mill-start/SKILL.md`'s "Fork echo
 
 - **Context:**
   - `plugins/mill/skills/mill-plan/SKILL.md`
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-start/SKILL.md`
 - **Creates:** none
@@ -40,7 +41,7 @@ If the response is a restatement rather than grounded findings, `SendMessage` th
   Do not send the fork a second corrective directive -- one corrective retry is the limit before switching dispatch mechanisms entirely.
   ```
 
-  Read `plugins/mill/skills/mill-plan/SKILL.md`'s "Fork scope guardrail" paragraph (Phase: Plan) first and reuse its exact `general-purpose` phrasing ("`general-purpose` when the research needs a tool beyond Explore's read-only grant") so the two skills describe the same cold-agent choice consistently.
+  Read `plugins/mill/skills/mill-plan/SKILL.md`'s "Fork scope guardrail" paragraph (Phase: Plan) first and adapt its `general-purpose` phrasing ("`general-purpose` when the research needs a tool beyond Explore's read-only grant") to the appended sentence above (which reads "investigation" in place of "research", matching mill-start's own Explore-phase vocabulary) so the two skills describe the same cold-agent choice, in each skill's own consistent terminology.
 
   Leave the `**Fork scope guardrail.**` paragraph, the "Sub-investigation guidance" bullet list, and every other section of `plugins/mill/skills/mill-start/SKILL.md` unchanged -- this card is scoped to the `**Fork echo caution.**` paragraph only.
 - **Commit:** `docs(mill-start): add fork-retry-failure fallback to Fork echo caution`

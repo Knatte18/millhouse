@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-start Explore: Agent(subagent_type: fork) dispatch fails to perform assigned investigation'
 slug: mill-start-explore-fork-dispatch-failure
-approved: false
+approved: true
 started: '20260918-174934'
 parent: main
 root: ""
