@@ -48,7 +48,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    - **(a) Review file present.**
      Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring;
      per-batch files embed `{batch_name}` so the glob never collides).
-     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", occurrence=H)` (the Hth occurrence corresponds to round H);
+     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", latest=True)` (`"holistic-reviewing"` is the one phase string in this codebase that is reused verbatim across every round -- unlike the per-batch mirror in `SKILL.md`'s Execute step 3, which uses `f"reviewing-{batch_name}-r{N}"`, already unique per round by construction, so it correctly keeps `occurrence=1` unchanged -- so a positional `occurrence=H` silently breaks when an operator manually resumes a `blocked` task without incrementing the round counter, since re-appending the same phase entry shifts every later occurrence index; `latest=True` always resolves to the most recently appended matching entry regardless of how many times the phase string has been appended, which is the correct semantics here);
      treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`.
      If freshness validation passes, skip the CLI and use that file's verdict directly.
      Proceed to step 4 (verdict branch);
