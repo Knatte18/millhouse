@@ -35,7 +35,9 @@ batches:
     commit_sha: 450f4adcecbabbd637938f25f4150c5687a4b2f1
     verify_baseline_failures: []
   - name: done-gate-reason-priority
-    state: pending
+    state: running
+    implementer_session: 7ddc944d-adf6-42ef-8546-5d9f44c7fef5
+    start_sha: c748490d4b12ee4747a81ea0bfa06240c25c2f0c
     verify_baseline_failures: []
   - name: implement-finalize-start-sha
     state: pending
