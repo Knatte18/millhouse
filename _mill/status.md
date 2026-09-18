@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: plan-validate-misc-check-and-perf-bugs
 branch: hanf/plan-validate-misc-check-and-perf-bugs
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-09-18T17:28:12Z'
+discussion-fix-r1  '2026-09-18T17:50:52Z'
+discussed  '2026-09-18T17:50:52Z'
 ```
