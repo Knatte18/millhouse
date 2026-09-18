@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-base-batch-auto-approve-wiring
+phase: approved-mill-go-base-holistic-auto-approve-wiring
 slug: review-cap-auto-approve
 branch: hanf/review-cap-auto-approve
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-18T18:05:05Z'
 approved-config-schema-auto-approve-on-cap  '2026-09-18T18:08:08Z'
 approved-mill-plan-auto-approve-wiring  '2026-09-18T18:09:41Z'
 approved-mill-go-base-batch-auto-approve-wiring  '2026-09-18T18:11:24Z'
+approved-mill-go-base-holistic-auto-approve-wiring  '2026-09-18T18:12:53Z'
 ```
 
 ## Batches
@@ -48,7 +49,8 @@ batches:
     start_sha: 8e416403a83c451aef305c12e4e483a4551117e4
     commit_sha: 8d2555b7c0c50d78ca6412e930ac733ae5f68348
   - name: mill-go-base-holistic-auto-approve-wiring
-    state: running
+    state: approved
     implementer_session: 99a63c78-a824-43c0-a7e8-9ea9e06ebf5d
     start_sha: 1dfe70edd19e9e8b88f22edece787f5a8d1219a3
+    commit_sha: f910e07ef9129e275a73c6adc2e5e4a708593fdb
 ```
