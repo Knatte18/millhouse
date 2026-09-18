@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-validate-fixes
 slug: plan-validate-misc-check-and-perf-bugs
 branch: hanf/plan-validate-misc-check-and-perf-bugs
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-09-18T18:07:05Z'
 plan-fix-r1  '2026-09-18T18:13:32Z'
 planned  '2026-09-18T18:13:49Z'
 implementing  '2026-09-18T18:14:43Z'
+approved-plan-validate-fixes  '2026-09-18T18:19:53Z'
 ```
 
 ## Batches
@@ -28,9 +29,10 @@ implementing  '2026-09-18T18:14:43Z'
 ```yaml
 batches:
   - name: plan-validate-fixes
-    state: running
+    state: approved
     implementer_session: e5ea7f7b-0fb9-4472-a47b-f110bea814d2
     start_sha: de510ec97ca09b3ad5050c2d360093416f0f33ad
+    commit_sha: b19894aa99eafa68d1903293c673310f2272e24b
     verify_baseline_failures: []
   - name: plan-validate-tests
     state: pending
