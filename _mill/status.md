@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: review-cap-auto-approve
 branch: hanf/review-cap-auto-approve
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-mill-go-base-batch-auto-approve-wiring  '2026-09-18T18:11:24Z'
 approved-mill-go-base-holistic-auto-approve-wiring  '2026-09-18T18:12:53Z'
 holistic-reviewing  '2026-09-18T18:13:08Z'
 holistic-approved  '2026-09-18T18:15:04Z'
+done  '2026-09-18T18:15:25Z'
 ```
 
 ## Batches
