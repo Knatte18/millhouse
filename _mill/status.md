@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-entry-gate-parallel-baseline
+phase: holistic-reviewing
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -39,6 +39,7 @@ approved-handoff-worktree-guard  '2026-09-18T19:25:36Z'
 approved-blocked-batch-resume  '2026-09-18T19:27:18Z'
 approved-review-loop-fixes  '2026-09-18T19:29:21Z'
 approved-entry-gate-parallel-baseline  '2026-09-18T19:31:35Z'
+holistic-reviewing  '2026-09-18T19:32:01Z'
 ```
 
 ## Batches
