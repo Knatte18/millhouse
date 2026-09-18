@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-fork-echo-fallback
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-18T17:52:35Z'
 plan-fix-r1  '2026-09-18T17:53:15Z'
 planned  '2026-09-18T17:53:35Z'
 implementing  '2026-09-18T17:54:13Z'
+approved-fork-echo-fallback  '2026-09-18T17:56:03Z'
 ```
 
 ## Batches
@@ -29,7 +30,8 @@ implementing  '2026-09-18T17:54:13Z'
 ```yaml
 batches:
   - name: fork-echo-fallback
-    state: running
+    state: approved
     implementer_session: 7e053b10-378f-4bfb-ab93-cf0ba93105e2
     start_sha: 63beedb33a88be195bf6d102ccf0654be9d4d797
+    commit_sha: c291a8540e9884ad91003035998fce3e844a7cf9
 ```
