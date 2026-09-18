@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-start-explore-fork-dispatch-failure
 branch: hanf/mill-start-explore-fork-dispatch-failure
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-18T17:27:54Z'
 discussion-fix-r1  '2026-09-18T17:46:43Z'
+discussed  '2026-09-18T17:48:25Z'
 ```
