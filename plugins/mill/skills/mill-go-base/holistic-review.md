@@ -5,6 +5,7 @@ Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("h
 
 `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`.
 `min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`.
+`auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap", False)`.
 Loop variable `H` starts at 1. `extra_files = []`.
 
 **Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (the `APPROVE` branch below), compute:

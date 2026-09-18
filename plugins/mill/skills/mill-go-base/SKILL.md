@@ -62,6 +62,7 @@ these skills are loaded defensively in case a future addition needs `mill:conver
    - `roles.code-review.batch.auto_approve_on_cap` — when `true`, a round-cap exhausted with the last round's verdict `REQUEST_CHANGES` is treated as an implicit approval instead of a halt (default `false` when absent). See step 5 "Max-rounds exhaustion" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
    - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
+   - `roles.code-review.holistic.auto_approve_on_cap` — when `true`, a round-cap exhausted with `REQUEST_CHANGES` still returned is treated as an implicit approval instead of a halt (default `false` when absent). See step 7 "Rounds exhausted" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
