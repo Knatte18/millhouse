@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go-base: orchestration robustness gaps"
 slug: mill-go-base-orchestration-robustness-gaps
-approved: false
+approved: true
 started: "20260918-181719"
 parent: main
 root: ""
