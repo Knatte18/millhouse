@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: millpy-implement-and-done-gate-cli-bugs
 branch: hanf/millpy-implement-and-done-gate-cli-bugs
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-18T17:28:21Z'
+discussed  '2026-09-18T17:55:19Z'
 ```
