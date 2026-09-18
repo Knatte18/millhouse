@@ -82,6 +82,8 @@ batches:
     commit_sha: 1496da5904f47c25cd800567f7fdbe1305690bb6
     verify_baseline_failures: []
   - name: entry-gate-parallel-baseline
-    state: pending
+    state: running
+    implementer_session: 499dbd7e-0be1-4af0-b9bc-e188b633c814
+    start_sha: 7d69b8981123f89a6d414e57ddcf676a6b47c53d
     verify_baseline_failures: []
 ```
