@@ -40,6 +40,7 @@ Step 0.5 does tokenization only — it does not validate `phase:`/`approved:` it
    Call `cfg = _config.load_config(hub_root=worktree_root, worktree_root=git_root)`.
    Read `roles.plan-review.holistic.rounds` as `max_review_rounds`.
    Read `roles.plan-review.holistic.min_rounds` as `min_review_rounds` (default `1` when absent — see "Convergence gate" in Phase: Plan Review below).
+   Read `roles.plan-review.holistic.auto_approve_on_cap` as `auto_approve_on_cap` (default `False` when absent) — see "Live operator waiver of step 6" and step 6 "Max-rounds escape" in Phase: Plan Review below for its effect.
    Entry step 4's `phase: discussing` row additionally reads two `pipeline.*` keys at the point of use (see "Entry-gate wait for upstream mill-start" below): `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent) — and `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `240` if the key is absent). `signature: _config.load_config(hub_root: Path, worktree_root: Path) -> dict`
 3. Read the slug via `_marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError` → halt with "this worktree was not created by mill-spawn".
