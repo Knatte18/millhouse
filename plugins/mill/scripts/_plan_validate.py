@@ -147,9 +147,9 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     """Return list of (card_number, card_lines) pairs.
 
     Each card block starts at a ``### Card N:`` line and ends just before the next ``### ``
-    heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines starting
-    with ``` ``` ```, toggled per ``_requirements_fence_aware_body``'s convention) never starts
-    or ends a card block.
+    heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines whose
+    stripped-of-leading-whitespace prefix is ``` ``` ```, toggled per
+    ``_requirements_fence_aware_body``'s convention) never starts or ends a card block.
     """
     lines = batch_text.splitlines()
     cards: list[tuple[int, list[str]]] = []
@@ -171,7 +171,7 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
                 current_lines = []
             else:
                 current_lines.append(line)
-        if line.startswith("```"):
+        if line.lstrip().startswith("```"):
             in_fence = not in_fence
 
     if current_num is not None:
@@ -2323,7 +2323,7 @@ def _check_context_completeness(
                 # _parse_cards's convention) so the fence-delimiter line itself is judged by
                 # whichever state it opens or closes, not the state it produces.
                 line_is_quoted = in_fence or line.lstrip().startswith(">")
-                if line.startswith("```"):
+                if line.lstrip().startswith("```"):
                     in_fence = not in_fence
                 if line_is_quoted:
                     continue
@@ -2618,7 +2618,7 @@ def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
         line = card_lines[j]
         if not in_fence and any_field_header_re.match(line):
             break
-        if line.startswith("```"):
+        if line.lstrip().startswith("```"):
             in_fence = not in_fence
         collected.append(line)
         j += 1
