@@ -75,7 +75,9 @@ batches:
     commit_sha: 7460701b19de776950e77a2c940578db37e84f6c
     verify_baseline_failures: []
   - name: review-loop-fixes
-    state: pending
+    state: running
+    implementer_session: 3d587c72-e35f-480e-9af0-f63500dcf1e7
+    start_sha: a44af7f064f1ef13cb35f2f8e0dac7b249a47d4d
     verify_baseline_failures: []
   - name: entry-gate-parallel-baseline
     state: pending
