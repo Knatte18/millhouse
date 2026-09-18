@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-loop-fixes
+phase: approved-entry-gate-parallel-baseline
 slug: mill-go-base-orchestration-robustness-gaps
 branch: hanf/mill-go-base-orchestration-robustness-gaps
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-agent-dispatch-liveness  '2026-09-18T19:24:14Z'
 approved-handoff-worktree-guard  '2026-09-18T19:25:36Z'
 approved-blocked-batch-resume  '2026-09-18T19:27:18Z'
 approved-review-loop-fixes  '2026-09-18T19:29:21Z'
+approved-entry-gate-parallel-baseline  '2026-09-18T19:31:35Z'
 ```
 
 ## Batches
@@ -82,8 +83,9 @@ batches:
     commit_sha: 1496da5904f47c25cd800567f7fdbe1305690bb6
     verify_baseline_failures: []
   - name: entry-gate-parallel-baseline
-    state: running
+    state: approved
     implementer_session: 499dbd7e-0be1-4af0-b9bc-e188b633c814
     start_sha: 7d69b8981123f89a6d414e57ddcf676a6b47c53d
+    commit_sha: 39d9906941aab1faf7889b048ebbc71fecf345f8
     verify_baseline_failures: []
 ```
