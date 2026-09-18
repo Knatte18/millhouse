@@ -9574,6 +9574,95 @@ def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
             return 1
 
 
+def test_check_verify_unrelated_test_files_naming_convention_exempt_clean() -> int:
+    """Naming-convention exemption (#999): the batch's own Edits: token `_foo.py` derives to the
+    test name `test-foo.py` (leading underscore stripped), matching the --only token -> zero
+    findings, even though `test-foo.py` itself never appears in the batch's own
+    Edits:/Creates:/Moves: set."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "test-foo.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only test-foo.py",
+            edits=["_foo.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert errs == [], (
+                f"expected no findings for the naming-convention exemption, got: {errs}"
+            )
+            print("PASS test_check_verify_unrelated_test_files_naming_convention_exempt_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_verify_unrelated_test_files_naming_convention_exempt_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty() -> int:
+    """Regression guard: a differently-named source file in the batch's Edits: must not
+    accidentally exempt an unrelated --only token. `_bar.py` derives to `test-bar.py`, which does
+    not match the --only token `unrelated_test.py`, so the naming-convention exemption must not
+    fire here (#999)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+            edits=["_bar.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 1, f"expected 1 finding, got {len(errs)}: {errs}"
+            e = errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"wrong card: {e['card']!r}"
+            assert e["path"] == "unrelated_test.py", f"wrong path: {e['path']!r}"
+            print(
+                "PASS "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+                f": {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
     """Regression guard for #734: the Cards field-legend must not be parsed as refs.
 
@@ -10645,6 +10734,8 @@ def main() -> int:
         test_check_verify_unrelated_test_files_differs_not_flagged,
         test_check_verify_unrelated_test_files_parent_branch_none_no_findings,
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
+        test_check_verify_unrelated_test_files_naming_convention_exempt_clean,
+        test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
         test_check_card_missing_field_fence_guard_clean,
