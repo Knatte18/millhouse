@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-context-completeness-exemptions
 slug: plan-validate-context-completeness-path-branch-gaps
 branch: hanf/plan-validate-context-completeness-path-branch-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r2  '2026-09-19T12:11:03Z'
 plan-review-r3  '2026-09-19T12:17:31Z'
 planned  '2026-09-19T12:18:10Z'
 implementing  '2026-09-19T12:46:23Z'
+approved-context-completeness-exemptions  '2026-09-19T12:54:06Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-09-19T12:46:23Z'
 ```yaml
 batches:
   - name: context-completeness-exemptions
-    state: running
+    state: approved
     implementer_session: 8d1015d6-d035-43f8-84b9-f775075b4fdb
     start_sha: 167794307fd8305ac046f3a4a54be2fcb8ff8464
+    commit_sha: 27ce83b270ffdfc56d5deeb4e9f047f8abf3cf75
     verify_baseline_failures: []
   - name: context-completeness-exemptions-docs
     state: pending
