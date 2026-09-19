@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-planning-process-doc-fixes
+phase: holistic-reviewing
 slug: mill-plan-planning-process-documentation-gaps
 branch: hanf/mill-plan-planning-process-documentation-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-fix-r2  '2026-09-19T13:54:31Z'
 planned  '2026-09-19T13:54:53Z'
 implementing  '2026-09-19T13:58:03Z'
 approved-planning-process-doc-fixes  '2026-09-19T14:03:08Z'
+holistic-reviewing  '2026-09-19T14:03:50Z'
 ```
 
 ## Batches
