@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: turn-reduction-audit
 branch: hanf/turn-reduction-audit
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-09-19T11:25:34Z'
 planning  '2026-09-19T11:29:27Z'
 plan-review-r1  '2026-09-19T11:32:51Z'
 planned  '2026-09-19T11:33:32Z'
+implementing  '2026-09-19T11:35:59Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: turn-reduction-audit-doc
+    state: pending
 ```
