@@ -1,5 +1,7 @@
 # mill-go-base: Resume
 
+A batch that reached `state: blocked` is NOT handled by this file's own resume routing — it is handled by the `### Entry: resuming a blocked batch after external fix` subsection in `mill-go-base/SKILL.md`'s Entry phase gate, which runs BEFORE this file is ever reached (this file's own step 1, "locate the entry whose state is non-terminal: running, reviewing, or fixing," never matches a `blocked` batch, by design — `blocked` is a terminal state until `resume_batch` moves it back to `pending`).
+
 When mill-go's Entry-step 5 phase gate routes here (phase is `implementing`, `reviewing`, or `fixing`), the previous run was interrupted mid-batch.
 The CLIs that mutate task state (`millpy-implement.py`, `millpy-review-code.py`) are atomic — they record state-mutation commits before the heavy work starts and after each transition — so the resume playbook is simple: read the current batch entry and re-invoke the CLI for the current state.
 

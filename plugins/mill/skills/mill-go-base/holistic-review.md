@@ -5,6 +5,7 @@ Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("h
 
 `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`.
 `min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`.
+`auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap", False)`.
 Loop variable `H` starts at 1. `extra_files = []`.
 
 **Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (the `APPROVE` branch below), compute:
@@ -48,7 +49,7 @@ For each round `H` from 1 to `max_holistic_rounds`:
    - **(a) Review file present.**
      Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring;
      per-batch files embed `{batch_name}` so the glob never collides).
-     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", occurrence=H)` (the Hth occurrence corresponds to round H);
+     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", latest=True)` (`"holistic-reviewing"` is the one phase string in this codebase that is reused verbatim across every round -- unlike the per-batch mirror in `SKILL.md`'s Execute step 3, which uses `f"reviewing-{batch_name}-r{N}"`, already unique per round by construction, so it correctly keeps `occurrence=1` unchanged -- so a positional `occurrence=H` silently breaks when an operator manually resumes a `blocked` task without incrementing the round counter, since re-appending the same phase entry shifts every later occurrence index; `latest=True` always resolves to the most recently appended matching entry regardless of how many times the phase string has been appended, which is the correct semantics here);
      treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`.
      If freshness validation passes, skip the CLI and use that file's verdict directly.
      Proceed to step 4 (verdict branch);
@@ -166,6 +167,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review-file-abs-path> --round {H} --nits-only --prior-blocking <briefs_dir>/prior-blocking-holistic-r{H}.txt`.
    The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
+   After the dispatch's `<task-notification>` is accepted: capture the notification to `<brief_path>.out.md` (step 4 of the Agent-mode dispatch pattern), then run `--stage finalize` (step 5 of that same pattern) — this is what appends the `nits-fixed-holistic` marker Handoff's nit-enforcement gate requires. Only after finalize completes does the next sentence's `converged` computation happen; do not skip straight from the dispatch notification to computing `converged`.
    After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
    If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`).
    If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
@@ -210,7 +212,8 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 6. On `NEED_CONTEXT`: apply the same extra-files / notify path as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling.
 
-7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`;
-   commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push;
-   halt with "Holistic review exhausted {max_holistic_rounds} round(s).
-   Task left as [active] for manual review."
+7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned):
+
+   **If `auto_approve_on_cap` is `True`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"` — where `<review_file_path>` is the `file` field from the most recently completed round's `reviews[0]` (round `H = max_holistic_rounds`), same convention as step 4's own commit. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`) — do NOT halt.
+
+   **Otherwise** (flag is `False`, unchanged today's behavior): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push; halt with "Holistic review exhausted {max_holistic_rounds} round(s). Task left as [active] for manual review."

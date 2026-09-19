@@ -152,7 +152,8 @@ Derive:
    If `status_path` is absent (or the slug mismatch above triggered fallthrough): call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`).
    Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`.
    If `task["status"] == "pr-pending"` → treat as `pr-pending` below.
-   Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>';
+   If `task["status"] == "ready-to-merge"` → treat as `done` below (direct-mode's own post-cleanup-not-yet-squashed signal; mirrors `_phase_gate.absent_status_halt_message`'s pairing of `ready-to-merge` with `pr-pending` as the two resumable wiki states, but maps to `done` rather than `pr-pending` because a direct-mode task never has a PR -- the PR-state gate's `none` route below relies on this phase value alone to distinguish the two).
+   Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending or ready-to-merge for '<slug>';
    cannot determine merge state. (status.md slug did not match task slug '<slug>')" -- append the parenthetical only when a slug mismatch (not a genuinely absent file) triggered this branch.
 
    | phase | action |
@@ -161,9 +162,9 @@ Derive:
    | `pr-pending` | see *PR-state gate* below |
    | `complete` / missing / other | halt with "status.md phase is `<value>`; mill-merge expects `done`. If the task is not finished, run mill-go first." |
 
-   When `phase: done`, cache the task fields from `_mill/status.md` now, while status.md still exists and before the Teardown Steps run:
-   - `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` — the task title used in Step 5's squash commit message and Step 6's PR title.
-   - `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` — the task description used in Step 6's PR body.
+   When `phase: done`, cache the task fields now, before the Teardown Steps run:
+   - If `status_path.exists()`: read from `_mill/status.md` while it still exists — `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` (the task title used in Step 5's squash commit message and Step 6's PR title), `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` (the task description used in Step 6's PR body).
+   - Otherwise (the `ready-to-merge` wiki-fallback route above, where `status_path` never existed in this process): derive from the wiki instead, same as the `closed` PR-state-gate route below — `task = _client.get_task(wiki_path, slug)` (already fetched above; reuse it), `cached_task = task["title"]`, `cached_task_description = task.get("title")` (title is the only available field).
 
    Use `cached_task` and `cached_task_description` in all subsequent references to "task: field from status.md" and "task_description field from status.md".
    Step 4's `git rm -r _mill/` deletes status.md before Step 5 runs;
@@ -284,7 +285,7 @@ On the task branch (current cwd), remove the state directory that belongs to the
 
 ```bash
 git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \
-    ':!<task_dir>' ':!plugins/**/SKILL.md' ':!plugins/**/unit_tests/**' ':!plugins/**/integration_tests/**'
+    ':(exclude)<task_dir>' ':(exclude)plugins/**/SKILL.md' ':(exclude)plugins/**/unit_tests/**' ':(exclude)plugins/**/integration_tests/**'
 ```
 
 ```bash
@@ -347,6 +348,8 @@ This step is direct path only.
   **Rollback exemption:** this halt is exempt from `## Rollback (Steps 1-5 only)` below, for the same reason as the dirty-parent-worktree halt immediately above it — nothing has been mutated at this halt point. See that section's "Dirty-parent-worktree halt and parent-fast-forward-failure halt (Step 5)" paragraph, which covers both halts.
 
   `reset --hard origin/<parent_branch>` is deliberately never used as the fast-forward mechanism here — it would silently discard any local-only commits on the parent worktree's branch, exactly the class of silent parent-state destruction the sibling rollback-target fix (Card 4) treats as a bug. `merge --ff-only` fails loudly instead.
+
+  **Recovery path when `cached_task`/`cached_task_description` are undefined here:** Entry's phase-gate table caches these two values from `_mill/status.md` while `phase: done`, before Step 4's cleanup commit deletes `status.md` -- but if that caching step was skipped (the #987 incident), they are undefined by the time this bash block runs. Recover them instead of halting: `git -C <worktree> show HEAD~1:_mill/status.md` still returns `status.md`'s last content -- at this point in the flow, `HEAD` is Step 4's own cleanup commit (the one that ran `git rm -r <task_dir>` and deleted `status.md`), so its parent, `HEAD~1`, is the commit immediately before that deletion and still has the file, regardless of how many earlier commits led up to it. Read the `task:` field from that output -- falling back to the task's slug if the field itself is absent, exactly like the Entry caching block's own default -- and the `task_description:` field, falling back to the just-recovered `task` value, exactly like the Entry caching block's own default. Bind the two recovered values to `cached_task` and `cached_task_description` and continue into the bash block below. This mirrors the `closed` PR-state route's own documented fallback (`### PR-state gate`) for the same two variables, adapted to this flow's own recovery source (git history here, instead of the wiki, since `status.md` is still present one commit back in this flow).
 
   ```bash
   git -C <parent-path> merge --squash "$CHILD_BRANCH"

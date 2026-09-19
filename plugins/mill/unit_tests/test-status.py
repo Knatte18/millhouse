@@ -32,6 +32,7 @@ from _status import (
     read_status,
     remove_batch,
     render_initial,
+    resume_batch,
     set_batch_field,
     set_batch_fields,
     set_blocked,
@@ -744,6 +745,55 @@ def main() -> int:
                 pass
         print("PASS: set_batch_fields rejects unknown batch name")
 
+        # --- resume_batch tests ---
+        # Test 1: resets state and clears blocked_reason
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            set_batch_fields(sp, "foundation", {"state": "blocked", "blocked_reason": "verify failed"})
+            resume_batch(sp, "foundation", timestamp="2026-09-18T10:00:00Z", preserve_start_sha=True)
+            entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert entry["state"] == "pending", f"state mismatch: {entry['state']!r}"
+            assert "blocked_reason" not in entry, f"blocked_reason not cleared: {entry!r}"
+        print("PASS: resume_batch resets state and clears blocked_reason")
+
+        # Test 2: preserve_start_sha=True keeps existing sha fields
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            set_batch_fields(sp, "foundation", {"state": "blocked", "commit_sha": "abc123", "start_sha": "def456"})
+            resume_batch(sp, "foundation", timestamp="2026-09-18T10:00:00Z", preserve_start_sha=True)
+            entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert entry["commit_sha"] == "abc123", f"commit_sha mismatch: {entry.get('commit_sha')!r}"
+            assert entry["start_sha"] == "def456", f"start_sha mismatch: {entry.get('start_sha')!r}"
+        print("PASS: resume_batch preserve_start_sha=True keeps existing sha fields")
+
+        # Test 3: preserve_start_sha=False clears sha fields
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            set_batch_fields(sp, "foundation", {"state": "blocked", "commit_sha": "abc123", "start_sha": "def456"})
+            resume_batch(sp, "foundation", timestamp="2026-09-18T10:00:00Z", preserve_start_sha=False)
+            entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert "commit_sha" not in entry, f"commit_sha not cleared: {entry!r}"
+            assert "start_sha" not in entry, f"start_sha not cleared: {entry!r}"
+        print("PASS: resume_batch preserve_start_sha=False clears sha fields")
+
+        # Test 4: appends implementing phase and clears top-level blocked_reason
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(_out_sbf, encoding="utf-8")
+            init_batches(sp, ["foundation"])
+            set_blocked(sp, "external issue", timestamp="2026-09-18T09:00:00Z")
+            resume_batch(sp, "foundation", timestamp="2026-09-18T10:00:00Z", preserve_start_sha=True)
+            full = read_full(sp)
+            assert full["yaml"]["phase"] == "implementing", f"phase mismatch: {full['yaml'].get('phase')!r}"
+            assert "blocked_reason" not in full["yaml"], f"top-level blocked_reason not cleared: {full['yaml']!r}"
+        print("PASS: resume_batch appends implementing phase and clears top-level blocked_reason")
+
         # --- read() tests ---
         # Test 1: read returns yaml block dict with expected keys
         with tempfile.TemporaryDirectory() as tmp:
@@ -830,6 +880,40 @@ def main() -> int:
             ts = phase_entry_timestamp(sp, "nonexistent-phase")
             assert ts is None, f"expected None for absent phase, got {ts!r}"
             print("PASS: phase_entry_timestamp absent phase returns None")
+
+        # Test 5: latest=True returns last matching occurrence
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "holistic-reviewing", "2026-05-28T21:00:00Z")
+            append_phase(sp, "plan-review-r1", "2026-05-28T21:30:00Z")
+            append_phase(sp, "holistic-reviewing", "2026-05-28T22:00:00Z")
+            append_phase(sp, "plan-review-r2", "2026-05-28T22:30:00Z")
+            append_phase(sp, "holistic-reviewing", "2026-05-28T23:00:00Z")
+            ts_latest = phase_entry_timestamp(sp, "holistic-reviewing", latest=True)
+            assert ts_latest == "2026-05-28T23:00:00Z", f"expected 3rd (last) occurrence, got {ts_latest!r}"
+            ts_latest_with_occurrence = phase_entry_timestamp(
+                sp, "holistic-reviewing", occurrence=1, latest=True
+            )
+            assert ts_latest_with_occurrence == "2026-05-28T23:00:00Z", (
+                f"latest=True must take precedence over occurrence, got {ts_latest_with_occurrence!r}"
+            )
+            print("PASS: phase_entry_timestamp latest=True returns last matching occurrence")
+
+        # Test 6: latest=True returns None on zero matches
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            append_phase(sp, "discussed", "2026-05-28T21:00:00Z")
+            ts_latest_none = phase_entry_timestamp(sp, "nonexistent-phase", latest=True)
+            assert ts_latest_none is None, f"expected None for zero matches, got {ts_latest_none!r}"
+            print("PASS: phase_entry_timestamp latest=True returns None when no match")
 
         # --- module_verify_baseline tests ---
         # Test 1: get_module_verify_baseline returns None on a fresh file.

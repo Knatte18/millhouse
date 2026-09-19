@@ -615,6 +615,126 @@ def test_unknown_key_warning_emitted() -> None:
     print("PASS load_config — unknown-key warning emitted")
 
 
+def test_renamed_key_hints_named_in_warning() -> None:
+    """Both legacy pipeline round-cap keys get a hint naming the real roles.<role>.<scope>.rounds
+    key -- walk_unknown_keys only recurses into `pipeline` when the template's `pipeline` key is
+    itself a dict, so this test writes its own local template with `pipeline: {}` rather than
+    reusing `_setup_plugin_template` (which has no `pipeline` key at all).
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _write_yaml(
+            tmp_path / "templates" / "mill-config.yaml",
+            "spawn:\n  branch_prefix: ''\n"
+            "git:\n"
+            "  parent-branch: null\n"
+            "  require_pr_to_base: false\n"
+            "  base_branch: main\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n"
+            "pipeline: {}\n",
+        )
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "pipeline:\n  max_review_rounds: 3\n  max_discussion_review_rounds: 2\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        assert "roles.plan-review.holistic.rounds" in stderr_output, (
+            f"Expected max_review_rounds hint naming roles.plan-review.holistic.rounds; got {stderr_output!r}"
+        )
+        assert "roles.discussion-review.holistic.rounds" in stderr_output, (
+            f"Expected max_discussion_review_rounds hint naming roles.discussion-review.holistic.rounds; "
+            f"got {stderr_output!r}"
+        )
+    print("PASS load_config -- legacy pipeline round-cap keys name the correct roles.<role>.<scope>.rounds key")
+
+
+def test_unrelated_unknown_key_no_hint_bleed() -> None:
+    """The renamed-key hint is scoped to exactly the two named legacy keys -- an unrelated unknown
+    key under the same `pipeline:` block gets the plain warning, with no hint text bleeding onto it.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _write_yaml(
+            tmp_path / "templates" / "mill-config.yaml",
+            "spawn:\n  branch_prefix: ''\n"
+            "git:\n"
+            "  parent-branch: null\n"
+            "  require_pr_to_base: false\n"
+            "  base_branch: main\n"
+            "roles:\n"
+            "  discussion-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "  plan-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmax\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  code-review:\n"
+            "    holistic:\n"
+            "      reviewer: sonnetmedium\n"
+            "    batch:\n"
+            "      reviewer: sonnetmedium\n"
+            "  implementer:\n"
+            "    model: sonnethigh\n"
+            "pipeline: {}\n",
+        )
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(
+            wt_root / ".millhouse" / "config.local.yaml",
+            "pipeline:\n  max_review_rounds: 3\n  some_unrecognized_key: true\n",
+        )
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                    _config.load_config(wt_root, wt_root)
+                    stderr_output = mock_stderr.getvalue()
+
+        lines = stderr_output.splitlines()
+        hinted_lines = [line for line in lines if "pipeline.max_review_rounds" in line]
+        unrelated_lines = [line for line in lines if "pipeline.some_unrecognized_key" in line]
+        assert hinted_lines, f"Expected a line naming pipeline.max_review_rounds; got {lines!r}"
+        assert all("roles." in line for line in hinted_lines), (
+            f"Expected the max_review_rounds line to carry the hint; got {hinted_lines!r}"
+        )
+        assert unrelated_lines, f"Expected a line naming pipeline.some_unrecognized_key; got {lines!r}"
+        assert all("roles." not in line for line in unrelated_lines), (
+            f"Hint text bled onto the unrelated unknown key's line; got {unrelated_lines!r}"
+        )
+    print("PASS load_config -- renamed-key hint does not bleed onto an unrelated unknown key")
+
+
 def test_deep_merge_none_overlay_dict_base() -> None:
     """None overlay on dict base skips override, preserves base dict."""
     result = _config.deep_merge({"roles": {"k": "v"}}, {"roles": None})
@@ -1603,6 +1723,54 @@ def test_load_config_done_gate_key_present() -> None:
     print("PASS: pipeline.done_gate key present and null in template")
 
 
+def test_load_config_auto_approve_on_cap_keys_present() -> None:
+    """
+    Verify that the real mill-config.yaml template registers auto_approve_on_cap with a
+    default value of False under roles.plan-review.holistic, roles.code-review.batch,
+    and roles.code-review.holistic, and that loading it does not emit an unknown-key
+    warning for any of the three.
+    """
+    real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+    assert real_template_path.exists(), f"Real template not found at {real_template_path}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir(parents=True, exist_ok=True)
+        _git_init(hub_root)
+
+        with patch.object(
+            _config,
+            "resolve_plugin_template_path",
+            return_value=real_template_path
+        ):
+            with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                cfg = _config.load_config(hub_root, hub_root)
+                stderr_output = mock_stderr.getvalue()
+
+        assert cfg.get("roles", {}).get("plan-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
+            f"roles.plan-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('plan-review', {}).get('holistic', {})!r}"
+        )
+        assert cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("auto_approve_on_cap") is False, (
+            f"roles.code-review.batch.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('code-review', {}).get('batch', {})!r}"
+        )
+        assert cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
+            f"roles.code-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('code-review', {}).get('holistic', {})!r}"
+        )
+
+        assert "unknown key: roles.plan-review.holistic.auto_approve_on_cap" not in stderr_output, (
+            f"roles.plan-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+        assert "unknown key: roles.code-review.batch.auto_approve_on_cap" not in stderr_output, (
+            f"roles.code-review.batch.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+        assert "unknown key: roles.code-review.holistic.auto_approve_on_cap" not in stderr_output, (
+            f"roles.code-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+
+    print("PASS: roles.*.auto_approve_on_cap keys present (default False) and no unknown-key warning")
+
+
 def test_load_config_stub_misuse_warning_nested_layout() -> None:
     """load_config warns when a nested-hub stub declares hub_relative_path but also carries an
     unrelated top-level key -- the pointer-stub and real-override roles must not mix in one file.
@@ -1764,6 +1932,8 @@ def main() -> int:
         test_env_override_empty_string_is_noop,
         test_list_replace_semantics,
         test_unknown_key_warning_emitted,
+        test_renamed_key_hints_named_in_warning,
+        test_unrelated_unknown_key_no_hint_bleed,
         test_machine_layer_not_loaded,
         test_deep_merge_scalar_wins,
         test_deep_merge_nested_merge,
@@ -1805,6 +1975,7 @@ def main() -> int:
         test_no_repo_layer_config_anywhere_emits_note,
         test_load_config_rename_detect_pct_key_present,
         test_load_config_done_gate_key_present,
+        test_load_config_auto_approve_on_cap_keys_present,
         test_load_config_stub_misuse_warning_nested_layout,
         test_load_config_stub_misuse_no_warning_flat_layout,
         test_review_common_load_config_git_root_param,
