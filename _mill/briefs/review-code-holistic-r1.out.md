@@ -1,0 +1,28 @@
+MILL_REVIEW_BEGIN
+# Review: mill-merge / mill-merge-in: brief-staging path bug and easy-to-miss caching instruction — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-19
+```
+
+## Findings
+
+None.
+
+Both cards were verified against the plan requirements:
+
+- Card 1 (`mill-merge-in/SKILL.md` Step 5.5): new "Why relative, not absolute" paragraph is inserted exactly between the "Why staged-only, not unscoped porcelain" paragraph and the "#946" paragraph, as plain (non-blockquoted) prose, with the bash fence and both surrounding paragraphs untouched. Wording matches the plan's verbatim text (the plan's Unicode em-dash was rendered as `--`, which matches the immediately-adjacent, pre-existing "#946" paragraph's own `--` usage in the same file, so this is not a convention deviation).
+- Card 2 (`mill-merge/SKILL.md` Step 5): new "Recovery path when `cached_task`/`cached_task_description` are undefined here" paragraph is inserted exactly between the "`reset --hard origin/<parent_branch>` is deliberately never used" paragraph and the bash fence ending in `commit -m "<cached_task>"` / `push`, as plain prose, with the fence and both surrounding paragraphs (including the "Note: these two commands..." paragraph after it) untouched.
+- Out-of-plan files: none — only the two files named in `## All Files Touched` were edited; `test-brief-commit.py` and `_mill/status.md` are unmodified context/status inputs.
+- Shared Decisions honored: no `mill-config.yaml` change, no test file modified/added.
+- `test-brief-commit.py`'s `test_mill_merge_in_brief_commits` substring checks (`"add _mill/briefs/"` presence) are unaffected — the new paragraph adds more occurrences of that substring in backticks but does not remove or alter the existing `git -C <worktree> add _mill/briefs/` line.
+- No duplication: each new paragraph appears exactly once in its target file.
+
+## Verdict
+
+APPROVE
+Both doc-gap cards are correctly placed, verbatim, and scoped exactly as planned with no side effects.
+MILL_REVIEW_END
