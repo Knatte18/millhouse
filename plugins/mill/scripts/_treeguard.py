@@ -66,6 +66,11 @@ def check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: 
         A dict with keys "triggered" (bool), "restored_paths" (list[str], hub-relative, sorted), and
         "timestamp" (str | None, ISO-8601 UTC, set only when triggered is True).
     """
+    if not isinstance(worktree, Path):
+        raise TypeError(f"check_and_restore: worktree must be a pathlib.Path, got {type(worktree).__name__}")
+    if git_root is not None and not isinstance(git_root, Path):
+        raise TypeError(f"check_and_restore: git_root must be a pathlib.Path, got {type(git_root).__name__}")
+
     lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
 
     # Compute the hub_prefix using the same technique as _cleanliness.revert_out_of_scope_drift: empty for a flat layout (git_root is None or equals worktree) or an unresolved git_root.
