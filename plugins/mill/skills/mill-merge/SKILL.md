@@ -152,7 +152,8 @@ Derive:
    If `status_path` is absent (or the slug mismatch above triggered fallthrough): call `task = _client.get_task(wiki_path, slug)` (where `from wiki import _client`).
    Guard: `if task is None: halt("_mill/status.md absent and slug '<slug>' not found in wiki; cannot determine merge state.")`.
    If `task["status"] == "pr-pending"` → treat as `pr-pending` below.
-   Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending for '<slug>';
+   If `task["status"] == "ready-to-merge"` → treat as `done` below (direct-mode's own post-cleanup-not-yet-squashed signal; mirrors `_phase_gate.absent_status_halt_message`'s pairing of `ready-to-merge` with `pr-pending` as the two resumable wiki states, but maps to `done` rather than `pr-pending` because a direct-mode task never has a PR -- the PR-state gate's `none` route below relies on this phase value alone to distinguish the two).
+   Otherwise → halt with "_mill/status.md absent and wiki does not show pr-pending or ready-to-merge for '<slug>';
    cannot determine merge state. (status.md slug did not match task slug '<slug>')" -- append the parenthetical only when a slug mismatch (not a genuinely absent file) triggered this branch.
 
    | phase | action |
@@ -161,9 +162,9 @@ Derive:
    | `pr-pending` | see *PR-state gate* below |
    | `complete` / missing / other | halt with "status.md phase is `<value>`; mill-merge expects `done`. If the task is not finished, run mill-go first." |
 
-   When `phase: done`, cache the task fields from `_mill/status.md` now, while status.md still exists and before the Teardown Steps run:
-   - `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` — the task title used in Step 5's squash commit message and Step 6's PR title.
-   - `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` — the task description used in Step 6's PR body.
+   When `phase: done`, cache the task fields now, before the Teardown Steps run:
+   - If `status_path.exists()`: read from `_mill/status.md` while it still exists — `cached_task = _status.read_full(status_path)["yaml"].get("task", slug)` (the task title used in Step 5's squash commit message and Step 6's PR title), `cached_task_description = _status.read_full(status_path)["yaml"].get("task_description", cached_task)` (the task description used in Step 6's PR body).
+   - Otherwise (the `ready-to-merge` wiki-fallback route above, where `status_path` never existed in this process): derive from the wiki instead, same as the `closed` PR-state-gate route below — `task = _client.get_task(wiki_path, slug)` (already fetched above; reuse it), `cached_task = task["title"]`, `cached_task_description = task.get("title")` (title is the only available field).
 
    Use `cached_task` and `cached_task_description` in all subsequent references to "task: field from status.md" and "task_description field from status.md".
    Step 4's `git rm -r _mill/` deletes status.md before Step 5 runs;
