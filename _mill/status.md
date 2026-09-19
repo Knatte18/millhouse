@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: shared-helper-script-validation-gaps
 branch: hanf/shared-helper-script-validation-gaps
 plan: _mill/plan
@@ -26,4 +26,13 @@ plan-fix-r2  '2026-09-19T11:43:09Z'
 plan-review-r3  '2026-09-19T11:47:12Z'
 plan-fix-r3  '2026-09-19T11:48:15Z'
 planned  '2026-09-19T11:48:33Z'
+implementing  '2026-09-19T12:46:08Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: config-treeguard-guards
+    state: pending
 ```
