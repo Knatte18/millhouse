@@ -360,7 +360,7 @@ batch, not a repeated shape). Both files were re-read for this audit (not copied
     commit + push, fixed message.
 - **Phase: Plan Review** (lines 306-618) — the review loop, mirroring `mill-start`'s Discussion
   Review shape closely enough that most sub-mechanics classify the same way:
-  - **Path Setup / read persisted `skip_checks`/`discussion_sha`** (lines 308-337) — **Mechanical/
+  - **Path Setup / read persisted `skip_checks`/`discussion_sha`** (lines 308-314) — **Mechanical/
     collapsible**. Deterministic frontmatter reads.
   - **`--revise` namespacing override, `--max-rounds` threading for blocked-resume, live
     operator round-cap override, live operator waiver of step 6** (lines 316-329) — **Excluded**
