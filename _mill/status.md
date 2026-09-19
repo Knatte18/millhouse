@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r1
+phase: discussed
 slug: shared-helper-script-validation-gaps
 branch: hanf/shared-helper-script-validation-gaps
 plan: null
@@ -16,4 +16,6 @@ task_description: |
 ```text
 discussing  '2026-09-19T05:09:26Z'
 discussion-gap-fix-r1  '2026-09-19T11:23:50Z'
+discussion-fix-r2  '2026-09-19T11:27:30Z'
+discussed  '2026-09-19T11:27:30Z'
 ```
