@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fix-plan-review-kwarg-drift
+phase: holistic-reviewing
 slug: mill-plan-done-gate-kwargs-count-drift
 branch: hanf/mill-plan-done-gate-kwargs-count-drift
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-19T11:29:24Z'
 planned  '2026-09-19T11:30:03Z'
 implementing  '2026-09-19T11:32:21Z'
 approved-fix-plan-review-kwarg-drift  '2026-09-19T11:35:15Z'
+holistic-reviewing  '2026-09-19T11:35:45Z'
 ```
 
 ## Batches
