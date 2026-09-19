@@ -3,7 +3,7 @@
 ```yaml
 task: mill-finalize/mill-merge-in citation-scan pathspec `:!_mill` fails on git 2.53+
 slug: mill-finalize-citation-scan-pathspec-magic-bug
-approved: false
+approved: true
 started: 20260919-112545
 parent: main
 root: ""
