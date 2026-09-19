@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-turn-reduction-audit-doc
+phase: holistic-reviewing
 slug: turn-reduction-audit
 branch: hanf/turn-reduction-audit
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-19T11:32:51Z'
 planned  '2026-09-19T11:33:32Z'
 implementing  '2026-09-19T11:35:59Z'
 approved-turn-reduction-audit-doc  '2026-09-19T11:46:25Z'
+holistic-reviewing  '2026-09-19T11:46:49Z'
 ```
 
 ## Batches
