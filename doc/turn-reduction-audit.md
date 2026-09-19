@@ -225,7 +225,216 @@ batch, not a repeated shape). Both files were re-read for this audit (not copied
 
 ## mill-plan
 
-_Filled by card 2._
+- **Entry Step 0** (lines 16-18) — load `mill:prose`/`mill:conversation` — **Excluded**. Skill-tool
+  load, same reasoning as `mill-start`'s Entry Step 0.
+- **Entry Step 0.5: parse arguments** (lines 20-31) — token-walk `$ARGUMENTS` for `--revise`/
+  `--approve`, halt on both or on an unknown token — **Mechanical/collapsible**. Pure deterministic
+  string parsing with fixed halt messages, no judgment. Un-scripted today (inline token-walk); rough
+  saving: ~1 turn.
+- **Entry step 1** (lines 33-38) — resolve `git_root`/`wiki_path`/`worktree_root` — **Mechanical/
+  collapsible**. Same shape as `mill-start`'s steps 1-3 + Path Setup; already-scripted per-call.
+- **Entry step 2** (lines 39-43) — load config, read `max_review_rounds`/`min_review_rounds`/
+  `pipeline.entry_wait*` — **Mechanical/collapsible**. Deterministic config read.
+- **Entry step 3** (lines 44-45) — resolve slug, halt on `MarkerError` — **Mechanical/collapsible**.
+  Fixed halt text, no operator choice.
+- **Path Setup** (lines 47-52) — derive `status_path`; note `plan_dir`/`reviews_dir` are deferred to
+  later phases — **Mechanical/collapsible**.
+  - **Combined candidate:** Entry steps 1-3 + Path Setup (lines 33-52) are one collapse unit, same
+    shape and same recommendation as `mill-start`'s equivalent sequence above. Rough saving: ~3
+    turns collapsed to 1.
+- **Entry step 4: phase-table branch** (lines 54-138) — re-derived line range for this audit (the
+  task body's own first-pass citation of "~60 lines" is stale; `_mill/discussion.md`'s own
+  re-derivation of 54-138 checked out against the current worktree source and is used here
+  unchanged). This is the task body's own cited Borderline worked example and now spans three
+  distinct sub-parts, each classified separately below rather than as one monolithic entry, since
+  they no longer share one shape:
+  - **`--revise` pre-check** (lines 57-62) — read `phase`/`approved`, branch on
+    `planned+approved: true` vs. `blocked` vs. neither, flip `approved: false`, append_phase, commit
+    — **Borderline**. It brackets a phase-name-visible transition (`planning`) and a fixed halt
+    message for the "neither" branch.
+    - *Full exclusion:* keep the whole three-way branch and its commit/push inline, exactly as
+      today.
+    - *Scoped partial collapse:* a script call reads `phase`/`approved` and returns which of the
+      three branches applies (as a JSON tag), plus performs the deterministic `approved: false` edit
+      and the `_status.append_phase`+commit for the two proceed-branches; the SKILL.md keeps the
+      "unsupported" halt message text and the decision of which branch's report to show the
+      operator.
+    - **Recommendation:** scoped partial collapse — the branch-selection read is pure
+      deterministic YAML inspection, and the two proceed-branches' bookkeeping (edit + append_phase +
+      commit) is the same append_phase+commit shape flagged cross-cuttingly below; only the halt
+      wording for the "neither" branch needs to stay SKILL-owned.
+  - **`--approve` pre-check** (lines 64-70) — read `phase`/`blocked_reason`, branch on
+    `blocked` + `max-rounds exhausted` prefix vs. not, flip `approved: true`, commit, fall through to
+    Handoff — **Borderline**. Same shape as `--revise` above: brackets a fixed halt/defensive-guard
+    message and an operator-visible `approved:` flip.
+    - *Full exclusion:* keep inline exactly as today.
+    - *Scoped partial collapse:* a script call performs the `blocked_reason.startswith(...)` check
+      and the `approved:` frontmatter flip + commit in one call, returning whether the pre-check
+      applied; the SKILL.md keeps the "already true" defensive halt and the "--approve only applies
+      to..." halt text.
+    - **Recommendation:** scoped partial collapse, mirroring the `--revise` pre-check's
+      recommendation — same mechanical shape, same reasoning.
+  - **Phase table itself** (lines 72-79) — six-row `phase:` → action lookup — **Mechanical/
+    collapsible**. A fixed dict lookup with no judgment (each row's *action* may itself be Excluded
+    or Borderline, as classified separately, but the lookup that selects a row is pure mechanical
+    dispatch). Un-scripted; rough saving: ~1 turn.
+  - **Entry-gate wait for upstream mill-start** (lines 81-116) — compute the wait-trigger match,
+    build the `Monitor` wait command, wait for the `<task-notification>`, branch on `READY`/
+    `TIMEOUT`/harness-stop — **Borderline**. It brackets the `Monitor` tool's long-running wait (a
+    dispatch-shaped operation, not an Agent call, but the same "don't collapse the thing being
+    waited on" concern applies) and ends in three distinct operator-facing halt/re-entry messages.
+    - *Full exclusion:* keep the whole wait-and-branch sequence inline, exactly as today — the
+      `Monitor` call, the event-branching, and every halt message stay orchestrator-owned.
+    - *Scoped partial collapse:* a script call computes `matched`/`entry_wait`/`giveup_s` and builds
+      the wait command string (`_phase_wait.build_wait_command`) in one call; the SKILL.md keeps the
+      actual `Monitor` tool invocation, the event-branch decisions, and every halt/re-entry message.
+    - **Recommendation:** scoped partial collapse for the command-construction step only (three
+      deterministic reads + one helper call, currently three separate inline reads) — the `Monitor`
+      call itself and the branch on its result must stay inline, since collapsing those would hide
+      the operator-visible wait/timeout decision the Borderline bucket exists to protect.
+  - **Entry: resuming after a max-rounds block** (lines 117-138) — read `blocked_reason`, branch on
+    the `"max-rounds exhausted"` prefix, detect mid-`--revise` blocks, derive `N`/
+    `local_max_review_rounds`, append_phase, commit, fall through to Phase: Plan Review —
+    **Borderline**. Entangled with two distinct operator-facing halt messages (non-max-rounds block,
+    mid-`--revise` block) and a phase-name-visible `"planning"` transition.
+    - *Full exclusion:* keep the whole resume procedure inline exactly as today.
+    - *Scoped partial collapse:* a script call performs the deterministic sub-pieces — the
+      `blocked_reason` prefix check, the mid-`--revise` freshness comparison across
+      `revise-*` subdirectories, and the `N`/`local_max_review_rounds` arithmetic — returning a JSON
+      verdict (`resume` | `hard-stop` | `mid-revise-unsupported`) plus the computed values; the
+      SKILL.md keeps the two halt messages and the `_status.append_phase`+commit+fallthrough
+      decision.
+    - **Recommendation:** scoped partial collapse — every sub-piece here is deterministic file
+      inspection and arithmetic; only the two halt-message texts and the final fallthrough decision
+      need to stay SKILL-owned.
+- **Phase: Plan** (lines 144-304) — broken down at numbered-step granularity:
+  - **Read discussion.md, capture `discussion_sha`** (lines 146-149) — **Mechanical/collapsible**.
+    One read, one `git rev-parse` capture, no judgment.
+  - **"think the plan through end-to-end"** (line 149) — **Excluded**. The entire reason Opus runs
+    this phase; pure reasoning, no fixed shape.
+  - **Fork scope guardrail** (lines 151-160) — pre/post `git status --porcelain` diffing around a
+    research fork — **Borderline**, identical reasoning and recommendation to `mill-start`'s
+    equivalent guardrail above (brackets an Agent dispatch): scoped partial collapse for the
+    baseline-vs-post-return diff computation only, fork dispatch and violation-revert decision stay
+    inline.
+  - **Batch sizing** (lines 162-168) — judgment on how to split batches by module/subsystem boundary
+    — **Excluded**. Genuine design judgment, not mechanizable.
+  - **Write the files, steps 1-3** (lines 170-208) — render `plan-overview.md`/`plan-batch.md`
+    templates, fill Batch Index/Cards/Batch Tests — **mixed**. Template rendering (step 1, the
+    `_render.render` call) is **Mechanical/collapsible** (deterministic substitution, already
+    scripted); filling the Batch Index/Cards/Batch Tests content is **Excluded** (the plan's actual
+    design content, written by the planning LLM).
+  - **Self-validate the DAG** (lines 246-248) — call `_plan_dag.extract_batch_index` +
+    `_plan_dag.validate`, fix-then-retry on `PlanDAGError` — **Mechanical/collapsible**. Deterministic
+    validation gate with a fixed retry shape; already scripted per-call (each is one function call
+    issued as its own turn today). Rough saving: ~1 turn.
+  - **Self-run the validator gate** (lines 250-269, including the `wiki-config-mutation`/
+    `verify-full-suite`/`out-of-worktree-target` skip-check overrides) — **mixed**. The
+    `_plan_validate.run` call itself is **Mechanical/collapsible** (deterministic, already scripted);
+    each skip-check override's two-condition test is a judgment call on the planner's own design
+    intent (e.g. "is this key addition's consuming code provably unused" cannot be answered
+    mechanically) — **Excluded**.
+  - **Fix findings via Step 1.5's table, re-run** (lines 286) — **Mechanical/collapsible** for the
+    mechanical rows of the fix table (most rows are literal find-and-replace edits per the table);
+    the rows the table itself marks "Halt — not mechanically fixable" are **Excluded** by the table's
+    own design (a structural planning bug, not a fixable shape).
+  - **Persist `skip_checks`/`discussion_sha` into frontmatter** (lines 288-290) — **Mechanical/
+    collapsible**. Deterministic frontmatter edits with no judgment (the *values* being persisted
+    were already computed above; this is just the write).
+  - **Update `_mill/status.md`** (lines 294-299) — `_status.update_field` + `_status.append_phase` —
+    **Mechanical/collapsible**. Same append_phase shape flagged cross-cuttingly; un-scripted as a
+    combined unit today.
+  - **Pre-commit drift check** (line 301) — re-run `git rev-parse`, compare against captured
+    `discussion_sha`, halt+`set_blocked`+commit on mismatch, or fall through — **Borderline**. The
+    "proceed" path is pure Mechanical (a sha comparison), but the mismatch path is a fixed,
+    operator-facing halt message entangled with the same comparison.
+    - *Full exclusion:* keep the whole check-and-branch inline, exactly as today.
+    - *Scoped partial collapse:* a script call re-runs the `git rev-parse`, compares it, and on
+      mismatch performs the `git clean -fd` + `_status.set_blocked` + commit + push in one call,
+      returning a boolean; the SKILL.md keeps only the halt message text and the decision to stop
+      short of committing the plan.
+    - **Recommendation:** scoped partial collapse — the mismatch branch's actions are themselves
+      fully mechanical (clean, set_blocked, commit, push); only the halt wording needs to stay
+      SKILL-owned.
+  - **Commit on the task branch** (lines 303-304) — **Mechanical/collapsible**. One `git add` +
+    commit + push, fixed message.
+- **Phase: Plan Review** (lines 306-618) — the review loop, mirroring `mill-start`'s Discussion
+  Review shape closely enough that most sub-mechanics classify the same way:
+  - **Path Setup / read persisted `skip_checks`/`discussion_sha`** (lines 308-337) — **Mechanical/
+    collapsible**. Deterministic frontmatter reads.
+  - **`--revise` namespacing override, `--max-rounds` threading for blocked-resume, live
+    operator round-cap override, live operator waiver of step 6** (lines 316-329) — **Excluded**
+    for the live-operator overrides (they exist specifically to accept a natural-language operator
+    instruction — irreducibly interactive by design); **Mechanical/collapsible** for the `--revise`
+    namespacing arithmetic and the blocked-resume `--max-rounds` threading (deterministic
+    string/integer computation with no judgment, once the triggering condition is already known).
+  - **Tree-guard safeguard** (lines 330-332) — **Mechanical/collapsible**, identical shape and
+    recommendation to `mill-start`'s Tree-guard safeguard entry above.
+  - **Load `mill-receiving-review`, skip conditions** (lines 334-342) — **Excluded** (skill load) /
+    **Mechanical/collapsible** (the two-key skip check), same split as `mill-start`'s equivalent.
+  - **Step 1: report round** (line 350) — **Mechanical/collapsible**, trivial.
+  - **Step 1.5: pre-review validator gate, auto-run + fix table + two-pass cap** (lines 352-406) —
+    **mixed**, same split as Phase: Plan's own validator-gate entry above: the CLI auto-run and the
+    fix table's mechanical rows are **Mechanical/collapsible**; the fix table's "Halt" rows and the
+    two-pass-cap halt message are **Excluded**/fixed text respectively (the halt itself is a simple
+    fixed message, folded into the mechanical bookkeeping rather than broken out separately, since it
+    has no judgment branch of its own beyond "second failure").
+  - **Convergence gate (min_rounds)** (lines 411-421) — **Mechanical/collapsible**, identical
+    reasoning to `mill-start`'s Convergence gate entry — pure boolean arithmetic over already-known
+    values.
+  - **Step 2: dispatch mode + Agent-mode/subprocess dispatch** (lines 423-497) — **Borderline**,
+    identical reasoning and recommendation to `mill-start`'s Discussion-Review step 2 — brackets the
+    plan reviewer's Agent dispatch; scoped partial collapse for the subprocess polling-until-exit
+    loop only.
+  - **Step 3: confirm review skill loaded** (lines 499-502) — **Mechanical/collapsible**, trivial.
+  - **Step 3.5: ERROR-only-aggregate retry** (lines 504-549) — **Borderline**, identical reasoning
+    and recommendation to `mill-start`'s equivalent step 3.5 — same dispatch-and-classify shape,
+    different trigger condition.
+  - **Unconditional round-recorded append** (line 551) — **Mechanical/collapsible**. Same
+    append_phase+commit shape flagged cross-cuttingly.
+  - **Guardrail (NIT/BLOCKING fixes scoped to `plan_dir` only)** (line 553) — **Excluded**. A
+    standing constraint on the judgment-driven fix steps below it, not itself an executable step.
+  - **Step 4a: APPROVE, zero NITs** (lines 555-560) — **Mechanical/collapsible**, same shape as
+    `mill-start`'s 4a.
+  - **Step 4b: APPROVE with NITs** (lines 562-577) — **Excluded** for the NIT-fix judgment work and
+    the DAG/validator re-run's *judgment* content (deciding whether a given finding is a legitimate
+    fix); **Borderline** for the terminal bookkeeping tail (append_phase + single commit +
+    Handoff-transition), same reasoning and recommendation as `mill-start`'s 4b entry.
+  - **Step 4c: REQUEST_CHANGES with `blocking_count == 0`** (lines 579-588) — same split as 4b:
+    **Excluded** for the NIT-fix/validator-gate judgment; **Borderline** (scoped partial collapse
+    recommended) for the terminal append_phase+commit tail.
+  - **Step 4d: REQUEST_CHANGES with `blocking_count > 0`** (lines 590-601) — **Excluded**. Applying
+    the `mill-receiving-review` decision tree to genuine BLOCKING findings is exactly the judgment
+    work this bucket protects; even its terminal `_status.append_phase`+commit is entangled with the
+    fixer-report content it accompanies in the same step, so it is not broken out as a separate
+    Mechanical line the way 4a/4b/4c's cleaner terminal actions are.
+  - **Step 5: Non-progress check** (lines 603-611) — **Borderline**. The `Pushed Back`-title-set
+    comparison is a mechanical read, but the halt itself is the entire point of the check (a
+    stable-disagreement circuit-breaker) and is explicitly never auto-escaped.
+    - *Full exclusion:* keep inline exactly as today.
+    - *Scoped partial collapse:* a script call reads both rounds' fixer reports and returns whether
+      the title sets are identical and non-empty; the SKILL.md keeps the `_status.set_blocked`+
+      commit+halt text.
+    - **Recommendation:** scoped partial collapse for the title-set comparison only — the read-and-
+      compare is pure mechanical text parsing; the halt decision and its operator-facing message must
+      stay SKILL-owned, since this check exists specifically to force a human look.
+  - **Step 6: Max-rounds escape** (lines 613-618) — **Borderline**, same reasoning as step 5 —
+    mechanical `blocking_count`-read, but a deliberate halt whose whole purpose is stopping automatic
+    progress.
+    - *Full exclusion:* keep inline exactly as today.
+    - *Scoped partial collapse:* a script call reads `result["blocking_count"]` and the live-waiver
+      flag and returns which of "waive" / "halt" applies; the SKILL.md keeps the halt message and the
+      waiver's implicit-approve commit text.
+    - **Recommendation:** scoped partial collapse for the read-and-branch only, same reasoning as
+      step 5.
+- **Phase: Handoff** (lines 620-636) — guard-read `approved:`, halt on `false`, append_phase
+  `"planned"`, commit+push, conditionally invoke `/mill-self-report --auto`, report a fixed
+  completion string — **Mechanical/collapsible** for the guard-read/halt/append_phase/commit
+  (deterministic, fixed halt text, no operator choice); the conditional `/mill-self-report --auto`
+  invocation is an Agent-adjacent skill invocation, not itself a read/write/branch, so it is left
+  attached to this same Mechanical entry rather than broken out (it is a single conditional
+  skill-load, already effectively one turn). Rough saving for the guard+append_phase+commit portion:
+  ~2 turns collapsed to 1.
 
 ## mill-go-base
 
