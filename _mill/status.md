@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-plan-done-gate-kwargs-count-drift
 branch: hanf/mill-plan-done-gate-kwargs-count-drift
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-19T05:09:08Z'
 discussion-fix-r1  '2026-09-19T11:22:13Z'
+discussed  '2026-09-19T11:24:06Z'
 ```
