@@ -438,7 +438,205 @@ batch, not a repeated shape). Both files were re-read for this audit (not copied
 
 ## mill-go-base
 
-_Filled by card 3._
+Re-derived counts against the current worktree source (the task body's first-pass numbers are a
+starting point, not ground truth — `_mill/discussion.md`'s own spot-check already found a one-off
+drift): `_status.append_phase` call sites — `mill-start/SKILL.md` 6, `mill-plan/SKILL.md` 14,
+`mill-go-base/SKILL.md` 21. `commit -m` occurrences — `mill-start/SKILL.md` 6,
+`mill-go-base/SKILL.md` 17, `mill-plan/SKILL.md` 21. Both counts match `_mill/discussion.md`'s own
+cited numbers exactly, so no drift beyond what that document already flagged. The two counts are
+not 1:1 paired site-for-site: `mill-go-base/SKILL.md` has 21 `append_phase` calls against 17
+`commit -m` occurrences because several call sites share one commit across two bookkeeping
+operations (e.g. Prepare's `init_batches` + `append_phase` land in a single commit; the Cleanliness
+gate's several `set_batch_field`+`append_phase` blocked-branches each pair 1:1 with their own
+commit; the Stuck-escalation self-resolve path's `append_phase("self-resolved-verify-logic", ...)`
+shares a commit with a `plan_dir` edit). This paired-vs-unpaired shape is exactly the kind of detail
+a follow-up `append_phase_and_commit`-style helper (see `## Cross-cutting recommendations` below)
+would need to preserve per call site, not collapse into one generic wrapper.
+
+- **Entry Step 0 (variant binding + driver preamble)** (lines 19-33) — bind `VARIANT_LABEL`, halt if
+  not invoked via a variant, splice in the variant's `## Driver preamble` — **Mechanical/
+  collapsible** for the binding/halt check itself (deterministic, fixed halt text); the *content* of
+  a variant's driver preamble (e.g. `mill-go2`'s fork-dispatch overrides) is Excluded elsewhere by
+  each variant's own classification, already covered above (`mill-go`/`mill-go2` add no mechanical
+  sequences beyond dispatch-override judgment).
+- **Step 0: verify `CLAUDE_PLUGIN_ROOT`** (lines 35-46) — a one-line env-var guard —
+  **Mechanical/collapsible**. Trivial, already effectively zero-turn (a guard clause inside a Bash
+  block that runs anyway).
+- **Step 0b: load `mill:prose`/`mill:conversation`** (lines 48-50) — **Excluded**. Skill-tool load,
+  same reasoning as `mill-start`'s Entry Step 0.
+- **Entry steps 1-4.5 (resolve paths, load config, read slug, acquire builder lock, Path Setup)**
+  (lines 52-88) — **Mechanical/collapsible**. Current behavior: 5 sequential deterministic
+  operations (`_paths` resolution, `_review_common.load_config`, `_marker.slug_from_branch`, the
+  `millpy-builder-lock.py acquire` subprocess, and the multi-variable Path Setup block), each issued
+  as its own step today. Already scripted per-step (every sub-call is an existing helper/CLI); this
+  is the largest of the three files' Entry-sequence collapse candidates by step count. Rough saving:
+  ~5 turns collapsed to 1.
+- **Entry step 5: Entry phase gate** (lines 89-122) — guard against the merge-interrupted
+  missing-`status.md` state, read `phase`/`blocked_reason`, six-row phase-table dispatch —
+  **mixed**. The missing-`status.md` guard and the phase-table lookup itself are **Mechanical/
+  collapsible** (deterministic dict dispatch, fixed messages on the terminal rows); the widened
+  `implementing`/`reviewing`/`fixing`/`discussed`-family rows route into the two subsections below,
+  classified separately since they are not simple terminal actions.
+- **Mid-execution phase-gate widening** (lines 124-158) — compute `matched`, route across seven
+  named branches (bare states, `approved-{batch}`, `holistic-reviewing`, `self-resolved-verify-logic`
+  disambiguation, `holistic-approved`) — **Mechanical/collapsible**. Every branch here is a fixed
+  string/regex match against `phase`/`_status.read_batches` state, with a fixed routing target (no
+  branch asks an LLM anything or halts on an operator-facing message) — the most complex single
+  dispatch table in the three files, but still purely deterministic. Un-scripted today as a combined
+  routing table; rough saving: ~2-3 turns (collapsing the "read phase, read batches, compute match,
+  pick a route" sequence into one call that returns the target section name).
+- **Entry-gate wait for upstream mill-plan** (lines 160-201) — **Borderline**, identical reasoning
+  and recommendation to `mill-plan`'s "Entry-gate wait for upstream mill-start" entry above (brackets
+  a `Monitor` wait; scoped partial collapse for the wait-command construction only).
+- **Entry step 6: read/validate/topo-sort the Batch Index** (lines 203-207) —
+  **Mechanical/collapsible**. `_plan_dag.extract_batch_index` + `.validate` + `.topo_order`, three
+  deterministic calls with no judgment. Rough saving: ~1 turn.
+- **## Prepare** (lines 209-216) — `_status.init_batches` → `_status.append_phase("implementing",
+  ...)` → one git commit, fresh-run only — **Mechanical/collapsible**. Current behavior: two
+  status-file mutations followed by one commit, issued as three sequential tool calls today.
+  Already-scripted-per-step: yes, both `_status` calls and the git commit are existing operations;
+  the win is purely collapsing 3 script-invoking turns into 1 combined helper call (the
+  `append_phase`+git-commit pattern the "Helper-function home" cross-cutting recommendation below
+  names by candidate number). Rough saving: ~2 turns collapsed to 1.
+- **## Agent-mode dispatch** (lines 221-450) — the shared three-step prepare/Agent-call/finalize
+  pattern plus its error-recovery/liveness-probe/tree-guard machinery, referenced from every dispatch
+  site in the file (Implement, Code Review, NIT-fix, fix/REQUEST_CHANGES) — **Borderline** as a
+  whole, since every invocation of this pattern brackets a genuine Agent dispatch (implementer,
+  reviewer, or fixer). Broken down by its own numbered steps:
+  - **Step 1: run prepare stage, parse envelope** (lines 227-235) — **Mechanical/collapsible** on
+    its own (a CLI invocation + JSON parse, already scripted), but it exists only to feed step 2's
+    dispatch, so its collapse value is folded into the Borderline recommendation below rather than
+    listed as an independent saving.
+  - **Step 2: call Agent tool, record `agentId`/timestamps** (lines 236-271) — **Excluded**. This
+    step *is* the Agent dispatch the Borderline classification protects; the `agentId`/timestamp
+    bookkeeping around it is trivial and inseparable from the call itself.
+  - **Step 3: recover from raw API errors and interruptions** (lines 277-342) — **Borderline**. The
+    classification logic (raw-API-error marker match, implementer clean-turn-exhaustion vs.
+    non-clean-terminal split, reviewer/fixer liveness probe) is deterministic pattern-matching over
+    already-available notification text and `TaskOutput` results, but it exists entirely to decide
+    how to react around the just-completed Agent dispatch.
+    - *Full exclusion:* keep the whole three-way classification (a/b/c) inline exactly as today —
+      every branch's re-dispatch or probe call stays orchestrator-visible.
+    - *Scoped partial collapse:* a script call takes the notification text (and, where applicable,
+      a `TaskOutput` probe result already fetched) and returns which of (a)/(b)/(c)'s sub-branches
+      applies, as a classification tag; the SKILL.md keeps every re-dispatch decision, every
+      `TaskOutput` call itself, and the transient-vs-incomplete-vs-logic routing that follows.
+    - **Recommendation:** scoped partial collapse for the text-classification step only — matching
+      an "API Error" marker, a `<status>` tag value, and a JSON-status-block presence is pure string
+      inspection; the probe calls and every re-dispatch decision must stay inline since they are the
+      dispatch-adjacent actions this Borderline bucket exists to protect.
+  - **Step 4: capture output — reviewer-skipped** (lines 344-349) — **Mechanical/collapsible**. A
+    conditional file write with no judgment (implementer/fixer/merge-in write; reviewer skips).
+  - **Step 5: run finalize stage** (lines 351-380) — **Mechanical/collapsible** for the CLI
+    invocation and flag-threading itself (deterministic, already scripted); the accompanying prose
+    about Bash-tool timeout tuning and PATH inheritance is operational guidance, not itself a step.
+  - **Step 5.5: `incomplete` recovery** (lines 382-412) — **Borderline**. The warm-`SendMessage`-
+    then-`--resume-incomplete`-fallback shape re-dispatches into the same Agent session that step 2
+    already dispatched, so it brackets the identical Agent dispatch this whole section protects.
+    - *Full exclusion:* keep the whole warm-resume/cold-fallback sequence inline, exactly as today.
+    - *Scoped partial collapse:* a script call determines which of "warm resume viable" / "cold
+      `--resume-incomplete` required" applies (based on whether `agentId` is retained and the prior
+      `SendMessage` outcome) and performs the deterministic envelope re-parse afterward; the
+      SKILL.md keeps the actual `SendMessage`/`Agent` re-dispatch calls themselves.
+    - **Recommendation:** scoped partial collapse for the branch-selection logic only — the two
+      dispatch calls this recovery can issue must stay inline.
+  - **Step 6: branch on verdict** (line 414-415) — **Mechanical/collapsible**. A pointer to the
+    caller's own branching (Implement step 2, Code Review step 4, etc.), not additional logic of its
+    own.
+  - **Agent-mode properties / Tree-guard checkpoint block / "Why not fork?"** (lines 417-450) — not
+    executable steps; reference documentation and a standing design rationale — **Excluded** from
+    per-run classification (nothing here executes at runtime beyond the Tree-guard checkpoint calls,
+    which are the same **Mechanical/collapsible** shape already flagged for `mill-start`'s Tree-guard
+    safeguard entry above).
+- **## Review cost line** (lines 452-486) — a print-format specification, invoked by name from
+  every review dispatch site — **Mechanical/collapsible**. Deterministic field lookup + string
+  formatting, already effectively a single print call per invocation; not itself a multi-step
+  sequence to collapse further.
+- **### 0. Wiki health-check** (lines 487-506) — one Python one-liner health-check, release lock +
+  halt on failure — **Mechanical/collapsible**. Already a single Bash-tool invocation with a fixed
+  halt message; rough saving: ~0 turns (already at the 1-turn floor), same shape as `mill-start`'s
+  Phase: Select.
+- **### 0.55. Done-gate baseline pre-flight** (lines 508-546) — first-batch-only conditional
+  `_done_gate.run_preflight` invocation, log-and-continue on `blocked` — **Mechanical/collapsible**.
+  Deterministic config-gated call with a fixed non-halting log path; already scripted.
+- **### 0.5. Baseline pre-flight** (lines 548-578) — first-batch-only `millpy-bg`-backed
+  `--stage baseline` invocation, poll-until-exit, parse two JSON lines, never halts —
+  **Mechanical/collapsible**. Same "already-scripted subprocess + polling loop" shape as the
+  various review-dispatch polling loops classified Borderline elsewhere — but this one brackets no
+  Agent/LLM dispatch (it is a plain background CLI run), so it stays Mechanical rather than
+  Borderline. Rough saving: ~1-2 turns (the poll-until-exit cycle collapses to one wait call).
+- **### 0.6. Per-batch baseline recapture** (lines 580-625) — self-hosting-only conditional
+  `millpy-bg`-backed recapture, four-condition trigger check, never escalates on failure —
+  **Mechanical/collapsible**, same reasoning as 0.5 above (background CLI + polling loop, no Agent
+  dispatch bracketed).
+- **### 1. Implement** (lines 627-651) — venv-check, then the Agent-mode dispatch pattern with
+  `millpy-implement.py` — **mixed**. The venv-check (lines 629-640) is **Mechanical/collapsible**
+  (a fixed guard-and-`uv sync`-once shape); the dispatch itself is the same **Borderline** "##
+  Agent-mode dispatch" entry already classified above, not re-classified per call site.
+- **### 2. Parse implementer report** (lines 653-666) — branch on `status`/`stuck_type` from the
+  implementer's JSON line, one-retry-then-escalate for `transient` — **Mechanical/collapsible**.
+  Deterministic JSON-field dispatch with a fixed retry count; already effectively a single parse+
+  branch operation. Rough saving: ~1 turn when the retry fires (folds the re-invocation decision into
+  the same call as the parse).
+- **### 2b. Cleanliness gate** (lines 668-743) — scope-violations check, parent-branch liveness
+  resolution (including dead-parent auto-rebind/fallback/cycle), out-of-scope drift revert, dirt
+  classification, each ending in either a `blocked`+commit or a fall-through — **Mechanical/
+  collapsible**. Every branch here is a deterministic helper-call sequence (`_cleanliness`,
+  `_parent_branch`) with fixed `blocked_reason` text per outcome — no judgment call decides which
+  branch fires, only already-known return values do. This is the longest purely-Mechanical sequence
+  in the file: 5 chained deterministic decision points, each currently a separate tool-call round
+  today. Already scripted per-step (every sub-call is an existing helper); rough saving: ~4-5 turns
+  collapsed to 1 (one script call returning which terminal branch applies, plus the commit already
+  made).
+- **### 3. Code Review loop** (lines 745-878) — broken down at numbered-step granularity:
+  - **Per-batch-review-disabled shortcut** (line 747) — **Mechanical/collapsible**. A single
+    config-gated approve-and-continue path, no judgment.
+  - **Setup (state → reviewing, `min_batch_rounds`)** (lines 750-752) — **Mechanical/collapsible**.
+  - **Convergence gate (min_rounds + demoted predicate)** (lines 754-765) — **Mechanical/
+    collapsible**, identical reasoning to `mill-start`'s/`mill-plan`'s Convergence gate entries —
+    pure boolean arithmetic.
+  - **Per-round setup: tree-guard + `reviewing-{batch}-rN` append_phase + commit** (lines 769-772)
+    — **Mechanical/collapsible**, the same append_phase+commit shape flagged cross-cuttingly.
+  - **Step 1: crash-recovery check** (lines 774-795) — **Mechanical/collapsible**. Deterministic
+    freshness comparison (`ref_ts` vs. file mtime) against a scanned `reviews_dir` glob, no judgment.
+  - **Step 1.5: prior-notes digest** (lines 797-804) — **Mechanical/collapsible**. Deterministic
+    text extraction (parse `### [NIT]` headings from the prior round's review file) and file write.
+  - **Step 2: tree-guard + Agent-mode dispatch (code reviewer)** (lines 806-811) — the same
+    **Borderline** "## Agent-mode dispatch" entry, called here for the code-review CLI specifically;
+    not re-classified per call site.
+  - **Step 3: read cost line, no findings read** (lines 813-819) — **Mechanical/collapsible**.
+  - **Step 4: branch on verdict** (lines 821-856) — **mixed**. The `APPROVE`/`NEED_CONTEXT`/
+    `REQUEST_CHANGES` dispatch itself is **Mechanical/collapsible** (deterministic verdict-field
+    branch); the `APPROVE` branch's mandatory NIT-fix dispatch and the `REQUEST_CHANGES` branch's
+    fixer dispatch are each the same **Borderline** "## Agent-mode dispatch" pattern (bracket a
+    fixer Agent call), not re-classified per call site; `NEED_CONTEXT`'s missing-file existence
+    check and its "same files as before" non-progress detection are **Mechanical/collapsible**
+    (deterministic path-existence/set-comparison, no judgment).
+  - **Step 4.5: ERROR-only-aggregate retry** (lines 858-874) — **Borderline**, identical reasoning
+    and recommendation to `mill-plan`'s/`mill-start`'s equivalent ERROR-retry steps.
+  - **Step 5: Max-rounds exhaustion** (lines 876-878) — **Mechanical/collapsible**. Unlike
+    `mill-plan`'s step 5/6 (which are deliberately never auto-escaped), this is a fixed
+    `_notify.notify`+`set_batch_field`+`append_phase`+commit sequence with one fixed message and no
+    live-waiver escape hatch — no operator judgment is layered on top of the mechanical bookkeeping,
+    so it stays Mechanical rather than Borderline.
+- **### Stuck escalation** (lines 880-926) — per-`stuck_type` one-shot self-resolve-then-escalate
+  rules (`infrastructure`, `transient`, `incomplete`, `verify`/`logic`) — **mixed**. The
+  re-dispatch/escalation bookkeeping for `infrastructure`/`transient`/`incomplete` is
+  **Mechanical/collapsible** (fixed retry-once-then-`blocked` shape, deterministic branch on
+  `commits_made`); the `verify`/`logic` self-resolve is **Excluded** — "investigate the failure
+  using the same judgment an implementer/fixer already applies" is explicitly a judgment call, and
+  its optional plan-edit + new-card-append step is genuine authoring, not a fixed shape (though the
+  `compute_next_card_number`/`_check_card_numbering` calls it may invoke are themselves
+  Mechanical/collapsible helper calls, already scripted).
+- **### Blocked** (lines 928-937) — notify, release builder lock, tell the user a fixed message —
+  **Mechanical/collapsible**. Two deterministic calls plus one fixed string; already near the
+  1-turn floor.
+- **## Resume / ## Holistic code review / ## Handoff** (lines 939-949) — each a bare
+  "read this file now" pointer into a companion `.md` file (`resume.md`, `holistic-review.md`,
+  `handoff.md`) — **Excluded** from this file's own classification. These headings carry no inline
+  step content of their own to classify; the companion files they point to are outside this card's
+  `Context:` (mill-go-base/SKILL.md only) and are recorded in `## Follow-up backlog candidates`
+  below as an explicit scope note, not silently folded into this audit.
 
 ## Cross-cutting recommendations
 
