@@ -84,7 +84,7 @@ Call `_finalize_cleanup.base_tracks_task_dir(git_root, parent_branch, task_dir)`
 
 ```bash
 git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \
-    ':!<task_dir>' ':!plugins/**/SKILL.md' ':!plugins/**/unit_tests/**' ':!plugins/**/integration_tests/**'
+    ':(exclude)<task_dir>' ':(exclude)plugins/**/SKILL.md' ':(exclude)plugins/**/unit_tests/**' ':(exclude)plugins/**/integration_tests/**'
 ```
 
 ```bash

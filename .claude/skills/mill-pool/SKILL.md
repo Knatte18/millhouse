@@ -86,6 +86,8 @@ All work happens inside that worktree. Do not touch /home/knatte/Code/millhouse/
 
 The worktree was already created by mill-spawn: branch, junctions, and _mill/status.md already exist. Do not re-run mill-spawn or mill-claim.
 
+**Never call the EnterWorktree or ExitWorktree tools.** This path is already a real git worktree in millhouse's own container layout (`wts/<slug>`, created by mill-spawn) -- not one of the harness's own `.claude/worktrees/` sandboxes. EnterWorktree creates a brand-new worktree under `.claude/worktrees/` whenever it sees phrasing like "work in your own worktree," and creating one needs an approval no operator is present to give. Just run a plain `cd /home/knatte/Code/millhouse/wts/{SLUG}` via Bash (never compound it with a git command -- use `git -C <path> <command>` for one-off git calls per this repo's CLAUDE.md) as your first action, then treat that as your cwd for every subsequent Read/Write/Edit/Bash call.
+
 ## What to run, in order
 
 1. Invoke mill:mill-start (Skill tool) from inside {SLUG}'s worktree, and let it run to completion (phase: discussed, discussion.md committed and pushed).
@@ -123,6 +125,8 @@ Slug: {SLUG}
 Worktree path: /home/knatte/Code/millhouse/wts/{SLUG}
 
 Do not touch /home/knatte/Code/millhouse/wts/millhouse (the hub/parent) or any other task worktree. This is a fresh dispatch with no memory of the mill-start/mill-plan run that preceded it -- that's expected; mill-go reads the approved plan cold from disk.
+
+**Never call the EnterWorktree or ExitWorktree tools.** This path is already a real git worktree in millhouse's own container layout (`wts/<slug>`, created by mill-spawn) -- not one of the harness's own `.claude/worktrees/` sandboxes. EnterWorktree creates a brand-new worktree under `.claude/worktrees/` whenever it sees phrasing like "work in your own worktree," and creating one needs an approval no operator is present to give. Just run a plain `cd /home/knatte/Code/millhouse/wts/{SLUG}` via Bash (never compound it with a git command -- use `git -C <path> <command>` for one-off git calls per this repo's CLAUDE.md) as your first action, then treat that as your cwd for every subsequent Read/Write/Edit/Bash call.
 
 ## What to run
 
