@@ -28,5 +28,7 @@ implementing  '2026-09-19T11:35:59Z'
 ```yaml
 batches:
   - name: turn-reduction-audit-doc
-    state: pending
+    state: running
+    implementer_session: fe209338-acc7-4568-b11d-023f8f3a8c30
+    start_sha: 0ffb395e2ffd47f97e6e1efb04e2fcfe4c93940f
 ```
