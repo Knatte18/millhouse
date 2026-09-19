@@ -33,6 +33,7 @@ __all__ = [
     "deep_merge",
     "set_local_wiki_overrides",
     "ENV_REGISTRY",
+    "RENAMED_KEY_HINTS",
     "apply_env_overrides",
     "walk_unknown_keys",
     "warn_unknown_keys",
@@ -48,6 +49,11 @@ ENV_REGISTRY = {
     "MILL_CODE_REVIEWER":       ("roles", "code-review",       "holistic", "reviewer"),
     "MILL_CODE_BATCH_REVIEWER": ("roles", "code-review",       "batch",    "reviewer"),
     "MILL_IMPLEMENTER":         ("roles", "implementer",       "model"),
+}
+
+RENAMED_KEY_HINTS = {
+    "pipeline.max_review_rounds": "round caps now live at roles.<role>.<scope>.rounds, e.g. roles.plan-review.holistic.rounds -- this key has no effect",
+    "pipeline.max_discussion_review_rounds": "round caps now live at roles.<role>.<scope>.rounds, e.g. roles.discussion-review.holistic.rounds -- this key has no effect",
 }
 
 
@@ -122,7 +128,12 @@ def warn_unknown_keys(actual: dict, template: dict, source_label: str) -> None:
 
     unknown = walk_unknown_keys(actual, template)
     for path in unknown:
-        if path not in deprecated_keys:
+        if path in deprecated_keys:
+            continue
+        hint = RENAMED_KEY_HINTS.get(path)
+        if hint:
+            print(f"[config] unknown key: {path} (in {source_label}) -- {hint}", file=sys.stderr)
+        else:
             print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
 
 

@@ -166,7 +166,10 @@ If the exit code is non-zero and the JSON line has `result: blocked`, proceed to
    Otherwise tell the user: "Task complete.
    Run `/mill-finalize` to finalize the task (creates a PR or squashes directly, depending on config)." mill-finalize may halt on `pr-pending` in PR mode — that is expected;
    treat it as completion of step 5 and continue to step 6.
-6. If `pipeline.auto_report: true` → invoke `/mill-self-report --auto`.
+6. If `pipeline.auto_report: true`:
+   First check whether `worktree_root` still exists on disk (a plain filesystem existence check against the already-bound `worktree_root` variable, e.g. `Path(worktree_root).exists()` or `[ -d "<worktree_root>" ]` — do NOT `cd` anywhere as part of this check).
+   If it does not exist — a concurrent `mill-cleanup` run already cleaned up the worktree after step 5's `mill-finalize`/`mill-merge` flipped Home.md to `[done]` and created the archive tag, but before this session reached step 6 — log one ASCII-only line stating the task's worktree was "already cleaned up" by a concurrent `mill-cleanup` run before self-report could run, and that no further action is taken, then skip the `/mill-self-report --auto` invocation entirely.
+   Otherwise → invoke `/mill-self-report --auto`.
    **Always fires** at the end of Handoff, including after a `pr-pending` halt in step 5 — do NOT treat the PR-pending message as task termination.
    The skill checks `gh auth` itself and bails cleanly if absent.
    Cross-thread merges and post-PR teardowns are not auto-reflected;
