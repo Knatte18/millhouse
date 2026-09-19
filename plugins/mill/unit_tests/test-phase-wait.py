@@ -205,6 +205,189 @@ def main() -> int:
             "matching a near-miss string"
         )
 
+        # Case 16: matches_wait_trigger — mill-plan's own (now-widened) 2-pattern
+        # Entry-gate wait trigger list.
+        mill_plan_exact = {"discussing"}
+        mill_plan_regexes = [r"^discussion-fix-r\d+$", r"^discussion-gap-fix-r\d+$"]
+        assert matches_wait_trigger("discussion-gap-fix-r12", mill_plan_exact, mill_plan_regexes)
+        assert matches_wait_trigger("discussion-fix-r3", mill_plan_exact, mill_plan_regexes)
+        assert not matches_wait_trigger("discussion-fixed-r3", mill_plan_exact, mill_plan_regexes)
+        print(
+            "PASS: matches_wait_trigger matches mill-plan's widened "
+            "discussion-fix-rN/discussion-gap-fix-rN trigger list"
+        )
+
+        # Case 17: build_wait_command regression -- omitting the two new keyword
+        # arguments reproduces today's exact output, byte-for-byte, against a
+        # fixed golden string (not merely two identical live calls against
+        # each other).
+        expected = (
+            "elapsed=0\n"
+            "while true; do\n"
+            "  if tr -d '\\r' < \"/tmp/status.md\" | grep -q \"^phase: planned$\"; then\n"
+            "    echo \"READY\"\n"
+            "    exit 0\n"
+            "  fi\n"
+            "  if [ \"$elapsed\" -ge 7200 ]; then\n"
+            "    echo \"TIMEOUT after ${elapsed}s waiting for phase: planned\"\n"
+            "    exit 2\n"
+            "  fi\n"
+            "  sleep 10\n"
+            "  elapsed=$((elapsed + 10))\n"
+            "done\n"
+        )
+        assert cmd == expected
+        print("PASS: build_wait_command's default output matches the golden baseline byte-for-byte")
+
+        # Case 18: build_wait_command with clean_tree_root/clean_tree_paths supplied
+        # wraps the READY echo in a git-status-porcelain guard.
+        clean_tree_cmd = build_wait_command(
+            Path("/tmp/status.md"),
+            "planned",
+            10,
+            7200,
+            clean_tree_root=Path("/tmp/repo"),
+            clean_tree_paths=[Path("/tmp/status.md"), Path("/tmp/discussion.md")],
+        )
+        git_status_line = 'git -C "/tmp/repo" status --porcelain -- "/tmp/status.md" "/tmp/discussion.md"'
+        assert git_status_line in clean_tree_cmd
+        lines = clean_tree_cmd.splitlines()
+        git_status_line_idx = next(i for i, line in enumerate(lines) if git_status_line in line)
+        ready_line_idx = next(i for i, line in enumerate(lines) if 'echo "READY"' in line)
+        assert git_status_line_idx < ready_line_idx
+        assert git_status_line in lines[git_status_line_idx]
+        assert "if" in lines[git_status_line_idx]
+        print(
+            "PASS: build_wait_command nests echo \"READY\" inside the "
+            "clean-tree git-status guard when clean_tree_root/clean_tree_paths are supplied"
+        )
+
+        # Case 19: build_wait_command raises ValueError when exactly one of
+        # clean_tree_root/clean_tree_paths is supplied.
+        try:
+            build_wait_command(
+                Path("/tmp/status.md"),
+                "planned",
+                10,
+                7200,
+                clean_tree_root=Path("/tmp/repo"),
+            )
+            raise AssertionError("expected ValueError for clean_tree_root without clean_tree_paths")
+        except ValueError as exc:
+            assert "must both be provided together" in str(exc)
+        try:
+            build_wait_command(
+                Path("/tmp/status.md"),
+                "planned",
+                10,
+                7200,
+                clean_tree_paths=[Path("/tmp/status.md")],
+            )
+            raise AssertionError("expected ValueError for clean_tree_paths without clean_tree_root")
+        except ValueError as exc:
+            assert "must both be provided together" in str(exc)
+        print(
+            "PASS: build_wait_command raises ValueError when exactly one of "
+            "clean_tree_root/clean_tree_paths is supplied"
+        )
+
+        # Case 20: end-to-end dirty-then-clean execution -- READY must never
+        # fire while the tree is dirty, and must fire once it is clean.
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                subprocess.run(
+                    ["git", "init", tmp],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", tmp, "config", "user.email", "test@example.com"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", tmp, "config", "user.name", "Test"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                status_path = Path(tmp) / "status.md"
+                status_path.write_text("phase: planned\n")
+                subprocess.run(
+                    ["git", "-C", tmp, "add", "status.md"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", tmp, "commit", "-m", "initial commit"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+
+                dirty_cmd = build_wait_command(
+                    status_path, "planned", 1, 5, clean_tree_root=Path(tmp), clean_tree_paths=[status_path]
+                )
+
+                # Make the tree dirty -- an uncommitted change to status.md, still phase: planned.
+                status_path.write_text("phase: planned\n# uncommitted change\n")
+                result = subprocess.run(
+                    ["bash", "-c", dirty_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                assert result.returncode == 2, (
+                    f"expected timeout (exit 2) while tree is dirty, got {result.returncode}; "
+                    f"stdout={result.stdout!r} stderr={result.stderr!r}"
+                )
+
+                # Clean the tree -- commit the pending change.
+                subprocess.run(
+                    ["git", "-C", tmp, "add", "status.md"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "-C", tmp, "commit", "-m", "clean the tree"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True,
+                )
+                result = subprocess.run(
+                    ["bash", "-c", dirty_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                assert result.returncode == 0, (
+                    f"expected READY (exit 0) once tree is clean, got {result.returncode}; "
+                    f"stdout={result.stdout!r} stderr={result.stderr!r}"
+                )
+                assert result.stdout.strip() == "READY"
+                print(
+                    "PASS: build_wait_command withholds READY while the clean-tree "
+                    "gate paths are dirty and fires once they are committed clean"
+                )
+        except FileNotFoundError:
+            print(
+                "SKIP: git/bash not found on PATH, cannot exercise dirty-then-clean "
+                "end-to-end case"
+            )
+
         print("All _phase_wait unit tests passed.")
         return 0
     except AssertionError as exc:

@@ -75,7 +75,7 @@ Derive:
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
-   | `phase: discussing`, or matching `^discussion-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
+   | `phase: discussing`, or matching `^discussion-fix-r\d+$` / `^discussion-gap-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
    | `phase: blocked` | this row's literal action is superseded: the "Entry: resuming after a max-rounds block" procedure below runs **instead** whenever the phase-table lookup lands here, so the text below never executes verbatim — it summarizes that procedure's real behavior for readers scanning the table. For a `blocked_reason` that does NOT start with `"max-rounds exhausted"`: surface `blocked_reason` from status.md and halt; the operator resolves manually or re-runs `/mill-plan --revise` (the `--revise` pre-check above resumes any blocked state regardless of `blocked_reason`). For a `blocked_reason` that DOES start with `"max-rounds exhausted"`: plan review resumes **automatically**, with no halt — a bare `/mill-plan` re-invocation is sufficient; the operator does not need `--approve` for this. `/mill-plan --approve` is a separate, explicit choice (see the `--approve` pre-check above) to skip straight to Handoff and accept the plan as-is instead of running another review round. This row is reached only when neither `--revise` nor `--approve` was passed — the `--revise` pre-check intercepts `phase: blocked` when `--revise` is set, and the `--approve` pre-check above intercepts it when `--approve` is set. |
    | any other phase (`planned`, …) | Tell user what phase is set and which skill should run instead. Halt. |
 
@@ -85,15 +85,17 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
 
 - Compute the match:
   ```python
-  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [r"^discussion-fix-r\d+$"])
+  matched = _phase_wait.matches_wait_trigger(phase, {"discussing"}, [r"^discussion-fix-r\d+$", r"^discussion-gap-fix-r\d+$"])
   ```
-  The trigger is now widened to also match `discussion-fix-r{N}`.
+  The trigger is now widened to also match `discussion-fix-r{N}` and `discussion-gap-fix-r{N}`.
   This closes a real gap: GitHub issue #821 has a concrete repro (commit `ab1786d6`) showing mill-start's own convergence-gate not-converged branch (Phase: Discussion Review step 4b, per `mill-start/SKILL.md`) appends+commits+pushes `discussion-fix-r{N}` and continues to the next round *without* the `discussed` phase following in the same commit — so `discussion-fix-r{N}` genuinely is pushed as a standalone, externally observable phase, not always folded into the same commit as the following `discussed` write.
   This mirrors mill-go's own copy of this exact wait pattern for mill-plan's own phases (`mill-go-base/SKILL.md`: `{"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]`) — same mechanism, same file family.
+  `discussion-gap-fix-r{N}` has the same shape: `mill-start/SKILL.md`'s Phase: Discussion Review step 5 (the plain-interactive gap-resolution path — under `--auto`/`--orch`, step 5 is skipped entirely, so `discussion-gap-fix-r{N}` never appears in that mode) writes, commits, and pushes `discussion-gap-fix-r{N}` as its own standalone phase when the final batch of a review round's gap answers is applied, before the loop continues to round N+1 — mirroring the `discussion-fix-r{N}` gap this same paragraph describes for issue #821.
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
   - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 240)` and compute `giveup_s = timeout_minutes * 60`.
-  - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "discussed", 10, giveup_s)`.
+  - Derive `discussion_path = _paths.resolve_task_path(worktree_root, cfg['paths']['discussion_file'])` (the same `resolve_task_path` pattern `Path Setup` already uses for `status_path`; `discussion_path` is not otherwise bound this early in mill-plan's Entry section).
+  - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "discussed", 10, giveup_s, clean_tree_root=git_root, clean_tree_paths=[status_path, discussion_path])` — `git_root` is already bound at Entry step 1 of this same file. Passing `clean_tree_root`/`clean_tree_paths` makes the wait's `READY` condition additionally require a clean git tree for `status_path` and `discussion_path`, so `READY` fires only once mill-start's own commit for the corresponding phase transition has actually landed, not merely once the phase value is written to the working tree — closing the pinning race described in `_mill/discussion.md`'s "Gate `READY` on a clean tree, not just phase value" Decision (GitHub issue #1029).
   - State one sentence to the user: waiting for the upstream mill-start run to reach `phase: discussed`.
   - Call the `Monitor` tool with `command=cmd`, `persistent: true`, `description` naming the slug and the target phase (e.g. "waiting for phase: discussed (mill-start handoff) for `<slug>`").
     Do not set a `timeout_ms` value distinct from the default — `persistent: true` makes it irrelevant.
