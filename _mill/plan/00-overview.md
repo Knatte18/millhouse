@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-merge / mill-merge-in: brief-staging path bug and easy-to-miss caching instruction'
 slug: mill-merge-family-doc-gaps
-approved: false
+approved: true
 started: 20260919-112858
 parent: main
 root: ""

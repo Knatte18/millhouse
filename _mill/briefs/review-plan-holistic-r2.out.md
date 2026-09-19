@@ -1,0 +1,24 @@
+MILL_REVIEW_BEGIN
+# Review: mill-merge / mill-merge-in: brief-staging path bug and easy-to-miss caching instruction — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewer_self_id: Claude, Sonnet-tier model (exact point version not independently verifiable by me)
+reviewed_file: plan/
+date: 2026-09-19
+```
+
+## Findings
+
+### [NIT:consistency] Card 1's verbatim insertion is a blockquote; sibling "Why" text is plain
+**Location:** Batch 1 / Card 1 **Issue:** The "verbatim" text to insert starts with `> **Why relative, not absolute:**`, making it a Markdown blockquote, but the paragraph it's explicitly modeled on ("Why staged-only, not unscoped porcelain," `mill-merge-in/SKILL.md:210`) and its other neighbor (`:212`) are plain, non-blockquoted paragraphs — confirmed via grep that no `**Why` callout anywhere in `plugins/mill/skills/` is blockquoted. **Fix:** Drop the leading `> ` so the inserted paragraph is plain text, matching its stated sibling.
+
+### [NIT:consistency] Card 2's verbatim insertion is a blockquote; its cited precedent is plain
+**Location:** Batch 1 / Card 2 **Issue:** The new paragraph starts with `> **Recovery path when...**`. Its stated precedent per `_mill/discussion.md` ("the `closed`-route fallback... does exactly this pattern") is `mill-merge/SKILL.md:216`'s `**Commit-message source:**` paragraph, which is plain, not blockquoted; the neighboring `**Why:**` paragraphs at `:339`/`:349`/`:359` at the actual insertion point are likewise plain. (A `> **Recovery note:**` blockquote does exist at `:277`, but that is not the precedent Card 2 names, so it doesn't justify the mismatch.) **Fix:** Drop the leading `> ` to match the plain-paragraph style of the actual insertion-point neighbors.
+
+## Verdict
+
+APPROVE
+Plan is source-verified accurate and decision-aligned; only two cosmetic blockquote-vs-plain-paragraph NITs remain.
+MILL_REVIEW_END
