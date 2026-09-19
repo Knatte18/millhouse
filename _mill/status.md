@@ -28,5 +28,8 @@ implementing  '2026-09-19T11:34:25Z'
 ```yaml
 batches:
   - name: fix-citation-scan-pathspec
-    state: pending
+    state: running
+    implementer_session: 44d5d9b2-bfda-4ea0-8090-b6157e514f0e
+    start_sha: 5219a491f7972a7e708c2cac81ac962f67ee9320
+    verify_baseline_failures: []
 ```
