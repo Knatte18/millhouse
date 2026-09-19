@@ -113,6 +113,7 @@ numeric order.
 - **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
