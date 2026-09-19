@@ -28,5 +28,7 @@ implementing  '2026-09-19T13:58:03Z'
 ```yaml
 batches:
   - name: planning-process-doc-fixes
-    state: pending
+    state: running
+    implementer_session: b967ff82-b90c-4d9a-b73f-8b55e056640f
+    start_sha: 87bb0e577272737e5fc4bfddd7a5cde6285b547d
 ```
