@@ -157,6 +157,7 @@ roles:
     holistic:
       rounds: 4
       min_rounds: 1
+      auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
       reviewer: sonnetmax
       # large_prompt:            # optional: override reviewer and timeout for large prompts
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
@@ -168,11 +169,13 @@ roles:
     batch:
       rounds: 0
       min_rounds: 1
+      auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
       reviewer: null
       blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 4
       min_rounds: 1
+      auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
       reviewer: sonnethigh
       fallback_reviewer: null     # reviewer name from agents.yaml to swap in on consecutive rate-limit ERRORs; null = no fallback
       fallback_on:                 # list of substrings (lowercased match) in reviews[].error that trigger fallback
