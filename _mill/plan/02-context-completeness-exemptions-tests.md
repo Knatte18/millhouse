@@ -54,13 +54,15 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
   - `test_check_context_completeness_clean_ownership_possessive` — `` "batch 8's fix touches
     `x.cs`." `` — asserts 0 errors (guards the regex's optional `'s` group).
   - `test_check_context_completeness_dirty_ownership_no_number_not_exempted` — `` "batch fixes
-    `x.py`." `` (no card/batch number) — asserts exactly 1 `context-completeness` error whose `path`
-    is `x.py`, guarding against over-matching a bare "batch"/"card" mention with no number.
+    `x.py`." `` (no card/batch number) — create a real `x.py` under `project_root` so the token
+    resolves — asserts exactly 1 `context-completeness` error whose `path` is `x.py`, guarding
+    against over-matching a bare "batch"/"card" mention with no number.
   - `test_check_context_completeness_dirty_ownership_separate_line_not_exempted` — a card whose
     `Requirements:` has the ownership phrase on one bullet line ("- batch 8 fixes something else.")
-    and the token on a *different* bullet line ("- Read `x.py` for the new logic.") — asserts exactly
-    1 `context-completeness` error whose `path` is `x.py`, confirming the exemption is genuinely
-    line-scoped (not plan-wide or card-wide).
+    and the token on a *different* bullet line ("- Read `x.py` for the new logic.") — create a real
+    `x.py` under `project_root` so the token resolves — asserts exactly 1 `context-completeness`
+    error whose `path` is `x.py`, confirming the exemption is genuinely line-scoped (not plan-wide or
+    card-wide).
 
   Every path named in a fixture's `Requirements:` prose that is asserted clean (0 errors) must
   resolve to a real file under `project_root` in that test's own fixture setup (create the file with
@@ -125,7 +127,7 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
   - `test_check_context_completeness_clean_illustrative_output_past_tense` — `` "the answer emitted
     the bare `README.md`." `` (mentioned, not read) — asserts 0 errors (guards the hand-spelled
     past-tense form actually exists in `_OUTPUT_VERB_FORMS`).
-  - `test_check_context_completeness_dirty_illustrative_output_no_verb_not_exempted` — mentioned, not read, throughout this bullet — a card whose `Requirements:` names `` `README.md` `` on a line with no output verb (e.g. "Read `README.md` for the project description.") — asserts exactly 1 `context-completeness` error whose `path` is `README.md`.
+  - `test_check_context_completeness_dirty_illustrative_output_no_verb_not_exempted` — mentioned, not read, throughout this bullet — a card whose `Requirements:` names `` `README.md` `` on a line with no output verb (e.g. "Read `README.md` for the project description.") — create a real `README.md` under `project_root` so the token resolves — asserts exactly 1 `context-completeness` error whose `path` is `README.md`.
 
   Register each new test function in `main()`'s `tests` list, immediately after Card 5's last
   registered test, in the same order as the bullets above.

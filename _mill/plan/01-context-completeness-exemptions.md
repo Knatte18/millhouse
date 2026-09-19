@@ -57,7 +57,7 @@ numeric order.
   }
 
   _OWNERSHIP_RE = re.compile(
-      r"\b(?:batch|card)\s+\d+\s+(?:'s\s+)?(?:"
+      r"\b(?:batch|card)\s+\d+(?:'s)?\s+(?:"
       + "|".join(
           re.escape(form)
           for forms in _OWNERSHIP_VERB_FORMS.values()
@@ -155,8 +155,10 @@ numeric order.
   This reuses the existing per-line backtick regex `_check_context_completeness` already builds as a
   local variable `backtick_re = re.compile(r"\`([^\`]+)\`")` at the top of its own body -- promote
   that local variable to a new module-level constant `_BACKTICK_RE` with the identical pattern
-  (defined immediately above `_OWNERSHIP_VERB_FORMS` from Card 1, since both Card 1's future callers
-  and this function need it at module scope), and replace the local `backtick_re = re.compile(...)`
+  (defined immediately above `_OWNERSHIP_VERB_FORMS` from Card 1, purely for a stable, predictable
+  location among this batch's other new module-level constants -- Card 1's `_is_cross_card_ownership_exempt`
+  itself never calls `_BACKTICK_RE`; only this card's own `_is_literal_enumeration_exempt` does), and
+  replace the local `backtick_re = re.compile(...)`
   assignment inside `_check_context_completeness` with `backtick_re = _BACKTICK_RE` so the existing
   per-token loop's own `backtick_re.finditer(line)` call keeps working unchanged.
 
