@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-finalize-citation-scan-pathspec-magic-bug
 branch: hanf/mill-finalize-citation-scan-pathspec-magic-bug
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-19T11:21:26Z'
 discussed  '2026-09-19T11:23:54Z'
 planning  '2026-09-19T11:27:22Z'
 plan-review-r1  '2026-09-19T11:29:49Z'
+planned  '2026-09-19T11:30:21Z'
 ```
