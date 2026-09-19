@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-doc-gaps-fixes
+phase: holistic-reviewing
 slug: mill-merge-family-doc-gaps
 branch: hanf/mill-merge-family-doc-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r2  '2026-09-19T11:44:03Z'
 planned  '2026-09-19T11:44:41Z'
 implementing  '2026-09-19T11:49:06Z'
 approved-doc-gaps-fixes  '2026-09-19T11:52:52Z'
+holistic-reviewing  '2026-09-19T11:53:09Z'
 ```
 
 ## Batches
