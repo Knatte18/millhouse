@@ -2612,7 +2612,13 @@ def test_check_context_completeness_clean_no_file_read_needed_marker() -> int:
 
 
 def test_check_context_completeness_dirty_inline_signature_marker_absent() -> int:
-    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible."""
+    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible.
+
+    The signature itself is deliberately NOT backtick-wrapped here (unlike the two 'clean' marker
+    counterparts above) -- wrapping it would put a third, non-path/non-symbol-shaped backtick token
+    on the line, which would trip the unrelated literal-enumeration exemption
+    (`_is_literal_enumeration_exempt`) and mask the very exemption this test targets.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -2627,7 +2633,7 @@ def test_check_context_completeness_dirty_inline_signature_marker_absent() -> in
             "alpha",
             edits=["src/b.py"],
             requirements=(
-                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`).\n"
+                "  Call `helper()` (defined in `src/a.py` as def helper() -> int).\n"
             ),
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
