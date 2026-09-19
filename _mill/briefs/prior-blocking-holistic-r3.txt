@@ -1,2 +1,0 @@
-- Overlapping line-range double-classifies mill-plan Plan Review lines: **Location:** `doc/turn-reduction-audit.md` (`## mill-plan` ? Phase: Plan Review), citing `mill-plan/SKILL.md:308-337` vs. `mill-plan/SKILL.md:316-329`
-- `_status.append_phase` call-site counts don't match current source: **Location:** `doc/turn-reduction-audit.md:441-445` (the `## mill-go-base` re-derivation paragraph)
