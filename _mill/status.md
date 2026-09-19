@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: mill-plan-done-gate-kwargs-count-drift
 branch: hanf/mill-plan-done-gate-kwargs-count-drift
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-19T11:22:13Z'
 discussed  '2026-09-19T11:24:06Z'
 planning  '2026-09-19T11:26:36Z'
 plan-review-r1  '2026-09-19T11:29:24Z'
+planned  '2026-09-19T11:30:03Z'
 ```
