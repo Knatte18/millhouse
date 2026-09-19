@@ -202,6 +202,8 @@ This is the one site in mill with no brief, no resume requirement, and no per-ro
 A fork dispatched via `Agent(subagent_type: "fork")` shortly after the parent has just produced a similarly-shaped text block (e.g. the Step 2 scope digest) may, on its first turn, echo/restate that block instead of executing the assigned investigation directive.
 Check the fork's first response for grounded findings (specific file:line citations, quoted code) before trusting it as complete.
 If the response is a restatement rather than grounded findings, `SendMessage` the same fork an explicit corrective directive (e.g. telling it to stop restating context and perform the investigation) rather than accepting the echoed response.
+If the corrective retry's response also fails this same grounded-findings check -- whether by restating/echoing again (potentially echoing different context than the first failure, e.g. the orchestrator's own prior chat text rather than the scope digest) or by any other non-grounded response (near-zero tool use, content unrelated to the assigned investigation) -- abandon forking for this investigation and dispatch a cold agent instead: a cold `Explore` agent for a read-only investigation (per the "Sub-investigation guidance" bullets above), or `general-purpose` when the investigation needs a tool beyond `Explore`'s read-only grant (mirroring `plugins/mill/skills/mill-plan/SKILL.md`'s "Fork scope guardrail" precedent for the identical cold-agent choice).
+Do not send the fork a second corrective directive -- one corrective retry is the limit before switching dispatch mechanisms entirely.
 
 ### Phase: Discuss
 

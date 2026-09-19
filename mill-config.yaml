@@ -47,17 +47,20 @@ roles:
     holistic:
       rounds: 7
       min_rounds: 1
+      auto_approve_on_cap: false
       reviewer: sonnethigh
       blocking_classes: [design, scope]
   code-review:
     batch:
       rounds: 0
       min_rounds: 1
+      auto_approve_on_cap: false
       reviewer: null
       blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 5
       min_rounds: 1
+      auto_approve_on_cap: false
       reviewer: sonnethigh
       fallback_reviewer: null
       fallback_on:
