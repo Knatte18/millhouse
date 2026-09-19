@@ -34,5 +34,8 @@ implementing  '2026-09-19T12:46:08Z'
 ```yaml
 batches:
   - name: config-treeguard-guards
-    state: pending
+    state: running
+    implementer_session: 69f8d8b1-a936-4e5f-bfcb-af28e52fa379
+    start_sha: 0e3d3fd1d4881c80647b172a76760fcac60c76e9
+    verify_baseline_failures: []
 ```
