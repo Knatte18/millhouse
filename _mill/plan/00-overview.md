@@ -3,7 +3,7 @@
 ```yaml
 task: Audit mill-start/mill-plan/mill-go for turn reduction
 slug: turn-reduction-audit
-approved: false
+approved: true
 started: 20260919-112719
 parent: main
 root: ""
