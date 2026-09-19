@@ -16,6 +16,7 @@ Each batch entry has `number:` (the NN integer prefix, for DAG navigation), `nam
 `verify:` (top-level, in the frontmatter below) is an OPTIONAL module-wide check run at each batch boundary AFTER the batch's own `verify:` passes. `null` means skip (the default;
 no behavior change for existing plans).
 When set, it follows the same `PYTHONPATH= ` shape rule as per-batch `verify:` commands and should be a cheap whole-module compile/vet/smoke command (e.g. `PYTHONPATH= go vet ./...` or a scoped `run-all.py`) that catches cross-package regressions from shared-helper edits at the introducing batch.
+This rule is Python/mill-project-specific — see `mill-plan/SKILL.md`'s "Verify command shape" section for the non-Python-project carve-out.
 A module-wide failure propagates a `stuck_type: verify` stuck dict with the reason prefixed to indicate module-wide scope so the operator can distinguish the two gates.
 
 Both the per-batch `verify:` and this module-wide `verify:` also accept
