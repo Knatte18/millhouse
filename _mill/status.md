@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-family-doc-gaps
 branch: hanf/mill-merge-family-doc-gaps
 plan: _mill/plan
@@ -24,4 +24,13 @@ plan-fix-r1  '2026-09-19T11:36:38Z'
 plan-review-r2  '2026-09-19T11:43:22Z'
 plan-fix-r2  '2026-09-19T11:44:03Z'
 planned  '2026-09-19T11:44:41Z'
+implementing  '2026-09-19T11:49:06Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: doc-gaps-fixes
+    state: pending
 ```
