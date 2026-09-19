@@ -82,7 +82,6 @@ from _review_common import (
     compute_creates_union,
     compute_deletes_union,
     compute_moves_union,
-    parse_batch_refs,
     parse_moves,
     resolve_existing_paths,
     resolve_ref_paths,
@@ -147,9 +146,9 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     """Return list of (card_number, card_lines) pairs.
 
     Each card block starts at a ``### Card N:`` line and ends just before the next ``### ``
-    heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines starting
-    with ``` ``` ```, toggled per ``_requirements_fence_aware_body``'s convention) never starts
-    or ends a card block.
+    heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines whose
+    stripped-of-leading-whitespace prefix is ``` ``` ```, toggled per
+    ``_requirements_fence_aware_body``'s convention) never starts or ends a card block.
     """
     lines = batch_text.splitlines()
     cards: list[tuple[int, list[str]]] = []
@@ -171,7 +170,7 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
                 current_lines = []
             else:
                 current_lines.append(line)
-        if line.startswith("```"):
+        if line.lstrip().startswith("```"):
             in_fence = not in_fence
 
     if current_num is not None:
@@ -2320,8 +2319,9 @@ def _is_confirmed_git_ignored(
     that order, skipping any that is ``None``) it is relative to;
     when none matches, the candidate is out-of-repo and this returns False without running any
     subprocess -- the out-of-repo-literal exemption has already handled that case upstream.
-    Otherwise runs ``git -C <source_root> check-ignore -q <candidate>`` and treats returncode 0 as
-    ignored;
+    Otherwise runs ``git -C <source_root> check-ignore -q <candidate>`` (with ``quiet_nonzero=True``,
+    since exit 1 -- "not ignored" -- is this probe's own routine, non-error outcome) and treats
+    returncode 0 as ignored;
     any exception whatsoever, including a non-git source root, is swallowed and treated as
     not-confirmed-ignored, mirroring the ``soft_fail_gitignored`` branch of ``resolve_ref_paths`` in
     ``_review_common.py``.
@@ -2352,7 +2352,8 @@ def _is_confirmed_git_ignored(
 
     try:
         result = _subprocess_util.run(
-            ["git", "-C", str(source_root), "check-ignore", "-q", str(resolved_candidate)]
+            ["git", "-C", str(source_root), "check-ignore", "-q", str(resolved_candidate)],
+            quiet_nonzero=True,
         )
         ignored = result.returncode == 0
     except Exception:
@@ -2393,6 +2394,103 @@ def _card_creates_tokens(card_text: str) -> list[str]:
             continue
         i += 1
     return tokens
+
+
+def _card_context_tokens(card_text: str) -> list[str]:
+    """Return this card's own ``Context:`` backtick tokens, in declaration order.
+
+    Mirrors ``_card_edits_tokens``'s and ``_card_creates_tokens``'s inline/sub-bullet walk via
+    ``_RE_REFS_HEADER``/``_RE_REFS_SUB``, scoped to the ``Context`` field only.
+    """
+    tokens: list[str] = []
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_REFS_HEADER.match(line)
+        if m and m.group(1) == "Context":
+            inline = m.group("inline").strip()
+            if inline:
+                tokens.extend(re.findall(r"`([^`]+)`", inline))
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                tokens.extend(re.findall(r"`([^`]+)`", sm.group(1)))
+                j += 1
+            i = j
+            continue
+        i += 1
+    return tokens
+
+
+def _card_deletes_tokens(card_text: str) -> list[str]:
+    """Return this card's own ``Deletes:`` backtick tokens, in declaration order.
+
+    Mirrors ``_card_edits_tokens``'s and ``_card_creates_tokens``'s inline/sub-bullet walk via
+    ``_RE_REFS_HEADER``/``_RE_REFS_SUB``, scoped to the ``Deletes`` field only.
+    """
+    tokens: list[str] = []
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_REFS_HEADER.match(line)
+        if m and m.group(1) == "Deletes":
+            inline = m.group("inline").strip()
+            if inline:
+                tokens.extend(re.findall(r"`([^`]+)`", inline))
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                tokens.extend(re.findall(r"`([^`]+)`", sm.group(1)))
+                j += 1
+            i = j
+            continue
+        i += 1
+    return tokens
+
+
+def _card_moves_tokens(card_text: str) -> list[tuple[str, str]]:
+    """Return this card's own ``Moves:`` ``(src, dst)`` pairs, in declaration order.
+
+    Mirrors the module-level ``_RE_MOVES_HEADER``/``_RE_MOVE_PAIR`` inline-vs-multi-line-sub-bullet
+    walk (see ``_check_move_format``), scoped to one card's ``card_text``.
+    A sub-bullet that does not match ``_RE_MOVE_PAIR`` is skipped -- malformed-``Moves:`` reporting
+    stays ``move-format``'s job, not this helper's.
+    """
+    pairs: list[tuple[str, str]] = []
+    lines = card_text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        m = _RE_MOVES_HEADER.match(line)
+        if m:
+            inline = m.group("inline").strip()
+            if inline:
+                # Inline "none" (or any other inline value) has no sub-bullets to walk.
+                i += 1
+                continue
+            j = i + 1
+            while j < len(lines):
+                sm = _RE_REFS_SUB.match(lines[j])
+                if not sm:
+                    break
+                pm = _RE_MOVE_PAIR.match(sm.group(1).strip())
+                if pm:
+                    pairs.append((pm.group(1), pm.group(2)))
+                j += 1
+            i = j
+            continue
+        i += 1
+    return pairs
 
 
 def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tuple[int, int]]:
@@ -2583,7 +2681,7 @@ def _check_context_completeness(
                 # _parse_cards's convention) so the fence-delimiter line itself is judged by
                 # whichever state it opens or closes, not the state it produces.
                 line_is_quoted = in_fence or line.lstrip().startswith(">")
-                if line.startswith("```"):
+                if line.lstrip().startswith("```"):
                     in_fence = not in_fence
                 if line_is_quoted:
                     continue
@@ -2901,7 +2999,7 @@ def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
         line = card_lines[j]
         if not in_fence and any_field_header_re.match(line):
             break
-        if line.startswith("```"):
+        if line.lstrip().startswith("```"):
             in_fence = not in_fence
         collected.append(line)
         j += 1
@@ -3756,6 +3854,11 @@ def _check_verify_unrelated_test_files(
     and any subprocess or resolution failure for an individual token is treated as "cannot confirm
     identical, don't flag" rather than a crash.
 
+    A ``--only`` token naming the convention-derived test file for one of the batch's own touched
+    source files is exempt exactly like a directly-touched test file: Python ``test-<stem>.py`` for
+    ``<stem>.py`` (stripping any leading underscore and converting remaining underscores to hyphens),
+    or Go ``<stem>_test.go`` for ``<stem>.go``.
+
     Error dict shape: ``{check, batch, card, path, message}``.
 
     Args:
@@ -3811,9 +3914,19 @@ def _check_verify_unrelated_test_files(
         except Exception:
             touched = set()
         touched_basenames = {Path(t).name for t in touched}
+        derived_test_basenames: set[str] = set()
+        for t in touched:
+            basename = Path(t).name
+            if basename.endswith(".py") and not basename.startswith("test-"):
+                stem = Path(t).stem.lstrip("_").replace("_", "-")
+                derived_test_basenames.add(f"test-{stem}.py")
+            elif basename.endswith(".go") and not basename.endswith("_test.go"):
+                derived_test_basenames.add(f"{Path(t).stem}_test.go")
 
         for token in candidates:
             if Path(token).name in touched_basenames:
+                continue
+            if Path(token).name in derived_test_basenames:
                 continue
             try:
                 resolved = resolve_existing_paths(
@@ -3893,6 +4006,8 @@ def _check_out_of_worktree_target(
 
 # ---------------------------------------------------------------------------
 # Check 10 — batch-oversized (note: check 9 above)
+# Check 1 (card count) stays batch-level; Check 2 (context-size token estimate) is evaluated
+# per card, not per batch -- see _check_batch_oversized's Check 2 loop below.
 # ---------------------------------------------------------------------------
 
 def _check_batch_oversized(
@@ -3921,26 +4036,28 @@ def _check_batch_oversized(
                 "message": f"batch has {card_count} cards (cap {max_cards})",
             })
 
-        # Check 2: context size (token estimate)
-        # Collect Context/Edits/Creates tokens from the batch
-        all_refs = parse_batch_refs(batch_path)
-        deletes = _parse_deletes_only(batch_path)
+        # Check 2: context size (token estimate), evaluated per card.
+        # Collect Context/Edits/Creates/Deletes/Moves tokens from each card individually, so one
+        # oversized card in an otherwise-small batch is caught without the whole-batch aggregate
+        # masking (or over-penalizing) the other cards.
+        for card_num, card_lines in cards:
+            card_text = "\n".join(card_lines)
+            context = set(_card_context_tokens(card_text))
+            edits = set(_card_edits_tokens(card_text))
+            creates = set(_card_creates_tokens(card_text))
+            deletes = set(_card_deletes_tokens(card_text))
+            moves = _card_moves_tokens(card_text)
+            move_sources = {src for src, _ in moves}
+            move_targets = {dst for _, dst in moves}
 
-        # Move sources exist pre-implementation and are read by the implementer;
-        # add them to the estimate even when they are not listed in Context:/Edits:.
-        # Move targets do not exist yet (mirroring how Creates: targets are excluded);
-        # subtract them so they never inflate the estimate.
-        moves = parse_moves(batch_path)
-        move_sources = {src for src, _ in moves}
-        move_targets = {dst for _, dst in moves}
+            # Subtract deleted and move-target tokens, then add move sources.
+            card_tokens = ((context | edits | creates) - deletes - move_targets) | move_sources
 
-        # Subtract deleted and move-target tokens, then add move sources.
-        context_tokens = (set(all_refs) - deletes - move_targets) | move_sources
-
-        # Resolve existing paths, skipping those that don't exist (like Creates targets)
-        if context_tokens:
+            # Resolve existing paths, skipping those that don't exist (like Creates targets)
+            if not card_tokens:
+                continue
             resolved = resolve_existing_paths(
-                list(context_tokens),
+                list(card_tokens),
                 project_root,
                 root,
                 wiki_root=wiki_root,
@@ -3955,10 +4072,10 @@ def _check_batch_oversized(
                 errors.append({
                     "check": "batch-oversized",
                     "batch": batch_path.stem,
-                    "card": None,
+                    "card": card_num,
                     "path": None,
                     "message": (
-                        f"batch context ~{token_estimate} tokens (cap {max_context_tokens})"
+                        f"card {card_num} context ~{token_estimate} tokens (cap {max_context_tokens})"
                     ),
                 })
 
@@ -4006,8 +4123,11 @@ def run(
             when provided, refs resolve to git_root/root/raw before falling back to
                 project_root-based candidates (addresses #471 layout).
         skip_checks: Set of check names to skip (e.g. {"wiki-config-mutation"}).
-        max_cards_per_batch: Maximum cards per batch before batch-oversized is raised.
-        max_batch_context_tokens: Maximum context token estimate before batch-oversized is raised.
+        max_cards_per_batch: Maximum cards per batch before batch-oversized is raised
+            (card count itself stays batch-level).
+        max_batch_context_tokens: Maximum context token estimate before batch-oversized is raised,
+            applied per card -- each card's own Context/Edits/Creates/Deletes/Moves token estimate
+            is checked against this cap individually, not the batch's aggregate.
         parent_branch: The task's resolved parent branch name, threaded to
             verify-unrelated-test-file. ``None`` (the default) makes that check a no-op -- callers
             that cannot resolve a parent branch (e.g.

@@ -32,6 +32,8 @@ Check coverage:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -5661,6 +5663,65 @@ def test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling() 
             return 1
 
 
+def test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb() -> int:
+    """Regression guard for #1040: the routine 'confirmed not git-ignored' outcome (`git
+    check-ignore` exit 1) must not print a [subprocess] breadcrumb to stderr, since that call site
+    passes quiet_nonzero=True."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "scratch_ignored/\n", "add gitignore")
+        (project_root / "scratch_not_ignored").mkdir()
+        (project_root / "scratch_not_ignored" / "artifact.py").write_text(
+            "# not ignored scratch artifact", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  See `scratch_not_ignored/artifact.py` for the existing scratch conventions.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            result = _plan_validate.run(plan_dir, project_root)
+        stderr_out = buf.getvalue()
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "scratch_not_ignored/artifact.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            assert "[subprocess]" not in stderr_out, (
+                f"expected no [subprocess] breadcrumb, got stderr: {stderr_out!r}"
+            )
+            print(
+                "PASS "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_clean_gitignored_path_absent_from_disk() -> int:
     """The same ignored path as the present-on-disk clean case, but never created -> also zero
     errors, and for a reason unrelated to the gitignore exemption itself: an unresolvable,
@@ -9202,6 +9263,132 @@ def test_batch_oversized_defaults_applied() -> int:
             return 1
 
 
+def test_batch_oversized_per_card_two_cards_each_under_cap_clean() -> int:
+    """Clean: two cards, each own context estimate under the cap, but their summed estimate
+    over the cap -> zero batch-oversized 'tokens' errors, proving the check is evaluated per card
+    rather than as the old whole-batch aggregate (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Each file is 28000 "x" characters -> 7000-token estimate, under the 10000 cap on its own.
+        half_a = project_root / "src" / "half_a.py"
+        half_a.parent.mkdir(parents=True)
+        half_a.write_text("x" * 28000, encoding="utf-8")
+        half_b = project_root / "src" / "half_b.py"
+        half_b.write_text("x" * 28000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_a.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_b.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert oversized_errs == [], (
+                f"expected 0 batch-oversized 'tokens' errors, got: {oversized_errs}"
+            )
+            print("PASS test_batch_oversized_per_card_two_cards_each_under_cap_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_two_cards_each_under_cap_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_batch_oversized_per_card_one_card_over_cap_dirty() -> int:
+    """Dirty: one card's own context estimate is over the cap on its own -> exactly one
+    batch-oversized 'tokens' error, attributed to that specific card, not the whole batch (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # 44000 "x" characters -> 11000-token estimate, over the 10000 cap on its own.
+        big = project_root / "src" / "big.py"
+        big.parent.mkdir(parents=True)
+        big.write_text("x" * 44000, encoding="utf-8")
+        tiny = project_root / "src" / "tiny.py"
+        tiny.write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/big.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/tiny.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert len(oversized_errs) == 1, (
+                f"expected 1 batch-oversized 'tokens' error, got: {oversized_errs}"
+            )
+            assert oversized_errs[0]["card"] == 1, (
+                f"expected the finding attributed to card 1, got: {oversized_errs[0]['card']!r}"
+            )
+            print("PASS test_batch_oversized_per_card_one_card_over_cap_dirty")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_one_card_over_cap_dirty: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # verify-full-suite check
 # ---------------------------------------------------------------------------
@@ -11461,6 +11648,95 @@ def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
             return 1
 
 
+def test_check_verify_unrelated_test_files_naming_convention_exempt_clean() -> int:
+    """Naming-convention exemption (#999): the batch's own Edits: token `_foo.py` derives to the
+    test name `test-foo.py` (leading underscore stripped), matching the --only token -> zero
+    findings, even though `test-foo.py` itself never appears in the batch's own
+    Edits:/Creates:/Moves: set."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "test-foo.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only test-foo.py",
+            edits=["_foo.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert errs == [], (
+                f"expected no findings for the naming-convention exemption, got: {errs}"
+            )
+            print("PASS test_check_verify_unrelated_test_files_naming_convention_exempt_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_verify_unrelated_test_files_naming_convention_exempt_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty() -> int:
+    """Regression guard: a differently-named source file in the batch's Edits: must not
+    accidentally exempt an unrelated --only token. `_bar.py` derives to `test-bar.py`, which does
+    not match the --only token `unrelated_test.py`, so the naming-convention exemption must not
+    fire here (#999)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+            edits=["_bar.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 1, f"expected 1 finding, got {len(errs)}: {errs}"
+            e = errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"wrong card: {e['card']!r}"
+            assert e["path"] == "unrelated_test.py", f"wrong path: {e['path']!r}"
+            print(
+                "PASS "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+                f": {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
     """Regression guard for #734: the Cards field-legend must not be parsed as refs.
 
@@ -11656,6 +11932,102 @@ def test_check_card_missing_field_fence_guard_real_boundary_still_detected() -> 
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_card_missing_field_fence_guard_real_boundary_still_detected: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_card_missing_field_indented_delimiter_column_zero_heading_clean() -> int:
+    """Regression guard for #992: a fence-opening delimiter indented two spaces, whose fenced
+    content (a ### heading) sits at column zero, must still toggle the fence-tracking state -- the
+    column-zero content must not be mistaken for a real card-boundary heading."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "### Some Heading\n"
+            "  ```\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert check == [], (
+                f"expected no card-missing-field findings for an indented fence delimiter with "
+                f"column-zero content, got: {check}"
+            )
+            print("PASS test_check_card_missing_field_indented_delimiter_column_zero_heading_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_card_missing_field_indented_delimiter_column_zero_heading_clean: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence() -> int:
+    """Regression guard for #992: the context-completeness field-body extraction's own
+    independent fence-tracking must also tolerate an indented fence delimiter whose fenced content
+    (a field-header-shaped line) sits at column zero -- the reference after the fence closes must
+    still be collected and flagged."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+        (project_root / "sibling.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Quote a field-header-shaped line from another source file, at its own original "
+            "column:\n"
+            "  ```markdown\n"
+            "- **Commit:** fake, not a real field\n"
+            "  ```\n"
+            "  Also reference `sibling.py` for the existing pattern.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        missing_field_hits = [e for e in result if e["check"] == "card-missing-field"]
+        context_hits = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert missing_field_hits == [], (
+                f"expected no card-missing-field findings, got: {missing_field_hits}"
+            )
+            assert len(context_hits) == 1, (
+                f"expected 1 context-completeness finding, got: {context_hits}"
+            )
+            assert context_hits[0]["path"] == "sibling.py", (
+                f"wrong path: {context_hits[0]['path']!r}"
+            )
+            print(
+                "PASS "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+                f": {exc}",
+                file=sys.stderr,
+            )
             return 1
 
 
@@ -12425,6 +12797,7 @@ def main() -> int:
         test_check_context_completeness_dirty_out_of_repo_wiki_prefix_still_flagged,
         test_check_context_completeness_clean_gitignored_path_present,
         test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling,
+        test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb,
         test_check_context_completeness_clean_gitignored_path_absent_from_disk,
         test_check_context_completeness_clean_forward_creates_reference,
         test_check_context_completeness_dirty_forward_creates_reverse_direction,
@@ -12514,6 +12887,8 @@ def main() -> int:
         test_batch_oversized_context_tokens_clean,
         test_batch_oversized_context_tokens_dirty,
         test_batch_oversized_defaults_applied,
+        test_batch_oversized_per_card_two_cards_each_under_cap_clean,
+        test_batch_oversized_per_card_one_card_over_cap_dirty,
         # verify-full-suite check
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
@@ -12585,10 +12960,14 @@ def main() -> int:
         test_check_verify_unrelated_test_files_differs_not_flagged,
         test_check_verify_unrelated_test_files_parent_branch_none_no_findings,
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
+        test_check_verify_unrelated_test_files_naming_convention_exempt_clean,
+        test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
         test_check_card_missing_field_fence_guard_clean,
         test_check_card_missing_field_fence_guard_real_boundary_still_detected,
+        test_check_card_missing_field_indented_delimiter_column_zero_heading_clean,
+        test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence,
         # verify-excludes-edited-tagged-test check (#724)
         test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
         test_verify_excludes_edited_tagged_test_tags_integration_clean,
