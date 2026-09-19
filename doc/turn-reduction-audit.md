@@ -640,13 +640,150 @@ would need to preserve per call site, not collapse into one generic wrapper.
 
 ## Cross-cutting recommendations
 
-_Filled by card 4._
+These carry forward, as recommendations for whichever follow-up task implements an accepted
+candidate — not as new decisions made by this task:
+
+1. **Helper-function home for the `append_phase` + git-commit pattern.** Do **not** add a proposed
+   `append_phase_and_commit` (or equivalent) helper to `_status.py` itself. House it in a new,
+   separate module (e.g. `_status_commit.py`) that composes `_status.append_phase` with the existing
+   `_subprocess_util.git_commit` helper (`plugins/mill/scripts/_subprocess_util.py:219`), plus
+   `git add`/`git push` where the call site already pushes. `_status.py` (1482 lines) currently has
+   zero git/subprocess imports — that separation is exactly what lets its unit tests stay
+   in-memory/tempfile with no real git; adding a git-committing function to `_status.py` directly
+   would force every future `_status.py` unit test to either mock git or become an integration test.
+   Every "Mechanical/collapsible" entry above whose current behavior is "append_phase → commit"
+   (`mill-go-base`'s `## Prepare`, its per-round `reviewing-{batch}-rN` setup, its Unconditional
+   round-recorded append equivalent in `mill-plan`, `mill-start`'s Phase: Handoff, and others) is this
+   same candidate applied at a different call site — a single shared helper serves all of them, not
+   one bespoke wrapper per site.
+2. **Borderline treatment stays partial collapse, never all-or-nothing.** Every Borderline entry
+   above records both a full-exclusion alternative and a scoped-partial-collapse alternative with an
+   explicit recommendation — never a single forced verdict. Every Borderline entry in this document
+   in fact recommends the scoped-partial-collapse alternative (see `## Follow-up backlog candidates`
+   below): the pattern that emerged across all three files is consistent — the deterministic
+   read/classify work fronting or trailing a dispatch collapses cleanly, while the dispatch call
+   itself, the halt-message text, and the operator-visible phase-name transition never do. A
+   follow-up task implementing any one Borderline candidate should preserve that boundary exactly
+   (script returns a classification tag or a parsed value; the SKILL.md keeps every halt string, the
+   phase-name transition, and the actual `Agent()`/`Monitor` call), not attempt a full-exclusion
+   collapse just because a partial one already proved feasible for a similar-shaped site elsewhere.
+3. **The Entry-sequence collapse is the same shape in all three files.** `mill-start`'s Entry steps
+   1-3 + Path Setup, `mill-plan`'s Entry steps 1-3 + Path Setup, and `mill-go-base`'s Entry steps
+   1-4.5 + Path Setup are structurally identical (resolve `git_root`/`wiki_path` → load config →
+   resolve slug → derive task-scoped paths), differing only in which config keys each file reads and
+   which extra step `mill-go-base` inserts (the builder-lock acquire). A follow-up task should design
+   one shared script entry point parameterized by "which config keys to read" rather than three
+   independent per-file scripts, to avoid the three files drifting out of sync the way their
+   `append_phase`/`commit -m` counts already needed re-verification for this audit.
 
 ## Follow-up backlog candidates
 
-_Filled by card 4._
+**Mechanical/collapsible candidates** (each becomes its own follow-up task once this audit is
+reviewed):
+
+- Collapse `mill-start`'s Entry steps 1-3 + Path Setup (lines 85-107) into one script call
+  resolving `git_root`/`wiki_path`/config/slug/task paths before Phase: Color runs.
+- Collapse `mill-plan`'s Entry steps 1-3 + Path Setup (lines 33-52) the same way.
+- Collapse `mill-go-base`'s Entry steps 1-4.5 + Path Setup (lines 52-88), including the
+  builder-lock acquire, into one script call — the largest of the three Entry-sequence candidates.
+  (Per Cross-cutting recommendation 3, design these three as one shared, parameterized entry point
+  rather than three bespoke scripts.)
+- Script `mill-start`'s Phase: Color (lines 115-121) — read `.vscode/settings.json`, map to a
+  Claude Code color name, print the `/color` hint or skip silently.
+- Add an `append_phase_and_commit`-style helper (per Cross-cutting recommendation 1) and apply it
+  at: `mill-go-base`'s `## Prepare` (lines 209-216, the task body's own candidate #3); `mill-plan`'s
+  "Update `_mill/status.md`" step in Phase: Plan (lines 294-299); `mill-plan`'s "Unconditional
+  round-recorded append" in Phase: Plan Review (line 551); `mill-go-base`'s per-round
+  `reviewing-{batch}-rN` setup in the Code Review loop (lines 769-772); and `mill-start`'s/
+  `mill-plan`'s Phase: Handoff bookkeeping (`mill-start` lines 411-419, `mill-plan` lines 620-636).
+- Build a shared `converged` boolean-arithmetic helper (per the Convergence-gate entries in
+  `mill-start`'s Discussion Review, `mill-plan`'s Plan Review, and `mill-go-base`'s Code Review
+  loop) taking `round`, `min_rounds`, and the envelope's `findings`/`demoted` list, returning the
+  boolean plus which commit-message suffix (if any) applies.
+- Script `mill-go-base`'s Mid-execution phase-gate widening (lines 124-158) — the seven-branch
+  routing table that dispatches a resumed run to the correct section.
+- Script `mill-go-base`'s `### 2b. Cleanliness gate` (lines 668-743) — the five chained
+  deterministic decision points (scope-violations check, parent-branch liveness/rebind, out-of-scope
+  drift revert, dirt classification) into one call returning which terminal branch applies.
+- Script `mill-plan`'s Self-validate-the-DAG + self-run-the-validator-gate combination in Phase:
+  Plan (lines 246-269) into one call (excluding the skip-check overrides' own judgment tests, which
+  stay LLM-owned).
+- Script `mill-plan`'s Persist-`skip_checks`/`discussion_sha` frontmatter edits (lines 288-290) as
+  one combined write.
+- Script `mill-go-base`'s `### 2. Parse implementer report` (lines 653-666) — the JSON-field
+  branch plus fixed one-retry-then-escalate shape for `transient`.
+- Script `mill-go-base`'s `### Stuck escalation` bookkeeping (lines 880-926) for the
+  `infrastructure`/`transient`/`incomplete` branches specifically (never the `verify`/`logic`
+  self-resolve, which is judgment and stays Excluded).
+
+**Borderline candidates whose recommendation favors scoped partial collapse** (every Borderline
+entry in this document recommends partial collapse — see Cross-cutting recommendation 2 — so every
+one qualifies):
+
+- `mill-start`'s Fork scope guardrail (line 199) and `mill-plan`'s identical guardrail in Phase:
+  Plan (lines 151-160) — script the pre/post `git status --porcelain` baseline-vs-post-return diff
+  computation; keep the fork dispatch and revert decision inline.
+- The shared "## Agent-mode dispatch" polling/classification sub-steps, applied at every call site
+  that uses the pattern (`mill-start`'s Discussion Review steps 2/3.5, `mill-plan`'s Plan Review
+  steps 2/3.5, `mill-go-base`'s Implement/Code-Review/NIT-fix/fixer dispatches) — script the
+  subprocess-branch poll-until-`[mill-bg] EXIT` loop and the raw-API-error/liveness-probe text
+  classification (`mill-go-base`'s "## Agent-mode dispatch" step 3); keep every `Agent()` call, every
+  `TaskOutput` probe, and every re-dispatch decision inline.
+- `mill-plan`'s `--revise` pre-check and `--approve` pre-check (Entry step 4, lines 57-70) — script
+  the phase/`approved`/`blocked_reason` branch-selection read and the deterministic frontmatter
+  flip; keep the "unsupported" halt messages SKILL-owned.
+- `mill-plan`'s Entry-gate wait for upstream mill-start (lines 81-116) and `mill-go-base`'s
+  Entry-gate wait for upstream mill-plan (lines 160-201) — script the wait-command construction
+  (`matched`/`entry_wait`/`giveup_s`/`build_wait_command`); keep the `Monitor` call and every
+  event-branch halt message inline.
+- `mill-plan`'s "Entry: resuming after a max-rounds block" (lines 117-138) — script the
+  `blocked_reason` prefix check, mid-`--revise` freshness comparison, and `N`/
+  `local_max_review_rounds` arithmetic; keep both halt messages and the fallthrough decision
+  SKILL-owned.
+- `mill-plan`'s Pre-commit drift check in Phase: Plan (line 301) — script the `git rev-parse`
+  re-check and comparison, plus the mismatch branch's clean/`set_blocked`/commit/push sequence; keep
+  only the halt-message text SKILL-owned.
+- `mill-start`'s Discussion Review step 4b's terminal bookkeeping tail and `mill-plan`'s Plan Review
+  steps 4b/4c terminal bookkeeping tails — script the append_phase+commit once NIT fixes are already
+  applied; keep the Handoff-completion report and loop-break decision SKILL-owned.
+- `mill-plan`'s Plan Review step 5 (Non-progress check, lines 603-611) and step 6 (Max-rounds
+  escape, lines 613-618) — script the title-set comparison / `blocking_count`-and-waiver read; keep
+  both halt messages and the waiver's implicit-approve commit text SKILL-owned.
+- `mill-go-base`'s "## Agent-mode dispatch" step 5.5 `incomplete` recovery (lines 382-412) — script
+  the warm-resume-viable-vs-cold-fallback branch selection; keep the `SendMessage`/`Agent`
+  re-dispatch calls themselves inline.
+
+Not included: any Excluded item above, and no Borderline candidate in this document recommends
+full exclusion, so none is omitted on that basis.
 
 ## Coverage check
 
-_Filled by card 4._
+Re-scanned every `###`-level heading and every top-level numbered step in all three files
+(`grep -n '^### \|^## '` against each `SKILL.md`, cross-checked against every classification entry
+above) as a completeness self-check, run ad hoc during this card — no new persisted tooling ships.
+
+- **`mill-start/SKILL.md`:** 11 `##`/`###` headings found (`## Auto mode`, `## Orch mode`,
+  `## Entry`, `## Phases`, and 7 `### Phase:` headings). Every one is classified above, either
+  directly or (for `## Entry`/`## Phases`, pure section-grouping headings with no content of their
+  own) via their numbered sub-steps. `## Auto mode`/`## Orch mode` are classified as whole-section
+  Excluded rather than decomposed further, since every rule inside each is itself judgment/
+  round-loop machinery with no mechanical sub-step to separate out — confirmed by re-reading both
+  sections in full rather than assuming from their titles.
+- **`mill-plan/SKILL.md`:** 7 headings found (`## Entry`, the two Entry subsections, `## Phases`,
+  and 3 `### Phase:` headings), plus Entry step 4's own internal table (not a `###` heading but an
+  explicitly-named sub-part per the card 2 Requirements). All 7 headings plus the phase-table branch
+  are classified above.
+- **`mill-go-base/SKILL.md`:** 19 headings found. All 19 are classified above, with one explicit
+  exception recorded rather than silently dropped: `## Resume`, `## Holistic code review`, and
+  `## Handoff` (the three trailing pointer headings) carry no inline step content in this file — they
+  each read a companion file (`resume.md`, `holistic-review.md`, `handoff.md`) that is outside this
+  card's `Context:` allowlist (`mill-go-base/SKILL.md` only). They are marked Excluded from this
+  file's own classification with that scope note, not treated as covered.
+
+No step was found double-counted (each numbered step appears in exactly one classification bullet
+above) or silently dropped. The one item requiring a second look during this check was `## Auto
+mode`/`## Orch mode` in `mill-start` — initially considered for further per-rule decomposition, but
+resolved as whole-section Excluded per the reasoning above, since decomposing further would not
+surface any additional Mechanical/Borderline sub-step beyond what "Mechanical/collapsible entries"
+already lists elsewhere in the Discussion Review classification that these mode sections modify.
 </content>
