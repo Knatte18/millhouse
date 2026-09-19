@@ -510,14 +510,15 @@ def main(argv=None) -> int:
         "--agent-output",
         help="Path to agent output file (required when --stage finalize).",
     )
-    # These flags are accepted for CLI-shape parity with millpy-fix.py and the generic agent-mode dispatch loop (mill-go SKILL.md step 5).
-    # millpy-implement.py ignores them;
-    # the --stage finalize branch reads the authoritative start_sha and implementer_session from status.md instead.
+    # --start-sha is honored at --stage finalize when passed (non-empty), falling back to status.md otherwise.
     parser.add_argument(
         "--start-sha",
         default=None,
-        help="SHA captured at prepare stage (ignored by implement; status.md is authoritative).",
+        help="SHA captured at prepare stage; honored at --stage finalize when passed (non-empty), falling back to status.md otherwise.",
     )
+    # These flags are accepted for CLI-shape parity with millpy-fix.py and the generic agent-mode dispatch loop (mill-go SKILL.md step 5).
+    # millpy-implement.py ignores them;
+    # the --stage finalize branch reads the authoritative start_sha and implementer_session from status.md instead.
     parser.add_argument(
         "--session-id",
         default=None,
@@ -749,7 +750,7 @@ def main(argv=None) -> int:
         if batch_status is None:
             print(f"batch {args.batch_name!r} not found in status", file=sys.stderr)
             return 1
-        start_sha = batch_status.get("start_sha")
+        start_sha = args.start_sha if args.start_sha else batch_status.get("start_sha")
         _safe_batch = _paths.sanitize_filename_component(args.batch_name)
         snapshot_path = (
             project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"

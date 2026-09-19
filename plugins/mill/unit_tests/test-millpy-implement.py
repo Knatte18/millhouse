@@ -742,8 +742,9 @@ class TestMillpyImplement(unittest.TestCase):
         """--stage finalize accepts --round flag with no argparse error, ignores CLI value.
 
         Mirrors test_15_stage_finalize_accepts_session_and_start_sha_flags for #568: the --round
-        flag is accepted for CLI-shape parity with millpy-fix.py but is ignored;
-        the finalize branch reads start_sha and implementer_session from status.md.
+        and --session-id flags are accepted for CLI-shape parity with millpy-fix.py but remain
+        ignored, reading implementer_session (and, for --round, nothing at all) from status.md;
+        --start-sha is honored when passed (#1012).
         """
         status_path = self.tmp_path / "task" / "status.md"
         agent_output_path = self.tmp_path / "agent-output.txt"
@@ -773,8 +774,9 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_finalize.assert_called_once()
         call_kwargs = mock_finalize.call_args.kwargs
-        # Finalize must use status.md values, not the CLI --round/--session-id/--start-sha args.
-        self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
+        # Finalize must ignore the CLI --round/--session-id args and use status.md values for
+        # them, but must honor the CLI --start-sha value (#1012).
+        self.assertEqual(call_kwargs.get("start_sha"), "CLI_SHA")
         self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
         # main()'s already-resolved git_name/git_email locals (from `git config --global --get
         # user.name`/`user.email`, mocked via mock_subprocess_run's default "abc1234" stdout)
@@ -782,6 +784,37 @@ class TestMillpyImplement(unittest.TestCase):
         # git-identity fix; a future edit that silently drops these kwargs must fail this test.
         self.assertEqual(call_kwargs.get("git_name"), "abc1234")
         self.assertEqual(call_kwargs.get("git_email"), "abc1234")
+
+    def test_finalize_start_sha_falls_back_to_status_md_when_flag_absent(self):
+        """--stage finalize with no --start-sha flag falls back to status.md's value.
+
+        Covers the ordinary auto-dispatch path, and the warm-SendMessage recovery path
+        documented in mill-go-base/SKILL.md step 5.5 -- both bypass --stage prepare and
+        therefore never supply --start-sha to the following --stage finalize call (#1012).
+        """
+        status_path = self.tmp_path / "task" / "status.md"
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8"
+        )
+
+        millpy_implement._status.set_batch_field(status_path, "test-batch", "start_sha", "STATUS_SHA")
+
+        with unittest.mock.patch.object(
+            millpy_implement, "finalize_from_output",
+            return_value=0
+        ) as mock_finalize:
+            rc, out = self._run_main([
+                "test-batch",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_finalize.assert_called_once()
+        call_kwargs = mock_finalize.call_args.kwargs
+        self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
 
     def test_prepare_retry_dirty_staged_commits(self):
         """Re-fire with non-empty staged diff (regenerated session): git_commit IS called.
@@ -826,7 +859,11 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(commit_msg, f"mill-go: start batch {batch_name}")
 
     def test_15_stage_finalize_accepts_session_and_start_sha_flags(self):
-        """--stage finalize accepts --session-id and --start-sha flags, still uses status.md values."""
+        """--stage finalize accepts --session-id and --start-sha flags.
+
+        --session-id still falls back to status.md;
+        --start-sha is now honored when passed (#1012).
+        """
         status_path = self.tmp_path / "task" / "status.md"
         agent_output_path = self.tmp_path / "agent-output.txt"
         agent_output_path.write_text(
@@ -857,9 +894,10 @@ class TestMillpyImplement(unittest.TestCase):
         # Verify finalize_from_output was called once
         mock_finalize.assert_called_once()
 
-        # Verify the kwargs passed to finalize_from_output contain status.md values, NOT CLI args
+        # Verify the kwargs passed to finalize_from_output: session_id still comes from
+        # status.md (ignored CLI arg), but start_sha now comes from the CLI arg (#1012).
         call_kwargs = mock_finalize.call_args.kwargs
-        self.assertEqual(call_kwargs.get("start_sha"), "STATUS_SHA")
+        self.assertEqual(call_kwargs.get("start_sha"), "CLI_SHA")
         self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
 
     def test_finalize_stage_resolves_batch_verify_command(self):
