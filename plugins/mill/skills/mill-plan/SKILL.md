@@ -427,6 +427,8 @@ converged = (round >= min_review_rounds)
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
 
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to `<args>` for this and every remaining round; omit it on every other round.
+
    > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this and every remaining round.
 
    If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
@@ -511,6 +513,8 @@ converged = (round >= min_review_rounds)
    Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
+
+   > Only when this loop was entered via the Entry `blocked` re-entry row (see "Entry: resuming after a max-rounds block"), append ` --max-rounds <local_max_review_rounds>` to `<args>` for this retry too; omit it on every other round.
 
    > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this retry too — the Step 3.5 retry is explicitly included in that override's dispatch sites.
 
