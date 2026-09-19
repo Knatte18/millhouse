@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-plan-done-gate-kwargs-count-drift
 branch: hanf/mill-plan-done-gate-kwargs-count-drift
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-09-19T11:24:06Z'
 planning  '2026-09-19T11:26:36Z'
 plan-review-r1  '2026-09-19T11:29:24Z'
 planned  '2026-09-19T11:30:03Z'
+implementing  '2026-09-19T11:32:21Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fix-plan-review-kwarg-drift
+    state: pending
 ```
