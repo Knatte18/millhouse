@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: shared-helper-script-validation-gaps
 branch: hanf/shared-helper-script-validation-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-09-19T12:46:08Z'
 approved-config-treeguard-guards  '2026-09-19T12:51:14Z'
 holistic-reviewing  '2026-09-19T12:51:58Z'
 holistic-approved  '2026-09-19T12:54:11Z'
+done  '2026-09-19T12:54:45Z'
 ```
 
 ## Batches
