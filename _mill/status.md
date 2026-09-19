@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-config-treeguard-guards
 slug: shared-helper-script-validation-gaps
 branch: hanf/shared-helper-script-validation-gaps
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-review-r3  '2026-09-19T11:47:12Z'
 plan-fix-r3  '2026-09-19T11:48:15Z'
 planned  '2026-09-19T11:48:33Z'
 implementing  '2026-09-19T12:46:08Z'
+approved-config-treeguard-guards  '2026-09-19T12:51:14Z'
 ```
 
 ## Batches
@@ -34,8 +35,9 @@ implementing  '2026-09-19T12:46:08Z'
 ```yaml
 batches:
   - name: config-treeguard-guards
-    state: running
+    state: approved
     implementer_session: 69f8d8b1-a936-4e5f-bfcb-af28e52fa379
     start_sha: 0e3d3fd1d4881c80647b172a76760fcac60c76e9
+    commit_sha: c676fbf3dd43d12c804d874c625b2e87706f0b40
     verify_baseline_failures: []
 ```
