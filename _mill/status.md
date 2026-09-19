@@ -28,5 +28,7 @@ implementing  '2026-09-19T11:32:21Z'
 ```yaml
 batches:
   - name: fix-plan-review-kwarg-drift
-    state: pending
+    state: running
+    implementer_session: c843b1b3-54aa-4fc4-b207-b2705f041f85
+    start_sha: 308bd513b70b7d44870787762c91cb5b5c360487
 ```
