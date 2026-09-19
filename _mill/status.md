@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fix-citation-scan-pathspec
+phase: holistic-reviewing
 slug: mill-finalize-citation-scan-pathspec-magic-bug
 branch: hanf/mill-finalize-citation-scan-pathspec-magic-bug
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-19T11:29:49Z'
 planned  '2026-09-19T11:30:21Z'
 implementing  '2026-09-19T11:34:25Z'
 approved-fix-citation-scan-pathspec  '2026-09-19T11:37:26Z'
+holistic-reviewing  '2026-09-19T11:38:16Z'
 ```
 
 ## Batches
