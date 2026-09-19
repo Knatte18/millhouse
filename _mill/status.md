@@ -32,5 +32,8 @@ implementing  '2026-09-19T11:49:06Z'
 ```yaml
 batches:
   - name: doc-gaps-fixes
-    state: pending
+    state: running
+    implementer_session: 8360671f-49b9-476b-9cbf-22c5176c73e6
+    start_sha: f38d60edf66df5548b5da5317d8203e183928cbe
+    verify_baseline_failures: []
 ```
