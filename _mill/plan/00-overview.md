@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py context-completeness: path-token exemption list gaps'
 slug: plan-validate-context-completeness-path-branch-gaps
-approved: false
+approved: true
 started: 20260919-114105
 parent: main
 root: ""
