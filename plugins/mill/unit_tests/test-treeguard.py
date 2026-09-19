@@ -285,6 +285,26 @@ def main() -> int:
             )
         print("PASS: partial restore reports only the actually-restored path, surfaces the rest via stderr")
 
+        # --- Scenario 11: str worktree raises a clear TypeError instead of a raw AttributeError ---
+        try:
+            check_and_restore("/some/str/path", "_mill")
+        except TypeError as exc:
+            assert "worktree" in str(exc), f"expected 'worktree' in message, got {exc!r}"
+            assert "pathlib.Path" in str(exc), f"expected 'pathlib.Path' in message, got {exc!r}"
+        else:
+            raise AssertionError("expected TypeError for str worktree, none was raised")
+        print("PASS: str worktree raises a clear TypeError naming worktree and pathlib.Path")
+
+        # --- Scenario 12: str git_root raises a clear TypeError instead of a raw AttributeError ---
+        try:
+            check_and_restore(Path("/some/worktree"), "_mill", git_root="/some/str/path")
+        except TypeError as exc:
+            assert "git_root" in str(exc), f"expected 'git_root' in message, got {exc!r}"
+            assert "pathlib.Path" in str(exc), f"expected 'pathlib.Path' in message, got {exc!r}"
+        else:
+            raise AssertionError("expected TypeError for str git_root, none was raised")
+        print("PASS: str git_root raises a clear TypeError naming git_root and pathlib.Path")
+
         print("All _treeguard unit tests passed.")
         return 0
     except AssertionError as exc:
