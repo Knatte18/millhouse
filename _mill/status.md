@@ -34,9 +34,13 @@ implementing  '2026-09-19T12:46:23Z'
 ```yaml
 batches:
   - name: context-completeness-exemptions
-    state: pending
+    state: running
+    implementer_session: 8d1015d6-d035-43f8-84b9-f775075b4fdb
+    start_sha: 167794307fd8305ac046f3a4a54be2fcb8ff8464
+    verify_baseline_failures: []
   - name: context-completeness-exemptions-docs
     state: pending
   - name: context-completeness-exemptions-tests
     state: pending
+    verify_baseline_failures: []
 ```
