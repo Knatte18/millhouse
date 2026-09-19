@@ -59,8 +59,10 @@ these skills are loaded defensively in case a future addition needs `mill:conver
    - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `240` if the key is absent).
    - `roles.code-review.batch.rounds` — max review rounds per batch.
    - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
+   - `roles.code-review.batch.auto_approve_on_cap` — when `true`, a round-cap exhausted with the last round's verdict `REQUEST_CHANGES` is treated as an implicit approval instead of a halt (default `false` when absent). See step 5 "Max-rounds exhaustion" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
    - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
+   - `roles.code-review.holistic.auto_approve_on_cap` — when `true`, a round-cap exhausted with `REQUEST_CHANGES` still returned is treated as an implicit approval instead of a halt (default `false` when absent). See step 7 "Rounds exhausted" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
    - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
@@ -782,6 +784,7 @@ Skip the rest of this section.
 - Set batch state → `reviewing`, `review_round: 1`.
 - `extra_files = []`.
 - `min_batch_rounds = cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("min_rounds", 1)`.
+- `auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("auto_approve_on_cap", False)`.
 
 **Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (step 4's `APPROVE` branch below), compute:
 
@@ -907,8 +910,10 @@ Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" ab
    The two-pass cap mirrors mill-plan's existing step 3.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
 
 5. **Max-rounds exhaustion.**
-   After `roles.code-review.batch.rounds` rounds without APPROVE: `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`.
-   Go to *Blocked* below.
+   After `roles.code-review.batch.rounds` rounds without APPROVE: branch on the most recently completed round's verdict (round `N = roles.code-review.batch.rounds`, already read at step 3/4 for that round).
+
+   - **If `auto_approve_on_cap` is `True` AND that round's verdict was `REQUEST_CHANGES`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — set batch state → `approved`, `review_file: <path>` (using the `file` field from that round's `reviews[0]` as `<review_file_path>`, same as step 4's own convention); `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"`. Also emit `_notify.notify("<VARIANT_LABEL>.review-exhausted-auto-approved", f"batch {batch_name}", slug=slug, rounds=N)` so the auto-approval is still observable, not silent. Continue to the next batch — do NOT go to *Blocked*.
+   - **Otherwise** (flag is `False`, or that round's verdict was `NEED_CONTEXT`): `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
 
 ### Stuck escalation
 
