@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r3
+phase: planned
 slug: shared-helper-script-validation-gaps
 branch: hanf/shared-helper-script-validation-gaps
 plan: _mill/plan
@@ -25,4 +25,5 @@ plan-review-r2  '2026-09-19T11:42:33Z'
 plan-fix-r2  '2026-09-19T11:43:09Z'
 plan-review-r3  '2026-09-19T11:47:12Z'
 plan-fix-r3  '2026-09-19T11:48:15Z'
+planned  '2026-09-19T11:48:33Z'
 ```
