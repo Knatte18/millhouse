@@ -1,0 +1,33 @@
+MILL_REVIEW_BEGIN
+# Review: mill-merge / mill-merge-in: brief-staging path bug and easy-to-miss caching instruction — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewer_self_id: claude-sonnet-5
+reviewed_file: plan/
+date: 2026-09-19
+```
+
+## Findings
+
+### [BLOCKING:consistency] Card 2 recovery paragraph asserts a false commit-count claim
+**Location:** Batch 1 / Card 2 (mill-merge/SKILL.md, Step 5 direct-squash insertion).
+**Issue:** The verbatim paragraph states "Step 4's cleanup commit is the only commit between the caching point and here in the direct-squash flow." Verified against `mill-merge-in/SKILL.md` Step 3 ("Merge parent into current," which lands a merge or `merge --continue` commit) and Step 5.5 ("Commit dispatch briefs," which can add a `mill-merge-in: commit dispatch briefs` commit) — both run inside `mill-merge/SKILL.md` Step 2's invocation of `mill-merge-in`, which executes before `mill-merge`'s own Step 4, so at least one and often two additional commits routinely land in that span.
+**Fix:** Reword to something like "Step 4's cleanup commit is the most recent commit before this point, and no earlier commit in this flow touches `status.md`" — drop the "only commit" phrasing; the underlying recovery mechanism (`HEAD~1` still has the file) itself remains correct once reworded.
+
+### [NIT:consistency] `<status-relative-path>` placeholder is not tied to any bound variable
+**Location:** Batch 1 / Card 2, new paragraph's `git -C <worktree> show HEAD~1:<status-relative-path>` command.
+**Issue:** Unlike `<worktree>`, `<parent-path>`, `<CHK>`, etc. (all bound elsewhere in the file), `<status-relative-path>` has no corresponding definition anywhere in `mill-merge/SKILL.md` (the closest is `TASK_DIR_REL`, which is the directory, not the status-file path) — a reader can't tell what literal value to substitute.
+**Fix:** Either define the relative status-file path inline in the new paragraph (e.g. derive it from `cfg['paths']['status_md']`) or reuse/extend `TASK_DIR_REL`.
+
+### [NIT:consistency] Batch Tests' "no other test reads either file" claim is slightly inaccurate
+**Location:** Batch 1, `## Batch Tests` section.
+**Issue:** `plugins/mill/unit_tests/test-guards.py`'s `_WIKI_CWD_ALLOWLIST` (`_check_no_wiki_cwd`) does read `plugins/mill/skills/mill-merge/SKILL.md` — it's just allowlisted out of that specific pattern check, so it's harmless, but the batch's "no other test in the suite reads either file" statement is not literally true.
+**Fix:** Soften to "no other test asserts specific content of either file" or similar.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 2's recovery-path rationale contains a false mechanism claim about commit count that must be corrected before approval.
+MILL_REVIEW_END
