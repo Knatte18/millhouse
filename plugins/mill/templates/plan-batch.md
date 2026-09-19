@@ -13,6 +13,7 @@ Replace `NN` in `number: NN` with the integer from the batch filename (e.g., `02
 
 Non-null verify: commands MUST start with "PYTHONPATH= " (empty value, single space) so the test subprocess does not inherit the cache PYTHONPATH.
 The validator check verify-not-isolated enforces this.
+This rule is Python/mill-project-specific -- for a non-Python project (e.g. Go, C#), see `mill-plan/SKILL.md`'s "Verify command shape" section for the native-test-runner alternative.
 
 verify: scope MUST match what the batch touches — usually a single test file or a `--only` list (e.g. `verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-fold.py test-marker.py`).
 Unbounded `run-all.py` runs the entire suite (multiple minutes);
