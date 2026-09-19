@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-merge-family-doc-gaps
 branch: hanf/mill-merge-family-doc-gaps
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-19T11:23:16Z'
 discussion-fix-r2  '2026-09-19T11:26:47Z'
 discussed  '2026-09-19T11:26:47Z'
 planning  '2026-09-19T11:30:51Z'
+plan-review-r1  '2026-09-19T11:35:23Z'
 ```
