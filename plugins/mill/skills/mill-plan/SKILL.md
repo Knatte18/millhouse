@@ -676,6 +676,7 @@ Never hand-write or guess a date.
   A line listing 3 or more backtick-quoted literal values (e.g. table-driven test inputs) is exempt in full when at least one of those values is not itself path- or symbol-shaped -- do not rely on this for a line that is a genuine multi-file dependency list, since an all-path-shaped enumeration is never exempt by this rule.
   A line naming a rendered/emitted/printed/displayed/output value (e.g. "emitting the bare `x.md`") is exempt as an illustrative output citation, not a read dependency.
   A not-involved mention is exempt only when phrased as one of three clause-scoped templates (not a bare "no"/"not" anywhere on the line): "no `foo.py` is involved", "without `foo.py`" (the token immediately following "without", no intervening words), or "`foo.py` is not involved"/"is not needed"/"is not required"/"is not used". Phrasing outside these three exact templates is not recognized and must instead go through `Context:`.
+- **A hard clean-tree gate must exempt the current batch's own untracked brief** — a card that authors a `git status --porcelain`-must-be-empty gate must exclude `_mill/briefs/<currently-executing-batch>*.md` from it. That file is written by the orchestrator's `--stage prepare` before the implementer session starts and is committed only by the batch's own end-of-batch commit, so it is unavoidably untracked at any clean-tree checkpoint earlier in the same batch, in every plan run under mill-go — not just matrix/benchmark-style batches.
 
 ## Board discipline
 
