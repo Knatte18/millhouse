@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: turn-reduction-audit
 branch: hanf/turn-reduction-audit
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-09-19T05:08:49Z'
 discussion-fix-r1  '2026-09-19T11:25:34Z'
 discussed  '2026-09-19T11:25:34Z'
 planning  '2026-09-19T11:29:27Z'
+plan-review-r1  '2026-09-19T11:32:51Z'
 ```
