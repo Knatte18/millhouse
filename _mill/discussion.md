@@ -139,7 +139,7 @@ into a single script call, before any of that mechanization is actually built.
   `_status.append_phase` call count is 21 in the current source vs. the first-pass audit's cited
   22; candidate #3 (`mill-go-base`'s `## Prepare` section, `plugins/mill/skills/mill-go-base/SKILL.md:209-215`)
   checked out exactly as described and is a clean, accurate example of the pattern; candidate #2
-  (Entry path/config/slug resolution, mirrored in `mill-start/SKILL.md:1-3` under `## Entry` and
+  (Entry path/config/slug resolution, mirrored in `mill-start/SKILL.md:85-95` under `## Entry` and
   `mill-plan/SKILL.md:33-45` under the same heading) also checked out. The one cited Borderline
   case checked out as *understated*, not wrong (see previous Decision). Per CLAUDE.md's own
   "Task-worktree path for source verification" rule, all of this must be read from the task
@@ -151,7 +151,7 @@ into a single script call, before any of that mechanization is actually built.
 ## Technical context
 
 - Files to walk: `plugins/mill/skills/mill-start/SKILL.md` (441 lines), `.../mill-plan/SKILL.md`
-  (685 lines), `.../mill-go-base/SKILL.md` (995 lines). Also read `.../mill-go/SKILL.md` (29
+  (685 lines), `.../mill-go-base/SKILL.md` (996 lines). Also read `.../mill-go/SKILL.md` (29
   lines) and `.../mill-go2/SKILL.md` (105 lines) — this discussion already confirmed both add no
   mechanical sequences of their own: `mill-go` is a bare "load `mill-go-base`, follow it" wrapper;
   `mill-go2` only overrides dispatch calls with fork/cold-fallback branching logic (judgment, not
