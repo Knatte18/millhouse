@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: mill-finalize-citation-scan-pathspec-magic-bug
 branch: hanf/mill-finalize-citation-scan-pathspec-magic-bug
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-19T05:08:58Z'
 discussion-fix-r1  '2026-09-19T11:21:26Z'
+discussed  '2026-09-19T11:23:54Z'
 ```
