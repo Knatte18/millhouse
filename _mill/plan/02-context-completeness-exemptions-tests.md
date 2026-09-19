@@ -34,8 +34,8 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
 - **Moves:** none
 - **Requirements:**
   Add the following test functions to `plugins/mill/unit_tests/test-plan-validate.py`, immediately
-  after `test_check_context_completeness_dirty_quoted_material_prose_after_fence_closed` (the last
-  existing `context-completeness` test in the file), following that same function's exact fixture
+  after `test_check_context_completeness_dirty_escape_marker_phrase_removed` (the last existing
+  `context-completeness` test in the file), following that same function's exact fixture
   pattern (`tempfile.TemporaryDirectory`, `_make_overview`, `_make_batch_file`, `_write_plan`,
   `_plan_validate.run(plan_dir, project_root)`, filter `result` to `check == "context-completeness"`,
   assert count, `try`/`except AssertionError` PASS/FAIL print convention identical to every existing
@@ -49,8 +49,8 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
   - `test_check_context_completeness_clean_ownership_synonym_addresses` — `` "batch 4 addresses
     `y.py`." `` (a close-synonym verb, not one of the four issue-sourced verbs) — asserts 0 errors.
   - `test_check_context_completeness_clean_ownership_past_tense` — `` "batch 8 fixed `x.cs`." `` —
-    asserts 0 errors (guards the hand-spelled past-tense form actually exists in
-    `_OWNERSHIP_VERB_FORMS`).
+    asserts 0 errors (guards that Batch 1 Card 1's ownership verb-form table actually has a
+    hand-spelled past-tense form, not just base/3rd-person).
   - `test_check_context_completeness_clean_ownership_possessive` — `` "batch 8's fix touches
     `x.cs`." `` — asserts 0 errors (guards the regex's optional `'s` group).
   - `test_check_context_completeness_dirty_ownership_no_number_not_exempted` — `` "batch fixes
@@ -70,8 +70,8 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
   and every card must declare a real `Edits:` file unrelated to the tested path (the existing tests'
   `edits=["other.py"]` convention) so the fixture itself is otherwise structurally valid.
   Register each new test function in `main()`'s `tests` list, immediately after
-  `test_check_context_completeness_dirty_quoted_material_prose_after_fence_closed` in that list, in
-  the same order as the bullets above.
+  `test_check_context_completeness_dirty_escape_marker_phrase_removed` in that list, in the same
+  order as the bullets above.
 - **Commit:** `test(plan-validate): cover cross-card ownership context-completeness exemption`
 
 ### Card 5: Literal-enumeration exemption unit tests
@@ -120,13 +120,13 @@ card's own `Requirements:` below, so the implementer does not need to re-read `_
     asserts 0 `context-completeness` errors.
   - `test_check_context_completeness_clean_illustrative_output_rendering` — `` "the view renders the
     bare `README.md` for a dot directory." `` (mentioned, not read) — asserts 0 errors (a second
-    `_OUTPUT_VERB_FORMS` entry).
+    output-verb-form-table entry, per Batch 1 Card 3).
   - `test_check_context_completeness_clean_illustrative_output_printing` — `` "the CLI prints the
     bare `README.md` to stdout." `` (mentioned, not read) — asserts 0 errors (a third
-    `_OUTPUT_VERB_FORMS` entry).
+    output-verb-form-table entry).
   - `test_check_context_completeness_clean_illustrative_output_past_tense` — `` "the answer emitted
-    the bare `README.md`." `` (mentioned, not read) — asserts 0 errors (guards the hand-spelled
-    past-tense form actually exists in `_OUTPUT_VERB_FORMS`).
+    the bare `README.md`." `` (mentioned, not read) — asserts 0 errors (guards that Batch 1 Card 3's
+    output verb-form table actually has a hand-spelled past-tense form, not just base/3rd-person).
   - `test_check_context_completeness_dirty_illustrative_output_no_verb_not_exempted` — mentioned, not read, throughout this bullet — a card whose `Requirements:` names `` `README.md` `` on a line with no output verb (e.g. "Read `README.md` for the project description.") — create a real `README.md` under `project_root` so the token resolves — asserts exactly 1 `context-completeness` error whose `path` is `README.md`.
 
   Register each new test function in `main()`'s `tests` list, immediately after Card 5's last

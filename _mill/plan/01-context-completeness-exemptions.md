@@ -95,10 +95,10 @@ numeric order.
   and immediately before the existing `if is_path_shaped:` line, with matching indentation:
 
   ```python
-                      # Cross-card ownership exemption: the line names another card/batch as the
-                      # owner of this token, not a dependency this card itself reads.
-                      if _is_cross_card_ownership_exempt(lowered_line):
-                          continue
+                    # Cross-card ownership exemption: the line names another card/batch as the
+                    # owner of this token, not a dependency this card itself reads.
+                    if _is_cross_card_ownership_exempt(lowered_line):
+                        continue
   ```
 
   Add a new item `11.` to `_check_context_completeness`'s own docstring numbered exemption list
@@ -167,11 +167,11 @@ numeric order.
   `if is_path_shaped:` line:
 
   ```python
-                      # Literal-value enumeration exemption: 3+ backtick tokens on this line, at
-                      # least one neither path- nor symbol-shaped, marks the whole line as a literal
-                      # test-input enumeration rather than a dependency list.
-                      if _is_literal_enumeration_exempt(line, match.start(1), match.end(1)):
-                          continue
+                    # Literal-value enumeration exemption: 3+ backtick tokens on this line, at
+                    # least one neither path- nor symbol-shaped, marks the whole line as a literal
+                    # test-input enumeration rather than a dependency list.
+                    if _is_literal_enumeration_exempt(line, match.start(1), match.end(1)):
+                        continue
   ```
 
   Add a new item `12.` to the same docstring numbered exemption list, immediately after item `11.`
@@ -232,10 +232,10 @@ numeric order.
   before the `if is_path_shaped:` line:
 
   ```python
-                      # Illustrative-output exemption: the line describes a rendered/emitted output
-                      # value, not a file read dependency.
-                      if _is_illustrative_output_exempt(lowered_line):
-                          continue
+                    # Illustrative-output exemption: the line describes a rendered/emitted output
+                    # value, not a file read dependency.
+                    if _is_illustrative_output_exempt(lowered_line):
+                        continue
   ```
 
   Add a new item `13.` to the same docstring numbered exemption list, immediately after item `12.`
