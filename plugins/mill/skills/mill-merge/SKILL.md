@@ -284,7 +284,7 @@ On the task branch (current cwd), remove the state directory that belongs to the
 
 ```bash
 git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \
-    ':!<task_dir>' ':!plugins/**/SKILL.md' ':!plugins/**/unit_tests/**' ':!plugins/**/integration_tests/**'
+    ':(exclude)<task_dir>' ':(exclude)plugins/**/SKILL.md' ':(exclude)plugins/**/unit_tests/**' ':(exclude)plugins/**/integration_tests/**'
 ```
 
 ```bash
