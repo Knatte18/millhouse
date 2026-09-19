@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-turn-reduction-audit-doc
 slug: turn-reduction-audit
 branch: hanf/turn-reduction-audit
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-09-19T11:29:27Z'
 plan-review-r1  '2026-09-19T11:32:51Z'
 planned  '2026-09-19T11:33:32Z'
 implementing  '2026-09-19T11:35:59Z'
+approved-turn-reduction-audit-doc  '2026-09-19T11:46:25Z'
 ```
 
 ## Batches
@@ -28,7 +29,8 @@ implementing  '2026-09-19T11:35:59Z'
 ```yaml
 batches:
   - name: turn-reduction-audit-doc
-    state: running
+    state: approved
     implementer_session: fe209338-acc7-4568-b11d-023f8f3a8c30
     start_sha: 0ffb395e2ffd47f97e6e1efb04e2fcfe4c93940f
+    commit_sha: 26a37d56bf4c5ab0e625c6c3fc4289b3511bd87f
 ```
