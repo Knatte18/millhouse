@@ -43,15 +43,15 @@ This batch delivers both bug fixes from `_mill/discussion.md` in full: `_config.
   ```
   with:
   ```python
-      unknown = walk_unknown_keys(actual, template)
-      for path in unknown:
-          if path in deprecated_keys:
-              continue
-          hint = RENAMED_KEY_HINTS.get(path)
-          if hint:
-              print(f"[config] unknown key: {path} (in {source_label}) -- {hint}", file=sys.stderr)
-          else:
-              print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
+    unknown = walk_unknown_keys(actual, template)
+    for path in unknown:
+        if path in deprecated_keys:
+            continue
+        hint = RENAMED_KEY_HINTS.get(path)
+        if hint:
+            print(f"[config] unknown key: {path} (in {source_label}) -- {hint}", file=sys.stderr)
+        else:
+            print(f"[config] unknown key: {path} (in {source_label})", file=sys.stderr)
   ```
   This is a behavior-preserving refactor of the `if path not in deprecated_keys:` guard into `if path in deprecated_keys: continue`, plus the new hint branch — no change to the `deprecated_keys` frozenset or to `walk_unknown_keys`.
 
@@ -75,10 +75,10 @@ This batch delivers both bug fixes from `_mill/discussion.md` in full: `_config.
 - **Requirements:**
   In `_treeguard.py`'s `check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict`, add two `isinstance` guards as the function's first statements, before the existing `lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)` line:
   ```python
-      if not isinstance(worktree, Path):
-          raise TypeError(f"check_and_restore: worktree must be a pathlib.Path, got {type(worktree).__name__}")
-      if git_root is not None and not isinstance(git_root, Path):
-          raise TypeError(f"check_and_restore: git_root must be a pathlib.Path, got {type(git_root).__name__}")
+    if not isinstance(worktree, Path):
+        raise TypeError(f"check_and_restore: worktree must be a pathlib.Path, got {type(worktree).__name__}")
+    if git_root is not None and not isinstance(git_root, Path):
+        raise TypeError(f"check_and_restore: git_root must be a pathlib.Path, got {type(git_root).__name__}")
   ```
   `tracked_root` is unaffected — it is declared `str`, not `Path`, and is out of scope for this fix. The message format (`"{fn}: {arg} must be a pathlib.Path, got {type}"`) matches `_status.py`'s existing `_require_path` helper's message shape; do not import `_require_path` (private to `_status.py`) or add a new shared helper module — the two checks are written inline in `_treeguard.py`, matching this file's own existing convention of reimplementing a private helper locally rather than importing another module's underscore-prefixed internal (see `_rebase_onto_hub`'s docstring in this same file for the established precedent). `Path` is already imported at the top of `_treeguard.py` — no new import needed.
 
