@@ -785,12 +785,22 @@ above) as a completeness self-check, run ad hoc during this card — no new pers
   and 3 `### Phase:` headings), plus Entry step 4's own internal table (not a `###` heading but an
   explicitly-named sub-part per the card 2 Requirements). All 7 headings plus the phase-table branch
   are classified above.
-- **`mill-go-base/SKILL.md`:** 19 headings found. All 19 are classified above, with one explicit
-  exception recorded rather than silently dropped: `## Resume`, `## Holistic code review`, and
-  `## Handoff` (the three trailing pointer headings) carry no inline step content in this file — they
-  each read a companion file (`resume.md`, `holistic-review.md`, `handoff.md`) that is outside this
-  card's `Context:` allowlist (`mill-go-base/SKILL.md` only). They are marked Excluded from this
-  file's own classification with that scope note, not treated as covered.
+- **`mill-go-base/SKILL.md`:** 20 headings found (`## Entry`, `## Prepare`, `## Execute — sequential
+  loop`, `## Agent-mode dispatch`, `## Review cost line`, `## Resume`, `## Holistic code review`,
+  `## Handoff` — 8 `##` headings — plus 12 `###` headings: `Mid-execution phase-gate widening`,
+  `Entry-gate wait for upstream mill-plan`, `0. Wiki health-check`, `0.55. Done-gate baseline
+  pre-flight`, `0.5. Baseline pre-flight`, `0.6. Per-batch baseline recapture`, `1. Implement`,
+  `2. Parse implementer report`, `2b. Cleanliness gate`, `3. Code Review loop`, `Stuck escalation`,
+  `Blocked`; excludes the trailing meta sections `## Principles`/`## Board discipline`/`## History`,
+  per this doc's own convention for `mill-start`/`mill-plan`). All 20 are classified above.
+  `## Execute — sequential loop` is a pure section-grouping heading with no content of its own —
+  the same shape as `mill-start`'s `## Entry`/`## Phases` and `mill-plan`'s `## Phases` — and is
+  covered via its `### 0.`-through-`### Blocked` sub-headings rather than decomposed separately.
+  One explicit exception is recorded rather than silently dropped: `## Resume`, `## Holistic code
+  review`, and `## Handoff` (the three trailing pointer headings) carry no inline step content in
+  this file — they each read a companion file (`resume.md`, `holistic-review.md`, `handoff.md`)
+  that is outside this card's `Context:` allowlist (`mill-go-base/SKILL.md` only). They are marked
+  Excluded from this file's own classification with that scope note, not treated as covered.
 
 No step was found double-counted (each numbered step appears in exactly one classification bullet
 above) or silently dropped. The one item requiring a second look during this check was `## Auto
