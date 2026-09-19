@@ -3,7 +3,7 @@
 ```yaml
 task: '_config.py / _treeguard.py: silently-ignored config keys and unguarded str-vs-Path args'
 slug: shared-helper-script-validation-gaps
-approved: false
+approved: true
 started: '20260919-112835'
 parent: main
 root: ""
