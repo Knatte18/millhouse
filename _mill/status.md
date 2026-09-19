@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-merge-family-doc-gaps
 branch: hanf/mill-merge-family-doc-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: 'mill-merge / mill-merge-in: brief-staging path bug and easy-to-miss caching instruction'
 task_description: |
@@ -18,4 +18,5 @@ discussing  '2026-09-19T05:09:36Z'
 discussion-fix-r1  '2026-09-19T11:23:16Z'
 discussion-fix-r2  '2026-09-19T11:26:47Z'
 discussed  '2026-09-19T11:26:47Z'
+planning  '2026-09-19T11:30:51Z'
 ```
