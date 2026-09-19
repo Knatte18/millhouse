@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan: Phase Plan Review''s 4b/4c/4d re-validate gate says "7 kwargs", drops done_gate'
 slug: mill-plan-done-gate-kwargs-count-drift
-approved: false
+approved: true
 started: 20260919-112514
 parent: main
 root: ""
