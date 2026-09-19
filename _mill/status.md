@@ -47,6 +47,8 @@ batches:
     start_sha: 2508ce1b8b9c3b51e5fe255b906dc33d685d4190
     commit_sha: f1c344ce6eb1789288bcf35a07c34f3c93dfe803
   - name: context-completeness-exemptions-tests
-    state: pending
+    state: running
+    implementer_session: c04d6dcc-5c1c-4f4c-98ad-47ce72f11520
+    start_sha: 4bdbca91de273ff1a7affda5bb103ac0d9214512
     verify_baseline_failures: []
 ```
