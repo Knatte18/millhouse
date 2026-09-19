@@ -242,6 +242,45 @@ def _is_dir_not_empty_error(exc: OSError) -> bool:
     return "directory is not empty" in str(exc).lower()
 
 
+def _is_sharing_violation_error(exc: OSError) -> bool:
+    """
+    True if exc is a Windows "sharing violation" (WinError 32) error.
+
+    Matches on the numeric winerror attribute when present (locale-independent, unlike matching
+    the OS message text). Falls back to a lowercase substring check on str(exc) only when
+    winerror is absent (e.g. a test double or a non-Windows OSError).
+
+    Args:
+        exc: The OSError raised by shutil's rmtree (via _safe_rmtree.safe_rmtree).
+
+    Returns:
+        True if exc represents a WinError 32 (or a string-matching equivalent);
+        False otherwise.
+    """
+    winerror = getattr(exc, "winerror", None)
+    if winerror is not None:
+        return winerror == 32
+    return "being used by another process" in str(exc).lower()
+
+
+def _is_retryable_lock_error(exc: OSError) -> bool:
+    """
+    True if exc matches either of the two known transient Windows file-lock signatures that
+    remove_safe's rmtree-fallback retries with backoff.
+
+    Covers WinError 145 (directory not empty) and WinError 32 (sharing violation, e.g. a
+    lingering dotnet testhost/MSBuild file handle left over from a ``--stage baseline`` verify
+    run, GitHub #1032).
+
+    Args:
+        exc: The OSError raised by shutil's rmtree (via _safe_rmtree.safe_rmtree).
+
+    Returns:
+        True if exc represents either retryable signature; False otherwise.
+    """
+    return _is_dir_not_empty_error(exc) or _is_sharing_violation_error(exc)
+
+
 def remove_safe(
     path: Path,
     cwd: Path,
@@ -329,19 +368,22 @@ def remove_safe(
         if path.exists():
             try:
                 _safe_rmtree.safe_rmtree(path, allowed_root=path)
-            except PermissionError as exc:
-                raise WorktreeLockedError(
-                    f"worktree is locked via rmtree fallback (path={path}): {exc}"
-                ) from exc
             except OSError as exc:
-                if not _is_dir_not_empty_error(exc):
+                if not _is_retryable_lock_error(exc):
+                    if isinstance(exc, PermissionError):
+                        raise WorktreeLockedError(
+                            f"worktree is locked via rmtree fallback (path={path}): {exc}"
+                        ) from exc
                     raise
                 # Windows: a lingering dotnet build-server lock inside a generated obj/
-                # tree can leave the directory non-empty after junction-strip + rmtree.
-                # Shut down the build-server node and retry, up to 2 more times (3 rmtree
-                # attempts total), before giving up -- #846/#859/#929/#928/#918/#909 all
-                # report the race clearing itself by the time of a bare manual
-                # re-invocation moments later, and a single retry proved insufficient.
+                # tree can leave the directory non-empty after junction-strip + rmtree
+                # (WinError 145), or a lingering dotnet testhost/MSBuild file handle can
+                # still be holding a specific build-output file open (WinError 32, a
+                # sharing violation). Shut down the build-server node and retry, up to 2
+                # more times (3 rmtree attempts total), before giving up -- #846/#859/
+                # #929/#928/#918/#909/#1032 all report the race clearing itself by the
+                # time of a bare manual re-invocation moments later, and a single retry
+                # proved insufficient.
                 _retry_backoffs = (0.5, 1.5)
                 for _attempt_index, _backoff in enumerate(_retry_backoffs):
                     time.sleep(_backoff)
@@ -357,12 +399,12 @@ def remove_safe(
                     try:
                         _safe_rmtree.safe_rmtree(path, allowed_root=path)
                         break
-                    except PermissionError as retry_exc:
-                        raise WorktreeLockedError(
-                            f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
-                        ) from retry_exc
                     except OSError as retry_exc:
-                        if not _is_dir_not_empty_error(retry_exc):
+                        if not _is_retryable_lock_error(retry_exc):
+                            if isinstance(retry_exc, PermissionError):
+                                raise WorktreeLockedError(
+                                    f"worktree is locked via rmtree fallback (path={path}): {retry_exc}"
+                                ) from retry_exc
                             raise
                         if not _is_final_attempt:
                             continue

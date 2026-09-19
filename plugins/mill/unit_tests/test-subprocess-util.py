@@ -391,6 +391,18 @@ def main() -> int:
     except AssertionError as exc:
         failures.append(f"FAIL (r) scrub_env-default-os-environ: {exc}")
 
+    # (s) quiet_nonzero=True suppresses both breadcrumbs on non-zero exit
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            run([sys.executable, "-c", "import sys; sys.exit(7)"], check=False, quiet_nonzero=True)
+        stderr_out = buf.getvalue()
+        assert "[subprocess] spawn argv=" not in stderr_out, f"spawn breadcrumb should be suppressed with quiet_nonzero=True: {stderr_out!r}"
+        assert "[subprocess] exit code=" not in stderr_out, f"exit breadcrumb should be suppressed with quiet_nonzero=True: {stderr_out!r}"
+        print("PASS (s): quiet_nonzero=True suppresses both breadcrumbs on non-zero exit")
+    except AssertionError as exc:
+        failures.append(f"FAIL (s) quiet-nonzero-silence: {exc}")
+
     if failures:
         for msg in failures:
             print(msg, file=sys.stderr)
