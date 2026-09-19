@@ -69,7 +69,7 @@ Both are documentation-only fixes: no script or runtime-code changes, no behavio
 Doc-only change — no new automated test is added or expected:
 - `test-brief-commit.py` (existing) continues to pass unmodified; verified by inspection above that the substring it locks is untouched by the #996 doc note.
 - No script-level behavior exists for #987's recovery path to lock — it is an operator/orchestrator-facing manual procedure documented in prose, exercised only in the rare case where Entry's caching step was skipped. Adding a regression-lock test for prose content in `mill-merge/SKILL.md` would only duplicate `test-skill-helper-drift.py`-style textual assertions for a fallback path that has no code to drift out of sync with; skipped as out of proportion for a doc-only task.
-- Verify command for the plan: re-run the existing full unit-test suite (`plugins/mill/unit_tests/run-all.py`) to confirm no existing lock (particularly `test-brief-commit.py` and `test-skill-helper-drift.py`) regresses from either doc edit.
+- Verify command for the plan: `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-brief-commit.py test-skill-helper-drift.py` — scoped to the two existing locks either doc edit could regress, per CLAUDE.md's "Verify command shape" convention (`PYTHONPATH=` prefix required for Python projects; a bare, unfiltered `run-all.py` invocation is exactly what `_plan_validate.py`'s `verify-not-isolated` and `verify-full-suite` checks both flag).
 
 ## Q&A log
 
