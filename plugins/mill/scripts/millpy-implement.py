@@ -221,6 +221,7 @@ def _run_baseline_stage(
     module_wide_cwd_override: Path | None,
     plan_base: Path,
     baseline_prepare_cmd: str | None,
+    module_wide_only: bool = False,
 ) -> int:
     """
     Compute (idempotent, no-op-if-already-cached) both baseline sub-steps and persist them.
@@ -263,6 +264,13 @@ def _run_baseline_stage(
         `_worktree.remove_safe` in a `finally` block regardless of
         outcome.
 
+    When `module_wide_only` is True, step 1 above is bypassed entirely -- `_enumerate_batch_verify_triples`
+    is never called, and `batches_needing_computation`/`cached_batches` are bound directly to empty
+    lists -- so Case A always runs (the module-wide sub-step, standalone, with no shared checkout).
+    Used for a speculative early baseline launch before any batch files exist on disk yet, where
+    enumerating batch verify commands would either fail outright or force the expensive Case B
+    shared-checkout path for zero actual per-batch work.
+
     Never raises -- every failure path prints a JSON line describing the outcome and returns 0.
     Both `_worktree.remove_safe` teardown call sites are themselves wrapped in `try`/`except
     Exception` so a teardown failure (e.g. a still-locked dotnet build-server file) is logged to
@@ -287,22 +295,27 @@ def _run_baseline_stage(
             executes -- read by the caller from `pipeline.baseline_prepare_cmd` in mill-config.yaml.
             `None` (the default when the key is absent) disables this step entirely, matching
             today's behavior exactly.
+        module_wide_only: When True, skip the entire per-batch computation path -- never call
+            `_enumerate_batch_verify_triples`, and bind `batches_needing_computation`/
+            `cached_batches` directly to empty lists so Case A always runs. Used for a speculative
+            early baseline launch before any batch files exist on disk yet. Defaults to False,
+            matching today's behavior exactly.
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;
         outcomes are communicated through the printed JSON lines.
     """
-    batch_verify_triples = _enumerate_batch_verify_triples(plan_base, project_root, git_root)
-
-    status_by_name = {b.get("name"): b for b in _status.read_batches(status_path)}
     batches_needing_computation: list[tuple[str, str, Path | None]] = []
     cached_batches: list[str] = []
-    for name, command, cwd in batch_verify_triples:
-        entry = status_by_name.get(name, {})
-        if entry.get("verify_baseline_failures") is not None:
-            cached_batches.append(name)
-        else:
-            batches_needing_computation.append((name, command, cwd))
+    if not module_wide_only:
+        batch_verify_triples = _enumerate_batch_verify_triples(plan_base, project_root, git_root)
+        status_by_name = {b.get("name"): b for b in _status.read_batches(status_path)}
+        for name, command, cwd in batch_verify_triples:
+            entry = status_by_name.get(name, {})
+            if entry.get("verify_baseline_failures") is not None:
+                cached_batches.append(name)
+            else:
+                batches_needing_computation.append((name, command, cwd))
 
     module_wide_needs_computation = (
         module_wide_verify_cmd is not None and _status.get_module_verify_baseline(status_path) is None
@@ -497,14 +510,15 @@ def main(argv=None) -> int:
         "--agent-output",
         help="Path to agent output file (required when --stage finalize).",
     )
-    # These flags are accepted for CLI-shape parity with millpy-fix.py and the generic agent-mode dispatch loop (mill-go SKILL.md step 5).
-    # millpy-implement.py ignores them;
-    # the --stage finalize branch reads the authoritative start_sha and implementer_session from status.md instead.
+    # --start-sha is honored at --stage finalize when passed (non-empty), falling back to status.md otherwise.
     parser.add_argument(
         "--start-sha",
         default=None,
-        help="SHA captured at prepare stage (ignored by implement; status.md is authoritative).",
+        help="SHA captured at prepare stage; honored at --stage finalize when passed (non-empty), falling back to status.md otherwise.",
     )
+    # These flags are accepted for CLI-shape parity with millpy-fix.py and the generic agent-mode dispatch loop (mill-go SKILL.md step 5).
+    # millpy-implement.py ignores them;
+    # the --stage finalize branch reads the authoritative start_sha and implementer_session from status.md instead.
     parser.add_argument(
         "--session-id",
         default=None,
@@ -530,6 +544,17 @@ def main(argv=None) -> int:
             " and implementer_session from status.md instead of capturing HEAD and"
             " generating a fresh UUID. Skips the capture_snapshot call and the"
             " mill-go: start batch housekeeping commit."
+        ),
+    )
+    parser.add_argument(
+        "--module-wide-only",
+        action="store_true",
+        default=False,
+        help=(
+            "Valid only with --stage baseline: skip the per-batch substage entirely"
+            " (no batch-verify enumeration, no shared checkout for per-batch commands)"
+            " and run only the module-wide substage. Used for a speculative early"
+            " baseline launch before any batch files exist on disk yet."
         ),
     )
     args = parser.parse_args(argv)
@@ -669,7 +694,14 @@ def main(argv=None) -> int:
     if args.stage == "baseline":
         baseline_prepare_cmd = (cfg.get("pipeline") or {}).get("baseline_prepare_cmd")
         return _run_baseline_stage(
-            project_root, git_root, status_path, module_wide_verify_cmd, module_wide_cwd_override, plan_base, baseline_prepare_cmd
+            project_root,
+            git_root,
+            status_path,
+            module_wide_verify_cmd,
+            module_wide_cwd_override,
+            plan_base,
+            baseline_prepare_cmd,
+            module_wide_only=args.module_wide_only,
         )
 
     try:
@@ -718,7 +750,7 @@ def main(argv=None) -> int:
         if batch_status is None:
             print(f"batch {args.batch_name!r} not found in status", file=sys.stderr)
             return 1
-        start_sha = batch_status.get("start_sha")
+        start_sha = args.start_sha if args.start_sha else batch_status.get("start_sha")
         _safe_batch = _paths.sanitize_filename_component(args.batch_name)
         snapshot_path = (
             project_root / "_mill" / f".cleanliness-snapshot-{_safe_batch}.txt"

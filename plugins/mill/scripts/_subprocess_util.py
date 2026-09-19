@@ -83,6 +83,7 @@ def run(
     env: dict[str, str] | None = None,
     stdout=None,
     stderr=None,
+    quiet_nonzero: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a subprocess with UTF-8 text I/O and spawn/exit breadcrumbs on stderr.
@@ -108,6 +109,10 @@ def run(
             When overridden, the caller's value flows directly to ``subprocess.Popen``.
         stderr: Override for the stderr stream.
             Same semantics as ``stdout``.
+        quiet_nonzero: When True, suppresses the spawn/exit breadcrumb on a plain non-zero exit,
+            for a call site where non-zero is a known routine outcome rather than an error (e.g.
+            ``git check-ignore``'s "not ignored" result).
+            Timeout and Popen-raise breadcrumbs are unaffected — those stay unconditional.
 
     Returns:
         The completed ``subprocess.CompletedProcess[str]`` — stdout, stderr, and returncode
@@ -201,7 +206,7 @@ def run(
                 stderr=collected_stderr,
             ) from exc
 
-    if proc.returncode != 0:
+    if proc.returncode != 0 and not quiet_nonzero:
         print(_spawn_msg, file=sys.stderr)
         print(
             f"[subprocess] exit code={proc.returncode} duration={time.monotonic() - start:.3f}s",

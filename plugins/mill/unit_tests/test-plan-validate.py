@@ -32,6 +32,8 @@ Check coverage:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -2612,7 +2614,13 @@ def test_check_context_completeness_clean_no_file_read_needed_marker() -> int:
 
 
 def test_check_context_completeness_dirty_inline_signature_marker_absent() -> int:
-    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible."""
+    """Identical file reference and inlined signature, but with neither 'signature inlined' nor 'no file read needed' present -> one error, proving the exemption (not an unrelated change) is responsible.
+
+    The signature itself is deliberately NOT backtick-wrapped here (unlike the two 'clean' marker
+    counterparts above) -- wrapping it would put a third, non-path/non-symbol-shaped backtick token
+    on the line, which would trip the unrelated literal-enumeration exemption
+    (`_is_literal_enumeration_exempt`) and mask the very exemption this test targets.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -2627,7 +2635,7 @@ def test_check_context_completeness_dirty_inline_signature_marker_absent() -> in
             "alpha",
             edits=["src/b.py"],
             requirements=(
-                "  Call `helper()` (defined in `src/a.py` as `def helper() -> int`).\n"
+                "  Call `helper()` (defined in `src/a.py` as def helper() -> int).\n"
             ),
         )
         _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
@@ -3748,6 +3756,1505 @@ def test_check_context_completeness_symbol_underscore_qualifies() -> int:
 
 
 # ---------------------------------------------------------------------------
+# declaration-form matching (batch resolve-symbol-tests, Card 3): a token
+# resolvable only inside a comment, string/template literal, or usage/
+# field-access site is never flagged; a genuine top-level (or Go grouped-
+# block, Python module-level) declaration still is.
+# ---------------------------------------------------------------------------
+
+def test_check_context_completeness_symbol_comment_only_go() -> int:
+    """A token appearing only inside a Go `//` comment (never a declaration form) -> zero
+    errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.go").write_text(
+            "package internal\n\n// HandleComment explains behavior.\nfunc Other() {}\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `HandleComment` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_comment_only_go")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_comment_only_go: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_comment_only_cs() -> int:
+    """A token appearing only inside a C# `//` comment -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "Handler.cs").write_text(
+            "// HandleComment explains behavior.\npublic class Other {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `HandleComment` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_comment_only_cs")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_comment_only_cs: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_comment_only_py() -> int:
+    """A token appearing only inside a Python `#` comment -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.py").write_text(
+            "# HandleComment explains behavior.\ndef other():\n    pass\n", encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  `HandleComment` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_comment_only_py")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_comment_only_py: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_comment_only_ts() -> int:
+    """A token appearing only inside a TS `//` comment -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.ts").write_text(
+            "// HandleComment explains behavior.\nexport class Other {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `HandleComment` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_comment_only_ts")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_comment_only_ts: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_string_literal_only_go() -> int:
+    """A snake_case token appearing only inside a Go struct tag string literal -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.go").write_text(
+            'package internal\n\ntype Foo struct {\n\tBar string `json:"config_key"`\n}\n',
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `config_key` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_string_literal_only_go")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_string_literal_only_go: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_string_literal_only_cs() -> int:
+    """A capitalized token appearing only inside an ordinary C# string literal -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "Other.cs").write_text(
+            'public class Other\n{\n    private const string Marker = "SessionMarker";\n}\n',
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `SessionMarker` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_string_literal_only_cs")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_string_literal_only_cs: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_string_literal_only_py() -> int:
+    """A snake_case token appearing only as a dict-key string inside a Python literal -> zero
+    errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.py").write_text(
+            'CONFIG = {"status_file": "abc"}\n', encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  `status_file` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_string_literal_only_py")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_string_literal_only_py: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_string_literal_only_ts() -> int:
+    """A capitalized token appearing only inside an ordinary TS string literal -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.ts").write_text(
+            'const value = "SessionMarker";\n', encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `SessionMarker` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_string_literal_only_ts")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_string_literal_only_ts: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_usage_site_only_go() -> int:
+    """A token appearing only as a Go field-access usage site (`obj.Field = 1`), never declared
+    -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "use.go").write_text(
+            "package internal\n\nfunc Use() {\n\tobj.Field = 1\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `Field` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_usage_site_only_go")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_usage_site_only_go: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_usage_site_only_cs() -> int:
+    """A token appearing only as a C# call-site usage (`obj.Helper();`), never declared -> zero
+    errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "Other.cs").write_text(
+            "public class Other\n{\n    public void Use()\n    {\n        obj.Helper();\n"
+            "    }\n}\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `Helper` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_usage_site_only_cs")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_usage_site_only_cs: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_usage_site_only_py() -> int:
+    """A token appearing only as a Python call-site usage (`obj.call_helper()`), never declared
+    -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "use.py").write_text(
+            "def use():\n    obj.call_helper()\n", encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  `call_helper` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_usage_site_only_py")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_usage_site_only_py: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_usage_site_only_ts() -> int:
+    """A token appearing only as a TS call-site usage (`obj.Helper();`), never declared -> zero
+    errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "use.ts").write_text(
+            "export class Other {\n  use() {\n    obj.Helper();\n  }\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `Helper` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_usage_site_only_ts")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_usage_site_only_ts: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_declaration_form_go() -> int:
+    """Regression: a genuine top-level Go `func` declaration, absent from own refs, still resolves
+    to exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.go").write_text(
+            "package internal\n\nfunc HandleStart() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `HandleStart` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/handler.go'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_declaration_form_go")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_declaration_form_go: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_declaration_form_cs() -> int:
+    """Regression: a genuine top-level C# `class` declaration, absent from own refs, still
+    resolves to exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "HandleUser.cs").write_text(
+            "public class HandleUser\n{\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Construct `HandleUser` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/HandleUser.cs'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_declaration_form_cs")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_declaration_form_cs: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_declaration_form_py() -> int:
+    """Regression: a genuine top-level Python `def` declaration, absent from own refs, still
+    resolves to exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.py").write_text(
+            "def handle_start():\n    pass\n", encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  Call `handle_start` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/handler.py'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_declaration_form_py")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_declaration_form_py: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_declaration_form_ts() -> int:
+    """Regression: a genuine top-level TS `function` declaration, absent from own refs, still
+    resolves to exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.ts").write_text(
+            "function handleStart() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `handleStart` when the batch completes.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/handler.ts'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_declaration_form_ts")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_declaration_form_ts: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_go_grouped_declarations() -> int:
+    """Three tokens declared solely inside grouped `const ( … )`, `var ( … )`, and `type ( … )`
+    Go blocks each resolve to exactly one error naming that file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\n"
+            "const (\n\tMaxRetries = 3\n)\n\n"
+            "var (\n\tDefaultTimeout = 5\n)\n\n"
+            "type (\n\tConfigShape struct{}\n)\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  Use `MaxRetries`, `DefaultTimeout`, and `ConfigShape` throughout the batch.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 3, (
+                f"expected 3 context-completeness errors, got: {check_errors}"
+            )
+            for e in check_errors:
+                assert "which resolves to 'internal/state.go'" in e["message"], (
+                    f"wrong message: {e['message']!r}"
+                )
+            print("PASS test_check_context_completeness_symbol_go_grouped_declarations")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_go_grouped_declarations: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_py_module_level_assignment() -> int:
+    """A token declared solely as a Python module-level (column-0) assignment resolves to exactly
+    one error naming that file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.py").write_text(
+            "MAX_SIZE = 100\n", encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  Read `MAX_SIZE` before writing.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/config.py'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_py_module_level_assignment")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_py_module_level_assignment: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_py_class_body_attribute_not_flagged() -> int:
+    """The same token name declared only as a Python class-body attribute (one indent level in,
+    inside a `class Config:` body) resolves to zero errors -- the accepted residual gap."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.py").write_text(
+            "class Config:\n    MAX_SIZE = 100\n", encoding="utf-8",
+        )
+        (project_root / "other.go").write_text("package internal\n", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.go"],
+            requirements="  Read `MAX_SIZE` before writing.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_py_class_body_attribute_not_flagged")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_py_class_body_attribute_not_flagged: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+# ---------------------------------------------------------------------------
+# qualifier disambiguation (batch resolve-symbol-tests, Card 4): a dotted
+# token's qualifier segment narrows an ambiguous trailing-segment match via
+# package/namespace, then directory-basename fallback.
+# ---------------------------------------------------------------------------
+
+def test_check_context_completeness_symbol_qualifier_package_go() -> int:
+    """A dotted token whose bare trailing segment is declared identically in two Go files, exactly
+    one of which declares the matching `package` line -> resolves to that one file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "loomengine").mkdir(parents=True)
+        (project_root / "internal" / "loomengine" / "config.go").write_text(
+            "package loomengine\n\ntype ConfigTemplate struct{}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "otherpkg").mkdir(parents=True)
+        (project_root / "internal" / "otherpkg" / "config.go").write_text(
+            "package otherpkg\n\ntype ConfigTemplate struct{}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Use `loomengine.ConfigTemplate` for the shared config.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert (
+                "which resolves to 'internal/loomengine/config.go'" in check_errors[0]["message"]
+            ), f"wrong message: {check_errors[0]['message']!r}"
+            print("PASS test_check_context_completeness_symbol_qualifier_package_go")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_qualifier_package_go: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_namespace_cs() -> int:
+    """A dotted token whose qualifier matches the last segment of a multi-segment C# `namespace`
+    line -> resolves to that one file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "foo").mkdir(parents=True)
+        (project_root / "internal" / "foo" / "Handler.cs").write_text(
+            "namespace Foo.Bar.Baz;\n\npublic class Handler {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "other").mkdir(parents=True)
+        (project_root / "internal" / "other" / "Handler.cs").write_text(
+            "namespace Other.Ns;\n\npublic class Handler {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Use `Baz.Handler` for the shared handler.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/foo/Handler.cs'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_qualifier_namespace_cs")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_qualifier_namespace_cs: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_namespace_ts() -> int:
+    """A dotted token whose qualifier matches the last segment of a multi-segment TS `namespace`
+    line -> resolves to that one file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "foo").mkdir(parents=True)
+        (project_root / "internal" / "foo" / "handler.ts").write_text(
+            "namespace Foo.Bar.Baz {\n  export function Handler() {}\n}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "other").mkdir(parents=True)
+        (project_root / "internal" / "other" / "handler.ts").write_text(
+            "namespace Other.Ns {\n  export function Handler() {}\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Use `Baz.Handler` for the shared handler.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/foo/handler.ts'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_qualifier_namespace_ts")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_qualifier_namespace_ts: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_directory_basename_fallback() -> int:
+    """When neither candidate declares a `package`/`namespace` line, a dotted token's qualifier
+    falls back to matching the containing directory's basename (case-insensitively) -> resolves to
+    that one file."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "ReedEngine").mkdir(parents=True)
+        (project_root / "internal" / "ReedEngine" / "factory.go").write_text(
+            "func New() {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "OtherPkg").mkdir(parents=True)
+        (project_root / "internal" / "OtherPkg" / "factory.go").write_text(
+            "func New() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `reedengine.New` to construct the engine.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert (
+                "which resolves to 'internal/ReedEngine/factory.go'" in check_errors[0]["message"]
+            ), f"wrong message: {check_errors[0]['message']!r}"
+            print("PASS test_check_context_completeness_symbol_qualifier_directory_basename_fallback")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_qualifier_directory_basename_fallback: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_no_match_still_zero() -> int:
+    """A dotted token's qualifier matching zero of the candidate files (by package/namespace or
+    directory-basename) -> resolves to zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "pkga").mkdir(parents=True)
+        (project_root / "internal" / "pkga" / "widget.go").write_text(
+            "func Widget() {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "pkgb").mkdir(parents=True)
+        (project_root / "internal" / "pkgb" / "widget.go").write_text(
+            "func Widget() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Use `unknownpkg.Widget` for the shared widget.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_qualifier_no_match_still_zero")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_qualifier_no_match_still_zero: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_ambiguous_dirs_still_zero() -> int:
+    """A dotted token's qualifier matching more than one candidate (two files under differently-
+    cased but identically-named qualifier directories) -> resolves to zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "Foo").mkdir(parents=True)
+        (project_root / "internal" / "Foo" / "a.go").write_text(
+            "func Thing() {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "foo").mkdir(parents=True)
+        (project_root / "internal" / "foo" / "b.go").write_text(
+            "func Thing() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Use `foo.Thing` for the shared thing.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_qualifier_ambiguous_dirs_still_zero")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_qualifier_ambiguous_dirs_still_zero: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_qualifier_cache_correctness_different_qualifiers() -> int:
+    """Two different dotted tokens sharing the same bare trailing segment (`New`) but different
+    qualifiers, in two different cards of one `run()` call, each resolve to their OWN qualifier's
+    file -- confirms qualifier filtering is applied fresh on every lookup, not baked into the cached
+    result."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "reedengine").mkdir(parents=True)
+        (project_root / "internal" / "reedengine" / "factory.go").write_text(
+            "package reedengine\n\nfunc New() {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "otherpkg").mkdir(parents=True)
+        (project_root / "internal" / "otherpkg" / "factory.go").write_text(
+            "package otherpkg\n\nfunc New() {}\n", encoding="utf-8",
+        )
+        (project_root / "other_a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "other_b.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview(
+            [{"name": "alpha", "file": "01-alpha.md"}, {"name": "beta", "file": "02-beta.md"}]
+        )
+        batch_alpha = _make_batch_file(
+            "alpha",
+            edits=["other_a.py"],
+            requirements="  Call `reedengine.New` to construct the engine.\n",
+        )
+        batch_beta = _make_batch_file(
+            "beta",
+            edits=["other_b.py"],
+            requirements="  Call `otherpkg.New` to construct the engine.\n",
+        )
+        _write_plan(
+            plan_dir, overview, [("01-alpha.md", batch_alpha), ("02-beta.md", batch_beta)]
+        )
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 2, (
+                f"expected 2 context-completeness errors, got: {check_errors}"
+            )
+            by_batch = {e["batch"]: e for e in check_errors}
+            assert (
+                "which resolves to 'internal/reedengine/factory.go'"
+                in by_batch["01-alpha"]["message"]
+            ), f"wrong alpha message: {by_batch['01-alpha']['message']!r}"
+            assert (
+                "which resolves to 'internal/otherpkg/factory.go'"
+                in by_batch["02-beta"]["message"]
+            ), f"wrong beta message: {by_batch['02-beta']['message']!r}"
+            print(
+                "PASS test_check_context_completeness_symbol_qualifier_cache_correctness_different_qualifiers"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_qualifier_cache_correctness_different_qualifiers: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+# ---------------------------------------------------------------------------
+# solution-scope directory pruning (batch resolve-symbol-tests, Card 5): a
+# real declaration under a conventional out-of-solution directory marker is
+# pruned from the match set entirely.
+# ---------------------------------------------------------------------------
+
+def test_check_context_completeness_symbol_out_of_scope_deprecated() -> int:
+    """A token declared only inside a directory named `Deprecated` -> zero errors, even though the
+    declaration itself is syntactically real."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "Deprecated").mkdir(parents=True)
+        (project_root / "internal" / "Deprecated" / "legacy.go").write_text(
+            "package internal\n\nfunc OldHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `OldHandler` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_out_of_scope_deprecated")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_out_of_scope_deprecated: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_out_of_scope_legacy() -> int:
+    """A token declared only inside a directory named `legacy` -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "legacy").mkdir(parents=True)
+        (project_root / "internal" / "legacy" / "old.go").write_text(
+            "package internal\n\nfunc LegacyHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `LegacyHandler` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_out_of_scope_legacy")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_out_of_scope_legacy: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_out_of_scope_obsolete() -> int:
+    """A token declared only inside a directory named `Obsolete` -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "Obsolete").mkdir(parents=True)
+        (project_root / "internal" / "Obsolete" / "old.go").write_text(
+            "package internal\n\nfunc ObsoleteHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `ObsoleteHandler` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_out_of_scope_obsolete")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_out_of_scope_obsolete: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_out_of_scope_archive() -> int:
+    """A token declared only inside a directory named `ARCHIVE` -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "ARCHIVE").mkdir(parents=True)
+        (project_root / "internal" / "ARCHIVE" / "old.go").write_text(
+            "package internal\n\nfunc ArchivedHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `ArchivedHandler` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_out_of_scope_archive")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_check_context_completeness_symbol_out_of_scope_archive: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor() -> int:
+    """A token declared both inside an out-of-scope directory AND in a second file outside it still
+    resolves to exactly one error naming the OUTSIDE file -- pruning removes the in-scope-tree
+    candidate from the match set entirely rather than merely deprioritizing it."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "Deprecated").mkdir(parents=True)
+        (project_root / "internal" / "Deprecated" / "old.go").write_text(
+            "package internal\n\nfunc SharedHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "live").mkdir(parents=True)
+        (project_root / "internal" / "live" / "new.go").write_text(
+            "package internal\n\nfunc SharedHandler() {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `SharedHandler` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/live/new.go'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+# ---------------------------------------------------------------------------
+# characterization tests, one per source issue (batch resolve-symbol-tests,
+# Card 6): named regression guards reproducing each issue's reported scenario.
+# ---------------------------------------------------------------------------
+
+def test_check_context_completeness_symbol_issue_1037_qualified_disambiguation() -> int:
+    """#1037: a package-qualified reference (bare trailing segment declared in 3+ packages, exactly
+    one matching the qualifier) resolves to the qualified file, not zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        for pkg in ("pkga", "pkgb", "pkgc"):
+            (project_root / "internal" / pkg).mkdir(parents=True)
+            (project_root / "internal" / pkg / "thing.go").write_text(
+                f"package {pkg}\n\nfunc Widget() {{}}\n", encoding="utf-8",
+            )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Call `pkgb.Widget` for the shared widget.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/pkgb/thing.go'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1037_qualified_disambiguation")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_issue_1037_qualified_disambiguation: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_issue_1033_struct_tag_and_string_literal() -> int:
+    """#1033: a snake_case token whose only repo occurrence is inside a Go struct tag string
+    literal, and a separate PascalCase token whose only occurrence is inside an ordinary string
+    literal -- both resolve to zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.go").write_text(
+            'package internal\n\ntype Config struct {\n\tStatusFile string `json:"status_file"`\n}\n',
+            encoding="utf-8",
+        )
+        (project_root / "internal" / "greeting.go").write_text(
+            'package internal\n\nvar greeting = "SessionStart"\n', encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  The `status_file` key and the `SessionStart` marker never resolve here.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1033_struct_tag_and_string_literal")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_issue_1033_struct_tag_and_string_literal: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_issue_1030_deprecated_directory_property() -> int:
+    """#1030: a bare property-shaped token declared only inside a fixture file under a
+    `Deprecated`-named directory resolves to zero errors, even when the card's own Creates: declares
+    a same-named property on a brand-new type."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "Deprecated").mkdir(parents=True)
+        (project_root / "internal" / "Deprecated" / "Legacy.cs").write_text(
+            "public class Legacy\n{\n    public bool StatusFlag { get; set; }\n}\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            creates=["internal/NewType.cs"],
+            requirements="  The `StatusFlag` property lives elsewhere.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1030_deprecated_directory_property")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_issue_1030_deprecated_directory_property: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_issue_1023_comment_first_word() -> int:
+    """#1023: a capitalized token whose only occurrence is as the first word of a `//` line comment
+    resolves to zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "handler.go").write_text(
+            "package internal\n\n// Reconcile brings the state back in sync.\nfunc Sync() {}\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `Reconcile` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1023_comment_first_word")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_issue_1023_comment_first_word: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_issue_1015_usage_only_never_declared() -> int:
+    """#1015: a token whose only occurrences across the fixture project are usage/field-access
+    sites (never a declaration) resolves to zero errors -- confirms an external-module-style or
+    struct-field-selector-style reference with no in-repo declaration is never flagged."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "a.go").write_text(
+            "package internal\n\nfunc UseA() {\n\tmsg.Payload = data\n}\n", encoding="utf-8",
+        )
+        (project_root / "internal" / "b.go").write_text(
+            "package internal\n\nfunc UseB() {\n\tx.Payload()\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  `Payload` is unrelated to this card.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1015_usage_only_never_declared")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_issue_1015_usage_only_never_declared: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_issue_1008_own_new_symbol_not_flagged() -> int:
+    """#1008: a token shared between two fixture files -- one where the card's own Creates: declares
+    a new type on that file, the other an unrelated file where the same token name happens to appear
+    only as a non-declaration usage -- resolves to zero errors (the card's own new symbol is not
+    incorrectly flagged against the coincidental unrelated usage)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "other_usage.go").write_text(
+            "package internal\n\nfunc Use() {\n\tobj.Widget = 1\n}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            creates=["internal/newtype.go"],
+            requirements="  `Widget` is a new field on the type in `internal/newtype.go`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_issue_1008_own_new_symbol_not_flagged")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_issue_1008_own_new_symbol_not_flagged: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+# ---------------------------------------------------------------------------
 # context-completeness structural exemptions (directory-intent, out-of-repo,
 # gitignored, forward cross-card Creates) -- batch structural-exemption-tests
 # ---------------------------------------------------------------------------
@@ -4150,6 +5657,65 @@ def test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling() 
         except AssertionError as exc:
             print(
                 "FAIL test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb() -> int:
+    """Regression guard for #1040: the routine 'confirmed not git-ignored' outcome (`git
+    check-ignore` exit 1) must not print a [subprocess] breadcrumb to stderr, since that call site
+    passes quiet_nonzero=True."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        _test_helpers.init_minimal_git_repo(project_root, branch="main")
+        _git_commit_new_file(project_root, ".gitignore", "scratch_ignored/\n", "add gitignore")
+        (project_root / "scratch_not_ignored").mkdir()
+        (project_root / "scratch_not_ignored" / "artifact.py").write_text(
+            "# not ignored scratch artifact", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  See `scratch_not_ignored/artifact.py` for the existing scratch conventions.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            result = _plan_validate.run(plan_dir, project_root)
+        stderr_out = buf.getvalue()
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "scratch_not_ignored/artifact.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            assert "[subprocess]" not in stderr_out, (
+                f"expected no [subprocess] breadcrumb, got stderr: {stderr_out!r}"
+            )
+            print(
+                "PASS "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb: "
                 f"{exc}",
                 file=sys.stderr,
             )
@@ -5288,6 +6854,575 @@ def test_check_context_completeness_dirty_escape_marker_phrase_removed() -> int:
         except AssertionError as exc:
             print(
                 f"FAIL test_check_context_completeness_dirty_escape_marker_phrase_removed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_ownership_batch_fixes() -> int:
+    """A comma-joined "which batch N fixes" ownership phrase (#1022 shape) exempts the token
+    naming the owned file -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "x.cs").write_text("// fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  the stale prose reference in `x.cs`, which batch 8 fixes.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_ownership_batch_fixes")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_ownership_batch_fixes: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_ownership_card_corrects() -> int:
+    """"card N corrects" ownership phrase exempts the token naming the owned file -> zero
+    errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "golang.go").write_text("// fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  for the same reason card 23 corrects one stale sentence in `golang.go`.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_ownership_card_corrects")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_ownership_card_corrects: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_ownership_synonym_addresses() -> int:
+    """"addresses", a close-synonym ownership verb not among the four issue-sourced verbs, still
+    exempts the token -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "y.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  batch 4 addresses `y.py`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_ownership_synonym_addresses")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_ownership_synonym_addresses: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_ownership_past_tense() -> int:
+    """Past-tense ownership verb form ("fixed") exempts the token -> zero errors. Guards that
+    _OWNERSHIP_VERB_FORMS actually has a hand-spelled past-tense form, not just base/3rd-person."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "x.cs").write_text("// fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  batch 8 fixed `x.cs`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_ownership_past_tense")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_ownership_past_tense: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_ownership_possessive() -> int:
+    """A possessive "batch N's <verb>" phrase exempts the token -> zero errors. Guards the
+    regex's optional `'s` group."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "x.cs").write_text("// fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  batch 8's fix touches `x.cs`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_ownership_possessive")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_ownership_possessive: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_ownership_no_number_not_exempted() -> int:
+    """"batch fixes `x.py`" with no card/batch number is not an ownership phrase -> exactly one
+    error. Guards against over-matching a bare "batch"/"card" mention with no number."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "x.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  batch fixes `x.py`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "x.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_ownership_no_number_not_exempted")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_ownership_no_number_not_exempted:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_ownership_separate_line_not_exempted() -> int:
+    """The ownership phrase and the token sit on two different bullet lines -> exactly one
+    error, confirming the exemption is genuinely line-scoped, not plan-wide or card-wide."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "x.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  - batch 8 fixes something else.\n"
+                "  - Read `x.py` for the new logic.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "x.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_ownership_separate_line_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_ownership_separate_line_not_exempted:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_literal_enumeration_mixed_shapes() -> int:
+    """The verbatim #984 test-input list -- a line with many backtick tokens, several neither
+    path- nor symbol-shaped -- exempts every token on the line, including the path-shaped
+    `README.md` -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  `TestIsGlyphTarget` tables `isGlyphTarget` over at least `a/b#C`, `a/b`,"
+                " `#x`, `a#b#c`, `README.md`, the empty string, and `.`, ...\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_literal_enumeration_mixed_shapes")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_literal_enumeration_mixed_shapes:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_literal_enumeration_below_threshold_not_exempted() -> int:
+    """Only 2 backtick tokens on the line -- below the 3-token threshold -- so the literal-value
+    enumeration exemption must NOT fire -> exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Accepts `#x` or `README.md` as input.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "README.md", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_literal_enumeration_below_threshold"
+                "_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_literal_enumeration_below_threshold"
+                f"_not_exempted: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_literal_enumeration_all_path_shaped_not_exempted() -> int:
+    """3+ backtick tokens, all path-shaped and all resolving to real files -- a genuine
+    multi-file dependency enumeration -- must never be swept in -> exactly 3 errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "a.py").write_text("# fixture", encoding="utf-8")
+        (project_root / "b.py").write_text("# fixture", encoding="utf-8")
+        (project_root / "c.py").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  reads `a.py`, `b.py`, and `c.py` for the merge.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 3, (
+                f"expected 3 context-completeness errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_literal_enumeration_all_path_shaped"
+                "_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_literal_enumeration_all_path_shaped"
+                f"_not_exempted: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_illustrative_output_emitting() -> int:
+    """The verbatim #985 sentence names `README.md` as an emitted output value -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                '  an answer whose `Dir` is `"."` emitting the bare `README.md`, never'
+                " `./README.md`.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_illustrative_output_emitting")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_illustrative_output_emitting: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_illustrative_output_rendering() -> int:
+    """A second output-verb-form-table entry, "renders" -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  the view renders the bare `README.md` for a dot directory.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_illustrative_output_rendering")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_illustrative_output_rendering:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_illustrative_output_printing() -> int:
+    """A third output-verb-form-table entry, "prints" -> zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  the CLI prints the bare `README.md` to stdout.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_illustrative_output_printing")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_illustrative_output_printing:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_illustrative_output_past_tense() -> int:
+    """Past-tense output verb form ("emitted") exempts the token -> zero errors. Guards that
+    _OUTPUT_VERB_FORMS actually has a hand-spelled past-tense form, not just base/3rd-person."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  the answer emitted the bare `README.md`.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_illustrative_output_past_tense")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_clean_illustrative_output_past_tense:"
+                f" {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_illustrative_output_no_verb_not_exempted() -> int:
+    """`README.md` named on a line with no output verb -> exactly one error."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `README.md` for the project description.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "README.md", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_illustrative_output_no_verb"
+                "_not_exempted"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_illustrative_output_no_verb"
+                f"_not_exempted: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -7125,6 +9260,132 @@ def test_batch_oversized_defaults_applied() -> int:
             return 0
         except AssertionError as exc:
             print(f"FAIL test_batch_oversized_defaults_applied: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_batch_oversized_per_card_two_cards_each_under_cap_clean() -> int:
+    """Clean: two cards, each own context estimate under the cap, but their summed estimate
+    over the cap -> zero batch-oversized 'tokens' errors, proving the check is evaluated per card
+    rather than as the old whole-batch aggregate (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # Each file is 28000 "x" characters -> 7000-token estimate, under the 10000 cap on its own.
+        half_a = project_root / "src" / "half_a.py"
+        half_a.parent.mkdir(parents=True)
+        half_a.write_text("x" * 28000, encoding="utf-8")
+        half_b = project_root / "src" / "half_b.py"
+        half_b.write_text("x" * 28000, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_a.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/half_b.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert oversized_errs == [], (
+                f"expected 0 batch-oversized 'tokens' errors, got: {oversized_errs}"
+            )
+            print("PASS test_batch_oversized_per_card_two_cards_each_under_cap_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_two_cards_each_under_cap_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_batch_oversized_per_card_one_card_over_cap_dirty() -> int:
+    """Dirty: one card's own context estimate is over the cap on its own -> exactly one
+    batch-oversized 'tokens' error, attributed to that specific card, not the whole batch (#1000)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # 44000 "x" characters -> 11000-token estimate, over the 10000 cap on its own.
+        big = project_root / "src" / "big.py"
+        big.parent.mkdir(parents=True)
+        big.write_text("x" * 44000, encoding="utf-8")
+        tiny = project_root / "src" / "tiny.py"
+        tiny.write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            "task: test\nbatch: alpha\ncards: 2\nverify: null\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/big.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+            "\n"
+            "### Card 2: card 2\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** `src/tiny.py`\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 2\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root, max_batch_context_tokens=10000)
+        oversized_errs = [
+            e for e in result if e["check"] == "batch-oversized" and "tokens" in e["message"]
+        ]
+        try:
+            assert len(oversized_errs) == 1, (
+                f"expected 1 batch-oversized 'tokens' error, got: {oversized_errs}"
+            )
+            assert oversized_errs[0]["card"] == 1, (
+                f"expected the finding attributed to card 1, got: {oversized_errs[0]['card']!r}"
+            )
+            print("PASS test_batch_oversized_per_card_one_card_over_cap_dirty")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_batch_oversized_per_card_one_card_over_cap_dirty: {exc}",
+                file=sys.stderr,
+            )
             return 1
 
 
@@ -9387,6 +11648,95 @@ def test_check_verify_unrelated_test_files_no_only_segment_no_findings() -> int:
             return 1
 
 
+def test_check_verify_unrelated_test_files_naming_convention_exempt_clean() -> int:
+    """Naming-convention exemption (#999): the batch's own Edits: token `_foo.py` derives to the
+    test name `test-foo.py` (leading underscore stripped), matching the --only token -> zero
+    findings, even though `test-foo.py` itself never appears in the batch's own
+    Edits:/Creates:/Moves: set."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "test-foo.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only test-foo.py",
+            edits=["_foo.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert errs == [], (
+                f"expected no findings for the naming-convention exemption, got: {errs}"
+            )
+            print("PASS test_check_verify_unrelated_test_files_naming_convention_exempt_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_verify_unrelated_test_files_naming_convention_exempt_clean: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty() -> int:
+    """Regression guard: a differently-named source file in the batch's Edits: must not
+    accidentally exempt an unrelated --only token. `_bar.py` derives to `test-bar.py`, which does
+    not match the --only token `unrelated_test.py`, so the naming-convention exemption must not
+    fire here (#999)."""
+    import _test_helpers  # noqa: E402
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        git_root = tmp / "repo"
+        plan_dir = tmp / "plan"
+
+        repo = _test_helpers.init_minimal_git_repo(git_root, branch="main")
+        _test_helpers.checkout_new_branch(repo, "hanf/some-parent")
+        _git_commit_new_file(git_root, "unrelated_test.py", "print('parent')\n", "add unrelated test")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= python run-all.py --only unrelated_test.py",
+            edits=["_bar.py"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(
+            plan_dir, git_root, git_root=git_root, parent_branch="hanf/some-parent",
+        )
+        errs = [e for e in result if e["check"] == "verify-unrelated-test-file"]
+        try:
+            assert len(errs) == 1, f"expected 1 finding, got {len(errs)}: {errs}"
+            e = errs[0]
+            assert e["batch"] == "01-alpha", f"wrong batch: {e['batch']!r}"
+            assert e["card"] is None, f"wrong card: {e['card']!r}"
+            assert e["path"] == "unrelated_test.py", f"wrong path: {e['path']!r}"
+            print(
+                "PASS "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty"
+                f": {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_cards_legend_in_comment_not_parsed_as_refs() -> int:
     """Regression guard for #734: the Cards field-legend must not be parsed as refs.
 
@@ -9582,6 +11932,102 @@ def test_check_card_missing_field_fence_guard_real_boundary_still_detected() -> 
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_card_missing_field_fence_guard_real_boundary_still_detected: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_check_card_missing_field_indented_delimiter_column_zero_heading_clean() -> int:
+    """Regression guard for #992: a fence-opening delimiter indented two spaces, whose fenced
+    content (a ### heading) sits at column zero, must still toggle the fence-tracking state -- the
+    column-zero content must not be mistaken for a real card-boundary heading."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Write the following exact heading into the target file:\n"
+            "  ```markdown\n"
+            "### Some Heading\n"
+            "  ```\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "card-missing-field"]
+        try:
+            assert check == [], (
+                f"expected no card-missing-field findings for an indented fence delimiter with "
+                f"column-zero content, got: {check}"
+            )
+            print("PASS test_check_card_missing_field_indented_delimiter_column_zero_heading_clean")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_card_missing_field_indented_delimiter_column_zero_heading_clean: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence() -> int:
+    """Regression guard for #992: the context-completeness field-body extraction's own
+    independent fence-tracking must also tolerate an indented fence delimiter whose fenced content
+    (a field-header-shaped line) sits at column zero -- the reference after the fence closes must
+    still be collected and flagged."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+
+        existing_file = project_root / "src" / "a.py"
+        existing_file.parent.mkdir(parents=True)
+        existing_file.write_text("# placeholder", encoding="utf-8")
+        (project_root / "sibling.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Quote a field-header-shaped line from another source file, at its own original "
+            "column:\n"
+            "  ```markdown\n"
+            "- **Commit:** fake, not a real field\n"
+            "  ```\n"
+            "  Also reference `sibling.py` for the existing pattern.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_batch_file("alpha", edits=["src/a.py"], requirements=requirements)
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        missing_field_hits = [e for e in result if e["check"] == "card-missing-field"]
+        context_hits = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert missing_field_hits == [], (
+                f"expected no card-missing-field findings, got: {missing_field_hits}"
+            )
+            assert len(context_hits) == 1, (
+                f"expected 1 context-completeness finding, got: {context_hits}"
+            )
+            assert context_hits[0]["path"] == "sibling.py", (
+                f"wrong path: {context_hits[0]['path']!r}"
+            )
+            print(
+                "PASS "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL "
+                "test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence"
+                f": {exc}",
+                file=sys.stderr,
+            )
             return 1
 
 
@@ -10299,6 +12745,47 @@ def main() -> int:
         test_check_context_completeness_symbol_prohibition_marker_exempt,
         test_check_context_completeness_symbol_citation_marker_exempt,
         test_check_context_completeness_symbol_underscore_qualifies,
+        # declaration-form matching (batch resolve-symbol-tests, Card 3)
+        test_check_context_completeness_symbol_comment_only_go,
+        test_check_context_completeness_symbol_comment_only_cs,
+        test_check_context_completeness_symbol_comment_only_py,
+        test_check_context_completeness_symbol_comment_only_ts,
+        test_check_context_completeness_symbol_string_literal_only_go,
+        test_check_context_completeness_symbol_string_literal_only_cs,
+        test_check_context_completeness_symbol_string_literal_only_py,
+        test_check_context_completeness_symbol_string_literal_only_ts,
+        test_check_context_completeness_symbol_usage_site_only_go,
+        test_check_context_completeness_symbol_usage_site_only_cs,
+        test_check_context_completeness_symbol_usage_site_only_py,
+        test_check_context_completeness_symbol_usage_site_only_ts,
+        test_check_context_completeness_symbol_declaration_form_go,
+        test_check_context_completeness_symbol_declaration_form_cs,
+        test_check_context_completeness_symbol_declaration_form_py,
+        test_check_context_completeness_symbol_declaration_form_ts,
+        test_check_context_completeness_symbol_go_grouped_declarations,
+        test_check_context_completeness_symbol_py_module_level_assignment,
+        test_check_context_completeness_symbol_py_class_body_attribute_not_flagged,
+        # qualifier disambiguation (batch resolve-symbol-tests, Card 4)
+        test_check_context_completeness_symbol_qualifier_package_go,
+        test_check_context_completeness_symbol_qualifier_namespace_cs,
+        test_check_context_completeness_symbol_qualifier_namespace_ts,
+        test_check_context_completeness_symbol_qualifier_directory_basename_fallback,
+        test_check_context_completeness_symbol_qualifier_no_match_still_zero,
+        test_check_context_completeness_symbol_qualifier_ambiguous_dirs_still_zero,
+        test_check_context_completeness_symbol_qualifier_cache_correctness_different_qualifiers,
+        # solution-scope directory pruning (batch resolve-symbol-tests, Card 5)
+        test_check_context_completeness_symbol_out_of_scope_deprecated,
+        test_check_context_completeness_symbol_out_of_scope_legacy,
+        test_check_context_completeness_symbol_out_of_scope_obsolete,
+        test_check_context_completeness_symbol_out_of_scope_archive,
+        test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor,
+        # characterization tests, one per source issue (batch resolve-symbol-tests, Card 6)
+        test_check_context_completeness_symbol_issue_1037_qualified_disambiguation,
+        test_check_context_completeness_symbol_issue_1033_struct_tag_and_string_literal,
+        test_check_context_completeness_symbol_issue_1030_deprecated_directory_property,
+        test_check_context_completeness_symbol_issue_1023_comment_first_word,
+        test_check_context_completeness_symbol_issue_1015_usage_only_never_declared,
+        test_check_context_completeness_symbol_issue_1008_own_new_symbol_not_flagged,
         # context-completeness structural exemptions (batch structural-exemption-tests)
         test_check_context_completeness_clean_directory_intent_trailing_slash_dir,
         test_check_context_completeness_clean_directory_intent_trailing_slash_file,
@@ -10310,6 +12797,7 @@ def main() -> int:
         test_check_context_completeness_dirty_out_of_repo_wiki_prefix_still_flagged,
         test_check_context_completeness_clean_gitignored_path_present,
         test_check_context_completeness_dirty_gitignored_path_non_ignored_sibling,
+        test_check_context_completeness_not_gitignored_path_no_subprocess_breadcrumb,
         test_check_context_completeness_clean_gitignored_path_absent_from_disk,
         test_check_context_completeness_clean_forward_creates_reference,
         test_check_context_completeness_dirty_forward_creates_reverse_direction,
@@ -10335,6 +12823,21 @@ def main() -> int:
         test_check_context_completeness_dirty_fence_aware_extraction_genuine_header_after_fence,
         test_check_context_completeness_clean_escape_marker_mentioned_not_read,
         test_check_context_completeness_dirty_escape_marker_phrase_removed,
+        test_check_context_completeness_clean_ownership_batch_fixes,
+        test_check_context_completeness_clean_ownership_card_corrects,
+        test_check_context_completeness_clean_ownership_synonym_addresses,
+        test_check_context_completeness_clean_ownership_past_tense,
+        test_check_context_completeness_clean_ownership_possessive,
+        test_check_context_completeness_dirty_ownership_no_number_not_exempted,
+        test_check_context_completeness_dirty_ownership_separate_line_not_exempted,
+        test_check_context_completeness_clean_literal_enumeration_mixed_shapes,
+        test_check_context_completeness_dirty_literal_enumeration_below_threshold_not_exempted,
+        test_check_context_completeness_dirty_literal_enumeration_all_path_shaped_not_exempted,
+        test_check_context_completeness_clean_illustrative_output_emitting,
+        test_check_context_completeness_clean_illustrative_output_rendering,
+        test_check_context_completeness_clean_illustrative_output_printing,
+        test_check_context_completeness_clean_illustrative_output_past_tense,
+        test_check_context_completeness_dirty_illustrative_output_no_verb_not_exempted,
         # requirements-quote-indent-drift check (mill-plan-requirements-byte-exactness-gap)
         test_check_requirements_quote_indent_drift_clean_exact_match,
         test_check_requirements_quote_indent_drift_clean_illustrative_snippet,
@@ -10384,6 +12887,8 @@ def main() -> int:
         test_batch_oversized_context_tokens_clean,
         test_batch_oversized_context_tokens_dirty,
         test_batch_oversized_defaults_applied,
+        test_batch_oversized_per_card_two_cards_each_under_cap_clean,
+        test_batch_oversized_per_card_one_card_over_cap_dirty,
         # verify-full-suite check
         test_check_verify_full_suite_run_all_py_without_filter_is_error,
         test_check_verify_full_suite_run_all_py_with_k_filter_is_ok,
@@ -10455,10 +12960,14 @@ def main() -> int:
         test_check_verify_unrelated_test_files_differs_not_flagged,
         test_check_verify_unrelated_test_files_parent_branch_none_no_findings,
         test_check_verify_unrelated_test_files_no_only_segment_no_findings,
+        test_check_verify_unrelated_test_files_naming_convention_exempt_clean,
+        test_check_verify_unrelated_test_files_naming_convention_no_accidental_exempt_dirty,
         # Cards field-legend HTML-comment regression guard (#734)
         test_check_cards_legend_in_comment_not_parsed_as_refs,
         test_check_card_missing_field_fence_guard_clean,
         test_check_card_missing_field_fence_guard_real_boundary_still_detected,
+        test_check_card_missing_field_indented_delimiter_column_zero_heading_clean,
+        test_context_completeness_survives_indented_delimiter_column_zero_field_header_in_fence,
         # verify-excludes-edited-tagged-test check (#724)
         test_verify_excludes_edited_tagged_test_no_tags_flag_dirty,
         test_verify_excludes_edited_tagged_test_tags_integration_clean,

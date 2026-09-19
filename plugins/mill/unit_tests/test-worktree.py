@@ -325,6 +325,69 @@ def main() -> int:
             assert mock_dotnet_run.call_count == 2, "expected exactly two dotnet build-server shutdown calls (once per retry, not once per attempt)"
             print("PASS: remove_safe raises WorktreeLockedError after exhausting all 3 attempts on WinError 145")
 
+        # --- remove_safe retries safe_rmtree once after WinError 32 and succeeds ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc = OSError(
+                "[WinError 32] The process cannot access the file because it is "
+                "being used by another process"
+            )
+            lock_exc.winerror = 32
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc, None]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()) as mock_dotnet_run:
+                                remove_safe(path, cwd=cwd, junctions_cfg={})
+            assert mock_rmtree.call_count == 2, "expected safe_rmtree to be called twice (initial attempt + one retry)"
+            assert mock_dotnet_run.call_count == 1, "expected exactly one dotnet build-server shutdown call"
+            assert mock_dotnet_run.call_args.args[0] == ["dotnet", "build-server", "shutdown"], "expected the dotnet build-server shutdown command to be invoked"
+            print("PASS: remove_safe retries safe_rmtree once after WinError 32 and succeeds")
+
+        # --- remove_safe raises WorktreeLockedError after exhausting all 3 attempts on WinError 32 ---
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "wt"
+            path.mkdir()
+            cwd = Path(tmp) / "cwd"
+            cwd.mkdir()
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Directory not empty"
+            lock_exc_1 = OSError(
+                "[WinError 32] The process cannot access the file because it is "
+                "being used by another process"
+            )
+            lock_exc_1.winerror = 32
+            lock_exc_2 = OSError(
+                "[WinError 32] The process cannot access the file because it is "
+                "being used by another process"
+            )
+            lock_exc_2.winerror = 32
+            lock_exc_3 = OSError(
+                "[WinError 32] The process cannot access the file because it is "
+                "being used by another process"
+            )
+            lock_exc_3.winerror = 32
+            raised_locked = False
+            with patch("_worktree._subprocess_util.run", return_value=mock_result):
+                with patch("_safe_rmtree.shutil.rmtree", side_effect=[lock_exc_1, lock_exc_2, lock_exc_3]) as mock_rmtree:
+                    with patch("_safe_rmtree._blacklist_for", return_value=[]):
+                        with patch("_worktree.kill_stale_holders"):
+                            with patch("_worktree.subprocess.run", return_value=MagicMock()):
+                                try:
+                                    remove_safe(path, cwd=cwd, junctions_cfg={})
+                                except WorktreeLockedError:
+                                    raised_locked = True
+            assert raised_locked, "expected WorktreeLockedError after all 3 attempts raise WinError 32"
+            assert mock_rmtree.call_count == 3, "expected safe_rmtree to be called three times (initial attempt + two retries)"
+            print("PASS: remove_safe raises WorktreeLockedError after exhausting all 3 attempts on WinError 32")
+
         # --- remove_safe re-raises a non-145 OSError from a retry attempt unchanged (no further retry) ---
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "wt"
