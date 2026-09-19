@@ -36,8 +36,6 @@ Do not infer from filenames or positions.
 - **Decisions** — each `### Decision:` has rationale + rejected alternatives;
   implicit decisions surfaced.
 
-Independently state, in the `reviewer_self_id:` field below, what model/version you believe yourself to be — this is your own best-effort assessment, distinct from the `reviewer_model:` value already dictated to you above.
-
 ## Output format — STRICT
 
 Wrap your entire output in `MILL_REVIEW_BEGIN` / `MILL_REVIEW_END` markers, each on its own line.
@@ -61,7 +59,6 @@ MILL_REVIEW_BEGIN
 ```yaml
 verdict: APPROVE | REQUEST_CHANGES
 reviewer_model: <REVIEWER_MODEL>
-reviewer_self_id: <your own model self-identification, if known>
 reviewed_file: <artefact reference>
 date: <UTC YYYY-MM-DD>
 ```
