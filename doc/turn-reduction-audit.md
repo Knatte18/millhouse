@@ -440,17 +440,29 @@ batch, not a repeated shape). Both files were re-read for this audit (not copied
 
 Re-derived counts against the current worktree source (the task body's first-pass numbers are a
 starting point, not ground truth — `_mill/discussion.md`'s own spot-check already found a one-off
-drift): `_status.append_phase` call sites — `mill-start/SKILL.md` 6, `mill-plan/SKILL.md` 14,
-`mill-go-base/SKILL.md` 21. `commit -m` occurrences — `mill-start/SKILL.md` 6,
-`mill-go-base/SKILL.md` 17, `mill-plan/SKILL.md` 21. Both counts match `_mill/discussion.md`'s own
-cited numbers exactly, so no drift beyond what that document already flagged. The two counts are
-not 1:1 paired site-for-site: `mill-go-base/SKILL.md` has 21 `append_phase` calls against 17
-`commit -m` occurrences because several call sites share one commit across two bookkeeping
-operations (e.g. Prepare's `init_batches` + `append_phase` land in a single commit; the Cleanliness
-gate's several `set_batch_field`+`append_phase` blocked-branches each pair 1:1 with their own
-commit; the Stuck-escalation self-resolve path's `append_phase("self-resolved-verify-logic", ...)`
-shares a commit with a `plan_dir` edit). This paired-vs-unpaired shape is exactly the kind of detail
-a follow-up `append_phase_and_commit`-style helper (see `## Cross-cutting recommendations` below)
+drift): `_status.append_phase` call sites — `mill-start/SKILL.md` 5, `mill-plan/SKILL.md` 9,
+`mill-go-base/SKILL.md` 18 (one further textual occurrence, at `mill-go-base/SKILL.md:214`, is a
+`signature:` type-annotation naming `_status.append_phase`'s parameters, not a call, and is
+excluded from this count). `commit -m` occurrences — `mill-start/SKILL.md` 6,
+`mill-go-base/SKILL.md` 17, `mill-plan/SKILL.md` 21. The `commit -m` counts match
+`_mill/discussion.md`'s own cited numbers exactly. The `append_phase` counts do not:
+`_mill/discussion.md` cited 6/14/21 for mill-start/mill-plan/mill-go-base respectively, and a
+direct re-count against the current worktree source gives 5/9/18 for all three files — not only
+the single site that document's own spot-check flagged, confirming this card's instruction to
+re-derive rather than trust those figures on faith.
+
+The two counts are still not 1:1 paired site-for-site within `mill-go-base/SKILL.md`: 18
+`append_phase` calls against 17 `commit -m` occurrences, a difference of 1. That single gap is
+`mill-go-base/SKILL.md:763`, which mentions `_status.append_phase(status_path, f"approved-{batch_name}",
+...)` only to describe it as one of the terminal actions the not-converged-under-cap branch
+explicitly does *not* execute this round — the same call and its commit are the ones that fire
+later, on a converged or capped round, at line 843. It is not a second, distinct call site with its
+own commit. Every other call site does pair 1:1 with its own commit (e.g. Prepare's `init_batches` +
+`append_phase` land in a single commit; the Cleanliness gate's several
+`set_batch_field`+`append_phase` blocked-branches each pair 1:1 with their own commit; the
+Stuck-escalation self-resolve path's `append_phase("self-resolved-verify-logic", ...)` shares a
+commit with a `plan_dir` edit). This paired-vs-unpaired shape is exactly the kind of detail a
+follow-up `append_phase_and_commit`-style helper (see `## Cross-cutting recommendations` below)
 would need to preserve per call site, not collapse into one generic wrapper.
 
 - **Entry Step 0 (variant binding + driver preamble)** (lines 19-33) — bind `VARIANT_LABEL`, halt if
