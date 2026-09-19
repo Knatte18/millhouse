@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-finalize-citation-scan-pathspec-magic-bug
 branch: hanf/mill-finalize-citation-scan-pathspec-magic-bug
 plan: _mill/plan
@@ -20,4 +20,13 @@ discussed  '2026-09-19T11:23:54Z'
 planning  '2026-09-19T11:27:22Z'
 plan-review-r1  '2026-09-19T11:29:49Z'
 planned  '2026-09-19T11:30:21Z'
+implementing  '2026-09-19T11:34:25Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fix-citation-scan-pathspec
+    state: pending
 ```
