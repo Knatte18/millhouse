@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-context-completeness-exemptions-tests
+phase: holistic-reviewing
 slug: plan-validate-context-completeness-path-branch-gaps
 branch: hanf/plan-validate-context-completeness-path-branch-gaps
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-09-19T12:46:23Z'
 approved-context-completeness-exemptions  '2026-09-19T12:54:06Z'
 approved-context-completeness-exemptions-docs  '2026-09-19T12:56:11Z'
 approved-context-completeness-exemptions-tests  '2026-09-19T13:01:21Z'
+holistic-reviewing  '2026-09-19T13:01:45Z'
 ```
 
 ## Batches
