@@ -37,6 +37,7 @@ roles:
     holistic:
       rounds: 8
       min_rounds: 1
+      auto_approve_on_cap: false
       reviewer: sonnethigh
       blocking_classes: [design]
   plan-review:

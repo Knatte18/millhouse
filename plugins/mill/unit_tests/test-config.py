@@ -1727,8 +1727,8 @@ def test_load_config_auto_approve_on_cap_keys_present() -> None:
     """
     Verify that the real mill-config.yaml template registers auto_approve_on_cap with a
     default value of False under roles.plan-review.holistic, roles.code-review.batch,
-    and roles.code-review.holistic, and that loading it does not emit an unknown-key
-    warning for any of the three.
+    roles.code-review.holistic, and roles.discussion-review.holistic, and that loading
+    it does not emit an unknown-key warning for any of the four.
     """
     real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
     assert real_template_path.exists(), f"Real template not found at {real_template_path}"
@@ -1757,6 +1757,9 @@ def test_load_config_auto_approve_on_cap_keys_present() -> None:
         assert cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
             f"roles.code-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('code-review', {}).get('holistic', {})!r}"
         )
+        assert cfg.get("roles", {}).get("discussion-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
+            f"roles.discussion-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('discussion-review', {}).get('holistic', {})!r}"
+        )
 
         assert "unknown key: roles.plan-review.holistic.auto_approve_on_cap" not in stderr_output, (
             f"roles.plan-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
@@ -1766,6 +1769,9 @@ def test_load_config_auto_approve_on_cap_keys_present() -> None:
         )
         assert "unknown key: roles.code-review.holistic.auto_approve_on_cap" not in stderr_output, (
             f"roles.code-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+        assert "unknown key: roles.discussion-review.holistic.auto_approve_on_cap" not in stderr_output, (
+            f"roles.discussion-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
         )
 
     print("PASS: roles.*.auto_approve_on_cap keys present (default False) and no unknown-key warning")
