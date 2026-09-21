@@ -1,0 +1,32 @@
+MILL_REVIEW_BEGIN
+# Review: _plan_validate.py: further context-completeness, fence/indent-drift, and tag-exclusion gaps — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-21
+```
+
+## Findings
+
+### [BLOCKING:consistency] Card 7's add-pass fence quotes ~20 lines of unchanged existing source
+**Location:** Batch 1 / Card 7 (`_check_requirements_quote_indent_drift`), the "replace the whole add-pass loop ... with:" fenced block.
+**Issue:** Verified against `plugins/mill/scripts/_plan_validate.py` lines 3144-3168: the entire `for n in range(1, 41): ... errors.append({...})` body (loop, nested candidate/token loops, and the "after adding N leading spaces" error dict, including its exact message f-string) is byte-identical between current source and the fenced replacement — only a leading `add_matched = False`, three lines before the final `break`, and a trailing `if add_matched: continue` are new. This directly contradicts `00-overview.md`'s own Shared Decision "no fenced quote of existing source as an edit anchor," which permits a fence only for "a complete new function body being introduced (code that does not exist anywhere in the repo yet)" — this is a large majority-unchanged excerpt used as an edit anchor, exactly what that Decision says to avoid (existing-code anchors must be inline single-backtick quotes instead).
+**Fix:** Replace the fenced block with an inline-backtick description of the insertion points (mirroring how the strip-pass capture and the clean-check refactor in this same card already do it), reserving the fence for only the genuinely new lines (`add_matched = False`, the 3-line capture, `add_matched = True`, `if add_matched: continue`).
+
+### [NIT:consistency] Batch 1 scope rationale misstates cs_member_re's position relative to the walk
+**Location:** Batch 1 `## Batch Scope` (Cards 4 & 6 sequencing paragraph).
+**Issue:** The text claims "card 6 changes only the `cs_member_re` pattern string a few lines below the walk," but `cs_member_re` is assigned at `_plan_validate.py` line 2149, before the per-file `os.walk` loop that starts at line 2196 (Card 4's edit point, line 2208) — it sits above/before the walk, not below it. The no-conflict conclusion itself still holds (Card 4's insertion is textually after line 2149 either way), but the stated direction is backwards.
+**Fix:** Reword to "a few lines above the walk" (or simply "earlier in the function, before the walk").
+
+### [NIT:consistency] Card 8 implies a second copy of the fix table that doesn't exist
+**Location:** Batch 2 / Card 8, Requirements opening clause.
+**Issue:** The parenthetical "also present verbatim in `mill-plan/SKILL.md`'s own copy of the same table" is self-referential and confusing — Card 8's own `Edits:` is `plugins/mill/skills/mill-plan/SKILL.md`, and a grep confirms the `| check | mechanical fix |` table exists exactly once in the whole repo, at that same file's own "### Phase: Plan Review" section. There is no second copy to keep in sync.
+**Fix:** Drop the parenthetical, or reword to make clear it's describing the single table's own two identifying names, not a second location.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 7's add-pass fence violates the plan's own "no fenced quote of existing source" Decision; two wording NITs also flagged.
+MILL_REVIEW_END

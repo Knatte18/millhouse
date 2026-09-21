@@ -23,9 +23,9 @@ runs first and only touches the former; card 3 runs later and only touches the l
 card's inline-backtick anchors are invalidated by the other's edit. Cards 4 and 6 both edit inside
 `_resolve_symbol_files` too — card 4 adds a new helper call in the per-file walk (the
 `_is_conventional_test_file` skip, right after the extension check), card 6 changes only the
-`cs_member_re` pattern string a few lines below the walk — these are two distinct, non-adjacent spots
-in the same function, so card 4's edit does not shift the line `cs_member_re` sits on, and neither
-card's inline-backtick anchor is invalidated by the other's edit.
+`cs_member_re` pattern string earlier in the function, before the walk — these are two distinct,
+non-adjacent spots in the same function, so card 4's edit does not shift the line `cs_member_re` sits
+on, and neither card's inline-backtick anchor is invalidated by the other's edit.
 
 ## Cards
 
@@ -462,46 +462,29 @@ card's inline-backtick anchor is invalidated by the other's edit.
 
   In the add pass, the existing match branch's `if matched_token is not None:` block ends with an
   `errors.append({...})` call (the "after adding N leading spaces per line" message) immediately
-  followed by `break`, with no `matched`-style flag of its own. Change it to track whether the add pass
-  matched (mirroring the strip pass's `matched` flag) and capture the same two variables. Introduce
-  `add_matched = False` immediately before this pass's own `for n in range(1, 41):` loop, set
-  `add_matched = True` alongside the two-variable capture inside the match branch, and add an
-  `if add_matched: continue` immediately after that loop (mirroring the existing `if matched: continue`
-  immediately after the strip pass's own loop) — replace the whole add-pass loop (from its
-  `for n in range(1, 41):` line through its closing `break`) with:
-  ```python
-  add_matched = False
-  for n in range(1, 41):
-      matched_token = None
-      for candidate in (
-          _add_n_leading_spaces(fence_body, n),
-          _add_n_leading_spaces(fence_body, n, include_blank=True),
-      ):
-          for token in ordered_resolved_tokens:
-              if candidate in resolved_contents[token]:
-                  matched_token = token
-                  break
-          if matched_token is not None:
-              break
-      if matched_token is not None:
-          errors.append({
-              "check": "requirements-quote-indent-drift",
-              "batch": batch_path.stem,
-              "card": card_num,
-              "path": matched_token,
-              "message": (
-                  f"card {card_num}'s Requirements: fence {fence_idx} "
-                  f"matches '{matched_token}' after adding {n} "
-                  f"leading spaces per line (found N={n})"
-              ),
-          })
-          last_matched_indent = _first_nonblank_line_indent(fence_body)
-          last_matched_token = matched_token
-          add_matched = True
-          break
-  if add_matched:
-      continue
-  ```
+  followed by `break`, with no `matched`-style flag of its own, and the pass's own `for n in
+  range(1, 41):` loop has no `if <flag>: continue` after it (unlike the strip pass's own loop, which
+  does). Change it to track whether the add pass matched (mirroring the strip pass's `matched` flag)
+  and capture the same two variables, WITHOUT altering any of the pass's own existing matching logic
+  (the `for n in range(1, 41):` loop, its nested `for candidate in (...)` / `for token in
+  ordered_resolved_tokens:` loops, and the `errors.append({...})` call's dict contents and message
+  f-string all stay byte-for-byte as they are today):
+
+  1. Immediately before this pass's own `for n in range(1, 41):` line, add a new line:
+     `add_matched = False`.
+  2. Inside the existing match branch (`if matched_token is not None:`), immediately after the existing
+     `errors.append({...})` call and before its existing `break`, add three new lines:
+     ```python
+     last_matched_indent = _first_nonblank_line_indent(fence_body)
+     last_matched_token = matched_token
+     add_matched = True
+     ```
+  3. Immediately after that `for n in range(1, 41):` loop ends (i.e. right after its closing `break`,
+     at the loop's own indentation level), add two new lines:
+     ```python
+     if add_matched:
+         continue
+     ```
 
   Immediately after that (replacing the point where the per-fence loop iteration used to fall through
   silently — this is the end of the `for fence_idx, fence_body in enumerate(fence_bodies, start=1):`

@@ -28,9 +28,8 @@ runnable surface to check; the card's own correctness is that the row text match
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** Rewrite two rows of the Step 1.5 fix table (the `| check | mechanical fix |` table
-  under "### Phase: Plan Review", also present verbatim in `mill-plan/SKILL.md`'s own copy of the same
-  table) per `_mill/discussion.md`'s `verify-tags-package-scoping` and `paired-fence-indent-check`
-  Decisions:
+  under this same file's "### Phase: Plan Review" section — the only copy of this table in the repo) per
+  `_mill/discussion.md`'s `verify-tags-package-scoping` and `paired-fence-indent-check` Decisions:
 
   1. `verify-excludes-edited-tagged-test` row: replace its current cell text (which ends "...append a
      new ` && `-chained invocation of the same base command (same verb and package pattern as the
