@@ -41,13 +41,18 @@ both in one batch avoids a cross-batch `parallel-modifies-overlap` conflict on t
      matter functionally but keep it readable). When `repo` is `""`, omit `--repo` entirely — leave
      `gh`'s own cwd-based auto-detection as the fallback, unchanged from today.
   3. Add an `"error"` key to both the `_none_result` sentinel dict and every dict this function
-     returns, defaulting to `None`. Populate it with a descriptive string ONLY on the genuine-failure
-     branches: the `except Exception` branch around the `_subprocess_util.run` call (use
-     `str(exc)`), and the `result.returncode != 0` branch (use `result.stderr.strip()` or, if empty,
-     a fallback string noting the non-zero exit with no stderr). Every other `_none_result`-returning
-     branch (empty stdout, JSON parse failure, empty parsed list, no PR object matching a known
-     state) is a genuine "no PR" outcome, not a `gh` failure — `error` stays `None` for those. Update
-     the function's docstring `Returns:` section to document the new `"error"` key.
+     returns, defaulting to `None`. The existing check is currently ONE combined conditional —
+     `if result.returncode != 0 or not result.stdout.strip(): return dict(_none_result)` — that must
+     first be split into two separate `if` statements before either can carry its own `error` value:
+     (a) `if result.returncode != 0:` returns `_none_result` with `error` set to
+     `result.stderr.strip()` (or, if empty, a fallback string noting the non-zero exit with no
+     stderr); (b) `if not result.stdout.strip():` (now reached only when `returncode == 0`) returns
+     `_none_result` with `error` left `None` — an empty-stdout success is a genuine "no PR" outcome,
+     not a `gh` failure. Separately, the `except Exception` branch around the `_subprocess_util.run`
+     call also gets `error` set to `str(exc)`. Every other `_none_result`-returning branch (JSON
+     parse failure, empty parsed list, no PR object matching a known state) is likewise a genuine
+     "no PR" outcome, not a `gh` failure — `error` stays `None` for those, unchanged. Update the
+     function's docstring `Returns:` section to document the new `"error"` key.
 - **Commit:** `fix(pr-state): resolve --repo explicitly and distinguish gh failure from no-PR (#1105)`
 
 ### Card 4: `millpy-cleanup.py` PR-reap logs the `error` field (#1105)
@@ -98,7 +103,10 @@ both in one batch avoids a cross-batch `parallel-modifies-overlap` conflict on t
   not route this into "status.md says pr-pending but no PR on this branch; inspect manually", since
   that message is misleading when the real cause is a `gh` call failure, not an actually-missing PR.
   Only when `error` is null does the existing phase-based `none` fallback (the two bullets above)
-  apply, unchanged.
+  apply, unchanged. This card's correctness depends on Card 3 populating `error` ONLY for a genuine
+  `gh` failure and never for an ordinary empty-result "no PR" outcome — if Card 3's split were
+  incomplete, this halt would fire on routine no-PR cases instead of the exceptional `gh`-failure
+  case it targets. No independent verification needed here beyond Card 3's own tests passing.
 - **Commit:** `docs(mill-merge): distinguish a gh failure from a genuine no-PR state in the PR-state gate (#1105)`
 
 ### Card 6: self-hosting plugin-cache-freshness note (#1077)

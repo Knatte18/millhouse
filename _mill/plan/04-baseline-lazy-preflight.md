@@ -135,6 +135,7 @@ the pinned SHA from `status_path`, which every existing caller already passes.
   - `plugins/mill/scripts/_parent_branch.py`
   - `plugins/mill/scripts/_subprocess_util.py`
   - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/scripts/_status.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-implement.py`
   - `plugins/mill/unit_tests/test-millpy-implement.py`
@@ -191,9 +192,16 @@ the pinned SHA from `status_path`, which every existing caller already passes.
      line" (today's `{"stage": "baseline", "substage": "module_wide", ...}` line) — remove every
      mention of a second `per_batch` JSON line, of parsing "the two JSON lines", and of the
      `--module-wide-only` flag (Card 11 removed it; plain `--stage baseline` is now the only form
-     and always behaves the way `--module-wide-only` used to). `### 0.55. Done-gate baseline
-     pre-flight` is a distinct, unaffected mechanism (calls `_done_gate.run_preflight`, not
-     `_verify_baseline`) — do not touch it.
+     and always behaves the way `--module-wide-only` used to). Specifically, in the "First check: a
+     speculative early launch" bullet's `"exit"` handling, delete the entire "then proceed to run a
+     SECOND, ordinary (no `--module-wide-only`) `--stage baseline` invocation for the per-batch
+     substage only" clause and its accompanying "safe now, since... is not double work" sentence —
+     this second call has nothing left to do once the per-batch substage no longer exists; the
+     speculative early launch's single module-wide result now IS the complete baseline computation
+     for that batch, with nothing further to run. Update the `"running"` sub-bullet's cross-reference
+     to that removed second-call handling accordingly (it should simply stop once the module-wide
+     result is extracted). `### 0.55. Done-gate baseline pre-flight` is a distinct, unaffected
+     mechanism (calls `_done_gate.run_preflight`, not `_verify_baseline`) — do not touch it.
   2. Delete `### 0.6. Per-batch baseline recapture (self-hosting only)` in its entirety. This section
      existed only to backfill a still-missing per-batch `verify_baseline_failures` baseline for a
      self-hosting task's own in-progress plan — that eager per-batch baseline no longer exists to

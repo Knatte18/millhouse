@@ -107,12 +107,13 @@ No external interface changes — every fix is internal to the wiki daemon clien
 
 - Card 1: extend `plugins/mill/unit_tests/test-wiki-health-check.py` (the existing `main()`/`ok()`/`fail()`
   harness — see cases `(f1)`/`(f2)` for the exact mocking pattern) with a new case simulating a
-  slow-starting daemon: patch `wiki._client._spawn_server`, `wiki._client.wait_for_socket_reachable`
-  (forced `True` immediately, so the loop reaches the health-probe check on its very first
-  iteration) and `wiki._client._connect_send_recv` with a `side_effect` list returning `{FIELD_OK:
-  False}` twice then `{FIELD_OK: True}`; assert `_ensure_daemon` returns successfully only after the
-  third probe (i.e. it retried past the two `False` responses within `SPAWN_TIMEOUT` rather than
-  raising or returning prematurely on the first one).
+  slow-starting daemon: patch `wiki._client._spawn_server` and `wiki._client._connect_send_recv` with
+  a `side_effect` list returning `{FIELD_OK: False}` twice then `{FIELD_OK: True}` (do NOT patch
+  `wait_for_socket_reachable` — Card 1's fix replaces that call with the health probe entirely, so
+  after the fix `_ensure_daemon`'s post-spawn loop never calls it, and a mock for it would be an
+  inert no-op); assert `_ensure_daemon` returns successfully only after the third probe (i.e. it
+  retried past the two `False` responses within `SPAWN_TIMEOUT` rather than raising or returning
+  prematurely on the first one).
 - Card 2, sub-fix 1: extend `plugins/mill/unit_tests/test-wiki-sync.py`'s `main()` harness with a new
   case that forces `commit_push`'s rebase-retry path to fail (mock `_run` so the push reports
   `non-fast-forward` and the subsequent `git pull --rebase` reports non-zero) and asserts the raised

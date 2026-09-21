@@ -23,7 +23,8 @@ per-CLI `finalize` wrapper functions.
 
 ### Card 13: prepare-stage wall-clock stamp and duration derivation helper
 
-- **Context:** none
+- **Context:**
+  - `_mill/discussion.md`
 - **Edits:**
   - `plugins/mill/scripts/_agent_dispatch.py`
   - `plugins/mill/unit_tests/test-agent-dispatch.py`
@@ -31,6 +32,14 @@ per-CLI `finalize` wrapper functions.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
+  Deliberate deviation from `_mill/discussion.md`'s `review-duration-derived-not-trusted` Decision:
+  that Decision names `_review_common.py` as the new helper's home, but this card places it in
+  `_agent_dispatch.py` instead, alongside the two functions it composes with (`output_path_for`,
+  `write_brief`) — all three brief-path-derived-suffix helpers stay co-located in the module that
+  already owns the brief-file lifecycle, rather than splitting that lifecycle across two modules.
+  `_review_common.py` remains available to `derive_duration_s`'s callers exactly as before; nothing
+  about this relocation changes which module the three review CLIs import.
+
   In `_agent_dispatch.py`:
   1. Add `import sys` and `import time` to the module's imports.
   2. Add `prepare_ts_path_for(brief_path: Path) -> Path`, placed immediately after `output_path_for`,
