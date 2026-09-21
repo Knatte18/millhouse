@@ -56,7 +56,11 @@ already qualified with the repo-relative `plugins/mill/skills/mill-go-base/SKILL
 
 ## Batch Tests
 
-Documentation-only — no runnable surface. Verified by a grep self-check after editing: `grep -n
-"mill-go-base/SKILL.md" plugins/mill/skills/mill-plan/SKILL.md plugins/mill/skills/mill-start/SKILL.md`
-must show every remaining occurrence already prefixed with `` `${CLAUDE_PLUGIN_ROOT}/skills/` `` — no
-bare or bare-repo-relative form left in either file.
+Documentation-only — no runnable surface. Verified by an exact-match grep self-check after editing:
+`grep -n '\${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL\.md' plugins/mill/skills/mill-plan/SKILL.md
+plugins/mill/skills/mill-start/SKILL.md` must match every occurrence, and a companion check —
+`grep -c 'mill-go-base/SKILL\.md' <file>` minus the exact-match count above must be zero for each
+file — confirms no bare, repo-relative, or doubled-prefix form remains. A presence-only check on the
+prefix substring (e.g. `grep -n "mill-go-base/SKILL.md" ... | grep '\${CLAUDE_PLUGIN_ROOT}/skills/'`)
+is insufficient: a doubled prefix (`${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`)
+still contains the expected prefix substring and would pass it silently.
