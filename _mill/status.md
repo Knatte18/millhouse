@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-validate-check-fixes
+phase: approved-mill-plan-fix-table-docs
 slug: plan-validate-context-completeness-round2-gaps
 branch: hanf/plan-validate-context-completeness-round2-gaps
 plan: _mill/plan
@@ -29,6 +29,7 @@ plan-review-r3  '2026-09-21T16:05:21Z'
 planned  '2026-09-21T16:05:59Z'
 implementing  '2026-09-21T16:09:13Z'
 approved-plan-validate-check-fixes  '2026-09-21T16:24:31Z'
+approved-mill-plan-fix-table-docs  '2026-09-21T16:26:17Z'
 ```
 
 ## Batches
@@ -42,7 +43,8 @@ batches:
     commit_sha: 534cb39f7979a57736e984d5cfc8cfce36198317
     verify_baseline_failures: []
   - name: mill-plan-fix-table-docs
-    state: running
+    state: approved
     implementer_session: d8e7db4f-b1e0-4e55-80ad-1e57cfdced7a
     start_sha: bd0cce9e8a8111aabd6161b0f3074c90655cf8bd
+    commit_sha: 11121e44c7ccab1f002d2168a5411881199f29c5
 ```
