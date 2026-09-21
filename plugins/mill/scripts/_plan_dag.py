@@ -21,6 +21,8 @@ Public API:
     resolve.
     parse_commit_none_card_ids(batch_text) -> set[int] Return the card numbers in a batch file whose
     ``Commit:`` field is the literal ``none`` sentinel (verification-only cards).
+    parse_card_commit_messages(batch_text) -> dict[int, str] Return each card's ``Commit:`` message
+    (backtick-quoting stripped), excluding ``Commit: none`` cards.
     find_dependents(batches, batch_name) -> list[str] Return every batch name whose resolved
     ``depends-on:`` still names ``batch_name``.
     remove_batch_from_index(overview_text, batch_name) -> str Return ``overview_text`` with
@@ -164,6 +166,64 @@ def parse_commit_none_card_ids(batch_text: str) -> set[int]:
         if commit_match and commit_match.group("inline").strip().lower() == "none":
             none_card_ids.add(card_num)
     return none_card_ids
+
+
+def parse_card_commit_messages(batch_text: str) -> dict[int, str]:
+    """Return each card's ``Commit:`` message, excluding ``Commit: none`` cards.
+
+    Used by the full-batch-history fallback (#1061): a self-resolve re-fire mints a fresh
+    ``start_sha``, so the ordinary SHA-range recount can't see cards that were already committed
+    before that self-resolve.
+    Comparing each card's own ``Commit:`` message against the full ``git log --oneline --all``
+    output (not just the ``start_sha..HEAD`` range) works around that blind spot.
+
+    Card blocks are split exactly the way ``parse_commit_none_card_ids`` in this same module splits
+    them (NOT fence-aware, unlike ``_plan_validate._parse_cards``'s own splitting, which toggles on
+    ` ``` ` lines) -- this mirrors that function's actual splitting loop, not ``_parse_cards``'s.
+
+    Args:
+        batch_text: Full contents of a batch markdown file.
+
+    Returns:
+        ``{card_number: commit_message}`` for every card whose ``Commit:`` value is present and not
+        the literal ``none`` (case-insensitive).
+        A ``Commit: none`` card has nothing to search for in git log by definition and is excluded.
+        A card with no ``Commit:`` line at all is also excluded.
+    """
+    lines = batch_text.splitlines()
+    card_blocks: list[tuple[int, str]] = []
+    current_num: int | None = None
+    current_lines: list[str] = []
+    for line in lines:
+        m = _CARD_START_RE.match(line)
+        if m:
+            if current_num is not None:
+                card_blocks.append((current_num, "\n".join(current_lines)))
+            current_num = int(m.group(1))
+            current_lines = [line]
+        elif current_num is not None:
+            if line.startswith("### "):
+                card_blocks.append((current_num, "\n".join(current_lines)))
+                current_num = None
+                current_lines = []
+            else:
+                current_lines.append(line)
+    if current_num is not None:
+        card_blocks.append((current_num, "\n".join(current_lines)))
+
+    messages: dict[int, str] = {}
+    for card_num, card_block_text in card_blocks:
+        commit_match = _CARD_COMMIT_RE.search(card_block_text)
+        if commit_match:
+            inline = commit_match.group("inline").strip()
+            if inline.lower() != "none":
+                # Strip the Markdown backtick-quoting the plan convention wraps every real Commit:
+                # message in (e.g. "`fix(...): ... (#1060)`") -- the committed git log subject line
+                # itself never carries the backticks, so an unstripped comparison would never match.
+                if inline.startswith("`") and inline.endswith("`") and len(inline) >= 2:
+                    inline = inline[1:-1]
+                messages[card_num] = inline
+    return messages
 
 
 def _check_shapes(batches: list[dict]) -> None:
