@@ -71,6 +71,7 @@ No external interface changes — every fix is internal to the wiki daemon clien
   - `plugins/mill/scripts/wiki/_server.py`
   - `plugins/mill/unit_tests/test-wiki-sync.py`
   - `plugins/mill/unit_tests/test-wiki-daemon.py`
+  - `plugins/mill/unit_tests/run-all.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
