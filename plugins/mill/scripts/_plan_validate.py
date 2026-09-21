@@ -65,6 +65,9 @@ Checks performed (check keys):
     cross-batch-creates-no-depends-on — a card's Context:/Edits: references a file another batch's
         Creates: produces, with no depends-on edge (direct or transitive) from the referencing batch to the
         creating batch
+    cross-batch-build-break — a batch's Requirements: rename/remove a symbol while a
+        later-or-unordered batch's own Requirements: still reference the old symbol name, gated on
+        the overview's top-level verify: field being non-null
 """
 from __future__ import annotations
 
@@ -4083,6 +4086,144 @@ def _check_batch_oversized(
 
 
 # ---------------------------------------------------------------------------
+# cross-batch-build-break check (#1056)
+# ---------------------------------------------------------------------------
+
+_RE_RENAME_TO = re.compile(r"rename\s+`([^`]+)`\s+to\s+`([^`]+)`", re.IGNORECASE)
+_RE_REMOVE_SYMBOL = re.compile(r"\bremove\s+`([^`]+)`", re.IGNORECASE)
+_RE_DELETE_SYMBOL = re.compile(r"\bdelete\s+`([^`]+)`", re.IGNORECASE)
+_CROSS_BATCH_BUILD_BREAK_PATTERNS = (_RE_RENAME_TO, _RE_REMOVE_SYMBOL, _RE_DELETE_SYMBOL)
+# Common source/doc/config file extensions -- a matched token ending in one of these, or
+# containing "/", is a file-removal reference (e.g. "Remove `plugins/mill/scripts/foo.py`",
+# the standard prose for a file deletion in this repo's plans), never a code symbol, and must be
+# excluded from the rename/removal candidate set (#1056 plan-review round 2 finding).
+_CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS = (
+    ".py", ".md", ".go", ".ts", ".js", ".yaml", ".yml", ".json", ".txt", ".sh",
+    ".rs", ".java", ".cs", ".rb", ".toml", ".cfg", ".ini", ".html", ".css",
+)
+
+
+def _cross_batch_build_break_looks_like_file(token: str) -> bool:
+    """Return True when `token` is shaped like a file path rather than a code symbol."""
+    if "/" in token:
+        return True
+    lowered = token.lower()
+    return any(lowered.endswith(ext) for ext in _CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS)
+
+
+def _check_cross_batch_build_break(
+    batch_files: list[Path],
+    overview_path: Path,
+    overview_text: str,
+) -> list[dict]:
+    """
+    Flag a batch whose Requirements: rename/remove a symbol while a later-or-unordered batch's own
+    Requirements: still reference the old symbol name, when the plan's own module-wide `verify:`
+    is a whole-module build/compile/vet/smoke command (see #1056).
+
+    Gated on the overview's existing top-level frontmatter `verify:` field (already documented in
+    `plugins/mill/templates/plan-overview.md`) being non-null. A plan with `verify: null` has no
+    whole-module build-breakage question to ask, so the check is a no-op for it -- no new
+    frontmatter field is introduced.
+
+    This is a plan-text-only check: at plan-review time none of the batches have been implemented
+    yet, so the actual source tree never reflects any of the plan's renames -- there is nothing
+    useful to grep in real source files. Instead, this check scans every OTHER batch's own
+    Requirements: text for the literal old-symbol token the renaming batch's Requirements: names.
+
+    A matched token that looks file-path-shaped (contains "/" or ends in a common source/doc/
+    config file extension, per `_cross_batch_build_break_looks_like_file`) is never treated as a
+    symbol candidate -- "Remove `plugins/mill/scripts/foo.py`" is an ordinary file-deletion
+    instruction, not a renamed/removed code symbol.
+
+    A card that mentions the old symbol is exempt when it performs its own rename/removal of that
+    same symbol (i.e. its own Requirements: text also matches one of the three patterns with that
+    symbol as the matched group) -- that is a further rename in the same chain, not a stale
+    reference. A batch that the renaming batch is a transitive ancestor of (via
+    `_compute_transitive_ancestors` -- i.e. a batch that depends on the renaming batch, directly
+    or transitively) is exempt: the depends-on edge already guarantees it runs after the rename
+    lands.
+
+    Error dict shape: ``{check, batch, card, path, message}`` -- `path` carries the stale symbol
+    token, `card` the referencing card's number, `batch` the referencing batch's name.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_path: Path to the plan's ``00-overview.md``, whose top-level `verify:` field
+            gates this check.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+
+    Returns:
+        List of error dicts, one per stale cross-batch symbol reference found.
+    """
+    if not overview_path.exists():
+        return []
+    if _plan_dag._read_batch_frontmatter(overview_path).get("verify") is None:
+        return []
+
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    ancestors = _compute_transitive_ancestors(batches)
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        stem = Path(entry.get("file", "")).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    def _renamed_symbols(requirements_text: str) -> set[str]:
+        symbols: set[str] = set()
+        for pattern in _CROSS_BATCH_BUILD_BREAK_PATTERNS:
+            for m in pattern.finditer(requirements_text):
+                if _cross_batch_build_break_looks_like_file(m.group(1)):
+                    continue
+                symbols.add(m.group(1))
+        return symbols
+
+    # Collect (renaming_batch_name, old_symbol) pairs from every card's Requirements:.
+    renames: list[tuple[str, str]] = []
+    for name, path in batch_name_to_path.items():
+        text = path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            requirements = _extract_requirements_text("\n".join(card_lines)) or ""
+            for old_symbol in _renamed_symbols(requirements):
+                renames.append((name, old_symbol))
+
+    errors: list[dict] = []
+    for renaming_batch, old_symbol in renames:
+        for other_name, other_path in batch_name_to_path.items():
+            if other_name == renaming_batch:
+                continue
+            if renaming_batch in ancestors.get(other_name, set()):
+                # renaming_batch is an ancestor of other_name -- other_name is guaranteed to run
+                # after the rename lands (the depends-on edge already covers it) -- not at risk.
+                continue
+            text = other_path.read_text(encoding="utf-8")
+            for card_num, card_lines in _parse_cards(text):
+                requirements = _extract_requirements_text("\n".join(card_lines)) or ""
+                if old_symbol not in requirements:
+                    continue
+                if old_symbol in _renamed_symbols(requirements):
+                    continue
+                errors.append({
+                    "check": "cross-batch-build-break",
+                    "batch": other_name,
+                    "card": card_num,
+                    "path": old_symbol,
+                    "message": (
+                        f"batch '{other_name}' card {card_num} Requirements: still reference "
+                        f"'{old_symbol}', renamed/removed by batch '{renaming_batch}', with no "
+                        f"depends-on edge ordering this batch after it"
+                    ),
+                })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -4108,8 +4249,7 @@ def run(
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
     move-source-missing, move-target-collision, move-mechanic-missing),
-    cross-batch-creates-no-depends-on, and verify-batch-mismatch.
-
+    cross-batch-creates-no-depends-on, and verify-batch-mismatch, and cross-batch-build-break.
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -4180,6 +4320,7 @@ def run(
     errors.extend(_check_verify_batch_mismatch(batch_files, overview_text, project_root))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
+    errors.extend(_check_cross_batch_build_break(batch_files, overview_path, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
     errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path, done_gate=done_gate))
