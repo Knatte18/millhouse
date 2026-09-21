@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
-plan: null
+plan: _mill/plan
 parent: main
 task: Misc infra/wiki/PR/self-hosting reliability bugs
 task_description: |
@@ -18,4 +18,5 @@ discussing  '2026-09-21T14:53:18Z'
 discussion-gap-fix-r1  '2026-09-21T15:09:47Z'
 discussion-fix-r2  '2026-09-21T15:14:51Z'
 discussed  '2026-09-21T15:18:37Z'
+planning  '2026-09-21T15:37:50Z'
 ```
