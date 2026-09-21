@@ -45,7 +45,9 @@ batches:
     commit_sha: a5639f57095d9ef3f6bf85d4ffb758f4b312742d
     verify_baseline_failures: []
   - name: write-brief-warning
-    state: pending
+    state: running
+    implementer_session: 751c9d4a-ceab-4860-af97-5a4dbb07ddd2
+    start_sha: d2974a3c7d9ba83f4fccea1f716ee96cb7f5935b
     verify_baseline_failures: []
   - name: cross-batch-build-break
     state: pending
