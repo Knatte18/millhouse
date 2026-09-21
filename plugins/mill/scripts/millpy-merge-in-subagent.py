@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import subprocess
 import _subprocess_util
@@ -275,6 +276,33 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     return 0
 
 
+def _generous_terminal_env() -> dict:
+    """
+    Build a subprocess environment with a generous floor on ``COLUMNS``/``LINES``.
+
+    A headless orchestrating process (this script) inherits no real terminal geometry, unlike an
+    interactive shell.
+    A ``verify:`` command that drives a tmux-based smoke test can misjudge available pane space
+    from that absent/tiny geometry and fail with a "no space for new pane" error unrelated to the
+    actual code under test.
+    Raises ``COLUMNS``/``LINES`` to a generous floor only when the inherited value is smaller,
+    leaving any larger inherited value untouched;
+    a no-op for any verify command that does not consult terminal geometry.
+
+    Returns:
+        A copy of ``os.environ`` with ``COLUMNS``/``LINES`` raised to the floor when needed.
+    """
+    env = dict(os.environ)
+    for var, floor in (("COLUMNS", 220), ("LINES", 50)):
+        try:
+            current = int(env.get(var, "0"))
+        except ValueError:
+            current = 0
+        if current < floor:
+            env[var] = str(floor)
+    return env
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a Sonnet sub-agent for merge-in conflict or verify-fix work."
@@ -385,6 +413,7 @@ def main(argv=None) -> int:
                 capture_output=True,
                 text=True,
                 cwd=project_root,
+                env=_generous_terminal_env(),
                 **_run_kwargs,
             )
             # Case A: verify passes with no fixer needed (initial verify was 0)
@@ -523,6 +552,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 
@@ -591,6 +621,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 

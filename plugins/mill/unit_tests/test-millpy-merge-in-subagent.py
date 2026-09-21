@@ -1013,6 +1013,107 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertIn("**Moves:**", result)
         self.assertIn("old/path.py -> new/path.py", result)
 
+    def test_2x_generous_terminal_env_raises_floor_when_smaller(self):
+        """_generous_terminal_env raises COLUMNS/LINES to the floor only when the inherited value is
+        smaller than the floor (#1068)."""
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "40", "LINES": "10"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+        self.assertEqual(env["LINES"], "50")
+
+    def test_2x_generous_terminal_env_leaves_larger_value_untouched(self):
+        """_generous_terminal_env leaves a larger-than-floor inherited value untouched (#1068)."""
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "300", "LINES": "80"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "300")
+        self.assertEqual(env["LINES"], "80")
+
+    def test_2x_generous_terminal_env_handles_missing_or_invalid_values(self):
+        """_generous_terminal_env treats missing/non-integer COLUMNS/LINES as 0, raising to floor."""
+        env_without = dict(os.environ)
+        env_without.pop("COLUMNS", None)
+        env_without.pop("LINES", None)
+        with unittest.mock.patch.dict(os.environ, env_without, clear=True):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+        self.assertEqual(env["LINES"], "50")
+
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "not-a-number"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+
+    def test_2x_verify_fix_full_mode_subprocess_calls_pass_generous_env(self):
+        """verify-fix full mode: both the initial verify and the post-sub-agent re-verify
+        subprocess.run calls pass env=_generous_terminal_env() (#1068)."""
+        sentinel_env = {"COLUMNS": "220", "LINES": "50", "SENTINEL": "1"}
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_generous_terminal_env",
+            return_value=sentinel_env,
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=1, stdout="FAILED test_foo", stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ],
+        ) as mock_subprocess_run, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="diff --git a/f.py...", stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
+            ],
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "mill-checkpoint-x",
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(mock_subprocess_run.call_count, 2)
+        for call in mock_subprocess_run.call_args_list:
+            self.assertEqual(call.kwargs.get("env"), sentinel_env)
+
+    def test_2x_verify_fix_finalize_subprocess_call_passes_generous_env(self):
+        """--stage finalize verify-fix mode: the re-run verify subprocess.run call passes
+        env=_generous_terminal_env() (#1068)."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text("agent output", encoding="utf-8")
+        sentinel_env = {"COLUMNS": "220", "LINES": "50", "SENTINEL": "1"}
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_generous_terminal_env",
+            return_value=sentinel_env,
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ) as mock_subprocess_run, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n", stderr=""),
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "exit 0",
+                "--checkpoint", "abc123",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_subprocess_run.assert_called_once()
+        self.assertEqual(mock_subprocess_run.call_args.kwargs.get("env"), sentinel_env)
+
     def test_20_recompute_baseline_missing_status_md(self):
         """--recompute-baseline with status.md absent -> exit 0, baseline:error JSON, no raise.
 
