@@ -45,7 +45,9 @@ batches:
     start_sha: 017b33e9e837fab751223c0df5cba351dd403151
     commit_sha: 245a6b77cb59fac473ba195df6d5405103fd4b7f
   - name: orchestration-skill-doc-fixes
-    state: pending
+    state: running
+    implementer_session: 4b31cee8-7ebf-4346-9339-63a0913d7260
+    start_sha: 4f5803024ad3c338f33b7483a16e80d8c24afab2
   - name: plan-validate-build-tag-coverage
     state: pending
   - name: merge-in-conflict-and-verify-robustness
