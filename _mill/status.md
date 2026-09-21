@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-doc-fixes
+phase: approved-allow-missing-refs
 slug: mill-plan-process-gaps-r2
 branch: hanf/mill-plan-process-gaps-r2
 plan: _mill/plan
@@ -26,6 +26,7 @@ plan-fix-r2  '2026-09-21T15:58:14Z'
 planned  '2026-09-21T15:59:02Z'
 implementing  '2026-09-21T16:01:48Z'
 approved-doc-fixes  '2026-09-21T16:07:19Z'
+approved-allow-missing-refs  '2026-09-21T16:13:13Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     start_sha: 5c3e70534ca6fdfeeb0df0b27aa95c71b0ded521
     commit_sha: 84eb1edc93a29d41cf8feecdf5793af89db33ed4
   - name: allow-missing-refs
-    state: running
+    state: approved
     implementer_session: b689072c-062c-455a-bf9c-88186a2326c1
     start_sha: 35c921e205c67a7e22599357512d66ccefc182c4
+    commit_sha: a5639f57095d9ef3f6bf85d4ffb758f4b312742d
     verify_baseline_failures: []
   - name: write-brief-warning
     state: pending
