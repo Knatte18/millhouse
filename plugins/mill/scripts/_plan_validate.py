@@ -43,6 +43,11 @@ Checks performed (check keys):
         discovers each edited _test.go file's custom tag(s) from its own //go:build expression via
         denylist (GOOS/GOARCH/reserved-word/release-version tags excluded), and flags every edited
         tagged file independently whose batch verify: command lacks a matching -tags flag
+    verify-untested-tag-in-touched-package — Go-specific (gated on go.mod presence); flags an
+        untouched, differently-build-tagged Go test file co-located in a package some batch's
+        non-test Edits:/Creates: touched, when no batch's verify: command exercises that tag
+        against that package. Distinct from verify-excludes-edited-tagged-test, which only fires
+        when a batch itself edits the tagged test file.
     wiki-config-mutation — batch Edits:/Creates: contains mill-config.yaml (self-applying layout
         risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
@@ -3730,6 +3735,165 @@ def _check_verify_excludes_edited_tagged_test(
     return errors
 
 
+def _check_verify_untested_tag_in_touched_package(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag an untouched, differently-build-tagged Go test file sitting in a package some batch's
+    non-test Edits:/Creates: touched, when no batch's verify: command ever exercises that tag
+    against that package.
+
+    Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open for every non-Go project
+    -- mirrors `_check_verify_excludes_edited_tagged_test`'s own gate.
+
+    Distinct from `_check_verify_excludes_edited_tagged_test`, which only fires when a batch itself
+    edits the tagged test file. This check instead scans every `_test.go` file that already exists on
+    disk in a touched package -- including ones no batch's Edits:/Creates: names at all -- since a
+    sibling test file guarded by a different build tag can silently rot when its package's non-test
+    code changes underneath it.
+
+    Algorithm:
+      1. Collect every package directory touched by any batch's non-test Edits:/Creates: tokens (a
+         token ending in `_test.go` does not count as "touching" a package here). `Edits:` tokens are
+         resolved via `resolve_existing_paths` since they exist on disk;
+         `Creates:` tokens are used as literal relative paths without resolution, mirroring
+         `_check_verify_excludes_edited_tagged_test`'s own documented `Creates:`-tokens-do-not-exist-
+         yet exclusion, except here only a package directory (not file content) is needed, so the
+         token's own parent directory stands in for the resolved parent.
+      2. For each distinct touched package directory, list every `_test.go` file that exists in it on
+         disk (every file in the package, not just batch-Edits:-named ones -- the deliberate
+         difference from the sibling check) and collect its custom build tags via
+         `_go_file_custom_tags`; files with no custom tags are skipped.
+      3. Build, once per plan (not per package), the list of every batch's normalized verify: command
+         via `_plan_dag.parse_verify_field` (a malformed `{cwd, command}` mapping raises `ValueError`
+         -- caught and skipped since `_check_verify_malformed_cwd` is the sole reporter for that),
+         split into shell segments via `_RE_SHELL_OPERATOR`, restricted to segments matching
+         `_RE_GO_TEST_INVOCATION`.
+      4. A (package, tag) pair is "covered" when at least one recorded segment both carries the tag
+         via its `-tags` flag (`_verify_command_has_any_tag`) and targets the package: the segment
+         contains the literal substring `"./..."`, `f"./{pkg_rel}"`, or `f"./{parent}/..."` for any
+         ancestor directory `parent` of `pkg_rel`. Uncovered pairs are reported, one finding per
+         (package, tagged test file).
+
+    Error dict shape: ``{check, batch, card, path, message}``. Every finding uses ``batch=None`` --
+    an overview-level property of the plan's verify commands as a set, not any single batch's own
+    command -- mirrors `_check_verify_full_suite`'s own `batch=None` convention for its overview-level
+    findings.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root);
+            also the `go.mod` presence-check root.
+        root: Optional root subfolder for source refs, threaded to `resolve_existing_paths` exactly
+            like the sibling check.
+        wiki_root: Optional wiki root path, threaded to `resolve_existing_paths`.
+        git_root: Optional repo root, threaded to `resolve_existing_paths`.
+
+    Returns:
+        List of error dicts, one per (touched package, untested custom tag) pair.
+    """
+    if not (project_root / "go.mod").exists():
+        return []
+
+    # Step 1: collect every package directory touched by any batch's non-test Edits:/Creates:.
+    touched_packages: set[str] = set()
+    for batch_path in batch_files:
+        edit_tokens = sorted(
+            t for t in _parse_edits_only(batch_path) if not t.endswith("_test.go")
+        )
+        if edit_tokens:
+            resolved = resolve_existing_paths(
+                edit_tokens, project_root, root, wiki_root=wiki_root, git_root=git_root,
+            )
+            for path in resolved:
+                try:
+                    pkg_rel = path.parent.relative_to(project_root).as_posix()
+                except ValueError:
+                    continue
+                touched_packages.add(pkg_rel)
+        create_tokens = (
+            t for t in _parse_creates_only(batch_path) if not t.endswith("_test.go")
+        )
+        for token in create_tokens:
+            touched_packages.add(Path(token).parent.as_posix())
+
+    if not touched_packages:
+        return []
+
+    # Step 2: for each touched package, discover every on-disk _test.go file's custom tags.
+    package_tagged_files: dict[str, list[tuple[str, set[str]]]] = {}
+    for pkg_rel in touched_packages:
+        pkg_dir = project_root / pkg_rel
+        if not pkg_dir.is_dir():
+            continue
+        for test_file in sorted(pkg_dir.glob("*_test.go")):
+            tags = _go_file_custom_tags(test_file)
+            if tags:
+                package_tagged_files.setdefault(pkg_rel, []).append((test_file.name, tags))
+
+    if not package_tagged_files:
+        return []
+
+    # Step 3: build, once per plan, the list of every batch's go-test verify segments.
+    go_test_segments: list[str] = []
+    for batch_path in batch_files:
+        try:
+            frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+            command, _cwd = _plan_dag.parse_verify_field(
+                frontmatter, project_root, project_root,
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+        if command is None:
+            continue
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if _RE_GO_TEST_INVOCATION.search(segment):
+                go_test_segments.append(segment)
+
+    def _segment_targets_package(segment: str, pkg_rel: str) -> bool:
+        if "./..." in segment:
+            return True
+        if f"./{pkg_rel}" in segment:
+            return True
+        parent = str(Path(pkg_rel).parent.as_posix())
+        while parent and parent != ".":
+            if f"./{parent}/..." in segment:
+                return True
+            parent = str(Path(parent).parent.as_posix())
+        return False
+
+    # Step 4: report every (package, tag) pair no recorded segment covers.
+    errors: list[dict] = []
+    for pkg_rel in sorted(package_tagged_files):
+        for file_name, tags in package_tagged_files[pkg_rel]:
+            covered = any(
+                _verify_command_has_any_tag(segment, tags)
+                and _segment_targets_package(segment, pkg_rel)
+                for segment in go_test_segments
+            )
+            if not covered:
+                tag = sorted(tags)[0]
+                errors.append({
+                    "check": "verify-untested-tag-in-touched-package",
+                    "batch": None,
+                    "card": None,
+                    "path": f"{pkg_rel}/{file_name}",
+                    "message": (
+                        f"package '{pkg_rel}' is touched by a batch's Edits:/Creates: but its "
+                        f"custom-tagged test file '{file_name}' (tag '{tag}') is never exercised "
+                        f"by any batch's verify: command"
+                    ),
+                })
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # verify-full-suite check
 # ---------------------------------------------------------------------------
@@ -4531,6 +4695,11 @@ def run(
         batch_files, project_root, effective_git_root, parent_branch,
     ))
     errors.extend(_check_verify_excludes_edited_tagged_test(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_verify_untested_tag_in_touched_package(
         batch_files, project_root, effective_root,
         wiki_root=wiki_root,
         git_root=git_root,

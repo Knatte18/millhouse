@@ -13429,6 +13429,109 @@ def test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty() -> 
             return 1
 
 
+def test_verify_untested_tag_in_touched_package_untested_dirty() -> int:
+    """Touched package has an untouched integration-tagged sibling test; verify: covers a DIFFERENT
+    package with -tags integration -> one finding naming the untested package/tag."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        edited_file = project_root / "pkg" / "foo.go"
+        edited_file.parent.mkdir(parents=True, exist_ok=True)
+        edited_file.write_text("package foo\n", encoding="utf-8")
+        untouched_test = project_root / "pkg" / "bar_test.go"
+        untouched_test.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./otherpkg/... -tags integration",
+            edits=["pkg/foo.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-untested-tag-in-touched-package"]
+        try:
+            assert len(check) == 1, f"expected 1 finding, got {len(check)}: {check}"
+            e = check[0]
+            assert e["batch"] is None, f"expected overview-level finding, got batch={e['batch']!r}"
+            assert e["path"] == "pkg/bar_test.go", f"wrong path: {e['path']!r}"
+            assert "integration" in e["message"], f"message missing tag: {e['message']!r}"
+            assert "pkg" in e["message"], f"message missing package: {e['message']!r}"
+            print("PASS test_verify_untested_tag_in_touched_package_untested_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_untested_tag_in_touched_package_untested_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_untested_tag_in_touched_package_covered_by_full_suite_clean() -> int:
+    """Same fixture, but verify: covers the tag against the touched package via ./... -> zero
+    findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "go.mod").write_text(_GO_MOD_TEXT, encoding="utf-8")
+        edited_file = project_root / "pkg" / "foo.go"
+        edited_file.parent.mkdir(parents=True, exist_ok=True)
+        edited_file.write_text("package foo\n", encoding="utf-8")
+        untouched_test = project_root / "pkg" / "bar_test.go"
+        untouched_test.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./... -tags integration",
+            edits=["pkg/foo.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-untested-tag-in-touched-package"]
+        try:
+            assert check == [], f"expected no findings, got: {check}"
+            print("PASS test_verify_untested_tag_in_touched_package_covered_by_full_suite_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_untested_tag_in_touched_package_covered_by_full_suite_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_verify_untested_tag_in_touched_package_not_go_project_clean() -> int:
+    """NOT a Go project (no go.mod) -- otherwise identical to the dirty fixture -> zero findings
+    (fail-open language gate)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        edited_file = project_root / "pkg" / "foo.go"
+        edited_file.parent.mkdir(parents=True, exist_ok=True)
+        edited_file.write_text("package foo\n", encoding="utf-8")
+        untouched_test = project_root / "pkg" / "bar_test.go"
+        untouched_test.write_text(_INTEGRATION_TAGGED_TEST_GO, encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = _make_verify_only_batch_text(
+            "alpha", "PYTHONPATH= go test ./otherpkg/... -tags integration",
+            edits=["pkg/foo.go"],
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check = [e for e in result if e["check"] == "verify-untested-tag-in-touched-package"]
+        try:
+            assert check == [], f"expected no findings (non-Go project), got: {check}"
+            print("PASS test_verify_untested_tag_in_touched_package_not_go_project_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_verify_untested_tag_in_touched_package_not_go_project_clean: {exc}", file=sys.stderr)
+            return 1
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -13803,6 +13906,10 @@ def main() -> int:
         test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_no_tags_dirty,
         test_verify_excludes_edited_tagged_test_multi_composed_tag_single_file_second_tag_only_clean,
         test_verify_excludes_edited_tagged_test_goos_and_custom_composed_dirty,
+        # verify-untested-tag-in-touched-package check (#1069)
+        test_verify_untested_tag_in_touched_package_untested_dirty,
+        test_verify_untested_tag_in_touched_package_covered_by_full_suite_clean,
+        test_verify_untested_tag_in_touched_package_not_go_project_clean,
     ]
 
     errors = 0
