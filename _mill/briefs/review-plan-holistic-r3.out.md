@@ -1,0 +1,20 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go/mill-merge-in orchestration robustness gaps, round 2 — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-21
+```
+
+## Findings
+
+### [BLOCKING:design] Card 2's override never fires for merge-in despite claiming it does
+**Location:** batch 1 / Card 2 **Issue:** Requirements describe the new `_fixer_logic_ancestor_override` guard (`card_ids is None and start_sha is not None`) as covering "the fixer/merge-in shape," but `millpy-merge-in-subagent.py`'s `finalize_from_output` call for `verify-fix` mode hardcodes `start_sha=None` (line ~428), and its `--start-sha` CLI arg is documented "Accepted for CLI-shape parity ... ignored in all stages" (line ~327) — so `start_sha is not None` can never hold for a merge-in dispatch, and the override can never fire there; only the actual fixer (`millpy-fix.py`, which does thread `--start-sha` per `mill-go-base/SKILL.md` step 5) benefits. **Fix:** either narrow the Requirements text to claim fixer-only coverage, or add a card threading a real `start_sha` through millpy-merge-in-subagent.py's verify-fix finalize call if merge-in coverage is actually intended.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 2 (batch 1) overclaims merge-in coverage for a guard that source shows can never fire there.
+MILL_REVIEW_END

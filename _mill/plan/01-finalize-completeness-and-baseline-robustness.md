@@ -92,9 +92,15 @@ preserves today's behavior for every existing caller that doesn't pass it.
   the `parsed.get("status") == "incomplete"` early-return and after the `parsed.get("status") ==
   "success"` block, for every other self-reported status including `stuck`) passes a well-formed
   self-reported `stuck_type: logic` JSON straight through unchanged. Add a new check immediately
-  before that final `else`, gated narrowly to the fixer/merge-in shape (`card_ids is None` — the
-  implementer always passes `card_ids`, so this guard naturally excludes it) and to a real prior
-  commit existing (`start_sha is not None`):
+  before that final `else`, gated on `card_ids is None` (the implementer always passes `card_ids`,
+  so this guard naturally excludes it) and on a real prior commit existing (`start_sha is not
+  None`). This combination is satisfied only by `millpy-fix.py`'s `finalize_from_output` call, which
+  passes `start_sha=args.start_sha` and never passes `card_ids` — confirmed by reading both callers:
+  `millpy-merge-in-subagent.py`'s `verify-fix` mode never calls `finalize_from_output`/
+  `_forward_output` at all (it hand-rolls its own JSON in the `--stage finalize` early-exit branch),
+  and its `conflicts` mode's `finalize_from_output` call hardcodes `start_sha=None`, so this new
+  check can never fire for either merge-in mode — it is fixer-only, matching #1104's own incident
+  (a holistic fix-round crash in `millpy-fix.py`), and this card does not extend it to merge-in:
   ```python
   if (
       parsed.get("status") == "stuck"

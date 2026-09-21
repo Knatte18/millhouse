@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r3
+phase: plan-fix-r3
 slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
@@ -22,4 +22,5 @@ plan-fix-r1  '2026-09-21T17:57:54Z'
 plan-review-r2  '2026-09-21T18:07:11Z'
 plan-fix-r2  '2026-09-21T18:07:26Z'
 plan-review-r3  '2026-09-21T18:15:08Z'
+plan-fix-r3  '2026-09-21T18:15:18Z'
 ```
