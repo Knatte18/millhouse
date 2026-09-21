@@ -81,6 +81,8 @@ preserves today's behavior for every existing caller that doesn't pass it.
 - **Context:**
   - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/scripts/millpy-fix.py`
+  - `plugins/mill/scripts/millpy-merge-in-subagent.py`
 - **Edits:**
   - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/unit_tests/test-implementer-common.py`

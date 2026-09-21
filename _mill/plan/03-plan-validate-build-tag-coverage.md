@@ -71,7 +71,7 @@ cover. Single card, single new function, one batch.
      tag's absence is a property of the plan's verify commands as a set, not any single batch's own
      command — mirrors `_check_verify_full_suite`'s own `batch=None` convention for its overview-level
      findings.
-  Register the new check in the `validate()` aggregator's Go-specific check block, alongside the
+  Register the new check in the `run()` aggregator's Go-specific check block, alongside the
   existing `errors.extend(_check_verify_excludes_edited_tagged_test(...))` call, passed the same
   `batch_files, project_root, root` positional args plus `wiki_root=wiki_root, git_root=git_root`.
   Add a `"verify-untested-tag-in-touched-package"` row to `mill-plan/SKILL.md`'s Step 1.5 fix table:
