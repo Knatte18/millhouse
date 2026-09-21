@@ -3217,6 +3217,149 @@ def test_check_context_completeness_symbol_dirty_missing() -> int:
             return 1
 
 
+def test_check_context_completeness_symbol_clean_declared_param_same_card() -> int:
+    """A card's own Requirements: quotes a function signature declaring a parameter, then bare-
+    references that same identifier -> zero errors, even though an unrelated file declares a real
+    symbol of the same name (declared-symbols-exemption Decision)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        # Unrelated real declaration of the same identifier -- would otherwise resolve and fire.
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nvar inFlight = map[string]bool{}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  Update `planReapCycle(live []string, inFlight map[string]bool)` "
+                "so it also clears `inFlight`.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_declared_param_same_card")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_clean_declared_param_same_card: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_clean_declared_struct_field_cross_card() -> int:
+    """An EARLIER card's Requirements: quotes a struct-literal token declaring a field, and a
+    LATER card bare-references that field name -> zero errors (plan-wide, not same-card-only)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        # Unrelated real declaration of the same identifier -- would otherwise resolve and fire.
+        (project_root / "internal" / "deps.go").write_text(
+            "package internal\n\nfunc Acquire() error { return nil }\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": [1]},
+        ])
+        batch_a = _make_batch_file(
+            "alpha",
+            card_num=1,
+            edits=["other.py"],
+            requirements=(
+                "  Introduce `type Deps struct { Acquire func() error }` for dependency wiring.\n"
+            ),
+        )
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            edits=["other.py"],
+            requirements="  Call `Acquire` before doing any work.\n",
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_declared_struct_field_cross_card")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_clean_declared_struct_field_cross_card: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dirty_not_a_declared_symbol() -> int:
+    """A bare symbol NOT present in any signature/struct-shaped backtick anywhere in the plan still
+    resolves and fires normally -- the declared-symbols exemption must not over-suppress."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "state.go").write_text(
+            "package internal\n\nfunc OtherSymbol() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  A signature `helperFunc(x int)` is quoted here for reference, then "
+                "`OtherSymbol` is called separately.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "OtherSymbol", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_dirty_not_a_declared_symbol")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_dirty_not_a_declared_symbol: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_symbol_clean_zero_matches() -> int:
     """An identifier-shaped token that appears nowhere in the fixture project's source files ->
     zero errors (unresolvable, not flagged)."""
@@ -12921,6 +13064,9 @@ def main() -> int:
         # symbol-reference context-completeness (bare/dotted identifiers, not just paths)
         test_check_context_completeness_symbol_clean_in_context,
         test_check_context_completeness_symbol_dirty_missing,
+        test_check_context_completeness_symbol_clean_declared_param_same_card,
+        test_check_context_completeness_symbol_clean_declared_struct_field_cross_card,
+        test_check_context_completeness_symbol_dirty_not_a_declared_symbol,
         test_check_context_completeness_symbol_clean_zero_matches,
         test_check_context_completeness_symbol_clean_ambiguous_matches,
         test_check_context_completeness_symbol_call_site_phrasing,

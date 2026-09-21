@@ -2525,6 +2525,75 @@ def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tupl
     return declaring
 
 
+def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
+    """
+    Return the plan-wide union of identifiers declared inside a signature- or struct-literal-shaped
+    backtick token anywhere in any card's Requirements: text.
+
+    For every card in the plan (via `_parse_cards` on every `??-*.md` batch file except
+    `00-overview.md`), scans its Requirements: text (via `_requirements_fence_aware_body`, the same
+    fence-aware extraction `_check_context_completeness` itself uses) for every backtick token
+    matching `_BACKTICK_RE` that contains a balanced `(...)` or `{...}` span. For each such token,
+    when both a `(...)` and a `{...}` span are present (e.g. a struct-literal token whose field type
+    itself contains a function type, `` `type Deps struct { Acquire func() error }` ``), picks
+    whichever pair's outermost span is WIDER -- an inner, narrower span (the empty `()` in `func()`
+    here) would otherwise win by being checked first and yield an empty, useless `inner` substring.
+    Takes the substring between that pair's first opening delimiter and its last closing delimiter,
+    splits it on `,`/`;`, and for each non-empty clause adds BOTH its first and its last
+    whitespace-separated word to the result set when that word matches `^[A-Za-z_]\\w*$` -- the first
+    word covers a Go/Rust-style `name Type` parameter order, the last word covers a C#/TS-style
+    `Type name` order.
+
+    This is context-completeness's symbol-branch equivalent of `compute_creates_union`'s path-branch
+    plan-wide union: a token this set contains is a symbol the PLAN ITSELF is introducing (a new
+    parameter name, a new struct field) rather than a pre-existing repo symbol, so a bare reference
+    to it elsewhere in the plan's prose must not be treated as an unlisted dependency.
+
+    Args:
+        plan_dir: Directory containing the plan files (00-overview.md + batch files).
+
+    Returns:
+        The set[str] of candidate declared-symbol names found across the whole plan. Returns an
+        empty set when `plan_dir` does not exist or contains no qualifying tokens.
+    """
+    if not plan_dir.exists():
+        return set()
+
+    declared: set[str] = set()
+    bare_word_re = re.compile(r"^[A-Za-z_]\w*$")
+
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        text = batch_path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            requirements_text = _requirements_fence_aware_body(card_lines)
+            if requirements_text is None:
+                continue
+            for match in _BACKTICK_RE.finditer(requirements_text):
+                token = match.group(1)
+                candidate_spans = []
+                if "(" in token and ")" in token:
+                    candidate_spans.append((token.find("("), token.rfind(")")))
+                if "{" in token and "}" in token:
+                    candidate_spans.append((token.find("{"), token.rfind("}")))
+                if not candidate_spans:
+                    continue
+                start, end = max(candidate_spans, key=lambda span: span[1] - span[0])
+                if end <= start:
+                    continue
+                inner = token[start + 1:end]
+                for clause in re.split(r"[;,]", inner):
+                    words = clause.split()
+                    if not words:
+                        continue
+                    for word in (words[0], words[-1]):
+                        if bare_word_re.match(word):
+                            declared.add(word)
+
+    return declared
+
+
 def _check_context_completeness(
     batch_files: list[Path],
     project_root: Path,
@@ -2537,6 +2606,7 @@ def _check_context_completeness(
     wiki_root: Path | None = None,
     git_root: Path | None = None,
     creates_declaring_card_map: dict[str, tuple[int, int]] | None = None,
+    declared_symbols: set[str] | None = None,
 ) -> list[dict]:
     """
     Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
@@ -2619,6 +2689,10 @@ def _check_context_completeness(
     test-input enumeration, not a dependency list.
     13. Illustrative-output framing: a line naming a rendered/emitted/printed/displayed/output value
     (e.g. "emitting the bare `x.md`") cites the string as a described output, not a read dependency.
+    14. Same-plan declared symbol (symbol branch only): a search key that some card's Requirements:
+    declares as a new function-signature parameter or struct-literal field (extracted from a
+    parenthesized/braced backtick token) is a symbol the plan itself is introducing, not an existing
+    dependency to resolve.
 
     Not-shaped-at-all or unresolvable tokens (JSON keys, ordinary lowercase words, sentinel strings)
     are never flagged -- only genuine file/symbol references that this validator can independently
@@ -2647,12 +2721,18 @@ def _check_context_completeness(
             Defaults to ``None`` and is materialized to an empty dict on entry (a mutable default
             argument is never used directly in the signature) -- an empty map yields no forward
             exemptions, which is the correct no-op default.
+        declared_symbols: Plan-wide set from ``_compute_declared_symbols_union``, used by exemption
+            14. Defaults to ``None`` and is materialized to an empty set on entry (a mutable default
+            argument is never used directly in the signature) -- an empty set is the correct no-op
+            default.
 
     Returns:
         List of error dicts, one per unresolvable-elsewhere Requirements: reference.
     """
     if creates_declaring_card_map is None:
         creates_declaring_card_map = {}
+    if declared_symbols is None:
+        declared_symbols = set()
     errors: list[dict] = []
     backtick_re = _BACKTICK_RE
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
@@ -2705,6 +2785,12 @@ def _check_context_completeness(
                         if shape_result is None:
                             continue
                         search_key, qualifier = shape_result
+
+                        # Same-plan declared-symbol exemption (symbol branch only): a search key
+                        # some card's Requirements: declares as a new function-signature parameter
+                        # or struct-literal field is not resolved as an unlisted dependency.
+                        if search_key in declared_symbols:
+                            continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
                     if _is_prohibition_exempt(lowered_line):
@@ -4169,6 +4255,7 @@ def run(
     # Move sources behave like Deletes (disappear) and targets like Creates (appear).
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
+    declared_symbols = _compute_declared_symbols_union(plan_dir)
     # verify-mixed-cwd needs a concrete git_root to distinguish "cwd: hub" from "cwd: git_root" resolutions;
     # in a flat layout (no git_root supplied) the two roots collapse to the same Path, which correctly reports zero conflicts since there is nothing to mix.
     effective_git_root = git_root if git_root is not None else project_root
@@ -4209,6 +4296,7 @@ def run(
         wiki_root=wiki_root,
         git_root=git_root,
         creates_declaring_card_map=creates_declaring_card_map,
+        declared_symbols=declared_symbols,
     ))
     errors.extend(_check_requirements_quote_indent_drift(
         batch_files, project_root, effective_root,
