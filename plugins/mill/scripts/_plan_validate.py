@@ -1978,9 +1978,10 @@ def _card_own_reference_set(card_text: str) -> set[str]:
     """Return the union of backtick tokens this card declares as its own.
 
     Combines every backtick-wrapped token found under this card's Context:/Edits:/Creates:/Deletes:
-    headers (single-line or multi-line sub-bullet form) with the source-only half of its Moves:
-    pairs (the destination half is deliberately excluded -- a Requirements: reference to a
-    not-yet-existing Move target is not "already declared").
+    headers (single-line or multi-line sub-bullet form) with BOTH halves of its Moves: pairs --
+    the card declaring a rename is exactly the one whose Requirements: legitimately describes what
+    happens to the destination, so a not-yet-existing Move target it names is still "already
+    declared" for that card's own purposes.
     """
     tokens: set[str] = set()
     lines = card_text.splitlines()
@@ -2021,6 +2022,7 @@ def _card_own_reference_set(card_text: str) -> set[str]:
             pair_m = _RE_MOVE_PAIR.match(sm.group(1).strip())
             if pair_m:
                 tokens.add(pair_m.group(1))
+                tokens.add(pair_m.group(2))
             k += 1
 
     return tokens

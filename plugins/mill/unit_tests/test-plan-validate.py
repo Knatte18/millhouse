@@ -2119,8 +2119,12 @@ def test_check_context_completeness_clean_in_moves_source() -> int:
             return 1
 
 
-def test_check_context_completeness_dirty_moves_target_only() -> int:
-    """Requirements: token names the TARGET half of a Moves: pair -> one error (only source is exempt)."""
+def test_check_context_completeness_clean_moves_target_in_declaring_card() -> int:
+    """Requirements: token names the TARGET half of the card's OWN Moves: pair -> zero errors.
+
+    The card declaring the rename is exactly the one whose Requirements: legitimately describes
+    what happens to the destination (move-target-own-card-exemption Decision).
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -2141,16 +2145,16 @@ def test_check_context_completeness_dirty_moves_target_only() -> int:
         result = _plan_validate.run(plan_dir, project_root)
         check_errors = [e for e in result if e["check"] == "context-completeness"]
         try:
-            assert len(check_errors) == 1, (
-                f"expected 1 context-completeness error, got: {check_errors}"
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
             )
-            assert check_errors[0]["path"] == "src/new2.py", (
-                f"wrong path: {check_errors[0]['path']!r}"
-            )
-            print("PASS test_check_context_completeness_dirty_moves_target_only")
+            print("PASS test_check_context_completeness_clean_moves_target_in_declaring_card")
             return 0
         except AssertionError as exc:
-            print(f"FAIL test_check_context_completeness_dirty_moves_target_only: {exc}", file=sys.stderr)
+            print(
+                f"FAIL test_check_context_completeness_clean_moves_target_in_declaring_card: {exc}",
+                file=sys.stderr,
+            )
             return 1
 
 
@@ -2785,6 +2789,87 @@ def test_check_context_completeness_message_includes_moves_source_qualifier() ->
         except AssertionError as exc:
             print(
                 "FAIL test_check_context_completeness_message_includes_moves_source_qualifier: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_move_target_exempt_in_declaring_card() -> int:
+    """A card's own Moves: target, cited by its own Requirements:, produces zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "old.go").write_text("// placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            moves=[("old.go", "new.go")],
+            requirements="  Run `git mv` so the renamed file becomes `new.go`.\n",
+        )
+        batch += "\n## Rename mechanic\n\nUse `git mv` then apply surgical edits.\n"
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_move_target_exempt_in_declaring_card")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_move_target_exempt_in_declaring_card: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_move_target_not_exempt_in_other_card() -> int:
+    """A DIFFERENT card citing another card's Moves: target still fires (exemption is declaring-card-only)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "old.go").write_text("// placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": [1]},
+        ])
+        batch_a = _make_batch_file("alpha", card_num=1, moves=[("old.go", "new.go")])
+        batch_a += "\n## Rename mechanic\n\nUse `git mv` then apply surgical edits.\n"
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            edits=["src/c.py"],
+            requirements="  The relocated file will live at `new.go`.\n",
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "new.go", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_move_target_not_exempt_in_other_card")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_move_target_not_exempt_in_other_card: "
                 f"{exc}",
                 file=sys.stderr,
             )
@@ -12807,7 +12892,7 @@ def main() -> int:
         test_check_context_completeness_clean_unresolvable_token,
         test_check_context_completeness_clean_in_deletes,
         test_check_context_completeness_clean_in_moves_source,
-        test_check_context_completeness_dirty_moves_target_only,
+        test_check_context_completeness_clean_moves_target_in_declaring_card,
         test_check_context_completeness_run_wiring_no_false_positives,
         test_check_context_completeness_clean_prohibition_marker,
         test_check_context_completeness_clean_line_range_suffix_in_context,
@@ -12825,6 +12910,8 @@ def main() -> int:
         test_check_context_completeness_clean_moves_source_plan_wide,
         test_check_context_completeness_dirty_moves_target_plan_wide_still_flagged,
         test_check_context_completeness_message_includes_moves_source_qualifier,
+        test_check_context_completeness_clean_move_target_exempt_in_declaring_card,
+        test_check_context_completeness_dirty_move_target_not_exempt_in_other_card,
         test_check_context_completeness_clean_prohibition_marker_change_modify,
         test_check_context_completeness_clean_prohibition_marker_untested_existing,
         test_check_context_completeness_clean_prohibition_marker_new_verbs,
