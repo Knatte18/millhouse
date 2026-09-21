@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: mill-monitor-persistent-true-unsupported
 branch: hanf/mill-monitor-persistent-true-unsupported
-plan: null
+plan: _mill/plan
 parent: main
 task: 'Monitor tool: persistent:true doesn''''t exist, entry-gate waits break'
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-21T14:52:40Z'
 discussion-fix-r1  '2026-09-21T15:05:29Z'
 discussed  '2026-09-21T15:05:29Z'
+planning  '2026-09-21T15:09:34Z'
 ```
