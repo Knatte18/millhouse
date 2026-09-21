@@ -193,7 +193,7 @@ print(json.dumps(r))
 ")
 ```
 
-Parse the JSON `state` and `number` fields from `PR_STATE_JSON`.
+Parse the JSON `state`, `number`, and `error` fields from `PR_STATE_JSON`.
 
 **Route on `state`** (helper returns lowercase values):
 
@@ -227,10 +227,19 @@ Parse the JSON `state` and `number` fields from `PR_STATE_JSON`.
   **Caution -- branch-protection interaction:** in a branch-protected repo the Step 5 push may be rejected, triggering the existing Step 5 branch-protection fallback that auto-creates a NEW PR -- which contradicts the operator's deliberate close-without-merge.
   The fallback itself stays as-is, but be aware that `closed` -> local-squash is not guaranteed terminal (discussion Decisions/closed-no-merge-proceeds, Branch-protection interaction).
 
-- **`none`** -- silent fallback to phase-based behavior (no new output):
-  - If `phase: done`: continue to Step 1 (today's direct squash).
-  - If `phase: pr-pending`: keep today's halt -- "status.md says pr-pending but no PR on this branch;
-    inspect manually."
+- **`none`** -- first check `error`, since a `none` state collapses two very different causes: a
+  genuine no-PR outcome and a `gh` call that failed outright.
+  - If `error` is non-null: halt immediately -- do NOT fall into the phase-based behavior below.
+
+    > "Could not determine PR state for branch `<CHILD_BRANCH>`: `<error>`.
+    > Investigate the `gh` failure (auth, repo detection, network) before re-running `/mill-merge`."
+
+    Do not route this into the `pr-pending` halt message below -- that message is misleading when
+    the real cause is a `gh` call failure, not an actually-missing PR.
+  - If `error` is null: silent fallback to phase-based behavior (no new output):
+    - If `phase: done`: continue to Step 1 (today's direct squash).
+    - If `phase: pr-pending`: keep today's halt -- "status.md says pr-pending but no PR on this branch;
+      inspect manually."
 
 ## Steps
 
