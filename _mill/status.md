@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
@@ -30,4 +30,21 @@ plan-fix-r5  '2026-09-21T18:34:21Z'
 plan-review-r6  '2026-09-21T18:41:50Z'
 plan-fix-r6  '2026-09-21T18:42:00Z'
 planned  '2026-09-21T18:42:32Z'
+implementing  '2026-09-21T18:46:09Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: finalize-completeness-and-baseline-robustness
+    state: pending
+  - name: orchestration-skill-doc-fixes
+    state: pending
+  - name: plan-validate-build-tag-coverage
+    state: pending
+  - name: merge-in-conflict-and-verify-robustness
+    state: pending
+  - name: self-resolve-card-insertion-auto-renumber
+    state: pending
 ```
