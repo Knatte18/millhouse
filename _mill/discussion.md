@@ -31,7 +31,7 @@ Reading the current `plugins/mill/skills/*.md` and scripts against each issue (s
 - #1080 (agent-mode dispatch ignoring the prepare envelope's model) — verified already fixed in `mill-go-base/SKILL.md`'s "## Agent-mode dispatch": step 2 passes `model` (from the prepare envelope) to the `Agent` tool call, step 3 records the model actually passed, step 5 threads `--actual-model` into `--stage finalize` so `reviewer_model` reflects the real run. No code change.
 - #1048 (mill-start research fork echoes instructions instead of investigating) — verified already fixed: `mill-start/SKILL.md`'s "Fork echo caution" paragraph (Phase: Explore, "Sub-investigation guidance") already caps corrective retries at one and mandates falling back to a cold `Explore`/`general-purpose` agent when the corrective retry also fails the grounded-findings check. No code change.
 - Any change to the review-loop convergence/round-cap machinery already delivered by the round-1 sequel task (`mill-plan-planning-process-documentation-gaps`) — this task only adds the eight gaps above.
-- New `mill-config.yaml` keys — none of the eight fixes need one (the new `verify_module:` field for #1056 is per-plan overview frontmatter, not hub config).
+- New `mill-config.yaml` keys — none of the eight fixes need one (#1056 reuses the existing per-plan overview `verify:` field, not a new one).
 
 ## Decisions
 
@@ -99,7 +99,7 @@ Reading the current `plugins/mill/skills/*.md` and scripts against each issue (s
 - `plugins/mill/scripts/_agent_dispatch.py` — `write_brief`'s unconditional `output_path_for(brief_path).unlink(missing_ok=True)` call — add the pre-unlink existence check and warning (#1054a).
 - `plugins/mill/scripts/_plan_validate.py` — existing `_check_*` functions and `run()`'s check dispatch list (cross-referenced from mill-plan/SKILL.md's Step 1.5 fix table, which enumerates every current check name) — add `_check_cross_batch_build_break` plus its fix-table row, gated on the overview's existing `verify:` field being non-null (#1056).
 - `plugins/mill/templates/plan-overview.md` — no change needed for #1056: the top-level `verify:` field (frontmatter line 39, documented in the HTML comment at lines 16-20) already exists and already carries the exact "whole-module compile/vet/smoke command" semantics the new check gates on. Confirmed by reading the template in full: only `root:` and `verify:` are documented there today — `skip_checks:`/`discussion_sha:` are documented in mill-plan/SKILL.md, not in this template.
-- `plugins/mill/skills/mill-descope-batch/SKILL.md` — read at implementation time to confirm its actual preconditions (it may assume `phase: planned` plus an operator-initiated removal, not a blocked drift-guard state) before the #1086b pointer sentence claims it as a fit; if the preconditions don't line up exactly, phrase the pointer to say so precisely rather than presenting a guaranteed fit.
+- `plugins/mill/skills/mill-descope-batch/SKILL.md` / `plugins/mill/scripts/millpy-descope-batch.py` — confirmed (read in full): the script gates only on the target batch's own `status.md` state being `pending` and on no surviving batch still declaring it in `depends-on:`; it has no task-level `phase:` gate at all. It is therefore a clean fit for the #1086b pointer regardless of whether the plan is `blocked` (the drift-guard halt state) or any other phase — the #1086b sentence can state this as a confirmed fit, not a "verify at implementation time" caveat.
 
 ## Constraints
 
