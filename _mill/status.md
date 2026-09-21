@@ -40,7 +40,9 @@ batches:
     commit_sha: 4e56e8e5f3d09eeedf5ee0f8fa8a989c5ccf7a8b
     verify_baseline_failures: []
   - name: pr-state-and-cache-freshness
-    state: pending
+    state: running
+    implementer_session: 8babb595-e241-4127-b9c7-786814dd69a4
+    start_sha: da20747862bd1e2bc5a914a2384b7cc74395ca5e
     verify_baseline_failures: []
   - name: merge-in-verify-field-fix
     state: pending
