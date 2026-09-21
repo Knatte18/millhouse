@@ -1816,8 +1816,11 @@ _CITATION_MARKERS = (
     "mentioned, not read",
 )
 
-# A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
-_PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json")
+# A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored. Shared by every path-vs-symbol classification in this module (context-completeness's own check, its literal-enumeration exemption, and cross-batch-build-break's rename/removal candidate filter) so the extension list can never silently drift between checks (#1056 plan-review round 2 finding).
+_PATH_CANDIDATE_EXTENSIONS = (
+    ".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json", ".js", ".txt", ".sh",
+    ".rs", ".java", ".rb", ".toml", ".cfg", ".ini", ".html", ".css",
+)
 
 # Source-code extensions searched when resolving a symbol-shaped (not path-shaped) backtick token.
 # A standalone tuple rather than a slice of _PATH_CANDIDATE_EXTENSIONS, so this list never silently
@@ -4093,22 +4096,22 @@ _RE_RENAME_TO = re.compile(r"rename\s+`([^`]+)`\s+to\s+`([^`]+)`", re.IGNORECASE
 _RE_REMOVE_SYMBOL = re.compile(r"\bremove\s+`([^`]+)`", re.IGNORECASE)
 _RE_DELETE_SYMBOL = re.compile(r"\bdelete\s+`([^`]+)`", re.IGNORECASE)
 _CROSS_BATCH_BUILD_BREAK_PATTERNS = (_RE_RENAME_TO, _RE_REMOVE_SYMBOL, _RE_DELETE_SYMBOL)
-# Common source/doc/config file extensions -- a matched token ending in one of these, or
-# containing "/", is a file-removal reference (e.g. "Remove `plugins/mill/scripts/foo.py`",
-# the standard prose for a file deletion in this repo's plans), never a code symbol, and must be
-# excluded from the rename/removal candidate set (#1056 plan-review round 2 finding).
-_CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS = (
-    ".py", ".md", ".go", ".ts", ".js", ".yaml", ".yml", ".json", ".txt", ".sh",
-    ".rs", ".java", ".cs", ".rb", ".toml", ".cfg", ".ini", ".html", ".css",
-)
 
 
 def _cross_batch_build_break_looks_like_file(token: str) -> bool:
-    """Return True when `token` is shaped like a file path rather than a code symbol."""
+    """Return True when `token` is shaped like a file path rather than a code symbol.
+
+    A matched token ending in one of the shared ``_PATH_CANDIDATE_EXTENSIONS``, or containing "/",
+    is a file-removal reference (e.g. "Remove `plugins/mill/scripts/foo.py`", the standard prose
+    for a file deletion in this repo's plans), never a code symbol, and must be excluded from the
+    rename/removal candidate set (#1056 plan-review round 2 finding). Reuses the same extension
+    list as context-completeness's path-vs-symbol classification instead of maintaining a second,
+    independently-drifting tuple.
+    """
     if "/" in token:
         return True
     lowered = token.lower()
-    return any(lowered.endswith(ext) for ext in _CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS)
+    return any(lowered.endswith(ext) for ext in _PATH_CANDIDATE_EXTENSIONS)
 
 
 def _check_cross_batch_build_break(
