@@ -48,8 +48,14 @@ false-positive tasks that preceded it.
   its guidance scopes the added `-tags` invocation to the package(s) containing the flagged file(s),
   in both its "no `-tags` flag yet" and "`-tags` flag already exists" branches, instead of reusing
   the (possibly multi-package) verify command's own package pattern. (#1044)
-- Fix-table rows updated to describe the new/changed check behavior: `move-target-collision` (#386),
-  `requirements-quote-indent-drift` (#391).
+- Fix-table row updated to describe the new message shape: `requirements-quote-indent-drift` (#391).
+  The `move-target-collision` row (#386) needs NO content change — Decision `intra-plan-move-chain`
+  only adds a suppression condition (it no longer fires on a chained-move target); it emits no new
+  message text, and the existing row's remedy ("rename the colliding target... or fix the duplicate")
+  already correctly describes what to do on a genuine (still-firing) collision. This mirrors the
+  `context-completeness` row's own "likely no edit needed" note in Technical context, for the same
+  reason: a suppression-only fix changes when a check fires, never what its fix-table guidance says to
+  do once it does.
 - Unit test coverage for every fix above, following `test-plan-validate.py`'s existing conventions.
 
 **Out:**
@@ -357,11 +363,13 @@ plan — the task-worktree copy, not any plugin cache.
   mirror in the new `_compute_declared_symbols_union` helper. Per Decision `declared-symbols-exemption`,
   the new helper belongs in `_plan_validate.py` itself (like `_build_creates_declaring_card_map`), not
   `_review_common.py`, since nothing outside context-completeness needs it.
-- `mill-plan/SKILL.md` fix-table — lines 372-403. Rows to edit: `move-target-collision` (386),
-  `context-completeness` (390, only if a plan-writer judges the new exemption needs a mention — it adds
-  no new message shape, so likely no edit needed there), `requirements-quote-indent-drift` (391, new
-  message-shape clause), `verify-excludes-edited-tagged-test` (395, full rewrite per Decision
-  `verify-tags-package-scoping`).
+- `mill-plan/SKILL.md` fix-table — lines 372-403. Rows to edit: `requirements-quote-indent-drift` (391,
+  new message-shape clause), `verify-excludes-edited-tagged-test` (395, full rewrite per Decision
+  `verify-tags-package-scoping`). Rows needing NO edit (per round-2 discussion-review finding
+  `#move-target-collision-fix-table-edit`): `move-target-collision` (386) — see Scope's explicit note;
+  `context-completeness` (390) — the new `declared_symbols` exemption adds no new message shape either
+  (it is a pure skip, like the existing `moves_sources` exemption, which also required no row edit when
+  it was added).
 - Unit tests: `plugins/mill/unit_tests/test-plan-validate.py`. Existing helpers `_make_overview`,
   `_make_batch_file`, `_write_plan` build fixtures; `_plan_validate.run(plan_dir, project_root)` is the
   standard end-to-end entry point most tests use. The one direct-call exception is
