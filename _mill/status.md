@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -25,4 +25,27 @@ plan-review-r2  '2026-09-21T15:57:54Z'
 plan-fix-r2  '2026-09-21T15:58:01Z'
 plan-review-r3  '2026-09-21T16:04:33Z'
 planned  '2026-09-21T16:05:13Z'
+implementing  '2026-09-21T16:09:43Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-daemon-reliability
+    state: pending
+  - name: pr-state-and-cache-freshness
+    state: pending
+  - name: merge-in-verify-field-fix
+    state: pending
+  - name: baseline-lazy-preflight
+    state: pending
+  - name: review-duration-derivation
+    state: pending
+  - name: handoff-skill-doc-fix
+    state: pending
+  - name: csharp-build-node-reuse
+    state: pending
+  - name: skill-cross-reference-fix
+    state: pending
 ```
