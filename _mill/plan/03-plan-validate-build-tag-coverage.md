@@ -28,6 +28,7 @@ cover. Single card, single new function, one batch.
   - `plugins/mill/scripts/_review_common.py`
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
+  - `plugins/mill/skills/mill-plan/SKILL.md`
   - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none

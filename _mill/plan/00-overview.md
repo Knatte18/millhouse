@@ -52,7 +52,7 @@ batches:
 
 ### Decision: test convention
 
-- **Decision:** every code-touching batch extends an existing unit-test file in `plugins/mill/unit_tests/` (`test-implementer-common.py`, `test-verify-baseline.py`, `test-plan-validate.py`, `test-millpy-merge-in-subagent.py`, `test-merge-in-subagent.py`, `test-config.py`) rather than creating a new one. Verify commands run only the touched file(s), never the unbounded suite.
+- **Decision:** every code-touching batch extends an existing unit-test file in `plugins/mill/unit_tests/` rather than creating a new one: `test-implementer-common.py`, `test-verify-baseline.py`, and `test-plan-validate.py` are actually edited with new cases; `test-millpy-merge-in-subagent.py` and `test-config.py` are actually edited in batch 4. `test-merge-in-subagent.py` is a distinct case — batch 4 runs it (shared fixtures against the same module) but does not edit it, purely as a regression check, per that batch's own `## Batch Tests`. Verify commands run only the relevant file(s), never the unbounded suite.
 - **Rationale:** matches this repo's own `## Testing` conventions and keeps each batch's verify scope proportional to its diff.
 - **Applies to:** batches 1, 3, 4, 5 (batch 2 is pure documentation with no runnable surface — see its own `## Batch Tests`).
 
@@ -78,6 +78,7 @@ batches:
 - `plugins/mill/scripts/millpy-merge-in-subagent.py`
 - `plugins/mill/skills/mill-go-base/SKILL.md`
 - `plugins/mill/skills/mill-merge-in/SKILL.md`
+- `plugins/mill/skills/mill-plan/SKILL.md`
 - `plugins/mill/templates/merge-in-conflict-brief.md`
 - `plugins/mill/templates/mill-config.yaml`
 - `plugins/mill/unit_tests/test-config.py`

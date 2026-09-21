@@ -51,6 +51,14 @@ preserves today's behavior for every existing caller that doesn't pass it.
   already non-empty — the synthetic signature exists only to give an otherwise-empty signature set
   something comparable for the subset-diff waiver in `_run_verify_gates`; a command that already
   produces recognized FAIL-format lines needs no synthetic addition.
+  Known limitation, accepted rather than engineered around: `_verify_baseline._signatures_for_pair`
+  unions two runs' `_extract_failure_signatures` output via exact-string dedup, so if the embedded
+  `first_line` differs between the two corroboration runs (possible for an intrinsically
+  non-deterministic failure), the two runs produce two distinct persisted entries instead of one.
+  This is a non-issue for the target class this card fixes (a compiler/linter diagnostic like `go
+  vet` is deterministic across runs on identical content — its first output line does not vary), and
+  a broader failure class already has no stronger baseline-comparison guarantee today. Document this
+  explicitly in `## Batch Tests` rather than adding cross-run normalization logic.
   Update both authoritative call sites to pass the known return code: in `_run_verify_gate` (this
   same file), the call at the line reading `signatures = _extract_failure_signatures(output)` runs
   inside the `if result.returncode != 0:` block (and after the optional dotnet-lock retry, whose own
@@ -184,8 +192,12 @@ preserves today's behavior for every existing caller that doesn't pass it.
   fallback only ever prevents a false-negative demotion, never a false-positive success.
   In `millpy-implement.py`'s `main()`, wherever the batch's own text is already read to compute
   `card_ids` (the `### Card N:` heading scan), also compute `card_commit_messages =
-  _plan_dag.parse_card_commit_messages(batch_text)` and thread it into the `finalize_from_output`
-  call alongside the existing `card_ids=card_ids` argument.
+  _plan_dag.parse_card_commit_messages(batch_text)` and thread it into BOTH call sites that already
+  pass `card_ids=card_ids`: the `--stage finalize` branch's `finalize_from_output(...)` call, and the
+  `--stage full` branch's direct `_forward_output(...)` call — both must gain
+  `card_commit_messages=card_commit_messages` alongside their existing `card_ids=card_ids` argument,
+  since both are live entry points into the same self-resolve-remint false-negative this card exists
+  to close.
   This directly targets the gap in `millpy-implement.py`'s own `_prepare_reuse_entry`/
   `_self_resolve_remint_ts` mechanism (added 2026-09-04): the first re-fire after a
   `self-resolved-verify-logic` marker deliberately fresh-mints a new `start_sha`, so when every card
@@ -231,5 +243,9 @@ unchanged); (3) a case for the full-batch-history fallback: a fixture where ever
 asserts `_forward_output` reports `success` instead of the `HEAD == start_sha` logic demotion; a
 case with one missing message asserts the existing demotion still fires. Extends
 `test-verify-baseline.py` with a case asserting `_signatures_for_pair` threads `returncode` into
-`_extract_failure_signatures` for both runs. Runs via `run-all.py --only test-implementer-common.py
-test-verify-baseline.py` — both files are directly touched by this batch's cards.
+`_extract_failure_signatures` for both runs, and a case documenting the accepted limitation that two
+corroboration runs of a non-deterministic non-test failure can persist two distinct synthetic
+signatures rather than deduping to one (no cross-run normalization is added for this — see Card 1's
+Requirements for why the target class, deterministic compiler/linter diagnostics, is unaffected).
+Runs via `run-all.py --only test-implementer-common.py test-verify-baseline.py` — both files are
+directly touched by this batch's cards.
