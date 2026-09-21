@@ -35,7 +35,10 @@ implementing  '2026-09-21T16:09:13Z'
 ```yaml
 batches:
   - name: plan-validate-check-fixes
-    state: pending
+    state: running
+    implementer_session: 63e3728d-c769-4e6c-b4c2-a233a4d5a481
+    start_sha: 680b5759b855e73617305ca0f61f83c7d94f8d8d
+    verify_baseline_failures: []
   - name: mill-plan-fix-table-docs
     state: pending
 ```
