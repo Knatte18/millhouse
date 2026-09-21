@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-verify-field-fix
+phase: approved-baseline-lazy-preflight
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -29,6 +29,7 @@ implementing  '2026-09-21T16:09:43Z'
 approved-wiki-daemon-reliability  '2026-09-21T16:17:14Z'
 approved-pr-state-and-cache-freshness  '2026-09-21T16:23:59Z'
 approved-merge-in-verify-field-fix  '2026-09-21T16:27:29Z'
+approved-baseline-lazy-preflight  '2026-09-21T16:42:56Z'
 ```
 
 ## Batches
@@ -54,9 +55,10 @@ batches:
     commit_sha: 00512c765c901ea977b87b91a7f72de74018dc90
     verify_baseline_failures: []
   - name: baseline-lazy-preflight
-    state: running
+    state: approved
     implementer_session: 8beb742b-cfe8-4771-9a31-9c954966c784
     start_sha: 50935efffe51d5df4ee939b4abb2ebb86ff32718
+    commit_sha: 3e600c24924e335bac41962d1bb22e48894e7c22
     verify_baseline_failures: []
   - name: review-duration-derivation
     state: pending
