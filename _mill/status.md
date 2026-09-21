@@ -61,7 +61,9 @@ batches:
     commit_sha: 3e600c24924e335bac41962d1bb22e48894e7c22
     verify_baseline_failures: []
   - name: review-duration-derivation
-    state: pending
+    state: running
+    implementer_session: fc430032-d595-48aa-bad6-3b7fed350709
+    start_sha: ffeabc71ad9d9efd612be1f5db0f237318a4a107
     verify_baseline_failures: []
   - name: handoff-skill-doc-fix
     state: pending
