@@ -73,6 +73,7 @@ Derive:
    | state | action |
    | --- | --- |
    | `phase: discussed`, no `plan_dir` dir at worktree root | Phase: Plan (fresh write) |
+   | `phase: discussed`, `plan_dir/00-overview.md` exists at worktree root | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) — Phase: Plan's file writes landed but its own `phase: planning` status commit did not; the validator gate (Step 1.5) still re-checks the plan before any reviewer runs |
    | `phase: planning`/`plan-review-*`/`plan-fix-*`, `plan_dir/00-overview.md` exists, `approved: false` | Phase: Plan Review (re-enter loop; do NOT rewrite plan files) |
    | `approved: true` in overview frontmatter | Tell user: "plan already approved, run `/mill-go`". Halt. |
    | `phase: discussing`, or matching `^discussion-fix-r\d+$` / `^discussion-gap-fix-r\d+$` | wait for `phase: discussed` (see "Entry-gate wait for upstream mill-start" below) if `pipeline.entry_wait` is true; otherwise tell user what phase is set and halt |
