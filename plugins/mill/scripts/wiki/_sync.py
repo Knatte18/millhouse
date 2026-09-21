@@ -317,6 +317,12 @@ def commit_push(
             wiki_path,
             check=False,
         )
-        raise WikiPushError(f"git pull --rebase failed: {rebase.stderr.strip()!r}")
+        raise WikiPushError(
+            f"git pull --rebase failed: {rebase.stderr.strip()!r} -- "
+            f"a manual 'git reset --hard' recovery attempt can fail on Windows with "
+            f"\"unable to unlink old 'tasks.json'\" because the wiki daemon itself holds "
+            f"that file open; run millpy-wiki-shutdown.py first to release the daemon's "
+            f"handle before attempting a manual 'git reset --hard'."
+        )
 
     raise WikiPushError("push still failing after rebase retry")

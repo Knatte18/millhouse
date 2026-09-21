@@ -401,6 +401,74 @@ def main() -> int:
         except Exception as exc:
             fail("verify_git_repo() returns None without raising for a valid git clone", exc)
 
+        # --- (u) unresolvable rebase-retry failure names the millpy-wiki-shutdown.py recovery hint ---
+        try:
+            clone7 = tmp / "clone7"
+            clone7.mkdir(parents=True)
+            subprocess.run(["git", "init", "-b", "main", str(clone7)], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(clone7), "config", "user.email", "test@test.com"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone7), "config", "user.name", "Test User"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone7), "remote", "add", "origin", str(bare)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(["git", "-C", str(clone7), "fetch", "origin", "main"], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(clone7), "checkout", "-b", "main", "origin/main"],
+                check=True, capture_output=True,
+            )
+
+            clone8 = tmp / "clone8"
+            clone8.mkdir(parents=True)
+            subprocess.run(["git", "init", "-b", "main", str(clone8)], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(clone8), "config", "user.email", "test@test.com"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone8), "config", "user.name", "Test User"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone8), "remote", "add", "origin", str(bare)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(["git", "-C", str(clone8), "fetch", "origin", "main"], check=True, capture_output=True)
+            subprocess.run(
+                ["git", "-C", str(clone8), "checkout", "-b", "main", "origin/main"],
+                check=True, capture_output=True,
+            )
+
+            # clone7 pushes first, changing the same line clone8 is about to change.
+            (clone7 / "Home.md").write_text("# Home Conflict A\n", encoding="utf-8")
+            commit_push(clone7, ["Home.md"], "conflict from clone7")
+
+            # clone8, based on the pre-conflict origin state, edits the same line differently --
+            # its push is rejected as non-fast-forward, and the retry's "git pull --rebase" hits an
+            # unresolvable line conflict on Home.md rather than fast-forwarding cleanly.
+            (clone8 / "Home.md").write_text("# Home Conflict B\n", encoding="utf-8")
+
+            raised = False
+            error_msg = ""
+            try:
+                commit_push(clone8, ["Home.md"], "conflict from clone8")
+            except WikiPushError as e:
+                raised = True
+                error_msg = str(e)
+
+            assert raised, "expected WikiPushError for an unresolvable rebase conflict"
+            assert "millpy-wiki-shutdown.py" in error_msg, \
+                f"expected the shutdown-first recovery hint in the message, got: {error_msg}"
+            ok("unresolvable rebase-retry failure names the millpy-wiki-shutdown.py recovery hint")
+        except Exception as exc:
+            fail("unresolvable rebase-retry failure names the millpy-wiki-shutdown.py recovery hint", exc)
+
         # --- (o) clone_or_init plain-clone paths set upstream tracking ---
         try:
             # Import the setup module for clone_or_init

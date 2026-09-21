@@ -12,6 +12,7 @@ no real TCP sockets or accept loop.
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import logging.handlers
@@ -29,7 +30,7 @@ import _safe_rmtree  # noqa: E402
 from unittest.mock import patch, MagicMock  # noqa: E402
 from _daemon import DaemonBase  # noqa: E402
 from wiki._server import WikiServer  # noqa: E402
-from wiki import PROTOCOL_VERSION, WikiStartupError, OP_SET_DEPS, OP_MIGRATE_DEPS, OP_LIST_TASKS_BRIEF, OP_REMOVE_TASK, FIELD_OK, FIELD_OP  # noqa: E402
+from wiki import PROTOCOL_VERSION, WikiStartupError, WikiPushError, OP_SET_DEPS, OP_MIGRATE_DEPS, OP_LIST_TASKS_BRIEF, OP_REMOVE_TASK, FIELD_OK, FIELD_OP  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
 
 
@@ -872,6 +873,35 @@ def main() -> int:
             ok("tasks.json handle is released before commit_push runs")
     except Exception as exc:
         fail("tasks.json handle is released before commit_push runs", exc)
+
+    # --- (z3) pre-render pull failure is surfaced on stderr, not silently swallowed ---
+    try:
+        import os as _os
+        with safe_temp_dir() as tmp:
+            wiki_path = tmp / "wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            (wiki_path / "tasks.json").write_text('{"_default": {}}', encoding="utf-8")
+
+            wiki_server = WikiServer(wiki_path, idle_timeout=1)
+            wiki_server._store.upsert_task({"slug": "x", "title": "Task X"})
+
+            pull_error = WikiPushError("git pull --ff-only failed: simulated network error")
+            fake_stderr = io.StringIO()
+
+            with patch("wiki._server.pull", side_effect=pull_error), \
+                 patch("wiki._server.commit_push") as mock_commit, \
+                 patch.dict(_os.environ, {"WIKI_DAEMON_SKIP_GIT": ""}), \
+                 patch("sys.stderr", fake_stderr):
+                wiki_server._render_and_commit_all(slug_for_msg="x")
+
+            stderr_text = fake_stderr.getvalue()
+            assert "pre-render pull failed" in stderr_text and str(pull_error) in stderr_text, \
+                f"expected the pull failure to be printed to stderr, got: {stderr_text!r}"
+            assert mock_commit.call_count == 1, \
+                "render/commit must still proceed after a failed pre-render pull"
+            ok("pre-render pull failure is surfaced on stderr, not silently swallowed")
+    except Exception as exc:
+        fail("pre-render pull failure is surfaced on stderr, not silently swallowed", exc)
 
     print("", file=sys.stderr)
     if failed:
