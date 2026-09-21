@@ -63,5 +63,7 @@ batches:
     start_sha: 1e49765ef6625a645b1e70e4bfca30e7126ec72e
     commit_sha: 0f0345be7a6d1ebb0c8f60f9a741aba21fa4ea50
   - name: self-resolve-card-insertion-auto-renumber
-    state: pending
+    state: running
+    implementer_session: 5d0628df-4262-44ad-bdc9-d0d4526d1748
+    start_sha: 890f5b4a7a757bbf36e1317dc86b223e89ed34a7
 ```
