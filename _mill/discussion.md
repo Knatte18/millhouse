@@ -73,7 +73,8 @@ false-positive tasks that preceded it.
   `no-bcl-denylist`.
 - Generalizing the new indent-drift detection to arbitrary "insert after/before `<anchor>`" prose
   (the fully general form #1075 gestures at) — only the structural paired-fence case is implemented;
-  see Decision `paired-fence-only`.
+  see the "Rejected: the fully general ... detection" bullet under Decision
+  `paired-fence-indent-check`.
 - Struct-field-shaped same-plan declarations that aren't written as a parenthesized signature or a
   `{...}`-braced literal in some card's `Requirements:` — the new `declared symbols` exemption is
   restricted to that syntactic shape; a plain-prose declaration with no such fence/backtick shape is
@@ -282,7 +283,7 @@ false-positive tasks that preceded it.
   between the fences, so a zero-prose-gap rule would fail to fire on the very reports motivating this
   fix; `fence_bodies` list-adjacency is both simpler to implement (no secondary raw-text scan) and
   correct for the demonstrated cases.
-- Rejected (see `paired-fence-only` in Scope: Out): the fully general "insertion at a named function's
+- Rejected (also listed in Scope: Out): the fully general "insertion at a named function's
   body indent" detection #1075 gestures at — its own text calls this "likely much harder and may not be
   worth it," and the narrower paired-fence case already resolves both concrete reports.
 
