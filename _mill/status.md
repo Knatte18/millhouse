@@ -57,7 +57,9 @@ batches:
     start_sha: c40382b0ef54a503a4f65a9cd7cf9d5a130af428
     commit_sha: e8bbf126914166a5d17fffb382516e7e87b7e4ef
   - name: merge-in-conflict-and-verify-robustness
-    state: pending
+    state: running
+    implementer_session: ee73fce2-5d9d-4de3-b65b-d5d04fb5410f
+    start_sha: 1e49765ef6625a645b1e70e4bfca30e7126ec72e
   - name: self-resolve-card-insertion-auto-renumber
     state: pending
 ```
