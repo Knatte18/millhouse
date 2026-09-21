@@ -89,7 +89,7 @@ Whenever the phase-table lookup above lands on the `phase: discussing` row, run 
   ```
   The trigger is now widened to also match `discussion-fix-r{N}` and `discussion-gap-fix-r{N}`.
   This closes a real gap: GitHub issue #821 has a concrete repro (commit `ab1786d6`) showing mill-start's own convergence-gate not-converged branch (Phase: Discussion Review step 4b, per `mill-start/SKILL.md`) appends+commits+pushes `discussion-fix-r{N}` and continues to the next round *without* the `discussed` phase following in the same commit — so `discussion-fix-r{N}` genuinely is pushed as a standalone, externally observable phase, not always folded into the same commit as the following `discussed` write.
-  This mirrors mill-go's own copy of this exact wait pattern for mill-plan's own phases (`mill-go-base/SKILL.md`: `{"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]`) — same mechanism, same file family.
+  This mirrors mill-go's own copy of this exact wait pattern for mill-plan's own phases (`${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`: `{"discussed", "discussing", "planning"}, [r"^plan-review-r\d+$", r"^plan-fix-r\d+$"]`) — same mechanism, same file family.
   `discussion-gap-fix-r{N}` has the same shape: `mill-start/SKILL.md`'s Phase: Discussion Review step 5 (the plain-interactive gap-resolution path — under `--auto`/`--orch`, step 5 is skipped entirely, so `discussion-gap-fix-r{N}` never appears in that mode) writes, commits, and pushes `discussion-gap-fix-r{N}` as its own standalone phase when the final batch of a review round's gap answers is applied, before the loop continues to round N+1 — mirroring the `discussion-fix-r{N}` gap this same paragraph describes for issue #821.
 - Read `entry_wait = (cfg.get("pipeline") or {}).get("entry_wait", True)`.
 - **If `matched` is `True` and `entry_wait` is `True`:**
@@ -152,7 +152,7 @@ Read `CONSTRAINTS.md` at the hub root if present (via `_constraints.read_if_exis
 Then **think the plan through end-to-end before writing any file** — you are Opus and this is exactly where the planning budget pays off.
 
 **Fork scope guardrail.** mill-plan has no fork-dispatch guidance today;
-prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
+prefer a cold, non-fork agent (`Explore`, or `general-purpose` when the research needs a tool beyond Explore's read-only grant) over `Agent(subagent_type: "fork")` whenever the research does not genuinely need the parent's already-in-context reasoning. `Explore`'s tool grant excludes `Edit`/`Write`/`Bash`-mutation (making unauthorized writes to shared plan/config state structurally impossible), whereas a fork always inherits the parent's full tool access — see the "Why not fork?" paragraph in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for that inheritance behavior.
 
 Reserve `Agent(subagent_type: "fork")` for research that genuinely depends on the parent's in-flight reasoning to be useful.
 When a fork IS used under that narrower justification, all of the following apply: (a) The fork's prompt must explicitly forbid Edit/Write calls, forbid mutating Bash commands, and forbid touching `plan_dir`, `status_path`, or any `mill-config.yaml`/`config.local.yaml`. (b) Immediately BEFORE dispatching the fork, capture a `git status --porcelain` snapshot (scoped to the worktree) as a baseline.
@@ -436,11 +436,11 @@ converged = (round >= min_review_rounds)
 
    > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this and every remaining round.
 
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
-   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
+   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
    Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
    If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
-   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
+   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
    If `subprocess` or `psmux`: use the subprocess branch below.
 
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once.
@@ -458,7 +458,7 @@ converged = (round >= min_review_rounds)
      the same cycle repeats).
      Use the two-pass cap: if the second prepare invocation also fails validator, halt with `BLOCKED: plan-validate non-progress` and write the unresolved errors to the user.
    - **If `errors` key is absent** (validator success): The envelope contains `{"stage": "prepare", "brief_path": ..., ...}`.
-     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `mill-go-base/SKILL.md` "## Agent-mode dispatch").
+     Proceed with the Agent → finalize flow as documented in the Agent-mode dispatch pattern (step 3–6 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md` "## Agent-mode dispatch").
 
    The discriminator is the **presence of the `errors` key in the JSON**, not the exit code or any other field.
    Validator errors emit exit code 1 with `errors` in the JSON;
@@ -473,9 +473,9 @@ converged = (round >= min_review_rounds)
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after the Agent-mode dispatch pattern above returns (prepare through finalize, including any validator-fix re-invocation cycle), and on trigger call _status.append_recovery_log the same way.
    This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
-   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
+   Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in ${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
-   Print this round's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
+   Print this round's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
 
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
@@ -523,12 +523,12 @@ converged = (round >= min_review_rounds)
 
    > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this retry too — the Step 3.5 retry is explicitly included in that override's dispatch sites.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
-   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
+   Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
-   Print this retry's cost line per the shared "## Review cost line" section in `mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
+   Print this retry's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
 
@@ -672,7 +672,7 @@ Never hand-write or guess a date.
   A rename-plus-extraction is the `Moves:` pair for the relocated file plus a separate `Creates:` for the newly extracted file.
   Include a `## Rename mechanic` section in any batch that has a non-empty `Moves:` field.
   Keep naming the specific surgical edits (package declaration, import lines, identifier retargets) in `Requirements:` using stable identifiers.
-- **Never require two separately-numbered cards to land in the same commit.** Each card produces its own commit at implementation time (see the per-card `Commit:` field; every per-card commit invokes the `git-commit` skill per `mill-go-base/SKILL.md`'s one-commit-per-card execution convention). Once a card's commit is made and pushed, the harness's git-safety protocol (always create a new commit rather than amending a prior one, absent explicit operator instruction otherwise) forbids folding a later card's diff into it. If two changes are genuinely atomic — must land together or not at all — express them as a SINGLE card with one `Commit:` message, never as two cards linked by a cross-card "same commit" or "must be squashed into card N" instruction in `Requirements:`.
+- **Never require two separately-numbered cards to land in the same commit.** Each card produces its own commit at implementation time (see the per-card `Commit:` field; every per-card commit invokes the `git-commit` skill per `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`'s one-commit-per-card execution convention). Once a card's commit is made and pushed, the harness's git-safety protocol (always create a new commit rather than amending a prior one, absent explicit operator instruction otherwise) forbids folding a later card's diff into it. If two changes are genuinely atomic — must land together or not at all — express them as a SINGLE card with one `Commit:` message, never as two cards linked by a cross-card "same commit" or "must be squashed into card N" instruction in `Requirements:`.
 - **Phrase Requirements: prohibitions on one line; avoid double negatives** — `_plan_validate.py`'s `context-completeness` check exempts a prohibition via a same-line, lexical word-set match (a negation word/phrase paired with a verb form, anywhere on one physical line), not a structural or semantic parse.
   Write "Do not touch `foo.py`" on a single line (negation, verb, and path together) rather than a nested-bullet form (negation on a parent bullet, path on a child bullet) — the check never looks across bullet lines.
   Avoid double-negative phrasing such as "do not skip touching `foo.py`" or "do not forget to read `bar.py`" — the check misreads these as prohibited (a false exemption) even though the path SHOULD be touched/read.
