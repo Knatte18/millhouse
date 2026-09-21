@@ -39,9 +39,11 @@ timeout_ms: number, default 300000, max 3600000 — "Kill the monitor after this
 This directly contradicts the specific technical claim common to all ten source issues (no
 `persistent` parameter; 30-minute cap). The SKILL text's existing `persistent: true` call already
 matches this confirmed-current schema exactly, including the "no timeout, stop via TaskStop" semantics
-the entry-gate wait actually wants. Per this repo's own CLAUDE.md ("reading the real code takes
-priority over trusting the task body" — stated there for source-code verification, and the same
-principle applies to a live tool schema, which is exactly as authoritative), the fix in this task is
+the entry-gate wait actually wants. This repo's own CLAUDE.md makes the same point for source-code
+verification — "reading actual current code to verify plan/discussion accuracy... takes priority" over
+stale content, since reading stale content during plan-writing has previously produced an incorrect
+conclusion requiring mid-plan rework — and the same principle applies to a live tool schema, which is
+exactly as authoritative. So the fix in this task is
 **not** "drop `persistent: true` and rewrite the wait around a bounded-timeout re-arm loop", as the
 ten source issues suggest — doing so would regress a call pattern that is demonstrably correct against
 the tool as it exists now, purely to satisfy reports against an evidently older or different `Monitor`

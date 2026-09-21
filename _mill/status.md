@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: mill-monitor-persistent-true-unsupported
 branch: hanf/mill-monitor-persistent-true-unsupported
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-09-21T14:52:40Z'
+discussion-fix-r1  '2026-09-21T15:05:29Z'
+discussed  '2026-09-21T15:05:29Z'
 ```
