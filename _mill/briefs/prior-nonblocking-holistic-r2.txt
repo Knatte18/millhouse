@@ -1,1 +1,0 @@
-- Card 17's own verification method would not have caught the doubling: Location: _mill/plan/08-skill-cross-reference-fix.md:59-62. Issue: the batch's stated self-check is satisfied even by the doubled/malformed form found above, since a doubled prefix still "starts with" the expected prefix -- the check as written cannot distinguish correct-once from correct-twice.
