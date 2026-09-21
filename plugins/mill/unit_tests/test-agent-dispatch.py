@@ -7,9 +7,12 @@ Covers:
   - output_path_for: the ".md" -> ".out.md" mapping
   - write_brief output_contract footer, default-off byte-identity, and unconditional stale-".out.md"
   truncation
+  - write_brief stderr warning when overwriting a stale ".out.md", and silence when none exists
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import tempfile
 from pathlib import Path
@@ -272,6 +275,47 @@ def test_write_brief_truncates_stale_out_md() -> None:
     print("PASS write_brief -- unconditionally truncates stale .out.md for both output_contract states")
 
 
+def test_write_brief_warns_on_stale_out_md_overwrite() -> None:
+    """write_brief prints a stderr warning when overwriting an existing .out.md, and stays
+    silent when no stale .out.md exists."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        role, scope, round_n = "review-code", "holistic", 1
+
+        # Pre-create the brief once to learn its path, then plant a stale .out.md next to it as if a prior round's reviewer had run.
+        first_brief_path = _agent_dispatch.write_brief(
+            briefs_dir, role, scope, round_n, "first prompt"
+        )
+        stale_out_path = _agent_dispatch.output_path_for(first_brief_path)
+        stale_out_path.write_text("verdict: APPROVE", encoding="utf-8")
+        assert stale_out_path.exists(), "Test setup: stale .out.md must exist before re-dispatch"
+
+        # Re-dispatch the same role/scope/round, as a transient-retry would, capturing stderr.
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured):
+            _agent_dispatch.write_brief(briefs_dir, role, scope, round_n, "second prompt")
+
+        stderr_text = captured.getvalue()
+        assert "[write_brief] warning:" in stderr_text, (
+            f"Expected warning marker in stderr, got {stderr_text!r}"
+        )
+        assert str(stale_out_path) in stderr_text, (
+            f"Expected stale .out.md path in stderr, got {stderr_text!r}"
+        )
+
+    # A fresh briefs_dir with no stale .out.md must produce no warning at all.
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        captured = io.StringIO()
+        with contextlib.redirect_stderr(captured):
+            _agent_dispatch.write_brief(briefs_dir, "review-code", "holistic", 1, "first prompt")
+
+        assert captured.getvalue() == "", (
+            f"Expected no stderr output when no stale .out.md exists, got {captured.getvalue()!r}"
+        )
+    print("PASS write_brief -- warns on stale .out.md overwrite, silent when none exists")
+
+
 def main() -> int:
     tests = [
         test_resolve_dispatch_mode_defaults_to_agent,
@@ -295,6 +339,7 @@ def main() -> int:
         test_write_brief_footer_present_when_output_contract_true,
         test_write_brief_default_off_is_byte_identical_to_prompt,
         test_write_brief_truncates_stale_out_md,
+        test_write_brief_warns_on_stale_out_md_overwrite,
     ]
     failures: list[str] = []
     for fn in tests:
