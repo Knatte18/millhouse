@@ -74,7 +74,9 @@ batches:
     start_sha: 3e453fbcf0281268aacd6f54b4f2899f1904a0d8
     commit_sha: 7ca7a33d09d02bf1394a101dcd6397678da950a4
   - name: csharp-build-node-reuse
-    state: pending
+    state: running
+    implementer_session: 5ec2945b-3bc8-433b-ae8e-7fc7b05b5010
+    start_sha: b2e49b3d1ff65e10558723260db22122b73e6878
   - name: skill-cross-reference-fix
     state: pending
 ```
