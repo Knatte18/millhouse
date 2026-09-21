@@ -56,9 +56,10 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
       A card that mentions the old symbol is exempt when it performs its own rename/removal of that
       same symbol (i.e. its own Requirements: text also matches one of the three patterns with that
       symbol as the matched group) -- that is a further rename in the same chain, not a stale
-      reference. A batch that is a transitive ancestor of the renaming batch (via
-      `_compute_transitive_ancestors`) is exempt entirely -- it runs before the rename lands, so
-      seeing the pre-rename name there is expected, not stale.
+      reference. A batch that the renaming batch is a transitive ancestor of (via
+      `_compute_transitive_ancestors` -- i.e. a batch that depends on the renaming batch, directly
+      or transitively) is exempt: the depends-on edge already guarantees it runs after the rename
+      lands.
 
       Error dict shape: ``{check, batch, card, path, message}`` -- `path` carries the stale symbol
       token, `card` the referencing card's number, `batch` the referencing batch's name.
@@ -112,8 +113,9 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
           for other_name, other_path in batch_name_to_path.items():
               if other_name == renaming_batch:
                   continue
-              if other_name in ancestors.get(renaming_batch, set()):
-                  # other_name runs before renaming_batch -- not at risk.
+              if renaming_batch in ancestors.get(other_name, set()):
+                  # renaming_batch is an ancestor of other_name -- other_name is guaranteed to run
+                  # after the rename lands (the depends-on edge already covers it) -- not at risk.
                   continue
               text = other_path.read_text(encoding="utf-8")
               for card_num, card_lines in _parse_cards(text):
@@ -140,6 +142,14 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
 
   Update `run()`'s own docstring, the sentence listing every check name ("Checks 1, 2, 3, 4, 5, 6, 8 from issue #10, plus wiki-config-mutation, ..., cross-batch-creates-no-depends-on, and verify-batch-mismatch."), to append `, and cross-batch-build-break` at the end of that list.
 
+  Also add a new bullet to the MODULE-level docstring at the very top of the file (the "Checks performed (check keys):" list, e.g. immediately after the existing `cross-batch-creates-no-depends-on — ...` bullet), mirroring that list's existing one-entry-per-check style:
+
+  ```
+      cross-batch-build-break — a batch's Requirements: rename/remove a symbol while a
+          later-or-unordered batch's own Requirements: still reference the old symbol name, gated on
+          the overview's top-level verify: field being non-null
+  ```
+
   No new parameter is added to `run()` itself — `batch_files`, `overview_path`, and `overview_text` are already local variables in `run()` by the point this call is inserted.
 - **Commit:** `feat(plan-validate): add cross-batch-build-break check`
 
@@ -160,7 +170,7 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
   2. **Does not fire (depends-on edge present):** identical to scenario 1, except batch `beta`'s `depends-on: ["alpha"]` (both the per-batch file's own frontmatter `depends-on:` and the overview Batch Index entry, matching this repo's `depends-on-batch-mismatch` convention that both sides must agree). Assert the result is empty.
   3. **Skipped (verify: null):** identical to scenario 1's batch/card setup, but the overview's top-level `verify:` field is `null` (or omitted). Assert the result is empty.
 
-  Use `tempfile.TemporaryDirectory()` for the plan directory in every test, matching every other `_plan_validate` test file's fixture style. Give each test function a `-> None` return type and a bare `assert` (raising `AssertionError` on failure, matching `test-plan-validate-card-numbering.py`'s style exactly — not the `-> int` / `errors += 1` style `test-plan-validate.py` itself uses), print a `"PASS: <test name>"` line on success, and register all three in a `tests` list inside a `def main() -> int:` function with an `if __name__ == "__main__":` guard, mirroring `test-plan-validate-card-numbering.py`'s own `main()` shape exactly (iterate `tests`, catch/report failures, return a nonzero exit code on any failure).
+  Use `tempfile.TemporaryDirectory()` for the plan directory in every test, matching every other `_plan_validate` test file's fixture style. Give each test function a `-> None` return type and a bare `assert` (raising `AssertionError` on failure, matching `test-plan-validate-card-numbering.py`'s per-function style exactly — not the `-> int` / `errors += 1` style `test-plan-validate.py` itself uses), print a `"PASS: <test name>"` line on success, and register all three in a `tests` list inside a `def main() -> int:` function with an `if __name__ == "__main__":` guard. This `main()` shape (iterate the `tests` list, catch and report each function's failure independently, return a nonzero exit code if any failed) is NOT what `test-plan-validate-card-numbering.py`'s own `main()` does today (that file calls its four tests directly inside one shared `try`/`except AssertionError` block, with no `tests` list — a failure in an earlier test there prevents later ones from running); write the list-iteration shape described here directly, without citing that file's `main()` as a mirror for it.
 - **Commit:** `test(plan-validate): cross-batch-build-break check fixtures`
 
 ## Batch Tests

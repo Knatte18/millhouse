@@ -1,0 +1,26 @@
+MILL_REVIEW_BEGIN
+# Review: mill-plan/mill-start planning-process gaps, round 2 — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-21
+```
+
+## Findings
+
+### [BLOCKING:design] `_check_cross_batch_build_break`'s ancestor test is inverted
+**Location:** batch 04-cross-batch-build-break.md, card 13. **Issue:** The exemption `if other_name in ancestors.get(renaming_batch, set())` checks whether the *referencing* batch is an ancestor of the *renaming* batch — the opposite of what card 14's own scenario 2 requires (beta `depends-on: ["alpha"]`, alpha renames, expect empty result). With `alpha`'s own `depends-on: []`, `ancestors["alpha"]` is empty, so `beta in ancestors.get("alpha", set())` is always False and scenario 2 still fires, contradicting the test's own expected assertion. The sibling check `_check_cross_batch_creates_no_depends_on` (same file, already landed) uses the correct direction: `name_c not in ancestors.get(name_b, set())` — i.e. it tests whether the producing/renaming batch is an ancestor of the *referencing* batch. **Fix:** Invert the test to `if renaming_batch in ancestors.get(other_name, set()): continue` (renaming_batch is an ancestor of other_name ⇒ other_name is guaranteed to run after the rename, so the depends-on edge already covers it), matching the direction already used by `_check_cross_batch_creates_no_depends_on`.
+
+### [NIT:consistency] Module docstring's check-key list omits the new check
+**Location:** batch 04-cross-batch-build-break.md, card 13. **Issue:** `_plan_validate.py`'s top-of-file docstring enumerates every check under "Checks performed (check keys):", one entry per check including the existing `cross-batch-creates-no-depends-on`; card 13 only updates `run()`'s own inline docstring sentence, not this top-level list, so the module header falls out of sync with the codebase's own one-entry-per-check convention once this check lands. **Fix:** Add a `cross-batch-build-break — ...` bullet to the module docstring's check list, mirroring the existing entries' one-line style.
+
+### [NIT:consistency] Card 14's cited `main()` shape doesn't match the file it claims to mirror
+**Location:** batch 04-cross-batch-build-break.md, card 14. **Issue:** Card 14 says the new test file's `main()` should mirror `test-plan-validate-card-numbering.py`'s own `main()` shape "exactly (iterate `tests`, catch/report failures, return a nonzero exit code on any failure)" — but that file's actual `main()` calls the four test functions directly inside one shared `try/except AssertionError` block, with no `tests` list and no per-function iteration/isolation (a failure in test 1 prevents tests 2-4 from running at all). The card's own explicit instructions (register a `tests` list, iterate, catch/report per-function, nonzero exit) are self-sufficient and buildable, but the "mirrors X exactly" citation is factually wrong. **Fix:** Drop or correct the "mirroring ... exactly" claim — the explicit list-iteration instructions already fully specify the intended shape independent of that citation.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 13's ancestor-direction bug in `_check_cross_batch_build_break` fails its own card 14 test scenario 2.
+MILL_REVIEW_END
