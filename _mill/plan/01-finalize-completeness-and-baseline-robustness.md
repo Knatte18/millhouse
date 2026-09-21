@@ -185,9 +185,13 @@ preserves today's behavior for every existing caller that doesn't pass it.
   check to this batch's own cards (`card_commit_messages` may legitimately contain other batches'
   entries if the caller ever passes a whole-plan dict — this batch's callers only ever construct it
   from the current batch's own file, so this is a defensive, not load-bearing, cross-check). When
-  every message is found: skip both existing demotions entirely and instead print
-  `{"status": "success", "commit_sha": start_sha, "session_id": session_id or parsed.get
-  ("session_id") or "unknown", "inferred": True}` and `return 0`. When the full-history scan is
+  every message is found: skip both existing demotions entirely and instead build `_success =
+  {"status": "success", "session_id": session_id or parsed.get("session_id") or "unknown",
+  "inferred": True}`, call `_attach_commit_sha(_success, project_root)` (the existing helper every
+  sibling success/stuck path in this function already uses to resolve the actual current HEAD — do
+  NOT hardcode `start_sha` as `commit_sha`: in the `_is_only_start_batch_commit` bypass case HEAD is
+  one housekeeping commit ahead of `start_sha`, so `start_sha` would be stale), then `print
+  (json.dumps(_success))` and `return 0`. When the full-history scan is
   inconclusive (any message missing), fall through to the existing two demotions unchanged — this
   fallback only ever prevents a false-negative demotion, never a false-positive success.
   In `millpy-implement.py`'s `main()`, wherever the batch's own text is already read to compute
