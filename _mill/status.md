@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-baseline-lazy-preflight
+phase: approved-review-duration-derivation
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-wiki-daemon-reliability  '2026-09-21T16:17:14Z'
 approved-pr-state-and-cache-freshness  '2026-09-21T16:23:59Z'
 approved-merge-in-verify-field-fix  '2026-09-21T16:27:29Z'
 approved-baseline-lazy-preflight  '2026-09-21T16:42:56Z'
+approved-review-duration-derivation  '2026-09-21T16:49:32Z'
 ```
 
 ## Batches
@@ -61,9 +62,10 @@ batches:
     commit_sha: 3e600c24924e335bac41962d1bb22e48894e7c22
     verify_baseline_failures: []
   - name: review-duration-derivation
-    state: running
+    state: approved
     implementer_session: fc430032-d595-48aa-bad6-3b7fed350709
     start_sha: ffeabc71ad9d9efd612be1f5db0f237318a4a107
+    commit_sha: 756460208993f942986259a94b5a54c02379ade7
     verify_baseline_failures: []
   - name: handoff-skill-doc-fix
     state: pending
