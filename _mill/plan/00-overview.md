@@ -3,7 +3,7 @@
 ```yaml
 task: "Misc infra/wiki/PR/self-hosting reliability bugs"
 slug: mill-infra-reliability-misc-r2
-approved: false
+approved: true
 started: "20260921-152342"
 parent: main
 root: ""
