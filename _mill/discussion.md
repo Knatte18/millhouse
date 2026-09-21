@@ -228,29 +228,47 @@ false-positive tasks that preceded it.
 
 ### paired-fence-indent-check
 
-- Decision: `_check_requirements_quote_indent_drift` gains a new detection branch. While iterating a
-  card's `fence_bodies` in order, track `last_matched_indent: int | None`, reset to `None` at the start
-  of each card. After a fence is found byte-exact-clean, or matches via the strip pass, or matches via
-  the add pass: set `last_matched_indent` to that fence's own raw (as-authored) first-non-blank-line
-  leading-space count. After a fence matches in NEITHER direction (today's silent "illustrative
-  snippet" skip): if `last_matched_indent is not None`, compute this fence's own raw first-non-blank-
-  line leading-space count and compare; a mismatch emits a new `requirements-quote-indent-drift`
-  finding (same check name, new message: `"card {card_num}'s Requirements: fence {fence_idx} (new/
-  replacement code) immediately follows matched fence {fence_idx-1}, but its first line is indented
-  {sibling_indent} spaces vs the anchor fence's {anchor_indent} spaces"`, `path` = the anchor fence's
-  own matched `Edits:` token). Regardless of whether a mismatch was found, reset
-  `last_matched_indent = None` after processing an unmatched fence — the check only ever compares one
-  fence against the single anchor immediately preceding it, never chains across multiple consecutive
-  unmatched fences.
+- Decision: `_check_requirements_quote_indent_drift` gains a new detection branch. "Immediately
+  follows" means adjacency in `fence_bodies` — the flat, regex-extracted, in-order list of fences the
+  function already computes for the card (line 3082) — not raw-text line-adjacency: any prose between
+  two fences in the field (e.g. a "with:" label, or "insert this new guard immediately after the block
+  above") does not break the pairing, since both #1074's and #1075's real repros have exactly this kind
+  of short connective prose between the two fences, never zero characters. While iterating
+  `fence_bodies` in order, track two variables together, both reset to `None` at the start of each
+  card: `last_matched_indent: int | None` and `last_matched_token: str | None`. Refactor the existing
+  byte-exact-clean check (today's `any(fence_body in resolved_contents[t] for t in
+  ordered_resolved_tokens)` at lines 3110-3113, which never captures which token matched) into a
+  token-capturing loop, matching the shape the strip and add passes already use. After a fence matches
+  — whether via the (now token-capturing) clean check, the strip pass, or the add pass — set BOTH
+  `last_matched_indent` (that fence's own raw, as-authored first-non-blank-line leading-space count)
+  and `last_matched_token` (the `Edits:` token it matched against) from that match. After a fence
+  matches in NEITHER direction (today's silent "illustrative snippet" skip): if `last_matched_indent is
+  not None`, compute this fence's own raw first-non-blank-line leading-space count and compare; a
+  mismatch emits a new `requirements-quote-indent-drift` finding (same check name, new message:
+  `"card {card_num}'s Requirements: fence {fence_idx} (new/replacement code) immediately follows
+  matched fence {fence_idx-1}, but its first line is indented {sibling_indent} spaces vs the anchor
+  fence's {anchor_indent} spaces"`, `path` = `last_matched_token`). Regardless of whether a mismatch
+  was found, reset both `last_matched_indent` and `last_matched_token` to `None` after processing an
+  unmatched fence — the check only ever compares one fence against the single anchor immediately
+  preceding it in `fence_bodies` order, never chains across multiple consecutive unmatched fences.
 - Rationale: unifies #1074 and #1075, which report the identical underlying gap (the docstring's own
   "matching in neither direction ... is silently skipped -- never flagged" branch) from two different
   angles. #1074's own suggested fix explicitly frames this as the paired
   "Replace:-quote immediately followed by an unmatched with:-fence" structural case, and states that
   "even just the paired-fence case would have caught both instances observed here" — covering #1075's
-  repro too (a byte-matched anchor immediately followed by a new-code insertion fence).
+  repro too (a byte-matched anchor immediately followed by a new-code insertion fence). Tracking
+  `last_matched_token` alongside the indent (round-1 discussion-review finding, `#paired-fence-token`)
+  closes a gap the first draft missed: the finding's `path` field cannot name "the anchor fence's own
+  matched Edits: token" unless that token is actually captured somewhere, and today's clean-match
+  branch discards it.
 - Rejected: requiring literal "Replace:"/"with:" phrasing markers before applying the check — rejected
   because neither repro depends on that literal wording (#1075's repro has no such marker at all), and
   requiring it would make the fix fragile to phrasing rather than structure.
+- Rejected: raw-text line-adjacency (requiring zero intervening prose between the two fences) —
+  rejected (round-1 discussion-review finding) because both real repros have short connective prose
+  between the fences, so a zero-prose-gap rule would fail to fire on the very reports motivating this
+  fix; `fence_bodies` list-adjacency is both simpler to implement (no secondary raw-text scan) and
+  correct for the demonstrated cases.
 - Rejected (see `paired-fence-only` in Scope: Out): the fully general "insertion at a named function's
   body indent" detection #1075 gestures at — its own text calls this "likely much harder and may not be
   worth it," and the narrower paired-fence case already resolves both concrete reports.
@@ -326,9 +344,13 @@ plan — the task-worktree copy, not any plugin cache.
 - `_symbol_candidate_shape` — `_plan_validate.py:2040`. `qualifies()` closure is lines 2081-2082;
   the two return points are lines 2085 (bare) and 2088 (dotted).
 - `_check_requirements_quote_indent_drift` — `_plan_validate.py:3010`. The per-fence loop is lines
-  3106-3168; the clean/strip/add three-way branch is exactly where `last_matched_indent` bookkeeping
-  slots in. `_strip_n_leading_spaces`/`_add_n_leading_spaces` (lines 2888-2928) are the existing
-  per-line indent helpers — reuse their "count leading spaces, skip blank lines" convention for the new
+  3106-3168; the clean/strip/add three-way branch is exactly where `last_matched_indent`/
+  `last_matched_token` bookkeeping slots in. The clean-match check at lines 3110-3113
+  (`any(fence_body in resolved_contents[t] for t in ordered_resolved_tokens)`) must be refactored to a
+  token-capturing loop first — per Decision `paired-fence-indent-check`, it currently discards which
+  token matched, the same information the strip/add passes already capture as `matched_token`.
+  `_strip_n_leading_spaces`/`_add_n_leading_spaces` (lines 2888-2928) are the existing per-line indent
+  helpers — reuse their "count leading spaces, skip blank lines" convention for the new
   first-non-blank-line indent helper rather than inventing a third convention.
 - `compute_moves_union`, `compute_creates_union`, `compute_deletes_union` — `_review_common.py:879-978`
   — the existing plan-wide-union pattern (glob `??-*.md` excluding `00-overview.md`, iterate, union) to
@@ -386,14 +408,18 @@ naming convention (`test_<check_name>_<scenario>`):
   (`public InvalidOperationException Custom { get; }` or similar, no `new` between modifier and symbol)
   still matches and still fires when uncited.
 - **paired-fence-indent-check**: (a) a card with a byte-matched anchor fence (2-space list-continuation
-  indent) immediately followed by a new-code fence at a DIFFERENT indent (matching #1074/#1075's
+  indent) immediately followed (in `fence_bodies` order — connective prose such as a "with:" label or
+  "insert this new guard immediately after the block above" sits between the two fences in the raw
+  text, matching both real repros) by a new-code fence at a DIFFERENT indent (matching #1074/#1075's
   "22/26-space instead of 20/24-space" repro shape) produces one new-shape
-  `requirements-quote-indent-drift` finding. (b) the same setup with matching indents produces zero
-  findings. (c) an unmatched fence NOT immediately preceded by a matched one (e.g. two illustrative
-  fences in a row, or a matched fence separated from an unmatched one by intervening prose text but
-  still within the same Requirements: field — clarify during planning whether "immediately follows"
-  means adjacency within the parsed `fence_bodies` list, which is what this task implements) produces
-  no new-shape finding.
+  `requirements-quote-indent-drift` finding, with `path` equal to the anchor fence's own matched
+  `Edits:` token. (b) the same setup with matching indents produces zero findings. (c) an unmatched
+  fence NOT immediately preceded (in `fence_bodies` order) by a matched one — e.g. two illustrative
+  fences in a row, or a card whose first (and only) fence is itself unmatched with no prior anchor —
+  produces no new-shape finding. (d) a card with three fences — matched anchor, then two consecutive
+  unmatched fences — produces exactly one finding (for the first unmatched fence only), confirming the
+  anchor state resets after one comparison and does not chain across multiple trailing unmatched
+  fences.
 - **fence-detection-already-fixed**: no NEW test required (existing #992 regression tests already cover
   the shared mechanism), but the plan should record that this task's own repro
   (documented above) was run against current code and produced zero findings, confirming no regression
