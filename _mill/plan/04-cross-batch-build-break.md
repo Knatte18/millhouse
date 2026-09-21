@@ -31,6 +31,22 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
   _RE_REMOVE_SYMBOL = re.compile(r"\bremove\s+`([^`]+)`", re.IGNORECASE)
   _RE_DELETE_SYMBOL = re.compile(r"\bdelete\s+`([^`]+)`", re.IGNORECASE)
   _CROSS_BATCH_BUILD_BREAK_PATTERNS = (_RE_RENAME_TO, _RE_REMOVE_SYMBOL, _RE_DELETE_SYMBOL)
+  # Common source/doc/config file extensions -- a matched token ending in one of these, or
+  # containing "/", is a file-removal reference (e.g. "Remove `plugins/mill/scripts/foo.py`",
+  # the standard prose for a file deletion in this repo's plans), never a code symbol, and must be
+  # excluded from the rename/removal candidate set (#1056 plan-review round 2 finding).
+  _CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS = (
+      ".py", ".md", ".go", ".ts", ".js", ".yaml", ".yml", ".json", ".txt", ".sh",
+      ".rs", ".java", ".cs", ".rb", ".toml", ".cfg", ".ini", ".html", ".css",
+  )
+
+
+  def _cross_batch_build_break_looks_like_file(token: str) -> bool:
+      """Return True when `token` is shaped like a file path rather than a code symbol."""
+      if "/" in token:
+          return True
+      lowered = token.lower()
+      return any(lowered.endswith(ext) for ext in _CROSS_BATCH_BUILD_BREAK_FILE_EXTENSIONS)
 
 
   def _check_cross_batch_build_break(
@@ -52,6 +68,11 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
       yet, so the actual source tree never reflects any of the plan's renames -- there is nothing
       useful to grep in real source files. Instead, this check scans every OTHER batch's own
       Requirements: text for the literal old-symbol token the renaming batch's Requirements: names.
+
+      A matched token that looks file-path-shaped (contains "/" or ends in a common source/doc/
+      config file extension, per `_cross_batch_build_break_looks_like_file`) is never treated as a
+      symbol candidate -- "Remove `plugins/mill/scripts/foo.py`" is an ordinary file-deletion
+      instruction, not a renamed/removed code symbol.
 
       A card that mentions the old symbol is exempt when it performs its own rename/removal of that
       same symbol (i.e. its own Requirements: text also matches one of the three patterns with that
@@ -96,6 +117,8 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
           symbols: set[str] = set()
           for pattern in _CROSS_BATCH_BUILD_BREAK_PATTERNS:
               for m in pattern.finditer(requirements_text):
+                  if _cross_batch_build_break_looks_like_file(m.group(1)):
+                      continue
                   symbols.add(m.group(1))
           return symbols
 
@@ -165,12 +188,13 @@ Implements the `cross-batch-build-break` `_plan_validate` check (#1056): flags a
 - **Requirements:**
   Create `plugins/mill/unit_tests/test-plan-validate-cross-batch-build-break.py`, mirroring `test-plan-validate-card-numbering.py`'s exact structure and header-comment convention (own standalone file with a docstring stating why it is not appended to `test-plan-validate.py`, `sys.path.insert` of `HUB / "plugins" / "mill" / "scripts"`, import of `_plan_validate` directly, own minimal local fixture helpers — do NOT import anything from `test-plan-validate.py`). Write local fixture helpers that build a minimal overview text (with a `Batch Index` yaml block naming batches/deps and a top-level frontmatter `verify:` field the test controls) and minimal batch-file text (a single `### Card N:` heading followed by a `- **Requirements:**` line, since `_check_cross_batch_build_break` reads only the Requirements: field via `_parse_cards`/`_extract_requirements_text` and the Batch Index via `extract_batch_index` — no `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`/`Commit:` fields are needed for this check's own logic, though real plan files always have them).
 
-  Cover exactly these three scenarios (mentioned, not read — the file citing them is this task's own discussion.md, not a file the implementer needs to open):
+  Cover exactly these four scenarios (mentioned, not read — the file citing the first three is this task's own discussion.md, not a file the implementer needs to open; the fourth was added by plan-review round 2):
   1. **Fires:** overview `verify:` set (non-null); batch `alpha` (`depends-on: []`) has a card whose Requirements: reads `` Rename `Engine.HeaderText` to `Engine.StatusLineText`. ``; batch `beta` (`depends-on: []`, no edge to `alpha`) has a card whose Requirements: mentions `` `Engine.HeaderText` `` without itself renaming it. Assert `_plan_validate._check_cross_batch_build_break(batch_files, overview_path, overview_text)` returns exactly one error dict with `check == "cross-batch-build-break"`, `batch == "beta"`, and `path == "Engine.HeaderText"`.
   2. **Does not fire (depends-on edge present):** identical to scenario 1, except batch `beta`'s `depends-on: ["alpha"]` (both the per-batch file's own frontmatter `depends-on:` and the overview Batch Index entry, matching this repo's `depends-on-batch-mismatch` convention that both sides must agree). Assert the result is empty.
   3. **Skipped (verify: null):** identical to scenario 1's batch/card setup, but the overview's top-level `verify:` field is `null` (or omitted). Assert the result is empty.
+  4. **File-deletion prose does not false-positive:** overview `verify:` set (non-null); batch `alpha` (`depends-on: []`) has a card whose Requirements: reads `` Remove `plugins/mill/scripts/old_helper.py`. `` (a file path, not a code symbol); batch `beta` (`depends-on: []`) has a card whose Requirements: separately mentions `` `plugins/mill/scripts/old_helper.py` `` in its own prose (e.g. citing it as the file being replaced). Assert the result is empty — a file-shaped token (contains `/` or a recognized file extension) must never be treated as a renamed/removed symbol.
 
-  Use `tempfile.TemporaryDirectory()` for the plan directory in every test, matching every other `_plan_validate` test file's fixture style. Give each test function a `-> None` return type and a bare `assert` (raising `AssertionError` on failure, matching `test-plan-validate-card-numbering.py`'s per-function style exactly — not the `-> int` / `errors += 1` style `test-plan-validate.py` itself uses), print a `"PASS: <test name>"` line on success, and register all three in a `tests` list inside a `def main() -> int:` function with an `if __name__ == "__main__":` guard. This `main()` shape (iterate the `tests` list, catch and report each function's failure independently, return a nonzero exit code if any failed) is NOT what `test-plan-validate-card-numbering.py`'s own `main()` does today (that file calls its four tests directly inside one shared `try`/`except AssertionError` block, with no `tests` list — a failure in an earlier test there prevents later ones from running); write the list-iteration shape described here directly, without citing that file's `main()` as a mirror for it.
+  Use `tempfile.TemporaryDirectory()` for the plan directory in every test, matching every other `_plan_validate` test file's fixture style. Give each test function a `-> None` return type and a bare `assert` (raising `AssertionError` on failure, matching `test-plan-validate-card-numbering.py`'s per-function style exactly — not the `-> int` / `errors += 1` style `test-plan-validate.py` itself uses), print a `"PASS: <test name>"` line on success, and register all four in a `tests` list inside a `def main() -> int:` function with an `if __name__ == "__main__":` guard. This `main()` shape (iterate the `tests` list, catch and report each function's failure independently, return a nonzero exit code if any failed) is NOT what `test-plan-validate-card-numbering.py`'s own `main()` does today (that file calls its four tests directly inside one shared `try`/`except AssertionError` block, with no `tests` list — a failure in an earlier test there prevents later ones from running); write the list-iteration shape described here directly, without citing that file's `main()` as a mirror for it.
 - **Commit:** `test(plan-validate): cross-batch-build-break check fixtures`
 
 ## Batch Tests

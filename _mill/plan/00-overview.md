@@ -3,7 +3,7 @@
 ```yaml
 task: mill-plan/mill-start planning-process gaps, round 2
 slug: mill-plan-process-gaps-r2
-approved: false
+approved: true
 started: 20260921-153215
 parent: main
 root: ""
