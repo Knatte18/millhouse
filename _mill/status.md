@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-finalize-completeness-and-baseline-robustness
 slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
@@ -32,6 +32,7 @@ plan-review-r6  '2026-09-21T18:41:50Z'
 plan-fix-r6  '2026-09-21T18:42:00Z'
 planned  '2026-09-21T18:42:32Z'
 implementing  '2026-09-21T18:46:09Z'
+approved-finalize-completeness-and-baseline-robustness  '2026-09-21T18:59:11Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ implementing  '2026-09-21T18:46:09Z'
 ```yaml
 batches:
   - name: finalize-completeness-and-baseline-robustness
-    state: running
+    state: approved
     implementer_session: 34553b87-5ab1-4a5d-8dfe-06be411c02b1
     start_sha: 017b33e9e837fab751223c0df5cba351dd403151
+    commit_sha: 245a6b77cb59fac473ba195df6d5405103fd4b7f
   - name: orchestration-skill-doc-fixes
     state: pending
   - name: plan-validate-build-tag-coverage
