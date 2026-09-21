@@ -167,9 +167,13 @@ operator exchange to log — see Q&A log at the end for the one process note tha
 - Decision: adopt the issue's own **first fallback** ("make it lazy"), not its **primary** proposal
   ("drop the accommodation, halt on red parent"). Scope:
   - Stop eagerly computing every batch's `verify_baseline_failures` before batch 1 dispatches
-    (`mill-go-base/SKILL.md`'s "0.5 Baseline pre-flight" speculative-launch path, "0.55 Done-gate
-    baseline pre-flight", and "0.6 Per-batch baseline recapture" — all three currently drive
-    `_verify_baseline.compute_batch_baselines` across the whole plan's batch set up front).
+    (`mill-go-base/SKILL.md`'s "0.5 Baseline pre-flight" speculative-launch path and "0.6 Per-batch
+    baseline recapture" — these two currently drive `_verify_baseline.compute_batch_baselines` across
+    the whole plan's batch set up front). "0.55 Done-gate baseline pre-flight" is a **distinct,
+    unaffected mechanism** — confirmed by reading the code, it calls `_done_gate.run_preflight`, not
+    `compute_batch_baselines`, and captures a pre-implementation regression-suite snapshot for
+    Handoff-time comparison. It must stay eager (it exists specifically to run "before any batch
+    touches the tree") and is out of scope for this decision.
   - At task start, pin the parent branch's tip SHA once (a new `baseline_parent_sha:` field in
     status.md's top yaml block, following the existing `get_module_verify_baseline` /
     `set_module_verify_baseline` / `clear_module_verify_baseline` accessor pattern in `_status.py`)
@@ -213,7 +217,7 @@ operator exchange to log — see Q&A log at the end for the one process note tha
     `.out.md` suffix-swap pattern) containing the wall-clock time the brief was written (UTC epoch
     seconds is sufficient; reuse whatever the codebase's existing `_timestamp` helper exposes for a
     raw epoch value, or store the ISO string and diff on read).
-  - In the shared finalize path in `_review_common.py` (`apply_cost_metadata` / `finalize`'s
+  - In the shared finalize path in `_review_common.py` (`apply_cost_metadata` / `finalize_scope`'s
     `duration_s` handling), when a `.prepare_ts` stamp file exists next to the brief for this round,
     compute `derived_duration_s = now - prepare_ts`. Use `derived_duration_s` as the value written to
     `duration_s:`, ignoring or overriding a caller-supplied `--duration-s` whenever the two disagree
@@ -295,20 +299,24 @@ operator exchange to log — see Q&A log at the end for the one process note tha
 ### skill-cross-reference-no-bare-cd-bait (#1092)
 
 - Decision: in `plugins/mill/skills/mill-plan/SKILL.md` and `plugins/mill/skills/mill-start/SKILL.md`,
-  replace every cross-reference to `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section — both
-  the bare `mill-go-base/SKILL.md` form (mill-plan, 9 occurrences) and the repo-relative
-  `plugins/mill/skills/mill-go-base/SKILL.md` form (mill-start, 10 occurrences) — with the fully
-  qualified `` `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md` `` form, matching this repo's own
-  established convention (CLAUDE.md: "`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths ... Write
-  `${CLAUDE_PLUGIN_ROOT}` literally in Bash tool calls"). This makes the natural way to actually read
-  the cited section (`awk '/^## Agent-mode dispatch/,/^## [^A]/' "${CLAUDE_PLUGIN_ROOT}/skills/
-  mill-go-base/SKILL.md"`) require no `cd` at all, closing the exact bait the issue identifies.
-  - mill-start's existing repo-relative form is already safer than mill-plan's bare form (no `cd`
-    strictly required, since it can be read as `awk ... plugins/mill/skills/mill-go-base/SKILL.md`
-    from the worktree root), but it is still not the `${CLAUDE_PLUGIN_ROOT}` convention the rest of
-    the codebase uses for intra-plugin references, and it still implicitly assumes cwd is the git
-    root — bringing both files to the same `${CLAUDE_PLUGIN_ROOT}`-qualified form removes that
-    assumption too.
+  replace every cross-reference to `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section with the
+  fully qualified `` `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md` `` form, matching this
+  repo's own established convention (CLAUDE.md: "`${CLAUDE_PLUGIN_ROOT}` for all intra-plugin paths
+  ... Write `${CLAUDE_PLUGIN_ROOT}` literally in Bash tool calls"). This makes the natural way to
+  actually read the cited section (`awk '/^## Agent-mode dispatch/,/^## [^A]/'
+  "${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md"`) require no `cd` at all, closing the exact
+  bait the issue identifies.
+  - Exact counts, reproducible via `grep -c 'mill-go-base/SKILL.md' <file>`: `mill-plan/SKILL.md` has
+    **12** occurrences, all in the bare `mill-go-base/SKILL.md` form. `mill-start/SKILL.md` has **10**
+    occurrences, and they are a **mix**, not uniform — 6 bare (`mill-go-base/SKILL.md`, e.g. lines
+    ~198, ~300, ~302, ~318, ~320, ~324) and 4 already-qualified with the repo-relative
+    `plugins/mill/skills/mill-go-base/SKILL.md` prefix (e.g. lines ~262, ~264, ~265, ~275). Both
+    files' occurrences — bare and repo-relative alike — are in scope for the `${CLAUDE_PLUGIN_ROOT}`
+    rewrite; mill-start is not already uniformly safe, only partially so.
+  - The repo-relative form is still not the `${CLAUDE_PLUGIN_ROOT}` convention the rest of the
+    codebase uses for intra-plugin references, and it still implicitly assumes cwd is the git root —
+    bringing every occurrence in both files to the same `${CLAUDE_PLUGIN_ROOT}`-qualified form removes
+    that assumption.
 - Rationale: purely mechanical, low-risk text substitution confined to the two files the issue names;
   it removes the ambiguity that produced the natural-but-wrong `cd <dir> && awk ...` reading without
   changing any behavior these skills describe.
@@ -366,7 +374,7 @@ operator exchange to log — see Q&A log at the end for the one process note tha
   has the `get_module_verify_baseline`/`set_module_verify_baseline`/`clear_module_verify_baseline`
   accessor pattern to mirror for the new `baseline_parent_sha` field.
 - Review duration: `plugins/mill/scripts/_agent_dispatch.py` (`write_brief`, `output_path_for`),
-  `plugins/mill/scripts/_review_common.py` (`apply_cost_metadata`, `finalize`), invoked identically
+  `plugins/mill/scripts/_review_common.py` (`apply_cost_metadata`, `finalize_scope`), invoked identically
   from `millpy-review-plan.py`, `millpy-review-discussion.py`, and `millpy-review-code.py`.
 - Skill docs touched: `plugins/mill/skills/handoff/SKILL.md`, `plugins/csharp/skills/csharp-build/
   SKILL.md`, `plugins/mill/skills/mill-plan/SKILL.md`, `plugins/mill/skills/mill-start/SKILL.md`,
