@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import _gh_issues
 import _subprocess_util
 
 
@@ -56,27 +57,48 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
         - ``"number"``: the PR number as an ``int``, or ``None``.
         - ``"url"``: the PR URL as a ``str``, or ``None``.
         - ``"merge_commit"``: the raw gh ``mergeCommit`` object (dict), or ``None``.
+        - ``"error"``: a diagnostic string when ``state == "none"`` was caused by a genuine ``gh``
+            failure (non-zero exit, or the ``_subprocess_util.run`` call raising), or ``None`` for
+            every other outcome — including an ordinary empty-result "no PR" case.
     """
     # Sentinel returned whenever no definitive state can be determined.
-    _none_result = {"state": "none", "number": None, "url": None, "merge_commit": None}
+    _none_result = {"state": "none", "number": None, "url": None, "merge_commit": None, "error": None}
+
+    # Resolve the repo explicitly rather than relying on gh's own cwd-based auto-detection, which
+    # can pick the wrong remote when cwd is inside a worktree whose git dir points elsewhere.
+    # detect_repo() itself never raises for a non-zero git exit, but a raised exception (e.g. git
+    # absent) here should fall back to gh's own auto-detection rather than aborting the whole
+    # function -- the actual gh call below still runs, and gets its own exception handling.
+    try:
+        repo = _gh_issues.detect_repo(Path(cwd))
+    except Exception:
+        repo = ""
+    argv = ["gh", "pr", "list"]
+    if repo:
+        argv += ["--repo", repo]
+    argv += [
+        "--head", branch,
+        "--state", "all",
+        "--json", "state,mergeCommit,number,url",
+    ]
 
     # Run the gh query, catching any exception (e.g.
     # FileNotFoundError when gh is not installed) and mapping it to the "none" fallback.
     try:
-        result = _subprocess_util.run(
-            [
-                "gh", "pr", "list",
-                "--head", branch,
-                "--state", "all",
-                "--json", "state,mergeCommit,number,url",
-            ],
-            cwd=cwd,
-        )
-    except Exception:
-        return dict(_none_result)
+        result = _subprocess_util.run(argv, cwd=cwd)
+    except Exception as exc:
+        error_result = dict(_none_result)
+        error_result["error"] = str(exc)
+        return error_result
 
-    # Non-zero exit or empty stdout both signal "cannot determine state".
-    if result.returncode != 0 or not result.stdout.strip():
+    # A non-zero exit is a genuine gh failure, distinct from an ordinary "no PR" result.
+    if result.returncode != 0:
+        error_result = dict(_none_result)
+        error_result["error"] = result.stderr.strip() or f"gh exited {result.returncode} with no stderr"
+        return error_result
+
+    # Empty stdout on a successful exit is a genuine "no PR" outcome, not a gh failure.
+    if not result.stdout.strip():
         return dict(_none_result)
 
     # Parse the JSON array; any parse error or unexpected type -> "none".
@@ -117,4 +139,5 @@ def resolve_pr_state(branch: str, cwd: "Path | str") -> dict:
         "url": winning_obj.get("url"),
         # Keep the raw mergeCommit object so callers can do (merge_commit or {}).get("oid") without extra unwrapping.
         "merge_commit": winning_obj.get("mergeCommit"),
+        "error": None,
     }
