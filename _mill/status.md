@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-entry-gate-wait-expiry-branch
 slug: mill-monitor-persistent-true-unsupported
 branch: hanf/mill-monitor-persistent-true-unsupported
 plan: _mill/plan
@@ -21,6 +21,7 @@ planning  '2026-09-21T15:09:34Z'
 plan-review-r1  '2026-09-21T15:13:31Z'
 planned  '2026-09-21T15:14:13Z'
 implementing  '2026-09-21T15:18:31Z'
+approved-entry-gate-wait-expiry-branch  '2026-09-21T15:22:25Z'
 ```
 
 ## Batches
@@ -28,7 +29,8 @@ implementing  '2026-09-21T15:18:31Z'
 ```yaml
 batches:
   - name: entry-gate-wait-expiry-branch
-    state: running
+    state: approved
     implementer_session: ce86cf8d-d61f-4db3-96f8-6614abe8a3cc
     start_sha: a5197a0e1ab3ec3d929ff127eb448a7e03e7e2f9
+    commit_sha: 6439345cfa30fcb6421f117c269ab9d370f3e2d0
 ```
