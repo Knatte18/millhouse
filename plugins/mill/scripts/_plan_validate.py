@@ -65,6 +65,9 @@ Checks performed (check keys):
     cross-batch-creates-no-depends-on — a card's Context:/Edits: references a file another batch's
         Creates: produces, with no depends-on edge (direct or transitive) from the referencing batch to the
         creating batch
+    cross-batch-build-break — a batch's Requirements: rename/remove a symbol while a
+        later-or-unordered batch's own Requirements: still reference the old symbol name, gated on
+        the overview's top-level verify: field being non-null
 """
 from __future__ import annotations
 
@@ -542,6 +545,7 @@ def _check_move_target_collision(
     batch_files: list[Path],
     project_root: Path,
     root: str | None,
+    moves_sources: set[str],
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
@@ -552,6 +556,9 @@ def _check_move_target_collision(
     Three collision conditions are checked (OR semantics):
 
     1. The target already exists on disk before the plan runs.
+        Suppressed when the target is itself a plan-wide ``Moves:`` source -- it currently exists
+        on disk only because it is about to be vacated by another ``Moves:`` pair in the plan (an
+        intra-plan rename chain, e.g. ``a.go -> b.go`` followed by ``b.go -> c.go``).
     2. More than one batch across the plan names the same destination path.
     3. The target appears as a ``Creates:`` token in a DIFFERENT batch (cross-batch collision).
         Same-batch overlap is ``move-redundant``'s responsibility;
@@ -563,6 +570,8 @@ def _check_move_target_collision(
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project (worktree root).
         root: Optional root subfolder (threaded to ``resolve_existing_paths``).
+        moves_sources: Plan-wide union of ``Moves:`` source tokens (from ``compute_moves_union``),
+            used to suppress condition 1 on an intra-plan rename chain's intermediate path.
         wiki_root: Optional wiki root path.
         git_root: Optional repo root.
 
@@ -593,7 +602,7 @@ def _check_move_target_collision(
                 [dst], project_root, root,
                 wiki_root=wiki_root, git_root=git_root,
             )
-            if existing:
+            if existing and dst not in moves_sources:
                 errors.append({
                     "check": "move-target-collision",
                     "batch": stem,
@@ -1813,8 +1822,11 @@ _CITATION_MARKERS = (
     "mentioned, not read",
 )
 
-# A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored.
-_PATH_CANDIDATE_EXTENSIONS = (".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json")
+# A backtick-quoted token counts as path-candidate-shaped when it contains a path separator or ends with one of these extensions; anything else (a JSON key, a function name, a sentinel string) is silently ignored. Shared by every path-vs-symbol classification in this module (context-completeness's own check, its literal-enumeration exemption, and cross-batch-build-break's rename/removal candidate filter) so the extension list can never silently drift between checks (#1056 plan-review round 2 finding).
+_PATH_CANDIDATE_EXTENSIONS = (
+    ".py", ".go", ".cs", ".ts", ".md", ".yaml", ".yml", ".json", ".js", ".txt", ".sh",
+    ".rs", ".java", ".rb", ".toml", ".cfg", ".ini", ".html", ".css",
+)
 
 # Source-code extensions searched when resolving a symbol-shaped (not path-shaped) backtick token.
 # A standalone tuple rather than a slice of _PATH_CANDIDATE_EXTENSIONS, so this list never silently
@@ -1972,9 +1984,10 @@ def _card_own_reference_set(card_text: str) -> set[str]:
     """Return the union of backtick tokens this card declares as its own.
 
     Combines every backtick-wrapped token found under this card's Context:/Edits:/Creates:/Deletes:
-    headers (single-line or multi-line sub-bullet form) with the source-only half of its Moves:
-    pairs (the destination half is deliberately excluded -- a Requirements: reference to a
-    not-yet-existing Move target is not "already declared").
+    headers (single-line or multi-line sub-bullet form) with BOTH halves of its Moves: pairs --
+    the card declaring a rename is exactly the one whose Requirements: legitimately describes what
+    happens to the destination, so a not-yet-existing Move target it names is still "already
+    declared" for that card's own purposes.
     """
     tokens: set[str] = set()
     lines = card_text.splitlines()
@@ -2015,6 +2028,7 @@ def _card_own_reference_set(card_text: str) -> set[str]:
             pair_m = _RE_MOVE_PAIR.match(sm.group(1).strip())
             if pair_m:
                 tokens.add(pair_m.group(1))
+                tokens.add(pair_m.group(2))
             k += 1
 
     return tokens
@@ -2049,10 +2063,19 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     then requires what remains to look like a bare identifier (``SaveState``) or a dotted
     qualifier.identifier pair (``reedengine.New``).
     A bare or trailing-segment identifier only "qualifies" as a symbol candidate -- as opposed to an
-    ordinary lowercase English word like ``config`` -- when it is not entirely lowercase (contains an
-    uppercase letter, including possibly its first character) or contains an underscore;
-    for a dotted pair, only the trailing (second) segment's own qualification matters, since the
-    trailing segment is the only part ever used as the filesystem search key.
+    ordinary lowercase English word like ``config`` -- when it is longer than one character AND
+    either not entirely lowercase (contains an uppercase letter, including possibly its first
+    character) or contains an underscore; a length-1 identifier never qualifies regardless of
+    case/underscore content, since single-letter receiver/loop/parameter variables are near-
+    universal convention across Go/C#/TS/Python and essentially never disambiguate a real
+    project-specific symbol.
+    For a dotted pair, only the trailing (second) segment's own qualification matters, since the
+    trailing segment is the only part ever used as the filesystem search key -- but a dotted token
+    whose QUALIFIER segment (the first segment, e.g. ``t`` in ``t.Cleanup``) is length 1 is not
+    symbol-shaped AT ALL (the whole token returns ``None``), not merely exempt from qualifier-based
+    disambiguation downstream -- a single-letter qualifier is essentially always a stdlib/BCL-
+    receiver-shaped convention (Go's idiomatic ``*testing.T`` receiver name ``t``, for example),
+    never a project-specific package/namespace worth resolving through.
 
     Returns:
         ``None`` when the token is not symbol-shaped (or doesn't qualify).
@@ -2079,13 +2102,45 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     segments = base.split(".")
 
     def qualifies(segment: str) -> bool:
-        return segment != segment.lower() or "_" in segment
+        return len(segment) > 1 and (segment != segment.lower() or "_" in segment)
 
     if len(segments) == 1:
         return (base, None) if qualifies(base) else None
 
     trailing_segment = segments[-1]
-    return (trailing_segment, segments[0]) if qualifies(trailing_segment) else None
+    qualifier = segments[0]
+    if len(qualifier) <= 1:
+        return None
+    return (trailing_segment, qualifier) if qualifies(trailing_segment) else None
+
+
+_RE_CS_TEST_STEM = re.compile(r"Tests?$")
+
+
+def _is_conventional_test_file(path: Path) -> bool:
+    """
+    Return True when `path` follows a conventional test-file naming pattern for its own language.
+
+    `.go`: stem ends with `_test` (Go's own test-file convention, e.g. `cleanup_test.go`).
+    `.py`: stem starts with `test_` or ends with `_test` (pytest/unittest conventions).
+    `.cs`: stem ends with `Test` or `Tests` (xUnit/NUnit/MSTest convention, e.g. `FooTests.cs`).
+    `.ts`: stem ends with `.test` or `.spec` (Jest/Jasmine convention -- `Path("foo.test.ts").stem`
+    is `"foo.test"`, so this checks the stem's own suffix, not a second `.suffix` lookup).
+
+    A symbol declared ONLY in a test file must never be surfaced by `_resolve_symbol_files` as a
+    dependency a card should add to its read-only `Context:` -- a bulk-mode reviewer would never
+    expect another package's test file there.
+    """
+    stem = path.stem
+    suffix = path.suffix
+    if suffix == ".go":
+        return stem.endswith("_test")
+    if suffix == ".py":
+        return stem.startswith("test_") or stem.endswith("_test")
+    if suffix == ".cs":
+        return bool(_RE_CS_TEST_STEM.search(stem))
+    # suffix == ".ts" (the only remaining member of _SYMBOL_SEARCH_EXTENSIONS)
+    return stem.endswith((".test", ".spec"))
 
 
 def _resolve_symbol_files(
@@ -2105,7 +2160,9 @@ def _resolve_symbol_files(
     For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
     basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS``, or whose lowercased basename is in
     ``_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`` (a conventional out-of-solution marker such as
-    ``deprecated``/``legacy``) -- and, for every file whose suffix is in
+    ``deprecated``/``legacy``), and skipping any file that ``_is_conventional_test_file`` identifies
+    as a conventional test file before its content is ever read (a symbol declared only in a test
+    file is never surfaced as a dependency) -- and, for every remaining file whose suffix is in
     ``_SYMBOL_SEARCH_EXTENSIONS``, checks whether any line of its text matches a declaration-form
     pattern for that extension (a top-level or grouped-block declaration for ``.go``, a type/member
     declaration for ``.cs``, a ``def``/``class``/module-level-assignment for ``.py``, or a
@@ -2145,9 +2202,12 @@ def _resolve_symbol_files(
     go_group_member_re = re.compile(r"^\s*" + sym + r"\b")
 
     # .cs: a type-level declaration, or a member-level declaration guarded by an access modifier.
+    # A literal `new` keyword between the modifier and the symbol is unambiguously a construction
+    # expression (e.g. `throw new InvalidOperationException(...)`, `= new Foo();`), never a member
+    # declaration, so it is excluded from matching.
     cs_type_re = re.compile(r"\b(?:class|struct|interface|enum|record)\s+" + sym + r"\b")
     cs_member_re = re.compile(
-        r"\b(?:public|private|protected|internal)\b.*\b" + sym + r"\b\s*[({;=]"
+        r"\b(?:public|private|protected|internal)\b(?:(?!\bnew\b).)*?\b" + sym + r"\b\s*[({;=]"
     )
 
     # .py: a `def`/`class` declaration, or a module-level (column-0) assignment/annotation.
@@ -2206,6 +2266,8 @@ def _resolve_symbol_files(
             for filename in filenames:
                 file_path = Path(dirpath) / filename
                 if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
+                    continue
+                if _is_conventional_test_file(file_path):
                     continue
                 try:
                     content = file_path.read_text(encoding="utf-8", errors="replace")
@@ -2517,6 +2579,75 @@ def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tupl
     return declaring
 
 
+def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
+    """
+    Return the plan-wide union of identifiers declared inside a signature- or struct-literal-shaped
+    backtick token anywhere in any card's Requirements: text.
+
+    For every card in the plan (via `_parse_cards` on every `??-*.md` batch file except
+    `00-overview.md`), scans its Requirements: text (via `_requirements_fence_aware_body`, the same
+    fence-aware extraction `_check_context_completeness` itself uses) for every backtick token
+    matching `_BACKTICK_RE` that contains a balanced `(...)` or `{...}` span. For each such token,
+    when both a `(...)` and a `{...}` span are present (e.g. a struct-literal token whose field type
+    itself contains a function type, `` `type Deps struct { Acquire func() error }` ``), picks
+    whichever pair's outermost span is WIDER -- an inner, narrower span (the empty `()` in `func()`
+    here) would otherwise win by being checked first and yield an empty, useless `inner` substring.
+    Takes the substring between that pair's first opening delimiter and its last closing delimiter,
+    splits it on `,`/`;`, and for each non-empty clause adds BOTH its first and its last
+    whitespace-separated word to the result set when that word matches `^[A-Za-z_]\\w*$` -- the first
+    word covers a Go/Rust-style `name Type` parameter order, the last word covers a C#/TS-style
+    `Type name` order.
+
+    This is context-completeness's symbol-branch equivalent of `compute_creates_union`'s path-branch
+    plan-wide union: a token this set contains is a symbol the PLAN ITSELF is introducing (a new
+    parameter name, a new struct field) rather than a pre-existing repo symbol, so a bare reference
+    to it elsewhere in the plan's prose must not be treated as an unlisted dependency.
+
+    Args:
+        plan_dir: Directory containing the plan files (00-overview.md + batch files).
+
+    Returns:
+        The set[str] of candidate declared-symbol names found across the whole plan. Returns an
+        empty set when `plan_dir` does not exist or contains no qualifying tokens.
+    """
+    if not plan_dir.exists():
+        return set()
+
+    declared: set[str] = set()
+    bare_word_re = re.compile(r"^[A-Za-z_]\w*$")
+
+    for batch_path in sorted(plan_dir.glob("??-*.md")):
+        if batch_path.name == "00-overview.md":
+            continue
+        text = batch_path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            requirements_text = _requirements_fence_aware_body(card_lines)
+            if requirements_text is None:
+                continue
+            for match in _BACKTICK_RE.finditer(requirements_text):
+                token = match.group(1)
+                candidate_spans = []
+                if "(" in token and ")" in token:
+                    candidate_spans.append((token.find("("), token.rfind(")")))
+                if "{" in token and "}" in token:
+                    candidate_spans.append((token.find("{"), token.rfind("}")))
+                if not candidate_spans:
+                    continue
+                start, end = max(candidate_spans, key=lambda span: span[1] - span[0])
+                if end <= start:
+                    continue
+                inner = token[start + 1:end]
+                for clause in re.split(r"[;,]", inner):
+                    words = clause.split()
+                    if not words:
+                        continue
+                    for word in (words[0], words[-1]):
+                        if bare_word_re.match(word):
+                            declared.add(word)
+
+    return declared
+
+
 def _check_context_completeness(
     batch_files: list[Path],
     project_root: Path,
@@ -2529,6 +2660,7 @@ def _check_context_completeness(
     wiki_root: Path | None = None,
     git_root: Path | None = None,
     creates_declaring_card_map: dict[str, tuple[int, int]] | None = None,
+    declared_symbols: set[str] | None = None,
 ) -> list[dict]:
     """
     Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
@@ -2611,6 +2743,10 @@ def _check_context_completeness(
     test-input enumeration, not a dependency list.
     13. Illustrative-output framing: a line naming a rendered/emitted/printed/displayed/output value
     (e.g. "emitting the bare `x.md`") cites the string as a described output, not a read dependency.
+    14. Same-plan declared symbol (symbol branch only): a search key that some card's Requirements:
+    declares as a new function-signature parameter or struct-literal field (extracted from a
+    parenthesized/braced backtick token) is a symbol the plan itself is introducing, not an existing
+    dependency to resolve.
 
     Not-shaped-at-all or unresolvable tokens (JSON keys, ordinary lowercase words, sentinel strings)
     are never flagged -- only genuine file/symbol references that this validator can independently
@@ -2639,12 +2775,18 @@ def _check_context_completeness(
             Defaults to ``None`` and is materialized to an empty dict on entry (a mutable default
             argument is never used directly in the signature) -- an empty map yields no forward
             exemptions, which is the correct no-op default.
+        declared_symbols: Plan-wide set from ``_compute_declared_symbols_union``, used by exemption
+            14. Defaults to ``None`` and is materialized to an empty set on entry (a mutable default
+            argument is never used directly in the signature) -- an empty set is the correct no-op
+            default.
 
     Returns:
         List of error dicts, one per unresolvable-elsewhere Requirements: reference.
     """
     if creates_declaring_card_map is None:
         creates_declaring_card_map = {}
+    if declared_symbols is None:
+        declared_symbols = set()
     errors: list[dict] = []
     backtick_re = _BACKTICK_RE
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
@@ -2697,6 +2839,12 @@ def _check_context_completeness(
                         if shape_result is None:
                             continue
                         search_key, qualifier = shape_result
+
+                        # Same-plan declared-symbol exemption (symbol branch only): a search key
+                        # some card's Requirements: declares as a new function-signature parameter
+                        # or struct-literal field is not resolved as an unlisted dependency.
+                        if search_key in declared_symbols:
+                            continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
                     if _is_prohibition_exempt(lowered_line):
@@ -2928,6 +3076,19 @@ def _add_n_leading_spaces(text: str, n: int, *, include_blank: bool = False) -> 
     return "\n".join(added_lines)
 
 
+def _first_nonblank_line_indent(text: str) -> int | None:
+    """Return the leading-space count of the first non-blank line in `text`, or `None` if every
+    line is blank.
+
+    Mirrors `_strip_n_leading_spaces`/`_add_n_leading_spaces`'s "skip blank lines" convention -- a
+    fence's own baseline indentation is measured from its first line that actually has content.
+    """
+    for line in text.splitlines():
+        if line.strip():
+            return len(line) - len(line.lstrip(" "))
+    return None
+
+
 def _card_edits_tokens(card_text: str) -> list[str]:
     """Return this card's own ``Edits:`` backtick tokens, in declaration order.
 
@@ -3046,6 +3207,13 @@ def _check_requirements_quote_indent_drift(
     Either pass's first match wins and stops the search;
     a fence matching in neither direction at any N in range is an illustrative snippet showing
     new/desired-state code, not a drifted quote, and is silently skipped -- never flagged.
+    Exception: when such an unmatched fence immediately follows (in ``fence_bodies`` order -- any
+    prose between the two fences in the raw text does not break the pairing) a fence that DID match
+    (clean, strip, or add), its own first-non-blank-line indentation is compared against that anchor
+    fence's own first-non-blank-line indentation;
+    a mismatch is flagged as a new finding (same check name, distinct message).
+    This comparison only ever looks at the single immediately-preceding fence -- it does not chain
+    across multiple consecutive unmatched fences.
 
     Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are
     compared against (never Context:, Creates:, or other cards' files) -- those files already exist
@@ -3103,14 +3271,20 @@ def _check_requirements_quote_indent_drift(
             if not ordered_resolved_tokens:
                 continue
 
+            last_matched_indent: int | None = None
+            last_matched_token: str | None = None
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
                 fence_body = re.sub(r"\n[ \t]*\Z", "", fence_body)
                 # Already byte-exact -- nothing to flag.
                 # This also correctly no-ops for a fence with zero leading whitespace, since every N >= 1 strip on such a fence is a no-op that reduces to this same already-checked raw content.
-                if any(
-                    fence_body in resolved_contents[t]
-                    for t in ordered_resolved_tokens
-                ):
+                clean_match_token = None
+                for t in ordered_resolved_tokens:
+                    if fence_body in resolved_contents[t]:
+                        clean_match_token = t
+                        break
+                if clean_match_token is not None:
+                    last_matched_indent = _first_nonblank_line_indent(fence_body)
+                    last_matched_token = clean_match_token
                     continue
 
                 matched = False
@@ -3133,6 +3307,8 @@ def _check_requirements_quote_indent_drift(
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
+                        last_matched_indent = _first_nonblank_line_indent(fence_body)
+                        last_matched_token = matched_token
                         matched = True
                         break
                 if matched:
@@ -3141,6 +3317,7 @@ def _check_requirements_quote_indent_drift(
                 # The strip pass found nothing: this fence may instead be under-indented relative
                 # to its source (the opposite drift direction), so run the symmetric add pass over
                 # the same ascending N range.
+                add_matched = False
                 for n in range(1, 41):
                     matched_token = None
                     for candidate in (
@@ -3165,7 +3342,33 @@ def _check_requirements_quote_indent_drift(
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
+                        last_matched_indent = _first_nonblank_line_indent(fence_body)
+                        last_matched_token = matched_token
+                        add_matched = True
                         break
+                if add_matched:
+                    continue
+
+                # Neither the clean check, strip pass, nor add pass matched -- illustrative new/
+                # replacement code. Check indentation against the immediately preceding matched
+                # anchor fence in fence_bodies order, if any.
+                if last_matched_indent is not None:
+                    sibling_indent = _first_nonblank_line_indent(fence_body)
+                    if sibling_indent is not None and sibling_indent != last_matched_indent:
+                        errors.append({
+                            "check": "requirements-quote-indent-drift",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": last_matched_token,
+                            "message": (
+                                f"card {card_num}'s Requirements: fence {fence_idx} (new/replacement "
+                                f"code) immediately follows matched fence {fence_idx - 1}, but its "
+                                f"first line is indented {sibling_indent} spaces vs the anchor fence's "
+                                f"{last_matched_indent} spaces"
+                            ),
+                        })
+                last_matched_indent = None
+                last_matched_token = None
 
     return errors
 
@@ -4083,6 +4286,144 @@ def _check_batch_oversized(
 
 
 # ---------------------------------------------------------------------------
+# cross-batch-build-break check (#1056)
+# ---------------------------------------------------------------------------
+
+_RE_RENAME_TO = re.compile(r"rename\s+`([^`]+)`\s+to\s+`([^`]+)`", re.IGNORECASE)
+_RE_REMOVE_SYMBOL = re.compile(r"\bremove\s+`([^`]+)`", re.IGNORECASE)
+_RE_DELETE_SYMBOL = re.compile(r"\bdelete\s+`([^`]+)`", re.IGNORECASE)
+_CROSS_BATCH_BUILD_BREAK_PATTERNS = (_RE_RENAME_TO, _RE_REMOVE_SYMBOL, _RE_DELETE_SYMBOL)
+
+
+def _cross_batch_build_break_looks_like_file(token: str) -> bool:
+    """Return True when `token` is shaped like a file path rather than a code symbol.
+
+    A matched token ending in one of the shared ``_PATH_CANDIDATE_EXTENSIONS``, or containing "/",
+    is a file-removal reference (e.g. "Remove `plugins/mill/scripts/foo.py`", the standard prose
+    for a file deletion in this repo's plans), never a code symbol, and must be excluded from the
+    rename/removal candidate set (#1056 plan-review round 2 finding). Reuses the same extension
+    list as context-completeness's path-vs-symbol classification instead of maintaining a second,
+    independently-drifting tuple.
+    """
+    if "/" in token:
+        return True
+    lowered = token.lower()
+    return any(lowered.endswith(ext) for ext in _PATH_CANDIDATE_EXTENSIONS)
+
+
+def _check_cross_batch_build_break(
+    batch_files: list[Path],
+    overview_path: Path,
+    overview_text: str,
+) -> list[dict]:
+    """
+    Flag a batch whose Requirements: rename/remove a symbol while a later-or-unordered batch's own
+    Requirements: still reference the old symbol name, when the plan's own module-wide `verify:`
+    is a whole-module build/compile/vet/smoke command (see #1056).
+
+    Gated on the overview's existing top-level frontmatter `verify:` field (already documented in
+    `plugins/mill/templates/plan-overview.md`) being non-null. A plan with `verify: null` has no
+    whole-module build-breakage question to ask, so the check is a no-op for it -- no new
+    frontmatter field is introduced.
+
+    This is a plan-text-only check: at plan-review time none of the batches have been implemented
+    yet, so the actual source tree never reflects any of the plan's renames -- there is nothing
+    useful to grep in real source files. Instead, this check scans every OTHER batch's own
+    Requirements: text for the literal old-symbol token the renaming batch's Requirements: names.
+
+    A matched token that looks file-path-shaped (contains "/" or ends in a common source/doc/
+    config file extension, per `_cross_batch_build_break_looks_like_file`) is never treated as a
+    symbol candidate -- "Remove `plugins/mill/scripts/foo.py`" is an ordinary file-deletion
+    instruction, not a renamed/removed code symbol.
+
+    A card that mentions the old symbol is exempt when it performs its own rename/removal of that
+    same symbol (i.e. its own Requirements: text also matches one of the three patterns with that
+    symbol as the matched group) -- that is a further rename in the same chain, not a stale
+    reference. A batch that the renaming batch is a transitive ancestor of (via
+    `_compute_transitive_ancestors` -- i.e. a batch that depends on the renaming batch, directly
+    or transitively) is exempt: the depends-on edge already guarantees it runs after the rename
+    lands.
+
+    Error dict shape: ``{check, batch, card, path, message}`` -- `path` carries the stale symbol
+    token, `card` the referencing card's number, `batch` the referencing batch's name.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        overview_path: Path to the plan's ``00-overview.md``, whose top-level `verify:` field
+            gates this check.
+        overview_text: Full text of ``00-overview.md`` (source of the Batch Index DAG).
+
+    Returns:
+        List of error dicts, one per stale cross-batch symbol reference found.
+    """
+    if not overview_path.exists():
+        return []
+    if _plan_dag._read_batch_frontmatter(overview_path).get("verify") is None:
+        return []
+
+    try:
+        batches = extract_batch_index(overview_text)
+    except PlanDAGError:
+        # Check 4 has already recorded the parse error; don't double-report.
+        return []
+
+    ancestors = _compute_transitive_ancestors(batches)
+    stem_to_path: dict[str, Path] = {bf.stem: bf for bf in batch_files}
+    batch_name_to_path: dict[str, Path] = {}
+    for entry in batches:
+        stem = Path(entry.get("file", "")).stem
+        if stem in stem_to_path:
+            batch_name_to_path[entry["name"]] = stem_to_path[stem]
+
+    def _renamed_symbols(requirements_text: str) -> set[str]:
+        symbols: set[str] = set()
+        for pattern in _CROSS_BATCH_BUILD_BREAK_PATTERNS:
+            for m in pattern.finditer(requirements_text):
+                if _cross_batch_build_break_looks_like_file(m.group(1)):
+                    continue
+                symbols.add(m.group(1))
+        return symbols
+
+    # Collect (renaming_batch_name, old_symbol) pairs from every card's Requirements:.
+    renames: list[tuple[str, str]] = []
+    for name, path in batch_name_to_path.items():
+        text = path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            requirements = _extract_requirements_text("\n".join(card_lines)) or ""
+            for old_symbol in _renamed_symbols(requirements):
+                renames.append((name, old_symbol))
+
+    errors: list[dict] = []
+    for renaming_batch, old_symbol in renames:
+        for other_name, other_path in batch_name_to_path.items():
+            if other_name == renaming_batch:
+                continue
+            if renaming_batch in ancestors.get(other_name, set()):
+                # renaming_batch is an ancestor of other_name -- other_name is guaranteed to run
+                # after the rename lands (the depends-on edge already covers it) -- not at risk.
+                continue
+            text = other_path.read_text(encoding="utf-8")
+            for card_num, card_lines in _parse_cards(text):
+                requirements = _extract_requirements_text("\n".join(card_lines)) or ""
+                if old_symbol not in requirements:
+                    continue
+                if old_symbol in _renamed_symbols(requirements):
+                    continue
+                errors.append({
+                    "check": "cross-batch-build-break",
+                    "batch": other_name,
+                    "card": card_num,
+                    "path": old_symbol,
+                    "message": (
+                        f"batch '{other_name}' card {card_num} Requirements: still reference "
+                        f"'{old_symbol}', renamed/removed by batch '{renaming_batch}', with no "
+                        f"depends-on edge ordering this batch after it"
+                    ),
+                })
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -4108,8 +4449,7 @@ def run(
     verify-mixed-cwd, verify-unrelated-test-file, out-of-worktree-target, batch-oversized,
     commit-none-with-content, and five Move-specific checks (move-format, move-redundant,
     move-source-missing, move-target-collision, move-mechanic-missing),
-    cross-batch-creates-no-depends-on, and verify-batch-mismatch.
-
+    cross-batch-creates-no-depends-on, and verify-batch-mismatch, and cross-batch-build-break.
 
     Args:
         plan_dir: Directory containing the plan files (00-overview.md + batch files).
@@ -4161,6 +4501,7 @@ def run(
     # Move sources behave like Deletes (disappear) and targets like Creates (appear).
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
+    declared_symbols = _compute_declared_symbols_union(plan_dir)
     # verify-mixed-cwd needs a concrete git_root to distinguish "cwd: hub" from "cwd: git_root" resolutions;
     # in a flat layout (no git_root supplied) the two roots collapse to the same Path, which correctly reports zero conflicts since there is nothing to mix.
     effective_git_root = git_root if git_root is not None else project_root
@@ -4180,6 +4521,7 @@ def run(
     errors.extend(_check_verify_batch_mismatch(batch_files, overview_text, project_root))
     errors.extend(_check_parallel_modifies_overlap(batch_files, overview_text))
     errors.extend(_check_cross_batch_creates_no_depends_on(batch_files, overview_text))
+    errors.extend(_check_cross_batch_build_break(batch_files, overview_path, overview_text))
     errors.extend(_check_ref_not_backtick_path(batch_files))
     errors.extend(_check_verify_not_isolated(batch_files, project_root, overview_path))
     errors.extend(_check_verify_full_suite(batch_files, project_root, overview_path, done_gate=done_gate))
@@ -4201,6 +4543,7 @@ def run(
         wiki_root=wiki_root,
         git_root=git_root,
         creates_declaring_card_map=creates_declaring_card_map,
+        declared_symbols=declared_symbols,
     ))
     errors.extend(_check_requirements_quote_indent_drift(
         batch_files, project_root, effective_root,
@@ -4225,7 +4568,7 @@ def run(
         git_root=git_root,
     ))
     errors.extend(_check_move_target_collision(
-        batch_files, project_root, effective_root,
+        batch_files, project_root, effective_root, moves_sources,
         wiki_root=wiki_root,
         git_root=git_root,
     ))

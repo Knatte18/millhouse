@@ -21,7 +21,8 @@ Write a brief file to briefs_dir/<role>-<sanitized_scope>-r<round_n>.md,
 creating parent directories. The scope component is sanitized for Windows
 filename safety (colons, slashes, etc. become hyphens). Returns the path
 of the written file. Example role: "implement". Always unlinks a stale
-".out.md" next to the brief first. When output_contract is True (default
+".out.md" next to the brief first, printing a warning to stderr first when a
+stale ".out.md" already exists. When output_contract is True (default
 False), appends an output-contract footer naming the absolute ".out.md"
 path and requiring a one-line "WROTE <path>" chat ack.
 
@@ -205,7 +206,18 @@ def write_brief(
 
     # Unconditionally clear any stale output from a prior dispatch to this same brief path.
     # Runs for every role, agent-mode or not: without it, a transient-retry re-dispatch (same role/scope/round) could read back an attempt-1 output as attempt-2's result.
-    output_path_for(brief_path).unlink(missing_ok=True)
+    # Warn (never refuse) when a prior dispatch's output is about to be discarded -- a legitimate
+    # transient-retry re-dispatch reuses this same path by design, so this must never become a
+    # hard failure (#1054).
+    stale_out_path = output_path_for(brief_path)
+    if stale_out_path.exists():
+        print(
+            f"[write_brief] warning: overwriting existing unfinalized output "
+            f"'{stale_out_path}' -- if this round's finalize already ran, its result is about "
+            f"to be lost",
+            file=sys.stderr,
+        )
+    stale_out_path.unlink(missing_ok=True)
 
     # Stamp the prepare-stage wall-clock start time so a review round's finalize stage can derive
     # duration_s from measured elapsed time instead of trusting an orchestrator-supplied value.

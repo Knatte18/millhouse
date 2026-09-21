@@ -421,6 +421,8 @@ Report: **"Discussion complete.
 Run `/mill-plan` next to start autonomous plan writing."**
 Do not invoke `/mill-plan` yourself — handoff is always an explicit user decision.
 
+**Post-Handoff immutability.** Once this phase's `_status.append_phase(status_path, "discussed", timestamp)` commits, `discussion_path` must not be edited again by mill-start, in this session or a later one. `phase: discussed` is mill-plan's entry-gate signal (see mill-plan/SKILL.md's "Entry-gate wait for upstream mill-start") — a mill-start that keeps mutating discussion.md after raising it races mill-plan and makes the gate meaningless. If a genuine correction surfaces after Handoff, do not edit discussion.md directly; report the correction to the operator as a note for the next task/gap instead.
+
 ## Principles
 
 - **Design the full scope** — never suggest MVP phases or "we can add this later".

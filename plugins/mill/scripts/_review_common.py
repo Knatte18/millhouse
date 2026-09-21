@@ -992,6 +992,7 @@ def resolve_ref_paths(
     git_root: Path | None = None,
     caller_label: str = "resolve_ref_paths",
     soft_fail_gitignored: bool = False,
+    allow_missing_refs: bool = False,
 ) -> list[Path]:
     """Resolve batch-reference path strings to absolute ``Path``s.
 
@@ -1033,6 +1034,12 @@ def resolve_ref_paths(
             Opt-in;
             the ``wiki/`` branch is never affected.
             Default False (#733).
+        allow_missing_refs: When True, a missing non-wiki candidate — not on disk, not in
+            ``creates_union``/``deletes_union``, and not confirmed git-ignored — is skipped with a
+            stderr warning instead of raising ``ReviewError``.
+            Opt-in;
+            the ``wiki/`` branch is never affected, mirroring ``soft_fail_gitignored``'s own scope.
+            Default False (#1083).
 
     Raises ``ReviewError`` when a candidate path is not on disk AND not in either ``creates_union``
     or ``deletes_union`` — hard-fail replaces the old silent-skip + warning behaviour (#41).
@@ -1108,6 +1115,16 @@ def resolve_ref_paths(
                     break
             if skipped:
                 continue
+        # Opt-in: skip a missing ref that isn't confirmed git-ignored either, when the caller has
+        # explicitly accepted that the referenced file may live on an unmerged predecessor task's
+        # branch (#1083).
+        if allow_missing_refs:
+            print(
+                f"[resolve_ref_paths] warning: skipping missing Context: ref "
+                f"{raw!r} (not on disk, allow_missing_refs)",
+                file=sys.stderr,
+            )
+            continue
         # Hard-fail.
         raise ReviewError(
             f"[{caller_label}] referenced path not found: {raw!r}; "

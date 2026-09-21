@@ -1729,6 +1729,45 @@ def main() -> int:
                 "PASS: resolve_ref_paths hard-fails git-ignored missing ref when soft_fail_gitignored=False explicit"
             )
 
+    # resolve_ref_paths: allow_missing_refs=True skips a missing ref that is NOT git-ignored
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        result = resolve_ref_paths(
+            ["not_ignored_missing.py"],
+            repo_root,
+            None,
+            git_root=repo_root,
+            allow_missing_refs=True,
+        )
+        assert result == [], f"Got {result}"
+        print(
+            "PASS: resolve_ref_paths allow_missing_refs skips missing ref not on disk"
+        )
+
+    # resolve_ref_paths: allow_missing_refs=False explicit -> still hard-fails on the identical missing, non-ignored path
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        repo_root = Path(tmpdir)
+        _test_helpers.init_minimal_git_repo(repo_root, branch="main")
+        try:
+            resolve_ref_paths(
+                ["not_ignored_missing.py"],
+                repo_root,
+                None,
+                git_root=repo_root,
+                allow_missing_refs=False,
+            )
+            print(
+                "FAIL: resolve_ref_paths: expected ReviewError with allow_missing_refs=False",
+                file=sys.stderr,
+            )
+            errors += 1
+        except ReviewError as e:
+            assert "referenced path not found" in str(e), f"Unexpected message: {e}"
+            print(
+                "PASS: resolve_ref_paths hard-fails missing ref when allow_missing_refs=False explicit"
+            )
+
     # compute_creates_union: empty plan dir returns empty set
     with _test_helpers.safe_temp_dir() as tmpdir:
         result = compute_creates_union(Path(tmpdir) / "nonexistent")
