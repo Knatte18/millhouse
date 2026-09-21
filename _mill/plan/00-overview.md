@@ -3,7 +3,7 @@
 ```yaml
 task: '_plan_validate.py: further context-completeness, fence/indent-drift, and tag-exclusion gaps'
 slug: plan-validate-context-completeness-round2-gaps
-approved: false
+approved: true
 started: 20260921-153440
 parent: main
 root: ""
