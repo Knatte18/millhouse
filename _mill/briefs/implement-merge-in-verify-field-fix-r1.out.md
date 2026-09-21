@@ -1,0 +1,5 @@
+Card-count self-check: this batch declares 1 card (Card 7), and 1 matching commit exists in the range — 1 of 1 cards committed, all complete.
+
+Summary: implemented and committed the single card in batch 03-merge-in-verify-field-fix (Card 7), fixing `_run_recompute_baseline` in `plugins/mill/scripts/millpy-merge-in-subagent.py` to route the module-wide `verify:` field through `_plan_dag.parse_verify_field` instead of reading it raw, threading `cwd_override` into `_verify_baseline.compute_baseline`'s `cwd_override_relative` kwarg, and wrapping the new call in the function's existing never-raises try/except pattern. Extended `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py` with `test_21_recompute_baseline_mapping_verify_field` and `test_22_recompute_baseline_malformed_verify_field`. All 37 tests in the file pass. Working tree is clean; the batch's declared 1-of-1 card is committed.
+
+{"status":"success","commit_sha":"00512c765c901ea977b87b91a7f72de74018dc90","session_id":"aedea31e-284a-49e4-97b3-2ccd134954a9","cards_done":[7]}

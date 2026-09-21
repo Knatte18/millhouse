@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-pr-state-and-cache-freshness
+phase: approved-merge-in-verify-field-fix
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-09-21T16:05:13Z'
 implementing  '2026-09-21T16:09:43Z'
 approved-wiki-daemon-reliability  '2026-09-21T16:17:14Z'
 approved-pr-state-and-cache-freshness  '2026-09-21T16:23:59Z'
+approved-merge-in-verify-field-fix  '2026-09-21T16:27:29Z'
 ```
 
 ## Batches
@@ -47,9 +48,10 @@ batches:
     commit_sha: 2cc0cb624b5eade097065577fe7021105a7a1f2d
     verify_baseline_failures: []
   - name: merge-in-verify-field-fix
-    state: running
+    state: approved
     implementer_session: aedea31e-284a-49e4-97b3-2ccd134954a9
     start_sha: a8895fa97951d8cf5e1d2871651488bb33bf2331
+    commit_sha: 00512c765c901ea977b87b91a7f72de74018dc90
     verify_baseline_failures: []
   - name: baseline-lazy-preflight
     state: pending
