@@ -47,7 +47,9 @@ batches:
     commit_sha: 2cc0cb624b5eade097065577fe7021105a7a1f2d
     verify_baseline_failures: []
   - name: merge-in-verify-field-fix
-    state: pending
+    state: running
+    implementer_session: aedea31e-284a-49e4-97b3-2ccd134954a9
+    start_sha: a8895fa97951d8cf5e1d2871651488bb33bf2331
     verify_baseline_failures: []
   - name: baseline-lazy-preflight
     state: pending
