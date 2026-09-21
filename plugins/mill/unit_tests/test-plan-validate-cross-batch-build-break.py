@@ -59,7 +59,13 @@ def _write_overview(
     return overview_path
 
 
-def _write_batch_file(plan_dir: Path, filename: str, requirements: str) -> None:
+def _write_batch_file(
+    plan_dir: Path,
+    filename: str,
+    requirements: str,
+    *,
+    depends_on: list[str] | None = None,
+) -> None:
     """
     Write a minimal batch file: a single ``### Card 1:`` heading and a Requirements: field.
 
@@ -67,9 +73,16 @@ def _write_batch_file(plan_dir: Path, filename: str, requirements: str) -> None:
     `_parse_cards`/`_extract_requirements_text` and the Batch Index via
     `extract_batch_index` -- no Context:/Edits:/Creates:/Deletes:/Moves:/Commit: fields
     are needed for this check's own logic, though real plan files always have them.
+
+    `depends_on`, when given, prepends a minimal frontmatter `depends-on:` block matching
+    this repo's `depends-on-batch-mismatch` convention that a batch's own frontmatter and the
+    overview Batch Index entry must agree (card 14, scenario 2).
     """
     plan_dir.mkdir(parents=True, exist_ok=True)
     text = f"### Card 1: t\n\n- **Requirements:**\n  {requirements}\n"
+    if depends_on is not None:
+        deps_yaml = "[" + ", ".join(f'"{d}"' for d in depends_on) + "]"
+        text = f"```yaml\ndepends-on: {deps_yaml}\n```\n\n{text}"
     (plan_dir / filename).write_text(text, encoding="utf-8")
 
 
@@ -127,6 +140,7 @@ def test_does_not_fire_with_depends_on_edge() -> None:
         _write_batch_file(
             plan_dir, "02-beta.md",
             "Update the caller that still reads `Engine.HeaderText`.",
+            depends_on=["alpha"],
         )
         overview_text = overview_path.read_text(encoding="utf-8")
         batch_files = [plan_dir / "01-alpha.md", plan_dir / "02-beta.md"]
