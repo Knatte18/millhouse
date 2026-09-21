@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-plan-process-gaps-r2
 branch: hanf/mill-plan-process-gaps-r2
 plan: _mill/plan
@@ -33,6 +33,7 @@ holistic-reviewing  '2026-09-21T16:21:44Z'
 holistic-fixing  '2026-09-21T16:27:14Z'
 nits-fixed-holistic  '2026-09-21T16:33:21Z'
 holistic-approved  '2026-09-21T16:33:44Z'
+done  '2026-09-21T16:34:54Z'
 ```
 
 ## Batches
