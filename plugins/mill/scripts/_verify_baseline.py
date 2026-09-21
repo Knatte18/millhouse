@@ -44,8 +44,10 @@ Public API:
     Per-batch, multi-command companion to compute_baseline: takes an
     ALREADY-CHECKED-OUT checkout_path (no checkout/teardown of its own)
     so many commands can share one transient checkout, and returns a
-    union-of-two-runs failure-signature list per command name instead
+    union-of-runs failure-signature list per command name instead
     of a binary "clean"/"pre-existing-failures" verdict.
+    Deduplicates work across names sharing one (command, cwd) pair and
+    skips the corroboration re-run when run 1 is green.
 """
 from __future__ import annotations
 
@@ -315,12 +317,24 @@ def compute_batch_baselines(
     This lets a caller batch many verify commands against one shared checkout instead of checking
     out once per command.
 
-    For each `(name, command, cwd_override)` triple, runs `command` via `_run_verify_in` TWICE
-    unconditionally against its own effective cwd (`cwd_override` if not None, else `checkout_path`
-    directly -- mirroring `_run_verify_gate`'s `cwd_override` handling).
+    Work is keyed on the `(command, effective_cwd)` pair, NOT on the batch `name` (`cwd_override` if
+    not None, else `checkout_path` directly -- mirroring `_run_verify_gate`'s `cwd_override`
+    handling).
+    Plans whose last batch verifies the union of the earlier batches' commands are a common and
+    reasonable shape, and re-running an identical command string in an identical cwd cannot
+    corroborate anything the first evaluation of that pair did not already establish (#1098);
+    each distinct pair is therefore evaluated once and its signature list fanned out (as an
+    independent copy) to every batch name that maps to it.
+
+    Each pair is run via `_run_verify_in` up to TWICE.
     Each run's combined stdout+stderr is passed through `_extract_failure_signatures`;
-    the returned signature list for that command is the union (deduplicated, order-preserving by
+    the returned signature list for that pair is the union (deduplicated, order-preserving by
     first occurrence across both runs) of both runs' extracted (unnormalized) signatures.
+    Run 2 is SKIPPED when run 1 exits 0 with zero extracted signatures: there is nothing to
+    corroborate, and a green parent branch is the normal state rather than the exception, so paying
+    the retry cost there doubles every task's baseline pre-flight for no baseline content (#1098).
+    This mirrors `compute_baseline`'s module-wide algorithm, which likewise returns "clean"
+    immediately on a zero exit and only re-runs after a non-zero one.
 
     This is a union-of-two-runs corroboration, not the module-wide algorithm's binary verdict with a
     third task-worktree control run: a flaky pre-existing failure that reproduces on only one of the
@@ -342,22 +356,45 @@ def compute_batch_baselines(
             kept for forward compatibility.
 
     Returns:
-        A dict keyed by `name`, each value the union (deduplicated, order-preserving) of both runs'
-        extracted raw failure-signature lines for that command's `command`.
-        A command with zero failures on both runs maps to `[]` (present, not an absent key).
-        Each value is an independent list object, never aliased across names.
+        A dict keyed by `name`, each value the union (deduplicated, order-preserving) of the runs'
+        extracted raw failure-signature lines for that command's `(command, effective_cwd)` pair.
+        A command with zero failures maps to `[]` (present, not an absent key).
+        Each value is an independent list object, never aliased across names -- including across
+        names that share one `(command, effective_cwd)` pair.
     """
     del project_root  # unused today; kept for signature parity/forward compat.
+    by_pair: dict[tuple[str, Path], list[str]] = {}
     results: dict[str, list[str]] = {}
     for name, command, cwd_override in commands:
         effective_cwd = cwd_override if cwd_override is not None else checkout_path
-        signatures: list[str] = []
-        seen: set[str] = set()
-        for _run_index in range(2):
-            _rc, output = _run_verify_in(command, effective_cwd)
-            for line in _extract_failure_signatures(output):
-                if line not in seen:
-                    seen.add(line)
-                    signatures.append(line)
-        results[name] = signatures
+        pair = (command, effective_cwd)
+        if pair not in by_pair:
+            by_pair[pair] = _signatures_for_pair(command, effective_cwd)
+        # Copy per name: callers treat each value as their own mutable list.
+        results[name] = list(by_pair[pair])
     return results
+
+
+def _signatures_for_pair(command: str, effective_cwd: Path) -> list[str]:
+    """
+    Run one `(command, effective_cwd)` pair and return its union-of-runs failure signatures.
+
+    Runs `command` in `effective_cwd` once;
+    re-runs it once more -- unioning both runs' signatures, deduplicated and order-preserving by
+    first occurrence -- unless run 1 exited 0 with zero extracted signatures, in which case there is
+    nothing for a second run to corroborate.
+
+    Returns:
+        The extracted raw failure-signature lines, `[]` when the command produced none.
+    """
+    signatures: list[str] = []
+    seen: set[str] = set()
+    for run_index in range(2):
+        rc, output = _run_verify_in(command, effective_cwd)
+        for line in _extract_failure_signatures(output):
+            if line not in seen:
+                seen.add(line)
+                signatures.append(line)
+        if run_index == 0 and rc == 0 and not signatures:
+            break
+    return signatures

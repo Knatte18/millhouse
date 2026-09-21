@@ -35,6 +35,15 @@ runs still ends up in the union (neither run's set silently overwrites the other
 shared mocked `checkout_path` (mirroring how a future shared-checkout orchestrator calls it once per
 distinct effective-cwd fragment), then `compute_batch_baselines` with commands resolving to each of
 those two paths via their `cwd_override` entries.
+
+Cases (f)-(i) regress #1098, where `compute_batch_baselines` ran every verify command twice
+unconditionally and keyed its loop on the batch name, so a plan whose last batch verifies the union
+of the earlier batches executed each suite four times instead of once: (f) two names sharing one
+`(command, effective_cwd)` pair evaluate it once and each still get a non-aliased list;
+(g) a command exiting 0 with zero signatures runs once, not twice;
+(h) the skip is gated on the zero exit code, so a non-zero exit with no recognized signatures is
+still re-run;
+(i) dedup is keyed on the pair, so one command string at two distinct cwds stays two units of work.
 """
 from __future__ import annotations
 
@@ -229,16 +238,156 @@ def _case_e_mixed_cwd_dependency_linking() -> None:
 
         assert result == {"root-batch": [], "hub-batch": []}, result
 
+        # One run each, not two: both commands exit 0 with no signatures, so the corroboration
+        # re-run is skipped (#1098).
         root_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-root"]
         hub_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-hub"]
-        assert root_cwds == [target_git_root, target_git_root], root_cwds
-        assert hub_cwds == [target_hub, target_hub], hub_cwds
+        assert root_cwds == [target_git_root], root_cwds
+        assert hub_cwds == [target_hub], hub_cwds
 
         print(
             "PASS: compute_batch_baselines runs each command at its own "
             "resolved cwd within one shared checkout, with dependency dirs "
             "linked at both resolved paths"
         )
+
+
+def _case_f_identical_command_and_cwd_runs_once() -> None:
+    """
+    Case (f) regresses #1098: two batch names sharing one `(command, effective_cwd)` pair run the
+    command once, not once per name -- and each still gets its own, non-aliased list object.
+
+    Uses a failing command so the corroboration re-run is not itself skipped;
+    the assertion is about the pair being evaluated once (2 runs total), not four times.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    runs: list[str] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        del cwd
+        runs.append(command)
+        return 1, "--- FAIL: TestShared (0.01s)\n"
+
+    commands = [
+        ("batch1", "dotnet test Suite", None),
+        ("batch3", "dotnet test Suite", None),
+    ]
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(commands, checkout_path, project_root)
+
+    assert runs == ["dotnet test Suite", "dotnet test Suite"], (
+        f"expected the shared command evaluated once (2 runs), got {len(runs)} runs: {runs!r}"
+    )
+    assert result["batch1"] == ["--- FAIL: TestShared (0.01s)"], result["batch1"]
+    assert result["batch3"] == result["batch1"], result["batch3"]
+    assert result["batch1"] is not result["batch3"], (
+        "expected independent (non-aliased) list objects even for a shared command"
+    )
+
+    print(
+        "PASS: compute_batch_baselines evaluates an identical (command, cwd) pair "
+        "once and fans independent copies out to every batch name"
+    )
+
+
+def _case_g_green_run_skips_corroboration_rerun() -> None:
+    """
+    Case (g) regresses #1098: a command that exits 0 with zero extracted signatures is run once, not
+    twice -- there is nothing for the second run to corroborate.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    runs: list[str] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        del cwd
+        runs.append(command)
+        return 0, "Passed!  - Failed: 0, Passed: 412\n"
+
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(
+            [("green-batch", "cmd-green", None)], checkout_path, project_root
+        )
+
+    assert len(runs) == 1, f"expected a single run for a green command, got {runs!r}"
+    assert result == {"green-batch": []}, result
+
+    print(
+        "PASS: compute_batch_baselines skips the corroboration re-run when "
+        "run 1 exits 0 with zero failure signatures"
+    )
+
+
+def _case_h_nonzero_exit_without_signatures_still_reruns() -> None:
+    """
+    Case (h): the run-2 skip is gated on a ZERO exit code, not on the signature list alone.
+
+    A command that fails without emitting any line `_extract_failure_signatures` recognizes (a build
+    break, a crashed runner) is still re-run, so a signature that only surfaces on the second
+    attempt reaches the baseline.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    runs: list[str] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        del cwd
+        runs.append(command)
+        if len(runs) == 1:
+            return 1, "error CS0246: the type or namespace could not be found\n"
+        return 1, "--- FAIL: TestLate (0.03s)\n"
+
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(
+            [("broken-batch", "cmd-broken", None)], checkout_path, project_root
+        )
+
+    assert len(runs) == 2, (
+        f"expected a re-run after a non-zero exit with no signatures, got {runs!r}"
+    )
+    assert result["broken-batch"] == ["--- FAIL: TestLate (0.03s)"], result["broken-batch"]
+
+    print(
+        "PASS: compute_batch_baselines still re-runs a non-zero-exit command "
+        "that emitted no recognized failure signatures"
+    )
+
+
+def _case_i_same_command_distinct_cwds_not_deduped() -> None:
+    """
+    Case (i): dedup is keyed on the `(command, effective_cwd)` pair -- one command string run at two
+    distinct cwds is two distinct units of work, not one.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    seen_cwds: list[Path] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        del command
+        seen_cwds.append(cwd)
+        return 1, f"--- FAIL: Test{cwd.name} (0.01s)\n"
+
+    commands = [
+        ("root-batch", "make test", Path("/fake/checkout")),
+        ("sub-batch", "make test", Path("/fake/checkout/sub")),
+    ]
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(commands, checkout_path, project_root)
+
+    assert seen_cwds == [
+        Path("/fake/checkout"),
+        Path("/fake/checkout"),
+        Path("/fake/checkout/sub"),
+        Path("/fake/checkout/sub"),
+    ], seen_cwds
+    assert result["root-batch"] == ["--- FAIL: Testcheckout (0.01s)"], result["root-batch"]
+    assert result["sub-batch"] == ["--- FAIL: Testsub (0.01s)"], result["sub-batch"]
+
+    print(
+        "PASS: compute_batch_baselines keys dedup on (command, cwd), so one "
+        "command string at two distinct cwds stays two units of work"
+    )
 
 
 def main() -> int:
@@ -313,6 +462,10 @@ def main() -> int:
         _case_c_zero_failures_returns_empty_list()
         _case_d_union_of_two_runs()
         _case_e_mixed_cwd_dependency_linking()
+        _case_f_identical_command_and_cwd_runs_once()
+        _case_g_green_run_skips_corroboration_rerun()
+        _case_h_nonzero_exit_without_signatures_still_reruns()
+        _case_i_same_command_distinct_cwds_not_deduped()
 
         print("All _verify_baseline unit tests passed.")
         return 0
