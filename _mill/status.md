@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-entry-gate-wait-expiry-branch
+phase: holistic-reviewing
 slug: mill-monitor-persistent-true-unsupported
 branch: hanf/mill-monitor-persistent-true-unsupported
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-21T15:13:31Z'
 planned  '2026-09-21T15:14:13Z'
 implementing  '2026-09-21T15:18:31Z'
 approved-entry-gate-wait-expiry-branch  '2026-09-21T15:22:25Z'
+holistic-reviewing  '2026-09-21T15:22:55Z'
 ```
 
 ## Batches
