@@ -32,11 +32,16 @@ implementing  '2026-09-21T16:01:48Z'
 ```yaml
 batches:
   - name: doc-fixes
-    state: pending
+    state: running
+    implementer_session: af5e52fa-3547-4a4b-a68a-5c36575a1631
+    start_sha: 5c3e70534ca6fdfeeb0df0b27aa95c71b0ded521
   - name: allow-missing-refs
     state: pending
+    verify_baseline_failures: []
   - name: write-brief-warning
     state: pending
+    verify_baseline_failures: []
   - name: cross-batch-build-break
     state: pending
+    verify_baseline_failures: []
 ```
