@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-validate-context-completeness-round2-gaps
 branch: hanf/plan-validate-context-completeness-round2-gaps
 plan: _mill/plan
@@ -27,4 +27,15 @@ plan-review-r2  '2026-09-21T15:57:16Z'
 plan-fix-r2  '2026-09-21T15:58:45Z'
 plan-review-r3  '2026-09-21T16:05:21Z'
 planned  '2026-09-21T16:05:59Z'
+implementing  '2026-09-21T16:09:13Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-validate-check-fixes
+    state: pending
+  - name: mill-plan-fix-table-docs
+    state: pending
 ```
