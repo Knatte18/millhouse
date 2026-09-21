@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-review-duration-derivation
+phase: approved-handoff-skill-doc-fix
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-pr-state-and-cache-freshness  '2026-09-21T16:23:59Z'
 approved-merge-in-verify-field-fix  '2026-09-21T16:27:29Z'
 approved-baseline-lazy-preflight  '2026-09-21T16:42:56Z'
 approved-review-duration-derivation  '2026-09-21T16:49:32Z'
+approved-handoff-skill-doc-fix  '2026-09-21T16:51:18Z'
 ```
 
 ## Batches
@@ -68,9 +69,10 @@ batches:
     commit_sha: 756460208993f942986259a94b5a54c02379ade7
     verify_baseline_failures: []
   - name: handoff-skill-doc-fix
-    state: running
+    state: approved
     implementer_session: cc93d7cd-dfc3-40fd-b59b-863a965e1414
     start_sha: 3e453fbcf0281268aacd6f54b4f2899f1904a0d8
+    commit_sha: 7ca7a33d09d02bf1394a101dcd6397678da950a4
   - name: csharp-build-node-reuse
     state: pending
   - name: skill-cross-reference-fix
