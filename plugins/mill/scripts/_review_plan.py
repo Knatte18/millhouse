@@ -152,6 +152,7 @@ def _review_one_batch(
     bulk_timeout: int | None,
     *,
     blocking_classes: frozenset[str],
+    allow_missing_refs: bool = False,
 ) -> dict:
     """Review a single plan batch file.
 Returns a reviews[] entry dict.
@@ -169,6 +170,9 @@ Returns a reviews[] entry dict.
         blocking_classes: The pre-resolved per-scope blocking-class ceiling for this batch, supplied
             by the caller (this worker does not receive `cfg` and cannot call
             `resolve_blocking_classes` itself). Passed straight through to `finalize_scope`.
+        allow_missing_refs: When True, a missing `Context:` ref not on disk (and not confirmed
+            git-ignored) is dropped from the bulk with a stderr warning instead of hard-failing;
+            threaded straight through to this batch's own `resolve_ref_paths` call (#1083).
     """
     try:
         # Running per-round totals for the three cost-metadata fields; populated once the first
@@ -200,6 +204,7 @@ Returns a reviews[] entry dict.
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             soft_fail_gitignored=True,
+            allow_missing_refs=allow_missing_refs,
         )
         reads = [*other_reads, *context_reads]
 
@@ -398,6 +403,7 @@ def prepare(
     agent_mode: bool = False,
     reviewer_override: str | None = None,
     reviews_subdir: str | None = None,
+    allow_missing_refs: bool = False,
 ) -> dict:
     """Prepare a plan review by rendering the prompt for a single scope.
 
@@ -421,6 +427,11 @@ def prepare(
             from the original approved pass's review files.
             Mirrors `reviewer_override`'s per-invocation-only contract; nothing is written back
             to config.
+        allow_missing_refs: When True, a missing `Context:` ref not on disk (and not confirmed
+            git-ignored) is dropped from the bulk with a stderr warning instead of hard-failing --
+            per-invocation-only, mirroring `reviews_subdir`'s own contract; nothing is written
+            back to config. Threaded into both this function's `context_reads`/`all_context_reads`
+            calls (#1083).
 
     Returns:
         Dict with keys: prompt_text, model, effort, round, reviews_dir, scope.
@@ -475,6 +486,7 @@ def prepare(
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             soft_fail_gitignored=True,
+            allow_missing_refs=allow_missing_refs,
         )
         reads = [*other_reads, *context_reads]
 
@@ -597,6 +609,7 @@ def prepare(
             creates_union=combined_creates, deletes_union=deletes_union,
             wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
             soft_fail_gitignored=True,
+            allow_missing_refs=allow_missing_refs,
         )
         all_reads = [*all_other_reads, *all_context_reads]
 
@@ -786,6 +799,7 @@ def run(
     no_holistic: bool = False,
     reviewer_override: str | None = None,
     reviews_subdir: str | None = None,
+    allow_missing_refs: bool = False,
 ) -> ReviewResult:
     """Run plan review: parallel per-batch + optional holistic.
 
@@ -818,6 +832,12 @@ def run(
             from the original approved pass's review files.
             Mirrors `reviewer_override`'s per-invocation-only contract; nothing is written back
             to config.
+        allow_missing_refs: When True, a missing `Context:` ref not on disk (and not confirmed
+            git-ignored) is dropped from the bulk with a stderr warning instead of hard-failing --
+            per-invocation-only, mirroring `reviews_subdir`'s own contract; nothing is written
+            back to config. Threaded into this function's own holistic-branch
+            `all_context_reads` call and into every `_review_one_batch` worker dispatched below
+            (#1083).
     """
     if holistic_only and no_holistic:
         raise ReviewError("--holistic-only and --no-holistic are mutually exclusive")
@@ -990,6 +1010,7 @@ def run(
                                     blocking_classes=resolve_blocking_classes(
                                         cfg, "plan", batch_path.stem
                                     ),
+                                    allow_missing_refs=allow_missing_refs,
                                 )
                                 futures_map[future] = batch_path
 
@@ -1041,6 +1062,7 @@ def run(
                 creates_union=combined_creates, deletes_union=deletes_union,
                 wiki_root=wiki_root, git_root=git_root, caller_label="_review_plan",
                 soft_fail_gitignored=True,
+                allow_missing_refs=allow_missing_refs,
             )
             all_reads = [*all_other_reads, *all_context_reads]
 
