@@ -1124,6 +1124,11 @@ def _run_verify_gates(
         for waiver: it is mathematically a subset of any set, so treating it
         as waivable would silently mask genuine new regressions and
         infrastructure failures alike.
+            When this parameter arrives empty/None and a batch failure
+        occurs, this function now attempts an on-demand computation via
+        status_path's baseline_parent_sha before falling back to strict
+        blocking (previously: strict blocking was the only behavior when no
+        baseline was cached).
             Defaults to None (run strictly, as
         before this parameter existed).
         start_sha: The commit SHA this batch's implementer started from,
@@ -1158,6 +1163,67 @@ def _run_verify_gates(
         # Any other case -- no baseline yet,
         # or an empty/absent replay signature set -- blocks exactly as today, since an empty set is vacuously a subset of anything and must never be treated as waivable.
         replay_signatures = batch_result.get("signatures")
+
+        # On-demand compute prelude (#1102): fires only when there is no eager baseline yet -- the
+        # normal case now that per-batch precomputation is gone. Reads the pinned parent SHA and
+        # computes this batch's own baseline lazily, on demand, only now that the batch's verify
+        # gate has actually failed.
+        if (
+            not batch_verify_baseline
+            and replay_signatures
+            and status_path is not None
+            and verify_cmd is not None
+        ):
+            baseline_parent_sha = _status.get_baseline_parent_sha(status_path)
+            if baseline_parent_sha is not None:
+                import _verify_baseline
+
+                try:
+                    computed = _verify_baseline.compute_batch_baseline_on_demand(
+                        project_root,
+                        git_root or project_root,
+                        baseline_parent_sha,
+                        verify_cmd,
+                        cwd_override=cwd_override,
+                    )
+                except Exception:
+                    # Infrastructure failure: degrade to "gate strictly," the same fail-safe
+                    # direction the module-wide mechanism already uses.
+                    computed = None
+                if computed:
+                    batch_verify_baseline = computed
+                    # Persist for future batches: a computed baseline is valuable for a later
+                    # batch's failure even when it doesn't waive this one.
+                    if batch_name is not None:
+                        try:
+                            _status.set_batch_field(
+                                status_path,
+                                batch_name,
+                                "verify_baseline_failures",
+                                computed,
+                            )
+                        except Exception:
+                            pass
+                        else:
+                            if git_name is not None and git_email is not None:
+                                try:
+                                    _subprocess_util.run(
+                                        [
+                                            "git",
+                                            "add",
+                                            status_path.relative_to(project_root).as_posix(),
+                                        ],
+                                        cwd=project_root,
+                                    )
+                                    _subprocess_util.git_commit(
+                                        project_root,
+                                        f"mill-go: persist on-demand verify baseline for {batch_name}",
+                                        name=git_name,
+                                        email=git_email,
+                                    )
+                                except Exception:
+                                    pass
+
         if batch_verify_baseline and replay_signatures:
             normalized_replay = {
                 _normalize_failure_signature(line) for line in replay_signatures
