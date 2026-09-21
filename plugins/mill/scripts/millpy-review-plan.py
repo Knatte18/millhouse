@@ -19,6 +19,9 @@ Flags:
         Silently ignores unknown names.
     --skip-validate Bypass the auto pre-review validator.
         Use only when you know the validator is false-positive on a finding.
+    --allow-missing-refs Skip the brief-bulking hard-fail on a missing Context: ref (e.g. one
+        living only on an unmerged predecessor task's branch); the ref is dropped from the bulk
+        with a stderr warning instead. Never applies to Edits:/Creates:/Deletes: refs.
     --duration-s <seconds> Finalize-stage only, orchestrator-supplied wall-clock seconds the
         reviewer call took;
         written into the review file's yaml header and the JSON envelope.
@@ -81,6 +84,15 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Bypass the auto pre-review validator. Use only when you know the "
             "validator is false-positive on a finding."
+        ),
+    )
+    parser.add_argument(
+        "--allow-missing-refs",
+        action="store_true",
+        help=(
+            "Skip the brief-bulking hard-fail on a missing Context: ref (e.g. one living only on "
+            "an unmerged predecessor task's branch); the ref is dropped from the bulk with a "
+            "stderr warning instead. Never applies to Edits:/Creates:/Deletes: refs."
         ),
     )
     parser.add_argument(
@@ -233,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
                 cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
                 reviewer_override=args.reviewer, reviews_subdir=args.reviews_subdir,
+                allow_missing_refs=args.allow_missing_refs,
             )
             briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
             brief_path = _agent_dispatch.write_brief(
@@ -349,6 +362,7 @@ def main(argv: list[str] | None = None) -> int:
                 no_holistic=args.no_holistic,
                 reviewer_override=args.reviewer,
                 reviews_subdir=args.reviews_subdir,
+                allow_missing_refs=args.allow_missing_refs,
             )
             print(json.dumps(result.to_dict()))
             return 0
