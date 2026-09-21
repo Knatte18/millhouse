@@ -24,6 +24,7 @@ both in one batch avoids a cross-batch `parallel-modifies-overlap` conflict on t
 
 - **Context:**
   - `plugins/mill/scripts/_subprocess_util.py`
+  - `plugins/mill/scripts/_gh_issues.py`
 - **Edits:**
   - `plugins/mill/scripts/_pr_state.py`
   - `plugins/mill/unit_tests/test-pr-state.py`
