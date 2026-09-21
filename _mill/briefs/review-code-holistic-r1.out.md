@@ -1,0 +1,52 @@
+MILL_REVIEW_BEGIN
+# Review: Monitor tool: persistent:true doesn''t exist, entry-gate waits break — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-21
+```
+
+Verified against source: `plugins/mill/skills/mill-plan/SKILL.md:82-121` (Entry-gate wait for upstream
+mill-start), `plugins/mill/skills/mill-go-base/SKILL.md:174-227` (Entry-gate wait for upstream
+mill-plan), and `plugins/mill/docs/harness-tool-contracts.md:24-37` (Monitor tool contract), against
+`_mill/plan/00-overview.md` and `_mill/plan/01-entry-gate-wait-expiry-branch.md`'s three cards, and
+against `_mill/discussion.md`'s Decisions/Technical context.
+
+Findings checked and cleared:
+- New `wait_started_epoch` bullet lands immediately before the `Monitor` call bullet in both files
+  (`mill-plan/SKILL.md:100`, `mill-go-base/SKILL.md:207`), using each file's own established
+  variable-holder terminology ("orchestrator" vs. "Builder"), matching the batch's own diff rule.
+- New "Any other notification content" branch is a correctly-nested sibling of `READY`/`TIMEOUT
+  after ...` (4-space indent, `mill-plan/SKILL.md:111,113,115`; `mill-go-base/SKILL.md:216,219,221`),
+  distinct from the separately-indented (2-space) harness-stop bullet at `:116`/`:222` — the three
+  outcomes remain mutually exclusive as the plan's Batch Tests require.
+- `remaining_s` arithmetic and the rebuilt `build_wait_command` calls match each file's own original
+  call shape: mill-plan's rebuild retains `clean_tree_root=git_root, clean_tree_paths=[status_path,
+  discussion_path]` (`:115`, mirroring the original at `:98`); mill-go-base's rebuild omits both
+  (`:221`, mirroring the original at `:195`) — correctly diverging per each file's pre-existing
+  pattern, not a copy-paste slip.
+- `harness-tool-contracts.md`'s refreshed numbers (`timeout_ms` default `300000`, max `3600000`) and
+  the ten issue numbers (`#1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108`) match
+  `_mill/discussion.md`'s Problem section verbatim (`discussion.md:15-16,35-36` vs.
+  `harness-tool-contracts.md:26`).
+- New lead paragraph and fifth bullet in `harness-tool-contracts.md` are correctly positioned (before
+  the pre-existing "A poll script run via..." sentence at `:28`; after the four pre-existing bullets,
+  as the new bullet at `:35`), and the closing cross-reference line (`:37`) is untouched, per card 3's
+  requirements 2 and 4.
+- No out-of-plan files: only the three files named in `00-overview.md`'s "All Files Touched" are
+  modified; each card's "do not touch the other two files" boundary was respected (no cross-card
+  bleed found in either SKILL.md's untouched neighboring sections — "Speculative baseline launch" in
+  mill-go-base, `READY`/harness-stop bullets in both — all textually unchanged).
+- `_mill/discussion.md`'s "Keep `persistent: true`..." and "Add a fourth documented outcome..."
+  Decisions are both implemented as specified, with no reversion to a bounded-`timeout_ms`-primary
+  design.
+
+No BLOCKING or NIT findings.
+
+## Verdict
+
+APPROVE
+All three cards match the plan and discussion.md decisions exactly; no scope, consistency, or mechanism defects found.
+MILL_REVIEW_END
