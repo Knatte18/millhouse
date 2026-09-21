@@ -62,20 +62,24 @@ surface.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:**
-  In `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 3, both the implementer's step 3(b)
-  probe ("Before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)`
-  ... If it reports the agent is still running: ... If it reports the agent is no longer running, or
-  the probe call itself errors: proceed to Clean mid-work stop below exactly as documented.") and the
-  reviewer/fixer step 3(c) probe (the analogous "If it reports the agent is no longer running, or the
-  probe call itself errors: proceed to the existing one-retry transient classification from (a)")
-  already document "the probe call itself errors" as an existing fallback branch. Add one sentence
-  immediately after each of those two "or the probe call itself errors" clauses (step 3(b) and step
-  3(c), both instances): "This includes the case where `TaskOutput` is not a callable tool in this
+  `mill-go-base/SKILL.md` has four occurrences of a `TaskOutput(task_id: <agentId>, block: false)`
+  probe each followed by an "or the probe call itself errors: proceed to <some branch> exactly as
+  documented" fallback clause — confirmed by reading the whole file, not just "## Agent-mode
+  dispatch" step 3: (1) step 3(b), the implementer's stopped/interrupted probe ("... If it reports
+  the agent is no longer running, or the probe call itself errors: proceed to Clean mid-work stop
+  below exactly as documented."); (2) step 3(c), the reviewer/fixer probe ("... or the probe call
+  itself errors: proceed to the existing one-retry transient classification from (a)"); (3) step
+  5.5's "Warm `SendMessage` resume" liveness probe ("If the probe reports the agent is no longer
+  running, or the probe call itself errors: proceed as documented below."); (4) step 5.5's
+  "`--resume-incomplete` fallback" defensive re-check ("If it reports the agent is no longer
+  running, or the probe call itself errors: proceed with the `--resume-incomplete` dispatch exactly
+  as documented below."). Add one sentence immediately after each of these four "or the probe call
+  itself errors" clauses: "This includes the case where `TaskOutput` is not a callable tool in this
   host at all (confirmed via `ToolSearch(\"select:TaskOutput\")` returning no match, or an immediate
   \"unknown tool\" failure on the call itself) — treat that identically to a runtime probe error and
   proceed to the same branch; do not attempt to invent a replacement liveness check." Do not change
-  either branch's actual behavior — this documents an existing fallback's scope, it does not add a
-  new mechanism.
+  any of the four branches' actual behavior — this documents an existing fallback's scope at every
+  site sharing the same phrase, it does not add a new mechanism.
 - **Commit:** `docs(mill-go-base): document the TaskOutput-unavailable fallback (#1090)`
 
 ## Batch Tests
@@ -83,5 +87,6 @@ surface.
 Pure documentation batch, no runnable surface — `verify: null`. Self-check: after editing, re-read
 `mill-merge-in/SKILL.md`'s step 4 paragraph and confirm it names `iter_batch_verifies`'s own three
 variables (`batches`, `order`, `file_by_name`) in the same shape that function already uses, and
-re-read both edited sites in `mill-go-base/SKILL.md` step 3 to confirm the new sentence appears
-immediately after both existing "or the probe call itself errors" clauses, not just one.
+re-read all four edited sites in `mill-go-base/SKILL.md` (step 3(b), step 3(c), and step 5.5's two
+probes) to confirm the new sentence appears immediately after each of the four existing "or the
+probe call itself errors" clauses, not just the two in step 3.

@@ -66,6 +66,14 @@ to avoid a `parallel-modifies-overlap` finding on either shared file.
   dispatched (no commit anywhere references its old card numbers) — mill-go's own strictly-sequential
   `topo_order` execution guarantees this for the self-resolve caller, but this function itself does
   not verify it.
+  Known limitation, accepted rather than engineered around (mirroring Card 1's "known limitation,
+  accepted" pattern): the regex only rewrites `### Card N:` heading lines, never a card's own prose
+  that names another card by number (e.g. this very plan's own Card 11 text says "the caller (Card
+  12, in `mill-go-base/SKILL.md`)"). After an auto-renumber, such an in-plan textual cross-reference
+  can go stale even though every execution-relevant piece of state (`card_ids`,
+  `_check_card_numbering`'s own re-validation) stays correct — heading numbers are the only thing
+  mill-go's own machinery reads. Document this limitation in the function's own docstring; do not
+  add prose-scanning logic to chase down free-text card-number mentions.
 - **Commit:** `feat(plan-validate): add renumber_after_collision for a card-numbering collision (#1057)`
 
 ### Card 12: wire auto-renumber into mill-go-base's self-resolve step

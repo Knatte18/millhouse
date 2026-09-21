@@ -158,6 +158,7 @@ preserves today's behavior for every existing caller that doesn't pass it.
 
 - **Context:**
   - `plugins/mill/scripts/_plan_dag.py`
+  - `plugins/mill/scripts/_plan_validate.py`
   - `plugins/mill/scripts/_subprocess_util.py`
 - **Edits:**
   - `plugins/mill/scripts/_plan_dag.py`
@@ -172,10 +173,11 @@ preserves today's behavior for every existing caller that doesn't pass it.
   re.MULTILINE)`, used by `parse_commit_none_card_ids`. Add a new function
   `parse_card_commit_messages(batch_text: str) -> dict[int, str]` to `_plan_dag.py`, placed adjacent
   to `parse_commit_none_card_ids`: split `batch_text` into cards the same way
-  `_plan_validate._parse_cards` does (a `### Card N:` heading starts a card, the next `### ` heading
-  or EOF ends it — reuse that exact splitting logic inline rather than importing from
-  `_plan_validate`, since `_plan_dag.py` has no existing dependency on `_plan_validate.py` and this
-  batch does not introduce one), then for each card apply `_CARD_COMMIT_RE` to its own text and
+  `parse_commit_none_card_ids` already does in this same file (a `### Card N:` heading starts a
+  card, the next `### ` heading or EOF ends it — this is NOT fence-aware, unlike
+  `_plan_validate._parse_cards`'s own splitting, which toggles on ` ``` ` lines; mirror
+  `parse_commit_none_card_ids`'s actual splitting loop, not `_parse_cards`'s), then for each card
+  apply `_CARD_COMMIT_RE` to its own text and
   return `{card_number: inline.strip()}` for every card whose `Commit:` value is present and not the
   literal `none` (case-insensitive) — a `Commit: none` card has nothing to search for in git log by
   definition and is excluded from the returned dict.
