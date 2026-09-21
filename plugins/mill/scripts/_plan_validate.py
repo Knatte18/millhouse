@@ -2096,6 +2096,35 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     return (trailing_segment, segments[0]) if qualifies(trailing_segment) else None
 
 
+_RE_CS_TEST_STEM = re.compile(r"Tests?$")
+
+
+def _is_conventional_test_file(path: Path) -> bool:
+    """
+    Return True when `path` follows a conventional test-file naming pattern for its own language.
+
+    `.go`: stem ends with `_test` (Go's own test-file convention, e.g. `cleanup_test.go`).
+    `.py`: stem starts with `test_` or ends with `_test` (pytest/unittest conventions).
+    `.cs`: stem ends with `Test` or `Tests` (xUnit/NUnit/MSTest convention, e.g. `FooTests.cs`).
+    `.ts`: stem ends with `.test` or `.spec` (Jest/Jasmine convention -- `Path("foo.test.ts").stem`
+    is `"foo.test"`, so this checks the stem's own suffix, not a second `.suffix` lookup).
+
+    A symbol declared ONLY in a test file must never be surfaced by `_resolve_symbol_files` as a
+    dependency a card should add to its read-only `Context:` -- a bulk-mode reviewer would never
+    expect another package's test file there.
+    """
+    stem = path.stem
+    suffix = path.suffix
+    if suffix == ".go":
+        return stem.endswith("_test")
+    if suffix == ".py":
+        return stem.startswith("test_") or stem.endswith("_test")
+    if suffix == ".cs":
+        return bool(_RE_CS_TEST_STEM.search(stem))
+    # suffix == ".ts" (the only remaining member of _SYMBOL_SEARCH_EXTENSIONS)
+    return stem.endswith((".test", ".spec"))
+
+
 def _resolve_symbol_files(
     search_key: str,
     project_root: Path,
@@ -2113,7 +2142,9 @@ def _resolve_symbol_files(
     For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
     basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS``, or whose lowercased basename is in
     ``_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`` (a conventional out-of-solution marker such as
-    ``deprecated``/``legacy``) -- and, for every file whose suffix is in
+    ``deprecated``/``legacy``), and skipping any file that ``_is_conventional_test_file`` identifies
+    as a conventional test file before its content is ever read (a symbol declared only in a test
+    file is never surfaced as a dependency) -- and, for every remaining file whose suffix is in
     ``_SYMBOL_SEARCH_EXTENSIONS``, checks whether any line of its text matches a declaration-form
     pattern for that extension (a top-level or grouped-block declaration for ``.go``, a type/member
     declaration for ``.cs``, a ``def``/``class``/module-level-assignment for ``.py``, or a
@@ -2214,6 +2245,8 @@ def _resolve_symbol_files(
             for filename in filenames:
                 file_path = Path(dirpath) / filename
                 if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
+                    continue
+                if _is_conventional_test_file(file_path):
                     continue
                 try:
                     content = file_path.read_text(encoding="utf-8", errors="replace")

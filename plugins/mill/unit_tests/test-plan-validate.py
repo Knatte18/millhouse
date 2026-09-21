@@ -3360,6 +3360,57 @@ def test_check_context_completeness_symbol_dirty_not_a_declared_symbol() -> int:
             return 1
 
 
+def test_check_context_completeness_symbol_clean_test_file_excluded_all_languages() -> int:
+    """A symbol declared ONLY in a conventional test file (one per language) is never resolved --
+    unresolvable-with-confidence, so referencing it by bare name produces zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        (project_root / "cleanup_test.go").write_text(
+            "package pkg\n\nfunc HelperGo() {}\n", encoding="utf-8"
+        )
+        (project_root / "test_thing.py").write_text(
+            "def HelperPy():\n    pass\n", encoding="utf-8"
+        )
+        (project_root / "FooTests.cs").write_text(
+            "public class FooTests {\n    public void HelperCs() {}\n}\n", encoding="utf-8"
+        )
+        (project_root / "foo.test.ts").write_text(
+            "export function HelperTs() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  Reuse `HelperGo`, `HelperPy`, `HelperCs`, and `HelperTs` from the existing "
+                "test fixtures.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_clean_test_file_excluded_all_languages")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_clean_test_file_excluded_all_languages: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_symbol_clean_zero_matches() -> int:
     """An identifier-shaped token that appears nowhere in the fixture project's source files ->
     zero errors (unresolvable, not flagged)."""
@@ -13067,6 +13118,7 @@ def main() -> int:
         test_check_context_completeness_symbol_clean_declared_param_same_card,
         test_check_context_completeness_symbol_clean_declared_struct_field_cross_card,
         test_check_context_completeness_symbol_dirty_not_a_declared_symbol,
+        test_check_context_completeness_symbol_clean_test_file_excluded_all_languages,
         test_check_context_completeness_symbol_clean_zero_matches,
         test_check_context_completeness_symbol_clean_ambiguous_matches,
         test_check_context_completeness_symbol_call_site_phrasing,
