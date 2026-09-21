@@ -33,15 +33,22 @@ implementing  '2026-09-21T16:09:43Z'
 ```yaml
 batches:
   - name: wiki-daemon-reliability
-    state: pending
+    state: running
+    implementer_session: 6a974981-5e80-4f78-9461-935033a7a1e0
+    start_sha: 9891f2fd3fbc883597ebb7cf94e30792da19a253
+    verify_baseline_failures: []
   - name: pr-state-and-cache-freshness
     state: pending
+    verify_baseline_failures: []
   - name: merge-in-verify-field-fix
     state: pending
+    verify_baseline_failures: []
   - name: baseline-lazy-preflight
     state: pending
+    verify_baseline_failures: []
   - name: review-duration-derivation
     state: pending
+    verify_baseline_failures: []
   - name: handoff-skill-doc-fix
     state: pending
   - name: csharp-build-node-reuse
