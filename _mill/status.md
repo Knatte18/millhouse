@@ -42,5 +42,7 @@ batches:
     commit_sha: 534cb39f7979a57736e984d5cfc8cfce36198317
     verify_baseline_failures: []
   - name: mill-plan-fix-table-docs
-    state: pending
+    state: running
+    implementer_session: d8e7db4f-b1e0-4e55-80ad-1e57cfdced7a
+    start_sha: bd0cce9e8a8111aabd6161b0f3074c90655cf8bd
 ```
