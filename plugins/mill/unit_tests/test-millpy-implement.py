@@ -1334,15 +1334,14 @@ class TestMillpyImplement(unittest.TestCase):
         _, call_kwargs = mock_compute_baseline.call_args
         self.assertIsNone(call_kwargs.get("cwd_override_relative"))
 
-    def _write_two_batch_fixture(self, batch_a_verify_baseline=None, batch_b_verify_baseline=None):
+    def _write_two_batch_fixture(self):
         """
         Write a plan/status fixture with two batches (batch-a, batch-b), each declaring its own
         plain-string `verify:` frontmatter command, and an overview with `verify: null` (no
         module-wide command configured).
 
-        `batch_a_verify_baseline`/`batch_b_verify_baseline`, when not None, seed that batch's
-        `verify_baseline_failures` field in status.md's `## Batches` section -- simulating a prior
-        invocation that already computed a baseline for that batch.
+        Used by the on-demand-baseline-era tests below to confirm `_run_baseline_stage` no longer
+        enumerates or computes anything per-batch, regardless of how many batch files exist on disk.
         """
         plan_dir = self.tmp_path / "task" / "plan"
         (plan_dir / "01-batch-a.md").write_text(
@@ -1354,783 +1353,6 @@ class TestMillpyImplement(unittest.TestCase):
             encoding="utf-8",
         )
 
-        def _batch_yaml(name, baseline):
-            if baseline is None:
-                return f"  - name: {name}\n    state: pending\n"
-            return (
-                f"  - name: {name}\n    state: pending\n"
-                f"    verify_baseline_failures: {baseline!r}\n"
-            )
-
-        status_path = self.tmp_path / "task" / "status.md"
-        status_path.write_text(
-            "```yaml\n"
-            "phase: implementing\n"
-            "slug: test-slug\n"
-            "task: Test Task\n"
-            "branch: test-branch\n"
-            "parent: main\n"
-            "```\n\n"
-            "## Timeline\n\n"
-            "```text\n"
-            "implementing  2026-01-01T00:00:00Z\n"
-            "```\n\n"
-            "## Batches\n\n"
-            "```yaml\n"
-            "batches:\n"
-            + _batch_yaml("batch-a", batch_a_verify_baseline)
-            + _batch_yaml("batch-b", batch_b_verify_baseline)
-            + "```\n",
-            encoding="utf-8",
-        )
-
-    def test_baseline_stage_prints_exactly_two_lines_module_wide_then_per_batch(self):
-        """Module-wide + per-batch both need computing -> exactly two JSON lines, module_wide first."""
-        self._write_two_batch_fixture()
-        overview_with_verify = (
-            "# Plan: Test Task\n\n"
-            "```yaml\n"
-            "task: Test Task\n"
-            "slug: test-slug\n"
-            "approved: true\n"
-            "verify: exit 0\n"
-            "```\n\n"
-            "## Batch Index\n\n"
-            "```yaml\n"
-            "batches:\n"
-            "  - name: test-batch\n"
-            "    file: 01-test-batch.md\n"
-            "    depends-on: []\n"
-            "    verify: null\n"
-            "```\n"
-        )
-        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
-            overview_with_verify, encoding="utf-8"
-        )
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._status, "get_module_verify_baseline", return_value=None
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_module_wide_verify_algorithm",
-                return_value="clean",
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=lambda commands, checkout_path, project_root, **kwargs: {commands[0][0]: []},
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 2)
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        self.assertEqual(module_wide, {"stage": "baseline", "substage": "module_wide", "result": "computed", "value": "clean"})
-        self.assertEqual(per_batch["substage"], "per_batch")
-        self.assertEqual(sorted(per_batch["computed"]), ["batch-a", "batch-b"])
-        self.assertEqual(per_batch["cached"], [])
-        self.assertEqual(per_batch["errored"], {})
-
-    def test_baseline_stage_module_wide_only_skips_per_batch_loop(self):
-        """
-        --module-wide-only on --stage baseline bypasses the entire per-batch computation path
-        (no enumeration, no shared checkout) and runs only the module-wide substage standalone,
-        even when a batch file on disk declares a non-null verify: command and status.md has no
-        `## Batches` section at all -- simulating a speculative early launch before `## Prepare`.
-        """
-        plan_dir = self.tmp_path / "task" / "plan"
-        (plan_dir / "01-batch-a.md").write_text(
-            "```yaml\nbatch: batch-a\nverify: echo a\n```\n\n# Batch: batch-a\n",
-            encoding="utf-8",
-        )
-        overview_with_verify = (
-            "# Plan: Test Task\n\n"
-            "```yaml\n"
-            "task: Test Task\n"
-            "slug: test-slug\n"
-            "approved: true\n"
-            "verify: exit 0\n"
-            "```\n\n"
-            "## Batch Index\n\n"
-            "```yaml\n"
-            "batches:\n"
-            "  - name: batch-a\n"
-            "    file: 01-batch-a.md\n"
-            "    depends-on: []\n"
-            "    verify: echo a\n"
-            "```\n"
-        )
-        (plan_dir / "00-overview.md").write_text(overview_with_verify, encoding="utf-8")
-
-        # status.md with NO `## Batches` section -- the pre-`## Prepare` scenario.
-        status_path = self.tmp_path / "task" / "status.md"
-        status_path.write_text(
-            "```yaml\n"
-            "phase: implementing\n"
-            "slug: test-slug\n"
-            "task: Test Task\n"
-            "branch: test-branch\n"
-            "parent: main\n"
-            "```\n\n"
-            "## Timeline\n\n"
-            "```text\n"
-            "implementing  2026-01-01T00:00:00Z\n"
-            "```\n",
-            encoding="utf-8",
-        )
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._status, "get_module_verify_baseline", return_value=None
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
-            ) as mock_compute_baseline,
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch"
-            ) as mock_checkout_parent_branch,
-        ):
-            rc, out = self._run_main(["--stage", "baseline", "--module-wide-only"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 2)
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        self.assertEqual(
-            module_wide,
-            {"stage": "baseline", "substage": "module_wide", "result": "computed", "value": "clean"},
-        )
-        self.assertEqual(
-            per_batch,
-            {
-                "stage": "baseline",
-                "substage": "per_batch",
-                "computed": [],
-                "cached": [],
-                "errored": {},
-                # Present-but-empty: no per-batch work ran, and no shared checkout was created.
-                "elapsed_seconds": {},
-                "setup_seconds": {},
-            },
-        )
-        # The Case-B fallthrough this fix closes would have reached the shared checkout despite
-        # nothing per-batch ever actually needing to run -- assert it never fires.
-        mock_checkout_parent_branch.assert_not_called()
-        # The module-wide substage's own result is still written to status.md's
-        # `module_verify_baseline:` field, confirming it is genuinely unaffected by
-        # --module-wide-only. get_module_verify_baseline was mocked above only for the duration
-        # of the `with` block (to force the "needs computing" branch); outside it, the real
-        # function reads back what _run_module_wide_standalone persisted.
-        mock_compute_baseline.assert_called_once()
-        self.assertEqual(
-            millpy_implement._status.get_module_verify_baseline(status_path), "clean"
-        )
-
-    def test_baseline_stage_per_batch_idempotency_skips_already_cached_batch(self):
-        """batch-a already has a stored baseline -> not recomputed; batch-b computed."""
-        self._write_two_batch_fixture(batch_a_verify_baseline=[])
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines"
-            ) as mock_compute,
-        ):
-            mock_compute.side_effect = lambda commands, checkout_path, project_root, **kwargs: {
-                commands[0][0]: ["failure-b"]
-            }
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        mock_compute.assert_called_once()
-        lines = out.strip().splitlines()
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        # No module-wide verify configured in this fixture's overview.
-        self.assertEqual(module_wide["result"], "skipped")
-        self.assertEqual(per_batch["computed"], ["batch-b"])
-        self.assertEqual(per_batch["cached"], ["batch-a"])
-        self.assertEqual(per_batch["errored"], {})
-
-        status_path = self.tmp_path / "task" / "status.md"
-        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
-        # batch-a's stored value is untouched.
-        self.assertEqual(batches["batch-a"]["verify_baseline_failures"], [])
-        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], ["failure-b"])
-
-    def test_baseline_stage_per_batch_failure_isolation(self):
-        """One batch's computation raises -> sibling batch still computed and persisted."""
-        self._write_two_batch_fixture()
-
-        def _side_effect(commands, checkout_path, project_root, **kwargs):
-            name = commands[0][0]
-            if name == "batch-a":
-                raise RuntimeError("boom")
-            return {name: ["failure-b"]}
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=_side_effect,
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        # Module-wide sub-step is unaffected (no module-wide verify configured here).
-        self.assertEqual(module_wide["result"], "skipped")
-        self.assertEqual(per_batch["computed"], ["batch-b"])
-        self.assertEqual(per_batch["errored"], {"batch-a": "boom"})
-
-        status_path = self.tmp_path / "task" / "status.md"
-        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
-        self.assertNotIn("verify_baseline_failures", batches["batch-a"])
-        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], ["failure-b"])
-
-    def test_baseline_stage_shared_checkout_failure_module_wide_unaffected(self):
-        """Checkout fails, no module-wide work needed this round -> module-wide line unaffected, all batches errored."""
-        self._write_two_batch_fixture()
-        overview_with_verify = (
-            "# Plan: Test Task\n\n"
-            "```yaml\n"
-            "task: Test Task\n"
-            "slug: test-slug\n"
-            "approved: true\n"
-            "verify: exit 0\n"
-            "```\n\n"
-            "## Batch Index\n\n"
-            "```yaml\n"
-            "batches:\n"
-            "  - name: test-batch\n"
-            "    file: 01-test-batch.md\n"
-            "    depends-on: []\n"
-            "    verify: null\n"
-            "```\n"
-        )
-        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
-            overview_with_verify, encoding="utf-8"
-        )
-
-        with (
-            # Module-wide baseline already cached -- module-wide has nothing to compute this round.
-            unittest.mock.patch.object(
-                millpy_implement._status, "get_module_verify_baseline", return_value="clean"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                side_effect=RuntimeError("worktree add failed"),
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        # Unaffected: reports its own cached value exactly as it would without the failure.
-        self.assertEqual(module_wide, {"stage": "baseline", "substage": "module_wide", "result": "cached", "value": "clean"})
-        self.assertEqual(per_batch["computed"], [])
-        self.assertIn("batch-a", per_batch["errored"])
-        self.assertIn("batch-b", per_batch["errored"])
-
-    def test_baseline_stage_shared_checkout_failure_module_wide_also_errored(self):
-        """Checkout fails, module-wide ALSO needed computing this round -> module-wide line also reports error."""
-        self._write_two_batch_fixture()
-        overview_with_verify = (
-            "# Plan: Test Task\n\n"
-            "```yaml\n"
-            "task: Test Task\n"
-            "slug: test-slug\n"
-            "approved: true\n"
-            "verify: exit 0\n"
-            "```\n\n"
-            "## Batch Index\n\n"
-            "```yaml\n"
-            "batches:\n"
-            "  - name: test-batch\n"
-            "    file: 01-test-batch.md\n"
-            "    depends-on: []\n"
-            "    verify: null\n"
-            "```\n"
-        )
-        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
-            overview_with_verify, encoding="utf-8"
-        )
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._status, "get_module_verify_baseline", return_value=None
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                side_effect=RuntimeError("worktree add failed"),
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        self.assertEqual(module_wide["substage"], "module_wide")
-        self.assertEqual(module_wide["result"], "error")
-        self.assertEqual(per_batch["computed"], [])
-        self.assertIn("batch-a", per_batch["errored"])
-        self.assertIn("batch-b", per_batch["errored"])
-
-    def test_baseline_stage_finally_teardown_failure_never_raises(self):
-        """remove_safe raising from the finally-block teardown site never crashes the stage."""
-        self._write_two_batch_fixture()
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(
-                millpy_implement._worktree, "remove_safe",
-                side_effect=millpy_implement._worktree.WorktreeLockedError("still locked"),
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                return_value={"batch-a": [], "batch-b": []},
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 2)
-        module_wide = json.loads(lines[0])
-        per_batch = json.loads(lines[1])
-        self.assertEqual(module_wide["substage"], "module_wide")
-        self.assertEqual(per_batch["substage"], "per_batch")
-        self.assertEqual(per_batch["computed"], ["batch-a", "batch-b"])
-
-    def test_baseline_stage_checkout_failure_teardown_failure_never_raises(self):
-        """remove_safe raising from the checkout-failure early-return teardown site never crashes the stage."""
-        self._write_two_batch_fixture()
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_link_dependency_dirs",
-                side_effect=RuntimeError("link failed"),
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._worktree, "remove_safe",
-                side_effect=millpy_implement._worktree.WorktreeLockedError("still locked"),
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 2)
-        self.assertEqual(json.loads(lines[0])["substage"], "module_wide")
-        per_batch = json.loads(lines[1])
-        self.assertEqual(per_batch["substage"], "per_batch")
-        self.assertIn("batch-a", per_batch["errored"])
-        self.assertIn("batch-b", per_batch["errored"])
-
-    def test_baseline_stage_prepare_cmd_runs_once_per_cwd_fragment_before_verify(self):
-        """A configured baseline_prepare_cmd runs once (single cwd fragment) before either batch's verify."""
-        self._write_two_batch_fixture()
-        self.mock_load_config.return_value = {
-            **self.mock_load_config.return_value,
-            "pipeline": {"baseline_prepare_cmd": "dotnet build"},
-        }
-        checkout_path = self.tmp_path / "checkout"
-        call_order = []
-
-        def _run_verify_in_side_effect(command, cwd, timeout_seconds=None):
-            call_order.append(("prepare_cmd", command, cwd))
-            return (0, "")
-
-        def _compute_batch_baselines_side_effect(commands, checkout_path_arg, project_root, **kwargs):
-            call_order.append(("verify", commands[0][0]))
-            return {commands[0][0]: []}
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=checkout_path,
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_run_verify_in_side_effect,
-            ) as mock_run_verify_in,
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=_compute_batch_baselines_side_effect,
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        mock_run_verify_in.assert_called_once_with("dotnet build", checkout_path, None)
-        self.assertEqual(call_order[0][0], "prepare_cmd")
-        self.assertIn(("verify", "batch-a"), call_order[1:])
-        self.assertIn(("verify", "batch-b"), call_order[1:])
-
-    def test_baseline_stage_prepare_cmd_unset_no_prepare_call(self):
-        """No pipeline.baseline_prepare_cmd configured -> _run_verify_in is never called for a prepare step."""
-        self._write_two_batch_fixture()
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-            ) as mock_run_verify_in,
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=lambda commands, checkout_path, project_root, **kwargs: {commands[0][0]: []},
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        mock_run_verify_in.assert_not_called()
-
-    @contextlib.contextmanager
-    def _patch_shared_checkout(self, checkout_path):
-        """
-        Patch the (parent-branch, checkout, linking, teardown) quartet every Case-B baseline test
-        needs, so those tests reach the real per-batch loop without touching git.
-        """
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=checkout_path,
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-        ):
-            yield
-
-    def test_baseline_stage_shares_one_pair_cache_across_batches(self):
-        """
-        #1101: two batches carrying an identical verify command run it ONCE across the stage.
-
-        Deliberately does NOT mock compute_batch_baselines -- mocking it is what let the inert dedup
-        ship, since the stage drives one batch per call (for per-batch try/except isolation) and a
-        call-local cache is re-created empty every time. Only a real call through the function, with
-        the caller's own pair_cache threaded in, exercises the dedup at all.
-        Uses a FAILING command so the green-skip does not confound the run count: one evaluated pair
-        is 2 runs, two evaluated pairs would be 4.
-        """
-        self._write_two_batch_fixture()
-        # Give batch-b the SAME verify command as batch-a.
-        (self.tmp_path / "task" / "plan" / "02-batch-b.md").write_text(
-            "```yaml\nbatch: batch-b\nverify: echo a\n```\n\n# Batch: batch-b\n",
-            encoding="utf-8",
-        )
-        checkout_path = self.tmp_path / "checkout"
-        runs = []
-
-        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
-            del timeout_seconds
-            runs.append((command, cwd))
-            return 1, "--- FAIL: TestShared (0.01s)\n"
-
-        with (
-            self._patch_shared_checkout(checkout_path),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_fake_run_verify_in,
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        self.assertEqual(
-            len(runs), 2,
-            f"expected the shared command evaluated once (2 runs) across both batches, got {runs!r}",
-        )
-        per_batch = json.loads(out.strip().splitlines()[1])
-        self.assertEqual(sorted(per_batch["computed"]), ["batch-a", "batch-b"])
-
-        # Both batches still get the signature persisted -- dedup fans out, it does not drop.
-        status_path = self.tmp_path / "task" / "status.md"
-        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
-        self.assertEqual(
-            batches["batch-a"]["verify_baseline_failures"], ["--- FAIL: TestShared (0.01s)"]
-        )
-        self.assertEqual(
-            batches["batch-b"]["verify_baseline_failures"], ["--- FAIL: TestShared (0.01s)"]
-        )
-
-    def test_baseline_stage_distinct_commands_are_not_deduped(self):
-        """The shared pair_cache must not collapse two batches whose verify commands differ."""
-        self._write_two_batch_fixture()  # batch-a: "echo a", batch-b: "echo b"
-        checkout_path = self.tmp_path / "checkout"
-        runs = []
-
-        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
-            del cwd, timeout_seconds
-            runs.append(command)
-            return 1, f"--- FAIL: Test_{command[-1]} (0.01s)\n"
-
-        with (
-            self._patch_shared_checkout(checkout_path),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_fake_run_verify_in,
-            ),
-        ):
-            rc, _out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        self.assertEqual(sorted(runs), ["echo a", "echo a", "echo b", "echo b"])
-        status_path = self.tmp_path / "task" / "status.md"
-        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
-        self.assertEqual(batches["batch-a"]["verify_baseline_failures"], ["--- FAIL: Test_a (0.01s)"])
-        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], ["--- FAIL: Test_b (0.01s)"])
-
-    def test_baseline_stage_per_batch_payload_carries_timings(self):
-        """
-        #1101: the per_batch payload reports elapsed seconds per batch plus the shared setup costs
-        those per-batch numbers exclude, so "where did the pre-flight time go" is answerable from
-        the stage's own output.
-        """
-        self._write_two_batch_fixture()
-        self.mock_load_config.return_value = {
-            **self.mock_load_config.return_value,
-            "pipeline": {"baseline_prepare_cmd": "dotnet build"},
-        }
-
-        with (
-            self._patch_shared_checkout(self.tmp_path / "checkout"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in", return_value=(0, "ok\n")
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        per_batch = json.loads(out.strip().splitlines()[1])
-        self.assertEqual(sorted(per_batch["elapsed_seconds"]), ["batch-a", "batch-b"])
-        for name, seconds in per_batch["elapsed_seconds"].items():
-            self.assertIsInstance(seconds, (int, float), name)
-        # checkout and prepare are both accounted for; module_wide is absent because this
-        # fixture's overview configures no module-wide verify command.
-        self.assertEqual(sorted(per_batch["setup_seconds"]), ["checkout", "prepare"])
-
-    def test_baseline_stage_verify_timeout_is_forwarded_from_config(self):
-        """
-        #1101: pipeline.baseline_verify_timeout_minutes becomes a per-run seconds ceiling on every
-        verify command the stage runs -- including baseline_prepare_cmd.
-        """
-        self._write_two_batch_fixture()
-        self.mock_load_config.return_value = {
-            **self.mock_load_config.return_value,
-            "pipeline": {
-                "baseline_prepare_cmd": "dotnet build",
-                "baseline_verify_timeout_minutes": 30,
-            },
-        }
-        seen = []
-
-        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
-            del cwd
-            seen.append((command, timeout_seconds))
-            return 0, "ok\n"
-
-        with (
-            self._patch_shared_checkout(self.tmp_path / "checkout"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_fake_run_verify_in,
-            ),
-        ):
-            rc, _out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        self.assertTrue(seen)
-        self.assertEqual(
-            {timeout for _command, timeout in seen}, {1800.0},
-            f"expected every run to carry a 30-minute ceiling in seconds, got {seen!r}",
-        )
-        self.assertIn(("dotnet build", 1800.0), seen)
-
-    def test_baseline_stage_verify_timeout_absent_means_no_ceiling(self):
-        """No pipeline.baseline_verify_timeout_minutes configured -> no ceiling is imposed."""
-        self._write_two_batch_fixture()
-        seen = []
-
-        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
-            del cwd
-            seen.append((command, timeout_seconds))
-            return 0, "ok\n"
-
-        with (
-            self._patch_shared_checkout(self.tmp_path / "checkout"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_fake_run_verify_in,
-            ),
-        ):
-            rc, _out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        self.assertEqual({timeout for _command, timeout in seen}, {None}, seen)
-
-    def test_baseline_stage_hung_verify_leaves_baseline_unset(self):
-        """
-        #1101: a timed-out verify command degrades like every other infrastructure failure -- that
-        batch lands in `errored`, its baseline is left UNSET (so the next gate runs strictly), and
-        its sibling is still computed.
-        """
-        self._write_two_batch_fixture()
-        self.mock_load_config.return_value = {
-            **self.mock_load_config.return_value,
-            "pipeline": {"baseline_verify_timeout_minutes": 1},
-        }
-
-        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
-            del cwd
-            if command == "echo a":
-                raise subprocess.TimeoutExpired(cmd=command, timeout=timeout_seconds)
-            return 0, "ok\n"
-
-        with (
-            self._patch_shared_checkout(self.tmp_path / "checkout"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                side_effect=_fake_run_verify_in,
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        per_batch = json.loads(out.strip().splitlines()[1])
-        self.assertIn("batch-a", per_batch["errored"])
-        self.assertEqual(per_batch["computed"], ["batch-b"])
-
-        status_path = self.tmp_path / "task" / "status.md"
-        batches = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
-        self.assertIsNone(batches["batch-a"].get("verify_baseline_failures"))
-        self.assertEqual(batches["batch-b"]["verify_baseline_failures"], [])
-
-    def test_baseline_stage_prepare_cmd_failure_is_non_fatal(self):
-        """A non-zero-exit baseline_prepare_cmd is logged but never blocks the baseline stage."""
-        self._write_two_batch_fixture()
-        self.mock_load_config.return_value = {
-            **self.mock_load_config.return_value,
-            "pipeline": {"baseline_prepare_cmd": "dotnet build"},
-        }
-
-        with (
-            unittest.mock.patch.object(
-                millpy_implement._parent_branch, "resolve", return_value="main"
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_run_verify_in",
-                return_value=(1, "build failed: missing csproj"),
-            ),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=lambda commands, checkout_path, project_root, **kwargs: {commands[0][0]: []},
-            ),
-        ):
-            rc, out = self._run_main(["--stage", "baseline"])
-
-        self.assertEqual(rc, 0)
-        lines = out.strip().splitlines()
-        self.assertEqual(len(lines), 2)
-        per_batch = json.loads(lines[1])
-        self.assertEqual(sorted(per_batch["computed"]), ["batch-a", "batch-b"])
-        self.assertEqual(per_batch["errored"], {})
-
-    def test_baseline_stage_enumerates_batch_own_verify_despite_later_deletes(self):
-        """A batch whose own verify: names a path a LATER batch's Deletes: removes still gets a baseline."""
-        plan_dir = self.tmp_path / "task" / "plan"
-        (plan_dir / "01-batch-a.md").write_text(
-            "```yaml\nbatch: batch-a\nverify: test tools/x\n```\n\n"
-            "# Batch: batch-a\n\n"
-            "- **Deletes:** none\n",
-            encoding="utf-8",
-        )
-        (plan_dir / "02-batch-b.md").write_text(
-            "```yaml\nbatch: batch-b\nverify: echo b\n```\n\n"
-            "# Batch: batch-b\n\n"
-            "- **Deletes:** `tools/x`\n",
-            encoding="utf-8",
-        )
         status_path = self.tmp_path / "task" / "status.md"
         status_path.write_text(
             "```yaml\n"
@@ -2155,28 +1377,180 @@ class TestMillpyImplement(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def test_baseline_stage_prints_exactly_one_json_line(self):
+        """
+        #1102: `_run_baseline_stage` always prints exactly one JSON line -- the module-wide result --
+        never a second `per_batch` line, regardless of how many batch files exist on disk.
+        """
+        self._write_two_batch_fixture()
+        overview_with_verify = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "verify: exit 0\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: test-batch\n"
+            "    file: 01-test-batch.md\n"
+            "    depends-on: []\n"
+            "    verify: null\n"
+            "```\n"
+        )
+        (self.tmp_path / "task" / "plan" / "00-overview.md").write_text(
+            overview_with_verify, encoding="utf-8"
+        )
+
         with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value=None
+            ),
             unittest.mock.patch.object(
                 millpy_implement._parent_branch, "resolve", return_value="main"
             ),
             unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "_checkout_parent_branch",
-                return_value=self.tmp_path / "checkout",
-            ),
-            unittest.mock.patch.object(millpy_implement._verify_baseline, "_link_dependency_dirs"),
-            unittest.mock.patch.object(millpy_implement._worktree, "remove_safe"),
-            unittest.mock.patch.object(
-                millpy_implement._verify_baseline, "compute_batch_baselines",
-                side_effect=lambda commands, checkout_path, project_root, **kwargs: {commands[0][0]: []},
+                millpy_implement._verify_baseline, "compute_baseline", return_value="clean"
             ),
         ):
             rc, out = self._run_main(["--stage", "baseline"])
 
         self.assertEqual(rc, 0)
-        per_batch = json.loads(out.strip().splitlines()[1])
-        # Unlike `_plan_dag.iter_batch_verifies` (which would suppress batch-a's verify since batch-b's Deletes: names the same path), direct frontmatter enumeration still computes batch-a's baseline.
-        self.assertIn("batch-a", per_batch["computed"])
-        self.assertIn("batch-b", per_batch["computed"])
+        lines = out.strip().splitlines()
+        self.assertEqual(len(lines), 1, f"expected exactly one JSON line, got {lines!r}")
+        module_wide = json.loads(lines[0])
+        self.assertEqual(
+            module_wide,
+            {"stage": "baseline", "substage": "module_wide", "result": "computed", "value": "clean"},
+        )
+
+    def test_baseline_stage_module_wide_only_kwarg_no_longer_exists(self):
+        """
+        #1102: the `module_wide_only` parameter is gone from `_run_baseline_stage` -- passing it
+        raises `TypeError`, the regression-proof that no call site can silently resurrect it.
+        """
+        with self.assertRaises(TypeError):
+            millpy_implement._run_baseline_stage(
+                self.tmp_path,
+                self.tmp_path,
+                self.tmp_path / "task" / "status.md",
+                None,
+                None,
+                self.tmp_path / "task" / "plan",
+                None,
+                module_wide_only=True,
+            )
+
+    def test_baseline_stage_module_wide_only_cli_flag_no_longer_exists(self):
+        """#1102: the `--module-wide-only` CLI flag is gone -- passing it is a parse error."""
+        with self.assertRaises(SystemExit):
+            self._run_main(["--stage", "baseline", "--module-wide-only"])
+
+    def test_baseline_stage_pins_baseline_parent_sha_on_fresh_status(self):
+        """
+        #1102: a fresh status.md with no `baseline_parent_sha:` gets one pinned to the mocked
+        `git rev-parse` output after a single `--stage baseline` call.
+        """
+        sha = "c" * 40
+
+        def _fake_run(argv, **kwargs):
+            if argv[-2:] == ["rev-parse", "main"]:
+                return unittest.mock.MagicMock(returncode=0, stdout=f"{sha}\n", stderr="")
+            # Fall back to the setUp default's non-empty response for every other call this
+            # invocation makes (git config user.name/user.email, branch --show-current).
+            return unittest.mock.MagicMock(returncode=0, stdout="abc1234\n", stderr="")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value="clean"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "run", side_effect=_fake_run
+            ),
+        ):
+            rc, _out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        status_path = self.tmp_path / "task" / "status.md"
+        self.assertEqual(
+            millpy_implement._status.get_baseline_parent_sha(status_path), sha
+        )
+
+    def test_baseline_stage_pin_is_idempotent_across_calls(self):
+        """
+        #1102: a second `--stage baseline` call does not re-invoke `git rev-parse` for the pin -- a
+        resumed/restarted mill-go run must not re-pin.
+        """
+        sha = "d" * 40
+        status_path = self.tmp_path / "task" / "status.md"
+        rev_parse_calls = []
+
+        def _fake_run(argv, **kwargs):
+            if argv[-2:] == ["rev-parse", "main"]:
+                rev_parse_calls.append(argv)
+                return unittest.mock.MagicMock(returncode=0, stdout=f"{sha}\n", stderr="")
+            # Fall back to the setUp default's non-empty response for every other call this
+            # invocation makes (git config user.name/user.email, branch --show-current).
+            return unittest.mock.MagicMock(returncode=0, stdout="abc1234\n", stderr="")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value="clean"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "run", side_effect=_fake_run
+            ),
+        ):
+            rc1, _out1 = self._run_main(["--stage", "baseline"])
+            rc2, _out2 = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc1, 0)
+        self.assertEqual(rc2, 0)
+        self.assertEqual(
+            len(rev_parse_calls), 1,
+            f"expected the pin's git rev-parse to run exactly once across two calls, got {rev_parse_calls!r}",
+        )
+        self.assertEqual(
+            millpy_implement._status.get_baseline_parent_sha(status_path), sha
+        )
+
+    def test_baseline_stage_pin_failed_rev_parse_leaves_field_unset(self):
+        """
+        #1102: a non-zero `git rev-parse` during the pin attempt logs and leaves
+        `baseline_parent_sha:` unset -- the on-demand path's own "gate strictly" fail-safe covers the
+        rest.
+        """
+        def _fake_run(argv, **kwargs):
+            if argv[-2:] == ["rev-parse", "main"]:
+                return unittest.mock.MagicMock(returncode=1, stdout="", stderr="unknown revision")
+            # Fall back to the setUp default's non-empty response for every other call this
+            # invocation makes (git config user.name/user.email, branch --show-current).
+            return unittest.mock.MagicMock(returncode=0, stdout="abc1234\n", stderr="")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement._status, "get_module_verify_baseline", return_value="clean"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._parent_branch, "resolve", return_value="main"
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._subprocess_util, "run", side_effect=_fake_run
+            ),
+        ):
+            rc, _out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        status_path = self.tmp_path / "task" / "status.md"
+        self.assertIsNone(millpy_implement._status.get_baseline_parent_sha(status_path))
 
     def test_real_brief_renders_parent_branch_token(self):
         """Rendering the real implementer-brief.md substitutes <PARENT_BRANCH> with the parent value."""
