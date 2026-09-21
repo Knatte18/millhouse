@@ -2057,10 +2057,19 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     then requires what remains to look like a bare identifier (``SaveState``) or a dotted
     qualifier.identifier pair (``reedengine.New``).
     A bare or trailing-segment identifier only "qualifies" as a symbol candidate -- as opposed to an
-    ordinary lowercase English word like ``config`` -- when it is not entirely lowercase (contains an
-    uppercase letter, including possibly its first character) or contains an underscore;
-    for a dotted pair, only the trailing (second) segment's own qualification matters, since the
-    trailing segment is the only part ever used as the filesystem search key.
+    ordinary lowercase English word like ``config`` -- when it is longer than one character AND
+    either not entirely lowercase (contains an uppercase letter, including possibly its first
+    character) or contains an underscore; a length-1 identifier never qualifies regardless of
+    case/underscore content, since single-letter receiver/loop/parameter variables are near-
+    universal convention across Go/C#/TS/Python and essentially never disambiguate a real
+    project-specific symbol.
+    For a dotted pair, only the trailing (second) segment's own qualification matters, since the
+    trailing segment is the only part ever used as the filesystem search key -- but a dotted token
+    whose QUALIFIER segment (the first segment, e.g. ``t`` in ``t.Cleanup``) is length 1 is not
+    symbol-shaped AT ALL (the whole token returns ``None``), not merely exempt from qualifier-based
+    disambiguation downstream -- a single-letter qualifier is essentially always a stdlib/BCL-
+    receiver-shaped convention (Go's idiomatic ``*testing.T`` receiver name ``t``, for example),
+    never a project-specific package/namespace worth resolving through.
 
     Returns:
         ``None`` when the token is not symbol-shaped (or doesn't qualify).
@@ -2087,13 +2096,16 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     segments = base.split(".")
 
     def qualifies(segment: str) -> bool:
-        return segment != segment.lower() or "_" in segment
+        return len(segment) > 1 and (segment != segment.lower() or "_" in segment)
 
     if len(segments) == 1:
         return (base, None) if qualifies(base) else None
 
     trailing_segment = segments[-1]
-    return (trailing_segment, segments[0]) if qualifies(trailing_segment) else None
+    qualifier = segments[0]
+    if len(qualifier) <= 1:
+        return None
+    return (trailing_segment, qualifier) if qualifies(trailing_segment) else None
 
 
 _RE_CS_TEST_STEM = re.compile(r"Tests?$")

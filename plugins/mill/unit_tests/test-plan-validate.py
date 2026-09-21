@@ -3796,6 +3796,128 @@ def test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifyin
             return 1
 
 
+def test_check_context_completeness_symbol_single_letter_qualifier_not_candidate() -> int:
+    """`t.Cleanup` (a Go *testing.T-style single-letter receiver qualifier) is never flagged, even
+    though `Cleanup` resolves to exactly one real fixture declaration -- the whole dotted token is
+    not symbol-shaped when its qualifier segment is length 1."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "cleanup.go").write_text(
+            "package internal\n\nfunc Cleanup() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Register `t.Cleanup` to tear down the fixture.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_single_letter_qualifier_not_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_single_letter_qualifier_not_candidate: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_single_letter_bare_not_candidate() -> int:
+    """A bare single-letter token (`A`) is never flagged, even when a fixture file coincidentally
+    declares a real symbol literally named `A`."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "step.go").write_text(
+            "package internal\n\nfunc A() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Step `A` runs first, illustrating the sequence.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_single_letter_bare_not_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_symbol_single_letter_bare_not_candidate: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_two_letter_qualifier_still_candidate() -> int:
+    """A genuine two-or-more-character qualifier (`fe.Cleanup`) still resolves and fires normally
+    when uncited -- the length-1 gate must not over-suppress multi-character qualifiers."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "cleanup.go").write_text(
+            "package internal\n\nfunc Cleanup() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Register `fe.Cleanup` to tear down the fixture.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "fe.Cleanup", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/cleanup.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_two_letter_qualifier_still_candidate")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_two_letter_qualifier_still_candidate: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_symbol_first_match_wins_root_precedence() -> int:
     """Regression test for the resolvability-gate's root-precedence design: a symbol resolvable
     under both git_root/root and bare git_root must resolve to the git_root/root candidate only
@@ -13128,6 +13250,9 @@ def main() -> int:
         test_check_context_completeness_symbol_dotted_trailing_segment_only,
         test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment,
         test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing,
+        test_check_context_completeness_symbol_single_letter_qualifier_not_candidate,
+        test_check_context_completeness_symbol_single_letter_bare_not_candidate,
+        test_check_context_completeness_symbol_two_letter_qualifier_still_candidate,
         test_check_context_completeness_symbol_first_match_wins_root_precedence,
         test_check_context_completeness_symbol_cache_invoked_once_per_key,
         test_check_context_completeness_symbol_prohibition_marker_exempt,
