@@ -49,6 +49,13 @@ false-positive tasks that preceded it.
   in both its "no `-tags` flag yet" and "`-tags` flag already exists" branches, instead of reusing
   the (possibly multi-package) verify command's own package pattern. (#1044)
 - Fix-table row updated to describe the new message shape: `requirements-quote-indent-drift` (#391).
+  Intended remedy phrasing for the new clause (round-3 discussion-review finding
+  `#indent-drift-fix-table-content`): "A message reading '...immediately follows matched fence N, but
+  its first line is indented X spaces vs the anchor fence's Y spaces' means the new-code fence's own
+  indentation doesn't match its anchor: compute `Y - X`; if positive, add that many leading spaces to
+  every line of the new-code fence; if negative, strip `|Y - X|` leading spaces from every line —
+  mirroring the existing strip/add rows' per-line, not textwrap.dedent-style, adjustment — so the
+  fence's first line ends up indented exactly `Y` spaces, matching the anchor fence's own indentation."
   The `move-target-collision` row (#386) needs NO content change — Decision `intra-plan-move-chain`
   only adds a suppression condition (it no longer fires on a chained-move target); it emits no new
   message text, and the existing row's remedy ("rename the colliding target... or fix the duplicate")
@@ -412,9 +419,13 @@ naming convention (`test_<check_name>_<scenario>`):
 - **cs-member-regex-tightening**: a `.cs` repo with a line like
   `public void Foo() { throw new InvalidOperationException("x"); }`, referenced via
   `` `InvalidOperationException` `` in a card's Requirements:, produces zero findings (previously would
-  have matched). A positive/regression test confirms a genuine member declaration
-  (`public InvalidOperationException Custom { get; }` or similar, no `new` between modifier and symbol)
-  still matches and still fires when uncited.
+  have matched). A positive/regression test confirms a genuine member declaration where the symbol
+  itself is the member name immediately preceding member-declaration punctuation — e.g.
+  `public int InvalidOperationException { get; set; }` (the symbol precedes `{` directly; a variant
+  like `public InvalidOperationException Custom { get; }` does NOT exercise this regex at all, since
+  there `InvalidOperationException` is the return TYPE, not immediately followed by `({;=` — the next
+  token is `Custom`) — no `new` between modifier and symbol, so `cs_member_re` still matches and the
+  check still fires when this member is uncited.
 - **paired-fence-indent-check**: (a) a card with a byte-matched anchor fence (2-space list-continuation
   indent) immediately followed (in `fence_bodies` order — connective prose such as a "with:" label or
   "insert this new guard immediately after the block above" sits between the two fences in the raw
