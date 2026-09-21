@@ -11254,6 +11254,109 @@ def test_move_target_collision_cross_batch_creates_dirty() -> int:
             return 1
 
 
+def test_move_target_collision_intra_plan_chain_same_batch_clean() -> int:
+    """Clean: a same-batch Moves: chain (a.go -> b.go, b.go -> c.go) suppresses condition 1 on b.go."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        # b.go currently exists on disk (it is about to be vacated by the first pair), which is
+        # exactly the false-positive shape this fix suppresses.
+        (project_root / "a.go").write_text("// a", encoding="utf-8")
+        (project_root / "b.go").write_text("// b", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_raw = _make_batch_file(
+            "alpha", moves=[("a.go", "b.go"), ("b.go", "c.go")],
+        )
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [e for e in result if e["check"] == "move-target-collision"]
+        try:
+            assert len(collision_errs) == 0, (
+                f"intra-plan Moves: chain should suppress collision, got: {collision_errs}"
+            )
+            print("PASS test_move_target_collision_intra_plan_chain_same_batch_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_intra_plan_chain_same_batch_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_target_collision_intra_plan_chain_cross_batch_clean() -> int:
+    """Clean: the same rename chain split across two batches also suppresses condition 1 on b.go."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        (project_root / "a.go").write_text("// a", encoding="utf-8")
+        (project_root / "b.go").write_text("// b", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta",  "file": "02-beta.md",  "number": 2, "depends-on": [1]},
+        ])
+        batch_a_raw = _make_batch_file("alpha", card_num=1, moves=[("a.go", "b.go")])
+        batch_a = batch_a_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        batch_b_raw = _make_batch_file("beta", card_num=2, moves=[("b.go", "c.go")])
+        batch_b = batch_b_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [e for e in result if e["check"] == "move-target-collision"]
+        try:
+            assert len(collision_errs) == 0, (
+                f"plan-wide (not same-batch-only) suppression expected, got: {collision_errs}"
+            )
+            print("PASS test_move_target_collision_intra_plan_chain_cross_batch_clean")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_intra_plan_chain_cross_batch_clean: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_move_target_collision_not_a_moves_source_still_dirty() -> int:
+    """Dirty: a Moves: target that exists on disk and is NOT any batch's Moves: source still fires."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        (project_root / "old.py").write_text("# old", encoding="utf-8")
+        (project_root / "new.py").write_text("# new", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_raw = _make_batch_file("alpha", moves=[("old.py", "new.py")])
+        batch = batch_raw.replace("## Cards\n\n", "## Rename mechanic\n\nRun git mv.\n\n## Cards\n\n")
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        collision_errs = [
+            e for e in result
+            if e["check"] == "move-target-collision" and e["path"] == "new.py"
+        ]
+        try:
+            assert len(collision_errs) == 1, (
+                f"expected 1 move-target-collision error (new.go is not a Moves: source), "
+                f"got: {collision_errs}"
+            )
+            print("PASS test_move_target_collision_not_a_moves_source_still_dirty")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_move_target_collision_not_a_moves_source_still_dirty: {exc}", file=sys.stderr)
+            return 1
+
+
 def test_move_mechanic_missing_dirty() -> int:
     """Dirty: batch with non-empty Moves: and no ## Rename mechanic section -> one error."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -12948,6 +13051,9 @@ def main() -> int:
         test_move_target_collision_pre_existing_dirty,
         test_move_target_collision_duplicate_target_dirty,
         test_move_target_collision_cross_batch_creates_dirty,
+        test_move_target_collision_intra_plan_chain_same_batch_clean,
+        test_move_target_collision_intra_plan_chain_cross_batch_clean,
+        test_move_target_collision_not_a_moves_source_still_dirty,
         test_move_mechanic_missing_dirty,
         test_move_mechanic_missing_with_section_passes,
         test_move_mechanic_missing_all_none_skipped,

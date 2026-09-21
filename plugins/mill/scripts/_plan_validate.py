@@ -542,6 +542,7 @@ def _check_move_target_collision(
     batch_files: list[Path],
     project_root: Path,
     root: str | None,
+    moves_sources: set[str],
     *,
     wiki_root: Path | None = None,
     git_root: Path | None = None,
@@ -552,6 +553,9 @@ def _check_move_target_collision(
     Three collision conditions are checked (OR semantics):
 
     1. The target already exists on disk before the plan runs.
+        Suppressed when the target is itself a plan-wide ``Moves:`` source -- it currently exists
+        on disk only because it is about to be vacated by another ``Moves:`` pair in the plan (an
+        intra-plan rename chain, e.g. ``a.go -> b.go`` followed by ``b.go -> c.go``).
     2. More than one batch across the plan names the same destination path.
     3. The target appears as a ``Creates:`` token in a DIFFERENT batch (cross-batch collision).
         Same-batch overlap is ``move-redundant``'s responsibility;
@@ -563,6 +567,8 @@ def _check_move_target_collision(
         batch_files: Sorted list of batch file paths to validate.
         project_root: Root of the project (worktree root).
         root: Optional root subfolder (threaded to ``resolve_existing_paths``).
+        moves_sources: Plan-wide union of ``Moves:`` source tokens (from ``compute_moves_union``),
+            used to suppress condition 1 on an intra-plan rename chain's intermediate path.
         wiki_root: Optional wiki root path.
         git_root: Optional repo root.
 
@@ -593,7 +599,7 @@ def _check_move_target_collision(
                 [dst], project_root, root,
                 wiki_root=wiki_root, git_root=git_root,
             )
-            if existing:
+            if existing and dst not in moves_sources:
                 errors.append({
                     "check": "move-target-collision",
                     "batch": stem,
@@ -4225,7 +4231,7 @@ def run(
         git_root=git_root,
     ))
     errors.extend(_check_move_target_collision(
-        batch_files, project_root, effective_root,
+        batch_files, project_root, effective_root, moves_sources,
         wiki_root=wiki_root,
         git_root=git_root,
     ))
