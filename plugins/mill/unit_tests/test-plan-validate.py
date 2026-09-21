@@ -4670,6 +4670,89 @@ def test_check_context_completeness_symbol_declaration_form_cs() -> int:
             return 1
 
 
+def test_check_context_completeness_symbol_cs_new_expression_not_a_declaration() -> int:
+    """A `throw new InvalidOperationException(...)`-shaped line is a construction expression, not a
+    member declaration -- referencing the constructed type by bare name produces zero errors."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "Foo.cs").write_text(
+            'public void Foo() { throw new InvalidOperationException("x"); }\n',
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Handle `InvalidOperationException` when it is thrown.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_symbol_cs_new_expression_not_a_declaration")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_cs_new_expression_not_a_declaration: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_cs_member_declaration_still_fires() -> int:
+    """Regression: a genuine C# member declaration (the symbol itself is the member name, no `new`
+    between the modifier and the symbol) still resolves and fires when uncited."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "Foo.cs").write_text(
+            "public int InvalidOperationException { get; set; }\n",
+            encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Read `InvalidOperationException` from the model.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert "which resolves to 'internal/Foo.cs'" in check_errors[0]["message"], (
+                f"wrong message: {check_errors[0]['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_cs_member_declaration_still_fires")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_cs_member_declaration_still_fires: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_symbol_declaration_form_py() -> int:
     """Regression: a genuine top-level Python `def` declaration, absent from own refs, still
     resolves to exactly one error."""
@@ -13273,6 +13356,8 @@ def main() -> int:
         test_check_context_completeness_symbol_usage_site_only_ts,
         test_check_context_completeness_symbol_declaration_form_go,
         test_check_context_completeness_symbol_declaration_form_cs,
+        test_check_context_completeness_symbol_cs_new_expression_not_a_declaration,
+        test_check_context_completeness_symbol_cs_member_declaration_still_fires,
         test_check_context_completeness_symbol_declaration_form_py,
         test_check_context_completeness_symbol_declaration_form_ts,
         test_check_context_completeness_symbol_go_grouped_declarations,

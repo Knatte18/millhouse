@@ -2196,9 +2196,12 @@ def _resolve_symbol_files(
     go_group_member_re = re.compile(r"^\s*" + sym + r"\b")
 
     # .cs: a type-level declaration, or a member-level declaration guarded by an access modifier.
+    # A literal `new` keyword between the modifier and the symbol is unambiguously a construction
+    # expression (e.g. `throw new InvalidOperationException(...)`, `= new Foo();`), never a member
+    # declaration, so it is excluded from matching.
     cs_type_re = re.compile(r"\b(?:class|struct|interface|enum|record)\s+" + sym + r"\b")
     cs_member_re = re.compile(
-        r"\b(?:public|private|protected|internal)\b.*\b" + sym + r"\b\s*[({;=]"
+        r"\b(?:public|private|protected|internal)\b(?:(?!\bnew\b).)*?\b" + sym + r"\b\s*[({;=]"
     )
 
     # .py: a `def`/`class` declaration, or a module-level (column-0) assignment/annotation.
