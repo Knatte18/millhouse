@@ -237,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
                 project_root=project_root,
                 wiki_root=wiki_root,
                 actual_model=args.actual_model,
-                duration_s=args.duration_s,
+                duration_s=_agent_dispatch.derive_duration_s(agent_output_path, args.duration_s),
                 tool_calls=args.tool_calls,
                 cost_usd=args.cost_usd,
             )

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -142,6 +144,21 @@ from _review_common import (  # noqa: E402
 )
 
 import _review_code  # noqa: E402
+import _agent_dispatch  # noqa: E402
+
+
+def _load_cli_module(name: str):
+    """Load a millpy-review-*.py CLI script (hyphenated filename) as an importable module."""
+    path = Path(__file__).resolve().parent.parent / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_"), path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_MILLPY_REVIEW_PLAN = _load_cli_module("millpy-review-plan")
+_MILLPY_REVIEW_DISCUSSION = _load_cli_module("millpy-review-discussion")
+_MILLPY_REVIEW_CODE = _load_cli_module("millpy-review-code")
 
 
 def main() -> int:
@@ -4336,6 +4353,111 @@ def main() -> int:
         except ValueError as e:
             assert "weird" in str(e)
     print("PASS: build_tool_rule unknown mode -> ValueError in both agent_mode states")
+
+    # ------------------------------------------------------------------
+    # CLI-level: --stage finalize on each of the three review CLIs derives
+    # duration_s from a prepare-stage .prepare_ts stamp rather than trusting
+    # --duration-s verbatim. The shape is byte-identical across all three
+    # CLI files, so a single loop covers plan/discussion/code.
+    # ------------------------------------------------------------------
+    def _stub_cfg_for(reviews_dir: Path) -> dict:
+        return {
+            "paths": {
+                "reviews_dir": str(reviews_dir),
+                "discussion_file": "x",
+                "plan_dir": "x",
+                "status_md": "x",
+            }
+        }
+
+    def _run_finalize_derivation_case(module, finalize_target: str, wraps_to_dict: bool, extra_argv: list[str]):
+        """Run <module>.main(["--stage", "finalize", ...]) twice against a stamped .prepare_ts.
+
+        Returns the two captured duration_s values passed into the mocked backend `finalize`:
+        (derived_with_no_fallback, derived_overriding_a_disagreeing_fallback).
+        """
+        with _test_helpers.safe_temp_dir() as tmp:
+            reviews_dir = tmp / "reviews"
+            reviews_dir.mkdir(parents=True, exist_ok=True)
+            agent_output_path = tmp / "agent.out.md"
+            agent_output_path.write_text(
+                "MILL_REVIEW_BEGIN\n# stub\n\n```yaml\nverdict: APPROVE\n```\nMILL_REVIEW_END\n",
+                encoding="utf-8",
+            )
+            # Stamp a prepare_ts 10s in the past: derive_duration_s should read this back.
+            stamp_path = _agent_dispatch.prepare_ts_path_for(
+                Path(str(agent_output_path).removesuffix(".out.md") + ".md")
+            )
+            stamp_path.write_text(str(time.time() - 10.0), encoding="utf-8")
+
+            captured_durations: list[float | None] = []
+
+            def _make_stub_entry():
+                entry = {
+                    "scope": "holistic",
+                    "verdict": "APPROVE",
+                    "file": str(reviews_dir / "r1.md"),
+                    "session_id": None,
+                    "blocking_count": 0,
+                    "nit_count": 0,
+                    "findings": [],
+                    "round": 1,
+                }
+                if wraps_to_dict:
+                    return MagicMock(to_dict=MagicMock(return_value={**entry, "type": "x", "reviews": []}))
+                return entry
+
+            def _fake_finalize(*args, **kwargs):
+                captured_durations.append(kwargs.get("duration_s"))
+                return _make_stub_entry()
+
+            with patch("_paths.resolve_hub_path", return_value=tmp), \
+                 patch("_paths.resolve_git_root", return_value=tmp), \
+                 patch("_paths.resolve_wiki_path", return_value=tmp), \
+                 patch("_paths.resolve_container_path", return_value=tmp), \
+                 patch("_paths.resolve_active_hub", return_value=tmp), \
+                 patch("_review_common.load_config", return_value=_stub_cfg_for(reviews_dir)), \
+                 patch("_review_common.find_active_slug", return_value="test-slug"), \
+                 patch("_reviewers.load", return_value={}), \
+                 patch("_reviewers.validate_role_refs"), \
+                 patch("_review_common.resolve_path", return_value=reviews_dir), \
+                 patch(finalize_target, side_effect=_fake_finalize):
+                # Case 1: no --duration-s supplied -> derived value from the stamp is used.
+                rc = module.main([
+                    "--stage", "finalize",
+                    "--agent-output", str(agent_output_path),
+                    "--round", "1",
+                    *extra_argv,
+                ])
+                assert rc == 0, f"expected rc=0, got {rc}"
+
+                # Case 2: a wildly disagreeing --duration-s is overridden by the derived value.
+                rc = module.main([
+                    "--stage", "finalize",
+                    "--agent-output", str(agent_output_path),
+                    "--round", "1",
+                    "--duration-s", "0.5",
+                    *extra_argv,
+                ])
+                assert rc == 0, f"expected rc=0, got {rc}"
+
+            return captured_durations
+
+    for module, finalize_target, wraps_to_dict, label, extra_argv in (
+        (_MILLPY_REVIEW_PLAN, "_review_plan.finalize", False, "plan", []),
+        (_MILLPY_REVIEW_DISCUSSION, "_review_discussion.finalize", True, "discussion", []),
+        (_MILLPY_REVIEW_CODE, "_review_code.finalize", True, "code", []),
+    ):
+        durations = _run_finalize_derivation_case(module, finalize_target, wraps_to_dict, extra_argv)
+        assert len(durations) == 2, f"[{label}] expected 2 captured finalize calls, got {durations}"
+        no_fallback, overridden = durations
+        assert no_fallback is not None and 8.0 <= no_fallback <= 20.0, (
+            f"[{label}] expected derived duration_s near 10s with no fallback, got {no_fallback}"
+        )
+        assert overridden is not None and 8.0 <= overridden <= 20.0, (
+            f"[{label}] expected the derived value (~10s) to override a disagreeing --duration-s=0.5, got {overridden}"
+        )
+        print(f"PASS: millpy-review-{label} --stage finalize derives duration_s from .prepare_ts stamp")
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
