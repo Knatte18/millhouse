@@ -31,6 +31,20 @@ the single home of the ".md" -> ".out.md" rule every agent-mode
 dispatcher and reviewer relies on. Preserves the parent directory and
 absoluteness of the input path.
 
+prepare_ts_path_for(brief_path: Path) -> Path
+Return the brief path with its trailing ".md" replaced by ".prepare_ts" --
+the brief-path-relative sibling of output_path_for's ".out.md" mapping.
+Both derive from the same brief path independently, not chained off
+each other.
+
+derive_duration_s(agent_output_path: Path, fallback: float | None) -> float | None
+Derive an Agent-mode review round's wall-clock duration from the
+prepare-stage timestamp stamped next to agent_output_path's brief.
+Falls back to the orchestrator-supplied value when no stamp is
+available or it fails to parse; otherwise the derived value always
+wins, with a stderr warning when it disagrees with a supplied
+fallback beyond tolerance.
+
 language_skills_directive(batch_file: Path) -> str
 Detect languages from a batch file's touched files (Edits/Creates only)
 and return a markdown block naming the required language skills plus code-quality.
@@ -39,6 +53,8 @@ SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER String constants for subagent type names
 """
 from __future__ import annotations
 
+import sys
+import time
 from pathlib import Path
 
 import _paths
@@ -50,6 +66,8 @@ __all__ = [
     "resolve_subagent_type",
     "write_brief",
     "output_path_for",
+    "prepare_ts_path_for",
+    "derive_duration_s",
     "language_skills_directive",
     "SUBAGENT_REVIEWER",
     "SUBAGENT_IMPLEMENTER",
@@ -145,13 +163,19 @@ def write_brief(
 ) -> Path:
     """Write a brief file and return its path.
 
-    Two behaviours run on every call, regardless of ``output_contract``: the brief is written to
-    briefs_dir/<role>-<sanitized_scope>-r<round_n>.md, and any stale ``.out.md`` left over from a
-    prior dispatch to that same path is unlinked first.
+    Three behaviours run on every call, regardless of ``output_contract``: the brief is written to
+    briefs_dir/<role>-<sanitized_scope>-r<round_n>.md, any stale ``.out.md`` left over from a
+    prior dispatch to that same path is unlinked first, and a ``.prepare_ts`` sibling file is
+    stamped with the current wall-clock time.
     The unlink matters because a transient-retry re-dispatch reuses the same role/scope/round --
     hence the same ``.out.md`` path -- so without it an attempt-1 output file could be misread as
     attempt-2's result (e.g.
     a stale ``APPROVE`` from a reviewer that never actually ran this round).
+    The ``.prepare_ts`` stamp lets ``derive_duration_s`` compute an Agent-mode review round's
+    wall-clock duration from this prepare-stage timestamp rather than trusting an orchestrator-
+    supplied value with no cross-check.
+    This runs for every role (implement/fix/merge-in/review), including non-review roles that
+    never read the stamp back -- writing an unused stamp file for those is harmless.
 
     When ``output_contract`` is True, an output-contract footer is appended to ``prompt_text``
     before writing: it names the absolute ``.out.md`` path (via ``output_path_for``) as the file the
@@ -183,6 +207,10 @@ def write_brief(
     # Runs for every role, agent-mode or not: without it, a transient-retry re-dispatch (same role/scope/round) could read back an attempt-1 output as attempt-2's result.
     output_path_for(brief_path).unlink(missing_ok=True)
 
+    # Stamp the prepare-stage wall-clock start time so a review round's finalize stage can derive
+    # duration_s from measured elapsed time instead of trusting an orchestrator-supplied value.
+    prepare_ts_path_for(brief_path).write_text(str(time.time()), encoding="utf-8")
+
     text_to_write = prompt_text
     if output_contract:
         text_to_write = prompt_text + _build_output_contract_footer(brief_path)
@@ -210,6 +238,75 @@ def output_path_for(brief_path: Path) -> Path:
         The same path with the trailing ".md" replaced by ".out.md".
     """
     return Path(brief_path).with_suffix(".out.md")
+
+
+def prepare_ts_path_for(brief_path: Path) -> Path:
+    """Return the ``.prepare_ts`` path a brief's prepare-stage stamp is written to.
+
+    This is the brief-path-relative sibling of ``output_path_for``'s ``.out.md`` mapping -- both
+    derive from the same brief path, ``.md`` -> ``.out.md`` and ``.md`` -> ``.prepare_ts``
+    independently (neither is chained off the other).
+
+    Args:
+        brief_path: Path to a brief file, ending in ".md".
+
+    Returns:
+        The same path with the trailing ".md" replaced by ".prepare_ts".
+    """
+    return Path(brief_path).with_suffix(".prepare_ts")
+
+
+def derive_duration_s(agent_output_path: Path, fallback: float | None) -> float | None:
+    """Derive an Agent-mode review round's wall-clock duration_s from its prepare-stage stamp.
+
+    Reads the ``.prepare_ts`` file ``write_brief`` stamped when the round's brief was written, and
+    computes elapsed wall-clock time from it to ``time.time()`` at finalize time.
+    This replaces trusting an orchestrator-supplied ``--duration-s`` verbatim, which is silently
+    wrong forever when the orchestrator misses the round's actual start (e.g.
+    fork/dispatch overhead not accounted for).
+
+    Args:
+        agent_output_path: Path to the reviewer's ``...out.md`` output file.
+            The sibling ``.prepare_ts`` path is derived from this by stripping both the ``.md``
+            and ``.out`` suffixes and appending ``.prepare_ts`` -- landing on exactly the path
+            ``write_brief`` wrote via ``prepare_ts_path_for(brief_path)``.
+        fallback: The orchestrator-supplied duration, or None when it didn't supply one.
+            Used only when no stamp is available or it fails to parse.
+
+    Returns:
+        The derived duration when the ``.prepare_ts`` stamp exists and parses -- this is always
+        preferred over ``fallback`` in that case, with a stderr warning when the two disagree
+        beyond tolerance (20% relative or 5 seconds absolute, whichever is greater, to allow for
+        brief-write/process-launch overhead).
+        Otherwise returns ``fallback`` unchanged.
+    """
+    # Chain with_suffix("") twice rather than a single with_suffix(".prepare_ts") call: the first
+    # strips the trailing ".md" (leaving "...out"), the second strips ".out" and appends
+    # ".prepare_ts". A single call on agent_output_path directly would only strip one suffix
+    # level, landing on "....out.prepare_ts" -- not the file write_brief wrote.
+    prepare_ts_path = Path(agent_output_path).with_suffix("").with_suffix(".prepare_ts")
+
+    if not prepare_ts_path.exists():
+        return fallback
+
+    try:
+        prepare_ts = float(prepare_ts_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return fallback
+
+    derived = time.time() - prepare_ts
+
+    if fallback is None:
+        return derived
+
+    tolerance = max(derived * 0.20, 5.0)
+    if abs(derived - fallback) > tolerance:
+        print(
+            f"[review] duration_s mismatch: caller supplied {fallback:.1f}s, derived "
+            f"{derived:.1f}s from prepare-stage stamp; using derived value",
+            file=sys.stderr,
+        )
+    return derived
 
 
 def _build_output_contract_footer(brief_path: Path) -> str:
