@@ -80,5 +80,7 @@ batches:
     start_sha: b2e49b3d1ff65e10558723260db22122b73e6878
     commit_sha: 4fe959c0683a0dbcd582aaef5c171c1a968f0465
   - name: skill-cross-reference-fix
-    state: pending
+    state: running
+    implementer_session: 285b0f6c-c06d-419d-9a29-26ffe2f66ef0
+    start_sha: 81fc86ac2a2d0d0f19d82cd72e0429b68c15a987
 ```
