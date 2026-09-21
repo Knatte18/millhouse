@@ -259,10 +259,10 @@ Each round:
 2. **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
    This does not apply to the subprocess/psmux branch, which keeps its existing worktree_snapshot_guard coverage unchanged.
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above);
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above);
    omit `<args>` (no additional prepare arguments) on every other round.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (per the general Agent-mode dispatch pattern's step 2 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) — `millpy-review-discussion.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
-   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
+   The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
    If `subprocess` or `psmux`: use the subprocess branch below.
 
    **Agent-mode error recovery:** A raw Agent API error before any verdict is classified as `stuck_type: transient` and the brief is re-dispatched once.
@@ -272,7 +272,7 @@ Each round:
 
    **Agent-mode properties:** the mechanics of steps 4a/4b/5 (how to read the envelope, where the review file lives, how to enumerate findings) are unchanged once the envelope is in hand — Agent-mode dispatch only changes *how the review runs*, never *who resolves the findings*.
    Under `--auto`/`--orch`, step 5's interactive gap-prompt behavior is still fully replaced by "Phase: Discussion Review — `--auto` changes" above — see the explicit guard at the top of step 5 below. Do not read "unchanged" as "still interactive."
-   For the async background-agent launch, notification handling, and stopped/interrupted agent recovery, see the "## Agent-mode dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md` — that section is the single source of truth;
+   For the async background-agent launch, notification handling, and stopped/interrupted agent recovery, see the "## Agent-mode dispatch" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md` — that section is the single source of truth;
    do not re-assert synchronous return behavior here.
 
    **Subprocess/psmux branch — Background the CLI via `millpy-bg`:**
@@ -299,7 +299,7 @@ Tree-guard checkpoint (Agent-mode only, post-dispatch): when this round used the
 This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
 Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in ${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
-Print this round's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
+Print this round's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
 
 3. **Confirm `mill-receiving-review` is loaded before evaluating or acting on this round's findings** (see `plugins/mill/skills/mill-receiving-review/SKILL.md`;
    it was already loaded unconditionally at the start of this phase — see the note immediately after the `### Phase: Discussion Review` heading above).
@@ -315,13 +315,13 @@ Print this round's cost line per the shared "## Review cost line" section in `${
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before this retry's Agent-mode dispatch.
    Does not apply to the Subprocess/psmux branch immediately below.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above);
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-discussion.py` with `<args> = --max-rounds <max_review_rounds + 1>` ONLY when this round is the Auto mode non-progress-extension round (per the rule in "Phase: Discussion Review — `--auto` changes" above);
    omit `<args>` (no additional prepare arguments) on every other round — this re-dispatch must also carry `--max-rounds` if it fires during the extension round, since it is the same prepare call being retried.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged, and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (per the general Agent-mode dispatch pattern's step 2 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) — `millpy-review-discussion.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.
 
-   Print this retry's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
+   Print this retry's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = discussion` and `<scope> = holistic`.
 
    **Subprocess/psmux branch:**
 
