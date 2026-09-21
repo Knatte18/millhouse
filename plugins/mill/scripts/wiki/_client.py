@@ -656,7 +656,16 @@ def _ensure_daemon(wiki_path: Path) -> tuple[str, int, str]:
         time.sleep(0.1)
         state = _read_state_file()
         if state:
-            if wait_for_socket_reachable(state["host"], state["port"], timeout=deadline - time.monotonic()):
+            # A TCP connect only proves the OS accepted the connection into its listen backlog, not
+            # that the daemon's own request-handling path is ready. Probe with an actual health op
+            # (the same shape used above for the "is an existing daemon still alive" reuse check) so
+            # a freshly-spawned daemon that hasn't finished starting up is not mistaken for ready.
+            req = {FIELD_OP: OP_HEALTH, FIELD_TOKEN: state["token"], "payload": {"liveness_only": True}}
+            try:
+                resp = _connect_send_recv(state["host"], state["port"], req, timeout=1.0)
+            except OSError:
+                continue
+            if resp.get(FIELD_OK) is True:
                 return (state["host"], state["port"], state["token"])
 
     raise WikiStartupError("daemon did not start within timeout")
