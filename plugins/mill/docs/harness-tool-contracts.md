@@ -23,6 +23,8 @@ See `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for the full disp
 
 ## Monitor tool
 
+The `Monitor` tool schema was directly reconfirmed via a live tool-schema read on 2026-09-21 (the same verification `_mill/discussion.md`'s Problem section records): parameters `command`/`ws`, `description`, `timeout_ms` (number, default `300000`, max `3600000`, ignored when `persistent` is `true`), `persistent` (boolean, default `false` — "run for the lifetime of the session, no timeout; stop via `TaskStop`"). This contradicts the specific "no `persistent` parameter" claim common to ten independent field reports — GitHub issues #1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108 — filed against whatever `Monitor` build they each hit, and the two entry-gate wait sections cited at the bottom of this section document a defensive third outcome (an unexpected early expiry, with a re-arm) for a build where `persistent: true` does not hold the watch open for the full wait.
+
 A poll script run via `Monitor(command: ..., persistent: true, ...)`:
 
 - Delivers ONE `<task-notification>` PER stdout line the script emits, each carrying that line's content in an `<event>` tag.
@@ -30,5 +32,6 @@ A poll script run via `Monitor(command: ..., persistent: true, ...)`:
 - This two-notification shape (one-per-line, then a separate event-less terminal notification) is NOT the same shape as `Agent`'s single combined-result notification.
   Do not conflate the two when writing a new entry-gate wait or similar poll-and-notify pattern.
 - Runs bash, not PowerShell, regardless of the operator's terminal — see `cli/SKILL.md`.
+- An early, unrequested expiry (a notification whose <event> content is neither `READY` nor a `TIMEOUT after ...` line) is possible on a `Monitor` build where `persistent: true` does not hold the watch open for the full wait — both entry-gate wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
 
 See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section for two independent consumers of this contract.
