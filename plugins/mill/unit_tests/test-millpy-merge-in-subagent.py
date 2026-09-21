@@ -204,6 +204,82 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "transient")
 
+    def test_2x_conflicts_model_resolves_from_conflicts_model(self):
+        """conflicts mode: model_name resolves from merge.conflicts_model when set (#1059)."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku", "conflicts_model": "sonnet"},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"success"}\n', "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "sonnet")
+
+    def test_2x_conflicts_model_falls_back_to_model_when_conflicts_model_absent(self):
+        """conflicts mode: model_name falls back to merge.model when conflicts_model is absent."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku"},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"success"}\n', "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "haiku")
+
+    def test_2x_verify_fix_model_unaffected_by_conflicts_model(self):
+        """verify-fix mode: model_name resolution is unchanged regardless of conflicts_model
+        presence -- it always resolves from merge.model (never merge.conflicts_model)."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku", "conflicts_model": "sonnet", "verify_fix_rounds": 3},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "mill-checkpoint-x",
+            ])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "haiku")
+
     # ---- verify-fix mode ----
 
     def test_5_verify_fix_success_no_subagent(self):

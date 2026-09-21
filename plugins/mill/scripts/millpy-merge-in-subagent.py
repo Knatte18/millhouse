@@ -433,7 +433,15 @@ def main(argv=None) -> int:
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
-    model_name = cfg.get("merge", {}).get("model") or implementer_cfg.get("model", "haiku")
+    merge_cfg = cfg.get("merge", {})
+    if args.mode == "conflicts":
+        model_name = (
+            merge_cfg.get("conflicts_model")
+            or merge_cfg.get("model")
+            or implementer_cfg.get("model", "haiku")
+        )
+    else:
+        model_name = merge_cfg.get("model") or implementer_cfg.get("model", "haiku")
     try:
         registry = _reviewers.load(git_root)
         impl_spec = _reviewers.resolve(registry, model_name)

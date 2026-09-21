@@ -46,6 +46,7 @@ For each file listed above:
    - **Ambiguous case:** if you cannot confidently tell whether this is the same moved content or a legitimate independent duplication — fall back to step 3's default (keep both) rather than guessing, and report the ambiguity via the `discarded` field (see Report section) with the description `"kept both sides of a conflict, ambiguous move-vs-duplicate"`.
      Worked example: a similarly-worded item appears in two different sections and you cannot tell whether it is the same item moved or a legitimate second, independently-added item.
      The resolution keeps both occurrences and reports the ambiguity via `discarded`.
+   Before accepting a roadmap-shaped Planned/Done (or similarly staged/shipped) split as correct, explicitly check the rest of the resolved file — not just the immediate conflict hunk — for whether the same item is already represented under the other status further down; a losing side's move to a new section may already be reflected outside the hunk boundary, and keeping the item under both statuses is a self-contradiction (an item cannot be simultaneously upcoming and already shipped).
 5. Run `git -C <PROJECT_ROOT> add <file>` to stage the resolved file.
 6. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C <PROJECT_ROOT> rm <file>` instead of editing;
    that stages the intentional deletion.
