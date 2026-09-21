@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-write-brief-warning
+phase: approved-cross-batch-build-break
 slug: mill-plan-process-gaps-r2
 branch: hanf/mill-plan-process-gaps-r2
 plan: _mill/plan
@@ -28,6 +28,7 @@ implementing  '2026-09-21T16:01:48Z'
 approved-doc-fixes  '2026-09-21T16:07:19Z'
 approved-allow-missing-refs  '2026-09-21T16:13:13Z'
 approved-write-brief-warning  '2026-09-21T16:16:16Z'
+approved-cross-batch-build-break  '2026-09-21T16:21:12Z'
 ```
 
 ## Batches
@@ -52,8 +53,9 @@ batches:
     commit_sha: 6a12aa1c16cea14620cb9fbc006ce8071aacff12
     verify_baseline_failures: []
   - name: cross-batch-build-break
-    state: running
+    state: approved
     implementer_session: 5dd97d2c-b48b-4117-a7a0-cdf428ce3aea
     start_sha: 4d38c8e0813618d5a36a9ec93cf860b06bcb0616
+    commit_sha: f42bbfe129d2df606aa549df2bf50ffb2e82daa4
     verify_baseline_failures: []
 ```
