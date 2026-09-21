@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-daemon-reliability
+phase: approved-pr-state-and-cache-freshness
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-review-r3  '2026-09-21T16:04:33Z'
 planned  '2026-09-21T16:05:13Z'
 implementing  '2026-09-21T16:09:43Z'
 approved-wiki-daemon-reliability  '2026-09-21T16:17:14Z'
+approved-pr-state-and-cache-freshness  '2026-09-21T16:23:59Z'
 ```
 
 ## Batches
@@ -40,9 +41,10 @@ batches:
     commit_sha: 4e56e8e5f3d09eeedf5ee0f8fa8a989c5ccf7a8b
     verify_baseline_failures: []
   - name: pr-state-and-cache-freshness
-    state: running
+    state: approved
     implementer_session: 8babb595-e241-4127-b9c7-786814dd69a4
     start_sha: da20747862bd1e2bc5a914a2384b7cc74395ca5e
+    commit_sha: 2cc0cb624b5eade097065577fe7021105a7a1f2d
     verify_baseline_failures: []
   - name: merge-in-verify-field-fix
     state: pending
