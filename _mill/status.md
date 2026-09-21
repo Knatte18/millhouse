@@ -51,7 +51,9 @@ batches:
     start_sha: 4f5803024ad3c338f33b7483a16e80d8c24afab2
     commit_sha: 5fa9d8c7e6a2a7ccad111ae4e46b658fbe692f42
   - name: plan-validate-build-tag-coverage
-    state: pending
+    state: running
+    implementer_session: c3ded3e0-64a7-4230-99ef-7f7e674678b4
+    start_sha: c40382b0ef54a503a4f65a9cd7cf9d5a130af428
   - name: merge-in-conflict-and-verify-robustness
     state: pending
   - name: self-resolve-card-insertion-auto-renumber
