@@ -231,7 +231,13 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
     overview_path = plan_base / "00-overview.md"
     overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
-    module_wide_verify_cmd = overview_frontmatter.get("verify") or None
+    try:
+        module_wide_verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+            overview_frontmatter, project_root, git_root
+        )
+    except Exception as e:
+        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
+        return 0
 
     if module_wide_verify_cmd is None:
         print(
@@ -256,7 +262,8 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
 
     try:
         result = _verify_baseline.compute_baseline(
-            project_root, git_root, parent_branch, module_wide_verify_cmd
+            project_root, git_root, parent_branch, module_wide_verify_cmd,
+            cwd_override_relative=cwd_override,
         )
     except Exception as e:
         print(f"[millpy-merge-in-subagent] baseline recompute failed: {e}", file=sys.stderr)
