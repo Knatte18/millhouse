@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r1
+phase: discussion-fix-r2
 slug: mill-infra-reliability-misc-r2
 branch: hanf/mill-infra-reliability-misc-r2
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-21T14:53:18Z'
 discussion-gap-fix-r1  '2026-09-21T15:09:47Z'
+discussion-fix-r2  '2026-09-21T15:14:51Z'
 ```

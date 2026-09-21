@@ -217,17 +217,28 @@ operator exchange to log — see Q&A log at the end for the one process note tha
     `.out.md` suffix-swap pattern) containing the wall-clock time the brief was written (UTC epoch
     seconds is sufficient; reuse whatever the codebase's existing `_timestamp` helper exposes for a
     raw epoch value, or store the ISO string and diff on read).
-  - In the shared finalize path in `_review_common.py` (`apply_cost_metadata` / `finalize_scope`'s
-    `duration_s` handling), when a `.prepare_ts` stamp file exists next to the brief for this round,
-    compute `derived_duration_s = now - prepare_ts`. Use `derived_duration_s` as the value written to
-    `duration_s:`, ignoring or overriding a caller-supplied `--duration-s` whenever the two disagree
-    by more than a small tolerance (e.g. the greater of 20% relative or a fixed few-seconds absolute
-    floor, to allow for brief-write / process-launch overhead) — log a one-line ASCII warning noting
-    the discrepancy and which value won, rather than silently accepting the caller's number. When
-    they roughly agree, or no `--duration-s` was passed at all, use the derived value. `--duration-s`
-    remains available as a fallback for any dispatch path that doesn't go through `write_brief` (there
-    is no other such path today under Agent-mode dispatch, but the flag itself is kept rather than
-    removed, so no CLI contract breaks).
+  - Concrete insertion point (verified against the actual signatures — neither `apply_cost_metadata`
+    nor `finalize_scope` receives a brief path or `briefs_dir` today, so neither can locate a sibling
+    `.prepare_ts` file on its own): add a small shared helper in `_review_common.py`, e.g.
+    `derive_duration_s(agent_output_path: Path, fallback: float | None) -> float | None`, that derives
+    the `.prepare_ts` path from `agent_output_path` the same way `output_path_for` itself derives
+    `.out.md` from a brief path (suffix swap — `.prepare_ts` sits alongside `.out.md`, both siblings
+    of the brief), reads the stamp if present, and returns `now - prepare_ts`. Each of the three
+    review CLIs (`millpy-review-plan.py`, `millpy-review-discussion.py`, `millpy-review-code.py`)
+    already holds `agent_output_path` (from `--agent-output`) at the finalize stage — call
+    `derive_duration_s` there, before invoking `finalize_scope`, and pass its result as the
+    `duration_s` argument `finalize_scope` already accepts today. No signature change to
+    `finalize_scope`/`apply_cost_metadata` is needed; only the three CLI call sites gain one call
+    each, so they don't independently invent divergent wiring.
+  - Use the derived value as the value written to `duration_s:`, ignoring or overriding a
+    caller-supplied `--duration-s` whenever the two disagree by more than a small tolerance (e.g. the
+    greater of 20% relative or a fixed few-seconds absolute floor, to allow for brief-write /
+    process-launch overhead) — log a one-line ASCII warning noting the discrepancy and which value
+    won, rather than silently accepting the caller's number. When they roughly agree, or no
+    `--duration-s` was passed at all, use the derived value. `--duration-s` remains available as a
+    fallback for any dispatch path that doesn't go through `write_brief` (there is no other such path
+    today under Agent-mode dispatch, but the flag itself is kept rather than removed, so no CLI
+    contract breaks).
   - This is a non-blocking correction (never raises, never halts a review round) — the goal is a
     trustworthy `duration_s:` value for `/mill-review-summary`'s timing table, not a new failure mode
     in the review pipeline.
@@ -308,11 +319,12 @@ operator exchange to log — see Q&A log at the end for the one process note tha
   bait the issue identifies.
   - Exact counts, reproducible via `grep -c 'mill-go-base/SKILL.md' <file>`: `mill-plan/SKILL.md` has
     **12** occurrences, all in the bare `mill-go-base/SKILL.md` form. `mill-start/SKILL.md` has **10**
-    occurrences, and they are a **mix**, not uniform — 6 bare (`mill-go-base/SKILL.md`, e.g. lines
-    ~198, ~300, ~302, ~318, ~320, ~324) and 4 already-qualified with the repo-relative
-    `plugins/mill/skills/mill-go-base/SKILL.md` prefix (e.g. lines ~262, ~264, ~265, ~275). Both
-    files' occurrences — bare and repo-relative alike — are in scope for the `${CLAUDE_PLUGIN_ROOT}`
-    rewrite; mill-start is not already uniformly safe, only partially so.
+    occurrences, and they are an even **mix**, not uniform — 5 bare and 5 already-qualified with the
+    repo-relative `plugins/mill/skills/mill-go-base/SKILL.md` prefix. Re-derive the exact per-line
+    classification by reading the file at plan-writing time rather than trusting any specific line
+    numbers cited during discussion — both files' occurrences, bare and repo-relative alike, are in
+    scope for the `${CLAUDE_PLUGIN_ROOT}` rewrite regardless of the exact split; mill-start is not
+    already uniformly safe, only partially so.
   - The repo-relative form is still not the `${CLAUDE_PLUGIN_ROOT}` convention the rest of the
     codebase uses for intra-plugin references, and it still implicitly assumes cwd is the git root —
     bringing every occurrence in both files to the same `${CLAUDE_PLUGIN_ROOT}`-qualified form removes
