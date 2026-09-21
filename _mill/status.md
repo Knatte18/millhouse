@@ -54,7 +54,9 @@ batches:
     commit_sha: 00512c765c901ea977b87b91a7f72de74018dc90
     verify_baseline_failures: []
   - name: baseline-lazy-preflight
-    state: pending
+    state: running
+    implementer_session: 8beb742b-cfe8-4771-9a31-9c954966c784
+    start_sha: 50935efffe51d5df4ee939b4abb2ebb86ff32718
     verify_baseline_failures: []
   - name: review-duration-derivation
     state: pending
