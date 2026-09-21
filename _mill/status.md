@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: mill-monitor-persistent-true-unsupported
 branch: hanf/mill-monitor-persistent-true-unsupported
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-09-21T14:52:40Z'
 discussion-fix-r1  '2026-09-21T15:05:29Z'
 discussed  '2026-09-21T15:05:29Z'
 planning  '2026-09-21T15:09:34Z'
+plan-review-r1  '2026-09-21T15:13:31Z'
 ```
