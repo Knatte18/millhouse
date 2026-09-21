@@ -14,12 +14,18 @@ Build and test configuration for C#/.NET projects.
 Run these commands after completing a task to verify correctness:
 
 ```bash
-dotnet build --nologo -clp:ErrorsOnly
-dotnet test --nologo -clp:ErrorsOnly
+dotnet build --nologo -clp:ErrorsOnly -p:UseSharedCompilation=false /nr:false
+dotnet test --nologo -clp:ErrorsOnly -p:UseSharedCompilation=false /nr:false
 ```
 
 `-clp:ErrorsOnly` suppresses only MSBuild build-phase warnings (`CS8618`, `MSB3246`, `RZ10012`, etc.) — VSTest failure detail (failing test names, `Error Message:` blocks) and the run summary are untouched.
 
+- **Always disable MSBuild node reuse (`-p:UseSharedCompilation=false /nr:false`).** A long mill-orchestrated
+  session chains many sequential `dotnet build`/`dotnet test` calls in one process tree (per-batch verify,
+  baseline pre-flight, merge-in verify replay, git-pr's final verify). MSBuild's `nodeReuse:true` default lets
+  worker processes accumulate across that whole session with no teardown, and a later `dotnet test` can then
+  stall 11+ minutes on file-lock contention against those stale workers. Without the flags, a real incident
+  reproduced an 11+ minute stall; the same command with these two flags added completed in 32s.
 - **Never pipe the gating invocation** (mill-go verify, git-commit lint, any pass/fail check) to `grep` or `tail`. `cmd | grep` returns the downstream tool's exit status, not dotnet's — a failing suite would exit 0 and silently pass the gate. The unpiped form above preserves dotnet's authoritative exit code. If a human-readable summary-only view is ever wanted (never for gating), guard it with `set -o pipefail`.
 - **Never `tail -N` a dotnet build/test.**
   Warnings can evict the `Passed!`/`Failed!` summary from the tail window.
