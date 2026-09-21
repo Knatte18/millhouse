@@ -28,5 +28,7 @@ implementing  '2026-09-21T15:18:31Z'
 ```yaml
 batches:
   - name: entry-gate-wait-expiry-branch
-    state: pending
+    state: running
+    implementer_session: ce86cf8d-d61f-4db3-96f8-6614abe8a3cc
+    start_sha: a5197a0e1ab3ec3d929ff127eb448a7e03e7e2f9
 ```
