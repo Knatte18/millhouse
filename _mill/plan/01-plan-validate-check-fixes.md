@@ -20,7 +20,12 @@ on overlapping line ranges: cards 1 and 3 both touch `run()`'s check-invocation 
 different, non-adjacent call sites (`_check_move_target_collision`'s call vs `_check_context_
 completeness`'s call and the `moves_sources`/`moves_targets` computation line just above it) — card 1
 runs first and only touches the former; card 3 runs later and only touches the latter, so neither
-card's inline-backtick anchors are invalidated by the other's edit.
+card's inline-backtick anchors are invalidated by the other's edit. Cards 4 and 6 both edit inside
+`_resolve_symbol_files` too — card 4 adds a new helper call in the per-file walk (the
+`_is_conventional_test_file` skip, right after the extension check), card 6 changes only the
+`cs_member_re` pattern string a few lines below the walk — these are two distinct, non-adjacent spots
+in the same function, so card 4's edit does not shift the line `cs_member_re` sits on, and neither
+card's inline-backtick anchor is invalidated by the other's edit.
 
 ## Cards
 
@@ -125,7 +130,11 @@ card's inline-backtick anchors are invalidated by the other's edit.
       `00-overview.md`), scans its Requirements: text (via `_requirements_fence_aware_body`, the same
       fence-aware extraction `_check_context_completeness` itself uses) for every backtick token
       matching `_BACKTICK_RE` that contains a balanced `(...)` or `{...}` span. For each such token,
-      takes the substring between the first opening delimiter and the matching last closing delimiter,
+      when both a `(...)` and a `{...}` span are present (e.g. a struct-literal token whose field type
+      itself contains a function type, `` `type Deps struct { Acquire func() error }` ``), picks
+      whichever pair's outermost span is WIDER -- an inner, narrower span (the empty `()` in `func()`
+      here) would otherwise win by being checked first and yield an empty, useless `inner` substring.
+      Takes the substring between that pair's first opening delimiter and its last closing delimiter,
       splits it on `,`/`;`, and for each non-empty clause adds BOTH its first and its last
       whitespace-separated word to the result set when that word matches `^[A-Za-z_]\\w*$` -- the first
       word covers a Go/Rust-style `name Type` parameter order, the last word covers a C#/TS-style
@@ -159,14 +168,14 @@ card's inline-backtick anchors are invalidated by the other's edit.
                   continue
               for match in _BACKTICK_RE.finditer(requirements_text):
                   token = match.group(1)
+                  candidate_spans = []
                   if "(" in token and ")" in token:
-                      open_char, close_char = "(", ")"
-                  elif "{" in token and "}" in token:
-                      open_char, close_char = "{", "}"
-                  else:
+                      candidate_spans.append((token.find("("), token.rfind(")")))
+                  if "{" in token and "}" in token:
+                      candidate_spans.append((token.find("{"), token.rfind("}")))
+                  if not candidate_spans:
                       continue
-                  start = token.find(open_char)
-                  end = token.rfind(close_char)
+                  start, end = max(candidate_spans, key=lambda span: span[1] - span[0])
                   if end <= start:
                       continue
                   inner = token[start + 1:end]

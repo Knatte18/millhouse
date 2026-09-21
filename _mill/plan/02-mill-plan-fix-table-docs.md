@@ -50,12 +50,18 @@ runnable surface to check; the card's own correctness is that the row text match
      mutually-exclusive-suite-convention rationale) unchanged — only the two branches' package-scoping
      guidance changes.
 
-  2. `requirements-quote-indent-drift` row: keep its existing two sentences (the "after stripping N
-     leading spaces per line" and "after adding N leading spaces per line" remedies) verbatim, and
-     append a new sentence covering the new message shape Card 7 (batch 1) introduces: "A message
-     reading '...immediately follows matched fence N, but its first line is indented X spaces vs the
-     anchor fence's Y spaces' means the new-code fence's own indentation doesn't match its anchor:
-     compute `Y - X`; if positive, add that many leading spaces to every line of the new-code fence; if
+  2. `requirements-quote-indent-drift` row: keep its existing "locate the fence", "after stripping N
+     leading spaces per line", and "after adding N leading spaces per line" sentences verbatim. The row
+     currently closes with a fourth sentence, "In both cases the goal is identical: the fence body must
+     end up a literal byte-exact substring of the target `Edits:` file named in the payload's `path`
+     field." — that claim is false for the new third message shape below (a paired-fence indent
+     mismatch is never byte-matched against `Edits:` content, only indent-compared against an anchor
+     fence), so reword "In both cases" to "In the first two cases" in that sentence, leaving the rest of
+     it unchanged, and keep it immediately after the "after adding N..." sentence. Then append a new
+     final sentence covering the new message shape Card 7 (batch 1) introduces: "A message reading
+     '...immediately follows matched fence N, but its first line is indented X spaces vs the anchor
+     fence's Y spaces' means the new-code fence's own indentation doesn't match its anchor: compute
+     `Y - X`; if positive, add that many leading spaces to every line of the new-code fence; if
      negative, strip `|Y - X|` leading spaces from every line -- mirroring the existing strip/add rows'
      per-line, not textwrap.dedent-style, adjustment -- so the fence's first line ends up indented
      exactly `Y` spaces, matching the anchor fence's own indentation."
