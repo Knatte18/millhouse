@@ -3,7 +3,7 @@
 ```yaml
 task: 'Monitor tool: persistent:true doesn''''t exist, entry-gate waits break'
 slug: mill-monitor-persistent-true-unsupported
-approved: false
+approved: true
 started: 20260921-150808
 parent: main
 root: ""
