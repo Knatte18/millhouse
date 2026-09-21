@@ -38,7 +38,9 @@ batches:
     start_sha: 5c3e70534ca6fdfeeb0df0b27aa95c71b0ded521
     commit_sha: 84eb1edc93a29d41cf8feecdf5793af89db33ed4
   - name: allow-missing-refs
-    state: pending
+    state: running
+    implementer_session: b689072c-062c-455a-bf9c-88186a2326c1
+    start_sha: 35c921e205c67a7e22599357512d66ccefc182c4
     verify_baseline_failures: []
   - name: write-brief-warning
     state: pending
