@@ -49,6 +49,13 @@ Public API:
     Deduplicates work across names sharing one (command, cwd) pair and
     skips the corroboration re-run when run 1 is green. Pass a
     caller-owned `pair_cache` dict to make that dedup span calls.
+    compute_batch_baseline_on_demand(project_root, git_root, parent_sha, verify_cmd) -> list[str]
+    Single-batch companion to compute_batch_baselines that owns its own
+    transient-worktree checkout/teardown (mirroring compute_baseline's
+    structure) instead of requiring an already-checked-out
+    checkout_path -- the entry point for the "lazy" per-batch baseline
+    path (#1102), computed on demand only when a batch's own verify
+    gate fails and no baseline is cached yet.
 
 Both entry points accept `timeout_seconds`, a per-run wall-clock ceiling. `subprocess.TimeoutExpired`
 propagates to the caller, which applies the same "leave the baseline unset" fail-safe it applies to
@@ -437,6 +444,81 @@ def compute_batch_baselines(
         # Copy per name: callers treat each value as their own mutable list.
         results[name] = list(by_pair[pair])
     return results
+
+
+def compute_batch_baseline_on_demand(
+    project_root: Path,
+    git_root: Path,
+    parent_sha: str,
+    verify_cmd: str,
+    *,
+    cwd_override: Path | None = None,
+    timeout_seconds: float | None = None,
+) -> list[str]:
+    """
+    Compute one batch's `verify_baseline_failures` on demand, against an already-pinned parent SHA.
+
+    Unlike `compute_batch_baselines`, this function owns its own transient-worktree checkout and
+    teardown -- it exists for the "lazy" baseline path (#1102), where a single batch's baseline is
+    computed the first time that batch's own verify gate actually fails, instead of every batch's
+    baseline being precomputed eagerly before batch 1 dispatches.
+
+    Implementation, in order:
+        1. `_checkout_parent_branch(project_root, git_root, parent_sha)` -- `parent_sha` is already
+            a resolved 40-character SHA, so `_checkout_parent_branch`'s own internal `git rev-parse`
+            call on it is a no-op round-trip.
+        2. Resolve `effective_tmp_path` the same way `compute_baseline` does: `tmp_path /
+            cwd_override` when `cwd_override` is not `None`, else `tmp_path` directly.
+        3. `_link_dependency_dirs(project_root, effective_tmp_path)`.
+        4. `compute_batch_baselines([("_ondemand", verify_cmd, None)], effective_tmp_path,
+            project_root, timeout_seconds=timeout_seconds)`, returning the `"_ondemand"` entry.
+
+    The checkout-through-run sequence is wrapped in `try`/`finally` so the transient worktree is torn
+    down via `_worktree.remove_safe` unconditionally, mirroring `compute_baseline`'s own teardown.
+
+    This function has no fail-safe swallowing of its own -- any exception from
+    `_checkout_parent_branch`, `_link_dependency_dirs`, or `compute_batch_baselines` propagates to
+    the caller.
+    The caller (`_implementer_common._run_verify_gates`) treats a raised exception as "on-demand
+    computation failed, gate strictly," per this codebase's existing None-means-fail-strict
+    convention.
+
+    Args:
+        project_root: Absolute path to the task worktree root (where `.scratch/` lives and where
+            gitignored dependency dirs are probed for reuse).
+        git_root: Absolute path to the repo root `git` commands run against.
+        parent_sha: The already-resolved parent branch tip SHA to check out.
+        verify_cmd: The batch's own verify command string to run, verbatim.
+        cwd_override: Hub-relative path fragment, resolved the same way as
+            `compute_baseline`'s `cwd_override_relative` -- re-anchors both the verify subprocess's
+            cwd and the dependency-junction targets to `tmp_path / cwd_override` instead of
+            `tmp_path` directly.
+            `None` (the default) leaves everything at `tmp_path`.
+        timeout_seconds: Per-run wall-clock ceiling, or None for no ceiling.
+
+    Returns:
+        The `"_ondemand"` entry's failure-signature list from `compute_batch_baselines` -- `[]` when
+        the batch's verify command produces no extracted failures against the pinned parent SHA.
+
+    Raises:
+        RuntimeError: `git rev-parse` or `git worktree add` failed.
+        OSError: junction creation failed.
+        ValueError: link_path already exists (dependency dir collision).
+        subprocess.TimeoutExpired: A verify run exceeded `timeout_seconds`.
+    """
+    tmp_path = _checkout_parent_branch(project_root, git_root, parent_sha)
+    effective_tmp_path = tmp_path / cwd_override if cwd_override is not None else tmp_path
+    try:
+        _link_dependency_dirs(project_root, effective_tmp_path)
+        result = compute_batch_baselines(
+            [("_ondemand", verify_cmd, None)],
+            effective_tmp_path,
+            project_root,
+            timeout_seconds=timeout_seconds,
+        )
+        return result["_ondemand"]
+    finally:
+        _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
 
 
 def _signatures_for_pair(
