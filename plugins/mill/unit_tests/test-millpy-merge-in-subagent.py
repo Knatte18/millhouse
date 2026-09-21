@@ -914,6 +914,29 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("--files is required for conflicts mode", stderr_buf.getvalue())
 
+    def test_2x_collect_task_intent_includes_moves_bullet(self):
+        """_collect_task_intent widens its bullet-extraction regex to include `Moves:` (#1065).
+
+        A plan file's `Moves:` bullet (with its indented rename-pair sub-bullet) must reach the
+        returned task-intent text exactly like `Deletes:` already does today.
+        """
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        (plan_dir / "01-batch.md").write_text(
+            "```yaml\ntask: test\n```\n\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:**\n"
+            "  - old/path.py -> new/path.py\n",
+            encoding="utf-8",
+        )
+
+        result = millpy_merge_in_subagent._collect_task_intent(self.tmp_path)
+
+        self.assertIn("**Moves:**", result)
+        self.assertIn("old/path.py -> new/path.py", result)
+
     def test_20_recompute_baseline_missing_status_md(self):
         """--recompute-baseline with status.md absent -> exit 0, baseline:error JSON, no raise.
 

@@ -61,7 +61,7 @@ def _collect_task_intent(project_root: Path) -> str:
 
     Returns a string containing excerpts from this branch's _mill/discussion.md and _mill/plan/*.md
     that describe the branch's intent.
-    Extracts the top YAML block and the Edits/Creates/Deletes bullets from each plan file.
+    Extracts the top YAML block and the Edits/Creates/Deletes/Moves bullets from each plan file.
     Returns empty string if _mill directory does not exist.
     """
     mill_dir = project_root / "_mill"
@@ -90,7 +90,7 @@ def _collect_task_intent(project_root: Path) -> str:
             header_lines: list[str] = []
             lines = plan_content.splitlines()
             for i, line in enumerate(lines):
-                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes):\*\*", line):
+                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes|Moves):\*\*", line):
                     header_lines.append(line)
                     # Check for sub-bullets
                     j = i + 1
