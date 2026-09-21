@@ -6,6 +6,7 @@ slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
 parent: main
+baseline_parent_sha: 5d111edfa678fd279448258ced2ae272350e1f95
 task: mill-go/mill-merge-in orchestration robustness gaps, round 2
 task_description: |
   mill-go/mill-merge-in orchestration robustness gaps, round 2
@@ -38,7 +39,9 @@ implementing  '2026-09-21T18:46:09Z'
 ```yaml
 batches:
   - name: finalize-completeness-and-baseline-robustness
-    state: pending
+    state: running
+    implementer_session: 34553b87-5ab1-4a5d-8dfe-06be411c02b1
+    start_sha: 017b33e9e837fab751223c0df5cba351dd403151
   - name: orchestration-skill-doc-fixes
     state: pending
   - name: plan-validate-build-tag-coverage
