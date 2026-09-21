@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-plan-process-gaps-r2
 branch: hanf/mill-plan-process-gaps-r2
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-allow-missing-refs  '2026-09-21T16:13:13Z'
 approved-write-brief-warning  '2026-09-21T16:16:16Z'
 approved-cross-batch-build-break  '2026-09-21T16:21:12Z'
 holistic-reviewing  '2026-09-21T16:21:44Z'
+holistic-fixing  '2026-09-21T16:27:14Z'
 ```
 
 ## Batches
