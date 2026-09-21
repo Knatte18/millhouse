@@ -1,0 +1,20 @@
+MILL_REVIEW_BEGIN
+# Review: mill-go/mill-merge-in orchestration robustness gaps, round 2 — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-21
+```
+
+## Findings
+
+### [NIT:design] renumber_after_collision's "not-yet-dispatched" invariant is unverified generally
+**Location:** batch 5, Card 11/12 **Issue:** `renumber_after_collision` (`_plan_validate.py`) shifts every batch's cards `>= colliding_number`; safety rests entirely on "mill-go executes strictly sequentially per `topo_order`," but the colliding batch is whichever batch owns the candidate number by *file-numeric* range, which only coincides with topo order when `depends-on` never inverts file order (true for this plan, verified in `## Execute — sequential loop`, not enforced generally). **Fix:** none required for this plan (dependencies here are forward-only); the docstring's own "this function itself does not verify it" caveat already covers the residual risk for future plans, so this is informational only.
+
+## Verdict
+
+APPROVE
+Source-verified against `_implementer_common.py`, `_verify_baseline.py`, `_plan_dag.py`, `_plan_validate.py`, `millpy-implement.py`, `millpy-merge-in-subagent.py`, and both SKILL.md files; all mechanism claims (call sites, current text, function signatures) matched.
+MILL_REVIEW_END

@@ -3,7 +3,7 @@
 ```yaml
 task: mill-go/mill-merge-in orchestration robustness gaps, round 2
 slug: mill-go-merge-in-orchestration-robustness-r2
-approved: false
+approved: true
 started: "20260921-174106"
 parent: main
 root: ""
