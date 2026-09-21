@@ -52,6 +52,8 @@ batches:
     commit_sha: 6a12aa1c16cea14620cb9fbc006ce8071aacff12
     verify_baseline_failures: []
   - name: cross-batch-build-break
-    state: pending
+    state: running
+    implementer_session: 5dd97d2c-b48b-4117-a7a0-cdf428ce3aea
+    start_sha: 4d38c8e0813618d5a36a9ec93cf860b06bcb0616
     verify_baseline_failures: []
 ```
