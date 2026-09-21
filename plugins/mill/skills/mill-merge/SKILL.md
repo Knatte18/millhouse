@@ -290,7 +290,7 @@ a failed step is reported with its name so the user can re-run from that step (S
 
 On the task branch (current cwd), remove the state directory that belongs to the task lifecycle, not to production code.
 
-**Citation scan (non-blocking, #930).** Before removing `<task_dir>`, scan for permanent-doc citations of `_mill/discussion.md` that this deletion is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts this step under any outcome:
+**Citation scan (non-blocking, #930).** Before removing `<task_dir>`, scan for permanent-doc citations of `_mill/discussion.md` that this deletion is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts this step under any outcome. If this exact grep's pathspec syntax stops matching after a `main`-merged fix, see CLAUDE.md's `## Hard constraints` cache-freshness bullet before assuming the pathspec itself needs another fix (#1077):
 
 ```bash
 git -C <worktree> grep -InE '\]\([./]*_mill/discussion\.md\)' -- . \

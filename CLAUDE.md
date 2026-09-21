@@ -54,6 +54,11 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
   Reading actual source code to verify plan/discussion accuracy — the code a plan is about to edit, as distinct from invoking a script — must target the task-worktree path, never the plugin cache.
   In this self-hosted repo (millhouse developing millhouse), the cache and the worktree can silently diverge;
   reading stale cache content during plan-writing has previously produced an incorrect conclusion requiring mid-plan rework. `${CLAUDE_PLUGIN_ROOT}` remains correct for script invocation — this bullet narrows only the source-code-verification case, it does not revise the bullet above it.
+- **A `main`-merged plugin fix isn't live for dispatched invocations until the cache refreshes.**
+  A fix merged to `main` under `plugins/mill/**` during the current session does not take effect in
+  any *dispatched* mill-go/mill-merge/mill-plan invocation until the plugin cache is refreshed —
+  those dispatches read `${CLAUDE_PLUGIN_ROOT}`, a frozen copy, not the dev tree.
+  `./update-plugins.sh`, run from the hub root, is the existing mechanism to force that refresh.
 - **Working state never goes to wiki.** `_mill/` lives on the task branch.
   Wiki holds only `Home.md`.
 - **Never cite `_mill/discussion.md` (or any other `_mill/`-rooted path) from a permanent doc.**
