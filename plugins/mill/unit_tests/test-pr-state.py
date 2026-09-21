@@ -57,14 +57,14 @@ def test_single_closed_pr() -> None:
 
 
 def test_empty_array() -> None:
-    """An empty JSON array [] -> state='none'."""
+    """An empty JSON array [] -> state='none', error=None (a genuine no-PR outcome)."""
     with patch.object(_pr_state._subprocess_util, "run", return_value=_make_run_mock(0, "[]")):
         result = _pr_state.resolve_pr_state("no-pr-branch", cwd="/repo")
 
-    assert result == {"state": "none", "number": None, "url": None, "merge_commit": None}, (
-        f"expected none-dict, got {result!r}"
-    )
-    print("PASS resolve_pr_state -- empty array [] -> none")
+    assert result == {
+        "state": "none", "number": None, "url": None, "merge_commit": None, "error": None,
+    }, f"expected none-dict, got {result!r}"
+    print("PASS resolve_pr_state -- empty array [] -> none, error=None")
 
 
 def test_empty_stdout() -> None:
@@ -77,12 +77,13 @@ def test_empty_stdout() -> None:
 
 
 def test_nonzero_returncode() -> None:
-    """Non-zero exit code from gh -> state='none'."""
+    """Non-zero exit code from gh -> state='none', error carries the gh stderr text."""
     with patch.object(_pr_state._subprocess_util, "run", return_value=_make_run_mock(1, "", "gh error")):
         result = _pr_state.resolve_pr_state("error-branch", cwd="/repo")
 
     assert result["state"] == "none"
-    print("PASS resolve_pr_state -- returncode != 0 -> none")
+    assert result["error"] == "gh error", f"expected 'gh error', got {result['error']!r}"
+    print("PASS resolve_pr_state -- returncode != 0 -> none, error='gh error'")
 
 
 def test_gh_missing_no_exception_returns_none() -> None:
@@ -129,6 +130,32 @@ def test_multi_pr_closed_then_open_returns_open() -> None:
     print("PASS resolve_pr_state -- [CLOSED, OPEN] -> open (precedence OPEN > CLOSED)")
 
 
+def test_repo_flag_included_when_detect_repo_succeeds() -> None:
+    """detect_repo() returning a non-empty owner/repo -> argv carries --repo <owner/repo>."""
+    run_mock = MagicMock(return_value=_make_run_mock(0, "[]"))
+    with patch.object(_pr_state._gh_issues, "detect_repo", return_value="owner/repo"), \
+            patch.object(_pr_state._subprocess_util, "run", run_mock):
+        _pr_state.resolve_pr_state("my-branch", cwd="/repo")
+
+    argv = run_mock.call_args.args[0]
+    assert "--repo" in argv, f"expected '--repo' in argv, got {argv!r}"
+    repo_index = argv.index("--repo")
+    assert argv[repo_index + 1] == "owner/repo", f"expected 'owner/repo' after --repo, got {argv!r}"
+    print("PASS resolve_pr_state -- detect_repo() success -> --repo <owner/repo> in argv")
+
+
+def test_repo_flag_omitted_when_detect_repo_fails() -> None:
+    """detect_repo() returning '' -> argv omits --repo entirely (gh auto-detection fallback)."""
+    run_mock = MagicMock(return_value=_make_run_mock(0, "[]"))
+    with patch.object(_pr_state._gh_issues, "detect_repo", return_value=""), \
+            patch.object(_pr_state._subprocess_util, "run", run_mock):
+        _pr_state.resolve_pr_state("my-branch", cwd="/repo")
+
+    argv = run_mock.call_args.args[0]
+    assert "--repo" not in argv, f"expected no '--repo' in argv, got {argv!r}"
+    print("PASS resolve_pr_state -- detect_repo() failure -> --repo omitted from argv")
+
+
 def test_malformed_json() -> None:
     """Malformed JSON stdout -> state='none', no exception."""
     with patch.object(_pr_state._subprocess_util, "run", return_value=_make_run_mock(0, "{not json")):
@@ -148,5 +175,7 @@ if __name__ == "__main__":
     test_gh_missing_no_exception_returns_none()
     test_multi_pr_closed_then_merged_returns_merged()
     test_multi_pr_closed_then_open_returns_open()
+    test_repo_flag_included_when_detect_repo_succeeds()
+    test_repo_flag_omitted_when_detect_repo_fails()
     test_malformed_json()
     print("All test-pr-state.py tests passed.")

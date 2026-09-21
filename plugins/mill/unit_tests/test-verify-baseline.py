@@ -69,6 +69,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 from _verify_baseline import (
     _link_dependency_dirs,
     compute_baseline,
+    compute_batch_baseline_on_demand,
     compute_batch_baselines,
 )
 
@@ -550,6 +551,128 @@ def _case_m_no_timeout_by_default() -> None:
     print("PASS: compute_batch_baselines imposes no subprocess timeout by default")
 
 
+def _case_n_on_demand_checks_out_pinned_sha_and_tears_down() -> None:
+    """
+    Case (n) regresses #1102: `compute_batch_baseline_on_demand` checks out the passed `parent_sha`
+    verbatim, calls `compute_batch_baselines` with a single `("_ondemand", verify_cmd, None)`
+    triple, returns that entry's signature list, and tears down the transient worktree via
+    `_worktree.remove_safe` even when `compute_batch_baselines` raises.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        project_root = Path(tmp) / "project"
+        project_root.mkdir()
+        git_root = Path(tmp) / "git-root"
+        git_root.mkdir()
+        parent_sha = "d" * 40
+
+        captured_rev_parse_argv: list[list[str]] = []
+        captured_worktree_add_argv: list[list[str]] = []
+
+        def _fake_run(argv: list[str], **kwargs) -> MagicMock:
+            if "rev-parse" in argv:
+                captured_rev_parse_argv.append(argv)
+                return MagicMock(returncode=0, stdout=f"{parent_sha}\n", stderr="")
+            if "worktree" in argv:
+                captured_worktree_add_argv.append(argv)
+                return MagicMock(returncode=0, stdout="", stderr="")
+            raise AssertionError(f"unexpected argv in fake _subprocess_util.run: {argv!r}")
+
+        captured_batch_baselines_calls: list[tuple] = []
+
+        def _fake_compute_batch_baselines(commands, checkout_path, project_root, **kwargs):
+            captured_batch_baselines_calls.append((commands, checkout_path, project_root, kwargs))
+            return {"_ondemand": ["--- FAIL: TestOnDemand (0.01s)"]}
+
+        teardown_calls: list[Path] = []
+
+        with (
+            patch("_verify_baseline._subprocess_util.run", side_effect=_fake_run),
+            patch("_verify_baseline._junction.create"),
+            patch(
+                "_verify_baseline._worktree.remove_safe",
+                side_effect=lambda path, **kw: teardown_calls.append(path),
+            ),
+            patch(
+                "_verify_baseline.compute_batch_baselines",
+                side_effect=_fake_compute_batch_baselines,
+            ),
+        ):
+            result = compute_batch_baseline_on_demand(
+                project_root, git_root, parent_sha, "cmd-ondemand"
+            )
+
+        assert result == ["--- FAIL: TestOnDemand (0.01s)"], result
+
+        # The parent_sha is checked out verbatim.
+        assert captured_rev_parse_argv[0][-1] == parent_sha, captured_rev_parse_argv
+        assert len(captured_worktree_add_argv) == 1, captured_worktree_add_argv
+        assert captured_worktree_add_argv[0][-1] == parent_sha, captured_worktree_add_argv[0]
+
+        # compute_batch_baselines is called with a single ("_ondemand", verify_cmd, None) triple.
+        assert len(captured_batch_baselines_calls) == 1, captured_batch_baselines_calls
+        commands, _checkout_path, _project_root, _kwargs = captured_batch_baselines_calls[0]
+        assert commands == [("_ondemand", "cmd-ondemand", None)], commands
+
+        # Teardown happens exactly once.
+        assert len(teardown_calls) == 1, teardown_calls
+
+        print(
+            "PASS: compute_batch_baseline_on_demand checks out the pinned "
+            "parent_sha and returns the single-command result"
+        )
+
+    # Teardown also happens when compute_batch_baselines raises.
+    with tempfile.TemporaryDirectory() as tmp:
+        project_root = Path(tmp) / "project"
+        project_root.mkdir()
+        git_root = Path(tmp) / "git-root"
+        git_root.mkdir()
+        parent_sha = "e" * 40
+
+        def _fake_run(argv: list[str], **kwargs) -> MagicMock:
+            if "rev-parse" in argv:
+                return MagicMock(returncode=0, stdout=f"{parent_sha}\n", stderr="")
+            if "worktree" in argv:
+                return MagicMock(returncode=0, stdout="", stderr="")
+            raise AssertionError(f"unexpected argv in fake _subprocess_util.run: {argv!r}")
+
+        teardown_calls: list[Path] = []
+
+        def _raising_compute_batch_baselines(*args, **kwargs):
+            raise RuntimeError("verify command exploded")
+
+        with (
+            patch("_verify_baseline._subprocess_util.run", side_effect=_fake_run),
+            patch("_verify_baseline._junction.create"),
+            patch(
+                "_verify_baseline._worktree.remove_safe",
+                side_effect=lambda path, **kw: teardown_calls.append(path),
+            ),
+            patch(
+                "_verify_baseline.compute_batch_baselines",
+                side_effect=_raising_compute_batch_baselines,
+            ),
+        ):
+            try:
+                compute_batch_baseline_on_demand(
+                    project_root, git_root, parent_sha, "cmd-ondemand"
+                )
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError("expected RuntimeError to propagate")
+
+        assert len(teardown_calls) == 1, (
+            f"expected the transient worktree torn down even on a raised exception, "
+            f"got {teardown_calls!r}"
+        )
+
+        print(
+            "PASS: compute_batch_baseline_on_demand tears down the transient "
+            "worktree even when compute_batch_baselines raises"
+        )
+
+
 def main() -> int:
     try:
         # Case 1: core.longpaths=true is always present in the worktree-add argv.
@@ -630,6 +753,7 @@ def main() -> int:
         _case_k_omitted_pair_cache_stays_call_local()
         _case_l_timeout_propagates()
         _case_m_no_timeout_by_default()
+        _case_n_on_demand_checks_out_pinned_sha_and_tears_down()
 
         print("All _verify_baseline unit tests passed.")
         return 0

@@ -485,8 +485,11 @@ class WikiServer(DaemonBase):
             try:
                 pull(self._wiki_path)
                 self._last_pull = time.monotonic()
-            except WikiPushError:
-                pass
+            except WikiPushError as e:
+                print(
+                    f"[wiki] pre-render pull failed (continuing with existing local state): {e}",
+                    file=sys.stderr,
+                )
             finally:
                 self._store.reload()
 

@@ -5819,6 +5819,155 @@ def main() -> int:
             print(f"FAIL: case 82 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
+    # Case 83 (#1102) -- _run_verify_gates on-demand baseline computation.
+    # (a) batch_verify_baseline is None, the batch replay fails, and status_path has a pinned
+    # baseline_parent_sha -> compute_batch_baseline_on_demand is mocked to return a signature list
+    # matching the replay failure -> the gate is waived and the computed baseline is persisted.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            status_path = project_root / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                _status.render_initial(
+                    "Test Task",
+                    "test",
+                    "2026-01-01T00:00:00Z",
+                    "main",
+                    "test-slug",
+                    "test-branch",
+                ),
+                encoding="utf-8",
+            )
+            _status.init_batches(status_path, ["01-test-batch"])
+            _status.set_baseline_parent_sha(status_path, "a" * 40)
+            with unittest.mock.patch(
+                "_verify_baseline.compute_batch_baseline_on_demand",
+                return_value=["--- FAIL: TestNew (0.00s)"],
+            ):
+                result = _run_verify_gates(
+                    project_root,
+                    verify_cmd,
+                    None,
+                    batch_verify_baseline=None,
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                )
+            assert result is None, (
+                f"case 83a: expected waiver (None) once on-demand-computed, got {result}"
+            )
+            batches = _status.read_batches(status_path)
+            entry = next(b for b in batches if b["name"] == "01-test-batch")
+            persisted = entry.get("verify_baseline_failures") or []
+            assert persisted == ["--- FAIL: TestNew (0.00s)"], (
+                f"case 83a: expected the on-demand-computed baseline persisted, got {persisted}"
+            )
+            print(
+                "PASS: case 83a - on-demand computation waives the batch and"
+                " persists the computed baseline"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 83a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (b) no pinned baseline_parent_sha -> the gate blocks exactly as it did before this batch;
+    # no on-demand call is attempted.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            status_path = project_root / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                _status.render_initial(
+                    "Test Task",
+                    "test",
+                    "2026-01-01T00:00:00Z",
+                    "main",
+                    "test-slug",
+                    "test-branch",
+                ),
+                encoding="utf-8",
+            )
+            _status.init_batches(status_path, ["01-test-batch"])
+            with unittest.mock.patch(
+                "_verify_baseline.compute_batch_baseline_on_demand",
+                side_effect=AssertionError("should not be called"),
+            ):
+                result = _run_verify_gates(
+                    project_root,
+                    verify_cmd,
+                    None,
+                    batch_verify_baseline=None,
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                )
+            assert result is not None, (
+                "case 83b: expected strict blocking when no baseline_parent_sha is pinned"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 83b: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 83b - no pinned baseline_parent_sha blocks without"
+                " attempting an on-demand computation"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 83b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (c) the on-demand computation itself raises -> the gate blocks (fail-safe-strict) rather
+    # than propagating the exception.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+            status_path = project_root / "_mill" / "status.md"
+            status_path.parent.mkdir(parents=True, exist_ok=True)
+            status_path.write_text(
+                _status.render_initial(
+                    "Test Task",
+                    "test",
+                    "2026-01-01T00:00:00Z",
+                    "main",
+                    "test-slug",
+                    "test-branch",
+                ),
+                encoding="utf-8",
+            )
+            _status.init_batches(status_path, ["01-test-batch"])
+            _status.set_baseline_parent_sha(status_path, "b" * 40)
+            with unittest.mock.patch(
+                "_verify_baseline.compute_batch_baseline_on_demand",
+                side_effect=RuntimeError("infrastructure failure"),
+            ):
+                result = _run_verify_gates(
+                    project_root,
+                    verify_cmd,
+                    None,
+                    batch_verify_baseline=None,
+                    status_path=status_path,
+                    batch_name="01-test-batch",
+                )
+            assert result is not None, (
+                "case 83c: expected fail-safe-strict blocking when on-demand"
+                " computation raises"
+            )
+            assert result["stuck_type"] == "verify", (
+                f"case 83c: expected stuck_type=verify, got {result}"
+            )
+            print(
+                "PASS: case 83c - an on-demand computation that raises degrades"
+                " to strict blocking instead of propagating"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 83c ({exc})", file=sys.stderr)
+            errors += 1
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

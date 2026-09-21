@@ -934,6 +934,60 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["baseline"], "error")
         self.assertIn("status.md", data["reason"])
 
+    def _write_recompute_baseline_fixture(self, verify_frontmatter_yaml: str) -> None:
+        """
+        Write a status.md (with a resolvable ``parent:`` row) and a ``00-overview.md`` plan
+        fixture carrying ``verify_frontmatter_yaml`` as the ``verify:`` field, under
+        ``self.tmp_path``, and point ``self.mock_load_config`` at the matching ``paths`` section
+        -- the minimum fixture shape ``_run_recompute_baseline`` needs end-to-end.
+        """
+        self.mock_load_config.return_value = {
+            "merge": {"verify_fix_rounds": 3},
+            "llm": {"implementer_timeout": 1800},
+            "paths": {"status_md": "_mill/status.md", "plan_dir": "_mill/plan/"},
+        }
+        mill_dir = self.tmp_path / "_mill"
+        plan_dir = mill_dir / "plan"
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        (mill_dir / "status.md").write_text(
+            "```yaml\nslug: test-slug\nparent: main\n```\n",
+            encoding="utf-8",
+        )
+        (plan_dir / "00-overview.md").write_text(
+            f"```yaml\ntask: test\nslug: test-slug\n{verify_frontmatter_yaml}\n```\n",
+            encoding="utf-8",
+        )
+
+    def test_21_recompute_baseline_mapping_verify_field(self):
+        """--recompute-baseline with a mapping-form module-wide verify -> no TypeError,
+        compute_baseline receives the resolved plain-string command and hub cwd override (#1106)."""
+        self._write_recompute_baseline_fixture('verify:\n  cwd: hub\n  command: "pytest tests/"')
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._verify_baseline, "compute_baseline",
+            return_value="clean",
+        ) as mock_compute_baseline:
+            rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data, {"status": "success", "baseline": "computed", "value": "clean"})
+        mock_compute_baseline.assert_called_once()
+        call_args, call_kwargs = mock_compute_baseline.call_args
+        module_wide_verify_cmd = call_args[3]
+        self.assertEqual(module_wide_verify_cmd, "pytest tests/")
+        self.assertIsInstance(module_wide_verify_cmd, str)
+        self.assertEqual(call_kwargs["cwd_override_relative"], self.tmp_path)
+
+    def test_22_recompute_baseline_malformed_verify_field(self):
+        """--recompute-baseline with a mapping-form verify missing `command:` -> parse_verify_field's
+        ValueError is caught, exit 0, baseline:error JSON -- not an unhandled exception (#1106)."""
+        self._write_recompute_baseline_fixture('verify:\n  cwd: hub')
+        rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["baseline"], "error")
+        self.assertIn("command", data["reason"])
+
 
 def _git(args, cwd, check=True):
     """Run a git subprocess against a real fixture repo, raising on unexpected failure."""

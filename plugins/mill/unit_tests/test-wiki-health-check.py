@@ -259,6 +259,46 @@ def main() -> int:
     except Exception as exc:
         fail("_ensure_daemon's reuse-probe payload is tagged liveness_only=True", exc)
 
+    # --- (g) slow-starting daemon: post-spawn loop retries the health probe until it reports ready ---
+    try:
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            wiki_path = tmp / "slow-start-wiki"
+            wiki_path.mkdir(parents=True, exist_ok=True)
+            state_file = wiki_path / ".wiki-daemon.json"
+            state = {
+                "protocol_version": PROTOCOL_VERSION,
+                "pid": os.getpid(),
+                "host": "127.0.0.1",
+                "port": 9998,
+                "token": "test-token",
+            }
+
+            def _fake_spawn(_wiki_path: Path) -> None:
+                # Simulate the daemon process writing its state file right after being spawned --
+                # the state file's presence is what lets the post-spawn loop start probing at all.
+                state_file.write_text(json.dumps(state), encoding="utf-8")
+
+            with patch("wiki._client._spawn_server", side_effect=_fake_spawn) as mock_spawn, \
+                 patch(
+                     "wiki._client._connect_send_recv",
+                     side_effect=[{FIELD_OK: False}, {FIELD_OK: False}, {FIELD_OK: True}],
+                 ) as mock_send_recv:
+                result = wiki._ensure_daemon(wiki_path)
+
+            assert result == (state["host"], state["port"], state["token"]), \
+                f"expected the daemon's state tuple once the probe reports ready, got {result}"
+            assert mock_spawn.call_count == 1, \
+                f"expected exactly one spawn attempt, got {mock_spawn.call_count}"
+            assert mock_send_recv.call_count == 3, \
+                f"expected the probe to retry past the two False responses before succeeding, " \
+                f"got {mock_send_recv.call_count} calls"
+            ok("slow-starting daemon -> post-spawn loop retries the health probe until ready")
+        finally:
+            _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
+    except Exception as exc:
+        fail("slow-starting daemon -> post-spawn loop retries the health probe until ready", exc)
+
     print("", file=sys.stderr)
     if failed:
         print(f"FAIL -- {failed} of {passed + failed}", file=sys.stderr)

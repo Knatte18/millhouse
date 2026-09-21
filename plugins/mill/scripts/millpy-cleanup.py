@@ -672,10 +672,17 @@ def _apply_pr_reap_record(
     number = pr["number"]
 
     if state == "none":
-        print(
-            f"[cleanup] PR-reap {record.slug}: no PR / gh unavailable",
-            file=sys.stderr,
-        )
+        error = pr.get("error")
+        if error is not None:
+            print(
+                f"[cleanup] PR-reap {record.slug}: no PR / gh unavailable ({error})",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"[cleanup] PR-reap {record.slug}: no PR / gh unavailable",
+                file=sys.stderr,
+            )
         return wiki_relative_paths
 
     if state == "open":

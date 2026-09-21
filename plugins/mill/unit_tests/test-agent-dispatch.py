@@ -7,6 +7,10 @@ Covers:
   - output_path_for: the ".md" -> ".out.md" mapping
   - write_brief output_contract footer, default-off byte-identity, and unconditional stale-".out.md"
   truncation
+  - prepare_ts_path_for: the ".md" -> ".prepare_ts" mapping
+  - write_brief: stamps a ".prepare_ts" sibling file with the current wall-clock time
+  - derive_duration_s: derives duration_s from a prepare-stage stamp, tolerates disagreement with
+    a caller-supplied fallback, and falls back to it when the stamp is unavailable
   - write_brief stderr warning when overwriting a stale ".out.md", and silence when none exists
 """
 from __future__ import annotations
@@ -15,7 +19,9 @@ import contextlib
 import io
 import sys
 import tempfile
+import time
 from pathlib import Path
+from unittest.mock import patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS_DIR = HUB / "plugins" / "mill" / "scripts"
@@ -275,6 +281,85 @@ def test_write_brief_truncates_stale_out_md() -> None:
     print("PASS write_brief -- unconditionally truncates stale .out.md for both output_contract states")
 
 
+def test_write_brief_writes_prepare_ts_stamp() -> None:
+    """write_brief writes a .prepare_ts sibling file whose content parses as a recent float."""
+    with tempfile.TemporaryDirectory() as tmp:
+        briefs_dir = Path(tmp) / "briefs"
+        before = time.time()
+        brief_path = _agent_dispatch.write_brief(briefs_dir, "review-code", "holistic", 1, "prompt")
+        after = time.time()
+
+        stamp_path = _agent_dispatch.prepare_ts_path_for(brief_path)
+        assert stamp_path.exists(), f"Expected .prepare_ts stamp at {stamp_path}"
+        stamped = float(stamp_path.read_text(encoding="utf-8"))
+        assert before <= stamped <= after, (
+            f"Expected stamp within [{before}, {after}], got {stamped}"
+        )
+    print("PASS write_brief -- writes .prepare_ts stamp close to time.time()")
+
+
+def test_prepare_ts_path_for_maps_md_to_prepare_ts() -> None:
+    """prepare_ts_path_for maps foo-r1.md -> foo-r1.prepare_ts, preserving parent and absoluteness."""
+    with tempfile.TemporaryDirectory() as tmp:
+        brief_path = Path(tmp) / "briefs" / "foo-r1.md"
+        stamp_path = _agent_dispatch.prepare_ts_path_for(brief_path)
+
+        assert stamp_path.name == "foo-r1.prepare_ts", (
+            f"Expected foo-r1.prepare_ts, got {stamp_path.name!r}"
+        )
+        assert stamp_path.parent == brief_path.parent, (
+            f"Parent directory should be preserved: {stamp_path.parent} != {brief_path.parent}"
+        )
+        assert brief_path.is_absolute(), f"Test setup: brief_path must be absolute, got {brief_path}"
+        assert stamp_path.is_absolute(), f"Expected absolute path, got {stamp_path}"
+    print("PASS prepare_ts_path_for -- maps .md to .prepare_ts, preserves parent and absoluteness")
+
+
+def test_derive_duration_s_returns_derived_when_no_fallback() -> None:
+    """derive_duration_s returns the derived elapsed time when no fallback is supplied."""
+    with tempfile.TemporaryDirectory() as tmp:
+        agent_output_path = Path(tmp) / "review-code-holistic-r1.out.md"
+        stamp_path = Path(tmp) / "review-code-holistic-r1.prepare_ts"
+        prepare_ts = time.time() - 10.0
+        stamp_path.write_text(str(prepare_ts), encoding="utf-8")
+
+        derived = _agent_dispatch.derive_duration_s(agent_output_path, None)
+        assert derived is not None, "Expected a derived duration, got None"
+        assert 9.0 <= derived <= 20.0, f"Expected derived duration near 10s, got {derived}"
+    print("PASS derive_duration_s -- returns derived duration when no fallback")
+
+
+def test_derive_duration_s_uses_derived_on_mismatch() -> None:
+    """derive_duration_s prefers the derived value over a wildly disagreeing fallback, warning on stderr."""
+    with tempfile.TemporaryDirectory() as tmp:
+        agent_output_path = Path(tmp) / "review-code-holistic-r1.out.md"
+        stamp_path = Path(tmp) / "review-code-holistic-r1.prepare_ts"
+        prepare_ts = time.time() - 100.0
+        stamp_path.write_text(str(prepare_ts), encoding="utf-8")
+
+        captured_stderr = io.StringIO()
+        with patch("sys.stderr", captured_stderr):
+            derived = _agent_dispatch.derive_duration_s(agent_output_path, 1.0)
+
+        assert derived is not None and derived > 90.0, (
+            f"Expected the derived (~100s) value to win, got {derived}"
+        )
+        stderr_text = captured_stderr.getvalue()
+        assert "mismatch" in stderr_text, f"Expected a mismatch warning on stderr, got {stderr_text!r}"
+        assert "1.0" in stderr_text, f"Expected the caller-supplied value in the warning: {stderr_text!r}"
+    print("PASS derive_duration_s -- derived value wins on mismatch, with a stderr warning")
+
+
+def test_derive_duration_s_falls_back_when_stamp_missing() -> None:
+    """derive_duration_s returns the passed fallback unchanged when no .prepare_ts stamp exists."""
+    with tempfile.TemporaryDirectory() as tmp:
+        agent_output_path = Path(tmp) / "review-code-holistic-r1.out.md"
+
+        result = _agent_dispatch.derive_duration_s(agent_output_path, 42.5)
+        assert result == 42.5, f"Expected fallback 42.5 to be returned unchanged, got {result}"
+    print("PASS derive_duration_s -- falls back to caller-supplied value when stamp is missing")
+
+
 def test_write_brief_warns_on_stale_out_md_overwrite() -> None:
     """write_brief prints a stderr warning when overwriting an existing .out.md, and stays
     silent when no stale .out.md exists."""
@@ -339,6 +424,11 @@ def main() -> int:
         test_write_brief_footer_present_when_output_contract_true,
         test_write_brief_default_off_is_byte_identical_to_prompt,
         test_write_brief_truncates_stale_out_md,
+        test_write_brief_writes_prepare_ts_stamp,
+        test_prepare_ts_path_for_maps_md_to_prepare_ts,
+        test_derive_duration_s_returns_derived_when_no_fallback,
+        test_derive_duration_s_uses_derived_on_mismatch,
+        test_derive_duration_s_falls_back_when_stamp_missing,
         test_write_brief_warns_on_stale_out_md_overwrite,
     ]
     failures: list[str] = []

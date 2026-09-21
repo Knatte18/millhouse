@@ -25,7 +25,6 @@ import json
 import re
 import _subprocess_util
 import sys
-import time
 import uuid
 from pathlib import Path
 
@@ -42,7 +41,6 @@ import _review_common
 import _reviewers
 import _status
 import _verify_baseline
-import _worktree
 from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 from wiki import WikiStartupError
 
@@ -175,45 +173,46 @@ def _run_module_wide_standalone(
     print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "computed", "value": result}))
 
 
-def _enumerate_batch_verify_triples(
-    plan_base: Path, project_root: Path, git_root: Path
-) -> list[tuple[str, str, Path | None]]:
+def _pin_baseline_parent_sha(git_root: Path, status_path: Path) -> None:
     """
-    Return `(batch_name, verify_cmd, cwd)` triples read directly off each batch file's own
-    frontmatter.
+    Idempotently pin the parent branch's current tip SHA into `status.md`'s `baseline_parent_sha:`.
 
-    Deliberately NOT `_plan_dag.iter_batch_verifies` -- that function suppresses a batch's verify
-    command when a strictly-later batch's `Deletes:`/`Moves:` bullets reference a path it names,
-    which is correct for DAG-wide verify replay but wrong here: a batch's own `--stage finalize`
-    always runs its OWN verify command regardless of what a later batch will eventually delete, so
-    its baseline must always be computed too.
-    See `_mill/discussion.md`'s `gap2-enumerate-batches-directly-not-via-iter-batch-verifies`
-    Decision.
+    Cheap: a single `git rev-parse`, never a checkout.
+    Later, `_implementer_common._run_verify_gates` reads this pinned SHA to compute a batch's own
+    `verify_baseline_failures` on demand, only when that batch's verify gate actually fails (#1102).
+
+    A no-op when a SHA is already pinned -- a resumed/restarted mill-go run must not re-pin, since
+    the SHA is meant to represent the parent branch's state at the start of this task's coding
+    phase, not at the time of whichever invocation happens to run this function.
+
+    Never raises -- every failure (parent-branch resolution, or a non-zero `git rev-parse`) is
+    logged to stderr and the function returns without pinning, matching this stage's own
+    "never raises" contract.
+    A failed pin degrades safely: Card 10's on-demand path already treats an absent
+    `baseline_parent_sha` as "gate strictly."
 
     Args:
-        plan_base: Directory containing `00-overview.md` and every batch file.
-        project_root: Absolute path to the task worktree root, passed through to
-        `parse_verify_field` for `cwd: hub` resolution.
-        git_root: Absolute path to the repo root, passed through to `parse_verify_field` for `cwd:
-        git_root` resolution.
-
-    Returns:
-        One `(name, command, cwd)` triple per batch file whose own `verify:` frontmatter field
-        resolves to a non-`None` command. `00-overview.md` is always excluded. `cwd` is `None` for
-        the plain-string form or the caller's existing default;
-        the resolved `Path` for the mapping form.
+        git_root: Absolute path to the repo root `git` commands run against.
+        status_path: Absolute path to the task's status.md file.
     """
-    triples: list[tuple[str, str, Path | None]] = []
-    for batch_path in sorted(plan_base.glob("??-*.md")):
-        if batch_path.name == "00-overview.md":
-            continue
-        frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
-        name = frontmatter.get("batch")
-        command, cwd = _plan_dag.parse_verify_field(frontmatter, project_root, git_root)
-        if command is None:
-            continue
-        triples.append((name, command, cwd))
-    return triples
+    if _status.get_baseline_parent_sha(status_path) is not None:
+        return
+
+    try:
+        parent_branch = _parent_branch.resolve(status_path, interactive=False)
+    except Exception as e:
+        print(f"[millpy-implement] baseline_parent_sha pin: parent-branch resolution failed: {e}", file=sys.stderr)
+        return
+
+    result = _subprocess_util.run(["git", "-C", str(git_root), "rev-parse", parent_branch])
+    if result.returncode != 0:
+        print(
+            f"[millpy-implement] baseline_parent_sha pin: git rev-parse {parent_branch!r} failed: "
+            f"{result.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return
+    _status.set_baseline_parent_sha(status_path, result.stdout.strip())
 
 
 def _run_baseline_stage(
@@ -225,63 +224,26 @@ def _run_baseline_stage(
     plan_base: Path,
     baseline_prepare_cmd: str | None,
     verify_timeout_seconds: float | None = None,
-    module_wide_only: bool = False,
 ) -> int:
     """
-    Compute (idempotent, no-op-if-already-cached) both baseline sub-steps and persist them.
+    Compute (idempotent, no-op-if-already-cached) the module-wide baseline and persist it, and
+    idempotently pin the parent branch's tip SHA for later on-demand per-batch computation.
 
-    Restructured into two INDEPENDENT sub-steps that both run on every invocation, in either order:
-    (1) the module-wide `module_verify_baseline` scalar (unchanged existing mechanism), and (2) a
-    new per-batch `verify_baseline_failures` list per batch, computed eagerly for every batch before
-    batch 1 ever dispatches.
-    Per-batch computation is gated ONLY by that batch's own idempotency check (does it already have
-    a stored baseline?) -- never by whether a module-wide verify is configured,
-    or by the module-wide baseline's own cache state.
-    See `_mill/discussion.md`'s `gap2-baseline-stage-independent-of-module-wide-early-returns`
-    Decision.
+    Two INDEPENDENT sub-steps run on every invocation, in either order, since neither depends on the
+    other's outcome: (1) the module-wide `module_verify_baseline` scalar, computed standalone via
+    `_run_module_wide_standalone`'s own `compute_baseline` checkout;
+    and (2) the cheap `baseline_parent_sha` pin via `_pin_baseline_parent_sha` (a `git rev-parse`,
+    not a checkout).
 
-    Implementation, in order:
-        1. Enumerate every batch's own verify command directly off its frontmatter
-            (`_enumerate_batch_verify_triples`), then split into `batches_needing_computation` (no
-            stored baseline yet) and `cached_batches` (already computed by a prior invocation).
-        2. Case A -- nothing per-batch needs computing: run the module-wide sub-step exactly as it
-            always has, standalone (its own `compute_baseline` checkout, if it needs one) -- there
-            is nothing to share a checkout with.
-            Print both JSON lines and return.
-        3. Case B -- at least one batch needs computing: resolve the parent
-        branch once, then perform ONE shared checkout (`compute_baseline`
-        is deliberately bypassed here -- it would re-checkout) covering
-        the module-wide command (if it also needs computing) and every
-        per-batch command, linking dependency dirs at every distinct
-        effective cwd fragment actually in play.
-            A shared-setup failure
-        (checkout or linking) marks every batch needing computation as
-        errored and marks the module-wide sub-step as errored too, but
-        ONLY when it was also going to share this now-failed checkout;
-        if module-wide had nothing to compute this round, its line is
-        unaffected.
-            On success, the module-wide command (if needed) and
-        each batch's command (each independently try/excepted, so one
-        batch's failure never aborts a sibling) run against the shared
-        checkout, persisting on success;
-            the checkout is torn down via
-        `_worktree.remove_safe` in a `finally` block regardless of
-        outcome.
-
-    When `module_wide_only` is True, step 1 above is bypassed entirely -- `_enumerate_batch_verify_triples`
-    is never called, and `batches_needing_computation`/`cached_batches` are bound directly to empty
-    lists -- so Case A always runs (the module-wide sub-step, standalone, with no shared checkout).
-    Used for a speculative early baseline launch before any batch files exist on disk yet, where
-    enumerating batch verify commands would either fail outright or force the expensive Case B
-    shared-checkout path for zero actual per-batch work.
+    Per-batch `verify_baseline_failures` computation is NOT part of this stage -- it moved to an
+    on-demand call inside `_implementer_common._run_verify_gates` (#1102), which computes a batch's
+    own baseline lazily, only the first time that batch's own verify gate actually fails, instead of
+    eagerly for every batch before batch 1 ever dispatches.
+    `plan_base` and `baseline_prepare_cmd` remain accepted parameters -- unused by this simplified
+    function's own logic -- to keep both existing call sites in `main` unchanged; removing them would
+    force an unrelated change to every call site for no behavioral gain.
 
     Never raises -- every failure path prints a JSON line describing the outcome and returns 0.
-    Both `_worktree.remove_safe` teardown call sites are themselves wrapped in `try`/`except
-    Exception` so a teardown failure (e.g. a still-locked dotnet build-server file) is logged to
-    stderr and never propagates past this function.
-    A per-batch computation failure leaves that batch's `verify_baseline_failures` UNSET, which is the
-    same fail-safe direction as the module-wide mechanism's `None` default: the next
-    `_run_verify_gates` call for that batch runs the gate strictly.
 
     Args:
         project_root: Absolute path to the task worktree root.
@@ -292,254 +254,31 @@ def _run_baseline_stage(
         module_wide_cwd_override: The overview's module-wide verify cwd resolved by
             parse_verify_field -- one of project_root (hub_root), git_root, or None (plain-string
             verify: or absent).
-        plan_base: Directory containing `00-overview.md` and every batch file, used to enumerate
-            per-batch verify commands directly off disk.
-        baseline_prepare_cmd: Optional build-once command (e.g. "dotnet build") to run against the
-            shared transient checkout, once per distinct cwd fragment, before any verify command
-            executes -- read by the caller from `pipeline.baseline_prepare_cmd` in mill-config.yaml.
-            `None` (the default when the key is absent) disables this step entirely, matching
-            today's behavior exactly.
-        verify_timeout_seconds: Per-run wall-clock ceiling applied to every verify command this
-            stage runs (module-wide, per-batch, and `baseline_prepare_cmd`), or `None` for no
-            ceiling -- read by the caller from `pipeline.baseline_verify_timeout_minutes` in
-            mill-config.yaml. A timeout raises, which every call site here already handles as
-            "computation failed, leave the baseline unset," so a hung test runner degrades the way
-            every other infrastructure failure does instead of blocking the pre-flight
-            indefinitely (#1101).
-        module_wide_only: When True, skip the entire per-batch computation path -- never call
-            `_enumerate_batch_verify_triples`, and bind `batches_needing_computation`/
-            `cached_batches` directly to empty lists so Case A always runs. Used for a speculative
-            early baseline launch before any batch files exist on disk yet. Defaults to False,
-            matching today's behavior exactly.
+        plan_base: Unused by this function's own logic;
+            accepted for call-site parity.
+        baseline_prepare_cmd: Unused by this function's own logic;
+            accepted for call-site parity.
+        verify_timeout_seconds: Per-run wall-clock ceiling applied to the module-wide verify command,
+            or `None` for no ceiling -- read by the caller from
+            `pipeline.baseline_verify_timeout_minutes` in mill-config.yaml.
+            A timeout raises inside `_run_module_wide_standalone`, which already handles it as
+            "computation failed, leave the baseline unset."
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;
-        outcomes are communicated through the printed JSON lines.
+        outcomes are communicated through the printed JSON line.
     """
-    # Wall-clock instrumentation (#1101): a 25-minute pre-flight previously emitted only background
-    # heartbeats, so "where did the time go" could not be answered from the stage's own output.
-    # `timings` is per-batch-name; `setup_timings` carries the shared costs those numbers exclude.
-    timings: dict[str, float] = {}
-    setup_timings: dict[str, float] = {}
+    del plan_base, baseline_prepare_cmd  # unused; kept for call-site parity, see docstring.
 
-    batches_needing_computation: list[tuple[str, str, Path | None]] = []
-    cached_batches: list[str] = []
-    if not module_wide_only:
-        batch_verify_triples = _enumerate_batch_verify_triples(plan_base, project_root, git_root)
-        status_by_name = {b.get("name"): b for b in _status.read_batches(status_path)}
-        for name, command, cwd in batch_verify_triples:
-            entry = status_by_name.get(name, {})
-            if entry.get("verify_baseline_failures") is not None:
-                cached_batches.append(name)
-            else:
-                batches_needing_computation.append((name, command, cwd))
-
-    module_wide_needs_computation = (
-        module_wide_verify_cmd is not None and _status.get_module_verify_baseline(status_path) is None
+    _run_module_wide_standalone(
+        project_root,
+        git_root,
+        status_path,
+        module_wide_verify_cmd,
+        module_wide_cwd_override,
+        verify_timeout_seconds,
     )
-
-    # Case A: nothing per-batch needs computing -- run the module-wide sub-step exactly as before this restructure;
-    # no shared checkout is created, since there is nothing to share it with.
-    if not batches_needing_computation:
-        _run_module_wide_standalone(
-            project_root,
-            git_root,
-            status_path,
-            module_wide_verify_cmd,
-            module_wide_cwd_override,
-            verify_timeout_seconds,
-        )
-        print(
-            json.dumps(
-                {
-                    "stage": "baseline",
-                    "substage": "per_batch",
-                    "computed": [],
-                    "cached": cached_batches,
-                    "errored": {},
-                    "elapsed_seconds": timings,
-                    "setup_seconds": setup_timings,
-                }
-            )
-        )
-        return 0
-
-    # Case B: at least one batch needs computing.
-    # Resolve the parent branch once, up front, so both the module-wide command (if it also needs computing) and every per-batch command can share one checkout.
-    try:
-        parent_branch = _parent_branch.resolve(status_path, interactive=False)
-    except Exception as e:
-        reason = str(e)
-        print(f"[millpy-implement] baseline parent-branch resolution failed: {reason}", file=sys.stderr)
-        if module_wide_needs_computation:
-            print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "error", "reason": reason}))
-        else:
-            print(json.dumps(_module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)))
-        print(
-            json.dumps(
-                {
-                    "stage": "baseline",
-                    "substage": "per_batch",
-                    "computed": [],
-                    "cached": cached_batches,
-                    "errored": {name: reason for name, _cmd, _cwd in batches_needing_computation},
-                    "elapsed_seconds": timings,
-                    "setup_seconds": setup_timings,
-                }
-            )
-        )
-        return 0
-
-    # Distinct effective cwd fragments actually in play this invocation -- at most two: the checkout root itself (git_root/plain-string form) and the hub-relative fragment (hub form) -- collected across every batch needing computation PLUS the module-wide command, when it also needs computing.
-    cwd_fragments: set[Path | None] = {
-        _relative_cwd_fragment(cwd, project_root, git_root) for _name, _cmd, cwd in batches_needing_computation
-    }
-    if module_wide_needs_computation:
-        cwd_fragments.add(_relative_cwd_fragment(module_wide_cwd_override, project_root, git_root))
-
-    # One-time shared setup: checkout + dependency-junction linking at every distinct fragment.
-    # A failure here is NOT isolable per-batch -- no batch can run without the shared checkout existing -- so it is caught once, marking every batch needing computation (and, when applicable, the module-wide sub-step) as errored.
-    tmp_path: Path | None = None
-    checkout_started = time.monotonic()
-    try:
-        tmp_path = _verify_baseline._checkout_parent_branch(project_root, git_root, parent_branch)
-        for fragment in cwd_fragments:
-            target = tmp_path / fragment if fragment is not None else tmp_path
-            _verify_baseline._link_dependency_dirs(project_root, target)
-    except Exception as e:
-        setup_timings["checkout"] = round(time.monotonic() - checkout_started, 1)
-        reason = f"checkout failed: {e}"
-        print(f"[millpy-implement] baseline shared checkout failed: {reason}", file=sys.stderr)
-        if module_wide_needs_computation:
-            print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "error", "reason": reason}))
-        else:
-            print(json.dumps(_module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)))
-        print(
-            json.dumps(
-                {
-                    "stage": "baseline",
-                    "substage": "per_batch",
-                    "computed": [],
-                    "cached": cached_batches,
-                    "errored": {name: reason for name, _cmd, _cwd in batches_needing_computation},
-                    "elapsed_seconds": timings,
-                    "setup_seconds": setup_timings,
-                }
-            )
-        )
-        if tmp_path is not None:
-            try:
-                _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
-            except Exception as teardown_exc:
-                print(
-                    f"[millpy-implement] baseline teardown failed (checkout-failure path): {teardown_exc}",
-                    file=sys.stderr,
-                )
-        return 0
-
-    # Build-once step: run baseline_prepare_cmd (if configured) once per distinct cwd fragment,
-    # against the shared checkout, before any verify command executes -- eliminates the cold-build
-    # cost otherwise paid inside the first of several doubled verify commands below (#894).
-    # Failure here is deliberately non-fatal: it is logged and the verify commands still run,
-    # since a real build break will also surface naturally as a verify-command failure signature,
-    # which is correct baseline data rather than something to suppress by aborting early.
-    setup_timings["checkout"] = round(time.monotonic() - checkout_started, 1)
-
-    if baseline_prepare_cmd:
-        prepare_started = time.monotonic()
-        for fragment in cwd_fragments:
-            target = tmp_path / fragment if fragment is not None else tmp_path
-            try:
-                prepare_rc, prepare_output = _verify_baseline._run_verify_in(
-                    baseline_prepare_cmd, target, verify_timeout_seconds
-                )
-                if prepare_rc != 0:
-                    print(
-                        f"[millpy-implement] baseline_prepare_cmd failed (cwd={target}, exit={prepare_rc}): {prepare_output.strip()}",
-                        file=sys.stderr,
-                    )
-            except Exception as e:
-                print(f"[millpy-implement] baseline_prepare_cmd raised (cwd={target}): {e}", file=sys.stderr)
-        setup_timings["prepare"] = round(time.monotonic() - prepare_started, 1)
-
-    try:
-        # (a) Module-wide command, if it needs computing this round -- its own try/except, mirroring the standalone path, so a module-wide failure never aborts the per-batch work below.
-        if module_wide_needs_computation:
-            fragment = _relative_cwd_fragment(module_wide_cwd_override, project_root, git_root)
-            effective_tmp_path = tmp_path / fragment if fragment is not None else tmp_path
-            module_wide_started = time.monotonic()
-            try:
-                result = _verify_baseline._run_module_wide_verify_algorithm(
-                    module_wide_verify_cmd, effective_tmp_path, project_root, verify_timeout_seconds
-                )
-            except Exception as e:
-                print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
-                module_wide_payload = {
-                    "stage": "baseline",
-                    "substage": "module_wide",
-                    "result": "error",
-                    "reason": str(e),
-                }
-            else:
-                _status.set_module_verify_baseline(status_path, result)
-                module_wide_payload = {
-                    "stage": "baseline",
-                    "substage": "module_wide",
-                    "result": "computed",
-                    "value": result,
-                }
-            setup_timings["module_wide"] = round(time.monotonic() - module_wide_started, 1)
-        else:
-            module_wide_payload = _module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)
-
-        # (b) Every batch needing computation, each independently try/excepted so one batch's failure never aborts a sibling.
-        # pair_cache is owned here, not by compute_batch_baselines: driving a batch at a time is what
-        # buys that isolation, but it also means a call-local cache would be re-created empty per
-        # batch and could never fire, leaving two batches with an identical verify command running it
-        # twice (#1101). One dict across the loop restores the dedup without giving up the isolation;
-        # it is safe to share because every call below runs against this same shared tmp_path.
-        computed_names: list[str] = []
-        errored: dict[str, str] = {}
-        pair_cache: dict[tuple[str, Path], list[str]] = {}
-        for name, command, cwd in batches_needing_computation:
-            fragment = _relative_cwd_fragment(cwd, project_root, git_root)
-            effective_cwd = tmp_path / fragment if fragment is not None else None
-            batch_started = time.monotonic()
-            try:
-                failures = _verify_baseline.compute_batch_baselines(
-                    [(name, command, effective_cwd)],
-                    tmp_path,
-                    project_root,
-                    pair_cache=pair_cache,
-                    timeout_seconds=verify_timeout_seconds,
-                )[name]
-                _status.set_batch_field(status_path, name, "verify_baseline_failures", failures)
-            except Exception as e:
-                errored[name] = str(e)
-                timings[name] = round(time.monotonic() - batch_started, 1)
-                continue
-            timings[name] = round(time.monotonic() - batch_started, 1)
-            computed_names.append(name)
-    finally:
-        try:
-            _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
-        except Exception as teardown_exc:
-            print(f"[millpy-implement] baseline teardown failed: {teardown_exc}", file=sys.stderr)
-
-    print(json.dumps(module_wide_payload))
-    print(
-        json.dumps(
-            {
-                "stage": "baseline",
-                "substage": "per_batch",
-                "computed": computed_names,
-                "cached": cached_batches,
-                "errored": errored,
-                "elapsed_seconds": timings,
-                "setup_seconds": setup_timings,
-            }
-        )
-    )
+    _pin_baseline_parent_sha(git_root, status_path)
     return 0
 
 
@@ -597,17 +336,6 @@ def main(argv=None) -> int:
             " and implementer_session from status.md instead of capturing HEAD and"
             " generating a fresh UUID. Skips the capture_snapshot call and the"
             " mill-go: start batch housekeeping commit."
-        ),
-    )
-    parser.add_argument(
-        "--module-wide-only",
-        action="store_true",
-        default=False,
-        help=(
-            "Valid only with --stage baseline: skip the per-batch substage entirely"
-            " (no batch-verify enumeration, no shared checkout for per-batch commands)"
-            " and run only the module-wide substage. Used for a speculative early"
-            " baseline launch before any batch files exist on disk yet."
         ),
     )
     args = parser.parse_args(argv)
@@ -758,7 +486,6 @@ def main(argv=None) -> int:
             plan_base,
             baseline_prepare_cmd,
             verify_timeout_seconds,
-            module_wide_only=args.module_wide_only,
         )
 
     try:

@@ -1364,7 +1364,10 @@ def main() -> int:
             assert "pr-slug" in stderr_text_18d, (
                 f"Expected 'pr-slug' in stderr on gh failure, got: {stderr_text_18d!r}"
             )
-            print("PASS apply_plan — PR-reap gh pr list failed: early return, no tag, no teardown, no Home.md mutation")
+            assert "gh: command not found" in stderr_text_18d, (
+                f"Expected gh's stderr detail propagated into the log line, got: {stderr_text_18d!r}"
+            )
+            print("PASS apply_plan — PR-reap gh pr list failed: early return, no tag, no teardown, no Home.md mutation, error detail surfaced")
 
         # --- build_plan: phase=done + home_marker=done + archive tag present -> to_remove_done ---
         with tempfile.TemporaryDirectory() as tmp:

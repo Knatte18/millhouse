@@ -55,20 +55,22 @@ def main() -> int:
     args = parser.parse_args()
     jobs = 1 if args.sequential else max(1, args.jobs)
 
-    discovered = sorted(p for p in HERE.glob("test-*.py") if p.name not in SKIP)
-    if not discovered:
+    all_test_files = sorted(HERE.glob("test-*.py"))
+    if not all_test_files:
         print("No test-*.py files found.", file=sys.stderr)
         return 1
 
     if args.only:
-        by_name = {p.name: p for p in discovered}
+        # --only names a file explicitly, so SKIP (which only trims the unbounded default run) must
+        # not make an otherwise-valid name look unknown.
+        by_name = {p.name: p for p in all_test_files}
         unknown = [n for n in args.only if n not in by_name]
         if unknown:
             print(f"--only: unknown test file(s): {unknown}", file=sys.stderr)
             return 1
         tests = [by_name[n] for n in args.only]
     else:
-        tests = discovered
+        tests = [p for p in all_test_files if p.name not in SKIP]
 
     # Force UTF-8 I/O so test output containing non-ASCII characters (e.g.
     # the -> arrow in pick_task_single_or_multi output) doesn't crash on Windows consoles that default to cp1252.
