@@ -8703,6 +8703,217 @@ def test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_n
             return 1
 
 
+def test_check_requirements_quote_indent_drift_dirty_paired_fence_mismatched_indent() -> int:
+    """A byte-matched anchor fence immediately followed by a new-code fence at a DIFFERENT indent
+    -> one new-shape finding, path equal to the anchor fence's own matched Edits: token."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  line one\n  line two\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Anchor snippet with:\n"
+                "```\n"
+                "  line one\n"
+                "  line two\n"
+                "```\n"
+                "  New code with:\n"
+                "```\n"
+                "    def helper():\n"
+                "        pass\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "src/target.py", f"wrong path: {e['path']!r}"
+            assert "fence 2" in e["message"] and "fence 1" in e["message"], (
+                f"message should mention both fences: {e['message']!r}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_dirty_paired_fence_mismatched_indent"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_paired_fence_mismatched_indent: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_paired_fence_matching_indent() -> int:
+    """Same setup as the mismatched-indent case, but the new-code fence's indent MATCHES the
+    anchor fence's indent -> zero findings."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  line one\n  line two\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Anchor snippet with:\n"
+                "```\n"
+                "  line one\n"
+                "  line two\n"
+                "```\n"
+                "  New code with:\n"
+                "```\n"
+                "  def helper():\n"
+                "      pass\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print("PASS test_check_requirements_quote_indent_drift_clean_paired_fence_matching_indent")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_clean_paired_fence_matching_indent: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_clean_unmatched_fence_no_prior_anchor() -> int:
+    """A card whose only fence is itself unmatched, with no prior matched anchor -> no new-shape
+    finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  line one\n  line two\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  New code with:\n"
+                "```\n"
+                "    def helper():\n"
+                "        pass\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 requirements-quote-indent-drift errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_clean_unmatched_fence_no_prior_anchor"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_clean_unmatched_fence_no_prior_anchor: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_requirements_quote_indent_drift_dirty_paired_fence_no_chain_across_trailing() -> int:
+    """Three fences: matched anchor, then two consecutive unmatched fences at different indents ->
+    exactly one finding (for the first unmatched fence only); the anchor state resets after one
+    comparison and does not chain across multiple trailing unmatched fences."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "target.py").write_text(
+            "  line one\n  line two\n", encoding="utf-8",
+        )
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/target.py"],
+            requirements=(
+                "  Anchor snippet with:\n"
+                "```\n"
+                "  line one\n"
+                "  line two\n"
+                "```\n"
+                "  New code with:\n"
+                "```\n"
+                "    def helper():\n"
+                "        pass\n"
+                "```\n"
+                "  More new code with:\n"
+                "```\n"
+                "      def other():\n"
+                "          pass\n"
+                "```\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "requirements-quote-indent-drift"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
+            )
+            assert "fence 2" in check_errors[0]["message"], (
+                f"expected finding for fence 2 only: {check_errors[0]['message']!r}"
+            )
+            print(
+                "PASS test_check_requirements_quote_indent_drift_dirty_paired_fence_no_chain_across_trailing"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_requirements_quote_indent_drift_dirty_paired_fence_no_chain_across_trailing: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_skip_checks_filters_wiki_config_mutation() -> int:
     """skip_checks={"wiki-config-mutation"} suppresses that check entirely."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -13455,6 +13666,10 @@ def main() -> int:
         test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen,
         test_check_requirements_quote_indent_drift_clean_under_indent_byte_exact,
         test_check_requirements_quote_indent_drift_clean_under_indent_illustrative_no_match,
+        test_check_requirements_quote_indent_drift_dirty_paired_fence_mismatched_indent,
+        test_check_requirements_quote_indent_drift_clean_paired_fence_matching_indent,
+        test_check_requirements_quote_indent_drift_clean_unmatched_fence_no_prior_anchor,
+        test_check_requirements_quote_indent_drift_dirty_paired_fence_no_chain_across_trailing,
         # skip_checks filtering (Card 7 / #188)
         test_skip_checks_filters_wiki_config_mutation,
         test_skip_checks_does_not_suppress_other_checks,

@@ -3070,6 +3070,19 @@ def _add_n_leading_spaces(text: str, n: int, *, include_blank: bool = False) -> 
     return "\n".join(added_lines)
 
 
+def _first_nonblank_line_indent(text: str) -> int | None:
+    """Return the leading-space count of the first non-blank line in `text`, or `None` if every
+    line is blank.
+
+    Mirrors `_strip_n_leading_spaces`/`_add_n_leading_spaces`'s "skip blank lines" convention -- a
+    fence's own baseline indentation is measured from its first line that actually has content.
+    """
+    for line in text.splitlines():
+        if line.strip():
+            return len(line) - len(line.lstrip(" "))
+    return None
+
+
 def _card_edits_tokens(card_text: str) -> list[str]:
     """Return this card's own ``Edits:`` backtick tokens, in declaration order.
 
@@ -3188,6 +3201,13 @@ def _check_requirements_quote_indent_drift(
     Either pass's first match wins and stops the search;
     a fence matching in neither direction at any N in range is an illustrative snippet showing
     new/desired-state code, not a drifted quote, and is silently skipped -- never flagged.
+    Exception: when such an unmatched fence immediately follows (in ``fence_bodies`` order -- any
+    prose between the two fences in the raw text does not break the pairing) a fence that DID match
+    (clean, strip, or add), its own first-non-blank-line indentation is compared against that anchor
+    fence's own first-non-blank-line indentation;
+    a mismatch is flagged as a new finding (same check name, distinct message).
+    This comparison only ever looks at the single immediately-preceding fence -- it does not chain
+    across multiple consecutive unmatched fences.
 
     Per _mill/discussion.md's match-target-edits-only Decision, only a card's own Edits: files are
     compared against (never Context:, Creates:, or other cards' files) -- those files already exist
@@ -3245,14 +3265,20 @@ def _check_requirements_quote_indent_drift(
             if not ordered_resolved_tokens:
                 continue
 
+            last_matched_indent: int | None = None
+            last_matched_token: str | None = None
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
                 fence_body = re.sub(r"\n[ \t]*\Z", "", fence_body)
                 # Already byte-exact -- nothing to flag.
                 # This also correctly no-ops for a fence with zero leading whitespace, since every N >= 1 strip on such a fence is a no-op that reduces to this same already-checked raw content.
-                if any(
-                    fence_body in resolved_contents[t]
-                    for t in ordered_resolved_tokens
-                ):
+                clean_match_token = None
+                for t in ordered_resolved_tokens:
+                    if fence_body in resolved_contents[t]:
+                        clean_match_token = t
+                        break
+                if clean_match_token is not None:
+                    last_matched_indent = _first_nonblank_line_indent(fence_body)
+                    last_matched_token = clean_match_token
                     continue
 
                 matched = False
@@ -3275,6 +3301,8 @@ def _check_requirements_quote_indent_drift(
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
+                        last_matched_indent = _first_nonblank_line_indent(fence_body)
+                        last_matched_token = matched_token
                         matched = True
                         break
                 if matched:
@@ -3283,6 +3311,7 @@ def _check_requirements_quote_indent_drift(
                 # The strip pass found nothing: this fence may instead be under-indented relative
                 # to its source (the opposite drift direction), so run the symmetric add pass over
                 # the same ascending N range.
+                add_matched = False
                 for n in range(1, 41):
                     matched_token = None
                     for candidate in (
@@ -3307,7 +3336,33 @@ def _check_requirements_quote_indent_drift(
                                 f"leading spaces per line (found N={n})"
                             ),
                         })
+                        last_matched_indent = _first_nonblank_line_indent(fence_body)
+                        last_matched_token = matched_token
+                        add_matched = True
                         break
+                if add_matched:
+                    continue
+
+                # Neither the clean check, strip pass, nor add pass matched -- illustrative new/
+                # replacement code. Check indentation against the immediately preceding matched
+                # anchor fence in fence_bodies order, if any.
+                if last_matched_indent is not None:
+                    sibling_indent = _first_nonblank_line_indent(fence_body)
+                    if sibling_indent is not None and sibling_indent != last_matched_indent:
+                        errors.append({
+                            "check": "requirements-quote-indent-drift",
+                            "batch": batch_path.stem,
+                            "card": card_num,
+                            "path": last_matched_token,
+                            "message": (
+                                f"card {card_num}'s Requirements: fence {fence_idx} (new/replacement "
+                                f"code) immediately follows matched fence {fence_idx - 1}, but its "
+                                f"first line is indented {sibling_indent} spaces vs the anchor fence's "
+                                f"{last_matched_indent} spaces"
+                            ),
+                        })
+                last_matched_indent = None
+                last_matched_token = None
 
     return errors
 
