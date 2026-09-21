@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-doc-fixes
 slug: mill-plan-process-gaps-r2
 branch: hanf/mill-plan-process-gaps-r2
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-review-r2  '2026-09-21T15:56:15Z'
 plan-fix-r2  '2026-09-21T15:58:14Z'
 planned  '2026-09-21T15:59:02Z'
 implementing  '2026-09-21T16:01:48Z'
+approved-doc-fixes  '2026-09-21T16:07:19Z'
 ```
 
 ## Batches
@@ -32,9 +33,10 @@ implementing  '2026-09-21T16:01:48Z'
 ```yaml
 batches:
   - name: doc-fixes
-    state: running
+    state: approved
     implementer_session: af5e52fa-3547-4a4b-a68a-5c36575a1631
     start_sha: 5c3e70534ca6fdfeeb0df0b27aa95c71b0ded521
+    commit_sha: 84eb1edc93a29d41cf8feecdf5793af89db33ed4
   - name: allow-missing-refs
     state: pending
     verify_baseline_failures: []
