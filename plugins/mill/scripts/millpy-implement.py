@@ -25,6 +25,7 @@ import json
 import re
 import _subprocess_util
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -129,6 +130,7 @@ def _run_module_wide_standalone(
     status_path: Path,
     module_wide_verify_cmd: str | None,
     module_wide_cwd_override: Path | None,
+    verify_timeout_seconds: float | None = None,
 ) -> None:
     """
     Run the module-wide baseline sub-step standalone, via its own `compute_baseline` checkout.
@@ -162,6 +164,7 @@ def _run_module_wide_standalone(
             parent_branch,
             module_wide_verify_cmd,
             cwd_override_relative=cwd_override_relative,
+            timeout_seconds=verify_timeout_seconds,
         )
     except Exception as e:
         print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
@@ -221,6 +224,7 @@ def _run_baseline_stage(
     module_wide_cwd_override: Path | None,
     plan_base: Path,
     baseline_prepare_cmd: str | None,
+    verify_timeout_seconds: float | None = None,
     module_wide_only: bool = False,
 ) -> int:
     """
@@ -295,6 +299,13 @@ def _run_baseline_stage(
             executes -- read by the caller from `pipeline.baseline_prepare_cmd` in mill-config.yaml.
             `None` (the default when the key is absent) disables this step entirely, matching
             today's behavior exactly.
+        verify_timeout_seconds: Per-run wall-clock ceiling applied to every verify command this
+            stage runs (module-wide, per-batch, and `baseline_prepare_cmd`), or `None` for no
+            ceiling -- read by the caller from `pipeline.baseline_verify_timeout_minutes` in
+            mill-config.yaml. A timeout raises, which every call site here already handles as
+            "computation failed, leave the baseline unset," so a hung test runner degrades the way
+            every other infrastructure failure does instead of blocking the pre-flight
+            indefinitely (#1101).
         module_wide_only: When True, skip the entire per-batch computation path -- never call
             `_enumerate_batch_verify_triples`, and bind `batches_needing_computation`/
             `cached_batches` directly to empty lists so Case A always runs. Used for a speculative
@@ -305,6 +316,12 @@ def _run_baseline_stage(
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;
         outcomes are communicated through the printed JSON lines.
     """
+    # Wall-clock instrumentation (#1101): a 25-minute pre-flight previously emitted only background
+    # heartbeats, so "where did the time go" could not be answered from the stage's own output.
+    # `timings` is per-batch-name; `setup_timings` carries the shared costs those numbers exclude.
+    timings: dict[str, float] = {}
+    setup_timings: dict[str, float] = {}
+
     batches_needing_computation: list[tuple[str, str, Path | None]] = []
     cached_batches: list[str] = []
     if not module_wide_only:
@@ -325,7 +342,12 @@ def _run_baseline_stage(
     # no shared checkout is created, since there is nothing to share it with.
     if not batches_needing_computation:
         _run_module_wide_standalone(
-            project_root, git_root, status_path, module_wide_verify_cmd, module_wide_cwd_override
+            project_root,
+            git_root,
+            status_path,
+            module_wide_verify_cmd,
+            module_wide_cwd_override,
+            verify_timeout_seconds,
         )
         print(
             json.dumps(
@@ -335,6 +357,8 @@ def _run_baseline_stage(
                     "computed": [],
                     "cached": cached_batches,
                     "errored": {},
+                    "elapsed_seconds": timings,
+                    "setup_seconds": setup_timings,
                 }
             )
         )
@@ -359,6 +383,8 @@ def _run_baseline_stage(
                     "computed": [],
                     "cached": cached_batches,
                     "errored": {name: reason for name, _cmd, _cwd in batches_needing_computation},
+                    "elapsed_seconds": timings,
+                    "setup_seconds": setup_timings,
                 }
             )
         )
@@ -374,12 +400,14 @@ def _run_baseline_stage(
     # One-time shared setup: checkout + dependency-junction linking at every distinct fragment.
     # A failure here is NOT isolable per-batch -- no batch can run without the shared checkout existing -- so it is caught once, marking every batch needing computation (and, when applicable, the module-wide sub-step) as errored.
     tmp_path: Path | None = None
+    checkout_started = time.monotonic()
     try:
         tmp_path = _verify_baseline._checkout_parent_branch(project_root, git_root, parent_branch)
         for fragment in cwd_fragments:
             target = tmp_path / fragment if fragment is not None else tmp_path
             _verify_baseline._link_dependency_dirs(project_root, target)
     except Exception as e:
+        setup_timings["checkout"] = round(time.monotonic() - checkout_started, 1)
         reason = f"checkout failed: {e}"
         print(f"[millpy-implement] baseline shared checkout failed: {reason}", file=sys.stderr)
         if module_wide_needs_computation:
@@ -394,6 +422,8 @@ def _run_baseline_stage(
                     "computed": [],
                     "cached": cached_batches,
                     "errored": {name: reason for name, _cmd, _cwd in batches_needing_computation},
+                    "elapsed_seconds": timings,
+                    "setup_seconds": setup_timings,
                 }
             )
         )
@@ -413,11 +443,16 @@ def _run_baseline_stage(
     # Failure here is deliberately non-fatal: it is logged and the verify commands still run,
     # since a real build break will also surface naturally as a verify-command failure signature,
     # which is correct baseline data rather than something to suppress by aborting early.
+    setup_timings["checkout"] = round(time.monotonic() - checkout_started, 1)
+
     if baseline_prepare_cmd:
+        prepare_started = time.monotonic()
         for fragment in cwd_fragments:
             target = tmp_path / fragment if fragment is not None else tmp_path
             try:
-                prepare_rc, prepare_output = _verify_baseline._run_verify_in(baseline_prepare_cmd, target)
+                prepare_rc, prepare_output = _verify_baseline._run_verify_in(
+                    baseline_prepare_cmd, target, verify_timeout_seconds
+                )
                 if prepare_rc != 0:
                     print(
                         f"[millpy-implement] baseline_prepare_cmd failed (cwd={target}, exit={prepare_rc}): {prepare_output.strip()}",
@@ -425,15 +460,17 @@ def _run_baseline_stage(
                     )
             except Exception as e:
                 print(f"[millpy-implement] baseline_prepare_cmd raised (cwd={target}): {e}", file=sys.stderr)
+        setup_timings["prepare"] = round(time.monotonic() - prepare_started, 1)
 
     try:
         # (a) Module-wide command, if it needs computing this round -- its own try/except, mirroring the standalone path, so a module-wide failure never aborts the per-batch work below.
         if module_wide_needs_computation:
             fragment = _relative_cwd_fragment(module_wide_cwd_override, project_root, git_root)
             effective_tmp_path = tmp_path / fragment if fragment is not None else tmp_path
+            module_wide_started = time.monotonic()
             try:
                 result = _verify_baseline._run_module_wide_verify_algorithm(
-                    module_wide_verify_cmd, effective_tmp_path, project_root
+                    module_wide_verify_cmd, effective_tmp_path, project_root, verify_timeout_seconds
                 )
             except Exception as e:
                 print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
@@ -451,23 +488,37 @@ def _run_baseline_stage(
                     "result": "computed",
                     "value": result,
                 }
+            setup_timings["module_wide"] = round(time.monotonic() - module_wide_started, 1)
         else:
             module_wide_payload = _module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)
 
         # (b) Every batch needing computation, each independently try/excepted so one batch's failure never aborts a sibling.
+        # pair_cache is owned here, not by compute_batch_baselines: driving a batch at a time is what
+        # buys that isolation, but it also means a call-local cache would be re-created empty per
+        # batch and could never fire, leaving two batches with an identical verify command running it
+        # twice (#1101). One dict across the loop restores the dedup without giving up the isolation;
+        # it is safe to share because every call below runs against this same shared tmp_path.
         computed_names: list[str] = []
         errored: dict[str, str] = {}
+        pair_cache: dict[tuple[str, Path], list[str]] = {}
         for name, command, cwd in batches_needing_computation:
             fragment = _relative_cwd_fragment(cwd, project_root, git_root)
             effective_cwd = tmp_path / fragment if fragment is not None else None
+            batch_started = time.monotonic()
             try:
                 failures = _verify_baseline.compute_batch_baselines(
-                    [(name, command, effective_cwd)], tmp_path, project_root
+                    [(name, command, effective_cwd)],
+                    tmp_path,
+                    project_root,
+                    pair_cache=pair_cache,
+                    timeout_seconds=verify_timeout_seconds,
                 )[name]
                 _status.set_batch_field(status_path, name, "verify_baseline_failures", failures)
             except Exception as e:
                 errored[name] = str(e)
+                timings[name] = round(time.monotonic() - batch_started, 1)
                 continue
+            timings[name] = round(time.monotonic() - batch_started, 1)
             computed_names.append(name)
     finally:
         try:
@@ -484,6 +535,8 @@ def _run_baseline_stage(
                 "computed": computed_names,
                 "cached": cached_batches,
                 "errored": errored,
+                "elapsed_seconds": timings,
+                "setup_seconds": setup_timings,
             }
         )
     )
@@ -692,7 +745,10 @@ def main(argv=None) -> int:
     module_verify_baseline = _status.get_module_verify_baseline(status_path)
 
     if args.stage == "baseline":
-        baseline_prepare_cmd = (cfg.get("pipeline") or {}).get("baseline_prepare_cmd")
+        pipeline_cfg = cfg.get("pipeline") or {}
+        baseline_prepare_cmd = pipeline_cfg.get("baseline_prepare_cmd")
+        timeout_minutes = pipeline_cfg.get("baseline_verify_timeout_minutes")
+        verify_timeout_seconds = float(timeout_minutes) * 60 if timeout_minutes else None
         return _run_baseline_stage(
             project_root,
             git_root,
@@ -701,6 +757,7 @@ def main(argv=None) -> int:
             module_wide_cwd_override,
             plan_base,
             baseline_prepare_cmd,
+            verify_timeout_seconds,
             module_wide_only=args.module_wide_only,
         )
 

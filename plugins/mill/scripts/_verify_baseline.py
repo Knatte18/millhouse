@@ -47,7 +47,13 @@ Public API:
     union-of-runs failure-signature list per command name instead
     of a binary "clean"/"pre-existing-failures" verdict.
     Deduplicates work across names sharing one (command, cwd) pair and
-    skips the corroboration re-run when run 1 is green.
+    skips the corroboration re-run when run 1 is green. Pass a
+    caller-owned `pair_cache` dict to make that dedup span calls.
+
+Both entry points accept `timeout_seconds`, a per-run wall-clock ceiling. `subprocess.TimeoutExpired`
+propagates to the caller, which applies the same "leave the baseline unset" fail-safe it applies to
+the infrastructure failures above -- a hung test runner would otherwise block the whole pre-flight
+indefinitely before batch 1 dispatches (#1101).
 """
 from __future__ import annotations
 
@@ -150,6 +156,7 @@ def compute_baseline(
     module_wide_verify_cmd: str,
     *,
     cwd_override_relative: Path | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
     """
     Compute whether the parent branch's own module-wide verify already fails.
@@ -198,6 +205,8 @@ def compute_baseline(
                 of `tmp_path` (which mirrors `git_root`, not `hub_root`).
             When None (plain-string `verify:` or a `cwd: git_root` resolution), behavior is
                 unchanged: everything runs at `tmp_path` directly.
+        timeout_seconds: Per-run wall-clock ceiling for each verify run, or None for no ceiling.
+            Applied to each of the algorithm's up-to-three runs individually, not to their total.
 
     Returns:
         The literal string "clean" or "pre-existing-failures".
@@ -206,6 +215,10 @@ def compute_baseline(
         RuntimeError: `git rev-parse` or `git worktree add` failed.
         OSError: junction creation failed.
         ValueError: link_path already exists (dependency dir collision).
+        subprocess.TimeoutExpired: A verify run exceeded `timeout_seconds`. The transient worktree
+            is still torn down by the `finally` below;
+            the caller applies the same "leave the baseline unset" fail-safe it applies to the
+            infrastructure failures above.
     """
     tmp_path = _checkout_parent_branch(project_root, git_root, parent_branch)
 
@@ -220,14 +233,17 @@ def compute_baseline(
         _link_dependency_dirs(project_root, effective_tmp_path)
 
         return _run_module_wide_verify_algorithm(
-            module_wide_verify_cmd, effective_tmp_path, project_root
+            module_wide_verify_cmd, effective_tmp_path, project_root, timeout_seconds
         )
     finally:
         _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
 
 
 def _run_module_wide_verify_algorithm(
-    module_wide_verify_cmd: str, effective_tmp_path: Path, project_root: Path
+    module_wide_verify_cmd: str,
+    effective_tmp_path: Path,
+    project_root: Path,
+    timeout_seconds: float | None = None,
 ) -> str:
     """
     Run the 3-run/control-check module-wide verify corroboration algorithm.
@@ -256,22 +272,28 @@ def _run_module_wide_verify_algorithm(
         the first two runs.
         project_root: Absolute path to the task worktree root, used as cwd for the control-check
         run.
+        timeout_seconds: Per-run wall-clock ceiling passed through to `_run_verify_in`, or None for
+        no ceiling. Applied to each of the up-to-three runs individually, not to their total.
 
     Returns:
         The literal string "clean" or "pre-existing-failures".
+
+    Raises:
+        subprocess.TimeoutExpired: One of the runs exceeded `timeout_seconds`. The caller treats
+        this like any other computation failure and leaves the baseline unset.
     """
-    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path)
+    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path, timeout_seconds)
     if rc == 0:
         return "clean"
 
     # Flakiness-guard retry: a single transient-worktree failure is never trusted on its own.
-    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path)
+    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path, timeout_seconds)
     if rc == 0:
         return "clean"
 
     # Second consecutive transient-worktree failure.
     # Corroborate with a control run in the task worktree itself before caching a real pre-existing-failures verdict.
-    rc, _output = _run_verify_in(module_wide_verify_cmd, project_root)
+    rc, _output = _run_verify_in(module_wide_verify_cmd, project_root, timeout_seconds)
     if rc != 0:
         return "pre-existing-failures"
 
@@ -284,12 +306,31 @@ def _run_module_wide_verify_algorithm(
     return "clean"
 
 
-def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> tuple[int, str]:
+def _run_verify_in(
+    module_wide_verify_cmd: str, cwd: Path, timeout_seconds: float | None = None
+) -> tuple[int, str]:
     """
     Run `module_wide_verify_cmd` with cwd set to `cwd`.
 
+    Args:
+        module_wide_verify_cmd: The command string to run, verbatim.
+        cwd: The working directory to run it in.
+        timeout_seconds: Wall-clock ceiling for the run, or None for no ceiling.
+            A hung test runner or a build server waiting on a lock in the transient checkout would
+            otherwise block the whole `--stage baseline` pre-flight indefinitely, before batch 1 has
+            dispatched and with no output (#1101);
+            the module's fail-safe design covers a crash but not a hang.
+
     Returns:
         A tuple of (exit code, combined stdout + stderr).
+
+    Raises:
+        subprocess.TimeoutExpired: The command exceeded `timeout_seconds`.
+            Deliberately propagated rather than converted to a non-zero exit code: every caller
+            already treats an exception as "computation failed, leave the baseline unset," which
+            makes the hang degrade exactly the way every other infrastructure failure does, whereas
+            a fabricated non-zero exit would feed a truncated output into the signature extractor
+            and cache a bogus baseline.
     """
     run_args, run_kwargs = _posix_shell_run_args(module_wide_verify_cmd)
     result = subprocess.run(
@@ -297,6 +338,7 @@ def _run_verify_in(module_wide_verify_cmd: str, cwd: Path) -> tuple[int, str]:
         capture_output=True,
         text=True,
         cwd=cwd,
+        timeout=timeout_seconds,
         **run_kwargs,
     )
     return result.returncode, result.stdout + result.stderr
@@ -306,6 +348,9 @@ def compute_batch_baselines(
     commands: list[tuple[str, str, Path | None]],
     checkout_path: Path,
     project_root: Path,
+    *,
+    pair_cache: dict[tuple[str, Path], list[str]] | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, list[str]]:
     """
     Compute per-batch verify-command failure-signature baselines.
@@ -325,6 +370,13 @@ def compute_batch_baselines(
     corroborate anything the first evaluation of that pair did not already establish (#1098);
     each distinct pair is therefore evaluated once and its signature list fanned out (as an
     independent copy) to every batch name that maps to it.
+
+    That dedup only spans ONE call unless the caller supplies `pair_cache`.
+    The production call site drives a batch at a time so a failing batch never aborts a sibling
+    (`millpy-implement.py`'s per-batch try/except), which means a call-local cache is re-created
+    empty per batch and can never fire (#1101);
+    a caller-owned `pair_cache` dict threaded across those calls restores the dedup without giving
+    up that per-batch isolation.
 
     Each pair is run via `_run_verify_in` up to TWICE.
     Each run's combined stdout+stderr is passed through `_extract_failure_signatures`;
@@ -354,6 +406,18 @@ def compute_batch_baselines(
             but accepted for parity with `compute_baseline`'s signature and to keep the caller's
                 call sites uniform;
             kept for forward compatibility.
+        pair_cache: Optional caller-owned `{(command, effective_cwd): signatures}` dict, mutated in
+            place, that makes the dedup span every call sharing it -- pass one dict across a whole
+            shared-checkout pre-flight.
+            `None` (the default) falls back to a call-local cache, i.e. dedup within this call only.
+            Only ever share a cache across calls against the SAME checkout: the key carries no
+            checkout identity, so reusing one across checkouts would serve a stale signature list.
+        timeout_seconds: Per-run wall-clock ceiling passed through to `_run_verify_in`, or None for
+            no ceiling. Applied to each run individually, not to a pair's two runs together.
+
+    Raises:
+        subprocess.TimeoutExpired: A run exceeded `timeout_seconds`. Nothing is written to
+            `pair_cache` for a pair whose evaluation raised, so a later call may retry it.
 
     Returns:
         A dict keyed by `name`, each value the union (deduplicated, order-preserving) of the runs'
@@ -363,19 +427,21 @@ def compute_batch_baselines(
         names that share one `(command, effective_cwd)` pair.
     """
     del project_root  # unused today; kept for signature parity/forward compat.
-    by_pair: dict[tuple[str, Path], list[str]] = {}
+    by_pair = pair_cache if pair_cache is not None else {}
     results: dict[str, list[str]] = {}
     for name, command, cwd_override in commands:
         effective_cwd = cwd_override if cwd_override is not None else checkout_path
         pair = (command, effective_cwd)
         if pair not in by_pair:
-            by_pair[pair] = _signatures_for_pair(command, effective_cwd)
+            by_pair[pair] = _signatures_for_pair(command, effective_cwd, timeout_seconds)
         # Copy per name: callers treat each value as their own mutable list.
         results[name] = list(by_pair[pair])
     return results
 
 
-def _signatures_for_pair(command: str, effective_cwd: Path) -> list[str]:
+def _signatures_for_pair(
+    command: str, effective_cwd: Path, timeout_seconds: float | None = None
+) -> list[str]:
     """
     Run one `(command, effective_cwd)` pair and return its union-of-runs failure signatures.
 
@@ -384,13 +450,21 @@ def _signatures_for_pair(command: str, effective_cwd: Path) -> list[str]:
     first occurrence -- unless run 1 exited 0 with zero extracted signatures, in which case there is
     nothing for a second run to corroborate.
 
+    Args:
+        command: The verify command string to run, verbatim.
+        effective_cwd: The already-resolved working directory to run it in.
+        timeout_seconds: Per-run wall-clock ceiling, or None for no ceiling.
+
     Returns:
         The extracted raw failure-signature lines, `[]` when the command produced none.
+
+    Raises:
+        subprocess.TimeoutExpired: A run exceeded `timeout_seconds`.
     """
     signatures: list[str] = []
     seen: set[str] = set()
     for run_index in range(2):
-        rc, output = _run_verify_in(command, effective_cwd)
+        rc, output = _run_verify_in(command, effective_cwd, timeout_seconds)
         for line in _extract_failure_signatures(output):
             if line not in seen:
                 seen.add(line)

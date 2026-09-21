@@ -44,10 +44,20 @@ of the earlier batches executed each suite four times instead of once: (f) two n
 (h) the skip is gated on the zero exit code, so a non-zero exit with no recognized signatures is
 still re-run;
 (i) dedup is keyed on the pair, so one command string at two distinct cwds stays two units of work.
+
+Cases (j)-(m) regress #1101, where that dedup could never fire in production because the only caller
+drives one batch per call (to keep its per-batch try/except isolation), re-creating the call-local
+cache empty every time, and where no verify run had any timeout at all: (j) a caller-owned
+`pair_cache` makes the dedup span calls while still handing back independent list objects;
+(k) omitting it keeps the old call-local behaviour, so the shared cache is opt-in;
+(l) `timeout_seconds` reaches `subprocess.run` and a `TimeoutExpired` propagates to the caller's
+"leave the baseline unset" fail-safe instead of being swallowed into a bogus baseline;
+(m) omitting it imposes no ceiling.
 """
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -108,8 +118,8 @@ def _case_b_independent_signature_lists() -> None:
     checkout_path = Path("/fake/checkout")
     project_root = Path("/fake/project")
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del cwd
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
         if command == "cmd-a":
             return 1, "--- FAIL: TestA (0.01s)\n"
         if command == "cmd-b":
@@ -166,8 +176,8 @@ def _case_d_union_of_two_runs() -> None:
     project_root = Path("/fake/project")
     call_count = {"n": 0}
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del cwd
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
         assert command == "cmd-flaky"
         call_count["n"] += 1
         if call_count["n"] == 1:
@@ -225,7 +235,8 @@ def _case_e_mixed_cwd_dependency_linking() -> None:
 
         seen_cwds: list[tuple[str, Path]] = []
 
-        def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
+        def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+            del timeout_seconds
             seen_cwds.append((command, cwd))
             return 0, "ok\n"
 
@@ -264,8 +275,8 @@ def _case_f_identical_command_and_cwd_runs_once() -> None:
     project_root = Path("/fake/project")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del cwd
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
         runs.append(command)
         return 1, "--- FAIL: TestShared (0.01s)\n"
 
@@ -300,8 +311,8 @@ def _case_g_green_run_skips_corroboration_rerun() -> None:
     project_root = Path("/fake/project")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del cwd
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
         runs.append(command)
         return 0, "Passed!  - Failed: 0, Passed: 412\n"
 
@@ -331,8 +342,8 @@ def _case_h_nonzero_exit_without_signatures_still_reruns() -> None:
     project_root = Path("/fake/project")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del cwd
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
         runs.append(command)
         if len(runs) == 1:
             return 1, "error CS0246: the type or namespace could not be found\n"
@@ -363,8 +374,8 @@ def _case_i_same_command_distinct_cwds_not_deduped() -> None:
     project_root = Path("/fake/project")
     seen_cwds: list[Path] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path) -> tuple[int, str]:
-        del command
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del command, timeout_seconds
         seen_cwds.append(cwd)
         return 1, f"--- FAIL: Test{cwd.name} (0.01s)\n"
 
@@ -388,6 +399,155 @@ def _case_i_same_command_distinct_cwds_not_deduped() -> None:
         "PASS: compute_batch_baselines keys dedup on (command, cwd), so one "
         "command string at two distinct cwds stays two units of work"
     )
+
+
+def _case_j_caller_owned_pair_cache_spans_calls() -> None:
+    """
+    Case (j) regresses #1101: a caller-owned `pair_cache` makes the dedup span calls.
+
+    The production call site drives one batch per call (single-element list) to keep its per-batch
+    try/except isolation, so a call-local cache is re-created empty every time and can never fire.
+    With a shared `pair_cache`, the second call's identical pair is served from the cache instead of
+    re-running the command -- and still hands back an independent list object.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    runs: list[str] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
+        runs.append(command)
+        return 1, "--- FAIL: TestShared (0.01s)\n"
+
+    pair_cache: dict = {}
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        first = compute_batch_baselines(
+            [("batch1", "dotnet test Suite", None)],
+            checkout_path,
+            project_root,
+            pair_cache=pair_cache,
+        )
+        second = compute_batch_baselines(
+            [("batch3", "dotnet test Suite", None)],
+            checkout_path,
+            project_root,
+            pair_cache=pair_cache,
+        )
+
+    assert len(runs) == 2, (
+        f"expected the shared pair evaluated once across both calls (2 runs), got {runs!r}"
+    )
+    assert second["batch3"] == ["--- FAIL: TestShared (0.01s)"], second["batch3"]
+    assert second["batch3"] is not first["batch1"], (
+        "expected an independent list object per name, not the cached list itself"
+    )
+    assert second["batch3"] is not pair_cache[("dotnet test Suite", checkout_path)], (
+        "expected a copy, not the cache's own list object"
+    )
+
+    print(
+        "PASS: compute_batch_baselines dedups across calls when the caller "
+        "owns and threads a pair_cache"
+    )
+
+
+def _case_k_omitted_pair_cache_stays_call_local() -> None:
+    """
+    Case (k): omitting `pair_cache` keeps the old call-local behaviour -- two separate calls with
+    the same pair each evaluate it, so the shared cache is genuinely opt-in.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    runs: list[str] = []
+
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del cwd, timeout_seconds
+        runs.append(command)
+        return 1, "--- FAIL: TestShared (0.01s)\n"
+
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        compute_batch_baselines([("batch1", "cmd", None)], checkout_path, project_root)
+        compute_batch_baselines([("batch3", "cmd", None)], checkout_path, project_root)
+
+    assert len(runs) == 4, f"expected 2 runs per independent call (4 total), got {runs!r}"
+
+    print(
+        "PASS: compute_batch_baselines without a pair_cache stays call-local, "
+        "so the shared cache is opt-in"
+    )
+
+
+def _case_l_timeout_propagates() -> None:
+    """
+    Case (l) regresses #1101: `timeout_seconds` reaches `subprocess.run`, and a `TimeoutExpired`
+    propagates to the caller rather than being swallowed into a fabricated non-zero exit.
+
+    A swallowed timeout would feed truncated output into the signature extractor and cache a bogus
+    baseline;
+    propagating lets the caller apply its existing "leave the baseline unset" fail-safe.
+    Also asserts nothing is written to `pair_cache` for the pair that raised, so a later call can
+    retry it.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    seen_timeouts: list[float | None] = []
+
+    def _fake_subprocess_run(*args, **kwargs):
+        seen_timeouts.append(kwargs.get("timeout"))
+        raise subprocess.TimeoutExpired(cmd="cmd-hang", timeout=kwargs.get("timeout"))
+
+    pair_cache: dict = {}
+    with patch("_verify_baseline.subprocess.run", side_effect=_fake_subprocess_run):
+        try:
+            compute_batch_baselines(
+                [("hung-batch", "cmd-hang", None)],
+                checkout_path,
+                project_root,
+                pair_cache=pair_cache,
+                timeout_seconds=90.0,
+            )
+        except subprocess.TimeoutExpired:
+            pass
+        else:
+            raise AssertionError("expected TimeoutExpired to propagate to the caller")
+
+    assert seen_timeouts == [90.0], (
+        f"expected timeout_seconds forwarded to subprocess.run, got {seen_timeouts!r}"
+    )
+    assert pair_cache == {}, (
+        f"expected nothing cached for a pair whose evaluation raised, got {pair_cache!r}"
+    )
+
+    print(
+        "PASS: compute_batch_baselines forwards timeout_seconds to subprocess.run "
+        "and lets TimeoutExpired propagate without caching the failed pair"
+    )
+
+
+def _case_m_no_timeout_by_default() -> None:
+    """
+    Case (m): omitting `timeout_seconds` passes `timeout=None` to `subprocess.run` -- no ceiling is
+    imposed on repos that have not configured one.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+    seen_timeouts: list[float | None] = []
+
+    def _fake_subprocess_run(*args, **kwargs):
+        seen_timeouts.append(kwargs.get("timeout"))
+        return MagicMock(returncode=0, stdout="ok\n", stderr="")
+
+    with patch("_verify_baseline.subprocess.run", side_effect=_fake_subprocess_run):
+        result = compute_batch_baselines(
+            [("plain-batch", "cmd-plain", None)], checkout_path, project_root
+        )
+
+    assert result == {"plain-batch": []}, result
+    assert seen_timeouts == [None], (
+        f"expected timeout=None when no ceiling is configured, got {seen_timeouts!r}"
+    )
+
+    print("PASS: compute_batch_baselines imposes no subprocess timeout by default")
 
 
 def main() -> int:
@@ -466,6 +626,10 @@ def main() -> int:
         _case_g_green_run_skips_corroboration_rerun()
         _case_h_nonzero_exit_without_signatures_still_reruns()
         _case_i_same_command_distinct_cwds_not_deduped()
+        _case_j_caller_owned_pair_cache_spans_calls()
+        _case_k_omitted_pair_cache_stays_call_local()
+        _case_l_timeout_propagates()
+        _case_m_no_timeout_by_default()
 
         print("All _verify_baseline unit tests passed.")
         return 0
