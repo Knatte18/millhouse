@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -21,4 +21,19 @@ planning  '2026-09-22T09:10:36Z'
 plan-review-r1  '2026-09-22T09:15:48Z'
 plan-fix-r1  '2026-09-22T09:16:29Z'
 planned  '2026-09-22T09:16:38Z'
+implementing  '2026-09-22T09:17:18Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: prose-rules-and-markdown-retire
+    state: pending
+  - name: dispatch-directive
+    state: pending
+  - name: load-directive-sites-and-test
+    state: pending
+  - name: inlined-style-blocks
+    state: pending
 ```
