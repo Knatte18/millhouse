@@ -36,7 +36,9 @@ batches:
     commit_sha: b97a17dc240a1a3800b460b2079a2930c0f63e0c
     verify_baseline_failures: []
   - name: dispatch-directive
-    state: pending
+    state: running
+    implementer_session: fe5bea13-f8a0-4a3b-b38f-c6ac8b01dcba
+    start_sha: 3398ccf7011303293507b1eb49694dfd15ee4d1c
     verify_baseline_failures: []
   - name: load-directive-sites-and-test
     state: pending
