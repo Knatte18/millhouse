@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-prose-rules-and-markdown-retire
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-22T09:15:48Z'
 plan-fix-r1  '2026-09-22T09:16:29Z'
 planned  '2026-09-22T09:16:38Z'
 implementing  '2026-09-22T09:17:18Z'
+approved-prose-rules-and-markdown-retire  '2026-09-22T09:21:16Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-09-22T09:17:18Z'
 ```yaml
 batches:
   - name: prose-rules-and-markdown-retire
-    state: running
+    state: approved
     implementer_session: f7deebe2-8d99-4697-87d6-267faa46a874
     start_sha: 185148d5c8cd3802b525b94ca9bd44541417c3c7
+    commit_sha: b97a17dc240a1a3800b460b2079a2930c0f63e0c
     verify_baseline_failures: []
   - name: dispatch-directive
     state: pending
