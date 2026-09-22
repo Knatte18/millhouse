@@ -3,7 +3,7 @@
 ```yaml
 task: 'Fix prose skill: staleness rule and missing loads'
 slug: prose-skill-gaps
-approved: false
+approved: true
 discussion_sha: 14f67eb1af2035d8145d5df14c2bd38ded775b96
 started: '20260922-090637'
 parent: main

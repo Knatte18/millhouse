@@ -26,9 +26,12 @@ State the point first — no preamble, and no restating a point before making it
 Cut empty intensifiers ("actually", "really", "simply", "just", "completely"): remove the word, and if the sentence still means the same thing it was padding.
 Say each thing once; do not restate it in a summary or a closing recap.
 Do not narrate what is already visible in the quoted code or the surrounding context.
+Don't pin a perishable specific — a tally, a list of the current callers of a symbol, or a name cited descriptively rather than as a stable identifier: name the source, not the snapshot.
 Apply a per-sentence cut test: would the reader act differently if this sentence were missing? If not, cut it.
 For any multi-line prose written into a file, use semantic line breaks — one sentence per line, never fixed-column hard-wrap, plain newlines only (never a trailing double-space or backslash).
 ```
+
+The block compresses one rule from each of `prose`'s five content sections, including the staleness rule batch 1 card 1 adds — five of the eight sites write review findings and commit messages, which is exactly the prose a tally or a list of current callers goes stale in.
 
 The block contains no angle-bracket `<UPPERCASE>` token, and must not acquire one: `_render.render` raises `KeyError` on any unresolved token, which would break every prompt render in production.
 It also does not restate the per-finding review format ("severity-label plus three or four short bullets, a few hundred tokens"), which each reviewer template already specifies — these rules serve that requirement rather than redefining it.
