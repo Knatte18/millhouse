@@ -1,8 +1,8 @@
-"""One-shot repo sweep for the mill:markdown skill's semantic-line-break rule.
+"""One-shot repo sweep for the mill:prose skill's semantic-line-break rule.
 
 Reflows markdown prose/list-item paragraphs to one-sentence-per-line, with extra breaks at internal
 clause boundaries (semicolon, or comma+coordinating- conjunction+explicit-subject) per
-plugins/mill/skills/markdown/SKILL.md's "No fixed-column hard-wrapping" section.
+plugins/mill/skills/prose/SKILL.md's "Line breaks" section.
 Line breaks only -- never rewords, reorders, or drops content.
 Never touches fenced code blocks (nested fences tracked by CommonMark backtick-run-length matching,
 not a naive toggle), inline code spans, links/autolinks, YAML frontmatter, headings, tables,
