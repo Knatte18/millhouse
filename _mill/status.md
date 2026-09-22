@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-prose-rules-and-markdown-retire
+phase: approved-dispatch-directive
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-22T09:16:29Z'
 planned  '2026-09-22T09:16:38Z'
 implementing  '2026-09-22T09:17:18Z'
 approved-prose-rules-and-markdown-retire  '2026-09-22T09:21:16Z'
+approved-dispatch-directive  '2026-09-22T09:23:55Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: b97a17dc240a1a3800b460b2079a2930c0f63e0c
     verify_baseline_failures: []
   - name: dispatch-directive
-    state: running
+    state: approved
     implementer_session: fe5bea13-f8a0-4a3b-b38f-c6ac8b01dcba
     start_sha: 3398ccf7011303293507b1eb49694dfd15ee4d1c
+    commit_sha: dd5b4fe0c99d7c3e0083c7007ff6900639a2162e
     verify_baseline_failures: []
   - name: load-directive-sites-and-test
     state: pending
