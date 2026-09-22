@@ -43,7 +43,9 @@ batches:
     commit_sha: dd5b4fe0c99d7c3e0083c7007ff6900639a2162e
     verify_baseline_failures: []
   - name: load-directive-sites-and-test
-    state: pending
+    state: running
+    implementer_session: 1b5ac6ca-7468-4841-ace2-5754ec41b690
+    start_sha: ea4091464546a3bf77e58322ae7511659e4fc336
     verify_baseline_failures: []
   - name: inlined-style-blocks
     state: pending
