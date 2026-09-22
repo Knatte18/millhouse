@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r6
+phase: discussion-fix-r7
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: null
@@ -21,4 +21,5 @@ discussion-gap-fix-r3  '2026-09-22T13:12:05Z'
 discussion-gap-fix-r4  '2026-09-22T13:18:14Z'
 discussion-gap-fix-r5  '2026-09-22T13:25:04Z'
 discussion-gap-fix-r6  '2026-09-22T13:31:25Z'
+discussion-fix-r7  '2026-09-22T13:37:50Z'
 ```
