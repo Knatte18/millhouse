@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-load-directive-sites-and-test
+phase: approved-inlined-style-blocks
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-22T09:17:18Z'
 approved-prose-rules-and-markdown-retire  '2026-09-22T09:21:16Z'
 approved-dispatch-directive  '2026-09-22T09:23:55Z'
 approved-load-directive-sites-and-test  '2026-09-22T09:26:20Z'
+approved-inlined-style-blocks  '2026-09-22T09:29:51Z'
 ```
 
 ## Batches
@@ -50,8 +51,9 @@ batches:
     commit_sha: d3d1f297d738d1b5e2e4f219da514c1fc96cf75d
     verify_baseline_failures: []
   - name: inlined-style-blocks
-    state: running
+    state: approved
     implementer_session: 0d10d827-ffba-49e2-8219-9b6c41148aa3
     start_sha: c3c32bcff48199a2e3455b929be979ec6d3ed42f
+    commit_sha: 72d0613984d991765098cfad09d80be1ab86df38
     verify_baseline_failures: []
 ```
