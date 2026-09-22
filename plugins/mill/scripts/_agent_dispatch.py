@@ -48,7 +48,7 @@ fallback beyond tolerance.
 
 language_skills_directive(batch_file: Path) -> str
 Detect languages from a batch file's touched files (Edits/Creates only)
-and return a markdown block naming the required language skills plus code-quality.
+and return a markdown block naming the required language skills plus prose and code-quality.
 
 SUBAGENT_REVIEWER, SUBAGENT_IMPLEMENTER String constants for subagent type names.
 """
@@ -362,7 +362,7 @@ def language_skills_directive(batch_file: Path) -> str:
     edited.
 
     For each detected language, names the matching ``{lang}-comments`` and ``{lang}-testing`` skills
-    plus ``code-quality`` for all batches.
+    plus ``prose`` and ``code-quality`` for all batches.
 
     Args:
         batch_file: Path to the batch file.
@@ -409,7 +409,7 @@ def language_skills_directive(batch_file: Path) -> str:
                 break
 
     # Build skills list
-    skills = ["`code-quality`"]
+    skills = ["`prose`", "`code-quality`"]
     for _, prefix in detected_langs:
         skills.append(f"`{prefix}-comments`")
         skills.append(f"`{prefix}-testing`")
@@ -419,6 +419,6 @@ def language_skills_directive(batch_file: Path) -> str:
         lang_list = ", ".join(h for h, _ in detected_langs)
         prose = f"This batch touches {lang_list} files. Before editing any file, load and follow these skills (non-optional): {', '.join(skills)}"
     else:
-        prose = f"Before editing any file, load and follow this skill (non-optional): {skills[0]}"
+        prose = f"Before editing any file, load and follow these skills (non-optional): {', '.join(skills)}"
 
     return f"## Required skills\n\n{prose}"
