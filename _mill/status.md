@@ -50,6 +50,8 @@ batches:
     commit_sha: d3d1f297d738d1b5e2e4f219da514c1fc96cf75d
     verify_baseline_failures: []
   - name: inlined-style-blocks
-    state: pending
+    state: running
+    implementer_session: 0d10d827-ffba-49e2-8219-9b6c41148aa3
+    start_sha: c3c32bcff48199a2e3455b929be979ec6d3ed42f
     verify_baseline_failures: []
 ```
