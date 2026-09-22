@@ -29,11 +29,17 @@ implementing  '2026-09-22T09:17:18Z'
 ```yaml
 batches:
   - name: prose-rules-and-markdown-retire
-    state: pending
+    state: running
+    implementer_session: f7deebe2-8d99-4697-87d6-267faa46a874
+    start_sha: 185148d5c8cd3802b525b94ca9bd44541417c3c7
+    verify_baseline_failures: []
   - name: dispatch-directive
     state: pending
+    verify_baseline_failures: []
   - name: load-directive-sites-and-test
     state: pending
+    verify_baseline_failures: []
   - name: inlined-style-blocks
     state: pending
+    verify_baseline_failures: []
 ```
