@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-22T06:55:03Z'
 discussion-fix-r1  '2026-09-22T08:57:14Z'
+discussed  '2026-09-22T08:59:59Z'
 ```
