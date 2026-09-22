@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-09-22T08:59:59Z'
 planning  '2026-09-22T09:10:36Z'
 plan-review-r1  '2026-09-22T09:15:48Z'
 plan-fix-r1  '2026-09-22T09:16:29Z'
+planned  '2026-09-22T09:16:38Z'
 ```
