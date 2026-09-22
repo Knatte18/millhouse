@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: prose-skill-gaps
 branch: hanf/prose-skill-gaps
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-load-directive-sites-and-test  '2026-09-22T09:26:20Z'
 approved-inlined-style-blocks  '2026-09-22T09:29:51Z'
 holistic-reviewing  '2026-09-22T09:30:22Z'
 holistic-approved  '2026-09-22T09:33:10Z'
+done  '2026-09-22T09:33:48Z'
 ```
 
 ## Batches
