@@ -46,9 +46,10 @@ whether another patch round is still the right call, or whether the check needs 
   `_card_own_reference_set` — `Context:`/`Edits:`/`Creates:`/`Deletes:` tokens plus BOTH halves of every
   `Moves:` pair, source and target — across every card in the plan). No repo-wide fallback when the
   narrowed search finds nothing — treat as unresolvable, don't flag.
-- A refactor of `_check_context_completeness`'s (and `_compute_declared_symbols_union`'s) Requirements-text
-  tokenization from per-physical-line to a single pass over the fence/blockquote-filtered text, joined
-  into one continuous string (see Decision `line-join-refactor`). This fixes a previously undocumented
+- A refactor of `_check_context_completeness`'s Requirements-text tokenization from per-physical-line to a
+  single pass over the fence/blockquote-filtered text, joined into one continuous string (see Decision
+  `line-join-refactor`; `_compute_declared_symbols_union` already scans its Requirements body in one pass
+  with no per-line loop, so it is untouched by this refactor). This fixes a previously undocumented
   bug I traced during exploration (see below); it does NOT close `_is_prohibition_exempt`'s own documented
   "multi-line prohibition phrasing not detected" limitation — that remains open and out of scope (see the
   Decision for why).
@@ -120,8 +121,10 @@ whether another patch round is still the right call, or whether the check needs 
 
 ### line-join-refactor
 
-- Decision: `_check_context_completeness` and `_compute_declared_symbols_union` stop restarting
-  `_BACKTICK_RE.finditer` fresh on each physical line of the Requirements body. Instead, build the
+- Decision: `_check_context_completeness` stops restarting `_BACKTICK_RE.finditer` fresh on each physical
+  line of the Requirements body (`_compute_declared_symbols_union` is untouched — it already runs
+  `_BACKTICK_RE.finditer` once over its whole Requirements body with no per-line loop, so it never had
+  this bug). Instead, build the
   fence/blockquote-filtered text (skipping quoted lines exactly as today) as one continuous joined string
   (physical lines joined in order), with a line-start-offset lookup table recording which original
   physical line each character position falls in.
@@ -251,8 +254,11 @@ whether another patch round is still the right call, or whether the check needs 
   - `_resolve_symbol_files` — the repo-walk resolver being narrowed by `resolution-scope-rework`; already
     memoized per `run()` call via a `cache` dict keyed by search key.
   - `_compute_declared_symbols_union` — plan-wide union of symbols the plan itself declares (exemption
-    14); shares `_check_context_completeness`'s per-line backtick-scanning pattern, so
-    `line-join-refactor` touches both.
+    14); already calls `_BACKTICK_RE.finditer` once over the whole `_requirements_fence_aware_body`
+    output with no per-physical-line loop, so it does NOT have the backtick-line-wrap corruption bug and
+    is untouched by `line-join-refactor` — that decision is `_check_context_completeness`-only. This
+    function is touched only by the separate `modifier+ identifier = value` capture widening (#1119, see
+    Scope).
   - `_is_literal_enumeration_exempt`, `_is_prohibition_exempt`, `_is_non_dependency_negation_exempt`,
     `_is_contrast_citation_exempt`, `_is_cross_card_ownership_exempt`, `_is_illustrative_output_exempt`,
     `_clause_bounds` — the exemption helpers `line-join-refactor` re-targets onto joined text.
@@ -291,10 +297,12 @@ whether another patch round is still the right call, or whether the check needs 
   matching a file NOT in the plan-wide cited-files set (the #1131/#1129 false-positive shape) → no longer
   flagged; (c) the existing qualifier-disambiguation and single-letter-qualifier behavior is unaffected by
   the scope narrowing (that logic runs on whatever match list `_resolve_symbol_files` returns, regardless
-  of scope); (d) a fully empty plan-wide cited-files set (e.g. the first card of the first batch, before
-  any card's `Context:`/`Edits:`/etc. has accumulated anything into the plan-wide union) — assert no
-  crash and that the symbol branch simply resolves nothing and never flags (caught as a NIT in
-  discussion-review round 4).
+  of scope); (d) a fully empty plan-wide cited-files set — a fixture plan where no card anywhere has any
+  `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:` entry at all, so the whole-plan union (built once per
+  `run()` call over every card, per Decision `resolution-scope-rework`) is empty regardless of card order
+  — assert no crash and that the symbol branch simply resolves nothing and never flags (caught as a NIT
+  in discussion-review round 4; wording corrected in round 6 — the set is not order-/position-dependent,
+  so "first card before accumulation" was a misleading frame for this boundary case).
 - `line-join-refactor` needs a regression test reproducing the exact traced incident: a Requirements body
   where one inline-code span opens on one physical line and closes on the next, followed by a genuine
   path-shaped dependency later on the closing line — must now be flagged. Also cover the
@@ -324,13 +332,17 @@ whether another patch round is still the right call, or whether the check needs 
   mirrors the existing `creates_union`/`deletes_union`/`moves_sources` plan-wide pattern already used
   elsewhere in this exact function; no reason a cross-batch dependency should be treated differently.
 - **Q:** How to fix the newly-traced backtick-line-wrap-corruption bug? **A:** [auto-pick] Refactor
-  Requirements-text tokenization (in `_check_context_completeness` and `_compute_declared_symbols_union`)
-  to operate on the fence/blockquote-filtered text joined into one continuous string, and carry every
-  exemption helper onto that joined text too, rather than a narrower per-line odd-backtick-count
+  `_check_context_completeness`'s Requirements-text tokenization to operate on the fence/blockquote-
+  filtered text joined into one continuous string, rather than a narrower per-line odd-backtick-count
   suppression. **Why:** the narrower fix stops corruption spreading but doesn't recover the swallowed
-  token — the exact `millpy-fix.py` incident traced from #1122's source plan would still go undetected;
-  the joined-text approach is also a strict superset fix (closes `_is_prohibition_exempt`'s own
-  documented multi-line-prohibition limitation for free).
+  token — the exact `millpy-fix.py` incident traced from #1122's source plan would still go undetected.
+  (`_compute_declared_symbols_union` already tokenizes in one pass with no per-line loop, so it never had
+  this bug and is untouched — caught in discussion-review round 6, corrected from this entry's original,
+  now-inaccurate draft. The draft's other claim — that this refactor also closes
+  `_is_prohibition_exempt`'s documented multi-line-prohibition limitation "for free" — was separately
+  corrected in round 4: naively widening that helper's scope reproduces the same unbounded false-negative
+  class three other exemptions are deliberately kept away from, so that limitation remains open and out
+  of scope; see Decision `line-join-refactor`.)
 - **Q:** Add leading-prefix stripping to `_symbol_candidate_shape` for #1115's assignment-expression
   backtick spans, or leave it as a documented limitation? **A:** [auto-pick] Add the stripping. **Why:**
   direct, symmetric fix (mirrors existing trailing-suffix stripping) matching the issue's own suggested
