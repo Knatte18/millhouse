@@ -41,7 +41,9 @@ batches:
     start_sha: 596bbe3a59e5c92bc949e7f65e8cbca0dfa5eea2
     commit_sha: 4d6b8adab947229c8d89085c13f1241ac4a7959a
   - name: claude-settings-denylist
-    state: pending
+    state: running
+    implementer_session: 9d43f009-4986-406f-bd2c-cb7dd25e09aa
+    start_sha: 0d4978dbd0e1030fde1d0ed836346d509a3256ca
     verify_baseline_failures: []
   - name: golangci-lint-sandbox-fallback
     state: pending
