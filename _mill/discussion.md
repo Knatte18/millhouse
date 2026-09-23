@@ -58,7 +58,7 @@ A prior task already swept nine other GitHub issues reporting the same "`persist
   - `plugins/mill/skills/mill-plan/SKILL.md:102-103` (initial call) and `:116` (re-arm branch).
   - `plugins/mill/docs/harness-tool-contracts.md:26` (opening paragraph) and `:28`, `:35` (the `persistent: true` example call and the "early, unrequested expiry" bullet).
 - Both SKILL.md sections are otherwise structurally identical (mill-go-base waits on mill-plan reaching `planned`; mill-plan waits on mill-start reaching `discussed`), so the same edit shape applies to both — mill-plan's version additionally threads `clean_tree_root`/`clean_tree_paths` into `build_wait_command`, which is untouched by this fix.
-- Confirmed via `grep -rn "persistent" plugins/`: the only literal `Monitor(..., persistent: true, ...)` call-site text is in the four line ranges above (two per file, initial + re-arm). `orch-wait/SKILL.md:19`, `orch-review/SKILL.md:34`, and `mill-setup/SKILL.md:357` all use "persistent" in unrelated English prose, not as a tool argument.
+- Confirmed via `grep -rn "persistent" plugins/`: the only literal `Monitor(..., persistent: true, ...)` call-site text is in the four line ranges above (two per file, initial + re-arm). The grep also matches several other files (`orch-wait/SKILL.md`, `orch-review/SKILL.md`, `mill-setup/SKILL.md`, and a handful of non-SKILL Python/test files) — every one of those uses "persistent" in unrelated prose (a persistent background poll, a persistent env var, persistent git config, persistent server/retry semantics), never as a `Monitor` tool argument, so none needs editing.
 
 ## Testing
 

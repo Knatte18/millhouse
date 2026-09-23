@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: monitor-persistent-true-still-referenced
 branch: hanf/monitor-persistent-true-still-referenced
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-09-23T10:03:50Z'
+discussion-fix-r1  '2026-09-23T10:17:21Z'
+discussed  '2026-09-23T10:17:21Z'
 ```
