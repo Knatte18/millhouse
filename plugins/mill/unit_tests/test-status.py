@@ -146,32 +146,74 @@ def main() -> int:
             assert "discussed  '2026-04-22T15:00:00Z'" in contents, "timeline row not appended"
             print("PASS: append_phase updates phase yaml + appends timeline row")
 
-        # --- str-input-raises-TypeError regression tests (GitHub #597) ---
-        # A plain str passed where status_path (a pathlib.Path) is expected must raise a clear TypeError naming the offending function, not a bare AttributeError deep inside the module's read_text/exists calls.
+        # --- str/PathLike coercion tests (GitHub #1114) ---
+        # Every SKILL.md pseudocode call site passes a bare status_path string, so _as_path must
+        # coerce str and os.PathLike inputs to Path transparently -- producing the same on-disk
+        # effect / return value as the equivalent Path call -- while still raising a clear
+        # TypeError naming the offending function for a genuinely uncoercible type (GitHub #597).
+
+        class _FakePathLike:
+            """Minimal os.PathLike that is not a str or a Path, for coercion testing."""
+
+            def __init__(self, path: Path) -> None:
+                self._path = path
+
+            def __fspath__(self) -> str:
+                return str(self._path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp_path = Path(tmp) / "status.md"
+            sp_path.write_text(out, encoding="utf-8")
+            sp_str = str(sp_path)
+
+            append_phase(sp_str, "coerced", "2026-01-01T00:00:00Z")
+            contents = sp_path.read_text(encoding="utf-8")
+            assert "phase: coerced" in contents, "str status_path: phase row not updated"
+            assert "coerced  '2026-01-01T00:00:00Z'" in contents, (
+                "str status_path: timeline row not appended"
+            )
+            print("PASS: append_phase accepts a str status_path and matches Path behavior")
+
+            update_field(sp_str, "task", "Updated via str")
+            assert "task: Updated via str" in sp_path.read_text(encoding="utf-8")
+            print("PASS: update_field accepts a str status_path and matches Path behavior")
+
+            set_blocked(sp_str, "blocked via str", timestamp="2026-01-01T01:00:00Z")
+            blocked_contents = sp_path.read_text(encoding="utf-8")
+            assert "phase: blocked" in blocked_contents
+            assert "blocked_reason: blocked via str" in blocked_contents
+            print("PASS: set_blocked accepts a str status_path and matches Path behavior")
+
+            status_via_str = read_status(sp_str)
+            status_via_path = read_status(sp_path)
+            assert status_via_str == status_via_path, (
+                f"read_status(str) != read_status(Path): {status_via_str!r} vs {status_via_path!r}"
+            )
+            print("PASS: read_status accepts a str status_path and matches Path behavior")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp_pathlike = Path(tmp) / "status.md"
+            sp_pathlike.write_text(out, encoding="utf-8")
+            append_phase(_FakePathLike(sp_pathlike), "via-pathlike", "2026-01-01T02:00:00Z")
+            pathlike_contents = sp_pathlike.read_text(encoding="utf-8")
+            assert "phase: via-pathlike" in pathlike_contents, (
+                "os.PathLike status_path: phase row not updated"
+            )
+            print("PASS: append_phase accepts a non-str os.PathLike status_path")
 
         try:
-            append_phase("some/str/path", "phase", "2026-01-01T00:00:00Z")
-            raise AssertionError("expected TypeError from append_phase with str status_path")
+            append_phase(None, "phase", "2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from append_phase with None status_path")
         except TypeError as exc:
             assert "append_phase" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: append_phase raises TypeError on str status_path")
+        print("PASS: append_phase raises TypeError on None status_path")
 
         try:
-            update_field("some/str/path", "key", "value")
-            raise AssertionError("expected TypeError from update_field with str status_path")
+            append_phase(123, "phase", "2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from append_phase with int status_path")
         except TypeError as exc:
-            assert "update_field" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: update_field raises TypeError on str status_path")
-
-        try:
-            set_blocked("some/str/path", "reason", timestamp="2026-01-01T00:00:00Z")
-            raise AssertionError("expected TypeError from set_blocked with str status_path")
-        except TypeError as exc:
-            assert "set_blocked" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: set_blocked raises TypeError on str status_path")
+            assert "append_phase" in str(exc), f"function name missing from message: {exc}"
+        print("PASS: append_phase raises TypeError on int status_path")
 
         # Colon in phase round-trip — separate file to avoid contaminating shared sp.
         with tempfile.TemporaryDirectory() as tmp:

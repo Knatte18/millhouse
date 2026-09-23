@@ -10435,8 +10435,8 @@ def test_check_verify_full_suite_done_gate_exact_match_overview_level_is_ok() ->
         return 0
 
 
-def test_check_verify_full_suite_dotnet_test_without_filter_is_error() -> int:
-    """Dirty: verify invokes 'dotnet test' without --filter -> one verify-full-suite error."""
+def test_check_verify_full_suite_dotnet_test_project_target_is_ok() -> int:
+    """Clean: verify invokes 'dotnet test' naming a project target -> no verify-full-suite error."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -10463,16 +10463,14 @@ def test_check_verify_full_suite_dotnet_test_without_filter_is_error() -> int:
 
         result = _plan_validate.run(plan_dir, project_root)
         check_full_suite = [e for e in result if e["check"] == "verify-full-suite"]
-        try:
-            assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
-            assert "dotnet test" in check_full_suite[0]["message"], (
-                f"message should mention dotnet test: {check_full_suite[0]['message']!r}"
+        if check_full_suite:
+            print(
+                f"FAIL test_check_verify_full_suite_dotnet_test_project_target_is_ok: unexpected: {check_full_suite}",
+                file=sys.stderr,
             )
-            print("PASS test_check_verify_full_suite_dotnet_test_without_filter_is_error")
-            return 0
-        except AssertionError as exc:
-            print(f"FAIL test_check_verify_full_suite_dotnet_test_without_filter_is_error: {exc}", file=sys.stderr)
             return 1
+        print("PASS test_check_verify_full_suite_dotnet_test_project_target_is_ok")
+        return 0
 
 
 def test_check_verify_full_suite_dotnet_test_with_filter_is_ok() -> int:
@@ -10509,6 +10507,150 @@ def test_check_verify_full_suite_dotnet_test_with_filter_is_ok() -> int:
             return 1
         print("PASS test_check_verify_full_suite_dotnet_test_with_filter_is_ok")
         return 0
+
+
+def _dotnet_test_full_suite_findings(verify_command: str) -> list:
+    """Run verify-full-suite against a single-batch plan whose verify: is `verify_command`.
+
+    Shared plumbing for the dotnet-test-scoping dirty/clean test functions below -- each builds
+    the same one-batch, one-card plan shape and differs only in the verify: command under test.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch_text = (
+            "# Batch: alpha\n\n"
+            "```yaml\n"
+            f"task: test\nbatch: alpha\ncards: 1\nverify: {verify_command}\ndepends-on: []\n"
+            "```\n\n"
+            "## Cards\n\n"
+            "### Card 1: card 1\n\n"
+            "- **Context:** none\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:** none\n"
+            "- **Requirements:**\n  See scope.\n"
+            "- **Commit:** feat(alpha): card 1\n"
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch_text)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        return [e for e in result if e["check"] == "verify-full-suite"]
+
+
+def test_check_verify_full_suite_dotnet_test_bare_is_error() -> int:
+    """Dirty: bare 'dotnet test' with no target and no --filter -> one verify-full-suite error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test")
+    try:
+        assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+        assert "dotnet test" in check_full_suite[0]["message"]
+        print("PASS test_check_verify_full_suite_dotnet_test_bare_is_error")
+        return 0
+    except AssertionError as exc:
+        print(f"FAIL test_check_verify_full_suite_dotnet_test_bare_is_error: {exc}", file=sys.stderr)
+        return 1
+
+
+def test_check_verify_full_suite_dotnet_test_solution_target_is_error() -> int:
+    """Dirty: 'dotnet test MySolution.sln' names a solution, not a project -> one error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test MySolution.sln")
+    try:
+        assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+        assert "dotnet test" in check_full_suite[0]["message"]
+        print("PASS test_check_verify_full_suite_dotnet_test_solution_target_is_error")
+        return 0
+    except AssertionError as exc:
+        print(f"FAIL test_check_verify_full_suite_dotnet_test_solution_target_is_error: {exc}", file=sys.stderr)
+        return 1
+
+
+def test_check_verify_full_suite_dotnet_test_solution_filter_target_is_error() -> int:
+    """Dirty: 'dotnet test Backend.slnf' names a solution filter -> one error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test Backend.slnf")
+    try:
+        assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+        assert "dotnet test" in check_full_suite[0]["message"]
+        print("PASS test_check_verify_full_suite_dotnet_test_solution_filter_target_is_error")
+        return 0
+    except AssertionError as exc:
+        print(
+            f"FAIL test_check_verify_full_suite_dotnet_test_solution_filter_target_is_error: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+
+def test_check_verify_full_suite_dotnet_test_only_option_values_is_error() -> int:
+    """Dirty: 'dotnet test --nologo -c Release' -- Release is a value, not a target -> one error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test --nologo -c Release")
+    try:
+        assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+        assert "dotnet test" in check_full_suite[0]["message"]
+        print("PASS test_check_verify_full_suite_dotnet_test_only_option_values_is_error")
+        return 0
+    except AssertionError as exc:
+        print(f"FAIL test_check_verify_full_suite_dotnet_test_only_option_values_is_error: {exc}", file=sys.stderr)
+        return 1
+
+
+def test_check_verify_full_suite_dotnet_test_compound_segment_is_error() -> int:
+    """Dirty: 'dotnet build X.sln && dotnet test' -- the test segment is unscoped -> one error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet build X.sln && dotnet test")
+    try:
+        assert len(check_full_suite) == 1, f"expected 1 error, got {len(check_full_suite)}: {check_full_suite}"
+        assert "dotnet test" in check_full_suite[0]["message"]
+        print("PASS test_check_verify_full_suite_dotnet_test_compound_segment_is_error")
+        return 0
+    except AssertionError as exc:
+        print(f"FAIL test_check_verify_full_suite_dotnet_test_compound_segment_is_error: {exc}", file=sys.stderr)
+        return 1
+
+
+def test_check_verify_full_suite_dotnet_test_project_name_target_is_ok() -> int:
+    """Clean: 'dotnet test NORCE.Models.Tests --nologo -clp:ErrorsOnly' names a project -> no error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test NORCE.Models.Tests --nologo -clp:ErrorsOnly")
+    if check_full_suite:
+        print(
+            f"FAIL test_check_verify_full_suite_dotnet_test_project_name_target_is_ok: "
+            f"unexpected: {check_full_suite}",
+            file=sys.stderr,
+        )
+        return 1
+    print("PASS test_check_verify_full_suite_dotnet_test_project_name_target_is_ok")
+    return 0
+
+
+def test_check_verify_full_suite_dotnet_test_option_before_target_is_ok() -> int:
+    """Clean: 'dotnet test -c Release My.Tests.csproj' names a project after an option -> no error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test -c Release My.Tests.csproj")
+    if check_full_suite:
+        print(
+            f"FAIL test_check_verify_full_suite_dotnet_test_option_before_target_is_ok: "
+            f"unexpected: {check_full_suite}",
+            file=sys.stderr,
+        )
+        return 1
+    print("PASS test_check_verify_full_suite_dotnet_test_option_before_target_is_ok")
+    return 0
+
+
+def test_check_verify_full_suite_dotnet_test_solution_with_filter_is_ok() -> int:
+    """Clean: 'dotnet test MySolution.sln --filter Category=Unit' -- --filter present -> no error."""
+    check_full_suite = _dotnet_test_full_suite_findings("dotnet test MySolution.sln --filter Category=Unit")
+    if check_full_suite:
+        print(
+            f"FAIL test_check_verify_full_suite_dotnet_test_solution_with_filter_is_ok: "
+            f"unexpected: {check_full_suite}",
+            file=sys.stderr,
+        )
+        return 1
+    print("PASS test_check_verify_full_suite_dotnet_test_solution_with_filter_is_ok")
+    return 0
 
 
 def test_check_verify_full_suite_bare_pytest_without_filter_is_error() -> int:
@@ -13916,8 +14058,16 @@ def main() -> int:
         # verify-full-suite: language-aware unbounded-verify guard (#881)
         test_check_verify_full_suite_go_test_dotdotdot_without_run_is_error,
         test_check_verify_full_suite_go_test_dotdotdot_with_run_is_ok,
-        test_check_verify_full_suite_dotnet_test_without_filter_is_error,
+        test_check_verify_full_suite_dotnet_test_project_target_is_ok,
         test_check_verify_full_suite_dotnet_test_with_filter_is_ok,
+        test_check_verify_full_suite_dotnet_test_bare_is_error,
+        test_check_verify_full_suite_dotnet_test_solution_target_is_error,
+        test_check_verify_full_suite_dotnet_test_solution_filter_target_is_error,
+        test_check_verify_full_suite_dotnet_test_only_option_values_is_error,
+        test_check_verify_full_suite_dotnet_test_compound_segment_is_error,
+        test_check_verify_full_suite_dotnet_test_project_name_target_is_ok,
+        test_check_verify_full_suite_dotnet_test_option_before_target_is_ok,
+        test_check_verify_full_suite_dotnet_test_solution_with_filter_is_ok,
         test_check_verify_full_suite_bare_pytest_without_filter_is_error,
         test_check_verify_full_suite_bare_python_m_pytest_without_filter_is_error,
         test_check_verify_full_suite_pytest_with_k_filter_is_ok,
