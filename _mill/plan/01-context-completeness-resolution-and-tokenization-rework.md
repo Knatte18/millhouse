@@ -237,13 +237,20 @@ the plan.
   `dict[str, tuple[list[Path], Path | None]]` to `dict[str, list[Path]]`), derive
   `candidate_files = list(dict.fromkeys(cited_files_map.values()))` and build
   `path_to_token: dict[Path, str] = {}` via `for token, path in cited_files_map.items():
-  path_to_token.setdefault(path, token)` (first-seen wins on a rare duplicate-path collision). In the
-  symbol branch's resolution call site, replace the current cache-check-then-call wrapper (`if
-  search_key in search_cache: matches, producing_root = search_cache[search_key] else: matches,
-  producing_root = _resolve_symbol_files(search_key, project_root, root, git_root, search_cache)`)
-  with a single unconditional call `matches = _resolve_symbol_files(search_key, candidate_files,
-  search_cache)` — `_resolve_symbol_files` already returns the cached value directly, so the
-  surrounding pre-check is now redundant. Replace
+  path_to_token.setdefault(path, token)` (since `cited_files_map` is itself built by iterating
+  `sorted(raw_tokens)`, this keeps whichever citing token sorts ALPHABETICALLY FIRST among
+  duplicate-path spellings on a rare collision — not plan/encounter order). In the symbol branch's
+  resolution call site, KEEP the existing caller-side cache-check-then-call shape — only its callee
+  arguments change: `if search_key in search_cache: matches = search_cache[search_key] else: matches
+  = _resolve_symbol_files(search_key, candidate_files, search_cache)` (drop the `producing_root`
+  half of the old two-tuple unpacking on both sides, nothing else). Do not remove this caller-side
+  pre-check: `test_check_context_completeness_symbol_cache_invoked_once_per_key`
+  (`plugins/mill/unit_tests/test-plan-validate.py`) monkey-patches the module-level
+  `_resolve_symbol_files` function object itself and asserts it is CALLED exactly once across two
+  cards citing the same symbol — `_resolve_symbol_files`'s own internal `if search_key in cache`
+  check only prevents a redundant filesystem walk, it does not prevent a second CALL to the
+  (monkey-patched) function object, so removing the caller-side pre-check would make this existing
+  test see 2 calls instead of 1 and fail, even though no extra filesystem work would occur. Replace
   `canonical = matches[0].relative_to(producing_root).as_posix()` with
   `canonical = path_to_token[matches[0]]`.
 
