@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import subprocess
 import _subprocess_util
@@ -61,7 +62,7 @@ def _collect_task_intent(project_root: Path) -> str:
 
     Returns a string containing excerpts from this branch's _mill/discussion.md and _mill/plan/*.md
     that describe the branch's intent.
-    Extracts the top YAML block and the Edits/Creates/Deletes bullets from each plan file.
+    Extracts the top YAML block and the Edits/Creates/Deletes/Moves bullets from each plan file.
     Returns empty string if _mill directory does not exist.
     """
     mill_dir = project_root / "_mill"
@@ -90,7 +91,7 @@ def _collect_task_intent(project_root: Path) -> str:
             header_lines: list[str] = []
             lines = plan_content.splitlines()
             for i, line in enumerate(lines):
-                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes):\*\*", line):
+                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes|Moves):\*\*", line):
                     header_lines.append(line)
                     # Check for sub-bullets
                     j = i + 1
@@ -275,6 +276,33 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     return 0
 
 
+def _generous_terminal_env() -> dict:
+    """
+    Build a subprocess environment with a generous floor on ``COLUMNS``/``LINES``.
+
+    A headless orchestrating process (this script) inherits no real terminal geometry, unlike an
+    interactive shell.
+    A ``verify:`` command that drives a tmux-based smoke test can misjudge available pane space
+    from that absent/tiny geometry and fail with a "no space for new pane" error unrelated to the
+    actual code under test.
+    Raises ``COLUMNS``/``LINES`` to a generous floor only when the inherited value is smaller,
+    leaving any larger inherited value untouched;
+    a no-op for any verify command that does not consult terminal geometry.
+
+    Returns:
+        A copy of ``os.environ`` with ``COLUMNS``/``LINES`` raised to the floor when needed.
+    """
+    env = dict(os.environ)
+    for var, floor in (("COLUMNS", 220), ("LINES", 50)):
+        try:
+            current = int(env.get(var, "0"))
+        except ValueError:
+            current = 0
+        if current < floor:
+            env[var] = str(floor)
+    return env
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a Sonnet sub-agent for merge-in conflict or verify-fix work."
@@ -385,6 +413,7 @@ def main(argv=None) -> int:
                 capture_output=True,
                 text=True,
                 cwd=project_root,
+                env=_generous_terminal_env(),
                 **_run_kwargs,
             )
             # Case A: verify passes with no fixer needed (initial verify was 0)
@@ -433,7 +462,15 @@ def main(argv=None) -> int:
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
-    model_name = cfg.get("merge", {}).get("model") or implementer_cfg.get("model", "haiku")
+    merge_cfg = cfg.get("merge", {})
+    if args.mode == "conflicts":
+        model_name = (
+            merge_cfg.get("conflicts_model")
+            or merge_cfg.get("model")
+            or implementer_cfg.get("model", "haiku")
+        )
+    else:
+        model_name = merge_cfg.get("model") or implementer_cfg.get("model", "haiku")
     try:
         registry = _reviewers.load(git_root)
         impl_spec = _reviewers.resolve(registry, model_name)
@@ -515,6 +552,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 
@@ -583,6 +621,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 
