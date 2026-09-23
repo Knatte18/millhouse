@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-validate-dotnet-scoping
+phase: approved-status-path-coercion
 slug: mill-plan-verify-implement-misc-r3
 branch: hanf/mill-plan-verify-implement-misc-r3
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-23T12:00:02Z'
 planned  '2026-09-23T12:00:06Z'
 implementing  '2026-09-23T12:00:34Z'
 approved-plan-validate-dotnet-scoping  '2026-09-23T12:05:27Z'
+approved-status-path-coercion  '2026-09-23T12:08:30Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: 6b2519973411a21eddaf8767e722874150a0edce
     verify_baseline_failures: []
   - name: status-path-coercion
-    state: running
+    state: approved
     implementer_session: 46ac5e77-0b5d-4e2a-8c7a-30e2501c4e2d
     start_sha: 4e6626087dbdc5d8065f7023ba931c6ab4f2a1e1
+    commit_sha: 5e2de5913cb3297d348bfb918d64ad76d888c122
     verify_baseline_failures: []
   - name: verify-guidance-docs
     state: pending
