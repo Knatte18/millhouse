@@ -110,12 +110,33 @@ whether another patch round is still the right call, or whether the check needs 
 - Decision: `_check_context_completeness` and `_compute_declared_symbols_union` stop restarting
   `_BACKTICK_RE.finditer` fresh on each physical line of the Requirements body. Instead, build the
   fence/blockquote-filtered text (skipping quoted lines exactly as today) as one continuous joined string
-  (physical lines joined in order), and run token extraction and every exemption-check helper
-  (`_is_prohibition_exempt`, `_is_non_dependency_negation_exempt`, `_is_contrast_citation_exempt`,
-  `_is_cross_card_ownership_exempt`, `_is_illustrative_output_exempt`, `_is_literal_enumeration_exempt`,
-  `_clause_bounds`) against that joined text. The emitted error dict's `"line"` field switches from "the
-  physical line's stripped text" to "the physical line containing the token match's start offset" (a
-  line-start-offset lookup), preserving today's error-message granularity.
+  (physical lines joined in order), with a line-start-offset lookup table recording which original
+  physical line each character position falls in.
+  Token EXTRACTION (`_BACKTICK_RE.finditer`) always runs against this joined text — this is what fixes
+  the backtick-line-wrap corruption bug. Which text an EXEMPTION helper is checked against then splits
+  by helper, not uniformly:
+  - `_is_prohibition_exempt` runs against the joined text — its own docstring already documents
+    "Nested-bullet/multi-line prohibitions... are not handled" as a known, wanted-but-unimplemented gap,
+    so widening it is a deliberate fix, not an accidental scope change.
+  - `_is_non_dependency_negation_exempt`, `_is_contrast_citation_exempt`, and `_clause_bounds` also run
+    against the joined text — they are already clause-scoped (bounded by comma/semicolon/colon/period via
+    `_clause_bounds`), so cross-physical-line reach is a natural, low-risk extension of an already-bounded
+    check, not a new line-wide blast radius.
+  - `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, and `_is_illustrative_output_exempt`
+    keep running against ONLY the token's own originating physical line (looked up via the offset table),
+    exactly as today. Each of these three is an unconditional, unbounded line-wide substring/pattern
+    match with no clause scoping, and each one's own docstring explicitly calibrates its accepted
+    false-positive/negative tradeoff assuming single-physical-line scope (`_is_literal_enumeration_exempt`:
+    "3+ backtick tokens... on the same line"; `_is_cross_card_ownership_exempt`: accepts its line-wide
+    tradeoff explicitly for "an unusually long Requirements: line"; `_is_illustrative_output_exempt`: scans
+    "anywhere on the line"). Widening any of these three to the whole joined Requirements body would let one
+    sentence's literal-enumeration/ownership/output-verb phrase exempt every backtick token elsewhere in
+    that card's Requirements text, including an unrelated genuine dependency several sentences away — a new
+    false-negative class this task's own goal (fixing #1131's false positives without regressing coverage)
+    does not want.
+  The emitted error dict's `"line"` field switches from "the physical line's stripped text" to "the
+  physical line containing the token match's start offset" (via the same offset table), preserving today's
+  error-message granularity.
 - Rationale: during exploration I traced #1122 back to its real source plan
   (`hanf/mill-go-merge-in-orchestration-robustness-r2`, batch 1 card 2) and found the automated check
   missed `millpy-fix.py` for a reason *not* stated in the issue report: a single-backtick inline-code span
@@ -133,7 +154,14 @@ whether another patch round is still the right call, or whether the check needs 
   independent defect closed by the same change.
 - Rejected: detect-and-suppress (treat an odd-backtick-count line as a continuation and skip further
   matches on it) — stops the corruption from spreading past that line, but doesn't recover the swallowed
-  token, so the exact `millpy-fix.py` incident traced above would still go undetected.
+  token, so the exact `millpy-fix.py` incident traced above would still go undetected. Also rejected:
+  running every exemption helper uniformly against the whole joined body (this discussion's own original
+  draft) — flagged in discussion-review round 1 as silently widening three deliberately line-scoped,
+  unconditional exemptions (`_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`,
+  `_is_illustrative_output_exempt`) to whole-Requirements-field scope, a new false-negative class with no
+  test coverage; the per-helper split above (joined text for extraction, `_is_prohibition_exempt`, and the
+  already clause-scoped helpers; originating-physical-line only for the three unconditional line-wide ones)
+  is the fix.
 
 ### literal-enumeration-majority
 
@@ -210,6 +238,12 @@ whether another patch round is still the right call, or whether the check needs 
   path-shaped dependency later on the closing line — must now be flagged. Also cover the
   already-documented `_is_prohibition_exempt` multi-line-prohibition limitation as a bonus regression
   test, since the refactor incidentally fixes it too.
+- `line-join-refactor` also needs a negative-direction test proving the per-helper split holds: a card
+  whose Requirements text has a genuine unlisted dependency on one physical line and, on a *different*
+  physical line elsewhere in the same field, an unrelated phrase that would trigger
+  `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, or `_is_illustrative_output_exempt`
+  — the genuine dependency must still be flagged, proving the whole-body-join scope change didn't silently
+  widen these three exemptions' reach past their own originating line (discussion-review round 1 finding).
 - Each of the 6 filed issues should get at least one regression test using that issue's own reported repro
   text (adapted to this repo's fixture conventions), not just a synthetic minimal case — several of these
   bugs (especially #1122) only manifested with the exact surrounding prose shape.
