@@ -403,6 +403,7 @@ This phase is the bootstrapper exception: mill-setup cannot use `$MILL_PYTHON` i
 All other mill skills use `"$MILL_PYTHON"`.
 
 This phase also merges the mill subagent's tool surface (`_claude_settings.MILL_SUBAGENT_TOOLS`) into `permissions.allow` in the same file, so a background `mill-implementer`/`mill-reviewer` dispatch doesn't stall on an interactive tool-permission prompt that nothing can answer (#631).
+It also reconciles `permissions.deny`: `_claude_settings.reconcile_destructive_denylist` retires target-blind `rm -rf` deny rules (`RETIRED_DENY`) and replaces them with a scoped set of catastrophic-target rules (`DESTRUCTIVE_DENY`) — see `_claude_settings.py`.
 Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
 
 ```bash
@@ -427,11 +428,13 @@ else:
 
 _claude_settings.merge_permission_allowlist(settings_path, _claude_settings.MILL_SUBAGENT_TOOLS)
 print(f'Permission allowlist merged: {_claude_settings.MILL_SUBAGENT_TOOLS}')
+_claude_settings.reconcile_destructive_denylist(settings_path)
+print('Destructive denylist reconciled')
 "
 ```
 
-Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line and the permission-allowlist merge outcome.
-After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
+Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line, the permission-allowlist merge outcome, and the denylist-reconciliation outcome.
+After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed. Destructive denylist reconciled in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
 
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`

@@ -338,6 +338,11 @@ def _case_h_nonzero_exit_without_signatures_still_reruns() -> None:
     A command that fails without emitting any line `_extract_failure_signatures` recognizes (a build
     break, a crashed runner) is still re-run, so a signature that only surfaces on the second
     attempt reaches the baseline.
+
+    Since #1060, `_signatures_for_pair` threads each run's own return code into
+    `_extract_failure_signatures`, so run 1's non-test-format failure (no recognized FAIL-marker
+    line) now synthesizes a `NONZERO_EXIT:` signature instead of contributing nothing -- the union
+    carries both that synthetic entry and run 2's real FAIL-marker line.
     """
     checkout_path = Path("/fake/checkout")
     project_root = Path("/fake/project")
@@ -358,11 +363,15 @@ def _case_h_nonzero_exit_without_signatures_still_reruns() -> None:
     assert len(runs) == 2, (
         f"expected a re-run after a non-zero exit with no signatures, got {runs!r}"
     )
-    assert result["broken-batch"] == ["--- FAIL: TestLate (0.03s)"], result["broken-batch"]
+    assert result["broken-batch"] == [
+        "NONZERO_EXIT: exit 1: error CS0246: the type or namespace could not be found",
+        "--- FAIL: TestLate (0.03s)",
+    ], result["broken-batch"]
 
     print(
         "PASS: compute_batch_baselines still re-runs a non-zero-exit command "
-        "that emitted no recognized failure signatures"
+        "that emitted no recognized failure signatures, now synthesizing a "
+        "NONZERO_EXIT signature for the otherwise-empty first run"
     )
 
 
@@ -673,6 +682,73 @@ def _case_n_on_demand_checks_out_pinned_sha_and_tears_down() -> None:
         )
 
 
+def _case_o_returncode_synthesizes_signature_for_non_test_failure() -> None:
+    """
+    Case (o) (#1060): a command that fails ahead of its own test stage (e.g. `go vet ./... && go
+    test ./...` failing at `go vet`) emits no line `_extract_failure_signatures` recognizes on its
+    own -- `_signatures_for_pair` now threads each run's own return code through, so the pair still
+    yields a synthetic `NONZERO_EXIT:` signature instead of an empty list.
+
+    Also documents the accepted limitation (see Card 1's Requirements / this batch's Batch Tests):
+    when the two corroboration runs of a non-deterministic non-test failure produce different first
+    output lines, the union persists two distinct synthetic entries rather than deduping to one.
+    No cross-run normalization is added for this -- the target class this card fixes (a
+    compiler/linter diagnostic) is deterministic across runs on identical content, so its first line
+    does not vary.
+    """
+    checkout_path = Path("/fake/checkout")
+    project_root = Path("/fake/project")
+
+    # Both runs produce the identical non-test-format failure -- the union dedups to one entry.
+    with patch(
+        "_verify_baseline._run_verify_in",
+        return_value=(1, "vet: undeclared name: foo\n"),
+    ):
+        result = compute_batch_baselines(
+            [("vet-batch", "go vet ./... && go test ./...", None)],
+            checkout_path,
+            project_root,
+        )
+
+    assert result["vet-batch"] == [
+        "NONZERO_EXIT: exit 1: vet: undeclared name: foo",
+    ], result["vet-batch"]
+
+    print(
+        "PASS: case o (deterministic) - _signatures_for_pair synthesizes and dedups "
+        "a NONZERO_EXIT signature for a repeatable non-test-format failure"
+    )
+
+    # Accepted limitation: a non-deterministic non-test failure whose first output line differs
+    # across the two corroboration runs persists as two distinct synthetic entries.
+    _outputs = iter(
+        [
+            (1, "flaky tool crash: seed=1234\n"),
+            (1, "flaky tool crash: seed=5678\n"),
+        ]
+    )
+
+    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del command, cwd, timeout_seconds
+        return next(_outputs)
+
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(
+            [("flaky-nontest-batch", "flaky-tool", None)], checkout_path, project_root
+        )
+
+    assert result["flaky-nontest-batch"] == [
+        "NONZERO_EXIT: exit 1: flaky tool crash: seed=1234",
+        "NONZERO_EXIT: exit 1: flaky tool crash: seed=5678",
+    ], result["flaky-nontest-batch"]
+
+    print(
+        "PASS: case o (accepted limitation) - two runs of a non-deterministic "
+        "non-test failure persist as two distinct NONZERO_EXIT entries, "
+        "documented as accepted rather than normalized away"
+    )
+
+
 def main() -> int:
     try:
         # Case 1: core.longpaths=true is always present in the worktree-add argv.
@@ -754,6 +830,7 @@ def main() -> int:
         _case_l_timeout_propagates()
         _case_m_no_timeout_by_default()
         _case_n_on_demand_checks_out_pinned_sha_and_tears_down()
+        _case_o_returncode_synthesizes_signature_for_non_test_failure()
 
         print("All _verify_baseline unit tests passed.")
         return 0

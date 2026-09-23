@@ -116,26 +116,32 @@ Immediately after that bullet:
 - When `contract["embed_body"]` is true, write that item's `body` text immediately after the bullet (and after the hint line, when one was written).
 
 1. **New tasks.**
-   For each grouped new task, concatenate every source item's block (in grouping order) to form the full task body, then call:
+   For each grouped new task, concatenate every source item's block (in grouping order) to form the full task body.
+   Write `slug`, `title`, `brief` (the theme statement), and `body` to a fresh temp JSON file via the `Write` tool at `.scratch/mill-triage-upsert-<n>.json` (a JSON object with keys `slug`, `title`, `brief`, `body`; `<n>` a per-call counter starting at 1, one file per new task), then call:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
    from wiki import _client
+   data = json.load(open('.scratch/mill-triage-upsert-<n>.json', encoding='utf-8'))
    _client.upsert_task(
        <wiki_path>,
-       '<slug>',
-       title='<title>',
-       brief='<theme>',
-       body='''<concatenated per-item blocks>'''
+       data['slug'],
+       title=data['title'],
+       brief=data['brief'],
+       body=data['body']
    )
    "
    ```
-   Optionally, call `_client.upsert_tasks_batch(wiki_path, tasks, message=...)` to create all grouped tasks in one commit instead of sequential `upsert_task` calls.
+   `<wiki_path>` stays as direct literal substitution — it is an agent-resolved filesystem path, never derived from source-item text, and carries no injection risk. The temp file's path — never the item's own `title`/`brief`/`body`/`slug` content — is the only piece of item-derived text substituted into the command, so no source item's text can break the command's quoting.
+
+   Optionally, call `_client.upsert_tasks_batch(wiki_path, tasks, message=...)` to create all grouped tasks in one commit instead of sequential `upsert_task` calls. Apply the identical temp-file substitution here: write the `tasks` list to one temp JSON file and `json.load()` it inside the same script, never inline it as literal Python source.
    The daemon commits and pushes automatically on each mutation.
 
 2. **Fold-ins.**
-   For each fold-in candidate:
+   For each fold-in candidate, write the per-item block (built per the paragraph above, under the `- Sources: ...` heading) to a fresh temp JSON file via the `Write` tool at `.scratch/mill-triage-foldin-<n>.json` (a JSON object `{"block": "<this item per-item block>"}`; `<n>` a per-call counter starting at 1, one file per fold-in candidate), then call:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
    from wiki import _client
    task = _client.get_task(<wiki_path>, '<target_slug>')
    if task is None:
@@ -146,10 +152,13 @@ Immediately after that bullet:
        if task.get('status') is not None or task.get('deferred', False):
            print('ERROR: Cannot fold into <target_slug>: task is not unclaimed')
        else:
-           new_body = (task['body'] or '') + '<this item per-item block>'
+           block = json.load(open('.scratch/mill-triage-foldin-<n>.json', encoding='utf-8'))['block']
+           new_body = (task['body'] or '') + block
            _client.upsert_task(<wiki_path>, '<target_slug>', body=new_body)
    "
    ```
+   `<target_slug>` stays as direct literal substitution — like `<wiki_path>`, it is agent-controlled (an existing task slug already matching `[a-z][a-z0-9-]*`, established at Step 3), never derived from arbitrary source-item text. The temp file's path is the only item-derived text on the command line — the item's own block content (which embeds `item["title"]`) never appears as literal shell text.
+
    Note: this appends to the task's `body` field, not its `brief` field. `/mill-fold` appends its equivalent bullet to `brief`;
    this skill matches today's `mill-ghissues-to-tasks` body-placement behavior instead, only reusing `/mill-fold`'s bullet-string format (`- Sources: <ref> — <title>`).
 
