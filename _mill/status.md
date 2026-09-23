@@ -48,7 +48,9 @@ batches:
     commit_sha: 6a6f242ec8843123abd91203a763b2cb7639366b
     verify_baseline_failures: []
   - name: verify-baseline-core
-    state: pending
+    state: running
+    implementer_session: 6ec9c215-d097-4d22-8518-d45487f1f901
+    start_sha: 3925a07b36991e2b85ecc8d8832653d471526bf7
     verify_baseline_failures: []
   - name: cleanup-orphan-removal
     state: pending
