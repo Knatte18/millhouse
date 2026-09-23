@@ -71,93 +71,40 @@ from _implementer_common import _extract_failure_signatures, _posix_shell_run_ar
 
 
 def compute_baseline(
-    project_root: Path,
-    git_root: Path,
-    parent_branch: str,
+    cwd: Path,
     module_wide_verify_cmd: str,
     *,
-    cwd_override_relative: Path | None = None,
     timeout_seconds: float | None = None,
-) -> str:
+) -> tuple[str, list[str]]:
     """
-    Compute whether the parent branch's own module-wide verify already fails.
+    Compute whether the module-wide verify already fails at `cwd`.
 
-    Implementation, in order:
-        1. Resolve the parent branch's current tip SHA.
-        2. Create a fresh, uniquely-named subdirectory under `<project_root>/.scratch/` as the
-            transient worktree target.
-        3. `git worktree add <tmp-path> <parent-sha>` (detached HEAD, no new branch) at that SHA.
-        4. From here on, everything is wrapped in try/finally so the transient worktree is torn down
-            via `_worktree.remove_safe` unconditionally -- on success, on a verify failure, and on
-            any exception raised inside the try block.
-        5. Reuse the task worktree's already-installed gitignored dependency state: for each name in
-            `_DEPENDENCY_DIR_CANDIDATES` that exists at the task worktree's top level, junction it
-            into the transient worktree.
-        6. Run `module_wide_verify_cmd` with cwd set to the transient worktree.
-            Exit code 0 -> return "clean" immediately.
-        7. On a non-zero exit, re-run the same command in the same transient worktree once more (the
-            flakiness-guard retry).
-            A pass here means the first failure was a spurious fluke -> return "clean".
-        8. If the retry also fails, run `module_wide_verify_cmd` once more in
-        `project_root` itself (the task worktree -- always safe, no
-        mutation) as a control check.
-            If the control run also fails,
-        return "pre-existing-failures" -- both flakiness and a
-        deterministic path/environment mismatch have been ruled out.
-            If
-        the control run passes, the two transient-worktree failures are
-        path/environment-induced (not a real pre-existing failure): warn
-        on stderr and return "clean" instead.
+    `cwd` is the caller's already-resolved absolute working directory -- resolved the same way
+    `_run_verify_gate` resolves its own effective cwd: an explicit override if present, else
+    `git_root`.
+    There is no checkout: at `--stage baseline` time (before batch 1's implementer is ever
+    dispatched) `cwd`'s content already equals the merge-base content, per Decision `capture-site`
+    in `_mill/discussion.md`.
+
+    Delegates the run-then-retry algorithm to `_run_module_wide_verify_algorithm`.
 
     Args:
-        project_root: Absolute path to the task worktree root (where `.scratch/` lives and where
-            gitignored dependency dirs are probed for reuse).
-        git_root: Absolute path to the repo root `git` commands run against (passed to `git -C
-            <git_root> ...` for rev-parse and worktree add/remove).
-        parent_branch: Name of the parent branch to snapshot (e.g. "main").
-        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both the
-            transient worktree and (for the control check) the task worktree.
-        cwd_override_relative: Hub-relative path fragment (not an absolute cwd) resolved by
-            `_plan_dag.parse_verify_field` when the overview's `verify:` mapping resolves to `cwd:
-            hub` in a nested-hub-layout repo.
-            When set, both the transient-worktree verify subprocess's cwd and the
-                dependency-junction targets are re-anchored to `tmp_path / cwd_override_relative` --
-                the temp checkout's equivalent of the real worktree's hub sub-directory -- instead
-                of `tmp_path` (which mirrors `git_root`, not `hub_root`).
-            When None (plain-string `verify:` or a `cwd: git_root` resolution), behavior is
-                unchanged: everything runs at `tmp_path` directly.
+        cwd: The already-resolved absolute working directory to run `module_wide_verify_cmd` in.
+        module_wide_verify_cmd: The module-wide verify command string to run, verbatim.
         timeout_seconds: Per-run wall-clock ceiling for each verify run, or None for no ceiling.
-            Applied to each of the algorithm's up-to-three runs individually, not to their total.
+            Applied to each of the algorithm's up-to-two runs individually, not to their total.
 
     Returns:
-        The literal string "clean" or "pre-existing-failures".
+        A `(verdict, signatures)` tuple: `verdict` is `"clean"` or `"pre-existing-failures"`;
+        `signatures` is the deduplicated, order-preserving union of the raw failure-signature lines
+        extracted from every run actually performed.
 
     Raises:
-        RuntimeError: `git rev-parse` or `git worktree add` failed.
-        OSError: junction creation failed.
-        ValueError: link_path already exists (dependency dir collision).
-        subprocess.TimeoutExpired: A verify run exceeded `timeout_seconds`. The transient worktree
-            is still torn down by the `finally` below;
-            the caller applies the same "leave the baseline unset" fail-safe it applies to the
-            infrastructure failures above.
+        subprocess.TimeoutExpired: A verify run exceeded `timeout_seconds`. The caller applies the
+            same "leave the baseline unset" fail-safe it applies to a genuine
+            "pre-existing-failures" verdict.
     """
-    tmp_path = _checkout_parent_branch(project_root, git_root, parent_branch)
-
-    # The temp checkout at tmp_path mirrors git_root, not hub_root.
-    # When the verify subprocess must run one or more levels below that (cwd: hub in a nested-hub-layout repo), both the subprocess cwd and the dependency junctions need to be re-anchored to the equivalent hub sub-directory inside the temp checkout.
-    # Flat-layout behavior (tmp_path directly) is unchanged when cwd_override_relative is None.
-    effective_tmp_path = (
-        tmp_path / cwd_override_relative if cwd_override_relative is not None else tmp_path
-    )
-
-    try:
-        _link_dependency_dirs(project_root, effective_tmp_path)
-
-        return _run_module_wide_verify_algorithm(
-            module_wide_verify_cmd, effective_tmp_path, project_root, timeout_seconds
-        )
-    finally:
-        _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
+    return _run_module_wide_verify_algorithm(module_wide_verify_cmd, cwd, timeout_seconds)
 
 
 def _run_module_wide_verify_algorithm(
