@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-prose-cleanup
+phase: self-resolved-verify-logic
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-09-23T10:41:44Z'
 implementing  '2026-09-23T10:42:29Z'
 approved-deactivate-call-sites  '2026-09-23T10:48:58Z'
 approved-prose-cleanup  '2026-09-23T10:52:31Z'
+self-resolved-verify-logic  '2026-09-23T10:57:33Z'
 ```
 
 ## Batches

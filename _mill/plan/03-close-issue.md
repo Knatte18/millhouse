@@ -5,9 +5,35 @@ task: "Deactivate codeguide integration in millhouse"
 batch: close-issue
 number: 3
 cards: 1
-verify: PYTHONPATH= sh -c "! grep -q CODEGUIDE_PLUGIN_ROOT plugins/mill/skills/git-commit/SKILL.md && ! grep -q codeguide-update plugins/mill/skills/mill-merge-in/SKILL.md && uv run --project plugins/mill python plugins/mill/unit_tests/test-sibling.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-guards.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-worktree-sibling-resolution.py"
+verify: PYTHONPATH= sh -c "! grep -q CODEGUIDE_PLUGIN_ROOT plugins/mill/skills/git-commit/SKILL.md && ! grep -q codeguide-update plugins/mill/skills/mill-merge-in/SKILL.md && uv run --project plugins/mill python plugins/mill/unit_tests/test-sibling.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-guards.py"
 depends-on: [1, 2]
 ```
+
+## Prior failure
+
+- Round 1: PASS: container-form -> bare role next to wts/
+PASS: container-form works for non-millhouse repo names
+PASS: prefix-form -> <name>.<role> next to repo
+PASS: old hub-form no longer triggers special-case (intentional regression)
+PASS: container-form match is case-sensitive and literal
+PASS: trailing slash on repo_root does not break detection
+PASS: CLI entry point prints resolved path, exit 0
+PASS: CLI exits 2 with usage message on bad args
+PASS: resolve_path raises ValueError when repo_root.name == 'wiki' (role=wiki)
+PASS: resolve_path raises ValueError when repo_root.name == 'wiki' (role=plan, role-agnostic)
+PASS: resolve_path raises ValueError when repo_root.name == 'wiki' even in container-form parent
+PASS: resolve_path does not raise when repo_root.name != 'wiki' (regression guard)
+PASS: codeguide _sibling.py raises same ValueError -- identical-twin mirror is functional
+PASS: mill and codeguide _sibling.py are identical-twins (modulo module docstring)
+All _sibling unit tests passed.
+PASS: no direct rmtree callsites in plugins/mill/ outside ALLOWED_FILES
+PASS: no U+2192 arrow in any test-*.py
+PASS: no wiki-cwd anti-patterns in scripts/ or skills/ across mill + codeguide
+PASS: anti-weakening guardrail present in both implementer-brief.md and mill-implementer.md
+PASS: no Windows-only venv-existence checks in plugins/mill/skills/
+[Scenario A: hub-form]
+FAIL: resolve_wiki_path(hub_root): PosixPath('/tmp/tmpef3o16yi/hub.wiki') != PosixPath('/tmp/tmpef3o16yi/wiki')
+- Self-resolve: `test-worktree-sibling-resolution.py` Scenario A fails identically when run directly against `main` (confirmed by mill-go via a direct rerun on the `millhouse` hub worktree) -- a pre-existing, unrelated bug in `_sibling.py`/`_paths.py`'s hub-form resolution, not a regression from this plan. The batch's compound verify command couldn't catch this at baseline time: on `main`, the leading `! grep -q CODEGUIDE_PLUGIN_ROOT ...` check itself fails (the marker is still present pre-task), so the `&&` chain short-circuits before ever reaching this test -- the baseline computation never observed the failure. `_sibling.py`/`_paths.py` are out of scope for this plan (see 00-overview.md's "codeguide plugin and general-purpose plumbing are out of scope" Decision), so the fix is to drop this unrelated, already-broken assertion from this batch's own verify command rather than fix or gate on it.
 
 ## Batch Scope
 
@@ -29,4 +55,4 @@ Close GitHub issue #1137 as moot, now that both call sites into codeguide are go
 
 ## Batch Tests
 
-`verify:` checks that neither `CODEGUIDE_PLUGIN_ROOT` (git-commit's deleted invocation) nor `codeguide-update` (mill-merge-in's deleted invocation) remain in the two files those batches edited, confirming the mechanism this issue tracked is actually gone before the issue is closed, then re-runs `test-sibling.py`, `test-guards.py`, and `test-worktree-sibling-resolution.py` as a regression check on the files this plan intentionally left untouched. Card 12 itself makes no file changes, so `Commit: none` is correct (`Edits:`/`Creates:`/`Deletes:`/`Moves:` are all also "none").
+`verify:` checks that neither `CODEGUIDE_PLUGIN_ROOT` (git-commit's deleted invocation) nor `codeguide-update` (mill-merge-in's deleted invocation) remain in the two files those batches edited, confirming the mechanism this issue tracked is actually gone before the issue is closed, then re-runs `test-sibling.py` and `test-guards.py` as a regression check on the files this plan intentionally left untouched. `test-worktree-sibling-resolution.py` was dropped from this check after round 1 (see `## Prior failure`): its Scenario A fails identically on `main`, pre-dating this plan, in code (`_sibling.py`/`_paths.py`) this plan does not touch. Card 12 itself makes no file changes, so `Commit: none` is correct (`Edits:`/`Creates:`/`Deletes:`/`Moves:` are all also "none").

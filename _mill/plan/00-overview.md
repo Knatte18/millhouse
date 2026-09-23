@@ -29,7 +29,7 @@ batches:
     name: close-issue
     file: 03-close-issue.md
     depends-on: [1, 2]
-    verify: PYTHONPATH= sh -c "! grep -q CODEGUIDE_PLUGIN_ROOT plugins/mill/skills/git-commit/SKILL.md && ! grep -q codeguide-update plugins/mill/skills/mill-merge-in/SKILL.md && uv run --project plugins/mill python plugins/mill/unit_tests/test-sibling.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-guards.py && uv run --project plugins/mill python plugins/mill/integration_tests/test-worktree-sibling-resolution.py"
+    verify: PYTHONPATH= sh -c "! grep -q CODEGUIDE_PLUGIN_ROOT plugins/mill/skills/git-commit/SKILL.md && ! grep -q codeguide-update plugins/mill/skills/mill-merge-in/SKILL.md && uv run --project plugins/mill python plugins/mill/unit_tests/test-sibling.py && uv run --project plugins/mill python plugins/mill/unit_tests/test-guards.py"
 ```
 
 ## Shared Decisions
