@@ -47,14 +47,20 @@ whether another patch round is still the right call, or whether the check needs 
   repo-wide fallback when the narrowed search finds nothing — treat as unresolvable, don't flag.
 - A refactor of `_check_context_completeness`'s (and `_compute_declared_symbols_union`'s) Requirements-text
   tokenization from per-physical-line to a single pass over the fence/blockquote-filtered text, joined
-  into one continuous string (see Decision `line-join-refactor`). This also fixes a previously
-  undocumented bug I traced during exploration (see below) and closes the "multi-line prohibition
-  phrasing not detected" limitation already noted in `_is_prohibition_exempt`'s own docstring.
+  into one continuous string (see Decision `line-join-refactor`). This fixes a previously undocumented
+  bug I traced during exploration (see below); it does NOT close `_is_prohibition_exempt`'s own documented
+  "multi-line prohibition phrasing not detected" limitation — that remains open and out of scope (see the
+  Decision for why).
 - `_symbol_candidate_shape`: strip a leading `identifier(: Type)? = ` assignment-target prefix before the
   `_RE_SYMBOL_SHAPE` match, mirroring the existing trailing-suffix stripping (fixes #1115).
-- `_compute_declared_symbols_union`: also capture a `modifier* identifier = value` inline declaration
-  form (e.g. `` `private const double StepDurationS = 10.0` ``), not just the current paren/brace-shaped
-  extraction (fixes #1119).
+- `_compute_declared_symbols_union`: also capture a `modifier+ identifier = value` inline declaration form
+  — one OR MORE modifier/type-annotation tokens required before the `=` (e.g.
+  `` `private const double StepDurationS = 10.0` ``), not just the current paren/brace-shaped extraction
+  (fixes #1119). The modifier requirement is not optional/zero-or-more: a bare `` `identifier = value` ``
+  span with no modifier/type token in front is ordinary prose citing an EXISTING symbol's current value
+  (e.g. `` `timeout = 30` ``), not a new inline declaration — matching that bare form too would silently
+  add an existing repo symbol's name to the plan-wide declared-symbols set and wrongly exempt a genuine
+  later citation of that same symbol anywhere else in the plan (caught in discussion-review round 4).
 - `_is_literal_enumeration_exempt`: change the trigger from "at least one non-shaped sibling token" to
   "non-shaped tokens are a majority of the line's backtick tokens" (fixes #1116 and #1122 — see Decision
   `literal-enumeration-majority`).
@@ -115,42 +121,50 @@ whether another patch round is still the right call, or whether the check needs 
   Token EXTRACTION (`_BACKTICK_RE.finditer`) always runs against this joined text — this is what fixes
   the backtick-line-wrap corruption bug. Which text an EXEMPTION helper is checked against then splits
   by helper, not uniformly:
-  - `_is_prohibition_exempt` runs against the joined text — its own docstring already documents
-    "Nested-bullet/multi-line prohibitions... are not handled" as a known, wanted-but-unimplemented gap,
-    so widening it is a deliberate fix, not an accidental scope change.
-  - `_is_non_dependency_negation_exempt`, `_is_contrast_citation_exempt`, and `_clause_bounds` also run
-    against the joined text, but `_clause_bounds`'s own boundary search is capped from crossing an
+  - `_is_non_dependency_negation_exempt` and `_is_contrast_citation_exempt` (both via `_clause_bounds`)
+    run against the joined text, but `_clause_bounds`'s own boundary search is capped from crossing an
     original physical-line/bullet break: in addition to the existing comma/semicolon/colon/period
     (`_RE_CLAUSE_BOUNDARY`), the line-start-offset table's own line-break positions count as clause
     boundaries when computing bounds over the joined text. Without this cap, a "clause" could span two
     physical lines/bullets with no punctuation between them at all (e.g. one bullet ending "...`x.py`"
     and the next starting "without needing it") — reproducing, at clause scope, the exact new
-    cross-line false-negative class the three unconditional exemptions below are being kept away from.
+    cross-line false-negative class the four unconditional exemptions below are being kept away from.
     With the cap, these two helpers effectively keep the same per-physical-line reach they have today for
     any token whose own backtick span doesn't itself cross a line break, while still correctly handling
     the case that actually motivated the join: a single token whose own backtick span crosses a line
     break (the corrected-extraction case) still gets a well-defined clause, bounded by whichever comes
     first — real punctuation or the line break.
-  - `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, and `_is_illustrative_output_exempt`
-    keep running against ONLY the token's own originating physical line (looked up via the offset table),
-    exactly as today. `_is_literal_enumeration_exempt` is the one of these three that takes explicit
-    `token_start`/`token_end` position parameters (used to skip the tested occurrence via
-    `m.start(1) == token_start and m.end(1) == token_end` when scanning for a disqualifying sibling); since
-    token extraction now runs on the joined text, `token_start`/`token_end` arrive as joined-text-global
-    offsets and MUST be translated to offsets local to the looked-up originating physical line (subtract
-    that line's own start offset, from the same offset table, before the call) — passing global offsets
-    against a call that internally re-scans only the local line would make the self-skip comparison fail
-    for every line after the first, corrupting the `literal-enumeration-majority` tally by double-counting
-    the tested token as its own sibling. `_is_cross_card_ownership_exempt`/`_is_illustrative_output_exempt`
-    take no position parameters, so no offset translation applies to them.
-    Each of these three is an unconditional, unbounded line-wide substring/pattern
-    match with no clause scoping, and each one's own docstring explicitly calibrates its accepted
-    false-positive/negative tradeoff assuming single-physical-line scope (`_is_literal_enumeration_exempt`:
-    "3+ backtick tokens... on the same line"; `_is_cross_card_ownership_exempt`: accepts its line-wide
-    tradeoff explicitly for "an unusually long Requirements: line"; `_is_illustrative_output_exempt`: scans
-    "anywhere on the line"). Widening any of these three to the whole joined Requirements body would let one
-    sentence's literal-enumeration/ownership/output-verb phrase exempt every backtick token elsewhere in
-    that card's Requirements text, including an unrelated genuine dependency several sentences away — a new
+  - `_is_prohibition_exempt`, `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, and
+    `_is_illustrative_output_exempt` are each an unconditional, unbounded substring/pattern-presence match
+    with no clause or position scoping at all — the "any negation+verb pair", "any output verb", or "any
+    ownership phrase" fires anywhere the check looks, and `_is_literal_enumeration_exempt`'s trigger counts
+    every backtick token the check looks at. All four keep running against ONLY the physical line(s) that
+    the tested token's own backtick match spans — normally exactly one line, identical to today; for the
+    rare token whose own span crosses a line break (the corrected-extraction case), the two-or-more lines
+    it spans, joined, so the helper can still see a negation/verb pair or sibling token that happens to
+    straddle that same span — never the whole joined Requirements body. `_is_prohibition_exempt`'s own
+    docstring documents a broader "Nested-bullet/multi-line prohibitions (negation on a parent bullet, path
+    on a child bullet)" gap as known-but-unhandled; that gap is NOT closed by this task — closing it would
+    require bullet-parent-relative scoping this task has no filed issue demanding, and discussion-review
+    round 4 confirmed naively widening it to whole-body scope (this decision's own original draft)
+    reproduces the exact unbounded false-negative class the other three unconditional exemptions are
+    being deliberately kept away from, just via a fourth helper. `_is_literal_enumeration_exempt` is the
+    one of these four that takes explicit `token_start`/`token_end` position parameters (used to skip the
+    tested occurrence via `m.start(1) == token_start and m.end(1) == token_end` when scanning for a
+    disqualifying sibling); since token extraction now runs on the joined text, `token_start`/`token_end`
+    arrive as joined-text-global offsets and MUST be translated to offsets local to the token's own
+    spanned line(s) (subtract that span's own start offset, from the offset table, before the call) —
+    passing global offsets against a call that internally re-scans only the local text would make the
+    self-skip comparison fail for every occurrence past the first physical line, corrupting the
+    `literal-enumeration-majority` tally by double-counting the tested token as its own sibling. The other
+    three take no position parameters, so no offset translation applies to them. Each of these four
+    helpers' own docstring explicitly calibrates its accepted false-positive/negative tradeoff assuming
+    single-physical-line scope (`_is_literal_enumeration_exempt`: "3+ backtick tokens... on the same
+    line"; `_is_cross_card_ownership_exempt`: accepts its line-wide tradeoff explicitly for "an unusually
+    long Requirements: line"; `_is_illustrative_output_exempt`: scans "anywhere on the line") — widening
+    any of them to the whole joined Requirements body would let one sentence's prohibition/literal-
+    enumeration/ownership/output-verb phrase exempt every backtick token elsewhere in that card's
+    Requirements text, including an unrelated genuine dependency several sentences away — a new
     false-negative class this task's own goal (fixing #1131's false positives without regressing coverage)
     does not want.
   The emitted error dict's `"line"` field switches from "the physical line's stripped text" to "the
@@ -167,10 +181,12 @@ whether another patch round is still the right call, or whether the check needs 
   a bare file-path citation") — the check *does* have that mechanism; the token extraction itself was
   corrupted before the citation ever reached it. This bug is invisible to any per-line patch, since it can
   recur at any future multi-line-spanning inline-code span. Joining lines before tokenizing is the only
-  fix that closes the class rather than the one instance found. As a side effect it also resolves the
-  already-documented limitation in `_is_prohibition_exempt`'s own docstring ("Nested-bullet/multi-line
-  prohibitions... are not detected -- this check is scoped to a single physical line") — a second,
-  independent defect closed by the same change.
+  fix that closes the class rather than the one instance found. (An earlier draft of this decision also
+  claimed this refactor incidentally closes `_is_prohibition_exempt`'s own documented "Nested-bullet/
+  multi-line prohibitions" limitation — discussion-review round 4 caught that this was wrong: naively
+  widening that helper's own reach to whole-body scope reproduces the same unbounded false-negative class
+  the other unconditional exemptions are deliberately kept away from. That documented limitation remains
+  open and out of scope for this task; see the EXEMPTION-helper enumeration above.)
 - Rejected: detect-and-suppress (treat an odd-backtick-count line as a continuation and skip further
   matches on it) — stops the corruption from spreading past that line, but doesn't recover the swallowed
   token, so the exact `millpy-fix.py` incident traced above would still go undetected. Also rejected:
@@ -268,7 +284,10 @@ whether another patch round is still the right call, or whether the check needs 
   matching a file NOT in the plan-wide cited-files set (the #1131/#1129 false-positive shape) → no longer
   flagged; (c) the existing qualifier-disambiguation and single-letter-qualifier behavior is unaffected by
   the scope narrowing (that logic runs on whatever match list `_resolve_symbol_files` returns, regardless
-  of scope).
+  of scope); (d) a fully empty plan-wide cited-files set (e.g. the first card of the first batch, before
+  any card's `Context:`/`Edits:`/etc. has accumulated anything into the plan-wide union) — assert no
+  crash and that the symbol branch simply resolves nothing and never flags (caught as a NIT in
+  discussion-review round 4).
 - `line-join-refactor` needs a regression test reproducing the exact traced incident: a Requirements body
   where one inline-code span opens on one physical line and closes on the next, followed by a genuine
   path-shaped dependency later on the closing line — must now be flagged. Also cover the
