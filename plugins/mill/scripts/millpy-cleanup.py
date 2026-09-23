@@ -46,7 +46,6 @@ class CleanupPlan:
     to_report: list[str]
     to_reap_pr: list[SlugRecord] = field(default_factory=list)
     orphan_portals: list[Path] = field(default_factory=list)
-    orphan_baseline_dirs: list[Path] = field(default_factory=list)
     # Slugs whose Home.md marker is exactly "active" but have no worktree on disk, no local branch, and no portal junction -- safe to auto-reset to unclaimed. "ready-to-merge" and "pr-pending" are live PR states and are never auto-reset.
     to_reset_unclaimed: list[str] = field(default_factory=list)
 
@@ -155,7 +154,6 @@ def build_plan(
     to_report: list[str] = []
     to_reap_pr: list[SlugRecord] = []
     to_reset_unclaimed: list[str] = []
-    orphan_baseline_dirs: list[Path] = []
 
     for wt_path in active_worktrees:
         branch_proc = _subprocess_util.run(
@@ -171,7 +169,6 @@ def build_plan(
             continue
 
         active_slugs.add(slug)
-        orphan_baseline_dirs.extend(_scan_orphan_baseline_dirs(wt_path))
         phase = _read_phase(_paths.resolve_task_path(wt_path, "_mill/status.md"))
         if phase is None:
             # status.md absent -- mill-merge deletes _mill/ before squash merge.
@@ -339,7 +336,6 @@ def build_plan(
         to_reap_pr=to_reap_pr,
         orphan_portals=orphan_portals,
         to_reset_unclaimed=to_reset_unclaimed,
-        orphan_baseline_dirs=orphan_baseline_dirs,
     )
 
 
