@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-09-23T10:24:59Z'
 planning  '2026-09-23T10:34:04Z'
 plan-review-r1  '2026-09-23T10:39:09Z'
 plan-fix-r1  '2026-09-23T10:41:29Z'
+planned  '2026-09-23T10:41:44Z'
 ```
