@@ -42,6 +42,8 @@ batches:
     start_sha: ae452a574ada1fd6a314352f8565cd5db80e8717
     commit_sha: 6a269baaeeb40960e1eda1154186d818ee8addda
   - name: close-issue
-    state: pending
+    state: running
+    implementer_session: 4f6a7b67-fcb9-47f0-a9f2-5638c0b91671
+    start_sha: 988e85c5965f825983e2b33a861d41c6b91d01fe
     verify_baseline_failures: []
 ```
