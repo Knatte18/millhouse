@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: plan-validate-context-completeness-round3-gaps
 branch: hanf/plan-validate-context-completeness-round3-gaps
 plan: _mill/plan
@@ -35,6 +35,7 @@ implementing  '2026-09-23T12:40:13Z'
 approved-context-completeness-resolution-and-tokenization-rework  '2026-09-23T13:03:03Z'
 holistic-reviewing  '2026-09-23T13:03:30Z'
 holistic-fixing  '2026-09-23T13:07:51Z'
+holistic-reviewing  '2026-09-23T13:10:47Z'
 ```
 
 ## Batches
