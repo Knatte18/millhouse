@@ -4,14 +4,15 @@
 task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
 batch: implementer-gate-cleanup
 number: 4
-cards: 7
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-fix-finalize.py test-millpy-fix.py
+cards: 8
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-fix-finalize.py test-millpy-fix.py test-status.py
 depends-on: [3]
 ```
 
 ## Batch Scope
 
 This batch deletes the lazy on-demand per-batch baseline path (#1102) and the `start_sha`-checkout corroboration fallback from `_implementer_common.py`, per Decision `delete-corroboration` and `remove-all-three-checkouts` — both are made obsolete by batch 3's eager per-batch capture, since every batch now has a real pre-edit baseline captured before batch 1 ever dispatches. Deleting both empties out `start_sha`/`status_path`/`batch_name`/`git_name`/`git_email` as dead parameters of `_run_verify_gates`, and `batch_name`/`git_name`/`git_email` as dead parameters of `_forward_output`/`finalize_from_output` (per Decision `start-sha-parameter`'s "same treatment for the other parameters this task strands"), which this batch also removes, together with every call site across `millpy-implement.py` and `millpy-fix.py` that still passes them. This batch is ordered after batch 3 because it edits `millpy-implement.py` in different call sites than batch 3 does (the finalize/full-stage branches here, vs. the `--stage baseline` branch there) — sequencing avoids two batches touching one file without a dependency edge between them.
+This batch also deletes `_status.get_baseline_parent_sha`/`set_baseline_parent_sha` (Card 27) — batch 1 deliberately leaves that accessor pair in place, since its only reader (the on-demand prelude Card 21 deletes) calls it with no surrounding `try`/`except`; deleting the accessor before its last caller is gone would crash any batch verify replay run in the window between batch 1 and this one. Card 27 lands after Card 21 in this same batch, so the caller is already gone by the time the accessor itself goes.
 
 ## Cards
 
@@ -99,10 +100,23 @@ This batch deletes the lazy on-demand per-batch baseline path (#1102) and the `s
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In `test-implementer-common.py`: delete Case 72f, 72g, 72h in full (corroboration — `_corroborate_batch_failure` no longer exists) and Case 83a, 83b, 83c in full (on-demand compute — `_verify_baseline.compute_batch_baseline_on_demand` no longer exists, and `_status.get_baseline_parent_sha` no longer exists). Rewrite Cases 78, 79, 80 (persist-commit side effects via `git_name`/`git_email`/`status_path`/`batch_name` through `_forward_output`) to assert the *absence* of that behavior instead — call `_forward_output` with the same fixtures but without those now-removed kwargs, and assert a batch gate failure with no cached baseline gates strictly (blocks) and performs no checkout, since the corroboration-waiver path these three cases exercised no longer exists. Keep Cases 72a-72e (the pure subset-diff waiver, which never pass `start_sha`/`status_path`/`batch_name`) completely unchanged. Update every remaining direct `_run_verify_gates(...)` call site in this file that still passes `start_sha=`/`status_path=`/`batch_name=`/`git_name=`/`git_email=` to drop those keywords — a `TypeError: unexpected keyword argument` on any missed call site is the regression signal. Remove `_corroborate_batch_failure` from any import/patch-target string still naming it.
+- **Requirements:** In `test-implementer-common.py`: delete Case 72f, 72g, 72h in full (corroboration — `_corroborate_batch_failure` no longer exists) and Case 83a, 83b, 83c in full (on-demand compute — the prelude Card 21 deletes, which read `_verify_baseline.compute_batch_baseline_on_demand` and `_status.get_baseline_parent_sha`; the accessor itself is deleted later in this same batch by Card 27). Rewrite Cases 78, 79, 80 (persist-commit side effects via `git_name`/`git_email`/`status_path`/`batch_name` through `_forward_output`) to assert the *absence* of that behavior instead — call `_forward_output` with the same fixtures but without those now-removed kwargs, and assert a batch gate failure with no cached baseline gates strictly (blocks) and performs no checkout, since the corroboration-waiver path these three cases exercised no longer exists. Keep Cases 72a-72e (the pure subset-diff waiver, which never pass `start_sha`/`status_path`/`batch_name`) completely unchanged. Update every remaining direct `_run_verify_gates(...)` call site in this file that still passes `start_sha=`/`status_path=`/`batch_name=`/`git_name=`/`git_email=` to drop those keywords — a `TypeError: unexpected keyword argument` on any missed call site is the regression signal. Remove `_corroborate_batch_failure` from any import/patch-target string still naming it.
   In `test-fix-finalize.py`, at the call-argument assertion around the comment "main()'s already-resolved git_name/git_email locals... must be forwarded into finalize_from_output -- the #954 corroboration-commit git-identity fix; a future edit that silently drops these kwargs must fail this test" (the one block asserting `call_args.kwargs.get("batch_name")`, `call_args.kwargs.get("git_name")`, `call_args.kwargs.get("git_email")`), delete those three assertions and their explanatory comment — this is precisely the #954 mechanism this batch removes, so the guard is now testing for the absence, not the presence, of these kwargs. Keep the surrounding `batch_verify_baseline`, `module_wide_verify_cmd`, `module_wide_cwd_override`, `module_verify_baseline` assertions in the same block unchanged.
 - **Commit:** `test(_implementer_common): drop corroboration/on-demand coverage, update kwarg-forwarding guard`
 
+### Card 27: Delete the baseline_parent_sha scalar accessor pair and its tests
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/unit_tests/test-status.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Delete the `get_baseline_parent_sha` and `set_baseline_parent_sha` functions from `_status.py` in full (both functions, including their docstrings). Remove their two lines from the module's top `Public API:` docstring block (`get_baseline_parent_sha(status_path) -> str | None` and `set_baseline_parent_sha(status_path, value) -> None`). By this point in the batch, Card 21 has already deleted the only reader that called either function without a guarding `try`/`except` — this card runs last (after Card 21, Card 26) specifically so the accessor's last caller is confirmed gone before the accessor itself goes, closing the crash window described in this batch's own Batch Scope note.
+  In `test-status.py`, delete the "--- baseline_parent_sha tests ---" block in full (the block covering `get_baseline_parent_sha`/`set_baseline_parent_sha`: None-on-fresh-file, insert-then-round-trip, in-place-rewrite-on-second-set, and empty-string-value-rejects). Remove `get_baseline_parent_sha` and `set_baseline_parent_sha` from the `from _status import (...)` block at the top of the file.
+- **Commit:** `refactor(_status): delete get/set_baseline_parent_sha now that its last caller is gone`
+
 ## Batch Tests
 
-`verify:` runs `test-implementer-common.py` (the direct unit test for every function this batch edits), `test-fix-finalize.py` (the one test elsewhere in the suite asserting on the exact kwargs Card 23 removes from `finalize_from_output`), and `test-millpy-fix.py` (re-run for safety since Card 25 edits `millpy-fix.py`, even though no test in that file references the removed kwargs by name).
+`verify:` runs `test-implementer-common.py` (the direct unit test for every function this batch edits), `test-fix-finalize.py` (the one test elsewhere in the suite asserting on the exact kwargs Card 23 removes from `finalize_from_output`), `test-millpy-fix.py` (re-run for safety since Card 25 edits `millpy-fix.py`, even though no test in that file references the removed kwargs by name), and `test-status.py` (re-run since Card 27 edits it, removing the `baseline_parent_sha` coverage batch 1 deliberately left in place).

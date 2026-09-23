@@ -15,7 +15,7 @@ This batch updates `millpy-merge-in-subagent.py --recompute-baseline` for the ne
 
 ## Cards
 
-### Card 27: Rewrite _run_recompute_baseline
+### Card 28: Rewrite _run_recompute_baseline
 
 - **Context:**
   - `plugins/mill/scripts/_verify_baseline.py`
@@ -34,7 +34,7 @@ This batch updates `millpy-merge-in-subagent.py --recompute-baseline` for the ne
   Map the result asymmetrically per Decision `merge-in-recompute`: `"clean"` -> `_status.set_module_verify_baseline(status_path, "clean")`, then print `{"status": "success", "baseline": "computed", "value": "clean"}`; `"pre-existing-failures"` -> do NOT call `_status.set_module_verify_baseline` at all (the earlier `clear_module_verify_baseline` call already left the field unset — leaving it unset is the strict-gating outcome), then print `{"status": "success", "baseline": "computed", "value": "pre-existing-failures"}` (unchanged wire shape from today, only the underlying mapping logic changes).
 - **Commit:** `refactor(millpy-merge-in-subagent): recompute-baseline uses new compute_baseline signature, clears every batch baseline first`
 
-### Card 28: Rewrite test-millpy-merge-in-subagent.py's recompute-baseline coverage
+### Card 29: Rewrite test-millpy-merge-in-subagent.py's recompute-baseline coverage
 
 - **Context:**
   - `plugins/mill/scripts/millpy-merge-in-subagent.py`
@@ -44,11 +44,11 @@ This batch updates `millpy-merge-in-subagent.py --recompute-baseline` for the ne
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In `test_21_recompute_baseline_mapping_verify_field`, update the `compute_baseline` mock from `return_value="clean"` to `return_value=("clean", [])`, and update the call-argument assertions to the new signature: no more `project_root`/`git_root`/`parent_branch` positional args and no `cwd_override_relative` kwarg — assert the resolved absolute cwd positional argument (the mapping-form fixture's `cwd: hub` resolves to `self.tmp_path`, mirroring the deleted assertion's own expected value but as the new direct `cwd` positional arg) and `module_wide_verify_cmd` positional argument instead. Keep `test_20_recompute_baseline_missing_status_md` and `test_22_recompute_baseline_malformed_verify_field` conceptually unchanged, but re-verify each against the rewritten early-return ordering in Card 27 (both still fail before reaching `compute_baseline`, so their assertions on the printed JSON should be unaffected — confirm by running the test, not by inspection alone).
+- **Requirements:** In `test_21_recompute_baseline_mapping_verify_field`, update the `compute_baseline` mock from `return_value="clean"` to `return_value=("clean", [])`, and update the call-argument assertions to the new signature: no more `project_root`/`git_root`/`parent_branch` positional args and no `cwd_override_relative` kwarg — assert the resolved absolute cwd positional argument (the mapping-form fixture's `cwd: hub` resolves to `self.tmp_path`, mirroring the deleted assertion's own expected value but as the new direct `cwd` positional arg) and `module_wide_verify_cmd` positional argument instead. Keep `test_20_recompute_baseline_missing_status_md` and `test_22_recompute_baseline_malformed_verify_field` conceptually unchanged, but re-verify each against the rewritten early-return ordering in Card 28 (both still fail before reaching `compute_baseline`, so their assertions on the printed JSON should be unaffected — confirm by running the test, not by inspection alone).
   Add new tests, per the discussion's own Testing-section framing for this file: (a) `--recompute-baseline` leaves every batch's `verify_baseline_failures` cleared on both the `"clean"`-mapped pass branch and the `"pre-existing-failures"`-unset fail branch, given a `status.md` fixture with several batches carrying non-empty `verify_baseline_failures` beforehand; (b) the same clearing still happens in the no-module-wide-verify-configured case (overview `verify:` null, batches present) even though the module-wide half exits early with `baseline: "skipped"`; (c) the same clearing still happens in the malformed-verify-field error case (`test_22`'s own fixture); (d) a fail-then-pass sequence at the `compute_baseline` mock (`side_effect` returning a first result then a corrected one across two calls is not applicable here since this function calls `compute_baseline` once per invocation — instead, mock `compute_baseline` to return `("clean", [])` after having asserted the flakiness-guard retry itself is `compute_baseline`'s own internal concern, not this caller's) resolves to `module_verify_baseline` set to `"clean"` — a test asserting against `compute_baseline`'s own *return value* rather than a raw exit code, since a raw-exit-code-based test would pass for the wrong implementation here.
 - **Commit:** `test(millpy-merge-in-subagent): rewrite recompute-baseline coverage for new signature and batch clearing`
 
-### Card 29: Rework the integration test for the eager per-batch capture model
+### Card 30: Rework the integration test for the eager per-batch capture model
 
 - **Context:**
   - `plugins/mill/scripts/millpy-implement.py`

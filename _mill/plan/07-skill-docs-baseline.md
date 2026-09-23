@@ -15,7 +15,7 @@ This batch updates the two SKILL.md files whose prose describes the mechanisms b
 
 ## Cards
 
-### Card 34: Rewrite mill-go-base/SKILL.md's "0.5. Baseline pre-flight" section
+### Card 35: Rewrite mill-go-base/SKILL.md's "0.5. Baseline pre-flight" section
 
 - **Context:** none
 - **Edits:**
@@ -29,7 +29,7 @@ This batch updates the two SKILL.md files whose prose describes the mechanisms b
   Replace the closing paragraph's citation "per `_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision (\"Compute it **eagerly, once, before the task's first batch implementer is ever dispatched**\")" with the rationale restated inline, with no `_mill/`-rooted path reference: state directly that this ordering guarantees no implementer session has touched dependency manifests yet, so the eager capture's reused worktree state is still guaranteed to match the parent branch tip at the moment it runs.
 - **Commit:** `docs(mill-go-base): update 0.5 baseline pre-flight for the two-half module-wide/per-batch split`
 
-### Card 35: Rewrite mill-merge-in/SKILL.md's "3.5. Baseline recompute" step
+### Card 36: Rewrite mill-merge-in/SKILL.md's "3.5. Baseline recompute" step
 
 - **Context:** none
 - **Edits:**

@@ -4,27 +4,17 @@
 task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
 batch: status-baseline-fields
 number: 1
-cards: 3
+cards: 2
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py
 depends-on: []
 ```
 
 ## Batch Scope
 
-This batch prepares the `status.md` field surface the rest of the plan depends on: it removes the now-dead `baseline_parent_sha` scalar accessor pair (the lazy on-demand path that reads it is deleted in batch 4) and adds the `module_verify_baseline_signatures` list accessor pair that the eager module-wide capture (batch 3) and the merge-in recompute (batch 5) need to persist/seed a pair-cache from. `_status.py` has no import-time coupling to `_verify_baseline.py`, so this batch could run standalone, but batch 3 calls the new accessors, so it is ordered before it.
+This batch prepares the `status.md` field surface the rest of the plan depends on: it adds the `module_verify_baseline_signatures` list accessor pair that the eager module-wide capture (batch 3) and the merge-in recompute (batch 5) need to persist/seed a pair-cache from. `_status.py` has no import-time coupling to `_verify_baseline.py`, so this batch could run standalone, but batch 3 calls the new accessors, so it is ordered before it.
+This batch deliberately does NOT delete the now-dead `get_baseline_parent_sha`/`set_baseline_parent_sha` scalar accessor pair, even though `compute_baseline`'s no-checkout redesign makes them dead. Their only reader — `_implementer_common._run_verify_gates`'s on-demand-compute prelude, at `baseline_parent_sha = _status.get_baseline_parent_sha(status_path)` — calls it with NO surrounding `try`/`except` (unlike the adjacent `compute_batch_baseline_on_demand` call, which is wrapped), and that reader survives until batch 4 deletes it. Deleting the accessor here in batch 1 would leave every batch between this one and batch 4 — including this very plan's own batch 1/2/3 verify replays, driven through this same `_run_verify_gates` code path — one first-attempt verify failure away from an unguarded `AttributeError` crash instead of the intended graceful strict-gating degradation. The accessor pair is deleted in batch 4 instead, in the same batch (and the same card-ordering position, immediately after its caller is removed) that removes the last read of it — see batch 4's Card 27.
 
 ## Cards
-
-### Card 1: Delete the baseline_parent_sha scalar accessor pair
-
-- **Context:** none
-- **Edits:**
-  - `plugins/mill/scripts/_status.py`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:** Delete the `get_baseline_parent_sha` and `set_baseline_parent_sha` functions from `_status.py` in full (both functions, including their docstrings). Remove their two lines from the module's top `Public API:` docstring block (`get_baseline_parent_sha(status_path) -> str | None` and `set_baseline_parent_sha(status_path, value) -> None`). These two functions become unused once batch 4 deletes their only reader, the on-demand-compute prelude in `_implementer_common._run_verify_gates`; deleting them here does not break batch 4's own diff, since a caller reading a since-deleted accessor is a batch-4-side change, not a batch-1-side one.
-- **Commit:** `refactor(_status): delete get/set_baseline_parent_sha (checkout mechanism removed)`
 
 ### Card 2: Add module_verify_baseline_signatures accessor pair
 
@@ -49,7 +39,7 @@ This batch prepares the `status.md` field surface the rest of the plan depends o
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** Delete the "--- baseline_parent_sha tests ---" block in full (the block covering `get_baseline_parent_sha`/`set_baseline_parent_sha`: None-on-fresh-file, insert-then-round-trip, in-place-rewrite-on-second-set, and empty-string-value-rejects). Remove `get_baseline_parent_sha` and `set_baseline_parent_sha` from the `from _status import (...)` block at the top of the file.
+- **Requirements:** Leave the existing "--- baseline_parent_sha tests ---" block and the `get_baseline_parent_sha`/`set_baseline_parent_sha` imports untouched in this card — per this batch's own Batch Scope note, the accessor pair itself is not deleted until batch 4, and its test coverage is deleted there too (batch 4's Card 27), alongside the function deletion, not here.
   In the "--- module_verify_baseline tests ---" block, add: (a) round-trip coverage for `get_module_verify_baseline_signatures`/`set_module_verify_baseline_signatures` mirroring the existing `module_verify_baseline` scalar accessors' own insert-in-place-vs-append assertions, including an empty list `[]` surviving a round-trip as a present-but-empty field (distinct from the key being absent); (b) a signature list long enough that a naive `yaml.safe_dump` without a `width` override would wrap it across multiple physical lines — assert it instead writes as exactly one physical line, and that a subsequent `set` then `clear_module_verify_baseline` then `read` round-trip on that value leaves `status.md` fully parseable (the regression guard for the line-stranding bug this would otherwise cause on every later `_status` read); (c) `clear_module_verify_baseline` now also clears `module_verify_baseline_signatures` in the same call — assert both fields are absent after one `clear_module_verify_baseline` call that previously had both set.
   Add `get_module_verify_baseline_signatures` and `set_module_verify_baseline_signatures` to the `from _status import (...)` block.
 - **Commit:** `test(_status): drop baseline_parent_sha coverage, add signatures accessor coverage`

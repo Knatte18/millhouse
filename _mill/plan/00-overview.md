@@ -38,7 +38,7 @@ batches:
     name: implementer-gate-cleanup
     file: 04-implementer-gate-cleanup.md
     depends-on: [3]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-fix-finalize.py test-millpy-fix.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-fix-finalize.py test-millpy-fix.py test-status.py
   - number: 5
     name: merge-in-baseline-recompute
     file: 05-merge-in-baseline-recompute.md
