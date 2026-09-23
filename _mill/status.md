@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -43,6 +43,8 @@ approved-implementer-gate-cleanup  '2026-09-23T10:55:51Z'
 approved-skill-docs-baseline  '2026-09-23T10:59:19Z'
 holistic-reviewing  '2026-09-23T10:59:42Z'
 holistic-fixing  '2026-09-23T11:04:12Z'
+nits-fixed-holistic  '2026-09-23T11:11:02Z'
+holistic-approved  '2026-09-23T11:11:09Z'
 ```
 
 ## Batches
