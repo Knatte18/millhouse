@@ -118,42 +118,6 @@ def _scan_orphan_portals(portals_dir: Path, active_slugs: set[str]) -> list[Path
     return stale
 
 
-def _scan_orphan_baseline_dirs(wt_path: Path) -> list[Path]:
-    """
-    Find `.scratch/verify-baseline-*` directories under `wt_path` that are no longer registered
-    as a git worktree.
-
-    `git worktree remove --force` deregisters the `.git/worktrees/<id>` administrative entry
-    internally before it ever attempts to delete the working directory, regardless of the
-    deletion's own exit code -- so a WinError-145-blocked teardown on Windows can leave the
-    physical `.scratch/verify-baseline-<hash>/` checkout behind forever with no registry entry
-    pointing at it.
-    This scan finds exactly those orphans.
-
-    Returns:
-        The list of matched `.scratch/verify-baseline-*` directories whose resolved path is not
-        in `wt_path`'s current `git worktree list` output.
-        Returns `[]` when `.scratch` is absent/not-a-directory, or when `git worktree list` itself
-        fails -- fail safe toward "sweep nothing" rather than risk misclassifying a still-registered,
-        in-progress baseline computation as orphaned.
-    """
-    scratch_dir = wt_path / ".scratch"
-    if not scratch_dir.is_dir():
-        return []
-
-    candidates = [entry.resolve() for entry in scratch_dir.glob("verify-baseline-*")]
-    if not candidates:
-        return []
-
-    try:
-        registered = _worktree.list_worktrees(wt_path)
-    except _worktree.WorktreeError:
-        return []
-    registered_paths: set[Path] = {Path(entry["path"]).resolve() for entry in registered}
-
-    return [candidate for candidate in candidates if candidate not in registered_paths]
-
-
 def build_plan(
     active_worktrees: list[Path],
     home_tasks: list[dict],
