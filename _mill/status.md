@@ -43,6 +43,8 @@ batches:
     commit_sha: 5e2de5913cb3297d348bfb918d64ad76d888c122
     verify_baseline_failures: []
   - name: verify-guidance-docs
-    state: pending
+    state: running
+    implementer_session: 8e884744-7db5-46b8-9957-2c9143069ff9
+    start_sha: 554d772661b4086df773c216a6f67d6db6f79a56
     verify_baseline_failures: []
 ```
