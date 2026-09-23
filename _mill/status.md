@@ -76,7 +76,9 @@ batches:
     commit_sha: 1c3a2e2639cf3d96b323410defe24eb8c134905c
     verify_baseline_failures: []
   - name: implementer-gate-cleanup
-    state: pending
+    state: running
+    implementer_session: 8661aaed-f434-4d3a-99b4-fac415bc57ea
+    start_sha: f9ae13381840b256f9aa1f27f04a550122b4c169
     verify_baseline_failures: []
   - name: skill-docs-baseline
     state: pending
