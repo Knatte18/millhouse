@@ -3,7 +3,7 @@
 ```yaml
 task: 'Monitor tool: persistent:true still referenced in mill-go-base and mill-plan despite no such param'
 slug: monitor-persistent-true-still-referenced
-approved: false
+approved: true
 started: '20260923-102007'
 parent: main
 root: ""
