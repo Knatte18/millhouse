@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: mill-setup-wiki-doc-misc-r3
 branch: hanf/mill-setup-wiki-doc-misc-r3
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-handoff-draft-order  '2026-09-23T10:52:40Z'
 approved-claude-settings-denylist  '2026-09-23T10:56:24Z'
 approved-golangci-lint-sandbox-fallback  '2026-09-23T10:57:37Z'
 holistic-reviewing  '2026-09-23T10:57:56Z'
+holistic-fixing  '2026-09-23T11:00:49Z'
 ```
 
 ## Batches
