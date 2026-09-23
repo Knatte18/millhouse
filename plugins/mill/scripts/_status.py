@@ -45,11 +45,11 @@ Public API:
 """
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
 import yaml
-
 from _yaml_writer import quote_scalar
 
 _TOKEN_RE = re.compile(r"<([A-Z][A-Z0-9_]*)>")
@@ -57,24 +57,34 @@ _YAML_FENCE = "```yaml"
 _TIMELINE_FENCE = "```text"
 
 
-def _require_path(status_path, fn_name: str) -> None:
-    """Guard against callers passing a plain ``str`` instead of a ``Path``.
+def _as_path(status_path, fn_name: str) -> Path:
+    """Coerce ``status_path`` to a ``pathlib.Path``, accepting ``str`` and ``os.PathLike`` too.
 
     Every public function below reads ``status_path`` with ``Path.read_text`` / ``Path.exists``;
-    a plain ``str`` has neither method, so without this guard the failure surfaces as a bare,
-    unexplained ``AttributeError`` deep inside this module (GitHub #597).
-    Raising a clear ``TypeError`` naming both the offending function and the expected type lets a
-    caller fix the bug at the call site instead of debugging this module's internals.
+    every SKILL.md pseudocode call site passes a bare ``status_path`` string, so rejecting ``str``
+    outright made every one of those call sites fail with a bare, unexplained ``TypeError`` deep
+    inside this module (GitHub #1114).
+    Coercing here means a ``Path``, ``str``, or any other ``os.PathLike`` all work identically;
+    only a genuinely uncoercible type (e.g. ``None`` or an ``int``) still raises, with a clear
+    message naming both the offending function and the expected types (GitHub #597).
 
     Args:
-        status_path: The value passed by the caller in place of a ``pathlib.Path``.
+        status_path: The value passed by the caller — already a ``pathlib.Path``, a ``str``, or
+            another ``os.PathLike``.
         fn_name: The public function's own name, as a literal string, used verbatim in the error
         message.
+
+    Returns:
+        ``status_path`` unchanged if it is already a ``Path``, otherwise ``Path(status_path)``.
     """
-    if not isinstance(status_path, Path):
-        raise TypeError(
-            f"{fn_name}: status_path must be a pathlib.Path, got {type(status_path).__name__}"
-        )
+    if isinstance(status_path, Path):
+        return status_path
+    if isinstance(status_path, (str, os.PathLike)):
+        return Path(status_path)
+    raise TypeError(
+        f"{fn_name}: status_path must be a pathlib.Path, str, or os.PathLike, "
+        f"got {type(status_path).__name__}"
+    )
 
 
 _TEMPLATE_PATH = (
@@ -179,11 +189,12 @@ def _split_fences(text: str, fence_open: str) -> tuple[int, int]:
     raise ValueError(f"Unterminated {fence_open} block in status file")
 
 
-def read(status_path: Path) -> dict:
+def read(status_path: Path | str) -> dict:
     """Return the parsed top fenced-YAML block as a plain dict.
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         The contents of the top YAML block as a dict.
@@ -191,7 +202,7 @@ def read(status_path: Path) -> dict:
     Raises:
         ValueError: the file is missing, the yaml block is unterminated, or yaml parsing fails.
     """
-    _require_path(status_path, "read")
+    status_path = _as_path(status_path, "read")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -207,7 +218,7 @@ def read(status_path: Path) -> dict:
     return data
 
 
-def update_field(status_path: Path, key: str, value: str) -> None:
+def update_field(status_path: Path | str, key: str, value: str) -> None:
     """
     Rewrite ``<key>:`` in the top ``` ```yaml ``` ``` block of ``status_path``.
 
@@ -218,6 +229,7 @@ def update_field(status_path: Path, key: str, value: str) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         key: YAML key to mutate (must already exist in the block).
         value: Written via ``_yaml_writer.quote_scalar`` so values containing YAML-special
             characters (``:``, ``#``, leading ``-``, etc.) are quoted automatically.
@@ -228,7 +240,7 @@ def update_field(status_path: Path, key: str, value: str) -> None:
         ValueError: the file lacks a yaml block, the block is unterminated, or ``key`` is not
         present at a scalar row.
     """
-    _require_path(status_path, "update_field")
+    status_path = _as_path(status_path, "update_field")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
@@ -245,7 +257,7 @@ def update_field(status_path: Path, key: str, value: str) -> None:
     raise ValueError(f"Key {key!r} not found in yaml block of {status_path}")
 
 
-def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
+def set_blocked(status_path: Path | str, reason: str, *, timestamp: str) -> None:
     """
     Transition a task into the blocked state in ``status.md``.
 
@@ -263,6 +275,7 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         reason: Human-readable explanation for the block;
             written through ``_yaml_writer.quote_scalar`` so colons and other YAML-special
                 characters are handled automatically.
@@ -273,7 +286,7 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
         ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block,
         or the timeline block is absent.
     """
-    _require_path(status_path, "set_blocked")
+    status_path = _as_path(status_path, "set_blocked")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
 
@@ -324,7 +337,7 @@ def set_blocked(status_path: Path, reason: str, *, timestamp: str) -> None:
 _MODULE_VERIFY_BASELINE_STATES = {"clean", "pre-existing-failures"}
 
 
-def get_module_verify_baseline(status_path: Path) -> str | None:
+def get_module_verify_baseline(status_path: Path | str) -> str | None:
     """
     Return the cached ``module_verify_baseline:`` value from the top yaml block.
 
@@ -334,6 +347,7 @@ def get_module_verify_baseline(status_path: Path) -> str | None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         ``"clean"``, ``"pre-existing-failures"``, or ``None``.
@@ -342,12 +356,12 @@ def get_module_verify_baseline(status_path: Path) -> str | None:
         ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to
         parse as yaml.
     """
-    _require_path(status_path, "get_module_verify_baseline")
+    status_path = _as_path(status_path, "get_module_verify_baseline")
     data = read(status_path)
     return data.get("module_verify_baseline")
 
 
-def set_module_verify_baseline(status_path: Path, value: str) -> None:
+def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
     """
     Write ``module_verify_baseline:`` in the top yaml block of ``status_path``.
 
@@ -359,6 +373,7 @@ def set_module_verify_baseline(status_path: Path, value: str) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         value: Must be the literal string ``"clean"`` or ``"pre-existing-failures"``.
             Written through ``_yaml_writer.quote_scalar`` for consistency with every other string
                 field in this module.
@@ -367,7 +382,7 @@ def set_module_verify_baseline(status_path: Path, value: str) -> None:
         ValueError: ``value`` is not one of the two allowed states, the file lacks a yaml block, the
         block is unterminated, or the block has no ``parent:`` row to insert after.
     """
-    _require_path(status_path, "set_module_verify_baseline")
+    status_path = _as_path(status_path, "set_module_verify_baseline")
     if value not in _MODULE_VERIFY_BASELINE_STATES:
         raise ValueError(
             f"Unknown module_verify_baseline value {value!r}; "
@@ -399,7 +414,7 @@ def set_module_verify_baseline(status_path: Path, value: str) -> None:
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
-def clear_module_verify_baseline(status_path: Path) -> None:
+def clear_module_verify_baseline(status_path: Path | str) -> None:
     """
     Remove the ``module_verify_baseline:`` row from the top yaml block, if present.
 
@@ -410,12 +425,13 @@ def clear_module_verify_baseline(status_path: Path) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Raises:
         ValueError: the file lacks a yaml block,
             or the block is unterminated.
     """
-    _require_path(status_path, "clear_module_verify_baseline")
+    status_path = _as_path(status_path, "clear_module_verify_baseline")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
@@ -434,7 +450,7 @@ def clear_module_verify_baseline(status_path: Path) -> None:
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
-def get_module_verify_baseline_signatures(status_path: Path) -> list[str] | None:
+def get_module_verify_baseline_signatures(status_path: Path | str) -> list[str] | None:
     """
     Return the cached ``module_verify_baseline_signatures:`` value from the top yaml block.
 
@@ -445,6 +461,7 @@ def get_module_verify_baseline_signatures(status_path: Path) -> list[str] | None
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         The list of signature strings, or ``None``.
@@ -453,12 +470,12 @@ def get_module_verify_baseline_signatures(status_path: Path) -> list[str] | None
         ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to
         parse as yaml.
     """
-    _require_path(status_path, "get_module_verify_baseline_signatures")
+    status_path = _as_path(status_path, "get_module_verify_baseline_signatures")
     data = read(status_path)
     return data.get("module_verify_baseline_signatures")
 
 
-def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -> None:
+def set_module_verify_baseline_signatures(status_path: Path | str, value: list[str]) -> None:
     """
     Write ``module_verify_baseline_signatures:`` in the top yaml block of ``status_path``.
 
@@ -470,6 +487,7 @@ def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         value: Serialised as a yaml flow-sequence via ``yaml.safe_dump(value,
             default_flow_style=True, width=10**9)`` rather than ``quote_scalar`` (which is
             string-only). The explicit ``width=10**9`` is load-bearing: PyYAML's default
@@ -481,7 +499,7 @@ def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -
         ValueError: the file lacks a yaml block, the block is unterminated, or the block has no
         ``parent:`` row to insert after.
     """
-    _require_path(status_path, "set_module_verify_baseline_signatures")
+    status_path = _as_path(status_path, "set_module_verify_baseline_signatures")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
@@ -509,7 +527,7 @@ def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
-def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
+def append_phase(status_path: Path | str, phase: str, timestamp: str) -> None:
     """
     Record a phase transition in ``status.md``.
 
@@ -527,6 +545,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         phase: Written via ``_yaml_writer.quote_scalar`` inside the YAML block.
             Phase names from the closed v2 set (``discussing``, ``planning``, ``coding``, ``done``,
                 plus per-round variants like ``plan-review-r1``) are YAML-safe and pass through
@@ -540,7 +559,7 @@ def append_phase(status_path: Path, phase: str, timestamp: str) -> None:
         ValueError: yaml block is missing / malformed, ``phase:`` key is absent from the yaml block,
         or the timeline block is absent.
     """
-    _require_path(status_path, "append_phase")
+    status_path = _as_path(status_path, "append_phase")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
 
@@ -736,14 +755,14 @@ def _write_batches(status_path: Path, batches: list[dict]) -> None:
     status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def read_batches(status_path: Path) -> list[dict]:
+def read_batches(status_path: Path | str) -> list[dict]:
     """Return the batches list from ``## Batches``,
 or ``[]`` if absent.
 
     Raises ``ValueError`` if the section exists but its yaml fence is malformed — that is a
     corruption we want to surface, not silently mask with an empty list.
     """
-    _require_path(status_path, "read_batches")
+    status_path = _as_path(status_path, "read_batches")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
     located = _find_batches_block(lines)
@@ -759,7 +778,7 @@ or ``[]`` if absent.
     return batches or []
 
 
-def read_status(status_path: Path) -> dict:
+def read_status(status_path: Path | str) -> dict:
     """Return a summary dict parsed from ``status_path``.
 
     Returns:
@@ -770,7 +789,7 @@ def read_status(status_path: Path) -> dict:
         ValueError: file missing, no yaml block, yaml parse error, missing ``phase:`` key, or
         ``read_batches`` raises ValueError.
     """
-    _require_path(status_path, "read_status")
+    status_path = _as_path(status_path, "read_status")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -828,7 +847,7 @@ def read_status(status_path: Path) -> dict:
     }
 
 
-def read_full(status_path: Path) -> dict:
+def read_full(status_path: Path | str) -> dict:
     """Return the complete yaml block and full timeline from ``status_path``.
 
     Unlike ``read_status``, which returns a slim summary, this returns the raw parsed contents
@@ -843,7 +862,7 @@ def read_full(status_path: Path) -> dict:
         ValueError: file missing, yaml block missing/unterminated/malformed, or timeline block
         missing/unterminated.
     """
-    _require_path(status_path, "read_full")
+    status_path = _as_path(status_path, "read_full")
     if not status_path.exists():
         raise ValueError(f"status file not found: {status_path}")
     text = status_path.read_text(encoding="utf-8")
@@ -873,7 +892,7 @@ def read_full(status_path: Path) -> dict:
     return {"yaml": data, "timeline": timeline_lines}
 
 
-def read_parent_branch(status_path: Path) -> str | None:
+def read_parent_branch(status_path: Path | str) -> str | None:
     """Return the ``parent:`` value from the top yaml block of ``status_path``.
 
     Used by ``mill-cleanup`` to determine which branch to check out after an in-place task is
@@ -884,12 +903,13 @@ def read_parent_branch(status_path: Path) -> str | None:
 
     Args:
         status_path: Absolute path to the task's ``status.md`` file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         The parent branch name string,
         or ``None`` on any parse failure.
     """
-    _require_path(status_path, "read_parent_branch")
+    status_path = _as_path(status_path, "read_parent_branch")
     try:
         full = read_full(status_path)
         value = full["yaml"].get("parent")
@@ -901,7 +921,7 @@ def read_parent_branch(status_path: Path) -> str | None:
 
 
 def phase_entry_timestamp(
-    status_path: Path, phase: str, *, occurrence: int = 1, latest: bool = False
+    status_path: Path | str, phase: str, *, occurrence: int = 1, latest: bool = False
 ) -> str | None:
     """Return the timestamp of a matching phase entry from timeline.
 
@@ -916,6 +936,7 @@ def phase_entry_timestamp(
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         phase: Phase name to search for in the timeline.
         occurrence: Which matching phase entry to return (1-indexed).
         Defaults to 1.
@@ -933,7 +954,7 @@ def phase_entry_timestamp(
     Raises:
         ValueError: if the timeline block is malformed (unterminated).
     """
-    _require_path(status_path, "phase_entry_timestamp")
+    status_path = _as_path(status_path, "phase_entry_timestamp")
     try:
         full = read_full(status_path)
     except ValueError:
@@ -985,7 +1006,7 @@ def phase_entry_timestamp(
     return None
 
 
-def read_slug(status_path: Path) -> str:
+def read_slug(status_path: Path | str) -> str:
     """Return the ``slug:`` value from the top yaml block,
 or the parent dir name.
 
@@ -994,11 +1015,12 @@ or the parent dir name.
 
     Args:
         status_path: Absolute path to the task's ``status.md`` file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         The slug string.
     """
-    _require_path(status_path, "read_slug")
+    status_path = _as_path(status_path, "read_slug")
     try:
         full = read_full(status_path)
         value = full["yaml"].get("slug")
@@ -1009,7 +1031,7 @@ or the parent dir name.
     return status_path.parent.name
 
 
-def read_branch(status_path: Path, *, cfg: dict, slug: str) -> str:
+def read_branch(status_path: Path | str, *, cfg: dict, slug: str) -> str:
     """Return the ``branch:`` value from the top yaml block,
 or derive it.
 
@@ -1019,6 +1041,7 @@ or derive it.
 
     Args:
         status_path: Absolute path to the task's ``status.md`` file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         cfg: Loaded mill config dict;
         must contain ``cfg['spawn']['branch_prefix']``.
         slug: Task slug; used to derive the branch name on the fallback path.
@@ -1026,7 +1049,7 @@ or derive it.
     Returns:
         The branch name string.
     """
-    _require_path(status_path, "read_branch")
+    status_path = _as_path(status_path, "read_branch")
     import sys as _sys
 
     try:
@@ -1046,7 +1069,7 @@ or derive it.
     return derived
 
 
-def init_batches(status_path: Path, names: list[str]) -> None:
+def init_batches(status_path: Path | str, names: list[str]) -> None:
     """Seed the ``## Batches`` section with every batch in ``pending`` state.
 
     Idempotent: calling with the same ``names`` list produces the same output.
@@ -1054,13 +1077,13 @@ def init_batches(status_path: Path, names: list[str]) -> None:
     entry before any batch has started.
     Callers resuming an existing run must not pass through this function.
     """
-    _require_path(status_path, "init_batches")
+    status_path = _as_path(status_path, "init_batches")
     batches = [{"name": n, "state": "pending"} for n in names]
     _write_batches(status_path, batches)
 
 
 def set_batch_field(
-    status_path: Path,
+    status_path: Path | str,
     name: str,
     key: str,
     value: str | int | list[str] | None,
@@ -1072,7 +1095,7 @@ def set_batch_field(
     Unknown keys raise ``ValueError`` so typos fail loudly rather than silently writing a field no
     consumer reads.
     """
-    _require_path(status_path, "set_batch_field")
+    status_path = _as_path(status_path, "set_batch_field")
     if key not in _BATCH_ALLOWED_KEYS:
         raise ValueError(
             f"Unknown batch field {key!r}; allowed: {sorted(_BATCH_ALLOWED_KEYS)}"
@@ -1094,7 +1117,7 @@ def set_batch_field(
 
 
 def set_batch_fields(
-    status_path: Path,
+    status_path: Path | str,
     name: str,
     fields: dict[str, str | int | list[str] | None],
 ) -> None:
@@ -1103,7 +1126,7 @@ def set_batch_fields(
     Validates all keys before any mutation — a single ``read_batches → mutate all → _write_batches``
     cycle ensures no partial write is possible.
     """
-    _require_path(status_path, "set_batch_fields")
+    status_path = _as_path(status_path, "set_batch_fields")
     for key in fields:
         if key not in _BATCH_ALLOWED_KEYS:
             raise ValueError(
@@ -1127,7 +1150,7 @@ def set_batch_fields(
 
 
 def resume_batch(
-    status_path: Path,
+    status_path: Path | str,
     batch_name: str,
     *,
     timestamp: str,
@@ -1154,6 +1177,7 @@ def resume_batch(
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         batch_name: Name of the batch entry to resume.
         timestamp: ISO-8601 UTC timestamp for the new ``implementing`` timeline row,
             passed through unchanged to ``append_phase``.
@@ -1166,6 +1190,7 @@ def resume_batch(
         ValueError: propagated unchanged from ``set_batch_field`` / ``append_phase``,
             e.g. when ``batch_name`` does not exist in ``## Batches``.
     """
+    status_path = _as_path(status_path, "resume_batch")
     set_batch_field(status_path, batch_name, "state", "pending")
     set_batch_field(status_path, batch_name, "blocked_reason", None)
     if not preserve_start_sha:
@@ -1174,7 +1199,7 @@ def resume_batch(
     append_phase(status_path, "implementing", timestamp)
 
 
-def remove_batch(status_path: Path, name: str) -> None:
+def remove_batch(status_path: Path | str, name: str) -> None:
     """Delete one batch entry from ``## Batches`` entirely.
 
     Unlike ``set_batch_field`` / ``set_batch_fields``, which mutate a field on an existing entry,
@@ -1183,7 +1208,7 @@ def remove_batch(status_path: Path, name: str) -> None:
     Raises ``ValueError`` naming ``name`` when no entry with that name exists, matching
     ``set_batch_field``'s own not-found message format.
     """
-    _require_path(status_path, "remove_batch")
+    status_path = _as_path(status_path, "remove_batch")
     batches = read_batches(status_path)
     for entry in batches:
         if entry.get("name") == name:
@@ -1252,7 +1277,7 @@ def _find_recovery_log_block(lines: list[str]) -> tuple[int, int, int, int] | No
 
 
 def append_recovery_log(
-    status_path: Path, timestamp: str, restored_paths: list[str]
+    status_path: Path | str, timestamp: str, restored_paths: list[str]
 ) -> None:
     """
     Append one audit row recording a tracked-file restore to ``status.md``.
@@ -1270,6 +1295,7 @@ def append_recovery_log(
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         timestamp: ISO-8601 UTC timestamp for the restore event;
             written through ``_yaml_writer.quote_scalar`` to match ``append_phase``'s quoted
                 timeline-row convention.
@@ -1282,7 +1308,7 @@ def append_recovery_log(
         ValueError: the recovery-log heading is present but its fenced block is missing or
         unterminated.
     """
-    _require_path(status_path, "append_recovery_log")
+    status_path = _as_path(status_path, "append_recovery_log")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
@@ -1360,7 +1386,7 @@ def _find_inferred_success_log_block(lines: list[str]) -> tuple[int, int, int, i
 
 
 def append_inferred_success_log(
-    status_path: Path, batch_name: str, round: int, timestamp: str
+    status_path: Path | str, batch_name: str, round: int, timestamp: str
 ) -> None:
     """
     Append one audit row recording a finalize-side no-JSON commit-count-inferred success to
@@ -1379,6 +1405,7 @@ def append_inferred_success_log(
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         batch_name: The batch whose success was inferred rather than reported via the implementer's
             structured JSON.
         round: The review round the inference happened on.
@@ -1390,7 +1417,7 @@ def append_inferred_success_log(
         ValueError: the inferred-success-log heading is present but its fenced block is missing or
         unterminated.
     """
-    _require_path(status_path, "append_inferred_success_log")
+    status_path = _as_path(status_path, "append_inferred_success_log")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
@@ -1474,7 +1501,7 @@ def _find_fork_fallback_log_block(lines: list[str]) -> tuple[int, int, int, int]
     return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
 
 
-def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str) -> None:
+def append_fork_fallback_log(status_path: Path | str, batch_name: str, timestamp: str) -> None:
     """
     Append one audit row recording a mill-go2 cold fallback (a forked implementer dying and being
     replaced by a fresh cold-dispatched agent) to ``status.md``.
@@ -1494,6 +1521,7 @@ def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str)
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         batch_name: The batch whose forked implementer died and was replaced by a cold fallback.
         timestamp: ISO-8601 UTC timestamp for the fallback event;
             written through ``_yaml_writer.quote_scalar`` to match ``append_inferred_success_log``'s
@@ -1503,7 +1531,7 @@ def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str)
         ValueError: the fork-fallback-log heading is present but its fenced block is missing or
         unterminated.
     """
-    _require_path(status_path, "append_fork_fallback_log")
+    status_path = _as_path(status_path, "append_fork_fallback_log")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
@@ -1524,7 +1552,7 @@ def append_fork_fallback_log(status_path: Path, batch_name: str, timestamp: str)
 
 
 def append_fixer_fork_fallback_log(
-    status_path: Path, scope: str, round: int, timestamp: str
+    status_path: Path | str, scope: str, round: int, timestamp: str
 ) -> None:
     """
     Append one row recording a cold fork-fallback retry for the mill-go2 fixer override to
@@ -1551,6 +1579,7 @@ def append_fixer_fork_fallback_log(
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
         scope: The fixer dispatch scope this fallback applies to — a batch name, or the literal
             ``"holistic"`` for the holistic-review fixer pass.
         round: The review round the fallback happened on.
@@ -1562,7 +1591,7 @@ def append_fixer_fork_fallback_log(
         ValueError: the fork-fallback-log heading is present but its fenced block is missing or
         unterminated.
     """
-    _require_path(status_path, "append_fixer_fork_fallback_log")
+    status_path = _as_path(status_path, "append_fixer_fork_fallback_log")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
@@ -1585,7 +1614,7 @@ def append_fixer_fork_fallback_log(
     status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def read_fixer_fork_fallback_log(status_path: Path) -> list[dict]:
+def read_fixer_fork_fallback_log(status_path: Path | str) -> list[dict]:
     """
     Return every recorded fixer fork-fallback row as ``{"scope": str, "round": int}`` dicts.
 
@@ -1612,6 +1641,7 @@ def read_fixer_fork_fallback_log(status_path: Path) -> list[dict]:
 
     Args:
         status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
 
     Returns:
         One dict per parsed row, each with keys ``scope`` (``str``) and ``round`` (``int``).
@@ -1623,7 +1653,7 @@ def read_fixer_fork_fallback_log(status_path: Path) -> list[dict]:
         ValueError: the fork-fallback-log heading is present but its fenced block is missing or
         unterminated.
     """
-    _require_path(status_path, "read_fixer_fork_fallback_log")
+    status_path = _as_path(status_path, "read_fixer_fork_fallback_log")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines()
 
