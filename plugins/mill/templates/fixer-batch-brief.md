@@ -50,7 +50,7 @@ The following BLOCKING findings were fixed in earlier rounds of this task. Do no
 ## Fix discipline
 
 1. Apply findings in the order the review lists them.
-2. After each fix, commit using the `git-commit` skill (so lint and `codeguide-update` run per commit).
+2. After each fix, commit using the `git-commit` skill (so lint runs per commit).
    Do not call raw `git commit`.
 3. For each finding routed to FIX: edit the relevant file(s) and commit.
 4. For each finding routed to PUSH BACK: note your rebuttal;
