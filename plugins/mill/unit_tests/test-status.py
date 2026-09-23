@@ -20,8 +20,8 @@ from _status import (
     append_phase,
     append_recovery_log,
     clear_module_verify_baseline,
-    get_baseline_parent_sha,
     get_module_verify_baseline,
+    get_module_verify_baseline_signatures,
     init_batches,
     phase_entry_timestamp,
     read,
@@ -34,11 +34,11 @@ from _status import (
     remove_batch,
     render_initial,
     resume_batch,
-    set_baseline_parent_sha,
     set_batch_field,
     set_batch_fields,
     set_blocked,
     set_module_verify_baseline,
+    set_module_verify_baseline_signatures,
     update_field,
 )
 from _yaml_writer import quote_scalar
@@ -992,55 +992,92 @@ def main() -> int:
             assert after == before, "clear_module_verify_baseline should be a no-op when field is absent"
             print("PASS: clear_module_verify_baseline is a no-op when the field was never set")
 
-        # --- baseline_parent_sha tests ---
-        # Test 1: get_baseline_parent_sha returns None on a fresh file.
+        # Test 7: get_module_verify_baseline_signatures returns None on a fresh file.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            value = get_baseline_parent_sha(sp)
+            value = get_module_verify_baseline_signatures(sp)
             assert value is None, f"expected None on fresh file, got {value!r}"
-            print("PASS: get_baseline_parent_sha returns None on a fresh file")
+            print("PASS: get_module_verify_baseline_signatures returns None on a fresh file")
 
-        # Test 2: set_baseline_parent_sha inserts the row;
-        # a subsequent get_baseline_parent_sha round-trips the same value.
+        # Test 8: set_module_verify_baseline_signatures inserts the row;
+        # a subsequent get_module_verify_baseline_signatures round-trips the same value.
+        # An empty list survives the round-trip as a present-but-empty field, distinct from absence.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            sha_1 = "a" * 40
-            set_baseline_parent_sha(sp, sha_1)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_1, f"expected {sha_1!r}, got {value!r}"
-            print("PASS: set_baseline_parent_sha('<sha>') inserts the row")
+            set_module_verify_baseline_signatures(sp, ["sig-a", "sig-b"])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == ["sig-a", "sig-b"], f"expected ['sig-a', 'sig-b'], got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures inserts the row")
 
-            # Test 3: a second set() with a different value rewrites the existing row in place -- exactly one baseline_parent_sha: line survives, not a duplicate.
-            sha_2 = "b" * 40
-            set_baseline_parent_sha(sp, sha_2)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_2, f"expected {sha_2!r}, got {value!r}"
+            set_module_verify_baseline_signatures(sp, [])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == [], f"expected [] (present, not None), got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures([]) survives round-trip as present-but-empty")
+
+            # Test 9: a second set() with a different value rewrites the existing row in place --
+            # exactly one module_verify_baseline_signatures: line survives, not a duplicate.
+            set_module_verify_baseline_signatures(sp, ["sig-c"])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == ["sig-c"], f"expected ['sig-c'], got {value!r}"
             raw = sp.read_text(encoding="utf-8")
-            occurrences = raw.count("baseline_parent_sha:")
+            occurrences = raw.count("module_verify_baseline_signatures:")
             assert occurrences == 1, f"expected exactly one row, found {occurrences}"
-            print("PASS: set_baseline_parent_sha rewrites the existing row in place")
+            print("PASS: set_module_verify_baseline_signatures rewrites the existing row in place")
 
-        # Test 4: set_baseline_parent_sha rejects an empty-string value.
+        # Test 10: a signature list long enough that a naive yaml.safe_dump without a width
+        # override would wrap it across multiple physical lines must instead write as exactly one
+        # physical line -- this is the regression guard for the line-stranding bug this would
+        # otherwise cause on every later _status read.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            try:
-                set_baseline_parent_sha(sp, "")
-                assert False, "expected ValueError"
-            except ValueError:
-                pass
-            print("PASS: set_baseline_parent_sha rejects an empty-string value")
+            long_signatures = [f"sha256:{'a' * 60}-{i}" for i in range(10)]
+            set_module_verify_baseline_signatures(sp, long_signatures)
+            raw = sp.read_text(encoding="utf-8")
+            matching_lines = [
+                line for line in raw.splitlines() if line.startswith("module_verify_baseline_signatures:")
+            ]
+            assert len(matching_lines) == 1, (
+                f"expected the row to stay on exactly one physical line, found {len(matching_lines)}"
+            )
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == long_signatures, f"expected round-trip to preserve the list, got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures writes a long list as one physical line")
+
+            # A subsequent set() then clear_module_verify_baseline() then read() round-trip on that
+            # value leaves status.md fully parseable.
+            clear_module_verify_baseline(sp)
+            parsed = read(sp)
+            assert parsed.get("module_verify_baseline_signatures") is None
+            print("PASS: clear_module_verify_baseline after a long-signature-list set leaves status.md parseable")
+
+        # Test 11: clear_module_verify_baseline now also clears module_verify_baseline_signatures
+        # in the same call -- assert both fields are absent after one call that previously had both set.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            set_module_verify_baseline(sp, "clean")
+            set_module_verify_baseline_signatures(sp, ["sig-a"])
+            clear_module_verify_baseline(sp)
+            assert get_module_verify_baseline(sp) is None, "module_verify_baseline should be cleared"
+            assert get_module_verify_baseline_signatures(sp) is None, (
+                "module_verify_baseline_signatures should be cleared in the same call"
+            )
+            print("PASS: clear_module_verify_baseline clears both fields together")
 
         # --- append_recovery_log tests ---
         ts_rl = "2026-07-29T08:00:00Z"

@@ -5057,143 +5057,6 @@ def main() -> int:
             print(f"FAIL: case 72e ({exc})", file=sys.stderr)
             errors += 1
 
-    # (f) corroboration succeeds: a start_sha checkout reproduces the same mismatch -> waived + baseline persisted.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        base_sha = _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            result = _run_verify_gates(
-                project_root,
-                verify_cmd,
-                None,
-                batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
-                start_sha=base_sha,
-                status_path=status_path,
-                batch_name="01-test-batch",
-            )
-            assert result is None, (
-                f"case 72f: expected waiver (None) once corroborated, got {result}"
-            )
-            batches = _status.read_batches(status_path)
-            entry = next(b for b in batches if b["name"] == "01-test-batch")
-            persisted = entry.get("verify_baseline_failures") or []
-            assert "--- FAIL: TestOld (1.11s)" in persisted, (
-                f"case 72f: original baseline entry must survive the persist, got {persisted}"
-            )
-            assert "--- FAIL: TestNew (0.00s)" in persisted, (
-                f"case 72f: corroborated new signature must be self-healed into the"
-                f" baseline, got {persisted}"
-            )
-            print(
-                "PASS: case 72f - a start_sha checkout reproducing the same mismatch"
-                " waives the batch and persists the expanded baseline"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 72f ({exc})", file=sys.stderr)
-            errors += 1
-
-    # (g) corroboration fails to reproduce: still blocks.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        base_sha = _setup_fixture(project_root)
-        try:
-            marker = project_root / "marker.txt"
-            marker.write_text("x", encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "marker.txt"],
-                check=True,
-                capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "add marker"],
-                check=True,
-                capture_output=True,
-            )
-            verify_cmd = (
-                "test -f marker.txt && echo '--- FAIL: TestNew (0.00s)' && exit 1"
-                " || exit 0"
-            )
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            result = _run_verify_gates(
-                project_root,
-                verify_cmd,
-                None,
-                batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
-                start_sha=base_sha,
-                status_path=status_path,
-                batch_name="01-test-batch",
-            )
-            assert result is not None, (
-                "case 72g: a control run that passes at start_sha must not be"
-                " corroborated -- the batch must still block"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 72g: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72g - a start_sha checkout that does NOT reproduce the"
-                " mismatch leaves the batch blocked"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 72g ({exc})", file=sys.stderr)
-            errors += 1
-
-    # (h) backward compatibility: omitting start_sha never attempts corroboration.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            baseline = ["--- FAIL: TestFoo (9.99s)"]
-            with unittest.mock.patch(
-                "_implementer_common._corroborate_batch_failure",
-                side_effect=AssertionError("should not be called"),
-            ):
-                result = _run_verify_gates(
-                    project_root, verify_cmd, None, batch_verify_baseline=baseline
-                )
-            assert result is not None, (
-                "case 72h: a non-baseline signature with no start_sha must still block"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 72h: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72h - omitting start_sha short-circuits corroboration,"
-                " matching every pre-existing caller's behavior"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 72h ({exc})", file=sys.stderr)
-            errors += 1
-
     # Case 73: #825 regression -- a prior batch's committed file, touched again by later
     # activity but currently reading back its earlier (start_sha-identical) content, must
     # NOT trip the dirty-tree gate: `git diff --name-only start_sha` is a pure content
@@ -5492,11 +5355,9 @@ def main() -> int:
             print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 78: #954 regression -- the explicit-JSON-success path, with the corroboration-waiver
-    # firing (a subset-diff mismatch that reproduces against a start_sha checkout), must not
-    # self-trip the in-scope dirty-tree gate on the very status.md write the waiver itself makes.
-    # git_name/git_email supplied -> batch 1's fix commits that write before the dirty-tree gate
-    # runs later in this same _forward_output call, so the batch reaches success cleanly.
+    # Case 78: the corroboration mechanism (#954) is deleted -- a subset-diff mismatch against a
+    # non-empty batch_verify_baseline on the explicit-JSON-success path must now block strictly,
+    # with no checkout of any kind attempted (Decision no-checkout-anywhere / delete-corroboration).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5562,30 +5423,27 @@ def main() -> int:
                     parent_branch="main",
                     batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
-                    batch_name="01-test-batch",
-                    git_name="Test",
-                    git_email="test@test.com",
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "success", (
-                f"case 78: expected success once the corroboration-waiver fires, got {data}"
+            assert data["status"] == "stuck", (
+                f"case 78: expected strict blocking with corroboration deleted, got {data}"
+            )
+            assert data["stuck_type"] == "verify", (
+                f"case 78: expected stuck_type=verify, got {data}"
             )
             print(
-                "PASS: case 78 - #954: explicit-JSON-success path with the corroboration-waiver"
-                " commits its status.md write before the dirty-tree gate, so the batch does not"
-                " self-trip"
+                "PASS: case 78 - explicit-JSON-success path: a subset-diff mismatch blocks"
+                " strictly now that the corroboration mechanism is deleted"
             )
         except Exception as exc:
             print(f"FAIL: case 78 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 79: #954 regression -- same corroboration-waiver, driven through one of the three
+    # Case 79: same deleted corroboration mechanism, driven through one of the three
     # no-JSON-inference call sites in _forward_output (no parseable status JSON, snapshot_path
-    # omitted, forcing the inferred-success branch). This is the discriminating assertion for
-    # these call sites: none of them reach _in_scope_dirty_stuck, so "success not stuck" alone
-    # would not prove git_name/git_email were actually threaded through -- only the absence of
-    # an uncommitted status.md diff afterward proves the persist-commit actually ran here too.
+    # omitted, forcing the inferred-success branch). Must block strictly like case 78, and must
+    # leave status.md untouched since there is no persist-commit mechanism left to write it.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5645,35 +5503,34 @@ def main() -> int:
                     session_id="case79",
                     batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
-                    batch_name="01-test-batch",
-                    git_name="Test",
-                    git_email="test@test.com",
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "success", (
-                f"case 79: expected inferred success once corroborated, got {data}"
+            assert data["status"] == "stuck", (
+                f"case 79: expected strict blocking with corroboration deleted, got {data}"
+            )
+            assert data["stuck_type"] in ("verify", "incomplete"), (
+                f"case 79: expected stuck_type=verify or incomplete, got {data}"
             )
             status_diff = _subprocess_util.run(
                 ["git", "status", "--porcelain", "_mill/status.md"],
                 cwd=project_root,
             )
             assert status_diff.stdout.strip() == "", (
-                "case 79: status.md must have no uncommitted diff after the corroboration"
-                f" persist-commit, got {status_diff.stdout!r}"
+                "case 79: status.md must have no uncommitted diff -- there is no persist"
+                f" mechanism left to write it, got {status_diff.stdout!r}"
             )
             print(
-                "PASS: case 79 - #954: a no-JSON-inference call site also commits its"
-                " corroboration-waiver status.md write, leaving no uncommitted diff behind"
+                "PASS: case 79 - a no-JSON-inference call site blocks strictly with the"
+                " corroboration mechanism deleted, leaving status.md untouched"
             )
         except Exception as exc:
             print(f"FAIL: case 79 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 80: git_name/git_email both omitted (None, the default) -- the corroboration-waiver
-    # itself must still succeed (the safe no-op degrades only the persist-commit, matching every
-    # other optional-parameter-absent behavior in this module), but no commit is attempted for
-    # the status.md write, which is left as an uncommitted diff.
+    # Case 80: with the corroboration mechanism deleted, a subset-diff mismatch blocks strictly
+    # regardless of git identity or batch name -- there is no persist-commit path left to
+    # exercise, so status.md is never written and stays byte-identical to its committed state.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5725,10 +5582,8 @@ def main() -> int:
         )
         captured = ""
         try:
-            # task_dir/parent_branch deliberately omitted here -- the dirty-tree gate this
-            # module's fix guards against is Card 1's own scope (covered by case 78 above);
-            # this case isolates whether the corroboration-waiver itself still fires safely
-            # when the persist-commit's identity parameters are absent.
+            # task_dir/parent_branch deliberately omitted here -- this case isolates the
+            # subset-diff-mismatch blocking behavior with no downstream dirty-tree gate involved.
             rc, captured = _capture_stdout(
                 lambda: _forward_output(
                     agent_output,
@@ -5738,25 +5593,23 @@ def main() -> int:
                     session_id="case80",
                     batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
-                    batch_name="01-test-batch",
                 )
             )
             data = json.loads(captured.strip())
-            assert data["status"] == "success", (
-                f"case 80: expected success once corroborated, even with git identity absent,"
-                f" got {data}"
+            assert data["status"] == "stuck", (
+                f"case 80: expected strict blocking with corroboration deleted, got {data}"
             )
             status_diff = _subprocess_util.run(
                 ["git", "status", "--porcelain", "_mill/status.md"],
                 cwd=project_root,
             )
-            assert status_diff.stdout.strip() != "", (
-                "case 80: with git_name/git_email omitted, the status.md write must be a safe"
-                " no-op commit-wise -- left uncommitted, not silently attempted"
+            assert status_diff.stdout.strip() == "", (
+                "case 80: status.md must be untouched -- there is no persist mechanism left"
+                f" that could write it, got {status_diff.stdout!r}"
             )
             print(
-                "PASS: case 80 - git_name/git_email omitted: corroboration-waiver still"
-                " succeeds, but the persist-commit safely no-ops rather than raising"
+                "PASS: case 80 - subset-diff mismatch blocks strictly with no persist"
+                " mechanism to exercise, leaving status.md untouched"
             )
         except Exception as exc:
             print(f"FAIL: case 80 ({exc}) captured={captured!r}", file=sys.stderr)
@@ -5854,155 +5707,6 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 82 ({exc}) captured={captured!r}", file=sys.stderr)
-            errors += 1
-
-    # Case 83 (#1102) -- _run_verify_gates on-demand baseline computation.
-    # (a) batch_verify_baseline is None, the batch replay fails, and status_path has a pinned
-    # baseline_parent_sha -> compute_batch_baseline_on_demand is mocked to return a signature list
-    # matching the replay failure -> the gate is waived and the computed baseline is persisted.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            _status.set_baseline_parent_sha(status_path, "a" * 40)
-            with unittest.mock.patch(
-                "_verify_baseline.compute_batch_baseline_on_demand",
-                return_value=["--- FAIL: TestNew (0.00s)"],
-            ):
-                result = _run_verify_gates(
-                    project_root,
-                    verify_cmd,
-                    None,
-                    batch_verify_baseline=None,
-                    status_path=status_path,
-                    batch_name="01-test-batch",
-                )
-            assert result is None, (
-                f"case 83a: expected waiver (None) once on-demand-computed, got {result}"
-            )
-            batches = _status.read_batches(status_path)
-            entry = next(b for b in batches if b["name"] == "01-test-batch")
-            persisted = entry.get("verify_baseline_failures") or []
-            assert persisted == ["--- FAIL: TestNew (0.00s)"], (
-                f"case 83a: expected the on-demand-computed baseline persisted, got {persisted}"
-            )
-            print(
-                "PASS: case 83a - on-demand computation waives the batch and"
-                " persists the computed baseline"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 83a ({exc})", file=sys.stderr)
-            errors += 1
-
-    # (b) no pinned baseline_parent_sha -> the gate blocks exactly as it did before this batch;
-    # no on-demand call is attempted.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            with unittest.mock.patch(
-                "_verify_baseline.compute_batch_baseline_on_demand",
-                side_effect=AssertionError("should not be called"),
-            ):
-                result = _run_verify_gates(
-                    project_root,
-                    verify_cmd,
-                    None,
-                    batch_verify_baseline=None,
-                    status_path=status_path,
-                    batch_name="01-test-batch",
-                )
-            assert result is not None, (
-                "case 83b: expected strict blocking when no baseline_parent_sha is pinned"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 83b: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 83b - no pinned baseline_parent_sha blocks without"
-                " attempting an on-demand computation"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 83b ({exc})", file=sys.stderr)
-            errors += 1
-
-    # (c) the on-demand computation itself raises -> the gate blocks (fail-safe-strict) rather
-    # than propagating the exception.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            _status.set_baseline_parent_sha(status_path, "b" * 40)
-            with unittest.mock.patch(
-                "_verify_baseline.compute_batch_baseline_on_demand",
-                side_effect=RuntimeError("infrastructure failure"),
-            ):
-                result = _run_verify_gates(
-                    project_root,
-                    verify_cmd,
-                    None,
-                    batch_verify_baseline=None,
-                    status_path=status_path,
-                    batch_name="01-test-batch",
-                )
-            assert result is not None, (
-                "case 83c: expected fail-safe-strict blocking when on-demand"
-                " computation raises"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 83c: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 83c - an on-demand computation that raises degrades"
-                " to strict blocking instead of propagating"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 83c ({exc})", file=sys.stderr)
             errors += 1
 
     # Case 84 (#1104) -- _fixer_logic_ancestor_override direct coverage.
@@ -6217,52 +5921,6 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 85b ({exc})", file=sys.stderr)
-            errors += 1
-
-    # Case 86 (#1089) -- on-demand baseline computation prints an attributable progress line.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            status_path = project_root / "_mill" / "status.md"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_text(
-                _status.render_initial(
-                    "Test Task",
-                    "test",
-                    "2026-01-01T00:00:00Z",
-                    "main",
-                    "test-slug",
-                    "test-branch",
-                ),
-                encoding="utf-8",
-            )
-            _status.init_batches(status_path, ["01-test-batch"])
-            _status.set_baseline_parent_sha(status_path, "a" * 40)
-            with unittest.mock.patch(
-                "_verify_baseline.compute_batch_baseline_on_demand",
-                return_value=["--- FAIL: TestNew (0.00s)"],
-            ):
-                _, captured = _capture_stdout(
-                    lambda: _run_verify_gates(
-                        project_root,
-                        verify_cmd,
-                        None,
-                        batch_verify_baseline=None,
-                        status_path=status_path,
-                        batch_name="01-test-batch",
-                    )
-                )
-            assert "[baseline] computing on-demand baseline for 01-test-batch..." in captured, (
-                f"expected an attributable ASCII progress line, got {captured!r}"
-            )
-            print(
-                "PASS: case 86 - on-demand baseline computation prints an"
-                " attributable progress line naming the batch"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 86 ({exc})", file=sys.stderr)
             errors += 1
 
     if errors:

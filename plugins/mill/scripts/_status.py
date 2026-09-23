@@ -35,8 +35,8 @@ Public API:
     get_module_verify_baseline(status_path) -> str | None
     set_module_verify_baseline(status_path, value) -> None
     clear_module_verify_baseline(status_path) -> None
-    get_baseline_parent_sha(status_path) -> str | None
-    set_baseline_parent_sha(status_path, value) -> None
+    get_module_verify_baseline_signatures(status_path) -> list[str] | None
+    set_module_verify_baseline_signatures(status_path, value) -> None
     append_recovery_log(status_path, timestamp, restored_paths) -> None
     append_inferred_success_log(status_path, batch_name, round, timestamp) -> None
     append_fork_fallback_log(status_path, batch_name, timestamp) -> None
@@ -420,78 +420,79 @@ def clear_module_verify_baseline(status_path: Path) -> None:
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
 
-    for i in range(start, end):
-        stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^module_verify_baseline:\s*", stripped):
-            del lines[i]
-            status_path.write_text("".join(lines), encoding="utf-8")
-            return
-    # Row already absent: no-op, matches append_phase's tolerant style.
+    # Both rows must go out together: a stale signature set paired with a cleared verdict
+    # would seed a later dedup from a run that no longer has a corresponding verdict.
+    for pattern in (r"^module_verify_baseline:\s*", r"^module_verify_baseline_signatures:\s*"):
+        for i in range(start, end):
+            stripped = lines[i].rstrip("\r\n")
+            if re.match(pattern, stripped):
+                del lines[i]
+                text = "".join(lines)
+                lines = text.splitlines(keepends=True)
+                start, end = _split_fences(text, _YAML_FENCE)
+                break
+    status_path.write_text("".join(lines), encoding="utf-8")
 
 
-def get_baseline_parent_sha(status_path: Path) -> str | None:
+def get_module_verify_baseline_signatures(status_path: Path) -> list[str] | None:
     """
-    Return the cached ``baseline_parent_sha:`` value from the top yaml block.
+    Return the cached ``module_verify_baseline_signatures:`` value from the top yaml block.
 
-    This is the parent-branch tip SHA pinned once, cheaply (a ``git rev-parse``, not a checkout),
-    at the start of a task's coding phase.
-    ``_run_verify_gates`` reads this value to compute a batch's ``verify_baseline_failures`` on
-    demand, only when that batch's own verify gate actually fails.
-    ``None`` means "not yet pinned" -- the expected state before ``millpy-implement.py``'s baseline
-    stage has run, or when the pin attempt itself failed, not an error condition.
+    This is the list of per-verify-invocation signatures backing the eager module-wide capture and
+    the merge-in recompute's pair-cache seed. ``None`` means "not yet computed" (the key is absent,
+    or present as an explicit ``null``) -- the expected state before the task's first baseline
+    computation runs, not an error condition.
 
     Args:
         status_path: Absolute path to the status.md file.
 
     Returns:
-        The 40-character parent SHA string, or ``None``.
+        The list of signature strings, or ``None``.
 
     Raises:
         ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to
         parse as yaml.
     """
-    _require_path(status_path, "get_baseline_parent_sha")
+    _require_path(status_path, "get_module_verify_baseline_signatures")
     data = read(status_path)
-    return data.get("baseline_parent_sha")
+    return data.get("module_verify_baseline_signatures")
 
 
-def set_baseline_parent_sha(status_path: Path, value: str) -> None:
+def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -> None:
     """
-    Write ``baseline_parent_sha:`` in the top yaml block of ``status_path``.
+    Write ``module_verify_baseline_signatures:`` in the top yaml block of ``status_path``.
 
     Mirrors ``set_module_verify_baseline``'s insert-in-place-or-append pattern: if a
-    ``baseline_parent_sha:`` row already exists in the block it is rewritten in place;
-    otherwise a new row is inserted immediately after ``parent:`` -- that field's natural neighbor
-    in the template's field ordering, since the row does not exist in ``status-discussing.md``'s
-    template and must be inserted the first time the pin happens.
-    There is no ``clear_baseline_parent_sha`` -- the value is pinned once per task and never
-    cleared within a task's lifetime; a new task gets a fresh ``status.md``.
+    ``module_verify_baseline_signatures:`` row already exists in the block it is rewritten in
+    place;
+    otherwise a new row is inserted immediately after ``parent:``, that field's natural neighbor in
+    the template's field ordering.
 
     Args:
         status_path: Absolute path to the status.md file.
-        value: The parent branch's tip SHA.
-            Must be a non-empty string -- unlike ``set_module_verify_baseline`` there is no fixed
-                enum to validate against, just non-emptiness.
-            Written through ``_yaml_writer.quote_scalar`` for consistency with every other string
-                field in this module.
+        value: Serialised as a yaml flow-sequence via ``yaml.safe_dump(value,
+            default_flow_style=True, width=10**9)`` rather than ``quote_scalar`` (which is
+            string-only). The explicit ``width=10**9`` is load-bearing: PyYAML's default
+            80-column ``best_width`` would wrap a realistic multi-signature list across physical
+            lines, and every other reader/writer of this top yaml block assumes one field is
+            exactly one physical line.
 
     Raises:
-        ValueError: ``value`` is empty, the file lacks a yaml block, the block is unterminated, or
-        the block has no ``parent:`` row to insert after.
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block has no
+        ``parent:`` row to insert after.
     """
-    _require_path(status_path, "set_baseline_parent_sha")
-    if not value:
-        raise ValueError("baseline_parent_sha value must be a non-empty string")
+    _require_path(status_path, "set_module_verify_baseline_signatures")
     text = status_path.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
+    flow_value = yaml.safe_dump(value, default_flow_style=True, width=10**9).strip()
 
     # Rewrite the existing row in place if one is already present.
     for i in range(start, end):
         stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^baseline_parent_sha:\s*", stripped):
+        if re.match(r"^module_verify_baseline_signatures:\s*", stripped):
             eol = lines[i][len(stripped):]
-            lines[i] = f"baseline_parent_sha: {quote_scalar(value)}{eol}"
+            lines[i] = f"module_verify_baseline_signatures: {flow_value}{eol}"
             status_path.write_text("".join(lines), encoding="utf-8")
             return
 
@@ -504,7 +505,7 @@ def set_baseline_parent_sha(status_path: Path, value: str) -> None:
             break
     if parent_idx is None:
         raise ValueError(f"parent: key missing from yaml block of {status_path}")
-    lines.insert(parent_idx + 1, f"baseline_parent_sha: {quote_scalar(value)}\n")
+    lines.insert(parent_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
