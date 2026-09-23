@@ -200,7 +200,9 @@ the plan.
   ) -> dict[str, Path]:
   ```
   Body: for every batch file in `batch_files` (already the caller-filtered, sorted, non-overview
-  list `run()` builds), for every card returned by `_parse_cards(batch_path.read_text(encoding="utf-8"))`,
+  list `run()` builds), for every `(card_num, card_lines)` pair returned by
+  `_parse_cards(batch_path.read_text(encoding="utf-8"))`, build `card_text = "\n".join(card_lines)`
+  (mirroring `_check_context_completeness`'s own established `_parse_cards` -> join pattern) and
   union `_card_own_reference_set(card_text)`'s tokens into one plan-wide `raw_tokens: set[str]`. For
   each token in `sorted(raw_tokens)`, resolve it via
   `resolve_existing_paths([token], project_root, root, wiki_root=wiki_root, git_root=git_root)`; when
@@ -266,23 +268,23 @@ the plan.
   wiki_root=wiki_root, git_root=git_root)`. Thread `cited_files_map=cited_files_map` into the
   existing `_check_context_completeness(...)` call alongside `declared_symbols=declared_symbols`.
 
-  Delete 6 existing test functions from `test-plan-validate.py` in this same card (not card 5) —
+  Delete 7 existing test functions from `test-plan-validate.py` in this same card (not card 5) —
   each one specifically exercises a mechanism this card deletes outright, so migrating them via
   card 5's generic "cite the fixture's declaring file" recipe would silently change what they test
   rather than preserve it: `test_check_context_completeness_symbol_out_of_scope_deprecated`,
   `test_check_context_completeness_symbol_out_of_scope_legacy`,
   `test_check_context_completeness_symbol_out_of_scope_obsolete`,
-  `test_check_context_completeness_symbol_out_of_scope_archive`, and
-  `test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor`
-  (all five assert 0 errors specifically because `_SYMBOL_SEARCH_DENYLIST_DIRS`/
-  `_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS` pruning hides the declaring file — once that pruning is deleted,
-  the declaring file becomes an ordinary, individually-citable candidate and citing it per card 5's
-  recipe would flip the asserted outcome from 0 errors to 1, testing the opposite of what these
-  functions are named for); and
+  `test_check_context_completeness_symbol_out_of_scope_archive`,
+  `test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor`, and
+  `test_check_context_completeness_symbol_issue_1030_deprecated_directory_property` (all six assert
+  0 errors specifically because `_SYMBOL_SEARCH_DENYLIST_DIRS`/`_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`
+  pruning hides the declaring file — once that pruning is deleted, the declaring file becomes an
+  ordinary, individually-citable candidate and citing it per card 5's recipe would flip the asserted
+  outcome from 0 errors to 1, testing the opposite of what these functions are named for); and
   `test_check_context_completeness_symbol_first_match_wins_root_precedence` (asserts exactly 1 error
   selected via `candidate_roots` multi-root precedence, a concept this card removes entirely —
   `_resolve_symbol_files` no longer takes `project_root`/`root`/`git_root` at all). Also remove these
-  6 functions from this file's own test-function reference list (the module-level list the
+  7 functions from this file's own test-function reference list (the module-level list the
   `__main__`/run-all.py discovery block iterates).
 
   New fixture-based tests in `test-plan-validate.py`:
@@ -322,11 +324,13 @@ the plan.
   already present in `_compute_plan_wide_cited_files`'s plan-wide map — a symbol declared solely in a
   file that no card's own `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:` cites anywhere in a
   fixture plan can no longer be found (Decision `resolution-scope-rework`'s accepted cost). Card 4
-  already deletes 6 test functions whose asserted outcome depends on mechanisms that card removes
-  outright (the 5 `..._out_of_scope_...` denylist/pruning tests and
+  already deletes 7 test functions whose asserted outcome depends on mechanisms that card removes
+  outright (the 5 `..._out_of_scope_...` denylist/pruning tests,
+  `test_check_context_completeness_symbol_issue_1030_deprecated_directory_property` — also a
+  denylist/pruning test despite its different name — and
   `test_check_context_completeness_symbol_first_match_wins_root_precedence`'s multi-root precedence
   test — see card 4's own Requirements for the full list and why); this card's generic recipe below
-  does not apply to those 6 and must not re-add or otherwise touch them. Card 3's own new
+  does not apply to those 7 and must not re-add or otherwise touch them. Card 3's own new
   `test_check_context_completeness_dirty_literal_enumeration_issue_1116` is already narrowing-safe by
   construction (its own two-batch fixture already cites its symbol's declaring file from a second
   batch) and is not `_symbol_`-prefixed, so it is correctly out of scope for this card's grep-driven
@@ -348,17 +352,40 @@ the plan.
     reference via their own dotted qualifier token), leaving both tested batches' own refs unchanged;
     the existing per-batch message assertions are otherwise unaffected.
 
+  **The audit criterion below is NOT "does the asserted error count change" — it is "does the test's
+  fixture require the symbol to actually be resolved (found, then possibly rejected by a specific
+  downstream branch) for the test to mean what it claims."** A whole class of existing tests already
+  asserts 0 errors AND would STILL assert 0 errors if left un-migrated — because their target file is
+  simply absent from the narrowed search space either way — but their 0-error outcome is currently
+  reached by the symbol being FOUND and then REJECTED by a specific mechanism (an ambiguous-match
+  skip, a qualifier mismatch, a comment/string-literal/usage-only non-declaration, or a conventional
+  test-file exclusion), not by the symbol never being searched for at all. Running verify to green
+  does NOT catch a skipped migration in this class, since the assertion value is identical either
+  way — this class must be identified and migrated by inspection, not inferred from a verify failure.
+  Confirmed members of this class (migrate all of them, citing each fixture's declaring file(s) from
+  a second batch exactly per the generic recipe below, even though their asserted count stays 0):
+  `test_check_context_completeness_symbol_clean_ambiguous_matches`,
+  `test_check_context_completeness_symbol_qualifier_no_match_still_zero`,
+  `test_check_context_completeness_symbol_qualifier_ambiguous_dirs_still_zero`,
+  `test_check_context_completeness_symbol_clean_test_file_excluded_all_languages`, and every
+  `test_check_context_completeness_symbol_comment_only_{go,cs,py,ts}`,
+  `test_check_context_completeness_symbol_string_literal_only_{go,cs,py,ts}`, and
+  `test_check_context_completeness_symbol_usage_site_only_{go,cs,py,ts}` variant. When auditing every
+  OTHER remaining test below, apply this same criterion (not just "count changes") in case further
+  members of this class exist beyond the ones named here.
+
   For every OTHER remaining existing symbol-branch test: grep
   `^def test_check_context_completeness_symbol_` in `plugins/mill/unit_tests/test-plan-validate.py`
-  to enumerate every REMAINING existing symbol-branch test function (excluding the 6 card-4-deleted
+  to enumerate every REMAINING existing symbol-branch test function (excluding the 7 card-4-deleted
   functions and the 2 named exceptions immediately above). For each one whose fixture places its
   target symbol's declaring file under `project_root` WITHOUT any card's `context=`/`edits=`/
   `creates=`/`deletes=`/`moves=` argument to `_make_batch_file` naming that same file anywhere in the
-  fixture plan, AND whose assertions depend on that symbol actually being resolved (a
-  context-completeness error naming the resolved path, a `_filter_matches_by_qualifier`
-  disambiguation outcome, an out-of-scope/denylist-directory outcome, a `_resolve_symbol_files`
-  cache-behavior assertion, or similar) rather than on the token failing the shape/exemption gate
-  before resolution is ever attempted: add a second batch entry to that test's `_write_plan` call (a
+  fixture plan, AND whose assertions depend on that symbol actually being resolved per the criterion
+  stated immediately above (a context-completeness error naming the resolved path, a
+  `_filter_matches_by_qualifier` disambiguation outcome, a comment/string/usage-only rejection, a
+  test-file-exclusion rejection, a `_resolve_symbol_files` cache-behavior assertion, or similar)
+  rather than on the token failing the shape/exemption gate before resolution is ever attempted: add
+  a second batch entry to that test's `_write_plan` call (a
   new `_make_overview` batch dict with `depends-on: []`, a second `_make_batch_file(..., card_num=2,
   context=[<the same file path(s) the fixture already writes to disk>])` file) so the plan-wide
   cited-files union now includes the declaring file — without adding it to the TESTED card's own
@@ -369,8 +396,11 @@ the plan.
   does not depend on the file being found at all (e.g. a token failing `_symbol_candidate_shape`'s
   own shape gate before resolution is attempted, or an already-covered same-plan-declared-symbol
   exemption case). Running `PYTHONPATH= uv run --project plugins/mill python
-  plugins/mill/unit_tests/run-all.py --only test-plan-validate.py` to green is the authoritative
-  completeness check for this card, not a manual tally of function names.
+  plugins/mill/unit_tests/run-all.py --only test-plan-validate.py` to green is authoritative for
+  every test whose asserted outcome would actually CHANGE if migration were skipped — but NOT for
+  the already-zero-error class named above, whose assertion value is identical whether migrated or
+  silently skipped; that class must be identified and migrated by inspection against the criterion
+  stated above, not inferred from a verify pass.
   This card intentionally audits the whole remaining symbol-branch test population in one card
   rather than splitting it further: every one of those tests already shares the batch's single
   `verify:` command, the mechanical fixture-edit rule is identical across all of them, and splitting
