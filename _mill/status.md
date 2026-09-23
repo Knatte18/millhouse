@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-09-23T10:34:04Z'
 plan-review-r1  '2026-09-23T10:39:09Z'
 plan-fix-r1  '2026-09-23T10:41:29Z'
 planned  '2026-09-23T10:41:44Z'
+implementing  '2026-09-23T10:42:29Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: deactivate-call-sites
+    state: pending
+  - name: prose-cleanup
+    state: pending
+  - name: close-issue
+    state: pending
 ```
