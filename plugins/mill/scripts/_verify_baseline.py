@@ -63,7 +63,6 @@ pre-flight indefinitely before batch 1 dispatches (#1101).
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import _subprocess_util
@@ -109,69 +108,60 @@ def compute_baseline(
 
 def _run_module_wide_verify_algorithm(
     module_wide_verify_cmd: str,
-    effective_tmp_path: Path,
-    project_root: Path,
+    cwd: Path,
     timeout_seconds: float | None = None,
-) -> str:
+) -> tuple[str, list[str]]:
     """
-    Run the 3-run/control-check module-wide verify corroboration algorithm.
+    Run the 2-run module-wide verify flakiness-guard algorithm.
 
     Implementation, in order:
-        1. Run `module_wide_verify_cmd` with cwd set to `effective_tmp_path`.
-            Exit code 0 -> return "clean" immediately.
-        2. On a non-zero exit, re-run the same command in the same `effective_tmp_path` once more
-            (the flakiness-guard retry).
-            A pass here means the first failure was a spurious fluke -> return "clean".
-        3. If the retry also fails, run `module_wide_verify_cmd` once more in
-        `project_root` itself (the task worktree -- always safe, no
-        mutation) as a control check.
-            If the control run also fails,
-        return "pre-existing-failures" -- both flakiness and a
-        deterministic path/environment mismatch have been ruled out.
-            If
-        the control run passes, the two `effective_tmp_path` failures are
-        path/environment-induced (not a real pre-existing failure): warn
-        on stderr and return "clean" instead.
+        1. Run `module_wide_verify_cmd` with cwd set to `cwd`.
+            Exit code 0 -> return ("clean", <signatures from this run>).
+        2. On a non-zero exit, re-run the same command at the same `cwd` once more (the
+            flakiness-guard retry).
+            A pass here means the first failure was a spurious fluke -> return ("clean", <union of
+            both runs' signatures>).
+        3. If the retry also fails, return ("pre-existing-failures", <union of both runs'
+            signatures>) -- two consecutive failures at `cwd` is sufficient corroboration; there is
+            no separate control-check cwd to fall back to.
 
     Args:
-        module_wide_verify_cmd: The module-wide verify command string to run, verbatim, in both
-        `effective_tmp_path` and (for the control check) `project_root`.
-        effective_tmp_path: The transient checkout's effective cwd to run the command against for
-        the first two runs.
-        project_root: Absolute path to the task worktree root, used as cwd for the control-check
-        run.
+        module_wide_verify_cmd: The module-wide verify command string to run, verbatim.
+        cwd: The already-resolved working directory to run it in for both runs.
         timeout_seconds: Per-run wall-clock ceiling passed through to `_run_verify_in`, or None for
-        no ceiling. Applied to each of the up-to-three runs individually, not to their total.
+            no ceiling. Applied to each of the up-to-two runs individually, not to their total.
 
     Returns:
-        The literal string "clean" or "pre-existing-failures".
+        A `(verdict, signatures)` tuple: `verdict` is `"clean"` or `"pre-existing-failures"`;
+        `signatures` is the deduplicated, order-preserving union of the raw failure-signature lines
+        extracted from every run actually performed.
 
     Raises:
         subprocess.TimeoutExpired: One of the runs exceeded `timeout_seconds`. The caller treats
-        this like any other computation failure and leaves the baseline unset.
+            this like any other computation failure and leaves the baseline unset.
     """
-    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path, timeout_seconds)
+    signatures: list[str] = []
+    seen: set[str] = set()
+
+    def _accumulate(output: str) -> None:
+        for line in _extract_failure_signatures(output):
+            if line not in seen:
+                seen.add(line)
+                signatures.append(line)
+
+    rc, output = _run_verify_in(module_wide_verify_cmd, cwd, timeout_seconds)
+    _accumulate(output)
     if rc == 0:
-        return "clean"
+        return "clean", signatures
 
-    # Flakiness-guard retry: a single transient-worktree failure is never trusted on its own.
-    rc, _output = _run_verify_in(module_wide_verify_cmd, effective_tmp_path, timeout_seconds)
+    # Flakiness-guard retry: a single failure is never trusted on its own.
+    rc, output = _run_verify_in(module_wide_verify_cmd, cwd, timeout_seconds)
+    _accumulate(output)
     if rc == 0:
-        return "clean"
+        return "clean", signatures
 
-    # Second consecutive transient-worktree failure.
-    # Corroborate with a control run in the task worktree itself before caching a real pre-existing-failures verdict.
-    rc, _output = _run_verify_in(module_wide_verify_cmd, project_root, timeout_seconds)
-    if rc != 0:
-        return "pre-existing-failures"
-
-    print(
-        "[_verify_baseline] warning: module-wide verify failed twice in "
-        "transient worktree but passed in task worktree -- treating as "
-        "path/environment-induced, caching 'clean'",
-        file=sys.stderr,
-    )
-    return "clean"
+    # Second consecutive failure at cwd is sufficient corroboration.
+    return "pre-existing-failures", signatures
 
 
 def _run_verify_in(
