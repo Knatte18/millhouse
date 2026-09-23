@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: monitor-persistent-true-still-referenced
 branch: hanf/monitor-persistent-true-still-referenced
 plan: _mill/plan
@@ -22,4 +22,13 @@ plan-review-r1  '2026-09-23T10:27:41Z'
 plan-fix-r1  '2026-09-23T10:27:55Z'
 plan-review-r2  '2026-09-23T10:31:37Z'
 planned  '2026-09-23T10:32:23Z'
+implementing  '2026-09-23T10:32:58Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: fix-monitor-persistent-refs
+    state: pending
 ```
