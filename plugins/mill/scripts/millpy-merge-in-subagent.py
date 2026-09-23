@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
 import subprocess
 import _subprocess_util
@@ -43,7 +44,6 @@ import _agent_dispatch
 import _implementer_claude
 import _llm_claude
 import _marker
-import _parent_branch
 import _paths
 import _plan_dag
 import _render
@@ -61,7 +61,7 @@ def _collect_task_intent(project_root: Path) -> str:
 
     Returns a string containing excerpts from this branch's _mill/discussion.md and _mill/plan/*.md
     that describe the branch's intent.
-    Extracts the top YAML block and the Edits/Creates/Deletes bullets from each plan file.
+    Extracts the top YAML block and the Edits/Creates/Deletes/Moves bullets from each plan file.
     Returns empty string if _mill directory does not exist.
     """
     mill_dir = project_root / "_mill"
@@ -90,7 +90,7 @@ def _collect_task_intent(project_root: Path) -> str:
             header_lines: list[str] = []
             lines = plan_content.splitlines()
             for i, line in enumerate(lines):
-                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes):\*\*", line):
+                if re.match(r"^-\s*\*\*(Edits|Creates|Deletes|Moves):\*\*", line):
                     header_lines.append(line)
                     # Check for sub-bullets
                     j = i + 1
@@ -208,9 +208,19 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     merge is never reused: ``--stage baseline``'s own idempotent no-op-if-cached behavior is exactly
     why a bare call to it would not recompute after a merge-in without this explicit reset.
 
-    Never raises -- every failure path (no module-wide verify configured, parent branch
-    unresolvable, status.md absent, or the computation itself raising) prints a JSON line
-    describing the outcome and returns 0 without blocking the merge-in;
+    Every batch's ``verify_baseline_failures`` field is cleared unconditionally, on every code path
+    through this function -- including the no-module-wide-verify-configured skip and the malformed
+    ``verify:`` error case -- per Decision ``merge-in-batch-baseline-staleness``: a merge-in changes
+    the tree these per-batch baselines were captured against, so they are stale the instant the merge
+    lands, independent of whether an overview-level module-wide ``verify:`` even exists.
+    Previously ``_corroborate_batch_failure`` masked this staleness by re-checking a batch's own
+    failure against the current tree at gate time;
+    that function is gone, so this unconditional clear is now what keeps a stale per-batch baseline
+    from silently surviving a merge.
+
+    Never raises -- every failure path (status.md absent, malformed ``verify:`` field, or the
+    computation itself raising) prints a JSON line describing the outcome and returns 0 without
+    blocking the merge-in;
     a baseline-recompute failure must never fail an otherwise successful merge.
 
     Args:
@@ -226,6 +236,12 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     except Exception as e:
         print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
         return 0
+
+    # Clear every batch's per-batch baseline FIRST, before any other code path in this function --
+    # per Decision merge-in-batch-baseline-staleness, staleness applies regardless of whether the
+    # module-wide half below even runs.
+    for batch in _status.read_batches(status_path):
+        _status.set_batch_field(status_path, batch["name"], "verify_baseline_failures", None)
 
     plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
     plan_base = _paths.resolve_task_path(project_root, plan_dir)
@@ -254,25 +270,53 @@ def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> in
     # Reset: force recomputation regardless of any currently-cached value.
     _status.clear_module_verify_baseline(status_path)
 
-    try:
-        parent_branch = _parent_branch.resolve(status_path, interactive=False)
-    except Exception as e:
-        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-        return 0
+    # Resolve the effective verify cwd the same way _run_verify_gate resolves its own: an explicit
+    # override if present, else git_root.
+    effective_cwd = cwd_override if cwd_override is not None else git_root
 
     try:
-        result = _verify_baseline.compute_baseline(
-            project_root, git_root, parent_branch, module_wide_verify_cmd,
-            cwd_override_relative=cwd_override,
+        result, _signatures = _verify_baseline.compute_baseline(
+            effective_cwd, module_wide_verify_cmd,
         )
     except Exception as e:
         print(f"[millpy-merge-in-subagent] baseline recompute failed: {e}", file=sys.stderr)
         print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
         return 0
 
-    _status.set_module_verify_baseline(status_path, result)
+    # Asymmetric mapping per Decision merge-in-recompute: only "clean" is cached; a
+    # "pre-existing-failures" result is left unset (clear_module_verify_baseline above already did
+    # that) so the module-wide gate stays strict rather than caching a permissive result.
+    if result == "clean":
+        _status.set_module_verify_baseline(status_path, "clean")
     print(json.dumps({"status": "success", "baseline": "computed", "value": result}))
     return 0
+
+
+def _generous_terminal_env() -> dict:
+    """
+    Build a subprocess environment with a generous floor on ``COLUMNS``/``LINES``.
+
+    A headless orchestrating process (this script) inherits no real terminal geometry, unlike an
+    interactive shell.
+    A ``verify:`` command that drives a tmux-based smoke test can misjudge available pane space
+    from that absent/tiny geometry and fail with a "no space for new pane" error unrelated to the
+    actual code under test.
+    Raises ``COLUMNS``/``LINES`` to a generous floor only when the inherited value is smaller,
+    leaving any larger inherited value untouched;
+    a no-op for any verify command that does not consult terminal geometry.
+
+    Returns:
+        A copy of ``os.environ`` with ``COLUMNS``/``LINES`` raised to the floor when needed.
+    """
+    env = dict(os.environ)
+    for var, floor in (("COLUMNS", 220), ("LINES", 50)):
+        try:
+            current = int(env.get(var, "0"))
+        except ValueError:
+            current = 0
+        if current < floor:
+            env[var] = str(floor)
+    return env
 
 
 def main(argv=None) -> int:
@@ -385,6 +429,7 @@ def main(argv=None) -> int:
                 capture_output=True,
                 text=True,
                 cwd=project_root,
+                env=_generous_terminal_env(),
                 **_run_kwargs,
             )
             # Case A: verify passes with no fixer needed (initial verify was 0)
@@ -433,7 +478,15 @@ def main(argv=None) -> int:
 
     timeout = cfg.get("llm", {}).get("implementer_timeout", 1800)
     implementer_cfg = cfg.get("roles", {}).get("implementer", {})
-    model_name = cfg.get("merge", {}).get("model") or implementer_cfg.get("model", "haiku")
+    merge_cfg = cfg.get("merge", {})
+    if args.mode == "conflicts":
+        model_name = (
+            merge_cfg.get("conflicts_model")
+            or merge_cfg.get("model")
+            or implementer_cfg.get("model", "haiku")
+        )
+    else:
+        model_name = merge_cfg.get("model") or implementer_cfg.get("model", "haiku")
     try:
         registry = _reviewers.load(git_root)
         impl_spec = _reviewers.resolve(registry, model_name)
@@ -515,6 +568,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 
@@ -583,6 +637,7 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         capture_output=True,
         text=True,
         cwd=project_root,
+        env=_generous_terminal_env(),
         **_run_kwargs,
     )
 

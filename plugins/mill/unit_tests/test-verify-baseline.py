@@ -1,40 +1,33 @@
 """
 Unit test for `plugins/mill/scripts/_verify_baseline.py`.
 
-Case 1 regresses #615/#620: the module-wide verify baseline's transient `git worktree add` failed
-with "Filename too long" on deep-path Windows repos because `core.longpaths` was not set for that
-throwaway checkout, silently disabling the baseline gate.
-This case asserts the `git worktree add` argv `compute_baseline` builds always carries `-c
-core.longpaths=true` immediately after the `-C <git_root>` pair and before the `worktree` token --
-the exact shape the fix in `_verify_baseline.py` produces.
+Case 1 regresses the no-checkout design (`_mill/discussion.md`'s `remove-all-three-checkouts` /
+`algorithm-simplification` Decisions): a table-driven exercise of `compute_baseline`'s 2-run
+flakiness-guard algorithm against its `tuple[str, list[str]]` return, using a call-counting fake for
+`_run_verify_in`.
+Asserts the run count explicitly (not just the returned verdict) -- deleting the third control run
+is a behavioral change a bare outcome assertion would not catch.
+Also asserts the signature half: the returned list equals the deduplicated, order-preserving union of
+`_extract_failure_signatures(output)` across every run actually performed in each case.
 
-Case 2 mitigates #629: a long `.scratch/verify-baseline-<uuid4().hex>/` prefix (32 hex characters)
-could itself push a deep-fixture Windows repo over MAX_PATH.
-This case asserts the transient-worktree directory basename `compute_baseline` builds matches
-`verify-baseline-<12 hex chars>` -- the shortened `uuid.uuid4().hex[:12]` slice, not the full
-32-character string.
+Case 2 is the regression guard against the checkout mechanism creeping back in: `compute_baseline`
+performs no git operation of any kind.
+`_verify_baseline._subprocess_util.run` is patched with a fake that raises `AssertionError` if called
+with any argv containing "git";
+`compute_baseline` is called with a fake `cwd` and a benign command and must still return
+successfully, with `_subprocess_util.run` never invoked at all.
 
 Follows the monkeypatch/in-memory fixture style of `test-worktree.py`: no real git is invoked.
-`_subprocess_util.run` is monkeypatched to fabricate a successful `rev-parse` result and to capture
-the `worktree add` argv;
-`_run_verify_in` is stubbed to return `(0, "")` so `compute_baseline` short-circuits to "clean" on
-the first verify;
-`_junction.create` and `_worktree.remove_safe` are stubbed to no-ops since no real filesystem
-worktree is ever created.
 
 Cases (b)/(c) cover `compute_batch_baselines`'s basic multi-command computation directly against a
-mocked `checkout_path`: (b) confirms two distinct commands each get their own, independent
-(non-aliased) signature list keyed by name;
+mocked `cwd`: (b) confirms two distinct commands each get their own, independent (non-aliased)
+signature list keyed by name;
 (c) confirms a command with zero recognized FAIL-marker lines on both runs maps to `[]` (present,
 not an absent dict key).
 
-Cases (d)/(e) cover `compute_batch_baselines`'s union-of-two-runs corroboration and mixed-cwd
-dependency-linking orchestration: (d) confirms a signature that only reproduces on one of the two
-runs still ends up in the union (neither run's set silently overwrites the other's);
-(e) exercises `_link_dependency_dirs` called at two distinct resolved target paths against one
-shared mocked `checkout_path` (mirroring how a future shared-checkout orchestrator calls it once per
-distinct effective-cwd fragment), then `compute_batch_baselines` with commands resolving to each of
-those two paths via their `cwd_override` entries.
+Case (d) covers `compute_batch_baselines`'s union-of-two-runs corroboration: a signature that only
+reproduces on one of the two runs still ends up in the union (neither run's set silently overwrites
+the other's).
 
 Cases (f)-(i) regress #1098, where `compute_batch_baselines` ran every verify command twice
 unconditionally and keyed its loop on the batch name, so a plan whose last batch verifies the union
@@ -53,10 +46,15 @@ cache empty every time, and where no verify run had any timeout at all: (j) a ca
 (l) `timeout_seconds` reaches `subprocess.run` and a `TimeoutExpired` propagates to the caller's
 "leave the baseline unset" fail-safe instead of being swallowed into a bogus baseline;
 (m) omitting it imposes no ceiling.
+
+Case (o) regresses #1060: a command that fails ahead of its own test stage (e.g. `go vet ./... && go
+test ./...` failing at `go vet`) emits no line `_extract_failure_signatures` recognizes on its own,
+so `_signatures_for_pair` synthesizes a `NONZERO_EXIT:` signature instead of an empty list.
+It also documents the accepted limitation that two non-deterministic non-test failures with
+different first output lines persist as two distinct synthetic entries rather than deduping to one.
 """
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import tempfile
@@ -66,49 +64,99 @@ from unittest.mock import MagicMock, patch
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _verify_baseline import (
-    _link_dependency_dirs,
-    compute_baseline,
-    compute_batch_baseline_on_demand,
-    compute_batch_baselines,
-)
+from _implementer_common import _extract_failure_signatures
+from _verify_baseline import compute_baseline, compute_batch_baselines
 
 
-def _run_compute_baseline_capturing_worktree_add(tmp: str) -> tuple[str, list[list[str]]]:
+def _run_one_compute_baseline_case(
+    label: str, exit_codes: tuple[int, ...]
+) -> tuple[str, list[str], list[str], list[str]]:
     """
-    Run `compute_baseline` against a fully-mocked git/subprocess layer and return its result plus
-    every `git worktree add` argv it issued.
+    Run `compute_baseline` against a call-counting fake for `_run_verify_in` that returns
+    `exit_codes[i]` on its i-th invocation, and a matching output line per non-zero exit.
 
-    `_subprocess_util.run` is monkeypatched to fabricate a successful `rev-parse` result and to
-    capture the `worktree add` argv;
-    `_run_verify_in` is stubbed to return `(0, "")` so `compute_baseline` short-circuits to "clean"
-    on the first verify;
-    `_junction.create` and `_worktree.remove_safe` are stubbed to no-ops since no real filesystem
-    worktree is ever created.
+    Returns `(verdict, signatures, run_calls, outputs)`.
     """
-    # tempfile.TemporaryDirectory (passed in by the caller) keeps compute_baseline's unconditional `project_root/.scratch` mkdir (see _verify_baseline.py:148-149) landing in an auto-cleaned path rather than a stray real directory.
-    project_root = Path(tmp) / "project"
-    project_root.mkdir()
-    git_root = Path(tmp) / "git-root"
-    git_root.mkdir()
+    outputs = [
+        f"--- FAIL: Test{label}{i} (0.01s)\n" if rc != 0 else "ok\n"
+        for i, rc in enumerate(exit_codes)
+    ]
+    run_calls: list[str] = []
 
-    captured_worktree_add_argv: list[list[str]] = []
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del command, run_cwd, timeout_seconds
+        index = len(run_calls)
+        run_calls.append(label)
+        return exit_codes[index], outputs[index]
 
-    def _fake_run(argv: list[str], **kwargs) -> MagicMock:
-        if "rev-parse" in argv:
-            return MagicMock(returncode=0, stdout="deadbeefcafe\n", stderr="")
-        if "worktree" in argv:
-            captured_worktree_add_argv.append(argv)
-            return MagicMock(returncode=0, stdout="", stderr="")
-        raise AssertionError(f"unexpected argv in fake _subprocess_util.run: {argv!r}")
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        verdict, signatures = compute_baseline(Path("/fake/cwd"), "echo ok")
 
-    with patch("_verify_baseline._subprocess_util.run", side_effect=_fake_run):
-        with patch("_verify_baseline._run_verify_in", return_value=(0, "")):
-            with patch("_verify_baseline._junction.create"):
-                with patch("_verify_baseline._worktree.remove_safe"):
-                    result = compute_baseline(project_root, git_root, "main", "echo ok")
+    return verdict, signatures, run_calls, outputs
 
-    return result, captured_worktree_add_argv
+
+def _case_1_two_run_algorithm_against_return_tuple() -> None:
+    """
+    Case 1: `compute_baseline`'s new 2-run algorithm, table-driven against its
+    `tuple[str, list[str]]` return, using a call-counting fake for `_run_verify_in`.
+    """
+    cases = [
+        ("all-pass", (0,), "clean", 1),
+        ("fail-then-pass", (1, 0), "clean", 2),
+        ("both-fail", (1, 1), "pre-existing-failures", 2),
+    ]
+
+    for label, exit_codes, expected_verdict, expected_run_count in cases:
+        verdict, signatures, run_calls, outputs = _run_one_compute_baseline_case(label, exit_codes)
+
+        assert verdict == expected_verdict, (
+            f"case {label}: expected verdict {expected_verdict!r}, got {verdict!r}"
+        )
+        assert len(run_calls) == expected_run_count, (
+            f"case {label}: expected {expected_run_count} run(s), got {len(run_calls)}"
+        )
+
+        expected_signatures: list[str] = []
+        seen: set[str] = set()
+        for output in outputs:
+            for line in _extract_failure_signatures(output):
+                if line not in seen:
+                    seen.add(line)
+                    expected_signatures.append(line)
+        assert signatures == expected_signatures, (
+            f"case {label}: expected signatures {expected_signatures!r}, got {signatures!r}"
+        )
+
+    print(
+        "PASS: compute_baseline's 2-run algorithm returns the correct verdict, "
+        "run count, and signature union for all-pass/fail-then-pass/both-fail"
+    )
+
+
+def _case_2_no_git_subprocess_call() -> None:
+    """
+    Case 2: regression guard against the checkout mechanism creeping back in -- `compute_baseline`
+    performs no git operation of any kind.
+    """
+
+    def _fail_on_git(argv: list[str], **kwargs) -> None:
+        if any("git" in str(token) for token in argv):
+            raise AssertionError(f"unexpected git invocation: {argv!r}")
+        raise AssertionError(f"unexpected _subprocess_util.run call: {argv!r}")
+
+    with (
+        patch("_verify_baseline._subprocess_util.run", side_effect=_fail_on_git) as fake_run,
+        patch("_verify_baseline._run_verify_in", return_value=(0, "ok\n")),
+    ):
+        verdict, signatures = compute_baseline(Path("/fake/cwd"), "echo ok")
+
+    assert verdict == "clean", f"expected 'clean', got {verdict!r}"
+    assert signatures == [], f"expected no signatures, got {signatures!r}"
+    fake_run.assert_not_called()
+
+    print(
+        "PASS: compute_baseline performs no git subprocess call of any kind"
+    )
 
 
 def _case_b_independent_signature_lists() -> None:
@@ -116,11 +164,10 @@ def _case_b_independent_signature_lists() -> None:
     Case (b): two distinct commands each get their own, independent (non-aliased) signature list
     keyed by name.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         if command == "cmd-a":
             return 1, "--- FAIL: TestA (0.01s)\n"
         if command == "cmd-b":
@@ -129,7 +176,7 @@ def _case_b_independent_signature_lists() -> None:
 
     commands = [("batchA", "cmd-a", None), ("batchB", "cmd-b", None)]
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(commands, checkout_path, project_root)
+        result = compute_batch_baselines(commands, cwd)
 
     assert len(result) == 2, f"expected 2 entries, got {len(result)}: {result!r}"
     assert result["batchA"] == ["--- FAIL: TestA (0.01s)"], result["batchA"]
@@ -149,13 +196,10 @@ def _case_c_zero_failures_returns_empty_list() -> None:
     Case (c): a command with zero recognized FAIL-marker lines on both runs maps to [] (present, not
     an absent dict key).
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
 
     with patch("_verify_baseline._run_verify_in", return_value=(0, "ok, nothing failed\n")):
-        result = compute_batch_baselines(
-            [("clean-batch", "cmd-clean", None)], checkout_path, project_root
-        )
+        result = compute_batch_baselines([("clean-batch", "cmd-clean", None)], cwd)
 
     assert "clean-batch" in result, f"expected 'clean-batch' key present, got {result!r}"
     assert result["clean-batch"] == [], (
@@ -173,12 +217,11 @@ def _case_d_union_of_two_runs() -> None:
     Case (d): a signature that only reproduces on one of the two runs still ends up in the union --
     neither run's set silently overwrites the other's.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     call_count = {"n": 0}
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         assert command == "cmd-flaky"
         call_count["n"] += 1
         if call_count["n"] == 1:
@@ -186,9 +229,7 @@ def _case_d_union_of_two_runs() -> None:
         return 1, "--- FAIL: TestFlakyB (0.02s)\n"
 
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(
-            [("flaky-batch", "cmd-flaky", None)], checkout_path, project_root
-        )
+        result = compute_batch_baselines([("flaky-batch", "cmd-flaky", None)], cwd)
 
     assert result["flaky-batch"] == [
         "--- FAIL: TestFlakyA (0.01s)",
@@ -201,44 +242,24 @@ def _case_d_union_of_two_runs() -> None:
     )
 
 
-def _case_e_mixed_cwd_dependency_linking() -> None:
+def _case_e_mixed_cwd_dedup() -> None:
     """
-    Case (e): `_link_dependency_dirs` called at two distinct resolved target paths against one
-    shared checkout (mirroring how a future shared-checkout orchestrator calls it once per distinct
-    effective-cwd fragment), then `compute_batch_baselines` with commands resolving to each of those
-    two paths via their `cwd_override` entries -- confirming each command runs at its own cwd within
-    the one shared checkout and dependency dirs are linked at both resolved paths.
+    Case (e): `compute_batch_baselines` with commands resolving to two distinct `cwd_override`
+    paths against one shared `cwd` -- confirming each command runs at its own cwd and dedup stays
+    per-cwd.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        project_root = Path(tmp) / "project"
-        project_root.mkdir()
-        (project_root / ".venv").mkdir()
-
-        checkout_path = Path(tmp) / "checkout"
-        checkout_path.mkdir()
-        target_git_root = checkout_path
-        target_hub = checkout_path / "hub"
+        cwd = Path(tmp) / "checkout"
+        cwd.mkdir()
+        target_git_root = cwd
+        target_hub = cwd / "hub"
         target_hub.mkdir()
-
-        linked_calls: list[tuple[Path, Path]] = []
-
-        def _fake_junction_create(src: Path, dst: Path) -> None:
-            linked_calls.append((src, dst))
-
-        with patch("_verify_baseline._junction.create", side_effect=_fake_junction_create):
-            _link_dependency_dirs(project_root, target_git_root)
-            _link_dependency_dirs(project_root, target_hub)
-
-        assert linked_calls == [
-            (project_root / ".venv", target_git_root / ".venv"),
-            (project_root / ".venv", target_hub / ".venv"),
-        ], f"expected dependency dirs linked at both resolved paths, got {linked_calls!r}"
 
         seen_cwds: list[tuple[str, Path]] = []
 
-        def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
             del timeout_seconds
-            seen_cwds.append((command, cwd))
+            seen_cwds.append((command, run_cwd))
             return 0, "ok\n"
 
         commands = [
@@ -246,21 +267,20 @@ def _case_e_mixed_cwd_dependency_linking() -> None:
             ("hub-batch", "cmd-hub", target_hub),
         ]
         with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-            result = compute_batch_baselines(commands, checkout_path, project_root)
+            result = compute_batch_baselines(commands, cwd)
 
         assert result == {"root-batch": [], "hub-batch": []}, result
 
         # One run each, not two: both commands exit 0 with no signatures, so the corroboration
         # re-run is skipped (#1098).
-        root_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-root"]
-        hub_cwds = [cwd for command, cwd in seen_cwds if command == "cmd-hub"]
+        root_cwds = [c for command, c in seen_cwds if command == "cmd-root"]
+        hub_cwds = [c for command, c in seen_cwds if command == "cmd-hub"]
         assert root_cwds == [target_git_root], root_cwds
         assert hub_cwds == [target_hub], hub_cwds
 
         print(
             "PASS: compute_batch_baselines runs each command at its own "
-            "resolved cwd within one shared checkout, with dependency dirs "
-            "linked at both resolved paths"
+            "resolved cwd_override, deduping per (command, cwd) pair"
         )
 
 
@@ -272,12 +292,11 @@ def _case_f_identical_command_and_cwd_runs_once() -> None:
     Uses a failing command so the corroboration re-run is not itself skipped;
     the assertion is about the pair being evaluated once (2 runs total), not four times.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         runs.append(command)
         return 1, "--- FAIL: TestShared (0.01s)\n"
 
@@ -286,7 +305,7 @@ def _case_f_identical_command_and_cwd_runs_once() -> None:
         ("batch3", "dotnet test Suite", None),
     ]
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(commands, checkout_path, project_root)
+        result = compute_batch_baselines(commands, cwd)
 
     assert runs == ["dotnet test Suite", "dotnet test Suite"], (
         f"expected the shared command evaluated once (2 runs), got {len(runs)} runs: {runs!r}"
@@ -308,19 +327,16 @@ def _case_g_green_run_skips_corroboration_rerun() -> None:
     Case (g) regresses #1098: a command that exits 0 with zero extracted signatures is run once, not
     twice -- there is nothing for the second run to corroborate.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         runs.append(command)
         return 0, "Passed!  - Failed: 0, Passed: 412\n"
 
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(
-            [("green-batch", "cmd-green", None)], checkout_path, project_root
-        )
+        result = compute_batch_baselines([("green-batch", "cmd-green", None)], cwd)
 
     assert len(runs) == 1, f"expected a single run for a green command, got {runs!r}"
     assert result == {"green-batch": []}, result
@@ -338,31 +354,37 @@ def _case_h_nonzero_exit_without_signatures_still_reruns() -> None:
     A command that fails without emitting any line `_extract_failure_signatures` recognizes (a build
     break, a crashed runner) is still re-run, so a signature that only surfaces on the second
     attempt reaches the baseline.
+
+    Since #1060, `_signatures_for_pair` threads each run's own return code into
+    `_extract_failure_signatures`, so run 1's non-test-format failure (no recognized FAIL-marker
+    line) now synthesizes a `NONZERO_EXIT:` signature instead of contributing nothing -- the union
+    carries both that synthetic entry and run 2's real FAIL-marker line.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         runs.append(command)
         if len(runs) == 1:
             return 1, "error CS0246: the type or namespace could not be found\n"
         return 1, "--- FAIL: TestLate (0.03s)\n"
 
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(
-            [("broken-batch", "cmd-broken", None)], checkout_path, project_root
-        )
+        result = compute_batch_baselines([("broken-batch", "cmd-broken", None)], cwd)
 
     assert len(runs) == 2, (
         f"expected a re-run after a non-zero exit with no signatures, got {runs!r}"
     )
-    assert result["broken-batch"] == ["--- FAIL: TestLate (0.03s)"], result["broken-batch"]
+    assert result["broken-batch"] == [
+        "NONZERO_EXIT: exit 1: error CS0246: the type or namespace could not be found",
+        "--- FAIL: TestLate (0.03s)",
+    ], result["broken-batch"]
 
     print(
         "PASS: compute_batch_baselines still re-runs a non-zero-exit command "
-        "that emitted no recognized failure signatures"
+        "that emitted no recognized failure signatures, now synthesizing a "
+        "NONZERO_EXIT signature for the otherwise-empty first run"
     )
 
 
@@ -371,29 +393,28 @@ def _case_i_same_command_distinct_cwds_not_deduped() -> None:
     Case (i): dedup is keyed on the `(command, effective_cwd)` pair -- one command string run at two
     distinct cwds is two distinct units of work, not one.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     seen_cwds: list[Path] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
         del command, timeout_seconds
-        seen_cwds.append(cwd)
-        return 1, f"--- FAIL: Test{cwd.name} (0.01s)\n"
+        seen_cwds.append(run_cwd)
+        return 1, f"--- FAIL: Test{run_cwd.name} (0.01s)\n"
 
     commands = [
-        ("root-batch", "make test", Path("/fake/checkout")),
-        ("sub-batch", "make test", Path("/fake/checkout/sub")),
+        ("root-batch", "make test", Path("/fake/cwd")),
+        ("sub-batch", "make test", Path("/fake/cwd/sub")),
     ]
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        result = compute_batch_baselines(commands, checkout_path, project_root)
+        result = compute_batch_baselines(commands, cwd)
 
     assert seen_cwds == [
-        Path("/fake/checkout"),
-        Path("/fake/checkout"),
-        Path("/fake/checkout/sub"),
-        Path("/fake/checkout/sub"),
+        Path("/fake/cwd"),
+        Path("/fake/cwd"),
+        Path("/fake/cwd/sub"),
+        Path("/fake/cwd/sub"),
     ], seen_cwds
-    assert result["root-batch"] == ["--- FAIL: Testcheckout (0.01s)"], result["root-batch"]
+    assert result["root-batch"] == ["--- FAIL: Testcwd (0.01s)"], result["root-batch"]
     assert result["sub-batch"] == ["--- FAIL: Testsub (0.01s)"], result["sub-batch"]
 
     print(
@@ -411,12 +432,11 @@ def _case_j_caller_owned_pair_cache_spans_calls() -> None:
     With a shared `pair_cache`, the second call's identical pair is served from the cache instead of
     re-running the command -- and still hands back an independent list object.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         runs.append(command)
         return 1, "--- FAIL: TestShared (0.01s)\n"
 
@@ -424,14 +444,12 @@ def _case_j_caller_owned_pair_cache_spans_calls() -> None:
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
         first = compute_batch_baselines(
             [("batch1", "dotnet test Suite", None)],
-            checkout_path,
-            project_root,
+            cwd,
             pair_cache=pair_cache,
         )
         second = compute_batch_baselines(
             [("batch3", "dotnet test Suite", None)],
-            checkout_path,
-            project_root,
+            cwd,
             pair_cache=pair_cache,
         )
 
@@ -442,7 +460,7 @@ def _case_j_caller_owned_pair_cache_spans_calls() -> None:
     assert second["batch3"] is not first["batch1"], (
         "expected an independent list object per name, not the cached list itself"
     )
-    assert second["batch3"] is not pair_cache[("dotnet test Suite", checkout_path)], (
+    assert second["batch3"] is not pair_cache[("dotnet test Suite", cwd)], (
         "expected a copy, not the cache's own list object"
     )
 
@@ -457,18 +475,17 @@ def _case_k_omitted_pair_cache_stays_call_local() -> None:
     Case (k): omitting `pair_cache` keeps the old call-local behaviour -- two separate calls with
     the same pair each evaluate it, so the shared cache is genuinely opt-in.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     runs: list[str] = []
 
-    def _fake_run_verify_in(command: str, cwd: Path, timeout_seconds=None) -> tuple[int, str]:
-        del cwd, timeout_seconds
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del run_cwd, timeout_seconds
         runs.append(command)
         return 1, "--- FAIL: TestShared (0.01s)\n"
 
     with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
-        compute_batch_baselines([("batch1", "cmd", None)], checkout_path, project_root)
-        compute_batch_baselines([("batch3", "cmd", None)], checkout_path, project_root)
+        compute_batch_baselines([("batch1", "cmd", None)], cwd)
+        compute_batch_baselines([("batch3", "cmd", None)], cwd)
 
     assert len(runs) == 4, f"expected 2 runs per independent call (4 total), got {runs!r}"
 
@@ -489,8 +506,7 @@ def _case_l_timeout_propagates() -> None:
     Also asserts nothing is written to `pair_cache` for the pair that raised, so a later call can
     retry it.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     seen_timeouts: list[float | None] = []
 
     def _fake_subprocess_run(*args, **kwargs):
@@ -502,8 +518,7 @@ def _case_l_timeout_propagates() -> None:
         try:
             compute_batch_baselines(
                 [("hung-batch", "cmd-hang", None)],
-                checkout_path,
-                project_root,
+                cwd,
                 pair_cache=pair_cache,
                 timeout_seconds=90.0,
             )
@@ -530,8 +545,7 @@ def _case_m_no_timeout_by_default() -> None:
     Case (m): omitting `timeout_seconds` passes `timeout=None` to `subprocess.run` -- no ceiling is
     imposed on repos that have not configured one.
     """
-    checkout_path = Path("/fake/checkout")
-    project_root = Path("/fake/project")
+    cwd = Path("/fake/cwd")
     seen_timeouts: list[float | None] = []
 
     def _fake_subprocess_run(*args, **kwargs):
@@ -539,9 +553,7 @@ def _case_m_no_timeout_by_default() -> None:
         return MagicMock(returncode=0, stdout="ok\n", stderr="")
 
     with patch("_verify_baseline.subprocess.run", side_effect=_fake_subprocess_run):
-        result = compute_batch_baselines(
-            [("plain-batch", "cmd-plain", None)], checkout_path, project_root
-        )
+        result = compute_batch_baselines([("plain-batch", "cmd-plain", None)], cwd)
 
     assert result == {"plain-batch": []}, result
     assert seen_timeouts == [None], (
@@ -551,200 +563,79 @@ def _case_m_no_timeout_by_default() -> None:
     print("PASS: compute_batch_baselines imposes no subprocess timeout by default")
 
 
-def _case_n_on_demand_checks_out_pinned_sha_and_tears_down() -> None:
+def _case_o_returncode_synthesizes_signature_for_non_test_failure() -> None:
     """
-    Case (n) regresses #1102: `compute_batch_baseline_on_demand` checks out the passed `parent_sha`
-    verbatim, calls `compute_batch_baselines` with a single `("_ondemand", verify_cmd, None)`
-    triple, returns that entry's signature list, and tears down the transient worktree via
-    `_worktree.remove_safe` even when `compute_batch_baselines` raises.
+    Case (o) (#1060): a command that fails ahead of its own test stage (e.g. `go vet ./... && go
+    test ./...` failing at `go vet`) emits no line `_extract_failure_signatures` recognizes on its
+    own -- `_signatures_for_pair` now threads each run's own return code through, so the pair still
+    yields a synthetic `NONZERO_EXIT:` signature instead of an empty list.
+
+    Also documents the accepted limitation (see Card 1's Requirements / this batch's Batch Tests):
+    when the two corroboration runs of a non-deterministic non-test failure produce different first
+    output lines, the union persists two distinct synthetic entries rather than deduping to one.
+    No cross-run normalization is added for this -- the target class this card fixes (a
+    compiler/linter diagnostic) is deterministic across runs on identical content, so its first line
+    does not vary.
     """
-    with tempfile.TemporaryDirectory() as tmp:
-        project_root = Path(tmp) / "project"
-        project_root.mkdir()
-        git_root = Path(tmp) / "git-root"
-        git_root.mkdir()
-        parent_sha = "d" * 40
+    cwd = Path("/fake/cwd")
 
-        captured_rev_parse_argv: list[list[str]] = []
-        captured_worktree_add_argv: list[list[str]] = []
-
-        def _fake_run(argv: list[str], **kwargs) -> MagicMock:
-            if "rev-parse" in argv:
-                captured_rev_parse_argv.append(argv)
-                return MagicMock(returncode=0, stdout=f"{parent_sha}\n", stderr="")
-            if "worktree" in argv:
-                captured_worktree_add_argv.append(argv)
-                return MagicMock(returncode=0, stdout="", stderr="")
-            raise AssertionError(f"unexpected argv in fake _subprocess_util.run: {argv!r}")
-
-        captured_batch_baselines_calls: list[tuple] = []
-
-        def _fake_compute_batch_baselines(commands, checkout_path, project_root, **kwargs):
-            captured_batch_baselines_calls.append((commands, checkout_path, project_root, kwargs))
-            return {"_ondemand": ["--- FAIL: TestOnDemand (0.01s)"]}
-
-        teardown_calls: list[Path] = []
-
-        with (
-            patch("_verify_baseline._subprocess_util.run", side_effect=_fake_run),
-            patch("_verify_baseline._junction.create"),
-            patch(
-                "_verify_baseline._worktree.remove_safe",
-                side_effect=lambda path, **kw: teardown_calls.append(path),
-            ),
-            patch(
-                "_verify_baseline.compute_batch_baselines",
-                side_effect=_fake_compute_batch_baselines,
-            ),
-        ):
-            result = compute_batch_baseline_on_demand(
-                project_root, git_root, parent_sha, "cmd-ondemand"
-            )
-
-        assert result == ["--- FAIL: TestOnDemand (0.01s)"], result
-
-        # The parent_sha is checked out verbatim.
-        assert captured_rev_parse_argv[0][-1] == parent_sha, captured_rev_parse_argv
-        assert len(captured_worktree_add_argv) == 1, captured_worktree_add_argv
-        assert captured_worktree_add_argv[0][-1] == parent_sha, captured_worktree_add_argv[0]
-
-        # compute_batch_baselines is called with a single ("_ondemand", verify_cmd, None) triple.
-        assert len(captured_batch_baselines_calls) == 1, captured_batch_baselines_calls
-        commands, _checkout_path, _project_root, _kwargs = captured_batch_baselines_calls[0]
-        assert commands == [("_ondemand", "cmd-ondemand", None)], commands
-
-        # Teardown happens exactly once.
-        assert len(teardown_calls) == 1, teardown_calls
-
-        print(
-            "PASS: compute_batch_baseline_on_demand checks out the pinned "
-            "parent_sha and returns the single-command result"
+    # Both runs produce the identical non-test-format failure -- the union dedups to one entry.
+    with patch(
+        "_verify_baseline._run_verify_in",
+        return_value=(1, "vet: undeclared name: foo\n"),
+    ):
+        result = compute_batch_baselines(
+            [("vet-batch", "go vet ./... && go test ./...", None)],
+            cwd,
         )
 
-    # Teardown also happens when compute_batch_baselines raises.
-    with tempfile.TemporaryDirectory() as tmp:
-        project_root = Path(tmp) / "project"
-        project_root.mkdir()
-        git_root = Path(tmp) / "git-root"
-        git_root.mkdir()
-        parent_sha = "e" * 40
+    assert result["vet-batch"] == [
+        "NONZERO_EXIT: exit 1: vet: undeclared name: foo",
+    ], result["vet-batch"]
 
-        def _fake_run(argv: list[str], **kwargs) -> MagicMock:
-            if "rev-parse" in argv:
-                return MagicMock(returncode=0, stdout=f"{parent_sha}\n", stderr="")
-            if "worktree" in argv:
-                return MagicMock(returncode=0, stdout="", stderr="")
-            raise AssertionError(f"unexpected argv in fake _subprocess_util.run: {argv!r}")
+    print(
+        "PASS: case o (deterministic) - _signatures_for_pair synthesizes and dedups "
+        "a NONZERO_EXIT signature for a repeatable non-test-format failure"
+    )
 
-        teardown_calls: list[Path] = []
+    # Accepted limitation: a non-deterministic non-test failure whose first output line differs
+    # across the two corroboration runs persists as two distinct synthetic entries.
+    _outputs = iter(
+        [
+            (1, "flaky tool crash: seed=1234\n"),
+            (1, "flaky tool crash: seed=5678\n"),
+        ]
+    )
 
-        def _raising_compute_batch_baselines(*args, **kwargs):
-            raise RuntimeError("verify command exploded")
+    def _fake_run_verify_in(command: str, run_cwd: Path, timeout_seconds=None) -> tuple[int, str]:
+        del command, run_cwd, timeout_seconds
+        return next(_outputs)
 
-        with (
-            patch("_verify_baseline._subprocess_util.run", side_effect=_fake_run),
-            patch("_verify_baseline._junction.create"),
-            patch(
-                "_verify_baseline._worktree.remove_safe",
-                side_effect=lambda path, **kw: teardown_calls.append(path),
-            ),
-            patch(
-                "_verify_baseline.compute_batch_baselines",
-                side_effect=_raising_compute_batch_baselines,
-            ),
-        ):
-            try:
-                compute_batch_baseline_on_demand(
-                    project_root, git_root, parent_sha, "cmd-ondemand"
-                )
-            except RuntimeError:
-                pass
-            else:
-                raise AssertionError("expected RuntimeError to propagate")
-
-        assert len(teardown_calls) == 1, (
-            f"expected the transient worktree torn down even on a raised exception, "
-            f"got {teardown_calls!r}"
+    with patch("_verify_baseline._run_verify_in", side_effect=_fake_run_verify_in):
+        result = compute_batch_baselines(
+            [("flaky-nontest-batch", "flaky-tool", None)], cwd
         )
 
-        print(
-            "PASS: compute_batch_baseline_on_demand tears down the transient "
-            "worktree even when compute_batch_baselines raises"
-        )
+    assert result["flaky-nontest-batch"] == [
+        "NONZERO_EXIT: exit 1: flaky tool crash: seed=1234",
+        "NONZERO_EXIT: exit 1: flaky tool crash: seed=5678",
+    ], result["flaky-nontest-batch"]
+
+    print(
+        "PASS: case o (accepted limitation) - two runs of a non-deterministic "
+        "non-test failure persist as two distinct NONZERO_EXIT entries, "
+        "documented as accepted rather than normalized away"
+    )
 
 
 def main() -> int:
     try:
-        # Case 1: core.longpaths=true is always present in the worktree-add argv.
-        with tempfile.TemporaryDirectory() as tmp:
-            result, captured_worktree_add_argv = _run_compute_baseline_capturing_worktree_add(
-                tmp
-            )
-
-            assert result == "clean", f"expected 'clean', got {result!r}"
-
-            assert len(captured_worktree_add_argv) == 1, (
-                f"expected exactly one 'git worktree add' call, got "
-                f"{len(captured_worktree_add_argv)}"
-            )
-            argv = captured_worktree_add_argv[0]
-
-            # -c core.longpaths=true must appear as an adjacent pair.
-            longpaths_index = None
-            for i, token in enumerate(argv[:-1]):
-                if token == "-c" and argv[i + 1] == "core.longpaths=true":
-                    longpaths_index = i
-                    break
-            assert longpaths_index is not None, (
-                f"expected '-c core.longpaths=true' pair in worktree-add argv: {argv!r}"
-            )
-
-            # It must sit after the -C <git_root> pair and before the 'worktree' token.
-            c_index = argv.index("-C")
-            worktree_index = argv.index("worktree")
-            assert c_index < longpaths_index < worktree_index, (
-                f"expected order -C ... -c core.longpaths=true ... worktree, got {argv!r}"
-            )
-
-            print(
-                "PASS: compute_baseline's git worktree add carries "
-                "-c core.longpaths=true between -C <git_root> and 'worktree'"
-            )
-
-        # Case 2: the transient-worktree directory basename uses the shortened, 12-hex-character uuid4().hex slice (#629 Windows MAX_PATH mitigation), not the full 32-character hex string.
-        with tempfile.TemporaryDirectory() as tmp:
-            result, captured_worktree_add_argv = _run_compute_baseline_capturing_worktree_add(
-                tmp
-            )
-
-            assert result == "clean", f"expected 'clean', got {result!r}"
-
-            assert len(captured_worktree_add_argv) == 1, (
-                f"expected exactly one 'git worktree add' call, got "
-                f"{len(captured_worktree_add_argv)}"
-            )
-            argv = captured_worktree_add_argv[0]
-
-            # The worktree-add target path sits immediately after 'add' and before the parent SHA (the last argv token).
-            add_index = argv.index("add")
-            tmp_path_arg = argv[add_index + 1]
-            basename = Path(tmp_path_arg).name
-
-            pattern = re.compile(r"^verify-baseline-[0-9a-f]{12}$")
-            assert pattern.match(basename), (
-                f"expected transient-worktree basename to match "
-                f"{pattern.pattern!r}, got {basename!r}"
-            )
-
-            print(
-                "PASS: compute_baseline's transient-worktree directory basename "
-                "matches the shortened 'verify-baseline-<12 hex chars>' pattern"
-            )
-
+        _case_1_two_run_algorithm_against_return_tuple()
+        _case_2_no_git_subprocess_call()
         _case_b_independent_signature_lists()
         _case_c_zero_failures_returns_empty_list()
         _case_d_union_of_two_runs()
-        _case_e_mixed_cwd_dependency_linking()
+        _case_e_mixed_cwd_dedup()
         _case_f_identical_command_and_cwd_runs_once()
         _case_g_green_run_skips_corroboration_rerun()
         _case_h_nonzero_exit_without_signatures_still_reruns()
@@ -753,7 +644,7 @@ def main() -> int:
         _case_k_omitted_pair_cache_stays_call_local()
         _case_l_timeout_propagates()
         _case_m_no_timeout_by_default()
-        _case_n_on_demand_checks_out_pinned_sha_and_tears_down()
+        _case_o_returncode_synthesizes_signature_for_non_test_failure()
 
         print("All _verify_baseline unit tests passed.")
         return 0

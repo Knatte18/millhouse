@@ -23,15 +23,15 @@ See `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for the full disp
 
 ## Monitor tool
 
-The `Monitor` tool schema was directly reconfirmed via a live tool-schema read on 2026-09-21 (the same verification `_mill/discussion.md`'s Problem section records): parameters `command`/`ws`, `description`, `timeout_ms` (number, default `300000`, max `3600000`, ignored when `persistent` is `true`), `persistent` (boolean, default `false` — "run for the lifetime of the session, no timeout; stop via `TaskStop`"). This contradicts the specific "no `persistent` parameter" claim common to ten independent field reports — GitHub issues #1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108 — filed against whatever `Monitor` build they each hit, and the two entry-gate wait sections cited at the bottom of this section document a defensive third outcome (an unexpected early expiry, with a re-arm) for a build where `persistent: true` does not hold the watch open for the full wait.
+The `Monitor` tool schema was directly reconfirmed via a live tool-schema read on 2026-09-23: parameters `command`/`ws`, `description`, `timeout_ms` (number, default `300000`, JSON `maximum: 3600000`, but the tool's own description states deadlines above `1800000` are capped to `1800000` — treat `1800000` as the real ceiling). There is no `persistent` parameter. This confirms the "no `persistent` parameter" claim common to ten independent field reports — GitHub issues #1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108 — and supersedes this section's own prior claim (from an earlier, since-disproven 2026-09-21 read) that `persistent` existed; the two entry-gate wait sections cited at the bottom of this section now document the resulting design: every wait re-arms at least once whenever its configured `giveup_s` exceeds 1800s, since no `Monitor` build holds a wait open indefinitely.
 
-A poll script run via `Monitor(command: ..., persistent: true, ...)`:
+A poll script run via `Monitor(command: ..., timeout_ms: 1800000, ...)`:
 
 - Delivers ONE `<task-notification>` PER stdout line the script emits, each carrying that line's content in an `<event>` tag.
 - Followed by a SEPARATE, terminal `<status>completed</status>` notification once the script's process actually exits — this one carries no `<event>` tag and no further information.
 - This two-notification shape (one-per-line, then a separate event-less terminal notification) is NOT the same shape as `Agent`'s single combined-result notification.
   Do not conflate the two when writing a new entry-gate wait or similar poll-and-notify pattern.
 - Runs bash, not PowerShell, regardless of the operator's terminal — see `cli/SKILL.md`.
-- An early, unrequested expiry (a notification whose <event> content is neither `READY` nor a `TIMEOUT after ...` line) is possible on a `Monitor` build where `persistent: true` does not hold the watch open for the full wait — both entry-gate wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
+- An expiry with no `<event>` content (a notification whose payload is neither `READY` nor a `TIMEOUT after ...` line) fires whenever the poll script is still running when `Monitor`'s `timeout_ms` cap is reached — expected for any wait exceeding 30 minutes, not build-specific. Both entry-gate wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
 
 See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section for two independent consumers of this contract.

@@ -9,14 +9,17 @@ case-by-case in v1:
     and stdout/stderr are decoded with encoding="utf-8", errors="replace".
     This eliminates the class of bugs where a Windows console's cp1252 default mangled git or
         claude-cli output.
-2. Every spawn and exit is echoed to stderr as a one-line breadcrumb (``[subprocess] spawn argv=...
-    timeout=...`` / ``exit code=... duration=...s``).
-    Smoke tests can grep this stream to assert what was (or wasn't) spawned.
+2. A spawn/exit breadcrumb pair is echoed to stderr (``[subprocess] spawn argv=...
+    timeout=...`` / ``exit code=... duration=...s``), but only on a failure path: a non-zero exit
+    (unless the caller passes ``quiet_nonzero=True``), a timeout, or a ``Popen`` raise.
+    A successful run prints nothing.
+    Smoke tests can still grep this stream to assert what was (or wasn't) spawned on failure.
 3. Timeouts propagate as ``subprocess.TimeoutExpired`` after emitting a matching exit breadcrumb, so
     callers don't have to log their own.
 
 Public API:
-    run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None, stdout=None, stderr=None)
+    run(argv, *, cwd=None, input=None, check=False, timeout=None, env=None, stdout=None, stderr=None,
+        quiet_nonzero=False)
     Thin wrapper around ``subprocess.Popen`` with the guarantees above.
     popen_detached(argv, *, stdin=None, stdout=None, stderr=None, cwd=None, env=None)
     Fire-and-forget detached subprocess.
@@ -86,7 +89,7 @@ def run(
     quiet_nonzero: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run a subprocess with UTF-8 text I/O and spawn/exit breadcrumbs on stderr.
+    Run a subprocess with UTF-8 text I/O and failure-path-only spawn/exit breadcrumbs on stderr.
 
     The child environment is a shallow copy of either the caller-supplied ``env`` or ``os.environ``,
     with ``PYTHONIOENCODING=utf-8`` always injected so child Python processes don't fall back to

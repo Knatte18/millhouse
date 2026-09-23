@@ -11,6 +11,11 @@ Public API:
         done_gate=None) -> list[dict]
     Validate plan files in plan_dir. Returns a sorted list of error dicts.
     Each error dict has keys: {check, batch, card, path, message}.
+    compute_next_card_number(plan_dir, target_batch_file) -> int
+    Compute the next unused card number for a target batch, before that card is written to disk.
+    renumber_after_collision(plan_dir, colliding_number) -> None
+    Shift every card numbered >= colliding_number, across every batch file in the plan, up by one,
+    to resolve a compute_next_card_number collision on a self-resolve card-insertion retry.
 
 Checks performed (check keys):
     non-existent-path — (#10 check 1) Context:/Edits:/Creates: refs that don't exist on disk and are
@@ -31,8 +36,9 @@ Checks performed (check keys):
         and cards' Edits:/Creates:/Moves: targets
     verify-not-isolated — per-batch or overview-level verify: command does not start with
         PYTHONPATH= reset prefix
-    verify-full-suite — per-batch or overview-level verify: invokes run-all.py without a -k/--only
-        filter
+    verify-full-suite — per-batch or overview-level verify: invokes one of four unscoped full-suite
+        runners: run-all.py without -k/--only, go test ./... without -run, dotnet test with no
+        project target or a solution target and no --filter, bare pytest
     verify-malformed-cwd — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd
         or missing command)
     verify-mixed-cwd — batches in the plan resolve the {cwd, command} mapping form to more than one
@@ -43,6 +49,11 @@ Checks performed (check keys):
         discovers each edited _test.go file's custom tag(s) from its own //go:build expression via
         denylist (GOOS/GOARCH/reserved-word/release-version tags excluded), and flags every edited
         tagged file independently whose batch verify: command lacks a matching -tags flag
+    verify-untested-tag-in-touched-package — Go-specific (gated on go.mod presence); flags an
+        untouched, differently-build-tagged Go test file co-located in a package some batch's
+        non-test Edits:/Creates: touched, when no batch's verify: command exercises that tag
+        against that package. Distinct from verify-excludes-edited-tagged-test, which only fires
+        when a batch itself edits the tagged test file.
     wiki-config-mutation — batch Edits:/Creates: contains mill-config.yaml (self-applying layout
         risk)
     plugin-manifest-context-missing — batch Creates:/Edits:/Deletes: touches plugins/mill/agents/
@@ -74,6 +85,7 @@ from __future__ import annotations
 import bisect
 import os
 import re
+import shlex
 import yaml
 from pathlib import Path
 
@@ -1040,6 +1052,56 @@ def compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int:
             )
 
     return candidate
+
+
+def renumber_after_collision(plan_dir: Path, colliding_number: int) -> None:
+    """
+    Shift every card numbered >= colliding_number, across every batch file in the plan, up by one.
+
+    Card numbers are global and each batch occupies a contiguous, disjoint numeric range (this
+    file's own established convention), so shifting every colliding-or-later card up by exactly one
+    preserves every batch's own internal ordering and every batch's contiguous range relative to its
+    neighbors -- this is simpler than re-deriving ``topo_order`` and needs only each batch's own
+    file-local card numbers.
+
+    This function performs no numbering-collision re-validation of its own and never touches any
+    batch's ``cards:`` frontmatter count (shifting labels never changes how many cards a batch owns)
+    -- the caller is responsible for retrying ``compute_next_card_number`` afterward and for the
+    post-write ``_check_card_numbering`` re-check the self-resolve step already runs.
+
+    Safe to call only when the caller has already confirmed every renumbered batch has not yet been
+    dispatched (no commit anywhere references its old card numbers) -- mill-go's own
+    strictly-sequential ``topo_order`` execution guarantees this for the self-resolve caller, but
+    this function itself does not verify it.
+
+    Known limitation, accepted rather than engineered around: the regex only rewrites ``### Card N:``
+    heading lines, never a card's own prose that names another card by number. After an
+    auto-renumber, such an in-plan textual cross-reference can go stale even though every
+    execution-relevant piece of state (``card_ids``, ``_check_card_numbering``'s own re-validation)
+    stays correct -- heading numbers are the only thing mill-go's own machinery reads.
+
+    Args:
+        plan_dir: Directory containing the ``NN-<batch-slug>.md`` batch files (and
+            ``00-overview.md``, which is excluded from consideration).
+        colliding_number: The card number that ``compute_next_card_number`` reported as already
+            used; every card numbered at or above this value is shifted up by one.
+    """
+    batch_files = sorted(
+        p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
+    )
+    to_shift: list[tuple[Path, int]] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        for num, _lines in _parse_cards(text):
+            if num >= colliding_number:
+                to_shift.append((batch_path, num))
+    # Descending order: shift the highest numbers first so no intermediate write
+    # collides with a not-yet-shifted number in the same file.
+    for batch_path, num in sorted(to_shift, key=lambda pair: pair[1], reverse=True):
+        text = batch_path.read_text(encoding="utf-8")
+        heading_re = re.compile(rf"^(###\s+Card\s+){num}(\s*:)", re.MULTILINE)
+        text = heading_re.sub(rf"\g<1>{num + 1}\g<2>", text, count=1)
+        batch_path.write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -3874,6 +3936,165 @@ def _check_verify_excludes_edited_tagged_test(
     return errors
 
 
+def _check_verify_untested_tag_in_touched_package(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> list[dict]:
+    """
+    Flag an untouched, differently-build-tagged Go test file sitting in a package some batch's
+    non-test Edits:/Creates: touched, when no batch's verify: command ever exercises that tag
+    against that package.
+
+    Go-specific: gated on `(project_root / "go.mod").exists()`, fail-open for every non-Go project
+    -- mirrors `_check_verify_excludes_edited_tagged_test`'s own gate.
+
+    Distinct from `_check_verify_excludes_edited_tagged_test`, which only fires when a batch itself
+    edits the tagged test file. This check instead scans every `_test.go` file that already exists on
+    disk in a touched package -- including ones no batch's Edits:/Creates: names at all -- since a
+    sibling test file guarded by a different build tag can silently rot when its package's non-test
+    code changes underneath it.
+
+    Algorithm:
+      1. Collect every package directory touched by any batch's non-test Edits:/Creates: tokens (a
+         token ending in `_test.go` does not count as "touching" a package here). `Edits:` tokens are
+         resolved via `resolve_existing_paths` since they exist on disk;
+         `Creates:` tokens are used as literal relative paths without resolution, mirroring
+         `_check_verify_excludes_edited_tagged_test`'s own documented `Creates:`-tokens-do-not-exist-
+         yet exclusion, except here only a package directory (not file content) is needed, so the
+         token's own parent directory stands in for the resolved parent.
+      2. For each distinct touched package directory, list every `_test.go` file that exists in it on
+         disk (every file in the package, not just batch-Edits:-named ones -- the deliberate
+         difference from the sibling check) and collect its custom build tags via
+         `_go_file_custom_tags`; files with no custom tags are skipped.
+      3. Build, once per plan (not per package), the list of every batch's normalized verify: command
+         via `_plan_dag.parse_verify_field` (a malformed `{cwd, command}` mapping raises `ValueError`
+         -- caught and skipped since `_check_verify_malformed_cwd` is the sole reporter for that),
+         split into shell segments via `_RE_SHELL_OPERATOR`, restricted to segments matching
+         `_RE_GO_TEST_INVOCATION`.
+      4. A (package, tag) pair is "covered" when at least one recorded segment both carries the tag
+         via its `-tags` flag (`_verify_command_has_any_tag`) and targets the package: the segment
+         contains the literal substring `"./..."`, `f"./{pkg_rel}"`, or `f"./{parent}/..."` for any
+         ancestor directory `parent` of `pkg_rel`. Uncovered pairs are reported, one finding per
+         (package, tagged test file).
+
+    Error dict shape: ``{check, batch, card, path, message}``. Every finding uses ``batch=None`` --
+    an overview-level property of the plan's verify commands as a set, not any single batch's own
+    command -- mirrors `_check_verify_full_suite`'s own `batch=None` convention for its overview-level
+    findings.
+
+    Args:
+        batch_files: Sorted list of batch file paths to validate.
+        project_root: Root of the project (worktree root);
+            also the `go.mod` presence-check root.
+        root: Optional root subfolder for source refs, threaded to `resolve_existing_paths` exactly
+            like the sibling check.
+        wiki_root: Optional wiki root path, threaded to `resolve_existing_paths`.
+        git_root: Optional repo root, threaded to `resolve_existing_paths`.
+
+    Returns:
+        List of error dicts, one per (touched package, untested custom tag) pair.
+    """
+    if not (project_root / "go.mod").exists():
+        return []
+
+    # Step 1: collect every package directory touched by any batch's non-test Edits:/Creates:.
+    touched_packages: set[str] = set()
+    for batch_path in batch_files:
+        edit_tokens = sorted(
+            t for t in _parse_edits_only(batch_path) if not t.endswith("_test.go")
+        )
+        if edit_tokens:
+            resolved = resolve_existing_paths(
+                edit_tokens, project_root, root, wiki_root=wiki_root, git_root=git_root,
+            )
+            for path in resolved:
+                try:
+                    pkg_rel = path.parent.relative_to(project_root).as_posix()
+                except ValueError:
+                    continue
+                touched_packages.add(pkg_rel)
+        create_tokens = (
+            t for t in _parse_creates_only(batch_path) if not t.endswith("_test.go")
+        )
+        for token in create_tokens:
+            touched_packages.add(Path(token).parent.as_posix())
+
+    if not touched_packages:
+        return []
+
+    # Step 2: for each touched package, discover every on-disk _test.go file's custom tags.
+    package_tagged_files: dict[str, list[tuple[str, set[str]]]] = {}
+    for pkg_rel in touched_packages:
+        pkg_dir = project_root / pkg_rel
+        if not pkg_dir.is_dir():
+            continue
+        for test_file in sorted(pkg_dir.glob("*_test.go")):
+            tags = _go_file_custom_tags(test_file)
+            if tags:
+                package_tagged_files.setdefault(pkg_rel, []).append((test_file.name, tags))
+
+    if not package_tagged_files:
+        return []
+
+    # Step 3: build, once per plan, the list of every batch's go-test verify segments.
+    go_test_segments: list[str] = []
+    for batch_path in batch_files:
+        try:
+            frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+            command, _cwd = _plan_dag.parse_verify_field(
+                frontmatter, project_root, project_root,
+            )
+        except ValueError:
+            # _check_verify_malformed_cwd is the sole reporter for this.
+            continue
+        if command is None:
+            continue
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if _RE_GO_TEST_INVOCATION.search(segment):
+                go_test_segments.append(segment)
+
+    def _segment_targets_package(segment: str, pkg_rel: str) -> bool:
+        if "./..." in segment:
+            return True
+        if f"./{pkg_rel}" in segment:
+            return True
+        parent = str(Path(pkg_rel).parent.as_posix())
+        while parent and parent != ".":
+            if f"./{parent}/..." in segment:
+                return True
+            parent = str(Path(parent).parent.as_posix())
+        return False
+
+    # Step 4: report every (package, tag) pair no recorded segment covers.
+    errors: list[dict] = []
+    for pkg_rel in sorted(package_tagged_files):
+        for file_name, tags in package_tagged_files[pkg_rel]:
+            covered = any(
+                _verify_command_has_any_tag(segment, tags)
+                and _segment_targets_package(segment, pkg_rel)
+                for segment in go_test_segments
+            )
+            if not covered:
+                tag = sorted(tags)[0]
+                errors.append({
+                    "check": "verify-untested-tag-in-touched-package",
+                    "batch": None,
+                    "card": None,
+                    "path": f"{pkg_rel}/{file_name}",
+                    "message": (
+                        f"package '{pkg_rel}' is touched by a batch's Edits:/Creates: but its "
+                        f"custom-tagged test file '{file_name}' (tag '{tag}') is never exercised "
+                        f"by any batch's verify: command"
+                    ),
+                })
+
+    return errors
+
+
 # ---------------------------------------------------------------------------
 # verify-full-suite check
 # ---------------------------------------------------------------------------
@@ -3890,6 +4111,78 @@ _RE_SHELL_OPERATOR = re.compile(r"&&|\|\||;")
 # `go get test/pkg`.
 _RE_GO_TEST_INVOCATION = re.compile(r"\bgo\s+(?:-C\s+\S+\s+)?test\b")
 
+# Matches a `dotnet test` invocation anywhere in a segment.
+_RE_DOTNET_TEST_INVOCATION = re.compile(r"\bdotnet\s+test\b")
+
+# `dotnet test` options that consume the following token as their value (as opposed to a bare
+# flag). Used by `_dotnet_test_segment_is_unscoped` to skip the value token when walking for the
+# first positional (non-flag) argument, so a value like `Release` in `-c Release` is never
+# mistaken for a project/solution target.
+_DOTNET_TEST_VALUE_OPTIONS = frozenset({
+    "-c", "--configuration",
+    "-f", "--framework",
+    "-r", "--runtime",
+    "-o", "--output",
+    "-s", "--settings",
+    "-l", "--logger",
+    "-v", "--verbosity",
+    "-a", "--test-adapter-path",
+    "-d", "--diag",
+    "-e", "--environment",
+    "--results-directory",
+    "--arch",
+    "--os",
+})
+
+# Solution-file suffixes: a `dotnet test` positional target ending in one of these (case-insensitive)
+# names a whole solution rather than a single project, so it is still an unscoped full-suite run.
+_DOTNET_SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
+
+
+def _dotnet_test_segment_is_unscoped(segment: str) -> bool:
+    """
+    Return True when a shell segment's `dotnet test` invocation is an unscoped full-suite run.
+
+    A segment with no `dotnet test` invocation, or one that already carries `--filter`, is
+    considered scoped (returns False) without further inspection.
+    Otherwise the text after the `dotnet test` match is tokenised with `shlex.split` (falling back
+    to `str.split` if the text has unbalanced quoting), and the tokens are walked to find the first
+    positional (non-flag) argument: any token starting with `-` is a flag and is skipped, and when
+    that flag is one of `_DOTNET_TEST_VALUE_OPTIONS` and does not carry an inline `=`/`:` value, the
+    following token (its value) is skipped too.
+
+    Returns:
+        True when there is no positional target at all, or the target's lowercased form ends with
+        one of `_DOTNET_SOLUTION_SUFFIXES` (a whole-solution target) -- both cases still run the
+        full suite. False when a project/directory/DLL target narrows the run.
+    """
+    m = _RE_DOTNET_TEST_INVOCATION.search(segment)
+    if not m or "--filter" in segment:
+        return False
+
+    rest = segment[m.end():]
+    try:
+        tokens = shlex.split(rest)
+    except ValueError:
+        tokens = rest.split()
+
+    target: str | None = None
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token.startswith("-"):
+            option = token.split("=", 1)[0].split(":", 1)[0]
+            if option in _DOTNET_TEST_VALUE_OPTIONS and "=" not in token and ":" not in token:
+                i += 1  # Skip the option's separate value token too.
+        else:
+            target = token
+            break
+        i += 1
+
+    if target is None:
+        return True
+    return target.lower().endswith(_DOTNET_SOLUTION_SUFFIXES)
+
 
 def _check_verify_full_suite(
     batch_files: list[Path],
@@ -3900,8 +4193,9 @@ def _check_verify_full_suite(
 ) -> list[dict]:
     """
     Flag verify: commands that invoke an unscoped full-suite runner: run-all.py without
-    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test without --filter
-    (C#), or bare pytest/python -m pytest with no path or -k filter (Python, non-mill).
+    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test with no project
+    target or a solution target and no --filter (C#), or bare pytest/python -m pytest with
+    no path or -k filter (Python, non-mill).
     A verify command that exactly equals `done_gate` (when supplied) is exempt from every
     sub-check below.
 
@@ -3966,17 +4260,19 @@ def _check_verify_full_suite(
                         "scope it or document the cross-cutting-helper justification in ## Batch Tests"
                     ),
                 }
-        if "dotnet test" in command and "--filter" not in command:
-            return {
-                "check": "verify-full-suite",
-                "batch": batch_label,
-                "card": None,
-                "path": command,
-                "message": (
-                    "verify command invokes 'dotnet test' without a --filter; "
-                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
-                ),
-            }
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if _dotnet_test_segment_is_unscoped(segment):
+                return {
+                    "check": "verify-full-suite",
+                    "batch": batch_label,
+                    "card": None,
+                    "path": command,
+                    "message": (
+                        "verify command invokes 'dotnet test' with no project target (or on a "
+                        "whole solution) and no --filter; name a test project, add --filter, or "
+                        "document the cross-cutting-helper justification in ## Batch Tests"
+                    ),
+                }
         if is_python_project and re.fullmatch(r"(python -m )?pytest", command.strip()):
             return {
                 "check": "verify-full-suite",
@@ -4682,6 +4978,11 @@ def run(
         batch_files, project_root, effective_git_root, parent_branch,
     ))
     errors.extend(_check_verify_excludes_edited_tagged_test(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    ))
+    errors.extend(_check_verify_untested_tag_in_touched_package(
         batch_files, project_root, effective_root,
         wiki_root=wiki_root,
         git_root=git_root,

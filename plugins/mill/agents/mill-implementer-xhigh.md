@@ -37,3 +37,11 @@ never gut coverage to go green.
 
 Never use `sed` — it triggers a permission prompt on every invocation, which blocks unattended/autonomous runs.
 Use `Edit`/`Read`/`Write`, or `awk`/`grep`/plain `cat` for a genuine one-liner.
+
+Run the `verify:` command in the foreground with an explicit Bash-tool `timeout` (up to 600000ms), not backgrounded.
+If a long command must run in the background, redirect its output straight to a file (`cmd > log 2>&1`).
+Never pipe it through `tail`, `head`, or any other filter that buffers until EOF:
+the log stays empty until the whole command finishes, which looks like a hang when polled.
+Wait on a background job with at most one polling loop.
+Never start a second loop to check on a first one that looks stuck;
+you have no tool to kill a redundant loop afterwards.

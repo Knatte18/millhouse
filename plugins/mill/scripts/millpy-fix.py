@@ -487,13 +487,10 @@ def main(argv=None) -> int:
             nits_scope=nits_scope,
             git_root=git_root,
             cwd_override=cwd_override,
-            git_name=git_name,
-            git_email=git_email,
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_wide_cwd_override=module_wide_cwd_override,
             module_verify_baseline=module_verify_baseline,
             batch_verify_baseline=batch_verify_baseline,
-            batch_name=args.batch_name,
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
@@ -751,8 +748,6 @@ def main(argv=None) -> int:
         nits_scope=nits_scope,
         git_root=git_root,
         cwd_override=cwd_override,
-        git_name=git_name,
-        git_email=git_email,
     )
 
 

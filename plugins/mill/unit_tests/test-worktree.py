@@ -560,8 +560,7 @@ def main() -> int:
             )
 
             # Register a nested worktree inside the task worktree's .scratch/ dir, against the
-            # hub's common gitdir — mirroring _verify_baseline._checkout_parent_branch's real
-            # detached-HEAD baseline-checkout behavior.
+            # hub's common gitdir — mirroring a detached-HEAD nested-worktree pattern.
             nested_path = task_wt / ".scratch" / "nested"
             (task_wt / ".scratch").mkdir(parents=True, exist_ok=True)
             subprocess.run(

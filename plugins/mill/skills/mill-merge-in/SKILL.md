@@ -1,12 +1,12 @@
 ---
 name: mill-merge-in
-description: Sync the parent branch into the current branch. Checkpoint + conflict policy + verify + codeguide-update. Safe to call standalone or as mill-merge's first step.
+description: Sync the parent branch into the current branch. Checkpoint + conflict policy + verify. Safe to call standalone or as mill-merge's first step.
 ---
 
 # mill-merge-in
 
 Merge the parent branch into the current branch.
-Creates a rollback checkpoint first, resolves conflicts conservatively, replays the same batch verifies mill-go ran during implementation, and runs codeguide-update when applicable.
+Creates a rollback checkpoint first, resolves conflicts conservatively, and replays the same batch verifies mill-go ran during implementation.
 This skill does not acquire the merge lock — only the calling `mill-merge` (or the user running it standalone) touches state outside the current branch.
 
 ## Entry
@@ -53,7 +53,7 @@ git log HEAD.."$MERGE_REF" --oneline
 ```
 
 If output is empty → report "Nothing to merge — already up to date." and exit 0 immediately.
-No checkpoint, no verify, no codeguide-update.
+No checkpoint, no verify.
 This is the fast-path contract that lets `mill-merge` call this skill cheaply as a first step.
 
 ### 2. Create checkpoint
@@ -110,7 +110,9 @@ On `{"status":"stuck"}` from the sub-agent → roll back to checkpoint (`git res
 Runs unconditionally after step 3 completes successfully (including after any conflict-resolution sub-dispatch in step 3's table), before step 4's verify replay begins.
 
 This call does not go through Agent-mode dispatch.
-Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same deterministic computation `millpy-implement.py --stage baseline` uses, with no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+Unlike steps 3/4's conflict/verify-fix sub-agent dispatches, `--recompute-baseline` runs the same underlying `compute_baseline` algorithm `millpy-implement.py --stage baseline`'s module-wide half uses, with its own asymmetric verdict mapping on top and no LLM session involved — it needs no `<cli>`/`<args>` Agent-mode dispatch pattern reference.
+The mapping differs from `--stage baseline` in exactly one respect: `--recompute-baseline` maps a `"pre-existing-failures"` result to "leave the cached baseline unset," while `--stage baseline`'s module-wide half caches whatever it computes verbatim, including `"pre-existing-failures"`.
+`--recompute-baseline` also unconditionally clears every batch's `verify_baseline_failures` before it recomputes the module-wide half, so every remaining batch in the task gates strictly (as if never captured) for the rest of the run after a merge-in — this is a separate, operator-visible side effect from the module-wide recompute itself.
 Instead of a capped foreground call, it is background-dispatched and polled via the same `millpy-bg.py --slug <name> -- ...` pattern `mill-go-base/SKILL.md`'s `### 0.5. Baseline pre-flight` section uses:
 
 > **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree (this is the first `millpy-bg` call site in `mill-merge-in/SKILL.md` or `mill-merge/SKILL.md` — see `mill-go-base/SKILL.md`'s 0.5/0.6 sections for the callout's precedent). If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), this is the one deliberate divergence from the imported callout's wording: rather than halting the skill, log the reason (ASCII-only) and continue past this step -- the same log-and-continue *action* the `"dead"` branch below takes, but not its *detection mechanism*. The `"dead"` outcome below is discovered by polling `_bg.check_bg_status` against an already-created `<log-path>`; a cwd rejection here is discovered synchronously, from `millpy-bg.py`'s own stderr on the failed Bash call itself (it exits 1 before ever printing `pid=<N> log=<abs-path>`, so there is no log file yet to poll). Capture that stderr directly from the failed Bash call as the logged reason, rather than attempting a `_bg.check_bg_status` poll against a log path that was never created. Step 3.5 is fail-safe by design (an error here degrades to a `baseline: "error"` result, not a merge failure), so a cwd-mismatch on the dispatch attempt itself is scoped to the dispatch attempt only, not a new halt condition for this step.
@@ -134,8 +136,8 @@ Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the result,
   This step never triggers the Rollback section.
 - If step 1's no-op check already exited early ("Nothing to merge"), this step never runs at all — the "## No-op guarantee" section's promise ("this skill touches nothing" when there was nothing to merge) continues to hold.
 
-Rationale (`_mill/discussion.md`'s `baseline-aware module-wide verify gate (#590)` Decision, merge-in paragraph): "Whenever `mill-merge-in` pulls new parent commits into the task branch, it must recompute the baseline eagerly at its own clean post-sync boundary — immediately after the sync completes and before control returns to any further batch work — by resetting `module_verify_baseline` to `null` and then immediately invoking `millpy-merge-in-subagent.py`'s own call to the same `millpy-implement.py --stage baseline` computation...
-This mirrors the batch-1 pre-flight rule exactly: the parent's dependency manifests just changed as of the merge-in, and recomputing eagerly at that boundary — rather than lazily inside a later batch's finalize, after that batch's implementer may have already touched manifests again — keeps the baseline computation on the correct side of the 'no implementer has touched manifests since this snapshot' invariant established for batch 1."
+Rationale: whenever `mill-merge-in` pulls new parent commits into the task branch, it must recompute the baseline eagerly at its own clean post-sync boundary — immediately after the sync completes and before control returns to any further batch work.
+This mirrors the batch-1 pre-flight rule: the parent's dependency manifests just changed as of the merge-in, and recomputing eagerly at that boundary — rather than lazily inside a later batch's finalize, after that batch's implementer may have already touched manifests again — keeps the computation on the correct side of the "no implementer has touched manifests since this snapshot" invariant established for batch 1.
 
 ### 4. Verify
 
@@ -145,7 +147,7 @@ Call `_plan_dag.iter_batch_verifies(plan_dir, hub_root, git_root, status_path=st
 That yields `(batch_name, verify_cmd, cwd)` triples in DAG order, skipping batches with `verify: null`, batches that have not reached `"approved"` state yet, and batches whose verify target a later-approved batch's `Deletes:`/`Moves:` declares removed.
 
 Immediately after that call, attribute and report every batch this filtering silently dropped, per the "visible, counted skips" Shared Decision (a verify that never ran must never look identical, in the report, to one that ran and passed).
-Independently recompute the raw, unfiltered batch-with-verify set: call `_plan_dag.extract_batch_index()` on the overview text and `_plan_dag.topo_order()` on the result, then for each batch in that order read its frontmatter via `_plan_dag._read_batch_frontmatter()` and normalize its `verify:` via `_plan_dag.parse_verify_field()`, collecting the names of every batch whose command is non-`None`.
+Independently recompute the raw, unfiltered batch-with-verify set: call `_plan_dag.extract_batch_index()` on the overview text to get the raw batch dicts, call `_plan_dag.topo_order()` on that same list to get the ordering (a list of batch-name strings, not dicts), build `file_by_name = {entry['name']: entry.get('file') for entry in batches}` from the raw batch dicts, then for each `name` in `topo_order`'s ordering resolve `batch_path = plan_dir / file_by_name[name]` and read its frontmatter via `_plan_dag._read_batch_frontmatter(batch_path)` — this is the identical pattern `_plan_dag.iter_batch_verifies` already uses, cited here rather than reinvented — and normalize its `verify:` via `_plan_dag.parse_verify_field()`, collecting the names of every batch whose command is non-`None`.
 Diff that raw set against the names actually present in the `iter_batch_verifies(...)` return value above -- every name in the raw set but absent from the actual return was dropped.
 For each dropped batch, attribute its reason via one cached `_status.read_batches(status_path)` lookup (call it once, reused across every dropped batch, never once per batch): if the batch's own state isn't `"approved"`, increment `skipped_not_approved`;
 otherwise (the batch IS approved but still missing) increment `skipped_target_removed`.
@@ -178,22 +180,7 @@ If `iter_batch_verifies` returns `[]` (no plan,
 or every batch had null verify) → skip verify entirely.
 This covers tasks that were entirely docs or config.
 
-### 5. Codeguide update
-
-If `_codeguide/Overview.md` exists anywhere in the repo, invoke the `codeguide-update` skill scoped to the checkpoint diff:
-
-- Resolve `hub_root = _paths.resolve_hub_path()`.
-- Run `cd <hub_root>` via the Bash tool.
-- Use the Skill tool with name `codeguide:codeguide-update` (namespace matches `plugins/codeguide/settings.json`).
-- Pass argument `"$CHK..HEAD"` so the update sees everything the merge introduced, including your conflict resolutions.
-- Immediately after the Skill tool call returns, run `cd <worktree>` via the Bash tool to restore cwd for the remaining steps in this file (Step 5.5, Step 6).
-
-**Why the explicit `cd`:** `codeguide/scripts/resolve.py`'s inline walk only searches from cwd *upward* to the git toplevel — it has no mechanism to find a `_codeguide/` directory that lives in a descendant directory below cwd (i.e. the hub, nested under `git_root`). `codeguide-update/SKILL.md`'s own Step 1 (`resolve.py --json`) and Step 2 (`resolve_scope.py $ARGUMENTS`) take no cwd/root argument at all — the CLI has no `--cwd` flag — so the ambient shell cwd at invocation time is the only lever available. Pinning it to `hub_root` here matches the confirmed repro (running from the hub root resolves correctly; running from git_root in a nested layout does not) without changing `resolve.py`'s shared upward-only walk algorithm, which other flat-layout call sites depend on. This `cd` is intra-worktree (`hub_root` is a subdirectory of the current worktree, not a different worktree), so it does not conflict with the cross-worktree `cd`-to-parent prohibition.
-
-If `_codeguide/Overview.md` is absent → skip silently.
-This is the documented convention in `plugins/mill/skills/git-commit/SKILL.md` step 2 and we follow it here for symmetry.
-
-### 5.5. Commit dispatch briefs
+### 5. Commit dispatch briefs
 
 If any dispatch briefs exist and have changes (both the `merge/conflicts` brief written in step 3 and the `merge/verify-fix` brief written in step 4 after the `git merge --continue`), stage and commit them alongside anything step 5 already staged.
 Staging is unconditional on `_mill/briefs` existing, but the commit is gated on whether anything is actually STAGED, never on unscoped `git status --porcelain`:
@@ -207,14 +194,12 @@ if [ -n "$(git -C <worktree> diff --cached --name-only)" ]; then
 fi
 ```
 
-**Why staged-only, not unscoped porcelain:** `git status --porcelain` also reports unrelated unstaged/untracked worktree state that may already exist when `mill-merge-in` is invoked -- state this skill's own earlier steps had no part in creating -- and gating on that would either sweep foreign dirt into this commit or, worse, pass the non-empty check while nothing is actually staged, making `git commit` fail with "nothing to commit" even though the guard said there was something to commit. Checking `git diff --cached` (staged-only) avoids both failure modes, since briefs (if added above) and codeguide docs (already staged by `codeguide_commit.py --mode inline` in Step 5) are the only two things this step ever stages or expects to find staged.
+**Why staged-only, not unscoped porcelain:** `git status --porcelain` also reports unrelated unstaged/untracked worktree state that may already exist when `mill-merge-in` is invoked -- state this skill's own earlier steps had no part in creating -- and gating on that would either sweep foreign dirt into this commit or, worse, pass the non-empty check while nothing is actually staged, making `git commit` fail with "nothing to commit" even though the guard said there was something to commit. Checking `git diff --cached` (staged-only) avoids both failure modes, since briefs (if added above) are the only thing this step ever stages or expects to find staged.
 
 **Why relative, not absolute:** the `git -C <worktree> add _mill/briefs/` line above must keep the pathspec relative to `<worktree>` -- never `git -C <worktree> add <worktree>/_mill/briefs/`. `git -C <dir>` already sets `<dir>` as the working directory for the command that follows it, so re-prefixing the pathspec with `<worktree>` again is redundant and resolves to a doubled, non-existent path. A past edit made exactly this mistake and broke `test-brief-commit.py`'s `"add _mill/briefs/"` substring regression lock; it was re-fixed in commit `7a972fbf` ("mill-merge-in: fix Step 5.5 git add command to match brief-commit test convention"). Keep the pathspec relative in any future edit to this step's bash block.
 
-This also now picks up Step 5's inline-mode codeguide docs -- already `git add`-staged by `codeguide_commit.py --mode inline` back in Step 5, before this step runs -- which the prior `_mill/briefs`-scoped guard silently dropped whenever `_mill/briefs/` did not exist (#946).
-
-This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief/codeguide-doc commit is intentionally outside rollback scope and captures successful state.
-Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written AND no codeguide docs were staged either -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
+This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief commit is intentionally outside rollback scope and captures successful state.
+Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
 
 ### 6. Report
 
@@ -255,6 +240,6 @@ if standalone, the user investigates.
 
 ## No-op guarantee
 
-When step 1 returns empty, this skill touches no task state: no checkpoint, no verify, no codeguide-update, no output side effects.
+When step 1 returns empty, this skill touches no task state: no checkpoint, no verify, no output side effects.
 Step 1 always performs a network fetch (`git fetch origin <parent-branch>`) even when the result is a no-op;
 this is a deliberate cost of correctly detecting a stale local ref and is the only exception to the "touches no task state" guarantee. `mill-merge` depends on this — it calls `mill-merge-in` first every time, expecting a cheap exit when there is nothing to sync.

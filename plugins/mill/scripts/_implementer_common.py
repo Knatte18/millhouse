@@ -747,7 +747,9 @@ _FAILURE_MARKER_PREFIXES = (
 )
 
 
-def _extract_failure_signatures(output: str) -> list[str]:
+def _extract_failure_signatures(
+    output: str, *, returncode: int | None = None,
+) -> list[str]:
     """
     Scan every line of a verify command's combined stdout+stderr for known failure-marker prefixes
     and return all matching lines, in order.
@@ -758,15 +760,39 @@ def _extract_failure_signatures(output: str) -> list[str]:
     This helper itself is deliberately uncapped -- a failure past the 20th matching line must still
     be detectable as a signature.
 
+    A verify command that chains a non-test tool ahead of tests (e.g. `go vet ./... && go test
+    ./...`) and fails at the non-test stage produces no line matching any known failure-marker
+    prefix, even though its own exit code is non-zero.
+    When returncode is given, is non-zero, and no marker line was found, this synthesizes exactly
+    one signature line -- `"NONZERO_EXIT: exit <returncode>: <first non-empty line of output,
+    stripped, truncated to 200 characters>"` (or "(no output)" when output has no non-empty line) --
+    so an otherwise-empty signature set still has something comparable for the baseline/finalize
+    subset-diff waiver.
+    The "NONZERO_EXIT:" prefix is deliberately outside _FAILURE_MARKER_PREFIXES, so it reads as
+    synthetic (not a real test-runner marker) wherever it is dumped, e.g. in status.md.
+    No synthesis happens when returncode is None or 0, or when a real marker line was already found.
+
+    Args:
+        output: Combined stdout+stderr of a verify command.
+        returncode: The verify command's own exit code, when known.
+            Used only to decide whether to synthesize a signature for an otherwise-empty result.
+
     Returns:
         A list of every line in output that starts with one of the fixed failure-marker prefixes, in
-        the order they appear.
-        Empty when output has no recognized failure lines (never raises).
+        the order they appear, plus the synthetic NONZERO_EXIT line described above when applicable.
+        Empty when output has no recognized failure lines and no synthesis applies (never raises).
     """
-    return [
+    matches = [
         line for line in output.splitlines()
         if line.startswith(_FAILURE_MARKER_PREFIXES)
     ]
+    if returncode and not matches:
+        first_line = next(
+            (line.strip() for line in output.splitlines() if line.strip()),
+            "(no output)",
+        )
+        matches.append(f"NONZERO_EXIT: exit {returncode}: {first_line[:200]}")
+    return matches
 
 
 def _normalize_failure_signature(line: str) -> str:
@@ -899,6 +925,7 @@ def _run_verify_gate(
                 pass
         if result.returncode != 0:
             output = result.stdout + result.stderr
+            effective_returncode = result.returncode
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
@@ -924,6 +951,7 @@ def _run_verify_gate(
                 if retry_result.returncode == 0:
                     return None
                 output = retry_result.stdout + retry_result.stderr
+                effective_returncode = retry_result.returncode
                 if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                     return None
                 retry_marker = (
@@ -931,7 +959,9 @@ def _run_verify_gate(
                     "still failing] "
                 )
             # Extract every raw failure-marker line from the FULL, untruncated output -- this is the signature set _run_verify_gates uses (after normalization) for baseline/finalize subset-diff comparison, distinct from the capped excerpt used below for the human-facing reason.
-            signatures = _extract_failure_signatures(output)
+            signatures = _extract_failure_signatures(
+                output, returncode=effective_returncode,
+            )
             # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
             output_stripped = output.strip()
             if len(output_stripped) > 2000:
@@ -962,83 +992,6 @@ def _run_verify_gate(
     return None
 
 
-def _corroborate_batch_failure(
-    project_root: Path,
-    git_root: Path | None,
-    start_sha: str | None,
-    verify_cmd: str | None,
-    cwd_override: Path | None,
-) -> dict | None:
-    """
-    Corroborate a batch-level subset-diff mismatch against a fresh checkout of the batch's own
-    pre-implementer start_sha.
-
-    When the live replay's failure signatures are NOT a subset of the cached
-    verify_baseline_failures (the subset-diff waiver in _run_verify_gates already failed), this is
-    the fallback control check: re-run the exact failing verify_cmd once more in a transient
-    checkout of start_sha -- the commit the live replay's own worktree started from, before this
-    batch's implementer made any commits.
-    A reproduction there means the failure predates this batch's own changes and should be treated
-    as pre-existing rather than a genuine regression.
-
-    Args:
-        project_root: Absolute path to the task worktree root (where gitignored dependency dirs are
-            probed for reuse).
-        git_root: Absolute path to the repo root `git` commands run against.
-            Falls back to project_root when None.
-        start_sha: The commit SHA this batch's implementer started from,
-            or None when unavailable -- in which case corroboration cannot be attempted and this
-            function returns None immediately.
-        verify_cmd: The batch-level verify command to re-run against the start_sha checkout,
-            or None -- in which case corroboration cannot be attempted and this function returns
-            None immediately.
-        cwd_override: Explicit verify cwd for the batch-level gate (see _run_verify_gate),
-            re-anchored to the equivalent path inside the transient start_sha checkout when
-            possible.
-
-    Returns:
-        The control run's own stuck dict (with a "signatures" field) on failure, or None on a clean
-        pass, or when corroboration could not be attempted (start_sha/verify_cmd missing, or any
-        infrastructure failure -- e.g. a failed `git worktree add`, a junction error -- degrades to
-        "not corroborated" rather than propagating, matching this module's existing
-        None-means-fail-safe-strict convention).
-    """
-    if start_sha is None or verify_cmd is None:
-        return None
-
-    import _verify_baseline
-    import _worktree
-
-    effective_git_root = git_root or project_root
-
-    try:
-        tmp_path = _verify_baseline._checkout_parent_branch(
-            project_root, effective_git_root, start_sha
-        )
-        try:
-            effective_tmp_path = tmp_path
-            if cwd_override is not None:
-                try:
-                    rel = cwd_override.relative_to(effective_git_root)
-                except ValueError:
-                    rel = None
-                if rel is not None:
-                    effective_tmp_path = tmp_path / rel
-
-            _verify_baseline._link_dependency_dirs(project_root, effective_tmp_path)
-
-            return _run_verify_gate(
-                effective_tmp_path, verify_cmd, git_root=None, cwd_override=None
-            )
-        finally:
-            try:
-                _worktree.remove_safe(tmp_path, cwd=effective_git_root, junctions_cfg={})
-            except Exception:
-                pass
-    except Exception:
-        return None
-
-
 def _run_verify_gates(
     project_root: Path,
     verify_cmd: str | None,
@@ -1049,11 +1002,6 @@ def _run_verify_gates(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
-    start_sha: str | None = None,
-    status_path: Path | None = None,
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1124,31 +1072,7 @@ def _run_verify_gates(
         for waiver: it is mathematically a subset of any set, so treating it
         as waivable would silently mask genuine new regressions and
         infrastructure failures alike.
-            When this parameter arrives empty/None and a batch failure
-        occurs, this function now attempts an on-demand computation via
-        status_path's baseline_parent_sha before falling back to strict
-        blocking (previously: strict blocking was the only behavior when no
-        baseline was cached).
-            Defaults to None (run strictly, as
-        before this parameter existed).
-        start_sha: The commit SHA this batch's implementer started from,
-            forwarded to _corroborate_batch_failure when a subset-diff mismatch occurs.
-            Defaults to None, which disables corroboration entirely (fully backward-compatible with
-            every existing caller that does not pass it).
-        status_path: Path to the task's status.md,
-            forwarded to _status.set_batch_field to persist an expanded verify_baseline_failures set
-            when corroboration succeeds.
-            Defaults to None, which disables the self-healing persist (corroboration can still waive
-            the batch for this call, but the expanded signature set is not saved for later batches).
-        batch_name: This batch's name,
-            forwarded to _status.set_batch_field alongside status_path.
-            Defaults to None, which disables the self-healing persist exactly like status_path=None.
-        git_name: Git commit identity (user.name) used to persist an expanded
-            verify_baseline_failures corroboration result to status.md.
-            Defaults to None, which disables the persist-commit.
-        git_email: Git commit identity (user.email) used to persist an expanded
-            verify_baseline_failures corroboration result to status.md.
-            Defaults to None, which disables the persist-commit.
+            Defaults to None (run strictly, as before this parameter existed).
 
     Returns:
         A stuck dict on the first gate that fails,
@@ -1164,66 +1088,6 @@ def _run_verify_gates(
         # or an empty/absent replay signature set -- blocks exactly as today, since an empty set is vacuously a subset of anything and must never be treated as waivable.
         replay_signatures = batch_result.get("signatures")
 
-        # On-demand compute prelude (#1102): fires only when there is no eager baseline yet -- the
-        # normal case now that per-batch precomputation is gone. Reads the pinned parent SHA and
-        # computes this batch's own baseline lazily, on demand, only now that the batch's verify
-        # gate has actually failed.
-        if (
-            not batch_verify_baseline
-            and replay_signatures
-            and status_path is not None
-            and verify_cmd is not None
-        ):
-            baseline_parent_sha = _status.get_baseline_parent_sha(status_path)
-            if baseline_parent_sha is not None:
-                import _verify_baseline
-
-                try:
-                    computed = _verify_baseline.compute_batch_baseline_on_demand(
-                        project_root,
-                        git_root or project_root,
-                        baseline_parent_sha,
-                        verify_cmd,
-                        cwd_override=cwd_override,
-                    )
-                except Exception:
-                    # Infrastructure failure: degrade to "gate strictly," the same fail-safe
-                    # direction the module-wide mechanism already uses.
-                    computed = None
-                if computed:
-                    batch_verify_baseline = computed
-                    # Persist for future batches: a computed baseline is valuable for a later
-                    # batch's failure even when it doesn't waive this one.
-                    if batch_name is not None:
-                        try:
-                            _status.set_batch_field(
-                                status_path,
-                                batch_name,
-                                "verify_baseline_failures",
-                                computed,
-                            )
-                        except Exception:
-                            pass
-                        else:
-                            if git_name is not None and git_email is not None:
-                                try:
-                                    _subprocess_util.run(
-                                        [
-                                            "git",
-                                            "add",
-                                            status_path.relative_to(project_root).as_posix(),
-                                        ],
-                                        cwd=project_root,
-                                    )
-                                    _subprocess_util.git_commit(
-                                        project_root,
-                                        f"mill-go: persist on-demand verify baseline for {batch_name}",
-                                        name=git_name,
-                                        email=git_email,
-                                    )
-                                except Exception:
-                                    pass
-
         if batch_verify_baseline and replay_signatures:
             normalized_replay = {
                 _normalize_failure_signature(line) for line in replay_signatures
@@ -1234,58 +1098,6 @@ def _run_verify_gates(
             if normalized_replay.issubset(normalized_baseline):
                 # Waived: fall through to the module-wide gate below exactly as the batch_result is None path already does.
                 batch_result = None
-            elif start_sha is None:
-                pass
-            else:
-                control_result = _corroborate_batch_failure(
-                    project_root, git_root, start_sha, verify_cmd, cwd_override
-                )
-                if control_result is not None:
-                    normalized_control = {
-                        _normalize_failure_signature(line)
-                        for line in (control_result.get("signatures") or [])
-                    }
-                    if normalized_replay.issubset(normalized_control):
-                        # Corroborated: this exact failure set also reproduces in a checkout that
-                        # predates this batch's own changes -- treat as pre-existing, waive, and
-                        # persist the expanded signature set so later batches in this task don't
-                        # re-pay the same false block.
-                        expanded = sorted(set(batch_verify_baseline) | set(replay_signatures))
-                        if status_path is not None and batch_name is not None:
-                            try:
-                                _status.set_batch_field(
-                                    status_path,
-                                    batch_name,
-                                    "verify_baseline_failures",
-                                    expanded,
-                                )
-                            except Exception:
-                                pass
-                            else:
-                                # Commit the status.md write immediately so the in-scope dirty-tree
-                                # gate (which runs later in the same finalize_from_output
-                                # invocation) never observes this write as uncommitted dirt (#954).
-                                # Best-effort: a commit failure here must never crash finalize --
-                                # the pre-existing dirty-tree gate is the fallback authority.
-                                if git_name is not None and git_email is not None:
-                                    try:
-                                        _subprocess_util.run(
-                                            [
-                                                "git",
-                                                "add",
-                                                status_path.relative_to(project_root).as_posix(),
-                                            ],
-                                            cwd=project_root,
-                                        )
-                                        _subprocess_util.git_commit(
-                                            project_root,
-                                            f"mill-go: persist corroborated verify baseline for {batch_name}",
-                                            name=git_name,
-                                            email=git_email,
-                                        )
-                                    except Exception:
-                                        pass
-                        batch_result = None
         if batch_result is not None:
             return batch_result
 
@@ -1735,9 +1547,7 @@ def finalize_from_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
+    card_commit_messages: dict[int, str] | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1791,16 +1601,9 @@ def finalize_from_output(
         (run strictly, as before this parameter existed).
         commit_sha_field_name: JSON key the corrective SHA is attached under on the success
             fallback path; defaults to "commit_sha".
-        batch_name: This batch's name, forwarded unchanged to _forward_output's _run_verify_gates
-            calls.
-            See _run_verify_gates for the self-healing persist this enables.
-            Defaults to None (persist disabled, as before this parameter existed).
-        git_name: Git commit identity (user.name) forwarded unchanged to _forward_output's
-            _run_verify_gates calls.
-            Defaults to None (persist-commit disabled).
-        git_email: Git commit identity (user.email) forwarded unchanged to _forward_output's
-            _run_verify_gates calls.
-            Defaults to None (persist-commit disabled).
+        card_commit_messages: Forwarded unchanged to _forward_output.
+            See _forward_output for the full-batch-history fallback this enables.
+            Defaults to None (fallback disabled, as before this parameter existed).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1839,9 +1642,7 @@ def finalize_from_output(
         module_wide_cwd_override=module_wide_cwd_override,
         batch_verify_baseline=batch_verify_baseline,
         commit_sha_field_name=commit_sha_field_name,
-        batch_name=batch_name,
-        git_name=git_name,
-        git_email=git_email,
+        card_commit_messages=card_commit_messages,
     )
 
 
@@ -1877,6 +1678,86 @@ def _extract_status_json(output: str) -> dict | None:
     return None
 
 
+def _fixer_logic_ancestor_override(
+    project_root: Path,
+    start_sha: str,
+    verify_cmd: str | None,
+    module_wide_verify_cmd: str | None,
+    *,
+    git_root: Path | None = None,
+    module_verify_baseline: str | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
+    batch_verify_baseline: list[str] | None = None,
+    session_id: str | None = None,
+) -> dict | None:
+    """
+    Override a fixer's self-reported ``stuck_type: logic`` when the ancestry and working tree show
+    the fix actually landed and verifies clean.
+
+    Mechanizes the manual `git merge-base --is-ancestor` / `git status --porcelain` check the
+    Builder previously performed by hand for a holistic fix-round crash whose own self-report
+    (`stuck_type: logic`) trailed a real, already-committed fix (#1104's own incident).
+    Fixer-only: `_forward_output`'s caller gates this to `card_ids is None and start_sha is not
+    None`, a combination only `millpy-fix.py`'s `finalize_from_output` call satisfies -- see that
+    call site for why merge-in's two modes can never reach this function.
+
+    Checks, in order:
+      1. A real content commit exists since start_sha (`_content_commit_count`).
+          None or 0 means the self-report stands -- return None.
+      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output).
+          A dirty tree means a genuine unresolved problem -- return None.
+      3. `_run_verify_gates` passes (returns None) for the already-committed state.
+          A non-None result means verify still fails -- the self-reported logic stuck is not
+          overridden, since a genuinely still-broken batch must not be silently waved through --
+          return None.
+
+    Args:
+        project_root: Path to the worktree root.
+        start_sha: Git SHA recorded before the fixer ran.
+        verify_cmd: Batch-level verify command, forwarded to `_run_verify_gates`.
+        module_wide_verify_cmd: Module-wide verify command, forwarded to `_run_verify_gates`.
+        git_root, module_verify_baseline, cwd_override, module_wide_cwd_override,
+            batch_verify_baseline: forwarded unchanged to `_run_verify_gates`.
+        session_id: Session identifier for the overridden envelope;
+            falls back to the literal "unknown" when not supplied.
+
+    Returns:
+        `{"status": "success", "commit_sha": <HEAD>, "session_id": ..., "inferred": True}` when all
+        three checks pass, or `None` when the self-reported logic stuck should stand unchanged.
+    """
+    if _content_commit_count(project_root, start_sha) in (None, 0):
+        return None
+
+    _status_result = _subprocess_util.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=project_root,
+    )
+    if _status_result.stdout.strip():
+        return None
+
+    _gate_result = _run_verify_gates(
+        project_root,
+        verify_cmd,
+        module_wide_verify_cmd,
+        git_root=git_root,
+        module_verify_baseline=module_verify_baseline,
+        cwd_override=cwd_override,
+        module_wide_cwd_override=module_wide_cwd_override,
+        batch_verify_baseline=batch_verify_baseline,
+    )
+    if _gate_result is not None:
+        return None
+
+    head = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root).stdout.strip()
+    return {
+        "status": "success",
+        "commit_sha": head,
+        "session_id": session_id or "unknown",
+        "inferred": True,
+    }
+
+
 def _forward_output(
     output: str,
     project_root: Path,
@@ -1899,9 +1780,7 @@ def _forward_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
+    card_commit_messages: dict[int, str] | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1962,14 +1841,14 @@ def _forward_output(
     "commit_sha", which preserves today's behavior for every existing caller. A non-default value
     also pops any stale self-reported "commit_sha" key from parsed before attaching the corrected
     SHA under the new key name, so the two never coexist.
-    batch_name is forwarded unchanged to every _run_verify_gates call site below, alongside the
-    already-present start_sha and status_path parameters, enabling the self-healing persist
-    documented on _run_verify_gates.
-    Defaults to None (persist disabled, as before this parameter existed).
-    git_name and git_email are forwarded unchanged to every _run_verify_gates call site below: the
-    git commit identity used to persist an expanded verify_baseline_failures corroboration result to
-    status.md.
-    Both default to None, which disables the persist-commit.
+    card_commit_messages is an optional {card_number: Commit-field-message} dict, used as a
+    full-batch-history fallback ahead of the two SHA-range no-content-commit demotions below: when
+    every value for this batch's own card_ids (per commit_none_card_ids exclusion is not applied
+    here -- only cards with a real Commit: message are ever keys) is found as a substring of `git log
+    --oneline --all`, the demotion is skipped and an inferred success is emitted instead, since a
+    self-resolve re-fire mints a fresh start_sha that can no longer see cards committed before it.
+    Defaults to None (the fallback never fires, preserving today's behavior for every caller that
+    doesn't pass it).
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -1995,11 +1874,6 @@ def _forward_output(
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
                 batch_verify_baseline=batch_verify_baseline,
-                start_sha=start_sha,
-                status_path=status_path,
-                batch_name=batch_name,
-                git_name=git_name,
-                git_email=git_email,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
@@ -2033,6 +1907,35 @@ def _forward_output(
                 _attach_commit_sha(_retiering_result, project_root)
                 print(json.dumps(_retiering_result))
                 return 0
+
+            # Full-batch-history fallback (#1061): a self-resolve re-fire mints a fresh start_sha, so
+            # the SHA-range recount below can never see cards that were already committed before
+            # that self-resolve. When every one of this batch's own declared cards' Commit: messages
+            # is found somewhere in the full commit history (not just the start_sha..HEAD range),
+            # treat the batch as complete instead of falling through to the SHA-range demotions.
+            # An inconclusive scan (any message missing) falls through unchanged -- this fallback
+            # only ever prevents a false-negative demotion, never a false-positive success.
+            if card_commit_messages and card_ids:
+                _full_log = _subprocess_util.run(
+                    ["git", "log", "--oneline", "--all"], cwd=project_root,
+                )
+                _full_log_output = _full_log.stdout if _full_log.returncode == 0 else ""
+                _scoped_messages = [
+                    message
+                    for card_number, message in card_commit_messages.items()
+                    if card_number in card_ids
+                ]
+                if _scoped_messages and all(
+                    message in _full_log_output for message in _scoped_messages
+                ):
+                    _success = {
+                        "status": "success",
+                        "session_id": session_id or parsed.get("session_id") or "unknown",
+                        "inferred": True,
+                    }
+                    _attach_commit_sha(_success, project_root)
+                    print(json.dumps(_success))
+                    return 0
 
             # Check for no-content-commit success: reject if HEAD == start_sha or if the only commit since start_sha is the batch-start housekeeping commit.
             # Skipped entirely when nits_only is True: a --nits-only pass that legitimately pushes back on every finding (per the mill-receiving-review decision tree) is expected to make zero commits,
@@ -2130,6 +2033,34 @@ def _forward_output(
             print(json.dumps(_incomplete_envelope))
             return 0
 
+        # Ancestor/clean-tree override for a self-reported fixer stuck_type: logic (#1104): the
+        # `card_ids is None and start_sha is not None` combination is satisfied only by
+        # millpy-fix.py's finalize_from_output call -- neither merge-in mode ever reaches here (see
+        # _fixer_logic_ancestor_override's own docstring for the full reasoning). When the override
+        # fires, it replaces the self-reported logic stuck with an inferred success instead of
+        # falling through to the generic passthrough below.
+        if (
+            parsed.get("status") == "stuck"
+            and parsed.get("stuck_type") == "logic"
+            and card_ids is None
+            and start_sha is not None
+        ):
+            _override = _fixer_logic_ancestor_override(
+                project_root,
+                start_sha,
+                verify_cmd,
+                module_wide_verify_cmd,
+                git_root=git_root,
+                module_verify_baseline=module_verify_baseline,
+                cwd_override=cwd_override,
+                module_wide_cwd_override=module_wide_cwd_override,
+                batch_verify_baseline=batch_verify_baseline,
+                session_id=session_id or parsed.get("session_id"),
+            )
+            if _override is not None:
+                print(json.dumps(_override))
+                return 0
+
         # The corrective git rev-parse HEAD / _is_valid_commit_sha block below only ever
         # applies to a self-reported status: success -- every other status (already-classified
         # stuck/*, or anything else that reaches this point) must print through unchanged.
@@ -2225,11 +2156,6 @@ def _forward_output(
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
                                         batch_verify_baseline=batch_verify_baseline,
-                                        start_sha=start_sha,
-                                        status_path=status_path,
-                                        batch_name=batch_name,
-                                        git_name=git_name,
-                                        git_email=git_email,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
@@ -2337,11 +2263,6 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
-                        start_sha=start_sha,
-                        status_path=status_path,
-                        batch_name=batch_name,
-                        git_name=git_name,
-                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
@@ -2449,11 +2370,6 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
-                        start_sha=start_sha,
-                        status_path=status_path,
-                        batch_name=batch_name,
-                        git_name=git_name,
-                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).

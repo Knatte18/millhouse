@@ -21,6 +21,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _implementer_common  # noqa: E402
 import _safe_rmtree  # noqa: E402
+import _status  # noqa: E402
 
 _SCRIPT_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-merge-in-subagent.py"
 
@@ -203,6 +204,82 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["status"], "stuck")
         self.assertEqual(data["stuck_type"], "transient")
+
+    def test_2x_conflicts_model_resolves_from_conflicts_model(self):
+        """conflicts mode: model_name resolves from merge.conflicts_model when set (#1059)."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku", "conflicts_model": "sonnet"},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"success"}\n', "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "sonnet")
+
+    def test_2x_conflicts_model_falls_back_to_model_when_conflicts_model_absent(self):
+        """conflicts mode: model_name falls back to merge.model when conflicts_model is absent."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku"},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=('{"status":"success"}\n', "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            _implementer_common._subprocess_util, "run",
+            side_effect=_clean_gate_side_effect,
+        ):
+            rc, out = self._run_main(["--mode", "conflicts", "--files", "a.py"])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "haiku")
+
+    def test_2x_verify_fix_model_unaffected_by_conflicts_model(self):
+        """verify-fix mode: model_name resolution is unchanged regardless of conflicts_model
+        presence -- it always resolves from merge.model (never merge.conflicts_model)."""
+        self.mock_load_config.return_value = {
+            "merge": {"model": "haiku", "conflicts_model": "sonnet", "verify_fix_rounds": 3},
+            "llm": {"implementer_timeout": 1800},
+        }
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "mill-checkpoint-x",
+            ])
+
+        self.assertEqual(rc, 0)
+        self.mock_reviewers_resolve.assert_called_once()
+        call_args = self.mock_reviewers_resolve.call_args
+        self.assertEqual(call_args.args[1], "haiku")
 
     # ---- verify-fix mode ----
 
@@ -914,6 +991,130 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("--files is required for conflicts mode", stderr_buf.getvalue())
 
+    def test_2x_collect_task_intent_includes_moves_bullet(self):
+        """_collect_task_intent widens its bullet-extraction regex to include `Moves:` (#1065).
+
+        A plan file's `Moves:` bullet (with its indented rename-pair sub-bullet) must reach the
+        returned task-intent text exactly like `Deletes:` already does today.
+        """
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        plan_dir.mkdir(parents=True, exist_ok=True)
+        (plan_dir / "01-batch.md").write_text(
+            "```yaml\ntask: test\n```\n\n"
+            "- **Edits:** none\n"
+            "- **Creates:** none\n"
+            "- **Deletes:** none\n"
+            "- **Moves:**\n"
+            "  - old/path.py -> new/path.py\n",
+            encoding="utf-8",
+        )
+
+        result = millpy_merge_in_subagent._collect_task_intent(self.tmp_path)
+
+        self.assertIn("**Moves:**", result)
+        self.assertIn("old/path.py -> new/path.py", result)
+
+    def test_2x_generous_terminal_env_raises_floor_when_smaller(self):
+        """_generous_terminal_env raises COLUMNS/LINES to the floor only when the inherited value is
+        smaller than the floor (#1068)."""
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "40", "LINES": "10"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+        self.assertEqual(env["LINES"], "50")
+
+    def test_2x_generous_terminal_env_leaves_larger_value_untouched(self):
+        """_generous_terminal_env leaves a larger-than-floor inherited value untouched (#1068)."""
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "300", "LINES": "80"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "300")
+        self.assertEqual(env["LINES"], "80")
+
+    def test_2x_generous_terminal_env_handles_missing_or_invalid_values(self):
+        """_generous_terminal_env treats missing/non-integer COLUMNS/LINES as 0, raising to floor."""
+        env_without = dict(os.environ)
+        env_without.pop("COLUMNS", None)
+        env_without.pop("LINES", None)
+        with unittest.mock.patch.dict(os.environ, env_without, clear=True):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+        self.assertEqual(env["LINES"], "50")
+
+        with unittest.mock.patch.dict(os.environ, {"COLUMNS": "not-a-number"}, clear=False):
+            env = millpy_merge_in_subagent._generous_terminal_env()
+        self.assertEqual(env["COLUMNS"], "220")
+
+    def test_2x_verify_fix_full_mode_subprocess_calls_pass_generous_env(self):
+        """verify-fix full mode: both the initial verify and the post-sub-agent re-verify
+        subprocess.run calls pass env=_generous_terminal_env() (#1068)."""
+        sentinel_env = {"COLUMNS": "220", "LINES": "50", "SENTINEL": "1"}
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_generous_terminal_env",
+            return_value=sentinel_env,
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=1, stdout="FAILED test_foo", stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ],
+        ) as mock_subprocess_run, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            side_effect=[
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="diff --git a/f.py...", stderr=""),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
+            ],
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake-session"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render",
+            return_value="rendered",
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "mill-checkpoint-x",
+            ])
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(mock_subprocess_run.call_count, 2)
+        for call in mock_subprocess_run.call_args_list:
+            self.assertEqual(call.kwargs.get("env"), sentinel_env)
+
+    def test_2x_verify_fix_finalize_subprocess_call_passes_generous_env(self):
+        """--stage finalize verify-fix mode: the re-run verify subprocess.run call passes
+        env=_generous_terminal_env() (#1068)."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text("agent output", encoding="utf-8")
+        sentinel_env = {"COLUMNS": "220", "LINES": "50", "SENTINEL": "1"}
+
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent, "_generous_terminal_env",
+            return_value=sentinel_env,
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent.subprocess, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+        ) as mock_subprocess_run, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n", stderr=""),
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "exit 0",
+                "--checkpoint", "abc123",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_subprocess_run.assert_called_once()
+        self.assertEqual(mock_subprocess_run.call_args.kwargs.get("env"), sentinel_env)
+
     def test_20_recompute_baseline_missing_status_md(self):
         """--recompute-baseline with status.md absent -> exit 0, baseline:error JSON, no raise.
 
@@ -934,12 +1135,18 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["baseline"], "error")
         self.assertIn("status.md", data["reason"])
 
-    def _write_recompute_baseline_fixture(self, verify_frontmatter_yaml: str) -> None:
+    def _write_recompute_baseline_fixture(
+        self, verify_frontmatter_yaml: str, batch_names: list[str] | None = None
+    ) -> None:
         """
         Write a status.md (with a resolvable ``parent:`` row) and a ``00-overview.md`` plan
         fixture carrying ``verify_frontmatter_yaml`` as the ``verify:`` field, under
         ``self.tmp_path``, and point ``self.mock_load_config`` at the matching ``paths`` section
         -- the minimum fixture shape ``_run_recompute_baseline`` needs end-to-end.
+
+        When ``batch_names`` is given, also writes a ``## Batches`` section with one entry per
+        name, each carrying a non-empty ``verify_baseline_failures`` list -- the pre-merge-in state
+        the unconditional clearing step (Decision ``merge-in-batch-baseline-staleness``) must wipe.
         """
         self.mock_load_config.return_value = {
             "merge": {"verify_fix_rounds": 3},
@@ -949,10 +1156,15 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         mill_dir = self.tmp_path / "_mill"
         plan_dir = mill_dir / "plan"
         plan_dir.mkdir(parents=True, exist_ok=True)
-        (mill_dir / "status.md").write_text(
-            "```yaml\nslug: test-slug\nparent: main\n```\n",
-            encoding="utf-8",
-        )
+        status_text = "```yaml\nslug: test-slug\nparent: main\n```\n"
+        if batch_names:
+            batches_yaml = "\n".join(
+                f"  - name: {name}\n    state: pending\n"
+                f"    verify_baseline_failures: [\"stale failure\"]"
+                for name in batch_names
+            )
+            status_text += f"\n## Batches\n\n```yaml\nbatches:\n{batches_yaml}\n```\n"
+        (mill_dir / "status.md").write_text(status_text, encoding="utf-8")
         (plan_dir / "00-overview.md").write_text(
             f"```yaml\ntask: test\nslug: test-slug\n{verify_frontmatter_yaml}\n```\n",
             encoding="utf-8",
@@ -960,11 +1172,11 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_21_recompute_baseline_mapping_verify_field(self):
         """--recompute-baseline with a mapping-form module-wide verify -> no TypeError,
-        compute_baseline receives the resolved plain-string command and hub cwd override (#1106)."""
+        compute_baseline receives the resolved absolute cwd and plain-string command (#1106)."""
         self._write_recompute_baseline_fixture('verify:\n  cwd: hub\n  command: "pytest tests/"')
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._verify_baseline, "compute_baseline",
-            return_value="clean",
+            return_value=("clean", []),
         ) as mock_compute_baseline:
             rc, out = self._run_main(["--recompute-baseline"])
         self.assertEqual(rc, 0)
@@ -972,10 +1184,10 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data, {"status": "success", "baseline": "computed", "value": "clean"})
         mock_compute_baseline.assert_called_once()
         call_args, call_kwargs = mock_compute_baseline.call_args
-        module_wide_verify_cmd = call_args[3]
-        self.assertEqual(module_wide_verify_cmd, "pytest tests/")
-        self.assertIsInstance(module_wide_verify_cmd, str)
-        self.assertEqual(call_kwargs["cwd_override_relative"], self.tmp_path)
+        self.assertEqual(call_args[0], self.tmp_path)
+        self.assertEqual(call_args[1], "pytest tests/")
+        self.assertIsInstance(call_args[1], str)
+        self.assertEqual(call_kwargs, {})
 
     def test_22_recompute_baseline_malformed_verify_field(self):
         """--recompute-baseline with a mapping-form verify missing `command:` -> parse_verify_field's
@@ -987,6 +1199,92 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["baseline"], "error")
         self.assertIn("command", data["reason"])
+
+    def _batch_verify_baseline_failures(self) -> dict[str, object]:
+        """Read back every batch's ``verify_baseline_failures`` field from the fixture's status.md."""
+        status_path = self.tmp_path / "_mill" / "status.md"
+        return {
+            b["name"]: b.get("verify_baseline_failures")
+            for b in _status.read_batches(status_path)
+        }
+
+    def test_23_recompute_baseline_clears_batches_on_clean_pass(self):
+        """--recompute-baseline clears every batch's verify_baseline_failures on the "clean"-mapped
+        pass branch, per Decision merge-in-batch-baseline-staleness."""
+        self._write_recompute_baseline_fixture(
+            'verify:\n  cwd: hub\n  command: "pytest tests/"',
+            batch_names=["batch-a", "batch-b"],
+        )
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._verify_baseline, "compute_baseline",
+            return_value=("clean", []),
+        ):
+            rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["value"], "clean")
+        self.assertEqual(
+            self._batch_verify_baseline_failures(),
+            {"batch-a": None, "batch-b": None},
+        )
+
+    def test_24_recompute_baseline_clears_batches_on_pre_existing_failures(self):
+        """--recompute-baseline clears every batch's verify_baseline_failures on the
+        "pre-existing-failures"-unset fail branch too -- staleness is unconditional."""
+        self._write_recompute_baseline_fixture(
+            'verify:\n  cwd: hub\n  command: "pytest tests/"',
+            batch_names=["batch-a", "batch-b"],
+        )
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._verify_baseline, "compute_baseline",
+            return_value=("pre-existing-failures", ["boom"]),
+        ):
+            rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["value"], "pre-existing-failures")
+        self.assertEqual(
+            self._batch_verify_baseline_failures(),
+            {"batch-a": None, "batch-b": None},
+        )
+        status_path = self.tmp_path / "_mill" / "status.md"
+        self.assertIsNone(_status.get_module_verify_baseline(status_path))
+
+    def test_25_recompute_baseline_clears_batches_when_no_module_wide_verify(self):
+        """--recompute-baseline still clears every batch's verify_baseline_failures when no
+        module-wide verify is configured -- clearing is independent of the module-wide half."""
+        self._write_recompute_baseline_fixture("verify: null", batch_names=["batch-a", "batch-b"])
+        rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["baseline"], "skipped")
+        self.assertEqual(
+            self._batch_verify_baseline_failures(),
+            {"batch-a": None, "batch-b": None},
+        )
+
+    def test_26_recompute_baseline_clears_batches_on_malformed_verify_field(self):
+        """--recompute-baseline still clears every batch's verify_baseline_failures when the
+        module-wide verify field is malformed -- clearing runs before that error is even reached."""
+        self._write_recompute_baseline_fixture('verify:\n  cwd: hub', batch_names=["batch-a"])
+        rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["baseline"], "error")
+        self.assertEqual(self._batch_verify_baseline_failures(), {"batch-a": None})
+
+    def test_27_recompute_baseline_sets_module_verify_baseline_from_compute_baseline_return_value(self):
+        """module_verify_baseline is set to "clean" from compute_baseline's own return value, not a
+        raw exit code -- a raw-exit-code-based caller would pass for the wrong implementation here."""
+        self._write_recompute_baseline_fixture('verify:\n  cwd: hub\n  command: "pytest tests/"')
+        with unittest.mock.patch.object(
+            millpy_merge_in_subagent._verify_baseline, "compute_baseline",
+            return_value=("clean", []),
+        ):
+            rc, out = self._run_main(["--recompute-baseline"])
+        self.assertEqual(rc, 0)
+        status_path = self.tmp_path / "_mill" / "status.md"
+        self.assertEqual(_status.get_module_verify_baseline(status_path), "clean")
 
 
 def _git(args, cwd, check=True):

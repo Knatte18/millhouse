@@ -20,8 +20,8 @@ from _status import (
     append_phase,
     append_recovery_log,
     clear_module_verify_baseline,
-    get_baseline_parent_sha,
     get_module_verify_baseline,
+    get_module_verify_baseline_signatures,
     init_batches,
     phase_entry_timestamp,
     read,
@@ -34,11 +34,11 @@ from _status import (
     remove_batch,
     render_initial,
     resume_batch,
-    set_baseline_parent_sha,
     set_batch_field,
     set_batch_fields,
     set_blocked,
     set_module_verify_baseline,
+    set_module_verify_baseline_signatures,
     update_field,
 )
 from _yaml_writer import quote_scalar
@@ -146,32 +146,74 @@ def main() -> int:
             assert "discussed  '2026-04-22T15:00:00Z'" in contents, "timeline row not appended"
             print("PASS: append_phase updates phase yaml + appends timeline row")
 
-        # --- str-input-raises-TypeError regression tests (GitHub #597) ---
-        # A plain str passed where status_path (a pathlib.Path) is expected must raise a clear TypeError naming the offending function, not a bare AttributeError deep inside the module's read_text/exists calls.
+        # --- str/PathLike coercion tests (GitHub #1114) ---
+        # Every SKILL.md pseudocode call site passes a bare status_path string, so _as_path must
+        # coerce str and os.PathLike inputs to Path transparently -- producing the same on-disk
+        # effect / return value as the equivalent Path call -- while still raising a clear
+        # TypeError naming the offending function for a genuinely uncoercible type (GitHub #597).
+
+        class _FakePathLike:
+            """Minimal os.PathLike that is not a str or a Path, for coercion testing."""
+
+            def __init__(self, path: Path) -> None:
+                self._path = path
+
+            def __fspath__(self) -> str:
+                return str(self._path)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp_path = Path(tmp) / "status.md"
+            sp_path.write_text(out, encoding="utf-8")
+            sp_str = str(sp_path)
+
+            append_phase(sp_str, "coerced", "2026-01-01T00:00:00Z")
+            contents = sp_path.read_text(encoding="utf-8")
+            assert "phase: coerced" in contents, "str status_path: phase row not updated"
+            assert "coerced  '2026-01-01T00:00:00Z'" in contents, (
+                "str status_path: timeline row not appended"
+            )
+            print("PASS: append_phase accepts a str status_path and matches Path behavior")
+
+            update_field(sp_str, "task", "Updated via str")
+            assert "task: Updated via str" in sp_path.read_text(encoding="utf-8")
+            print("PASS: update_field accepts a str status_path and matches Path behavior")
+
+            set_blocked(sp_str, "blocked via str", timestamp="2026-01-01T01:00:00Z")
+            blocked_contents = sp_path.read_text(encoding="utf-8")
+            assert "phase: blocked" in blocked_contents
+            assert "blocked_reason: blocked via str" in blocked_contents
+            print("PASS: set_blocked accepts a str status_path and matches Path behavior")
+
+            status_via_str = read_status(sp_str)
+            status_via_path = read_status(sp_path)
+            assert status_via_str == status_via_path, (
+                f"read_status(str) != read_status(Path): {status_via_str!r} vs {status_via_path!r}"
+            )
+            print("PASS: read_status accepts a str status_path and matches Path behavior")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp_pathlike = Path(tmp) / "status.md"
+            sp_pathlike.write_text(out, encoding="utf-8")
+            append_phase(_FakePathLike(sp_pathlike), "via-pathlike", "2026-01-01T02:00:00Z")
+            pathlike_contents = sp_pathlike.read_text(encoding="utf-8")
+            assert "phase: via-pathlike" in pathlike_contents, (
+                "os.PathLike status_path: phase row not updated"
+            )
+            print("PASS: append_phase accepts a non-str os.PathLike status_path")
 
         try:
-            append_phase("some/str/path", "phase", "2026-01-01T00:00:00Z")
-            raise AssertionError("expected TypeError from append_phase with str status_path")
+            append_phase(None, "phase", "2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from append_phase with None status_path")
         except TypeError as exc:
             assert "append_phase" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: append_phase raises TypeError on str status_path")
+        print("PASS: append_phase raises TypeError on None status_path")
 
         try:
-            update_field("some/str/path", "key", "value")
-            raise AssertionError("expected TypeError from update_field with str status_path")
+            append_phase(123, "phase", "2026-01-01T00:00:00Z")
+            raise AssertionError("expected TypeError from append_phase with int status_path")
         except TypeError as exc:
-            assert "update_field" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: update_field raises TypeError on str status_path")
-
-        try:
-            set_blocked("some/str/path", "reason", timestamp="2026-01-01T00:00:00Z")
-            raise AssertionError("expected TypeError from set_blocked with str status_path")
-        except TypeError as exc:
-            assert "set_blocked" in str(exc), f"function name missing from message: {exc}"
-            assert "pathlib.Path" in str(exc), f"'pathlib.Path' missing from message: {exc}"
-        print("PASS: set_blocked raises TypeError on str status_path")
+            assert "append_phase" in str(exc), f"function name missing from message: {exc}"
+        print("PASS: append_phase raises TypeError on int status_path")
 
         # Colon in phase round-trip — separate file to avoid contaminating shared sp.
         with tempfile.TemporaryDirectory() as tmp:
@@ -992,55 +1034,92 @@ def main() -> int:
             assert after == before, "clear_module_verify_baseline should be a no-op when field is absent"
             print("PASS: clear_module_verify_baseline is a no-op when the field was never set")
 
-        # --- baseline_parent_sha tests ---
-        # Test 1: get_baseline_parent_sha returns None on a fresh file.
+        # Test 7: get_module_verify_baseline_signatures returns None on a fresh file.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            value = get_baseline_parent_sha(sp)
+            value = get_module_verify_baseline_signatures(sp)
             assert value is None, f"expected None on fresh file, got {value!r}"
-            print("PASS: get_baseline_parent_sha returns None on a fresh file")
+            print("PASS: get_module_verify_baseline_signatures returns None on a fresh file")
 
-        # Test 2: set_baseline_parent_sha inserts the row;
-        # a subsequent get_baseline_parent_sha round-trips the same value.
+        # Test 8: set_module_verify_baseline_signatures inserts the row;
+        # a subsequent get_module_verify_baseline_signatures round-trips the same value.
+        # An empty list survives the round-trip as a present-but-empty field, distinct from absence.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            sha_1 = "a" * 40
-            set_baseline_parent_sha(sp, sha_1)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_1, f"expected {sha_1!r}, got {value!r}"
-            print("PASS: set_baseline_parent_sha('<sha>') inserts the row")
+            set_module_verify_baseline_signatures(sp, ["sig-a", "sig-b"])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == ["sig-a", "sig-b"], f"expected ['sig-a', 'sig-b'], got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures inserts the row")
 
-            # Test 3: a second set() with a different value rewrites the existing row in place -- exactly one baseline_parent_sha: line survives, not a duplicate.
-            sha_2 = "b" * 40
-            set_baseline_parent_sha(sp, sha_2)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_2, f"expected {sha_2!r}, got {value!r}"
+            set_module_verify_baseline_signatures(sp, [])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == [], f"expected [] (present, not None), got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures([]) survives round-trip as present-but-empty")
+
+            # Test 9: a second set() with a different value rewrites the existing row in place --
+            # exactly one module_verify_baseline_signatures: line survives, not a duplicate.
+            set_module_verify_baseline_signatures(sp, ["sig-c"])
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == ["sig-c"], f"expected ['sig-c'], got {value!r}"
             raw = sp.read_text(encoding="utf-8")
-            occurrences = raw.count("baseline_parent_sha:")
+            occurrences = raw.count("module_verify_baseline_signatures:")
             assert occurrences == 1, f"expected exactly one row, found {occurrences}"
-            print("PASS: set_baseline_parent_sha rewrites the existing row in place")
+            print("PASS: set_module_verify_baseline_signatures rewrites the existing row in place")
 
-        # Test 4: set_baseline_parent_sha rejects an empty-string value.
+        # Test 10: a signature list long enough that a naive yaml.safe_dump without a width
+        # override would wrap it across multiple physical lines must instead write as exactly one
+        # physical line -- this is the regression guard for the line-stranding bug this would
+        # otherwise cause on every later _status read.
         with tempfile.TemporaryDirectory() as tmp:
             sp = Path(tmp) / "status.md"
             initial = render_initial(
                 "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
             )
             sp.write_text(initial, encoding="utf-8")
-            try:
-                set_baseline_parent_sha(sp, "")
-                assert False, "expected ValueError"
-            except ValueError:
-                pass
-            print("PASS: set_baseline_parent_sha rejects an empty-string value")
+            long_signatures = [f"sha256:{'a' * 60}-{i}" for i in range(10)]
+            set_module_verify_baseline_signatures(sp, long_signatures)
+            raw = sp.read_text(encoding="utf-8")
+            matching_lines = [
+                line for line in raw.splitlines() if line.startswith("module_verify_baseline_signatures:")
+            ]
+            assert len(matching_lines) == 1, (
+                f"expected the row to stay on exactly one physical line, found {len(matching_lines)}"
+            )
+            value = get_module_verify_baseline_signatures(sp)
+            assert value == long_signatures, f"expected round-trip to preserve the list, got {value!r}"
+            print("PASS: set_module_verify_baseline_signatures writes a long list as one physical line")
+
+            # A subsequent set() then clear_module_verify_baseline() then read() round-trip on that
+            # value leaves status.md fully parseable.
+            clear_module_verify_baseline(sp)
+            parsed = read(sp)
+            assert parsed.get("module_verify_baseline_signatures") is None
+            print("PASS: clear_module_verify_baseline after a long-signature-list set leaves status.md parseable")
+
+        # Test 11: clear_module_verify_baseline now also clears module_verify_baseline_signatures
+        # in the same call -- assert both fields are absent after one call that previously had both set.
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            set_module_verify_baseline(sp, "clean")
+            set_module_verify_baseline_signatures(sp, ["sig-a"])
+            clear_module_verify_baseline(sp)
+            assert get_module_verify_baseline(sp) is None, "module_verify_baseline should be cleared"
+            assert get_module_verify_baseline_signatures(sp) is None, (
+                "module_verify_baseline_signatures should be cleared in the same call"
+            )
+            print("PASS: clear_module_verify_baseline clears both fields together")
 
         # --- append_recovery_log tests ---
         ts_rl = "2026-07-29T08:00:00Z"

@@ -1,11 +1,17 @@
 """
 Integration test for per-batch verify-baseline capture and waiver, end-to-end.
 
-`_mill/discussion.md`'s Testing section calls for real-git coverage of the whole `--stage baseline`
-/ `--stage finalize` per-batch waiver mechanism (batches 3-6 of this plan): a fixture task whose one
-batch's `verify:` command has a pre-existing failure unrelated to the batch's own work, confirming
-`--stage baseline` captures that failure's signature and `--stage finalize` waives it on replay
-while still catching a genuinely new, distinct failure introduced later.
+`_mill/discussion.md`'s Testing section calls for real-git coverage of the whole eager
+per-batch-pre-flight / waiver mechanism: a fixture task whose one batch's `verify:` command has a
+pre-existing failure unrelated to the batch's own work, confirming a `--stage baseline` CLI call
+made BEFORE any implementer/fixer dispatch captures that failure's signature (mirroring
+`millpy-implement.py`'s own eager two-half capture, see its `_run_baseline_stage`), and that
+`--stage finalize` waives it on replay while still catching a genuinely new, distinct failure
+introduced later.
+This is the highest-value surviving coverage in this file per that Testing-section note -- the
+subset-diff waiver logic itself (in `_run_verify_gates`) is unchanged by this task;
+only how the baseline it compares against is computed (no-checkout, per Decision
+`no-checkout-anywhere`) has changed.
 
 Layout mirrors `test-abandon.py` and `test-verify-baseline.py`:
 
@@ -27,7 +33,9 @@ worktree root, which starts out printing exactly one `FAILED ...`-shaped line an
 
 Three steps:
 
-    1. `--stage baseline` against the fixture worktree: confirms the batch's
+    1. Eager per-batch pre-flight: `--stage baseline` against the fixture worktree, run BEFORE any
+        implementer/fixer dispatch step (there is none here -- the fixture never dispatches an
+        agent, so this ordering is structural: Step 1 runs first, full stop). Confirms the batch's
         `verify_baseline_failures` field in `status.md` is captured as a non-empty list containing
         the pre-existing failure's signature.
     2. Mutate `verify_check.py` to ALSO print a second, distinct `FAILED
@@ -260,7 +268,9 @@ def main() -> int:
 
         script = SCRIPTS / "millpy-implement.py"
 
-        # --- Step 1: --stage baseline captures the pre-existing failure ---
+        # --- Step 1: eager per-batch pre-flight -- --stage baseline captures the pre-existing
+        # failure BEFORE any implementer/fixer dispatch, mirroring millpy-implement.py's own
+        # eager two-half capture ---
         result = _run(
             [sys.executable, str(script), "--stage", "baseline"],
             cwd=worktree,

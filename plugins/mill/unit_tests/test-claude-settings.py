@@ -9,6 +9,14 @@ Covers:
   second call skips the write entirely
   - MILL_SUBAGENT_TOOLS: matches the union of mill-implementer.md's and mill-reviewer.md's tools:
   frontmatter, so the two can never drift
+  - reconcile_destructive_denylist: retires target-blind rm -rf deny rules while leaving unrelated
+  deny entries untouched
+  - reconcile_destructive_denylist: settings file absent -> created with every DESTRUCTIVE_DENY
+  entry present, no duplicates
+  - reconcile_destructive_denylist: pre-existing unrelated deny entries, allow list,
+  additionalDirectories, and env block survive the reconciliation unchanged
+  - reconcile_destructive_denylist: calling twice in a row is idempotent -- same deny list both
+  times, second call skips the write entirely
 """
 from __future__ import annotations
 
@@ -145,6 +153,92 @@ def test_mill_subagent_tools_matches_agent_frontmatter() -> None:
 
 
 # ---------------------------------------------------------------------------
+# reconcile_destructive_denylist
+# ---------------------------------------------------------------------------
+
+
+def test_reconcile_retires_target_blind_rm_rf() -> None:
+    """A target-blind rm -rf deny rule is removed; unrelated deny entries survive."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        initial = {
+            "permissions": {
+                "deny": ["Bash(rm -rf:*)", "Bash(git push --force:*)"],
+            },
+        }
+        settings_path.write_text(json.dumps(initial, indent=2), encoding="utf-8")
+
+        result = _claude_settings.reconcile_destructive_denylist(settings_path)
+
+        deny = result["permissions"]["deny"]
+        assert "Bash(rm -rf:*)" not in deny, f"Retired rule must be removed; got {deny!r}"
+        assert "Bash(git push --force:*)" in deny, f"Unrelated deny entry must survive; got {deny!r}"
+    print("PASS reconcile_destructive_denylist -- target-blind rm -rf rule retired, unrelated entry survives")
+
+
+def test_reconcile_adds_destructive_deny_entries() -> None:
+    """A missing settings file is created with every DESTRUCTIVE_DENY entry present, no duplicates."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        result = _claude_settings.reconcile_destructive_denylist(settings_path)
+
+        deny = result["permissions"]["deny"]
+        for entry in _claude_settings.DESTRUCTIVE_DENY:
+            assert deny.count(entry) == 1, f"Expected exactly one {entry!r} in deny; got {deny!r}"
+    print("PASS reconcile_destructive_denylist -- absent settings file created with exact DESTRUCTIVE_DENY set")
+
+
+def test_reconcile_preserves_unrelated_deny_and_other_keys() -> None:
+    """Unrelated deny entries, allow list, additionalDirectories, and env block survive untouched."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        initial = {
+            "permissions": {
+                "allow": ["Read", "WebSearch"],
+                "deny": ["Bash(git push --force:*)", "Bash(git reset --hard:*)"],
+                "additionalDirectories": ["/home/user/other-project"],
+            },
+            "env": {"MILL_PYTHON": "/some/venv/bin/python"},
+        }
+        settings_path.write_text(json.dumps(initial, indent=2), encoding="utf-8")
+
+        result = _claude_settings.reconcile_destructive_denylist(settings_path)
+
+        deny = result["permissions"]["deny"]
+        for entry in initial["permissions"]["deny"]:
+            assert entry in deny, f"Unrelated deny entry must survive; got {deny!r}"
+        assert result["permissions"]["allow"] == initial["permissions"]["allow"], (
+            "allow list must be untouched"
+        )
+        assert result["permissions"]["additionalDirectories"] == initial["permissions"]["additionalDirectories"], (
+            "additionalDirectories block must be untouched"
+        )
+        assert result["env"] == initial["env"], "env block must be untouched"
+    print("PASS reconcile_destructive_denylist -- unrelated deny/allow/additionalDirectories/env survive reconciliation")
+
+
+def test_reconcile_idempotent_second_call_skips_write() -> None:
+    """Calling reconcile_destructive_denylist twice produces the same deny list and skips the second write."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+
+        first = _claude_settings.reconcile_destructive_denylist(settings_path)
+        before_mtime = settings_path.stat().st_mtime_ns
+        before_text = settings_path.read_text(encoding="utf-8")
+
+        second = _claude_settings.reconcile_destructive_denylist(settings_path)
+        after_mtime = settings_path.stat().st_mtime_ns
+        after_text = settings_path.read_text(encoding="utf-8")
+
+        assert second["permissions"]["deny"] == first["permissions"]["deny"], (
+            f"Second call's deny list must match first; got {second!r} vs {first!r}"
+        )
+        assert after_mtime == before_mtime, "Second call must not rewrite the file (no-op write-skip)"
+        assert after_text == before_text, "File content must be unchanged after the second call"
+    print("PASS reconcile_destructive_denylist -- idempotent, second call is a write no-op")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -154,6 +248,10 @@ def main() -> int:
         test_creates_settings_file_when_absent,
         test_preserves_existing_permissions_block,
         test_idempotent_second_call_skips_write,
+        test_reconcile_retires_target_blind_rm_rf,
+        test_reconcile_adds_destructive_deny_entries,
+        test_reconcile_preserves_unrelated_deny_and_other_keys,
+        test_reconcile_idempotent_second_call_skips_write,
         test_mill_subagent_tools_matches_agent_frontmatter,
     ]
     failures: list[str] = []
