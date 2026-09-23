@@ -72,8 +72,7 @@ it needs no log entry to be considered done.
    - Edit / create the files in `Edits:` / `Creates:`.
    - Stage the affected files and commit by invoking the `git-commit` skill with the card's `Commit:` message as the argument.
      **Do not call raw `git commit`.**
-     The skill runs language-appropriate lint on staged files and, if `_codeguide/Overview.md` exists, triggers `codeguide-update` so the next batch's implementer sees the updated codeguide.
-     Skipping the skill means the next batch reads a stale map.
+     The skill runs language-appropriate lint on staged files.
    - If the card's **Commit:** value is the literal "none", it is a verification-only card (validated by the plan review's commit-none-with-content check to have zero Edits:/Creates:/Deletes:/Moves:) -- do NOT invoke the git-commit skill, do NOT stage anything, and do NOT make any commit for this card.
      Perform only what its Requirements: describes (e.g. run a grep, confirm an earlier card's outcome) and move to the next card.
    - One commit per card is the norm.
