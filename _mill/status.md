@@ -29,9 +29,13 @@ implementing  '2026-09-23T10:42:29Z'
 ```yaml
 batches:
   - name: deactivate-call-sites
-    state: pending
+    state: running
+    implementer_session: e7f98397-a992-497a-8f03-5f45831d69b5
+    start_sha: 0acccf74dc0893668c82c1aa77615a224a75acad
+    verify_baseline_failures: []
   - name: prose-cleanup
     state: pending
   - name: close-issue
     state: pending
+    verify_baseline_failures: []
 ```
