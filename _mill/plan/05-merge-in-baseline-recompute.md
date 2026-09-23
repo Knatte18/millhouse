@@ -11,7 +11,7 @@ depends-on: [2]
 
 ## Batch Scope
 
-This batch updates `millpy-merge-in-subagent.py --recompute-baseline` for the new `compute_baseline` signature (batch 2) and adds the unconditional per-batch `verify_baseline_failures` clearing Decision `merge-in-batch-baseline-staleness` requires, since `_corroborate_batch_failure` (deleted in batch 4) is what previously masked this staleness. This batch depends only on batch 2, not batch 4 — `millpy-merge-in-subagent.py` never calls `_run_verify_gates`/`_forward_output`/`finalize_from_output`, so it has no coupling to batch 4's parameter removals.
+This batch updates `millpy-merge-in-subagent.py --recompute-baseline` for the new `compute_baseline` signature (batch 2) and adds the unconditional per-batch `verify_baseline_failures` clearing Decision `merge-in-batch-baseline-staleness` requires, since `_corroborate_batch_failure` (deleted in batch 4) is what previously masked this staleness. This batch depends only on batch 2, not batch 4. `millpy-merge-in-subagent.py` does call `_forward_output`/`finalize_from_output` (in `_run_conflicts`'s conflicts-mode finalize branch, `:425` and `:498`) — but neither call site passes `batch_name`, `git_name`, or `git_email`, relying on those parameters' defaults, so batch 4's removal of them does not change either call site's behavior. Batch 5 has no coupling to batch 4's parameter removals for that reason, not because the file never calls these functions.
 
 ## Cards
 
