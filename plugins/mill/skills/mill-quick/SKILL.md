@@ -87,7 +87,7 @@ Whatever model the operator started this session with is the model that does the
 - Explore and edit using whatever tool calls the fix requires (Read, Grep, Glob, Edit, Write, Bash) — no fixed algorithm;
   the task body/ brief already read in Entry step 4 is the scope.
 - Commit the fix by invoking the `git-commit` skill with a summary of the change as the argument — do **not** call raw `git commit`.
-  The skill runs language-appropriate lint on staged files and triggers `codeguide-update` when `_codeguide/Overview.md` exists.
+  The skill runs language-appropriate lint on staged files.
   This commit pushes immediately as part of `git-commit`'s own unconditional-push contract — this is harmless here because nothing downstream (`mill-merge`, `mill-finalize`) acts on a task before `phase: done`.
 
 ## Verify & Complete
