@@ -30,5 +30,7 @@ implementing  '2026-09-23T10:32:58Z'
 ```yaml
 batches:
   - name: fix-monitor-persistent-refs
-    state: pending
+    state: running
+    implementer_session: 33a0298e-546c-44b9-be8e-f9fc1ded5f56
+    start_sha: b18fab9a09cfa32229178704d0f342770822b54f
 ```
