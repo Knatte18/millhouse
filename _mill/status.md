@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
-plan: null
+plan: _mill/plan
 parent: main
 task: Deactivate codeguide integration in millhouse
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-23T09:59:54Z'
 discussion-fix-r1  '2026-09-23T10:22:20Z'
 discussed  '2026-09-23T10:24:59Z'
+planning  '2026-09-23T10:34:04Z'
 ```
