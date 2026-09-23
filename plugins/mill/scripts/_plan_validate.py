@@ -11,6 +11,11 @@ Public API:
         done_gate=None) -> list[dict]
     Validate plan files in plan_dir. Returns a sorted list of error dicts.
     Each error dict has keys: {check, batch, card, path, message}.
+    compute_next_card_number(plan_dir, target_batch_file) -> int
+    Compute the next unused card number for a target batch, before that card is written to disk.
+    renumber_after_collision(plan_dir, colliding_number) -> None
+    Shift every card numbered >= colliding_number, across every batch file in the plan, up by one,
+    to resolve a compute_next_card_number collision on a self-resolve card-insertion retry.
 
 Checks performed (check keys):
     non-existent-path — (#10 check 1) Context:/Edits:/Creates: refs that don't exist on disk and are
@@ -1044,6 +1049,56 @@ def compute_next_card_number(plan_dir: Path, target_batch_file: str) -> int:
             )
 
     return candidate
+
+
+def renumber_after_collision(plan_dir: Path, colliding_number: int) -> None:
+    """
+    Shift every card numbered >= colliding_number, across every batch file in the plan, up by one.
+
+    Card numbers are global and each batch occupies a contiguous, disjoint numeric range (this
+    file's own established convention), so shifting every colliding-or-later card up by exactly one
+    preserves every batch's own internal ordering and every batch's contiguous range relative to its
+    neighbors -- this is simpler than re-deriving ``topo_order`` and needs only each batch's own
+    file-local card numbers.
+
+    This function performs no numbering-collision re-validation of its own and never touches any
+    batch's ``cards:`` frontmatter count (shifting labels never changes how many cards a batch owns)
+    -- the caller is responsible for retrying ``compute_next_card_number`` afterward and for the
+    post-write ``_check_card_numbering`` re-check the self-resolve step already runs.
+
+    Safe to call only when the caller has already confirmed every renumbered batch has not yet been
+    dispatched (no commit anywhere references its old card numbers) -- mill-go's own
+    strictly-sequential ``topo_order`` execution guarantees this for the self-resolve caller, but
+    this function itself does not verify it.
+
+    Known limitation, accepted rather than engineered around: the regex only rewrites ``### Card N:``
+    heading lines, never a card's own prose that names another card by number. After an
+    auto-renumber, such an in-plan textual cross-reference can go stale even though every
+    execution-relevant piece of state (``card_ids``, ``_check_card_numbering``'s own re-validation)
+    stays correct -- heading numbers are the only thing mill-go's own machinery reads.
+
+    Args:
+        plan_dir: Directory containing the ``NN-<batch-slug>.md`` batch files (and
+            ``00-overview.md``, which is excluded from consideration).
+        colliding_number: The card number that ``compute_next_card_number`` reported as already
+            used; every card numbered at or above this value is shifted up by one.
+    """
+    batch_files = sorted(
+        p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
+    )
+    to_shift: list[tuple[Path, int]] = []
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        for num, _lines in _parse_cards(text):
+            if num >= colliding_number:
+                to_shift.append((batch_path, num))
+    # Descending order: shift the highest numbers first so no intermediate write
+    # collides with a not-yet-shifted number in the same file.
+    for batch_path, num in sorted(to_shift, key=lambda pair: pair[1], reverse=True):
+        text = batch_path.read_text(encoding="utf-8")
+        heading_re = re.compile(rf"^(###\s+Card\s+){num}(\s*:)", re.MULTILINE)
+        text = heading_re.sub(rf"\g<1>{num + 1}\g<2>", text, count=1)
+        batch_path.write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
