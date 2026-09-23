@@ -55,7 +55,9 @@ batches:
     commit_sha: 610616b5ece0e9354d20e61942b95b5af2182f08
     verify_baseline_failures: []
   - name: cleanup-orphan-removal
-    state: pending
+    state: running
+    implementer_session: bced0a23-fb81-41c6-9b6c-54f810504e74
+    start_sha: ccacdc8e877ff242bd95a63f80cea151c4589b34
     verify_baseline_failures: []
   - name: implement-baseline-stage
     state: pending
