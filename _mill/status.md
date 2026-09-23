@@ -48,5 +48,7 @@ batches:
     commit_sha: a26973da4a77f4c9f040e6242630b0809e2108a5
     verify_baseline_failures: []
   - name: golangci-lint-sandbox-fallback
-    state: pending
+    state: running
+    implementer_session: fff8d2ba-b556-4a42-aa20-085553369085
+    start_sha: 337bd6764ca4e3a122789dbe0515ab38dcf9a91e
 ```
