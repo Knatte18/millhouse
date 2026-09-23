@@ -73,22 +73,149 @@ def classify_stuck_type(reason: str) -> str:
     return "transient"
 
 
-def _relative_cwd_fragment(cwd_override: Path | None, project_root: Path, git_root: Path) -> Path | None:
+def _baseline_exclusion_prefixes(project_root: Path, git_root: Path) -> tuple[str, str]:
     """
-    Collapse a `parse_verify_field`-resolved verify cwd into a hub-relative fragment.
+    Return the two path-prefix strings that a baseline preflight check must never treat as dirt.
 
-    `cwd_override` can only ever be `project_root` (hub), `git_root`, or `None` (plain-string
-    `verify:` or absent) per `parse_verify_field`'s contract.
-    A `git_root`-resolved cwd already matches the transient checkout's own root,
-    and `None` has no opinion, so both collapse to `None` -- "run at the checkout root directly."
-    Only the `project_root` (hub) case needs an actual relative fragment, since the checkout mirrors
-    `git_root`, not `project_root`.
+    `_mill/` and `.millhouse/` are working-state directories a task's own machinery legitimately
+    writes to (status.md, snapshots, config.local.yaml) even before batch 1 dispatches -- neither
+    represents "implementation work has started".
+    Both prefixes are re-anchored to the hub fragment (`project_root.relative_to(git_root)`) so a
+    nested-layout task (hub is a subdirectory of the git repo) excludes `<hub-fragment>/_mill/`, not
+    the git-root-relative `_mill/` a flat-layout task would exclude.
+
+    This is the single source of truth for the exclusion set -- both
+    `_baseline_preflight_skip_reason` (Card 10) and `_warn_new_dirt`'s callers (Card 11) call this
+    rather than re-deriving the re-anchoring inline, so the two checks cannot drift apart.
+
+    Args:
+        project_root: Absolute path to the task worktree root (the mill hub).
+        git_root: Absolute path to the repo root `git` commands run against.
 
     Returns:
-        `project_root.relative_to(git_root)` when `cwd_override == project_root`;
-        `None` otherwise.
+        `(<fragment>_mill/, <fragment>.millhouse/)`, where `<fragment>` is
+        `project_root.relative_to(git_root)` followed by `/`,
+        or the empty string in a flat layout (`project_root == git_root`).
     """
-    return project_root.relative_to(git_root) if cwd_override == project_root else None
+    fragment = project_root.relative_to(git_root)
+    prefix = "" if fragment == Path(".") else f"{fragment.as_posix()}/"
+    return (f"{prefix}_mill/", f"{prefix}.millhouse/")
+
+
+def _baseline_preflight_skip_reason(project_root: Path, git_root: Path, status_path: Path) -> str | None:
+    """
+    Return a skip reason when the task worktree is not yet safe for eager baseline capture, or None.
+
+    Implements Decision `preflight-precondition-guard`: `--stage baseline` capture is only valid
+    while the task worktree's tracked source content still equals the merge-base content -- once an
+    implementer has committed real changes, a "baseline" computed from the current tree would no
+    longer describe the parent branch's own pre-edit state.
+
+    The only load-bearing check is whether any path has changed, per `git diff --name-only`, between
+    `git merge-base HEAD <parent>` and `HEAD` -- NOT `git status --porcelain` (an uncommitted dirty
+    tracked file outside `_mill/`/`.millhouse/` is the separate, advisory `preflight-dirt-warning`
+    case Card 11 covers; it never blocks capture on its own, per the "Why a dirty tree only warns"
+    rationale in `_mill/discussion.md`'s `preflight-precondition-guard` Decision).
+
+    This function performs no capture itself and mutates nothing -- it is a pure gate, and is called
+    exactly ONCE per `--stage baseline` invocation, by `_run_baseline_stage`, before either half
+    attempts anything.
+    Neither `_run_module_wide_standalone` nor `_run_per_batch_baseline_standalone` calls this
+    function itself -- each instead receives the already-computed skip reason as a parameter from
+    `_run_baseline_stage`, so the guard's two `git` calls never run twice in one invocation.
+
+    Args:
+        project_root: Absolute path to the task worktree root (the mill hub).
+        git_root: Absolute path to the repo root `git` commands run against.
+        status_path: Absolute path to the task's status.md file.
+
+    Returns:
+        A human-readable skip reason string when the precondition does not hold (parent
+        unresolvable, `merge-base` fails, or a changed path falls outside the exclusion set);
+        `None` when the precondition holds and capture may proceed.
+    """
+    try:
+        parent_branch = _parent_branch.resolve(status_path, interactive=False)
+    except Exception as e:
+        return f"baseline preflight: parent-branch resolution failed: {e}"
+
+    merge_base_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "merge-base", "HEAD", parent_branch]
+    )
+    if merge_base_result.returncode != 0:
+        return (
+            f"baseline preflight: git merge-base HEAD {parent_branch!r} failed: "
+            f"{merge_base_result.stderr.strip()}"
+        )
+    merge_base_sha = merge_base_result.stdout.strip()
+
+    diff_result = _subprocess_util.run(
+        ["git", "-C", str(git_root), "diff", "--name-only", merge_base_sha, "HEAD"]
+    )
+    if diff_result.returncode != 0:
+        return (
+            f"baseline preflight: git diff --name-only {merge_base_sha} HEAD failed: "
+            f"{diff_result.stderr.strip()}"
+        )
+
+    exclusion_prefixes = _baseline_exclusion_prefixes(project_root, git_root)
+    for changed_path in diff_result.stdout.splitlines():
+        changed_path = changed_path.strip()
+        if changed_path and not changed_path.startswith(exclusion_prefixes):
+            return f"worktree is not pre-edit: {changed_path!r} differs from merge-base {merge_base_sha}"
+    return None
+
+
+def _porcelain_snapshot(git_root: Path) -> set[str]:
+    """
+    Return the set of modified-tracked-path strings from `git -C <git_root> status --porcelain`.
+
+    Used as a before/after pair by `_warn_new_dirt` to detect which paths a verify run left newly
+    dirty. `--untracked-files` is deliberately left at its default (untracked files included) since
+    a verify run can leave behind new build artifacts that are just as worth naming in the advisory
+    warning as a modified tracked file.
+
+    Args:
+        git_root: Absolute path to the repo root `git` commands run against.
+
+    Returns:
+        The set of paths named by each porcelain status line (everything after the 2-character
+        status code and its following space).
+    """
+    result = _subprocess_util.run(["git", "-C", str(git_root), "status", "--porcelain"])
+    paths: set[str] = set()
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        paths.add(line[3:].strip())
+    return paths
+
+
+def _warn_new_dirt(before: set[str], after: set[str], exclusions: tuple[str, str]) -> None:
+    """
+    Print an ASCII-only stderr warning naming every path newly dirtied between `before` and `after`.
+
+    Implements Decision `preflight-dirt-warning`: a verify run that leaves behind a modified tracked
+    file (or new untracked artifact) outside the exclusion set is worth flagging to the operator, but
+    is never blocking, never reverted, and never fails the stage -- purely advisory.
+    Reused verbatim by both halves: the module-wide half wraps its own before/after snapshot around
+    its 1-2 verify runs, the per-batch half wraps its own before/after snapshot around the whole
+    per-batch capture loop.
+
+    Args:
+        before: The `_porcelain_snapshot` result taken before the verify run(s).
+        after: The `_porcelain_snapshot` result taken after the verify run(s).
+        exclusions: The `(mill_prefix, millhouse_prefix)` pair from `_baseline_exclusion_prefixes` --
+            a newly-dirty path under either prefix is expected working-state churn, not a warning.
+    """
+    for path in sorted(after - before):
+        if path.startswith(exclusions):
+            continue
+        print(
+            f"[millpy-implement] baseline stage: verify run left {path!r} newly dirty "
+            "(advisory only -- not blocking)",
+            file=sys.stderr,
+        )
 
 
 def _module_wide_skip_or_cached_payload(
