@@ -42,9 +42,10 @@ whether another patch round is still the right call, or whether the check needs 
 
 - A structural change to the symbol branch's resolution scope (see Decision `resolution-scope-rework`):
   `_resolve_symbol_files` stops walking the whole repo tree for a bare/dotted symbol candidate and
-  instead resolves only within the plan's own already-cited files (union of
-  `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`-source across every card in the plan). No
-  repo-wide fallback when the narrowed search finds nothing — treat as unresolvable, don't flag.
+  instead resolves only within the plan's own already-cited files (union of every card's
+  `_card_own_reference_set` — `Context:`/`Edits:`/`Creates:`/`Deletes:` tokens plus BOTH halves of every
+  `Moves:` pair, source and target — across every card in the plan). No repo-wide fallback when the
+  narrowed search finds nothing — treat as unresolvable, don't flag.
 - A refactor of `_check_context_completeness`'s (and `_compute_declared_symbols_union`'s) Requirements-text
   tokenization from per-physical-line to a single pass over the fence/blockquote-filtered text, joined
   into one continuous string (see Decision `line-join-refactor`). This fixes a previously undocumented
@@ -84,11 +85,17 @@ whether another patch round is still the right call, or whether the check needs 
 ### resolution-scope-rework
 
 - Decision: `_resolve_symbol_files` resolves a symbol-branch candidate only against the plan-wide union
-  of files already cited somewhere in the plan's own `Context:`/`Edits:`/`Creates:`/`Deletes:`/
-  `Moves:`-source fields (computed once per `run()` call, mirroring the existing plan-wide
-  `creates_union`/`deletes_union`/`moves_sources`/`moves_targets` pattern already threaded through this
-  same function). When the narrowed search finds zero matches, the token is treated as unresolvable and
-  never flagged — no fallback to a repo-wide walk.
+  of files already cited somewhere in the plan — built by calling the existing `_card_own_reference_set`
+  helper on every card and unioning the results, unchanged (computed once per `run()` call, mirroring the
+  existing plan-wide `creates_union`/`deletes_union`/`moves_sources`/`moves_targets` pattern already
+  threaded through this same function). This means a `Moves:` pair contributes BOTH its source and target
+  token to the set, exactly as `_card_own_reference_set` already does for its own existing callers — no
+  Moves-target carve-out. A not-yet-existing `Moves:`-target token cannot resolve to an existing file
+  anyway (the narrowed search only ever matches real on-disk declaration content — see the resolution
+  step below), so including it changes nothing behaviorally; excluding it would be extra filtering logic
+  bought for zero behavioral difference, and reusing `_card_own_reference_set` unchanged is simpler.
+  When the narrowed search finds zero matches, the token is treated as unresolvable and never flagged —
+  no fallback to a repo-wide walk.
 - Rationale: #1131's own false-positive list (`CellLength`, `InnerRadius`, `OuterRadius`, …) shows the
   failure mode is not shape-dependent — these are well-formed, multi-word, legitimately-cased
   identifiers that still collided with an unrelated file purely because the repo is large enough that
