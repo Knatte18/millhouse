@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
-plan: null
+plan: _mill/plan
 parent: main
 task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
 task_description: |
@@ -25,4 +25,5 @@ discussion-fix-r7  '2026-09-22T13:37:50Z'
 discussion-gap-fix-r8  '2026-09-22T13:45:44Z'
 discussion-fix-r9  '2026-09-22T13:51:12Z'
 discussed  '2026-09-22T13:51:12Z'
+planning  '2026-09-23T09:19:51Z'
 ```
