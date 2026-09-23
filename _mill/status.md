@@ -36,7 +36,9 @@ batches:
     commit_sha: 6b2519973411a21eddaf8767e722874150a0edce
     verify_baseline_failures: []
   - name: status-path-coercion
-    state: pending
+    state: running
+    implementer_session: 46ac5e77-0b5d-4e2a-8c7a-30e2501c4e2d
+    start_sha: 4e6626087dbdc5d8065f7023ba931c6ab4f2a1e1
     verify_baseline_failures: []
   - name: verify-guidance-docs
     state: pending
