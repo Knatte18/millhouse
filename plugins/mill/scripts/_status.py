@@ -35,6 +35,8 @@ Public API:
     get_module_verify_baseline(status_path) -> str | None
     set_module_verify_baseline(status_path, value) -> None
     clear_module_verify_baseline(status_path) -> None
+    get_module_verify_baseline_signatures(status_path) -> list[str] | None
+    set_module_verify_baseline_signatures(status_path, value) -> None
     get_baseline_parent_sha(status_path) -> str | None
     set_baseline_parent_sha(status_path, value) -> None
     append_recovery_log(status_path, timestamp, restored_paths) -> None
@@ -420,13 +422,93 @@ def clear_module_verify_baseline(status_path: Path) -> None:
     lines = text.splitlines(keepends=True)
     start, end = _split_fences(text, _YAML_FENCE)
 
+    # Both rows must go out together: a stale signature set paired with a cleared verdict
+    # would seed a later dedup from a run that no longer has a corresponding verdict.
+    for pattern in (r"^module_verify_baseline:\s*", r"^module_verify_baseline_signatures:\s*"):
+        for i in range(start, end):
+            stripped = lines[i].rstrip("\r\n")
+            if re.match(pattern, stripped):
+                del lines[i]
+                text = "".join(lines)
+                lines = text.splitlines(keepends=True)
+                start, end = _split_fences(text, _YAML_FENCE)
+                break
+    status_path.write_text("".join(lines), encoding="utf-8")
+
+
+def get_module_verify_baseline_signatures(status_path: Path) -> list[str] | None:
+    """
+    Return the cached ``module_verify_baseline_signatures:`` value from the top yaml block.
+
+    This is the list of per-verify-invocation signatures backing the eager module-wide capture and
+    the merge-in recompute's pair-cache seed. ``None`` means "not yet computed" (the key is absent,
+    or present as an explicit ``null``) -- the expected state before the task's first baseline
+    computation runs, not an error condition.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+
+    Returns:
+        The list of signature strings, or ``None``.
+
+    Raises:
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block fails to
+        parse as yaml.
+    """
+    _require_path(status_path, "get_module_verify_baseline_signatures")
+    data = read(status_path)
+    return data.get("module_verify_baseline_signatures")
+
+
+def set_module_verify_baseline_signatures(status_path: Path, value: list[str]) -> None:
+    """
+    Write ``module_verify_baseline_signatures:`` in the top yaml block of ``status_path``.
+
+    Mirrors ``set_module_verify_baseline``'s insert-in-place-or-append pattern: if a
+    ``module_verify_baseline_signatures:`` row already exists in the block it is rewritten in
+    place;
+    otherwise a new row is inserted immediately after ``parent:``, that field's natural neighbor in
+    the template's field ordering.
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        value: Serialised as a yaml flow-sequence via ``yaml.safe_dump(value,
+            default_flow_style=True, width=10**9)`` rather than ``quote_scalar`` (which is
+            string-only). The explicit ``width=10**9`` is load-bearing: PyYAML's default
+            80-column ``best_width`` would wrap a realistic multi-signature list across physical
+            lines, and every other reader/writer of this top yaml block assumes one field is
+            exactly one physical line.
+
+    Raises:
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block has no
+        ``parent:`` row to insert after.
+    """
+    _require_path(status_path, "set_module_verify_baseline_signatures")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start, end = _split_fences(text, _YAML_FENCE)
+    flow_value = yaml.safe_dump(value, default_flow_style=True, width=10**9).strip()
+
+    # Rewrite the existing row in place if one is already present.
     for i in range(start, end):
         stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^module_verify_baseline:\s*", stripped):
-            del lines[i]
+        if re.match(r"^module_verify_baseline_signatures:\s*", stripped):
+            eol = lines[i][len(stripped):]
+            lines[i] = f"module_verify_baseline_signatures: {flow_value}{eol}"
             status_path.write_text("".join(lines), encoding="utf-8")
             return
-    # Row already absent: no-op, matches append_phase's tolerant style.
+
+    # Absent: insert a new row immediately after parent:.
+    parent_idx: int | None = None
+    for i in range(start, end):
+        stripped = lines[i].rstrip("\r\n")
+        if re.match(r"^parent:\s*", stripped):
+            parent_idx = i
+            break
+    if parent_idx is None:
+        raise ValueError(f"parent: key missing from yaml block of {status_path}")
+    lines.insert(parent_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
+    status_path.write_text("".join(lines), encoding="utf-8")
 
 
 def get_baseline_parent_sha(status_path: Path) -> str | None:
