@@ -1833,18 +1833,6 @@ _PATH_CANDIDATE_EXTENSIONS = (
 # drifts if that constant's ordering or membership changes for unrelated (path-branch) reasons.
 _SYMBOL_SEARCH_EXTENSIONS = (".py", ".go", ".cs", ".ts")
 
-# Directory basenames pruned (never descended into) while walking a candidate root for symbol
-# resolution -- build artifacts and dependency trees that would otherwise dominate the search and
-# produce false ambiguous-matches.
-_SYMBOL_SEARCH_DENYLIST_DIRS = frozenset(
-    {".git", "node_modules", "vendor", "__pycache__", "dist", "build", ".venv"}
-)
-
-# Directory basenames (matched case-insensitively) treated as conventionally out-of-solution and
-# pruned alongside _SYMBOL_SEARCH_DENYLIST_DIRS -- e.g. a real declaration sitting inside a
-# `Deprecated/` C# tree should not count as a live match for the solution.
-_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS = frozenset({"deprecated", "legacy", "obsolete", "archive"})
-
 
 # Per-line backtick-token matcher, promoted from a local variable inside
 # _check_context_completeness so _is_literal_enumeration_exempt can reuse the identical pattern.
@@ -2169,50 +2157,36 @@ def _is_conventional_test_file(path: Path) -> bool:
 
 def _resolve_symbol_files(
     search_key: str,
-    project_root: Path,
-    root: str | None,
-    git_root: Path | None,
-    cache: dict[str, tuple[list[Path], Path | None]],
-) -> tuple[list[Path], Path | None]:
-    """Resolve ``search_key`` to its declaring file(s) via a first-match-wins filesystem walk.
+    candidate_files: list[Path],
+    cache: dict[str, list[Path]],
+) -> list[Path]:
+    """Resolve ``search_key`` to its declaring file(s) among ``candidate_files`` only.
 
-    Walks candidate roots in the same precedence order as ``resolve_existing_paths``
-    (``_review_common.py``'s "Resolution order (first match wins)"): (1) ``git_root / root`` when
-    both are set, (2) ``project_root / root`` (or bare ``project_root`` when ``root`` is None), (3)
-    bare ``git_root`` when set (tried unconditionally, mirroring that same precedence's own
-    unconditional trailing ``git_root`` candidate).
-    For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
-    basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS``, or whose lowercased basename is in
-    ``_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`` (a conventional out-of-solution marker such as
-    ``deprecated``/``legacy``), and skipping any file that ``_is_conventional_test_file`` identifies
-    as a conventional test file before its content is ever read (a symbol declared only in a test
-    file is never surfaced as a dependency) -- and, for every remaining file whose suffix is in
-    ``_SYMBOL_SEARCH_EXTENSIONS``, checks whether any line of its text matches a declaration-form
-    pattern for that extension (a top-level or grouped-block declaration for ``.go``, a type/member
-    declaration for ``.cs``, a ``def``/``class``/module-level-assignment for ``.py``, or a
-    function/class/interface/type/enum/const/let/var declaration for ``.ts``) -- a bare usage site,
-    comment, or string/template-literal occurrence of ``search_key`` no longer counts.
-    Stops at the first candidate root that yields one or more matching files -- a later root in the
-    precedence order is never walked, even if the winning root had more than one match.
+    ``candidate_files`` is the caller-supplied, already-resolved file set to search -- the plan-wide
+    union of files cited somewhere in the plan (``_compute_plan_wide_cited_files``), per the
+    resolution-scope-rework Decision. This function does no filesystem walking of its own and takes
+    no ``project_root``/``root``/``git_root`` -- narrowing *where* the search looks is the caller's
+    job now, not this function's.
+
+    For each file in ``candidate_files`` whose suffix is in ``_SYMBOL_SEARCH_EXTENSIONS`` and that
+    ``_is_conventional_test_file`` does not identify as a conventional test file (a symbol declared
+    only in a test file is never surfaced as a dependency), checks whether any line of its text
+    matches a declaration-form pattern for that extension (a top-level or grouped-block declaration
+    for ``.go``, a type/member declaration for ``.cs``, a ``def``/``class``/module-level-assignment
+    for ``.py``, or a function/class/interface/type/enum/const/let/var declaration for ``.ts``) -- a
+    bare usage site, comment, or string/template-literal occurrence of ``search_key`` no longer
+    counts.
 
     Memoized via ``cache`` (keyed by ``search_key``): a repeated call with the same key returns the
-    cached result without walking again, since a symbol name commonly recurs across many cards/
-    batches in one ``run()`` invocation.
+    cached result without re-reading any file, since a symbol name commonly recurs across many
+    cards/batches in one ``run()`` invocation.
 
     Returns:
-        ``(matching_file_paths, winning_root)`` -- ``winning_root`` is the candidate root that
-        produced the match (needed by the caller to canonicalize the match back to a relative path);
-        ``([], None)`` when no candidate root yields any match.
+        The list of matching file paths (from ``candidate_files``, in their original order) --
+        ``[]`` when none of ``candidate_files`` declares ``search_key``.
     """
     if search_key in cache:
         return cache[search_key]
-
-    candidate_roots: list[Path] = []
-    if root is not None and git_root is not None:
-        candidate_roots.append(git_root / root)
-    candidate_roots.append(project_root / root if root is not None else project_root)
-    if git_root is not None:
-        candidate_roots.append(git_root)
 
     sym = re.escape(search_key)
 
@@ -2277,35 +2251,22 @@ def _resolve_symbol_files(
             ts_type_re.search(line) or ts_var_re.search(line) for line in content.splitlines()
         )
 
-    for candidate_root in candidate_roots:
-        if not candidate_root.exists():
+    matches: list[Path] = []
+    for file_path in candidate_files:
+        if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
             continue
-        matches: list[Path] = []
-        for dirpath, dirnames, filenames in os.walk(candidate_root):
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in _SYMBOL_SEARCH_DENYLIST_DIRS
-                and d.lower() not in _SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS
-            ]
-            for filename in filenames:
-                file_path = Path(dirpath) / filename
-                if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
-                    continue
-                if _is_conventional_test_file(file_path):
-                    continue
-                try:
-                    content = file_path.read_text(encoding="utf-8", errors="replace")
-                except OSError:
-                    # Broken symlink, permission-denied, or any other unreadable-file condition
-                    # under an arbitrary real-world project tree -- skip it, don't crash the run.
-                    continue
-                if _has_declaration(file_path, content):
-                    matches.append(file_path)
-        if matches:
-            cache[search_key] = (matches, candidate_root)
-            return cache[search_key]
+        if _is_conventional_test_file(file_path):
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Broken symlink, permission-denied, or any other unreadable-file condition under an
+            # arbitrary real-world project tree -- skip it, don't crash the run.
+            continue
+        if _has_declaration(file_path, content):
+            matches.append(file_path)
 
-    cache[search_key] = ([], None)
+    cache[search_key] = matches
     return cache[search_key]
 
 
@@ -2603,6 +2564,58 @@ def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tupl
     return declaring
 
 
+def _compute_plan_wide_cited_files(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> dict[str, Path]:
+    """
+    Return the plan-wide map of every already-cited raw token to its resolved, on-disk file.
+
+    For every batch file in ``batch_files`` (the caller-filtered, sorted, non-overview list
+    ``run()`` builds), for every ``(card_num, card_lines)`` pair returned by ``_parse_cards``, unions
+    ``_card_own_reference_set(card_text)``'s tokens into one plan-wide ``raw_tokens`` set -- every
+    card's ``Context:``/``Edits:``/``Creates:``/``Deletes:``/``Moves:`` token, across every batch.
+    For each token in ``sorted(raw_tokens)``, resolves it via ``resolve_existing_paths``; when that
+    returns exactly one path and the path is a file, adds ``token -> path`` to the returned dict. A
+    token resolving to zero paths (not yet on disk -- an unbuilt ``Creates:``/``Moves:``-target
+    token) or to a directory is silently omitted -- no fallback, matching the resolution-scope-rework
+    Decision's "unresolvable, never flagged" contract.
+
+    This is ``_resolve_symbol_files``'s new search space: the symbol branch of
+    ``_check_context_completeness`` no longer walks the whole repo tree, only the files this map's
+    values already name.
+
+    Args:
+        batch_files: Sorted list of batch file paths (00-overview.md excluded).
+        project_root: Root of the project (typically the worktree root).
+        root: Optional root subfolder for source refs.
+        wiki_root: Optional wiki root path for wiki/-prefixed refs.
+        git_root: Optional repo root for git_root-relative resolution.
+
+    Returns:
+        Dict mapping each resolvable raw token to its single resolved on-disk file path.
+    """
+    raw_tokens: set[str] = set()
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            card_text = "\n".join(card_lines)
+            raw_tokens.update(_card_own_reference_set(card_text))
+
+    cited: dict[str, Path] = {}
+    for token in sorted(raw_tokens):
+        resolved = resolve_existing_paths(
+            [token], project_root, root, wiki_root=wiki_root, git_root=git_root,
+        )
+        if len(resolved) == 1 and resolved[0].is_file():
+            cited[token] = resolved[0]
+    return cited
+
+
 def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
     """
     Return the plan-wide union of identifiers declared inside a signature- or struct-literal-shaped
@@ -2694,6 +2707,7 @@ def _check_context_completeness(
     git_root: Path | None = None,
     creates_declaring_card_map: dict[str, tuple[int, int]] | None = None,
     declared_symbols: set[str] | None = None,
+    cited_files_map: dict[str, Path] | None = None,
 ) -> list[dict]:
     """
     Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
@@ -2714,10 +2728,11 @@ def _check_context_completeness(
     ``_symbol_candidate_shape`` -- it must look like a bare or dotted identifier (``SaveState``,
     ``reedengine.New``) that is not just an ordinary lowercase English word, else it is silently
     ignored (same as today's behavior for non-path tokens).
-    A token that passes the shape gate is resolved via ``_resolve_symbol_files``: a first-match-wins
-    filesystem walk (memoized per ``run()`` call) that finds every file, under the highest-precedence
-    candidate root that has any match at all, containing a declaration-form occurrence of the search
-    key.
+    A token that passes the shape gate is resolved via ``_resolve_symbol_files`` against the
+    plan-wide cited-files set (``cited_files_map``'s values, per the resolution-scope-rework
+    Decision): memoized per ``run()`` call, it finds every already-cited file containing a
+    declaration-form occurrence of the search key. There is no repo-wide fallback -- a symbol whose
+    declaring file is not cited anywhere in the plan yet is unresolvable and never flagged.
     A dotted token's qualifier segment (``reedengine`` in ``reedengine.New``) then participates in
     disambiguation: when the resolution above (fresh or cache hit) yields more than one candidate,
     ``_filter_matches_by_qualifier`` narrows it by package/namespace match, falling back to
@@ -2812,6 +2827,11 @@ def _check_context_completeness(
             14. Defaults to ``None`` and is materialized to an empty set on entry (a mutable default
             argument is never used directly in the signature) -- an empty set is the correct no-op
             default.
+        cited_files_map: Plan-wide map from ``_compute_plan_wide_cited_files``, the symbol branch's
+            search space (resolution-scope-rework Decision). Defaults to ``None`` and is
+            materialized to an empty dict on entry (a mutable default argument is never used
+            directly in the signature) -- an empty map yields an empty candidate-files set, so the
+            symbol branch never resolves anything, the correct no-op default.
 
     Returns:
         List of error dicts, one per unresolvable-elsewhere Requirements: reference.
@@ -2820,14 +2840,25 @@ def _check_context_completeness(
         creates_declaring_card_map = {}
     if declared_symbols is None:
         declared_symbols = set()
+    if cited_files_map is None:
+        cited_files_map = {}
     errors: list[dict] = []
     backtick_re = _BACKTICK_RE
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
     # recurring across the plan is only walked once (see _resolve_symbol_files's memoization).
-    search_cache: dict[str, tuple[list[Path], Path | None]] = {}
+    search_cache: dict[str, list[Path]] = {}
     # One git-ignore confirmation cache per run() call, keyed by resolved candidate path, so a path
     # recurring across cards costs one `git check-ignore` subprocess, not one per occurrence.
     ignore_memo: dict[Path, bool] = {}
+    # The symbol branch's search space: every already-cited file, in a stable (first-citing-token
+    # order) sequence. dict.fromkeys de-duplicates while preserving that order.
+    candidate_files = list(dict.fromkeys(cited_files_map.values()))
+    # Reverse map for canonicalizing a resolved match back to the token that cited it -- since
+    # cited_files_map is itself built by iterating sorted(raw_tokens), setdefault keeps whichever
+    # citing token sorts alphabetically first among duplicate-path spellings on a rare collision.
+    path_to_token: dict[Path, str] = {}
+    for token, path in cited_files_map.items():
+        path_to_token.setdefault(path, token)
 
     for batch_index, batch_path in enumerate(batch_files):
         text = batch_path.read_text(encoding="utf-8")
@@ -3028,10 +3059,10 @@ def _check_context_completeness(
                         # a recurring search_key across cards/batches then costs one function call
                         # (the actual filesystem walk), not one call per occurrence.
                         if search_key in search_cache:
-                            matches, producing_root = search_cache[search_key]
+                            matches = search_cache[search_key]
                         else:
-                            matches, producing_root = _resolve_symbol_files(
-                                search_key, project_root, root, git_root, search_cache
+                            matches = _resolve_symbol_files(
+                                search_key, candidate_files, search_cache
                             )
                         # Qualifier-based disambiguation: applied on this (caller) side, after the
                         # cache hit or fresh resolution above -- _resolve_symbol_files's own cache
@@ -3042,7 +3073,7 @@ def _check_context_completeness(
                         if len(matches) != 1:
                             continue
 
-                        canonical = matches[0].relative_to(producing_root).as_posix()
+                        canonical = path_to_token[matches[0]]
 
                         if own_refs is None:
                             own_refs = _card_own_reference_set(card_text)
@@ -4535,6 +4566,13 @@ def run(
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
     declared_symbols = _compute_declared_symbols_union(plan_dir)
+    # The symbol branch's search space (resolution-scope-rework Decision): only files already cited
+    # somewhere in the plan, never a repo-wide fallback.
+    cited_files_map = _compute_plan_wide_cited_files(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    )
     # verify-mixed-cwd needs a concrete git_root to distinguish "cwd: hub" from "cwd: git_root" resolutions;
     # in a flat layout (no git_root supplied) the two roots collapse to the same Path, which correctly reports zero conflicts since there is nothing to mix.
     effective_git_root = git_root if git_root is not None else project_root
@@ -4577,6 +4615,7 @@ def run(
         git_root=git_root,
         creates_declaring_card_map=creates_declaring_card_map,
         declared_symbols=declared_symbols,
+        cited_files_map=cited_files_map,
     ))
     errors.extend(_check_requirements_quote_indent_drift(
         batch_files, project_root, effective_root,
