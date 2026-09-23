@@ -15,10 +15,6 @@ Public API:
     When ``expected_slug`` is given and status.md's ``slug:`` row does not match it, the
     ``parent:`` row is treated as absent — protects against reading a stacked-branch worktree's
     stale status.md by identity.
-    resolve_for_codeguide(status_path, *, expected_slug=None) -> str | None Non-interactive wrapper
-    around resolve() that swallows ParentBranchError and returns None instead of raising, for
-    callers (e.g.
-    git-commit) that must never block on a missing parent.
     check_liveness(branch, git_root) -> bool Return True if branch currently exists on origin
     (``git ls-remote --exit-code``) or as a live local branch ref (``git rev-parse --verify``).
     resolve_dead_parent(dead_branch, git_root, cfg, *, max_hops=10) -> dict Walk the
@@ -228,21 +224,3 @@ def resolve(
     if not response:
         raise ParentBranchError("Empty parent branch name")
     return response
-
-
-def resolve_for_codeguide(
-    status_path: Path, *, expected_slug: str | None = None
-) -> str | None:
-    """Return the task's parent branch for codeguide-update, or None.
-
-    A non-interactive, exception-swallowing wrapper around ``resolve()`` for callers (e.g.
-    ``git-commit``) that must degrade silently rather than block a commit over a missing or
-    unreadable parent branch.
-    Calls ``resolve(status_path, interactive=False, expected_slug=expected_slug)``;
-    on ``ParentBranchError`` (missing ``parent:`` row, unreadable status.md, or a mismatched
-    ``slug:`` row) returns ``None`` instead of raising or prompting.
-    """
-    try:
-        return resolve(status_path, interactive=False, expected_slug=expected_slug)
-    except ParentBranchError:
-        return None
