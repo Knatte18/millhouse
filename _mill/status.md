@@ -39,5 +39,8 @@ implementing  '2026-09-23T12:40:13Z'
 ```yaml
 batches:
   - name: context-completeness-resolution-and-tokenization-rework
-    state: pending
+    state: running
+    implementer_session: 31a40564-8acb-49fa-8c5c-25b39eba0b52
+    start_sha: 8df3e611012bcc531ca4e299ebd09015e4707820
+    verify_baseline_failures: []
 ```
