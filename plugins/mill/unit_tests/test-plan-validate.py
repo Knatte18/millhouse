@@ -4430,7 +4430,9 @@ def test_check_context_completeness_symbol_cache_invoked_once_per_key() -> int:
 
 def test_check_context_completeness_symbol_prohibition_marker_exempt() -> int:
     """A resolvable, own-refs-absent symbol named inside a same-line prohibition -> zero errors,
-    mirroring the existing path-branch prohibition-exemption test."""
+    mirroring the existing path-branch prohibition-exemption test. `internal/state.go` is cited
+    in a second batch's `Context:` so `SaveState` is actually resolvable plan-wide -- otherwise
+    the exemption is never exercised and the assertion passes vacuously via unresolvability."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -4442,13 +4444,25 @@ def test_check_context_completeness_symbol_prohibition_marker_exempt() -> int:
         )
         (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
 
-        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file(
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": []},
+        ])
+        batch_a = _make_batch_file(
             "alpha",
+            card_num=1,
             edits=["other.py"],
             requirements="  Do not touch `SaveState`.\n",
         )
-        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            context=["internal/state.go"],
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
 
         result = _plan_validate.run(plan_dir, project_root)
         check_errors = [e for e in result if e["check"] == "context-completeness"]
@@ -4468,7 +4482,9 @@ def test_check_context_completeness_symbol_prohibition_marker_exempt() -> int:
 
 def test_check_context_completeness_symbol_citation_marker_exempt() -> int:
     """A resolvable, own-refs-absent symbol named as an illustrative example -> zero errors,
-    mirroring the existing path-branch citation-exemption test."""
+    mirroring the existing path-branch citation-exemption test. `internal/state.go` is cited
+    in a second batch's `Context:` so `SaveState` is actually resolvable plan-wide -- otherwise
+    the exemption is never exercised and the assertion passes vacuously via unresolvability."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -4480,13 +4496,25 @@ def test_check_context_completeness_symbol_citation_marker_exempt() -> int:
         )
         (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
 
-        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
-        batch = _make_batch_file(
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": []},
+        ])
+        batch_a = _make_batch_file(
             "alpha",
+            card_num=1,
             edits=["other.py"],
             requirements="  For example, `SaveState` illustrates the pattern.\n",
         )
-        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            context=["internal/state.go"],
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
 
         result = _plan_validate.run(plan_dir, project_root)
         check_errors = [e for e in result if e["check"] == "context-completeness"]
