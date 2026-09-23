@@ -44,7 +44,8 @@ batches:
     commit_sha: 6a269baaeeb40960e1eda1154186d818ee8addda
   - name: close-issue
     state: running
-    implementer_session: 4f6a7b67-fcb9-47f0-a9f2-5638c0b91671
-    start_sha: 988e85c5965f825983e2b33a861d41c6b91d01fe
+    implementer_session: a135da84-17f4-430e-b46c-a5a317fa1255
+    start_sha: 1f00c9f0ef6f9fc1a49c7156afe58807ec117e24
     verify_baseline_failures: []
+    self_resolve_remint_at: '2026-09-23T10:57:33Z'
 ```
