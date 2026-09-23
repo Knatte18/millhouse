@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -33,4 +33,25 @@ plan-fix-r2  '2026-09-23T09:44:24Z'
 plan-review-r3  '2026-09-23T09:52:23Z'
 plan-fix-r3  '2026-09-23T09:52:49Z'
 planned  '2026-09-23T09:53:04Z'
+implementing  '2026-09-23T10:00:12Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-baseline-fields
+    state: pending
+  - name: verify-baseline-core
+    state: pending
+  - name: cleanup-orphan-removal
+    state: pending
+  - name: implement-baseline-stage
+    state: pending
+  - name: merge-in-baseline-recompute
+    state: pending
+  - name: implementer-gate-cleanup
+    state: pending
+  - name: skill-docs-baseline
+    state: pending
 ```
