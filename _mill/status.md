@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-close-issue
+phase: holistic-reviewing
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-deactivate-call-sites  '2026-09-23T10:48:58Z'
 approved-prose-cleanup  '2026-09-23T10:52:31Z'
 self-resolved-verify-logic  '2026-09-23T10:57:33Z'
 approved-close-issue  '2026-09-23T11:00:55Z'
+holistic-reviewing  '2026-09-23T11:01:23Z'
 ```
 
 ## Batches
