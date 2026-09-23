@@ -36,8 +36,9 @@ Checks performed (check keys):
         and cards' Edits:/Creates:/Moves: targets
     verify-not-isolated — per-batch or overview-level verify: command does not start with
         PYTHONPATH= reset prefix
-    verify-full-suite — per-batch or overview-level verify: invokes run-all.py without a -k/--only
-        filter
+    verify-full-suite — per-batch or overview-level verify: invokes one of four unscoped full-suite
+        runners: run-all.py without -k/--only, go test ./... without -run, dotnet test with no
+        project target or a solution target and no --filter, bare pytest
     verify-malformed-cwd — verify: mapping fails to parse via _plan_dag.parse_verify_field (bad cwd
         or missing command)
     verify-mixed-cwd — batches in the plan resolve the {cwd, command} mapping form to more than one
@@ -83,6 +84,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import yaml
 from pathlib import Path
 
@@ -3965,6 +3967,78 @@ _RE_SHELL_OPERATOR = re.compile(r"&&|\|\||;")
 # `go get test/pkg`.
 _RE_GO_TEST_INVOCATION = re.compile(r"\bgo\s+(?:-C\s+\S+\s+)?test\b")
 
+# Matches a `dotnet test` invocation anywhere in a segment.
+_RE_DOTNET_TEST_INVOCATION = re.compile(r"\bdotnet\s+test\b")
+
+# `dotnet test` options that consume the following token as their value (as opposed to a bare
+# flag). Used by `_dotnet_test_segment_is_unscoped` to skip the value token when walking for the
+# first positional (non-flag) argument, so a value like `Release` in `-c Release` is never
+# mistaken for a project/solution target.
+_DOTNET_TEST_VALUE_OPTIONS = frozenset({
+    "-c", "--configuration",
+    "-f", "--framework",
+    "-r", "--runtime",
+    "-o", "--output",
+    "-s", "--settings",
+    "-l", "--logger",
+    "-v", "--verbosity",
+    "-a", "--test-adapter-path",
+    "-d", "--diag",
+    "-e", "--environment",
+    "--results-directory",
+    "--arch",
+    "--os",
+})
+
+# Solution-file suffixes: a `dotnet test` positional target ending in one of these (case-insensitive)
+# names a whole solution rather than a single project, so it is still an unscoped full-suite run.
+_DOTNET_SOLUTION_SUFFIXES = (".sln", ".slnx", ".slnf")
+
+
+def _dotnet_test_segment_is_unscoped(segment: str) -> bool:
+    """
+    Return True when a shell segment's `dotnet test` invocation is an unscoped full-suite run.
+
+    A segment with no `dotnet test` invocation, or one that already carries `--filter`, is
+    considered scoped (returns False) without further inspection.
+    Otherwise the text after the `dotnet test` match is tokenised with `shlex.split` (falling back
+    to `str.split` if the text has unbalanced quoting), and the tokens are walked to find the first
+    positional (non-flag) argument: any token starting with `-` is a flag and is skipped, and when
+    that flag is one of `_DOTNET_TEST_VALUE_OPTIONS` and does not carry an inline `=`/`:` value, the
+    following token (its value) is skipped too.
+
+    Returns:
+        True when there is no positional target at all, or the target's lowercased form ends with
+        one of `_DOTNET_SOLUTION_SUFFIXES` (a whole-solution target) -- both cases still run the
+        full suite. False when a project/directory/DLL target narrows the run.
+    """
+    m = _RE_DOTNET_TEST_INVOCATION.search(segment)
+    if not m or "--filter" in segment:
+        return False
+
+    rest = segment[m.end():]
+    try:
+        tokens = shlex.split(rest)
+    except ValueError:
+        tokens = rest.split()
+
+    target: str | None = None
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token.startswith("-"):
+            option = token.split("=", 1)[0].split(":", 1)[0]
+            if option in _DOTNET_TEST_VALUE_OPTIONS and "=" not in token and ":" not in token:
+                i += 1  # Skip the option's separate value token too.
+        else:
+            target = token
+            break
+        i += 1
+
+    if target is None:
+        return True
+    return target.lower().endswith(_DOTNET_SOLUTION_SUFFIXES)
+
 
 def _check_verify_full_suite(
     batch_files: list[Path],
@@ -3975,8 +4049,9 @@ def _check_verify_full_suite(
 ) -> list[dict]:
     """
     Flag verify: commands that invoke an unscoped full-suite runner: run-all.py without
-    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test without --filter
-    (C#), or bare pytest/python -m pytest with no path or -k filter (Python, non-mill).
+    -k/--only (Python/mill), go test ./... without -run (Go), dotnet test with no project
+    target or a solution target and no --filter (C#), or bare pytest/python -m pytest with
+    no path or -k filter (Python, non-mill).
     A verify command that exactly equals `done_gate` (when supplied) is exempt from every
     sub-check below.
 
@@ -4041,17 +4116,19 @@ def _check_verify_full_suite(
                         "scope it or document the cross-cutting-helper justification in ## Batch Tests"
                     ),
                 }
-        if "dotnet test" in command and "--filter" not in command:
-            return {
-                "check": "verify-full-suite",
-                "batch": batch_label,
-                "card": None,
-                "path": command,
-                "message": (
-                    "verify command invokes 'dotnet test' without a --filter; "
-                    "scope it or document the cross-cutting-helper justification in ## Batch Tests"
-                ),
-            }
+        for segment in _RE_SHELL_OPERATOR.split(command):
+            if _dotnet_test_segment_is_unscoped(segment):
+                return {
+                    "check": "verify-full-suite",
+                    "batch": batch_label,
+                    "card": None,
+                    "path": command,
+                    "message": (
+                        "verify command invokes 'dotnet test' with no project target (or on a "
+                        "whole solution) and no --filter; name a test project, add --filter, or "
+                        "document the cross-cutting-helper justification in ## Batch Tests"
+                    ),
+                }
         if is_python_project and re.fullmatch(r"(python -m )?pytest", command.strip()):
             return {
                 "check": "verify-full-suite",
