@@ -65,7 +65,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import _subprocess_util
+import _subprocess_util  # noqa: F401 -- imported for test patch target only; compute_baseline itself never calls it (regression guard against the checkout mechanism creeping back in, see test-verify-baseline.py case 2).
 from _implementer_common import _extract_failure_signatures, _posix_shell_run_args
 
 
