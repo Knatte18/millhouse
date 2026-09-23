@@ -88,14 +88,20 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
   applies to make it parse (e.g. doubling the apostrophe, as if escaping for a different quoting
   convention) is exactly the kind of unreliable, ad hoc escaping that produces a corrupted stored
   value with no deterministic code bug to find via grep — this is a prompt-text embedding problem,
-  not a Python string-escaping bug. mill-plan's batch for #1113 replaces that inline embedding with
-  an unambiguous, escaping-safe form — `json.dumps(title)` is a JSON string literal that is also
-  valid Python string-literal syntax and correctly escapes quotes/backslashes, so substituting
-  `json.dumps(title)`'s output in place of `'<title>'` removes the agent-judgment step entirely.
-  Apply the same substitution to every other literal `'<...>'` value in that same Step 5 block
-  (`brief`, `body`, `target_slug`) that could plausibly contain an apostrophe, for consistency and to
-  close the same class of bug at the other call sites in that step, even though only `title` was
-  reported corrupted.
+  not a Python string-escaping bug. The whole `python -c "..."` block in that Step 5 snippet is
+  itself one bash double-quoted string (opens with `"$MILL_PYTHON" -c "`, closes with a bare `"`
+  after the Python source) — so a fix that substitutes any escaped/quoted form of `title` directly
+  into that block (a Python string literal, a JSON string via `json.dumps`, etc.) still splices
+  characters controlled by external, untrusted source text (a GitHub issue title) into a shell
+  command line; the specific escaping scheme only changes which character breaks it. mill-plan's
+  batch for #1113 removes the free-text-into-shell-command-line splice entirely: write the item's
+  `title`/`brief`/`body` (and, for fold-ins, `target_slug`) to a small temp JSON file under
+  `.scratch/` via the `Write` tool, then have the `python -c "..."` script take only that file's
+  path as its one piece of inline text — a path the agent itself controls and that never contains
+  untrusted characters — and read + `json.load()` the file inside Python, passing the parsed values
+  to `upsert_task`/`get_task` as keyword arguments. No free text from any source item ever appears
+  as literal text inside the bash command line again, closing the whole class of bug (apostrophes,
+  quotes, backticks, `$()`) at every literal `'<...>'` value in that Step 5 block, not just `title`.
 - Rationale: the brief includes #1113 in this round; round 2's discussion review located and
   confirmed the actual mechanism, which is precise enough to fix directly rather than leaving
   further investigation to mill-plan.
@@ -207,11 +213,10 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 - **#1113**: the fix lands in a `SKILL.md`'s prose instructions (see Decisions), not a deterministic
   Python function, so a pytest-style regression test doesn't apply directly. Manual verification:
   walk through the corrected Step 5 with an apostrophe-containing title (e.g. the issue's own
-  `"Monitor tool: persistent:true doesn't exist, ..."`) and confirm the rendered `python -c "..."`
-  command is syntactically valid and the title round-trips with exactly one apostrophe. If the fix
-  introduces a small reusable Python quoting helper (rather than inlining `json.dumps(...)` at the
-  call site), that helper gets a unit test under `unit_tests/` mirroring `_yaml_writer.py`'s
-  `quote_scalar` test conventions.
+  `"Monitor tool: persistent:true doesn't exist, ..."`), confirm the temp JSON file round-trips the
+  value exactly (one apostrophe in, one apostrophe out via `json.load`), and confirm the `python -c`
+  command line itself contains only the fixed script text and the temp file's path — no title/brief/
+  body content — so its syntax no longer depends on what any source item's text contains.
 - **#1127**: add test cases to the existing `plugins/mill/unit_tests/test-claude-settings.py`
   covering `reconcile_destructive_denylist`: retires a present `Bash(rm -rf:*)` entry, adds the
   `DESTRUCTIVE_DENY` set, preserves unrelated existing `deny` entries, and is idempotent (second run
