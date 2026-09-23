@@ -2826,7 +2826,7 @@ def _check_context_completeness(
     token (e.g. "batch 8 fixes `x.py`", "card 23 corrects ... `y.py`") is not a dependency the card
     itself reads.
     12. Literal-value enumeration (path branch and symbol branch): a line with 3+ backtick tokens
-    where at least one other token is neither path- nor symbol-shaped is treated as a literal
+    where non-shaped tokens strictly outnumber path-/symbol-shaped tokens is treated as a literal
     test-input enumeration, not a dependency list.
     13. Illustrative-output framing: a line naming a rendered/emitted/printed/displayed/output value
     (e.g. "emitting the bare `x.md`") cites the string as a described output, not a read dependency.
