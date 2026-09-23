@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-status-baseline-fields
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -34,6 +34,7 @@ plan-review-r3  '2026-09-23T09:52:23Z'
 plan-fix-r3  '2026-09-23T09:52:49Z'
 planned  '2026-09-23T09:53:04Z'
 implementing  '2026-09-23T10:00:12Z'
+approved-status-baseline-fields  '2026-09-23T10:05:11Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ implementing  '2026-09-23T10:00:12Z'
 ```yaml
 batches:
   - name: status-baseline-fields
-    state: running
+    state: approved
     implementer_session: c8c7da89-2adf-480e-8cd8-c48ff7365335
     start_sha: f8ac9afcb4fdedd3329db288f736caf5766ab78e
+    commit_sha: 6a6f242ec8843123abd91203a763b2cb7639366b
     verify_baseline_failures: []
   - name: verify-baseline-core
     state: pending
