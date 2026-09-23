@@ -119,9 +119,18 @@ whether another patch round is still the right call, or whether the check needs 
     "Nested-bullet/multi-line prohibitions... are not handled" as a known, wanted-but-unimplemented gap,
     so widening it is a deliberate fix, not an accidental scope change.
   - `_is_non_dependency_negation_exempt`, `_is_contrast_citation_exempt`, and `_clause_bounds` also run
-    against the joined text — they are already clause-scoped (bounded by comma/semicolon/colon/period via
-    `_clause_bounds`), so cross-physical-line reach is a natural, low-risk extension of an already-bounded
-    check, not a new line-wide blast radius.
+    against the joined text, but `_clause_bounds`'s own boundary search is capped from crossing an
+    original physical-line/bullet break: in addition to the existing comma/semicolon/colon/period
+    (`_RE_CLAUSE_BOUNDARY`), the line-start-offset table's own line-break positions count as clause
+    boundaries when computing bounds over the joined text. Without this cap, a "clause" could span two
+    physical lines/bullets with no punctuation between them at all (e.g. one bullet ending "...`x.py`"
+    and the next starting "without needing it") — reproducing, at clause scope, the exact new
+    cross-line false-negative class the three unconditional exemptions below are being kept away from.
+    With the cap, these two helpers effectively keep the same per-physical-line reach they have today for
+    any token whose own backtick span doesn't itself cross a line break, while still correctly handling
+    the case that actually motivated the join: a single token whose own backtick span crosses a line
+    break (the corrected-extraction case) still gets a well-defined clause, bounded by whichever comes
+    first — real punctuation or the line break.
   - `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, and `_is_illustrative_output_exempt`
     keep running against ONLY the token's own originating physical line (looked up via the offset table),
     exactly as today. Each of these three is an unconditional, unbounded line-wide substring/pattern
@@ -166,8 +175,16 @@ whether another patch round is still the right call, or whether the check needs 
 ### literal-enumeration-majority
 
 - Decision: `_is_literal_enumeration_exempt` (the "3+ backtick tokens on a line, ≥1 not path/symbol
-  shaped" exemption) changes its trigger to "non-shaped tokens are a majority (more non-shaped than
-  shaped) of the line's backtick tokens," instead of "at least one non-shaped sibling."
+  shaped" exemption) changes its trigger to "non-shaped tokens are a STRICT majority (non-shaped count >
+  shaped count) of the line's backtick tokens," instead of "at least one non-shaped sibling." The tested
+  occurrence itself counts toward both the total and its own shape classification — the tally is over
+  every backtick token on the line, including the one currently being evaluated, exactly like the
+  existing "3 or more backtick tokens total" count already does (today's code only excludes the tested
+  occurrence from the separate "at least one OTHER token" sibling search, not from the total count; the
+  new rule keeps that same self-inclusive total and simply changes what's compared against it — there is
+  no separate "siblings only" tally to keep track of). An exact tie (non-shaped count == shaped count) is
+  NOT a majority and does not exempt — ties resolve toward flagging/checking, matching this task's
+  overall bias toward not suppressing a genuine dependency.
 - Rationale: verified against both real-world repro lines. #1116's own line
   (`` construct `WellboreCases.CaseHydraulic(includeCirculationSub: true)`, seed it with a converged
   `SteadyStateHydraulicSolver` at `EpsForConvergence = DefaultSolverScalings.Pressure * 10` `` — 3
@@ -178,10 +195,19 @@ whether another patch round is still the right call, or whether the check needs 
   correct outcome. A genuine literal-value enumeration (e.g. `` `"a"`, `"b"`, `42` ``) stays exempt since
   it's all or mostly non-shaped.
 - Rejected: clause-scoping the exemption (reusing `_clause_bounds`, the same mechanism
-  `_is_contrast_citation_exempt` already uses) — checked against #1122's line 99 specifically: that line
-  has no comma/semicolon/colon/period to split it into separate clauses, so clause-scoping alone leaves
-  all 3 tokens in one clause and the exemption still (wrongly) fires. The majority-based rule handles both
-  traced instances; clause-scoping only handles one.
+  `_is_contrast_citation_exempt` already uses) — checked against #1122's line 99 specifically. The line
+  does contain one clause-boundary character (the period inside `millpy-merge-in-subagent.py`'s own `.py`
+  extension), but that period sits BEFORE that token's own end offset, not after it — and
+  `_clause_bounds` computes a token's clause end by searching for the next boundary character starting
+  FROM that token's own end. For `millpy-merge-in-subagent.py` specifically (the token that actually needs
+  to be flagged), that forward search finds no further boundary punctuation anywhere else on the line, so
+  its own computed clause still spans the whole line, still including `verify-fix` and
+  `finalize_from_output` — the pre-existing "≥1 non-shaped sibling" trigger still (wrongly) fires for it.
+  (Clause-scoping would correctly isolate `verify-fix`/`finalize_from_output` into their own tighter
+  clause when evaluating THOSE two tokens, but that's immaterial: `millpy-merge-in-subagent.py` is the
+  token needing the fix, and its own clause-bounds computation is unaffected by a boundary that sits
+  inside its own already-consumed span.) The majority-based rule fixes this regardless of where any
+  boundary punctuation happens to sit, since it doesn't depend on clause position at all.
 
 ## Technical context
 
