@@ -340,7 +340,7 @@ def build_plan(
 
 
 def _print_plan(plan: CleanupPlan) -> None:
-    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals, plan.to_reset_unclaimed, plan.orphan_baseline_dirs]):
+    if not any([plan.to_remove_done, plan.to_remove_abandoned, plan.to_reap_pr, plan.to_report, plan.orphan_portals, plan.to_reset_unclaimed]):
         print("Nothing to do.")
         return
     for r in plan.to_remove_done:
@@ -362,8 +362,6 @@ def _print_plan(plan: CleanupPlan) -> None:
         print(f"REPORT: {line}")
     for p in plan.orphan_portals:
         print(f"ORPHAN-PORTAL:     {p.name}  [target gone or not in Home.md]")
-    for p in plan.orphan_baseline_dirs:
-        print(f"ORPHAN-BASELINE-DIR: {p}  [not registered in git worktree list]")
 
 
 def _resolve_inplace_mode(
@@ -458,21 +456,6 @@ def _delete_remote_branch(hub_root: Path, branch: str) -> None:
 def _apply_orphan_portal(portal_path: Path) -> None:
     _junction.remove(portal_path)
     print(f"[cleanup] removed orphan portal: {portal_path}", file=sys.stderr)
-
-
-def _apply_orphan_baseline_dir(dir_path: Path, wt_path: Path) -> None:
-    """
-    Remove one orphaned `.scratch/verify-baseline-*` directory.
-
-    Delegates to `_worktree.remove_safe` (junction-safe, picks up batch 1's strengthened retry
-    automatically) rather than a bespoke rmtree call -- `_link_dependency_dirs` may have junctioned
-    `.venv` / `node_modules` / etc. into the orphaned checkout, and `remove_safe`'s internal
-    `_junction.strip_all_in_worktree` call strips those unconditionally regardless of
-    `junctions_cfg`'s contents, so an empty `junctions_cfg` here matches
-    `_verify_baseline.compute_baseline`'s own equivalent call.
-    """
-    _worktree.remove_safe(dir_path, cwd=wt_path, junctions_cfg={})
-    print(f"[cleanup] removed orphan baseline dir: {dir_path}", file=sys.stderr)
 
 
 def _apply_inplace_record(
@@ -757,23 +740,6 @@ def apply_plan(
 
     for portal_path in plan.orphan_portals:
         _apply_orphan_portal(portal_path)
-
-    for dir_path in plan.orphan_baseline_dirs:
-        try:
-            # dir_path is always <wt_path>/.scratch/verify-baseline-<hash>, so .parent.parent
-            # recovers wt_path without threading a second parallel list of worktree roots.
-            _apply_orphan_baseline_dir(dir_path, dir_path.parent.parent)
-        except _worktree.WorktreeError as exc:
-            # Base class, not the narrower WorktreeLockedError subclass -- a
-            # .scratch/verify-baseline-* dir is never a registered git worktree, so
-            # remove_safe's initial `git worktree remove` call is likely to hit an
-            # "unrecognized git failure" shape and raise plain WorktreeError. A single
-            # stubborn lock must never abort the rest of apply_plan.
-            print(
-                f"REPORT: orphan baseline dir removal failed ({dir_path}): {exc}",
-                file=sys.stderr,
-            )
-            continue
 
     active_link = hub_root / ".active"
     if os.path.lexists(str(active_link)) and not active_link.is_dir():
