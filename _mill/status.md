@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-baseline-recompute
+phase: approved-implementer-gate-cleanup
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -39,6 +39,7 @@ approved-verify-baseline-core  '2026-09-23T10:17:59Z'
 approved-cleanup-orphan-removal  '2026-09-23T10:22:11Z'
 approved-implement-baseline-stage  '2026-09-23T10:39:05Z'
 approved-merge-in-baseline-recompute  '2026-09-23T10:46:38Z'
+approved-implementer-gate-cleanup  '2026-09-23T10:55:51Z'
 ```
 
 ## Batches
@@ -76,9 +77,10 @@ batches:
     commit_sha: 1c3a2e2639cf3d96b323410defe24eb8c134905c
     verify_baseline_failures: []
   - name: implementer-gate-cleanup
-    state: running
+    state: approved
     implementer_session: 8661aaed-f434-4d3a-99b4-fac415bc57ea
     start_sha: f9ae13381840b256f9aa1f27f04a550122b4c169
+    commit_sha: 608795c3700ba247520f51bcdfc77e55fe34b8f9
     verify_baseline_failures: []
   - name: skill-docs-baseline
     state: pending
