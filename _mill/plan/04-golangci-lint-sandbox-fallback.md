@@ -48,8 +48,13 @@ external interface — self-contained single-file doc fix.
     exactly as before.
 
   In `## Failure Handling`, after the existing bullet
-  `- Do **not** skip or disable failing tests.`, add one new bullet:
-  `- **golangci-lint unavailable due to network restriction**: see the network-restricted-sandbox fallback documented under **Tool Installation** — substitute `goimports -w` + `go vet ./...` for `golangci-lint run` instead of stopping; any other install failure still stops and reports.`
+  `- Do **not** skip or disable failing tests.`, add one new bullet, written as plain instruction
+  prose with inline code spans around each command (not one single backtick span wrapping the whole
+  line — nested backticks would close the outer span early and break rendering), matching how the
+  three sub-bullets added under Tool Installation above are formatted:
+  - **golangci-lint unavailable due to network restriction**: see the network-restricted-sandbox
+    fallback documented under **Tool Installation** — substitute `goimports -w` + `go vet ./...`
+    for `golangci-lint run` instead of stopping; any other install failure still stops and reports.
 
   Do not change the `**Missing goimports**` bullet, the tool-detection `command -v`/`$GOPATH/bin`
   fallback logic above it, the "Build Commands" section, "Project Configuration" section, or any

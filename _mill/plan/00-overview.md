@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-setup/wiki/docs/build-env: misc small bugs, round 3'
 slug: mill-setup-wiki-doc-misc-r3
-approved: false
+approved: true
 started: '20260923-103951'
 parent: main
 root: ""

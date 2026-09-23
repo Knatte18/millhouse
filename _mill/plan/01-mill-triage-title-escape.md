@@ -37,9 +37,14 @@ file.
   In `## Step 5 — Apply (on approve)`, numbered item `1. **New tasks.**`: the block currently builds
   the `python -c` command by substituting `title='<title>'`, `brief='<theme>'`, and
   `body='''<concatenated per-item blocks>'''` directly as literal text inside the bash-double-quoted
-  `-c` string (the whole `python -c "..."` block is itself one bash double-quoted string, opening
-  with `"$MILL_PYTHON" -c "` and closing with a bare `"` after the Python source — any character the
-  substituted text contains that also appears in that outer quoting scheme breaks the command).
+  `-c` string. An apostrophe in the substituted text breaks the *inner* Python single-quoted string
+  literal (`title='<title>'`) — a bash double-quoted wrapper gives no special meaning to a bare
+  apostrophe, so this is a Python-syntax break, not a bash-quoting break. Separately, the whole
+  `python -c "..."` block is itself one bash double-quoted string (opening with
+  `"$MILL_PYTHON" -c "`, closing with a bare `"` after the Python source) — a fix that instead
+  substitutes double-quote characters (e.g. a JSON-string-shaped value from `json.dumps`) would
+  break at that *outer* bash layer instead. The fix below avoids both failure modes by never
+  substituting item-derived text into the command line at all.
   Change the instructions so that, for each grouped new task, `slug`, `title`, `brief` (the theme
   statement), and the concatenated `body` are written first to a fresh temp JSON file via the
   `Write` tool at `.scratch/mill-triage-upsert-<n>.json` (a JSON object with keys `slug`, `title`,
