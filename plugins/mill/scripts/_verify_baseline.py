@@ -204,8 +204,7 @@ def _run_verify_in(
 
 def compute_batch_baselines(
     commands: list[tuple[str, str, Path | None]],
-    checkout_path: Path,
-    project_root: Path,
+    cwd: Path,
     *,
     pair_cache: dict[tuple[str, Path], list[str]] | None = None,
     timeout_seconds: float | None = None,
@@ -213,15 +212,12 @@ def compute_batch_baselines(
     """
     Compute per-batch verify-command failure-signature baselines.
 
-    Unlike `compute_baseline`, this function performs NO checkout and NO teardown of its own --
-    `checkout_path` must already be a live, fully linked transient worktree (e.g.
-    produced by `_checkout_parent_branch` + `_link_dependency_dirs`, shared across the module-wide
-    command and every per-batch command by the caller).
-    This lets a caller batch many verify commands against one shared checkout instead of checking
-    out once per command.
+    `cwd` is simply the default working directory used when a given command's own `cwd_override` is
+    `None` -- this function performs no checkout of its own.
+    This lets a caller batch many verify commands against one shared `cwd` in a single call.
 
     Work is keyed on the `(command, effective_cwd)` pair, NOT on the batch `name` (`cwd_override` if
-    not None, else `checkout_path` directly -- mirroring `_run_verify_gate`'s `cwd_override`
+    not None, else `cwd` directly -- mirroring `_run_verify_gate`'s `cwd_override`
     handling).
     Plans whose last batch verifies the union of the earlier batches' commands are a common and
     reasonable shape, and re-running an identical command string in an identical cwd cannot
@@ -255,21 +251,15 @@ def compute_batch_baselines(
 
     Args:
         commands: A list of `(name, command, cwd_override)` triples. `cwd_override` is `None` (use
-            `checkout_path` directly) or an already-resolved absolute `Path` to run `command` in
-            instead.
-        checkout_path: An already-checked-out, already-linked transient worktree path.
-            Never checked out or torn down by this function.
-        project_root: Absolute path to the task worktree root.
-            Unused by this function's own logic today,
-            but accepted for parity with `compute_baseline`'s signature and to keep the caller's
-                call sites uniform;
-            kept for forward compatibility.
+            `cwd` directly) or an already-resolved absolute `Path` to run `command` in instead.
+        cwd: The default working directory used when a given command's own `cwd_override` is
+            `None`.
         pair_cache: Optional caller-owned `{(command, effective_cwd): signatures}` dict, mutated in
             place, that makes the dedup span every call sharing it -- pass one dict across a whole
             shared-checkout pre-flight.
             `None` (the default) falls back to a call-local cache, i.e. dedup within this call only.
-            Only ever share a cache across calls against the SAME checkout: the key carries no
-            checkout identity, so reusing one across checkouts would serve a stale signature list.
+            Only ever share a cache across calls whose commands resolve to the SAME `cwd`: the key
+            carries no cwd identity beyond what is already part of it.
         timeout_seconds: Per-run wall-clock ceiling passed through to `_run_verify_in`, or None for
             no ceiling. Applied to each run individually, not to a pair's two runs together.
 
@@ -284,92 +274,16 @@ def compute_batch_baselines(
         Each value is an independent list object, never aliased across names -- including across
         names that share one `(command, effective_cwd)` pair.
     """
-    del project_root  # unused today; kept for signature parity/forward compat.
     by_pair = pair_cache if pair_cache is not None else {}
     results: dict[str, list[str]] = {}
     for name, command, cwd_override in commands:
-        effective_cwd = cwd_override if cwd_override is not None else checkout_path
+        effective_cwd = cwd_override if cwd_override is not None else cwd
         pair = (command, effective_cwd)
         if pair not in by_pair:
             by_pair[pair] = _signatures_for_pair(command, effective_cwd, timeout_seconds)
         # Copy per name: callers treat each value as their own mutable list.
         results[name] = list(by_pair[pair])
     return results
-
-
-def compute_batch_baseline_on_demand(
-    project_root: Path,
-    git_root: Path,
-    parent_sha: str,
-    verify_cmd: str,
-    *,
-    cwd_override: Path | None = None,
-    timeout_seconds: float | None = None,
-) -> list[str]:
-    """
-    Compute one batch's `verify_baseline_failures` on demand, against an already-pinned parent SHA.
-
-    Unlike `compute_batch_baselines`, this function owns its own transient-worktree checkout and
-    teardown -- it exists for the "lazy" baseline path (#1102), where a single batch's baseline is
-    computed the first time that batch's own verify gate actually fails, instead of every batch's
-    baseline being precomputed eagerly before batch 1 dispatches.
-
-    Implementation, in order:
-        1. `_checkout_parent_branch(project_root, git_root, parent_sha)` -- `parent_sha` is already
-            a resolved 40-character SHA, so `_checkout_parent_branch`'s own internal `git rev-parse`
-            call on it is a no-op round-trip.
-        2. Resolve `effective_tmp_path` the same way `compute_baseline` does: `tmp_path /
-            cwd_override` when `cwd_override` is not `None`, else `tmp_path` directly.
-        3. `_link_dependency_dirs(project_root, effective_tmp_path)`.
-        4. `compute_batch_baselines([("_ondemand", verify_cmd, None)], effective_tmp_path,
-            project_root, timeout_seconds=timeout_seconds)`, returning the `"_ondemand"` entry.
-
-    The checkout-through-run sequence is wrapped in `try`/`finally` so the transient worktree is torn
-    down via `_worktree.remove_safe` unconditionally, mirroring `compute_baseline`'s own teardown.
-
-    This function has no fail-safe swallowing of its own -- any exception from
-    `_checkout_parent_branch`, `_link_dependency_dirs`, or `compute_batch_baselines` propagates to
-    the caller.
-    The caller (`_implementer_common._run_verify_gates`) treats a raised exception as "on-demand
-    computation failed, gate strictly," per this codebase's existing None-means-fail-strict
-    convention.
-
-    Args:
-        project_root: Absolute path to the task worktree root (where `.scratch/` lives and where
-            gitignored dependency dirs are probed for reuse).
-        git_root: Absolute path to the repo root `git` commands run against.
-        parent_sha: The already-resolved parent branch tip SHA to check out.
-        verify_cmd: The batch's own verify command string to run, verbatim.
-        cwd_override: Hub-relative path fragment, resolved the same way as
-            `compute_baseline`'s `cwd_override_relative` -- re-anchors both the verify subprocess's
-            cwd and the dependency-junction targets to `tmp_path / cwd_override` instead of
-            `tmp_path` directly.
-            `None` (the default) leaves everything at `tmp_path`.
-        timeout_seconds: Per-run wall-clock ceiling, or None for no ceiling.
-
-    Returns:
-        The `"_ondemand"` entry's failure-signature list from `compute_batch_baselines` -- `[]` when
-        the batch's verify command produces no extracted failures against the pinned parent SHA.
-
-    Raises:
-        RuntimeError: `git rev-parse` or `git worktree add` failed.
-        OSError: junction creation failed.
-        ValueError: link_path already exists (dependency dir collision).
-        subprocess.TimeoutExpired: A verify run exceeded `timeout_seconds`.
-    """
-    tmp_path = _checkout_parent_branch(project_root, git_root, parent_sha)
-    effective_tmp_path = tmp_path / cwd_override if cwd_override is not None else tmp_path
-    try:
-        _link_dependency_dirs(project_root, effective_tmp_path)
-        result = compute_batch_baselines(
-            [("_ondemand", verify_cmd, None)],
-            effective_tmp_path,
-            project_root,
-            timeout_seconds=timeout_seconds,
-        )
-        return result["_ondemand"]
-    finally:
-        _worktree.remove_safe(tmp_path, cwd=git_root, junctions_cfg={})
 
 
 def _signatures_for_pair(
