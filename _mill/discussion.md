@@ -20,8 +20,10 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 
 - **#1113** — a wiki task's stored `title` field can contain a doubled apostrophe (`''` instead of
   `'`) when the title was synthesized (not copied verbatim from a single source issue) — e.g. by
-  fold/triage tooling consolidating multiple GitHub issues into one task. Locate the call site that
-  double-applies quote-escaping (or otherwise corrupts the apostrophe) and fix it there.
+  fold/triage tooling consolidating multiple GitHub issues into one task. Root cause (confirmed):
+  `mill-triage-to-tasks/SKILL.md` Step 5 substitutes the title directly into a literal
+  `title='<title>'` inside a bash-invoked `python -c "..."` string, an unsafe inline embedding for
+  any apostrophe-containing text — see Decisions.
 - **#1138** — the `handoff` skill (`plugins/mill/skills/handoff/SKILL.md`) tells the agent not to
   let a prior handoff document become a structural template, but doesn't sequence *when* the old
   file is read — so reading it before drafting makes it the template anyway. Reorder the skill's
@@ -76,16 +78,30 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 
 ### 1113-investigation-in-plan
 
-- Decision: the exact call site that double-escapes/corrupts the title is not located during
-  discussion. `_yaml_writer.py`'s `quote_scalar` (used for `status.md`'s `task:` field) was checked
-  and confirmed correct — not the bug site. mill-plan's batch for #1113 must include locating the
-  actual synthesis/upsert call site (likely in fold/triage tooling — see Technical context) as part
-  of implementation, then fix it there with a regression test.
-- Rationale: the brief includes #1113 in this round; the issue's own repro is precise enough
-  (inspect a synthesized, not-copied-verbatim title for a doubled apostrophe) to locate the bug
-  during implementation without needing it pre-diagnosed here.
-- Rejected: a defensive normalize-on-write in `_client.upsert_task` that doesn't find the real call
-  site — risks masking the bug instead of fixing it, and doesn't explain the mechanism.
+- Decision: `_yaml_writer.py`'s `quote_scalar` (used for `status.md`'s `task:` field) was checked
+  and confirmed correct — not the bug site. `millpy-fold.py`'s only `upsert_task` call passes
+  `brief=` and never `title=`, so it structurally cannot be the site either. The confirmed candidate
+  is `plugins/mill/skills/mill-triage-to-tasks/SKILL.md` Step 5 (new-task branch): it instructs the
+  *agent* to substitute a synthesized title directly into a literal `title='<title>'` inside a
+  bash-invoked `python -c "..."` string — an inline single-quoted Python string literal. A title
+  containing an apostrophe breaks that literal's syntax, and the natural inline "fix" an agent
+  applies to make it parse (e.g. doubling the apostrophe, as if escaping for a different quoting
+  convention) is exactly the kind of unreliable, ad hoc escaping that produces a corrupted stored
+  value with no deterministic code bug to find via grep — this is a prompt-text embedding problem,
+  not a Python string-escaping bug. mill-plan's batch for #1113 replaces that inline embedding with
+  an unambiguous, escaping-safe form — `json.dumps(title)` is a JSON string literal that is also
+  valid Python string-literal syntax and correctly escapes quotes/backslashes, so substituting
+  `json.dumps(title)`'s output in place of `'<title>'` removes the agent-judgment step entirely.
+  Apply the same substitution to every other literal `'<...>'` value in that same Step 5 block
+  (`brief`, `body`, `target_slug`) that could plausibly contain an apostrophe, for consistency and to
+  close the same class of bug at the other call sites in that step, even though only `title` was
+  reported corrupted.
+- Rationale: the brief includes #1113 in this round; round 2's discussion review located and
+  confirmed the actual mechanism, which is precise enough to fix directly rather than leaving
+  further investigation to mill-plan.
+- Rejected: a defensive normalize-on-write in `_client.upsert_task` — doesn't fix the other literals
+  in the same Step 5 block, and treats the symptom (a corrupted title reaching storage) rather than
+  the cause (unsafe inline literal substitution).
 
 ### 1112-investigation-in-plan
 
@@ -139,8 +155,16 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 
 - Decision: document the `goimports -w <changed-files>` + `go vet ./...` substitute as the official
   fallback in `golang-build/SKILL.md` when `golangci-lint` install fails specifically due to network
-  restriction (transitient dependency host unreachable), in both the Tool Installation and Failure
-  Handling sections.
+  restriction (transitive dependency host unreachable), in both the Tool Installation and Failure
+  Handling sections. Fallback trigger condition (must be stated explicitly in the skill, not left
+  implicit): the `go install .../golangci-lint@latest` command's own output indicates a
+  network/fetch failure reaching an external VCS host for a transitive dependency — e.g. contains
+  text like "Repository not found", "dial tcp", "no such host", "i/o timeout", "unable to fetch"
+  (the issue's own repro observed this via `git ls-remote` against the unreachable host returning
+  "Repository not found"). A `go install` failure whose output does NOT match this network-failure
+  shape (a real compile error, a bad module path, an auth failure, etc.) still falls through to the
+  existing stop-and-report behavior — the fallback is narrowly scoped to the network case, not a
+  blanket "any install failure" substitute.
 - Rationale: this exact substitute was already used ad hoc twice in the same session and unblocked
   the task; documenting it costs nothing and closes the gap between documented and actual behavior.
 - Rejected: vendoring/caching `golangci-lint` so `go install` never needs network — heavier
@@ -150,13 +174,15 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 ## Technical context
 
 - **#1113** — `plugins/mill/scripts/_yaml_writer.py`'s `quote_scalar()` (PyYAML-backed) is confirmed
-  correct for `status.md`'s `task:` field escaping — not the bug site. The corrupted value lives in
-  the wiki task's stored `title` field itself, read back verbatim via `wiki._client.get_task`.
-  Candidate synthesis/upsert call sites to check: `plugins/mill/scripts/millpy-fold.py`,
-  `plugins/mill/scripts/millpy-add.py`, `wiki._client.upsert_task`/`merge_tasks`, and whatever
-  drives the `mill-triage-to-tasks`/`mill-ghissues-to-tasks`/`mill-report-to-tasks` skills' task
-  upsert path — the task in question was created by consolidating ten duplicate GitHub issues, i.e.
-  through a fold/triage flow, not `mill-add`'s single-source path.
+  correct for `status.md`'s `task:` field escaping — not the bug site. `millpy-fold.py`'s only
+  `upsert_task` call passes `brief=`, never `title=` — ruled out. `millpy-add.py` takes `--title` as
+  a real argparse argument (proper argv passing, not an inline literal) — not vulnerable to this
+  class of bug, and not the site anyway since this task was created via fold/triage, not
+  `mill-add`'s single-source path. Confirmed site: `plugins/mill/skills/mill-triage-to-tasks/SKILL.md`
+  Step 5, "1. New tasks." — see Decisions for the exact line and fix shape. Neither
+  `mill-ghissues-to-tasks/SKILL.md` nor `mill-report-to-tasks/SKILL.md` duplicates this
+  `upsert_task`/title-embedding block themselves — both are entry skills that hand off to
+  `mill-triage-to-tasks`'s shared Step 5, so fixing that one site covers all three entry points.
 - **#1138** — target file: `plugins/mill/skills/handoff/SKILL.md`. Note:
   `plugins/mill/skills/mill-go-base/handoff.md` is a **different, unrelated** "Handoff phase" (task
   completion handoff inside mill-go) — confirmed during exploration to share only the word
@@ -178,10 +204,14 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
 
 ## Testing
 
-- **#1113**: once the call site is located, add a regression test (unit test if the fix lands in a
-  `plugins/mill/scripts/*.py` helper with existing test coverage under `unit_tests/`) that
-  synthesizes a title from an apostrophe-containing source string and asserts a single apostrophe
-  survives.
+- **#1113**: the fix lands in a `SKILL.md`'s prose instructions (see Decisions), not a deterministic
+  Python function, so a pytest-style regression test doesn't apply directly. Manual verification:
+  walk through the corrected Step 5 with an apostrophe-containing title (e.g. the issue's own
+  `"Monitor tool: persistent:true doesn't exist, ..."`) and confirm the rendered `python -c "..."`
+  command is syntactically valid and the title round-trips with exactly one apostrophe. If the fix
+  introduces a small reusable Python quoting helper (rather than inlining `json.dumps(...)` at the
+  call site), that helper gets a unit test under `unit_tests/` mirroring `_yaml_writer.py`'s
+  `quote_scalar` test conventions.
 - **#1127**: add test cases to the existing `plugins/mill/unit_tests/test-claude-settings.py`
   covering `reconcile_destructive_denylist`: retires a present `Bash(rm -rf:*)` entry, adds the
   `DESTRUCTIVE_DENY` set, preserves unrelated existing `deny` entries, and is idempotent (second run
