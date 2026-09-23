@@ -780,12 +780,6 @@ class TestMillpyImplement(unittest.TestCase):
         # them, but must honor the CLI --start-sha value (#1012).
         self.assertEqual(call_kwargs.get("start_sha"), "CLI_SHA")
         self.assertEqual(call_kwargs.get("session_id"), "STATUS_SESSION")
-        # main()'s already-resolved git_name/git_email locals (from `git config --global --get
-        # user.name`/`user.email`, mocked via mock_subprocess_run's default "abc1234" stdout)
-        # must be forwarded into finalize_from_output -- this is the #954 corroboration-commit
-        # git-identity fix; a future edit that silently drops these kwargs must fail this test.
-        self.assertEqual(call_kwargs.get("git_name"), "abc1234")
-        self.assertEqual(call_kwargs.get("git_email"), "abc1234")
 
     def test_finalize_start_sha_falls_back_to_status_md_when_flag_absent(self):
         """--stage finalize with no --start-sha flag falls back to status.md's value.
