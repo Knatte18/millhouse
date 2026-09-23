@@ -1517,9 +1517,6 @@ def finalize_from_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1573,16 +1570,6 @@ def finalize_from_output(
         (run strictly, as before this parameter existed).
         commit_sha_field_name: JSON key the corrective SHA is attached under on the success
             fallback path; defaults to "commit_sha".
-        batch_name: This batch's name, forwarded unchanged to _forward_output's _run_verify_gates
-            calls.
-            See _run_verify_gates for the self-healing persist this enables.
-            Defaults to None (persist disabled, as before this parameter existed).
-        git_name: Git commit identity (user.name) forwarded unchanged to _forward_output's
-            _run_verify_gates calls.
-            Defaults to None (persist-commit disabled).
-        git_email: Git commit identity (user.email) forwarded unchanged to _forward_output's
-            _run_verify_gates calls.
-            Defaults to None (persist-commit disabled).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1621,9 +1608,6 @@ def finalize_from_output(
         module_wide_cwd_override=module_wide_cwd_override,
         batch_verify_baseline=batch_verify_baseline,
         commit_sha_field_name=commit_sha_field_name,
-        batch_name=batch_name,
-        git_name=git_name,
-        git_email=git_email,
     )
 
 
@@ -1681,9 +1665,6 @@ def _forward_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1744,14 +1725,6 @@ def _forward_output(
     "commit_sha", which preserves today's behavior for every existing caller. A non-default value
     also pops any stale self-reported "commit_sha" key from parsed before attaching the corrected
     SHA under the new key name, so the two never coexist.
-    batch_name is forwarded unchanged to every _run_verify_gates call site below, alongside the
-    already-present start_sha and status_path parameters, enabling the self-healing persist
-    documented on _run_verify_gates.
-    Defaults to None (persist disabled, as before this parameter existed).
-    git_name and git_email are forwarded unchanged to every _run_verify_gates call site below: the
-    git commit identity used to persist an expanded verify_baseline_failures corroboration result to
-    status.md.
-    Both default to None, which disables the persist-commit.
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
