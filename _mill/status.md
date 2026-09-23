@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-handoff-draft-order
+phase: approved-claude-settings-denylist
 slug: mill-setup-wiki-doc-misc-r3
 branch: hanf/mill-setup-wiki-doc-misc-r3
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-09-23T10:48:54Z'
 implementing  '2026-09-23T10:49:26Z'
 approved-mill-triage-title-escape  '2026-09-23T10:51:27Z'
 approved-handoff-draft-order  '2026-09-23T10:52:40Z'
+approved-claude-settings-denylist  '2026-09-23T10:56:24Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     start_sha: 596bbe3a59e5c92bc949e7f65e8cbca0dfa5eea2
     commit_sha: 4d6b8adab947229c8d89085c13f1241ac4a7959a
   - name: claude-settings-denylist
-    state: running
+    state: approved
     implementer_session: 9d43f009-4986-406f-bd2c-cb7dd25e09aa
     start_sha: 0d4978dbd0e1030fde1d0ed836346d509a3256ca
+    commit_sha: a26973da4a77f4c9f040e6242630b0809e2108a5
     verify_baseline_failures: []
   - name: golangci-lint-sandbox-fallback
     state: pending
