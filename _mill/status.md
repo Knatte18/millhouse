@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-self-resolve-card-insertion-auto-renumber
+phase: holistic-reviewing
 slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
@@ -37,6 +37,7 @@ approved-orchestration-skill-doc-fixes  '2026-09-21T19:01:49Z'
 approved-plan-validate-build-tag-coverage  '2026-09-21T19:07:50Z'
 approved-merge-in-conflict-and-verify-robustness  '2026-09-21T19:14:15Z'
 approved-self-resolve-card-insertion-auto-renumber  '2026-09-23T10:18:42Z'
+holistic-reviewing  '2026-09-23T10:19:29Z'
 ```
 
 ## Batches
