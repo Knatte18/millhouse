@@ -1,0 +1,29 @@
+MILL_REVIEW_BEGIN
+# Review: Deactivate codeguide integration in millhouse — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/ + source
+date: 2026-09-23
+```
+
+## Findings
+
+No findings. Verified every card in all three batches against the delivered source:
+
+- `plugins/mill/skills/git-commit/SKILL.md` — Codeguide sync section (Card 1) fully removed; file ends at step 1 + `## Rules`, one blank line preserved, no renumbering.
+- `plugins/mill/skills/mill-merge-in/SKILL.md` — all 8 sub-requirements of Card 2 confirmed verbatim (frontmatter description, intro paragraph, no-op-check line, deleted `### 5. Codeguide update` section with correct renumber of the commit-briefs step to `### 5`, `### 6. Report` left unrenumbered, staged-only rationale clause, dropped inline-mode paragraph, updated success-path clause, and `## No-op guarantee` clause).
+- `plugins/mill/scripts/_parent_branch.py` — `resolve_for_codeguide` and its module-docstring "Public API" entry are gone; `ParentBranchError`, `resolve`, `check_liveness`, `resolve_dead_parent` untouched, matching the Shared Decision scoping.
+- `plugins/mill/unit_tests/test-parent-branch.py` — import trimmed to `ParentBranchError, resolve`; all five `resolve_for_codeguide` assert/print pairs and the `nonexistent` fixture variable removed; remaining `resolve`/`check_liveness`/`ParentBranchError` assertions untouched.
+- Batch 2 prose cards (5–11) — exact-text replacements confirmed in `implementer-brief.md`, `fixer-batch-brief.md`, `fixer-holistic-brief.md`, `mill-go-base/SKILL.md` ("every per-card commit invokes the `git-commit` skill so lint runs per-commit."), `mill-quick/SKILL.md`, `CLAUDE.md` (codeguide sibling-clone line removed from the container diagram), and `git-clone/SKILL.md`.
+- Repo-wide grep for `codeguide` (case-insensitive) across all ten edited files in the manifest returns zero matches — no leftover call sites or stale prose.
+- Batch 3's `verify:` (grep for `CODEGUIDE_PLUGIN_ROOT` / `codeguide-update` + `test-sibling.py` + `test-guards.py`) matches the actual post-batch-1/2 state; the dropped `test-worktree-sibling-resolution.py` check is justified in the batch file's own "Prior failure" section as a pre-existing, out-of-scope `main` bug, consistent with the "general-purpose plumbing out of scope" Shared Decision.
+- `## All Files Touched` in `00-overview.md` matches the 11 non-plan source files in the manifest exactly — no out-of-plan surprises.
+- No duplicated helpers, no cross-batch contract mismatches, no mutable-default/import-side-effect/path-sep pitfalls observed in the touched code.
+
+## Verdict
+
+APPROVE
+All batches' cards are faithfully implemented; no BLOCKING or NIT findings.
+MILL_REVIEW_END
