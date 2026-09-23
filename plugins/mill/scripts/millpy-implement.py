@@ -255,91 +255,80 @@ def _run_module_wide_standalone(
     status_path: Path,
     module_wide_verify_cmd: str | None,
     module_wide_cwd_override: Path | None,
+    preflight_skip_reason: str | None,
     verify_timeout_seconds: float | None = None,
-) -> None:
+) -> tuple[str, Path, list[str]] | None:
     """
-    Run the module-wide baseline sub-step standalone, via its own `compute_baseline` checkout.
+    Run the module-wide baseline sub-step, eagerly and in-worktree, per Decision
+    `two-half-stage-ownership`.
 
-    Used only in Case A (no per-batch command needs computing this invocation), where there is
-    nothing to share a checkout with -- this is the existing module-wide logic, byte-for-byte, just
-    tagged with a `"substage": "module_wide"` key on the printed JSON line.
+    `preflight_skip_reason` is the already-computed result of `_baseline_preflight_skip_reason`,
+    passed in by the caller (`_run_baseline_stage`) -- this function never calls that guard itself,
+    since the guard is called exactly once per `--stage baseline` invocation.
 
     Never raises -- every failure path prints a JSON line describing the outcome without persisting
     a baseline verdict, matching the "leave the field unset -> next `_run_verify_gates` call runs
     the gate strictly" fail-safe policy.
+
+    Args:
+        project_root: Absolute path to the task worktree root (the mill hub).
+        git_root: Absolute path to the repo root `git` commands run against.
+        status_path: Absolute path to the task's status.md file.
+        module_wide_verify_cmd: The overview's module-wide verify command, or None when unconfigured.
+        module_wide_cwd_override: The overview's module-wide verify cwd resolved by
+            `parse_verify_field` -- `project_root` (hub), `git_root`, or `None` (plain-string
+            `verify:` or absent).
+        preflight_skip_reason: The precomputed skip reason from `_baseline_preflight_skip_reason`,
+            or `None` when the precondition holds.
+        verify_timeout_seconds: Per-run wall-clock ceiling applied to the module-wide verify command,
+            or `None` for no ceiling.
+
+    Returns:
+        `(module_wide_verify_cmd, effective_cwd, signatures)` when this call actually computed a
+        fresh result this invocation (the `"computed"` branch only) -- fed to
+        `_run_per_batch_baseline_standalone` as `module_wide_pair_seed` so a batch whose own
+        `(command, cwd)` matches this pair reuses the result instead of re-running the suite.
+        `None` on every other branch (skipped, cached, or error).
     """
     payload = _module_wide_skip_or_cached_payload(module_wide_verify_cmd, status_path)
     if payload is not None:
         print(json.dumps(payload))
-        return
+        return None
 
+    if preflight_skip_reason is not None:
+        print(
+            json.dumps(
+                {
+                    "stage": "baseline",
+                    "substage": "module_wide",
+                    "result": "skipped",
+                    "reason": preflight_skip_reason,
+                }
+            )
+        )
+        return None
+
+    effective_cwd = module_wide_cwd_override if module_wide_cwd_override is not None else git_root
+
+    exclusion_prefixes = _baseline_exclusion_prefixes(project_root, git_root)
+    before_snapshot = _porcelain_snapshot(git_root)
     try:
-        parent_branch = _parent_branch.resolve(status_path, interactive=False)
-    except Exception as e:
-        print(f"[millpy-implement] baseline parent-branch resolution failed: {e}", file=sys.stderr)
-        print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "error", "reason": str(e)}))
-        return
-
-    cwd_override_relative = _relative_cwd_fragment(module_wide_cwd_override, project_root, git_root)
-
-    try:
-        result = _verify_baseline.compute_baseline(
-            project_root,
-            git_root,
-            parent_branch,
+        result, signatures = _verify_baseline.compute_baseline(
+            effective_cwd,
             module_wide_verify_cmd,
-            cwd_override_relative=cwd_override_relative,
             timeout_seconds=verify_timeout_seconds,
         )
     except Exception as e:
         print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
         print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "error", "reason": str(e)}))
-        return
+        return None
+    after_snapshot = _porcelain_snapshot(git_root)
+    _warn_new_dirt(before_snapshot, after_snapshot, exclusion_prefixes)
 
     _status.set_module_verify_baseline(status_path, result)
+    _status.set_module_verify_baseline_signatures(status_path, signatures)
     print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "computed", "value": result}))
-
-
-def _pin_baseline_parent_sha(git_root: Path, status_path: Path) -> None:
-    """
-    Idempotently pin the parent branch's current tip SHA into `status.md`'s `baseline_parent_sha:`.
-
-    Cheap: a single `git rev-parse`, never a checkout.
-    Later, `_implementer_common._run_verify_gates` reads this pinned SHA to compute a batch's own
-    `verify_baseline_failures` on demand, only when that batch's verify gate actually fails (#1102).
-
-    A no-op when a SHA is already pinned -- a resumed/restarted mill-go run must not re-pin, since
-    the SHA is meant to represent the parent branch's state at the start of this task's coding
-    phase, not at the time of whichever invocation happens to run this function.
-
-    Never raises -- every failure (parent-branch resolution, or a non-zero `git rev-parse`) is
-    logged to stderr and the function returns without pinning, matching this stage's own
-    "never raises" contract.
-    A failed pin degrades safely: Card 10's on-demand path already treats an absent
-    `baseline_parent_sha` as "gate strictly."
-
-    Args:
-        git_root: Absolute path to the repo root `git` commands run against.
-        status_path: Absolute path to the task's status.md file.
-    """
-    if _status.get_baseline_parent_sha(status_path) is not None:
-        return
-
-    try:
-        parent_branch = _parent_branch.resolve(status_path, interactive=False)
-    except Exception as e:
-        print(f"[millpy-implement] baseline_parent_sha pin: parent-branch resolution failed: {e}", file=sys.stderr)
-        return
-
-    result = _subprocess_util.run(["git", "-C", str(git_root), "rev-parse", parent_branch])
-    if result.returncode != 0:
-        print(
-            f"[millpy-implement] baseline_parent_sha pin: git rev-parse {parent_branch!r} failed: "
-            f"{result.stderr.strip()}",
-            file=sys.stderr,
-        )
-        return
-    _status.set_baseline_parent_sha(status_path, result.stdout.strip())
+    return (module_wide_verify_cmd, effective_cwd, signatures)
 
 
 def _run_baseline_stage(
