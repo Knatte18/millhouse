@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-verify-logic
+phase: approved-close-issue
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-23T10:42:29Z'
 approved-deactivate-call-sites  '2026-09-23T10:48:58Z'
 approved-prose-cleanup  '2026-09-23T10:52:31Z'
 self-resolved-verify-logic  '2026-09-23T10:57:33Z'
+approved-close-issue  '2026-09-23T11:00:55Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     start_sha: ae452a574ada1fd6a314352f8565cd5db80e8717
     commit_sha: 6a269baaeeb40960e1eda1154186d818ee8addda
   - name: close-issue
-    state: running
+    state: approved
     implementer_session: a135da84-17f4-430e-b46c-a5a317fa1255
     start_sha: 1f00c9f0ef6f9fc1a49c7156afe58807ec117e24
+    commit_sha: e147f8b6bb8aabe17decefb371e509875c903174
     verify_baseline_failures: []
     self_resolve_remint_at: '2026-09-23T10:57:33Z'
 ```
