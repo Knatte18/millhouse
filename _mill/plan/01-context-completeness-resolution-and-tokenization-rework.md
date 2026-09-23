@@ -402,13 +402,23 @@ the plan.
   cross-line corruption this refactor exists to fix for ordinary line wraps. Per-run processing makes
   that structurally impossible: a quoted region always starts a new run, so a backtick match can never
   span across one.
-  1. Build `runs: list[list[tuple[int, str]]]` by walking `requirements_lines` with the SAME
-     quoted-line skip logic already present (a line is quoted when `in_fence` is `True` on entry OR
-     the line's lstripped form starts with `>`; the fence toggle on a line starting with ` ``` ` is
-     evaluated on the line's CURRENT state, exactly as today). Maintain a `current_run: list[tuple[int, str]]`;
-     append `(original_line_index, line_text)` to it for every non-quoted line; whenever a quoted line
-     is encountered, if `current_run` is non-empty, append it to `runs` and start a fresh empty
-     `current_run`. After the walk, append any non-empty `current_run` to `runs`.
+  1. Build `runs: list[list[tuple[int, str]]]` by walking `requirements_lines`. A line is EXCLUDED
+     from run membership (never appended to `current_run`, and always closes out any non-empty
+     `current_run` first) when EITHER: (a) its lstripped form starts with the triple-backtick fence
+     marker ` ``` ` — this applies to BOTH the opening and the closing delimiter line, a DELIBERATE
+     departure from the existing per-physical-line loop's "current-state" toggle-line judgment (safe
+     there because each physical line was scanned in total isolation; unsafe here, because a
+     delimiter line's own literal backtick characters must never be allowed to enter any run's
+     `joined_text`, where a dangling/odd backtick on an adjacent included line could otherwise
+     spuriously pair with one of the delimiter's three backticks and bridge into or past the fence);
+     or (b) `in_fence` is `True` on entry (ordinary fenced content between two delimiters); or (c) the
+     line's lstripped form starts with `>` (blockquote). The `in_fence` TOGGLE itself still flips on
+     any line starting with ` ``` `, exactly as today, so that the content between two delimiter
+     lines is still correctly recognized as quoted via rule (b) — only run MEMBERSHIP for the
+     delimiter line itself changes, not the toggle mechanics. For every line that IS included, append
+     `(original_line_index, line_text)` to `current_run`; whenever an excluded line is encountered, if
+     `current_run` is non-empty, append it to `runs` and start a fresh empty `current_run`. After the
+     walk, append any non-empty `current_run` to `runs`.
   2. For each `run` in `runs` independently: build `joined_text = "\n".join(text for _, text in run)`
      and `line_starts: list[int]` where `line_starts[i]` is `run[i]`'s first-character offset in this
      run's own `joined_text` (accounting for the `"\n"` separators between consecutive lines in the
@@ -474,16 +484,28 @@ the plan.
 
   New regression test,
   `test_check_context_completeness_clean_line_join_dangling_backtick_before_fence_not_bridged` —
-  proves the per-run design (not a single whole-body joined text) prevents a NEW cross-region
-  corruption class: a Requirements: field with an odd/dangling, never-closed backtick on a line
-  immediately BEFORE a fenced code block, and a genuine unlisted path-shaped dependency on a line
-  several lines AFTER the fence closes. Under a single-joined-text design (the design this refactor
-  rejects), the dangling backtick would search past the elided fenced content and spuriously pair
-  with the genuine dependency's own opening backtick, silently swallowing it and producing 0 errors;
-  under the per-run design, the dangling backtick's own run (ending at the fence) contains no
-  complete pair and yields no token from it, while the dependency's own run (starting after the fence
-  closes) tokenizes independently and correctly. Assert exactly one context-completeness error naming
-  the genuine dependency.
+  proves both (a) per-run processing (not a single whole-body joined text) and (b) always excluding
+  the fence-delimiter line itself from run membership (step 1's rule (a) above) together prevent a
+  NEW cross-region corruption class. Fixture: a Requirements: field with a genuine unlisted
+  path-shaped dependency on one physical line, immediately followed by a SECOND physical line ending
+  in an odd/dangling, never-closed backtick with trailing prose after it (not merely at end-of-line —
+  e.g. "...then a stray backtick` appears here."), immediately followed by a fenced code block,
+  immediately followed by a second genuine unlisted path-shaped dependency several lines after the
+  fence closes. Under a single-whole-body-joined-text design (rejected by this refactor), the
+  dangling backtick would search past the elided fenced content and spuriously pair with the second
+  dependency's own opening backtick, silently swallowing it. Under a per-run design that still
+  INCLUDES the fence-delimiter line in run membership (the design this round's own fix rejects), the
+  dangling backtick would instead spuriously pair with one of the delimiter line's own three
+  backtick characters, silently discarding the trailing prose between them into an unreachable
+  captured group (harmless in THIS specific fixture only because that prose is not itself a
+  backtick-wrapped token, but still a structural violation of "a quoted region always starts a new
+  run"). Under the actual fixed design (fence-delimiter lines excluded from every run per step 1
+  rule (a)): the first dependency's own run tokenizes it cleanly and independently; the
+  dangling-backtick line's run ends at the fence with no closing partner available within it, so the
+  dangling backtick yields no token at all (correct — it is genuinely unpaired); the second
+  dependency's own run (starting fresh after the fence closes) tokenizes it cleanly and
+  independently. Assert exactly two context-completeness errors, one naming each genuine dependency,
+  and that neither message references the other dependency's path or any fence/delimiter text.
 - **Commit:** `fix(plan-validate): join fence-filtered Requirements text before tokenizing, fixing cross-line backtick-span corruption (line-join-refactor)`
 
 ## Batch Tests
