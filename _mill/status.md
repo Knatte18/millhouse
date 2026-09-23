@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-23T09:59:54Z'
+discussion-fix-r1  '2026-09-23T10:22:20Z'
 ```
