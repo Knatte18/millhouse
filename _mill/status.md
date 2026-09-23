@@ -29,11 +29,14 @@ implementing  '2026-09-23T10:49:26Z'
 ```yaml
 batches:
   - name: mill-triage-title-escape
-    state: pending
+    state: running
+    implementer_session: a55f75bb-7fe7-4489-a486-5a926e937e23
+    start_sha: 703710e6a2298aa81389974ad0d606270f842198
   - name: handoff-draft-order
     state: pending
   - name: claude-settings-denylist
     state: pending
+    verify_baseline_failures: []
   - name: golangci-lint-sandbox-fallback
     state: pending
 ```
