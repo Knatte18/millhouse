@@ -1,0 +1,27 @@
+MILL_REVIEW_BEGIN
+# Review: compute_baseline: use the task worktree's own pre-edit state, not a parent-branch checkout — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-23
+```
+
+## Findings
+
+### [NIT:consistency] Card 19 misattributes which batch deletes baseline_parent_sha
+**Location:** batch 3 (`03-implement-baseline-stage.md`), Card 19, final paragraph.
+**Issue:** The note says `get_baseline_parent_sha` "is deleted in batch 1," but batch 1's own Batch Scope (`01-status-baseline-fields.md`) explicitly states it deliberately does NOT delete that accessor pair — it is deleted in batch 4 (Card 27), confirmed against `_status.py`'s current accessor pair and batch 4's Card 27 text.
+**Fix:** Change "deleted in batch 1" to "deleted in batch 4" — the concrete instruction (assert via a direct yaml read instead of the accessor) is otherwise correct and unaffected.
+
+### [NIT:consistency] Card numbering starts at 2, no Card 1 exists anywhere in the plan
+**Location:** Plan-wide — first card is `01-status-baseline-fields.md`'s Card 2; no batch file contains a "Card 1".
+**Issue:** Violates the "Global step numbering — unique, sequential, no gaps across batches" criterion; the sequence 2..36 is internally gapless but does not start at 1.
+**Fix:** Either renumber so the first card is 1, or (if intentional, e.g. Card 1 was descoped in an earlier fix round) leave as-is only if `_plan_validate.py`'s numbering check does not require a 1-based start — otherwise renumber.
+
+## Verdict
+
+APPROVE
+Plan is well-grounded against source across all 7 batches; only two cosmetic numbering/attribution nits remain.
+MILL_REVIEW_END

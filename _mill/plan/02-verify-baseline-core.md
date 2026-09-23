@@ -15,7 +15,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
 
 ## Cards
 
-### Card 4: Rewrite the module docstring for the no-checkout design
+### Card 3: Rewrite the module docstring for the no-checkout design
 
 - **Context:** none
 - **Edits:**
@@ -29,7 +29,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   Delete the "confirmed by two consecutive transient-worktree failures AND a matching failure in the task worktree itself" clause (the control-check corroboration no longer exists — two consecutive failures at `cwd` alone is now sufficient) and the closing paragraph's "raises on any INFRASTRUCTURE failure (parent-branch rev-parse failure, git worktree add failure, junction creation failure)" — replace with: raises only `subprocess.TimeoutExpired`, which the caller treats as "computation failed, leave the baseline unset," identically to before.
 - **Commit:** `docs(_verify_baseline): rewrite module docstring for no-checkout design`
 
-### Card 5: Delete the checkout and dependency-junction helpers
+### Card 4: Delete the checkout and dependency-junction helpers
 
 - **Context:** none
 - **Edits:**
@@ -42,7 +42,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   In `test-worktree.py`, fix the stale comment "mirroring `_verify_baseline._checkout_parent_branch`'s real detached-HEAD baseline-checkout behavior" (in the block registering a nested worktree under the task worktree's `.scratch/` dir) — reword it to describe the detached-HEAD nested-worktree pattern being mirrored without citing a symbol this card deletes (e.g. "mirroring a detached-HEAD nested-worktree pattern", with no `_verify_baseline` reference). This is a comment-only fix; no test behavior changes.
 - **Commit:** `refactor(_verify_baseline): delete checkout and dependency-junction-reuse helpers`
 
-### Card 6: Rewrite compute_baseline to run in-worktree
+### Card 5: Rewrite compute_baseline to run in-worktree
 
 - **Context:** none
 - **Edits:**
@@ -55,7 +55,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   Rewrite the docstring to match: drop the numbered "Implementation, in order" steps describing checkout/junction/teardown (steps 1-5 in the current docstring); describe only the run-then-retry algorithm now owned by `_run_module_wide_verify_algorithm`. Update `Args:` to list only `cwd`, `module_wide_verify_cmd`, `timeout_seconds`. Update `Returns:` to describe the `tuple[str, list[str]]`. Update `Raises:` to `subprocess.TimeoutExpired` only (drop `RuntimeError`, `OSError`, `ValueError` — those were checkout/junction failure modes that no longer exist).
 - **Commit:** `refactor(_verify_baseline): compute_baseline runs against an already-resolved cwd, no checkout`
 
-### Card 7: Rewrite _run_module_wide_verify_algorithm to drop the 3rd control run
+### Card 6: Rewrite _run_module_wide_verify_algorithm to drop the 3rd control run
 
 - **Context:** none
 - **Edits:**
@@ -70,7 +70,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   Update the docstring's numbered steps, `Args:` (drop `project_root`), and `Returns:` (the new tuple) to match.
 - **Commit:** `refactor(_verify_baseline): drop 3rd control run, return signatures alongside verdict`
 
-### Card 8: Delete the on-demand batch path, rename checkout_path to cwd
+### Card 7: Delete the on-demand batch path, rename checkout_path to cwd
 
 - **Context:** none
 - **Edits:**
@@ -83,7 +83,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   Rewrite the docstring: drop the "Unlike `compute_baseline`, this function performs NO checkout and NO teardown of its own -- `checkout_path` must already be a live, fully linked transient worktree" framing and every "ALREADY-CHECKED-OUT" contract phrase, describing `cwd` instead as simply the default working directory used when a given command's `cwd_override` is `None`. Delete the `project_root: Unused by this function's own logic today...` `Args:` entry entirely. In the `pair_cache` `Args:` entry, replace "Only ever share a cache across calls against the SAME checkout: the key carries no checkout identity" with "Only ever share a cache across calls whose commands resolve to the SAME `cwd`: the key carries no cwd identity beyond what is already part of it."
 - **Commit:** `refactor(_verify_baseline): delete on-demand batch path, rename checkout_path to cwd`
 
-### Card 9: Rewrite the unit test for the no-checkout algorithm
+### Card 8: Rewrite the unit test for the no-checkout algorithm
 
 - **Context:**
   - `plugins/mill/scripts/_verify_baseline.py`
@@ -101,7 +101,7 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
   Remove `_link_dependency_dirs` and `compute_batch_baseline_on_demand` from the `from _verify_baseline import (...)` block at the top of the file.
 - **Commit:** `test(_verify_baseline): rewrite unit test for no-checkout compute_baseline algorithm`
 
-### Card 10: Rework the integration test for the no-checkout algorithm
+### Card 9: Rework the integration test for the no-checkout algorithm
 
 - **Context:**
   - `plugins/mill/scripts/_verify_baseline.py`
@@ -111,8 +111,8 @@ This batch rewrites `_verify_baseline.py`'s core algorithm to drop the transient
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** Delete every `.scratch/verify-baseline-*` snapshot assertion (the `_scratch_snapshot` helper and its six before/after call sites across cases 1-6) and the `_new_worktree` fixture helper that creates a second real worktree for `compute_baseline` to check out from — `compute_baseline` no longer checks out anything, so there is nothing under `.scratch/` for either to observe.
-  Rebuild the cases against the new `compute_baseline(cwd, module_wide_verify_cmd, *, timeout_seconds=None)` signature, calling it directly with `cwd` set to the real task-worktree fixture `_setup_hub` already builds (no second worktree needed): a "clean baseline" case; a "confirmed pre-existing failure" case reproducing across the 2-run flakiness-guard algorithm (not the deleted 3-run corroboration); a "flaky-then-passes" case. Drop the "path-sensitive deterministic failure" case and the "dependency-junction reuse" case in their current shape — the `cwd_override_relative`/re-anchoring concept the first exercised and the junction-linking the second exercised no longer exist at this layer once `compute_baseline` takes `cwd` directly; replace the "cleanup on exception" case (there is no transient worktree teardown left to test) with a `subprocess.TimeoutExpired`-propagation case, mirroring Card 9's unit-level coverage of the same behavior.
-  Add the same "no git subprocess call" regression guard Card 9 adds, at this integration level, against real subprocess history rather than a mock — the end-to-end guard against the checkout mechanism creeping back in.
+  Rebuild the cases against the new `compute_baseline(cwd, module_wide_verify_cmd, *, timeout_seconds=None)` signature, calling it directly with `cwd` set to the real task-worktree fixture `_setup_hub` already builds (no second worktree needed): a "clean baseline" case; a "confirmed pre-existing failure" case reproducing across the 2-run flakiness-guard algorithm (not the deleted 3-run corroboration); a "flaky-then-passes" case. Drop the "path-sensitive deterministic failure" case and the "dependency-junction reuse" case in their current shape — the `cwd_override_relative`/re-anchoring concept the first exercised and the junction-linking the second exercised no longer exist at this layer once `compute_baseline` takes `cwd` directly; replace the "cleanup on exception" case (there is no transient worktree teardown left to test) with a `subprocess.TimeoutExpired`-propagation case, mirroring Card 8's unit-level coverage of the same behavior.
+  Add the same "no git subprocess call" regression guard Card 8 adds, at this integration level, against real subprocess history rather than a mock — the end-to-end guard against the checkout mechanism creeping back in.
 - **Commit:** `test(_verify_baseline): rework integration test for no-checkout compute_baseline`
 
 ## Batch Tests

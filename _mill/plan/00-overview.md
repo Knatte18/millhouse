@@ -3,7 +3,7 @@
 ```yaml
 task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
 slug: baseline-uses-worktree-not-checkout
-approved: false
+approved: true
 started: 20260923-091042
 parent: main
 root: ""
@@ -70,7 +70,7 @@ Batch-local decisions live in each batch file._
 
 ### Decision: mid-flight-config-key-removal-is-safe
 
-- **Decision:** Batch 3 removes `pipeline.baseline_prepare_cmd` from both `mill-config.yaml` (hub) and `plugins/mill/templates/mill-config.yaml` in the same batch that deletes the key's last two readers (`millpy-implement.py`'s `main()` and `_run_baseline_stage`) — see Card 17/18/19. This satisfies the `wiki-config-mutation` validator check's condition (a) (a bootstrap card explaining the change is safe mid-flight): by the time this batch's implementer reaches the config cards, the code that ever read the removed key no longer exists anywhere in this same batch's own diff.
+- **Decision:** Batch 3 removes `pipeline.baseline_prepare_cmd` from both `mill-config.yaml` (hub) and `plugins/mill/templates/mill-config.yaml` in the same batch that deletes the key's last two readers (`millpy-implement.py`'s `main()` and `_run_baseline_stage`) — see Cards 14-17 (14-15 remove the two readers, 16-17 remove the config key itself). This satisfies the `wiki-config-mutation` validator check's condition (a) (a bootstrap card explaining the change is safe mid-flight): by the time this batch's implementer reaches the config cards, the code that ever read the removed key no longer exists anywhere in this same batch's own diff.
 - **Rationale:** Splitting the config edit into a separate, later-dependent batch would leave a window where the config template and the hub config disagree with each other for no benefit — the key has exactly one consumer, and that consumer is deleted in the same batch.
 - **Applies to:** implement-baseline-stage (batch 3).
 
