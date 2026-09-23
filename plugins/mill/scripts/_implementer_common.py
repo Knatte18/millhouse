@@ -747,7 +747,9 @@ _FAILURE_MARKER_PREFIXES = (
 )
 
 
-def _extract_failure_signatures(output: str) -> list[str]:
+def _extract_failure_signatures(
+    output: str, *, returncode: int | None = None,
+) -> list[str]:
     """
     Scan every line of a verify command's combined stdout+stderr for known failure-marker prefixes
     and return all matching lines, in order.
@@ -758,15 +760,39 @@ def _extract_failure_signatures(output: str) -> list[str]:
     This helper itself is deliberately uncapped -- a failure past the 20th matching line must still
     be detectable as a signature.
 
+    A verify command that chains a non-test tool ahead of tests (e.g. `go vet ./... && go test
+    ./...`) and fails at the non-test stage produces no line matching any known failure-marker
+    prefix, even though its own exit code is non-zero.
+    When returncode is given, is non-zero, and no marker line was found, this synthesizes exactly
+    one signature line -- `"NONZERO_EXIT: exit <returncode>: <first non-empty line of output,
+    stripped, truncated to 200 characters>"` (or "(no output)" when output has no non-empty line) --
+    so an otherwise-empty signature set still has something comparable for the baseline/finalize
+    subset-diff waiver.
+    The "NONZERO_EXIT:" prefix is deliberately outside _FAILURE_MARKER_PREFIXES, so it reads as
+    synthetic (not a real test-runner marker) wherever it is dumped, e.g. in status.md.
+    No synthesis happens when returncode is None or 0, or when a real marker line was already found.
+
+    Args:
+        output: Combined stdout+stderr of a verify command.
+        returncode: The verify command's own exit code, when known.
+            Used only to decide whether to synthesize a signature for an otherwise-empty result.
+
     Returns:
         A list of every line in output that starts with one of the fixed failure-marker prefixes, in
-        the order they appear.
-        Empty when output has no recognized failure lines (never raises).
+        the order they appear, plus the synthetic NONZERO_EXIT line described above when applicable.
+        Empty when output has no recognized failure lines and no synthesis applies (never raises).
     """
-    return [
+    matches = [
         line for line in output.splitlines()
         if line.startswith(_FAILURE_MARKER_PREFIXES)
     ]
+    if returncode and not matches:
+        first_line = next(
+            (line.strip() for line in output.splitlines() if line.strip()),
+            "(no output)",
+        )
+        matches.append(f"NONZERO_EXIT: exit {returncode}: {first_line[:200]}")
+    return matches
 
 
 def _normalize_failure_signature(line: str) -> str:
@@ -899,6 +925,7 @@ def _run_verify_gate(
                 pass
         if result.returncode != 0:
             output = result.stdout + result.stderr
+            effective_returncode = result.returncode
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
@@ -924,6 +951,7 @@ def _run_verify_gate(
                 if retry_result.returncode == 0:
                     return None
                 output = retry_result.stdout + retry_result.stderr
+                effective_returncode = retry_result.returncode
                 if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                     return None
                 retry_marker = (
@@ -931,7 +959,9 @@ def _run_verify_gate(
                     "still failing] "
                 )
             # Extract every raw failure-marker line from the FULL, untruncated output -- this is the signature set _run_verify_gates uses (after normalization) for baseline/finalize subset-diff comparison, distinct from the capped excerpt used below for the human-facing reason.
-            signatures = _extract_failure_signatures(output)
+            signatures = _extract_failure_signatures(
+                output, returncode=effective_returncode,
+            )
             # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
             output_stripped = output.strip()
             if len(output_stripped) > 2000:
@@ -1517,6 +1547,7 @@ def finalize_from_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
+    card_commit_messages: dict[int, str] | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1570,6 +1601,9 @@ def finalize_from_output(
         (run strictly, as before this parameter existed).
         commit_sha_field_name: JSON key the corrective SHA is attached under on the success
             fallback path; defaults to "commit_sha".
+        card_commit_messages: Forwarded unchanged to _forward_output.
+            See _forward_output for the full-batch-history fallback this enables.
+            Defaults to None (fallback disabled, as before this parameter existed).
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1608,6 +1642,7 @@ def finalize_from_output(
         module_wide_cwd_override=module_wide_cwd_override,
         batch_verify_baseline=batch_verify_baseline,
         commit_sha_field_name=commit_sha_field_name,
+        card_commit_messages=card_commit_messages,
     )
 
 
@@ -1643,6 +1678,86 @@ def _extract_status_json(output: str) -> dict | None:
     return None
 
 
+def _fixer_logic_ancestor_override(
+    project_root: Path,
+    start_sha: str,
+    verify_cmd: str | None,
+    module_wide_verify_cmd: str | None,
+    *,
+    git_root: Path | None = None,
+    module_verify_baseline: str | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
+    batch_verify_baseline: list[str] | None = None,
+    session_id: str | None = None,
+) -> dict | None:
+    """
+    Override a fixer's self-reported ``stuck_type: logic`` when the ancestry and working tree show
+    the fix actually landed and verifies clean.
+
+    Mechanizes the manual `git merge-base --is-ancestor` / `git status --porcelain` check the
+    Builder previously performed by hand for a holistic fix-round crash whose own self-report
+    (`stuck_type: logic`) trailed a real, already-committed fix (#1104's own incident).
+    Fixer-only: `_forward_output`'s caller gates this to `card_ids is None and start_sha is not
+    None`, a combination only `millpy-fix.py`'s `finalize_from_output` call satisfies -- see that
+    call site for why merge-in's two modes can never reach this function.
+
+    Checks, in order:
+      1. A real content commit exists since start_sha (`_content_commit_count`).
+          None or 0 means the self-report stands -- return None.
+      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output).
+          A dirty tree means a genuine unresolved problem -- return None.
+      3. `_run_verify_gates` passes (returns None) for the already-committed state.
+          A non-None result means verify still fails -- the self-reported logic stuck is not
+          overridden, since a genuinely still-broken batch must not be silently waved through --
+          return None.
+
+    Args:
+        project_root: Path to the worktree root.
+        start_sha: Git SHA recorded before the fixer ran.
+        verify_cmd: Batch-level verify command, forwarded to `_run_verify_gates`.
+        module_wide_verify_cmd: Module-wide verify command, forwarded to `_run_verify_gates`.
+        git_root, module_verify_baseline, cwd_override, module_wide_cwd_override,
+            batch_verify_baseline: forwarded unchanged to `_run_verify_gates`.
+        session_id: Session identifier for the overridden envelope;
+            falls back to the literal "unknown" when not supplied.
+
+    Returns:
+        `{"status": "success", "commit_sha": <HEAD>, "session_id": ..., "inferred": True}` when all
+        three checks pass, or `None` when the self-reported logic stuck should stand unchanged.
+    """
+    if _content_commit_count(project_root, start_sha) in (None, 0):
+        return None
+
+    _status_result = _subprocess_util.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=project_root,
+    )
+    if _status_result.stdout.strip():
+        return None
+
+    _gate_result = _run_verify_gates(
+        project_root,
+        verify_cmd,
+        module_wide_verify_cmd,
+        git_root=git_root,
+        module_verify_baseline=module_verify_baseline,
+        cwd_override=cwd_override,
+        module_wide_cwd_override=module_wide_cwd_override,
+        batch_verify_baseline=batch_verify_baseline,
+    )
+    if _gate_result is not None:
+        return None
+
+    head = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root).stdout.strip()
+    return {
+        "status": "success",
+        "commit_sha": head,
+        "session_id": session_id or "unknown",
+        "inferred": True,
+    }
+
+
 def _forward_output(
     output: str,
     project_root: Path,
@@ -1665,6 +1780,7 @@ def _forward_output(
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
+    card_commit_messages: dict[int, str] | None = None,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1725,6 +1841,14 @@ def _forward_output(
     "commit_sha", which preserves today's behavior for every existing caller. A non-default value
     also pops any stale self-reported "commit_sha" key from parsed before attaching the corrected
     SHA under the new key name, so the two never coexist.
+    card_commit_messages is an optional {card_number: Commit-field-message} dict, used as a
+    full-batch-history fallback ahead of the two SHA-range no-content-commit demotions below: when
+    every value for this batch's own card_ids (per commit_none_card_ids exclusion is not applied
+    here -- only cards with a real Commit: message are ever keys) is found as a substring of `git log
+    --oneline --all`, the demotion is skipped and an inferred success is emitted instead, since a
+    self-resolve re-fire mints a fresh start_sha that can no longer see cards committed before it.
+    Defaults to None (the fallback never fires, preserving today's behavior for every caller that
+    doesn't pass it).
     """
     parsed = _extract_status_json(output)
     if parsed is not None:
@@ -1783,6 +1907,35 @@ def _forward_output(
                 _attach_commit_sha(_retiering_result, project_root)
                 print(json.dumps(_retiering_result))
                 return 0
+
+            # Full-batch-history fallback (#1061): a self-resolve re-fire mints a fresh start_sha, so
+            # the SHA-range recount below can never see cards that were already committed before
+            # that self-resolve. When every one of this batch's own declared cards' Commit: messages
+            # is found somewhere in the full commit history (not just the start_sha..HEAD range),
+            # treat the batch as complete instead of falling through to the SHA-range demotions.
+            # An inconclusive scan (any message missing) falls through unchanged -- this fallback
+            # only ever prevents a false-negative demotion, never a false-positive success.
+            if card_commit_messages and card_ids:
+                _full_log = _subprocess_util.run(
+                    ["git", "log", "--oneline", "--all"], cwd=project_root,
+                )
+                _full_log_output = _full_log.stdout if _full_log.returncode == 0 else ""
+                _scoped_messages = [
+                    message
+                    for card_number, message in card_commit_messages.items()
+                    if card_number in card_ids
+                ]
+                if _scoped_messages and all(
+                    message in _full_log_output for message in _scoped_messages
+                ):
+                    _success = {
+                        "status": "success",
+                        "session_id": session_id or parsed.get("session_id") or "unknown",
+                        "inferred": True,
+                    }
+                    _attach_commit_sha(_success, project_root)
+                    print(json.dumps(_success))
+                    return 0
 
             # Check for no-content-commit success: reject if HEAD == start_sha or if the only commit since start_sha is the batch-start housekeeping commit.
             # Skipped entirely when nits_only is True: a --nits-only pass that legitimately pushes back on every finding (per the mill-receiving-review decision tree) is expected to make zero commits,
@@ -1879,6 +2032,34 @@ def _forward_output(
             _attach_commit_sha(_incomplete_envelope, project_root)
             print(json.dumps(_incomplete_envelope))
             return 0
+
+        # Ancestor/clean-tree override for a self-reported fixer stuck_type: logic (#1104): the
+        # `card_ids is None and start_sha is not None` combination is satisfied only by
+        # millpy-fix.py's finalize_from_output call -- neither merge-in mode ever reaches here (see
+        # _fixer_logic_ancestor_override's own docstring for the full reasoning). When the override
+        # fires, it replaces the self-reported logic stuck with an inferred success instead of
+        # falling through to the generic passthrough below.
+        if (
+            parsed.get("status") == "stuck"
+            and parsed.get("stuck_type") == "logic"
+            and card_ids is None
+            and start_sha is not None
+        ):
+            _override = _fixer_logic_ancestor_override(
+                project_root,
+                start_sha,
+                verify_cmd,
+                module_wide_verify_cmd,
+                git_root=git_root,
+                module_verify_baseline=module_verify_baseline,
+                cwd_override=cwd_override,
+                module_wide_cwd_override=module_wide_cwd_override,
+                batch_verify_baseline=batch_verify_baseline,
+                session_id=session_id or parsed.get("session_id"),
+            )
+            if _override is not None:
+                print(json.dumps(_override))
+                return 0
 
         # The corrective git rev-parse HEAD / _is_valid_commit_sha block below only ever
         # applies to a self-reported status: success -- every other status (already-classified

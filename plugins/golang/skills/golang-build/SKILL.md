@@ -30,6 +30,7 @@ Whole-project build, test, and read-only lint stay whole-project.**
 - If **tests fail**: analyze the failure, fix the code or test, and retry.
 - If a fix requires changes beyond the current task's scope: stop and report the issue to the user.
 - Do **not** skip or disable failing tests.
+- **golangci-lint unavailable due to network restriction**: see the network-restricted-sandbox fallback documented under **Tool Installation** — substitute `goimports -w` + `go vet ./...` for `golangci-lint run` instead of stopping; any other install failure still stops and reports.
 
 ---
 
@@ -53,7 +54,10 @@ When a tool resolves only via the fallback (bare `command -v` failed but `$(go e
 
 Only when BOTH the bare check and the `$GOPATH/bin` fallback fail for a tool:
 - **Missing goimports**: Report "goimports not found — install with: `go install golang.org/x/tools/cmd/goimports@latest`" and stop.
-- **Missing golangci-lint**: Report "golangci-lint not found — install with: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`" and stop.
+- **Missing golangci-lint**: Report "golangci-lint not found — install with: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`" and attempt that install command.
+  - If the install command succeeds, proceed with the build workflow using the now-installed `golangci-lint`.
+  - If the install command fails with output indicating a network/fetch failure reaching an external VCS host for a transitive dependency — e.g. containing text like "Repository not found", "dial tcp", "no such host", "i/o timeout", "unable to fetch" (the issue's own repro observed "Repository not found" via `git ls-remote` against the unreachable host) — do not stop: substitute `goimports -w <changed-files>` + `go vet ./...` in place of `golangci-lint run` for this build workflow run, and note in the summary that `golangci-lint` was skipped due to a network-restricted sandbox.
+  - Any other install failure (a real compile error, a bad module path, an authentication failure, etc. — output that does NOT match the network-failure shape above) still stops and reports exactly as before.
 
 Do not silently skip these steps.
 

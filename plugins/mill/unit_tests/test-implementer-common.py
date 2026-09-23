@@ -32,6 +32,7 @@ from _implementer_common import (  # noqa: E402
     _is_valid_commit_sha,
     _extract_failure_signatures,
     _normalize_failure_signature,
+    _fixer_logic_ancestor_override,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
@@ -4860,6 +4861,42 @@ def main() -> int:
         print(f"FAIL: case 71a ({exc})", file=sys.stderr)
         errors += 1
 
+    # Case 71c (#1060) -- _extract_failure_signatures returncode-driven synthesis.
+    try:
+        non_test_output = "go: vet failed\nexit status 1\n"
+        synthesized = _extract_failure_signatures(non_test_output, returncode=1)
+        assert synthesized == ["NONZERO_EXIT: exit 1: go: vet failed"], (
+            f"expected a single synthetic NONZERO_EXIT signature, got {synthesized}"
+        )
+        assert _extract_failure_signatures(non_test_output, returncode=0) == [], (
+            "returncode=0 must never synthesize a signature, even with no recognized markers"
+        )
+        assert _extract_failure_signatures(non_test_output) == [], (
+            "omitting returncode (default None) must never synthesize a signature"
+        )
+        # A recognized FAIL-format line already present means no synthesis is needed.
+        go_line = "--- FAIL: TestFoo (0.00s)"
+        assert _extract_failure_signatures(f"{go_line}\n", returncode=1) == [go_line], (
+            "a non-empty match set must never get a synthetic signature appended"
+        )
+        # Truncation to 200 characters, and the "(no output)" fallback for a blank first line.
+        long_line = "x" * 250
+        truncated = _extract_failure_signatures(long_line, returncode=2)
+        assert truncated == [f"NONZERO_EXIT: exit 2: {'x' * 200}"], (
+            f"expected the first line truncated to 200 characters, got {truncated}"
+        )
+        assert _extract_failure_signatures("   \n\n", returncode=1) == [
+            "NONZERO_EXIT: exit 1: (no output)"
+        ], "expected the '(no output)' fallback when every line is blank"
+        print(
+            "PASS: case 71c - _extract_failure_signatures synthesizes a stable"
+            " NONZERO_EXIT signature only for a non-zero returncode with no"
+            " recognized FAIL-format lines"
+        )
+    except Exception as exc:
+        print(f"FAIL: case 71c ({exc})", file=sys.stderr)
+        errors += 1
+
     # Case 71b -- _normalize_failure_signature direct coverage.
     try:
         assert _normalize_failure_signature(
@@ -5670,6 +5707,220 @@ def main() -> int:
             )
         except Exception as exc:
             print(f"FAIL: case 82 ({exc}) captured={captured!r}", file=sys.stderr)
+            errors += 1
+
+    # Case 84 (#1104) -- _fixer_logic_ancestor_override direct coverage.
+    # (a) a real content commit since start_sha, a clean tree, and a passing verify -> the override fires.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha = _setup_fixture(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "fix applied"],
+                check=True,
+                capture_output=True,
+            )
+            override = _fixer_logic_ancestor_override(
+                project_root, start_sha, "exit 0", None, session_id="test-session",
+            )
+            assert override is not None, "expected the override to fire"
+            assert override["status"] == "success", f"expected status=success, got {override}"
+            assert override["inferred"] is True, f"expected inferred=True, got {override}"
+            assert override["session_id"] == "test-session", override
+            head = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            assert override["commit_sha"] == head, (
+                f"expected commit_sha to be the actual current HEAD, got {override}"
+            )
+            print(
+                "PASS: case 84a - a real commit, a clean tree, and a passing"
+                " verify override a self-reported fixer logic-stuck"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 84a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (b) no real content commit since start_sha -> the self-report stands (None).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha = _setup_fixture(project_root)
+        try:
+            override = _fixer_logic_ancestor_override(project_root, start_sha, "exit 0", None)
+            assert override is None, (
+                f"expected None with no content commit since start_sha, got {override}"
+            )
+            print(
+                "PASS: case 84b - no content commit since start_sha ->"
+                " self-reported logic stuck stands unchanged"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 84b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (c) a dirty working tree -> the self-report stands (None), even with a real commit.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha = _setup_fixture(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "fix applied"],
+                check=True,
+                capture_output=True,
+            )
+            (project_root / "README.md").write_text("dirty", encoding="utf-8")
+            override = _fixer_logic_ancestor_override(project_root, start_sha, "exit 0", None)
+            assert override is None, f"expected None with a dirty tree, got {override}"
+            print(
+                "PASS: case 84c - a dirty working tree -> self-reported logic"
+                " stuck stands unchanged"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 84c ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (d) a still-failing verify -> the self-report stands (None), even with a real, clean commit.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha = _setup_fixture(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "fix applied"],
+                check=True,
+                capture_output=True,
+            )
+            override = _fixer_logic_ancestor_override(project_root, start_sha, "exit 1", None)
+            assert override is None, f"expected None with a still-failing verify, got {override}"
+            print(
+                "PASS: case 84d - a still-failing verify -> self-reported logic"
+                " stuck stands unchanged (never silently waved through)"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 84d ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (e) the guard in _forward_output only fires for card_ids=None and start_sha not None -- an
+    # implementer-shaped self-report (card_ids provided) must pass a stuck/logic straight through
+    # unchanged, never invoking the override.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        start_sha = _setup_fixture(project_root)
+        try:
+            subprocess.run(
+                ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "fix applied"],
+                check=True,
+                capture_output=True,
+            )
+            agent_output = (
+                '{"status":"stuck","stuck_type":"logic","reason":"plan unclear",'
+                '"session_id":"test-session"}\n'
+            )
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=start_sha,
+                    verify_cmd="exit 0",
+                    card_ids={1},
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            print(
+                "PASS: case 84e - an implementer-shaped self-report (card_ids"
+                " provided) never invokes the fixer-only ancestor override"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 84e ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 85 (#1061) -- full-batch-history fallback for a self-resolve re-fire's completeness recount.
+    # (a) every declared card's Commit: message is found in the full commit history predating a
+    # synthetic fresh start_sha -> _forward_output reports success instead of the HEAD == start_sha
+    # logic demotion.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            subprocess.run(
+                [
+                    "git", "-C", str(project_root), "commit", "--allow-empty", "-m",
+                    "fix(implementer-common): add the missing gate (#1061)",
+                ],
+                check=True,
+                capture_output=True,
+            )
+            # Simulate a self-resolve re-fire: start_sha is freshly minted at the current HEAD, so
+            # the SHA-range recount alone would see zero new commits.
+            fresh_start_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            agent_output = (
+                '{"status":"success","commit_sha":"abc","session_id":"test-session",'
+                '"cards_done":[1]}\n'
+            )
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=fresh_start_sha,
+                    verify_cmd="exit 0",
+                    card_ids={1},
+                    card_commit_messages={
+                        1: "fix(implementer-common): add the missing gate (#1061)"
+                    },
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success", (
+                f"expected success via the full-batch-history fallback, got {data}"
+            )
+            assert data.get("inferred") is True, f"expected inferred=True, got {data}"
+            print(
+                "PASS: case 85a - every declared card's Commit: message found in"
+                " the full history -> success instead of the HEAD == start_sha demotion"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 85a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # (b) one card's message is missing from history -> the scan is inconclusive, so the existing
+    # HEAD == start_sha demotion still fires unchanged.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            # No new commit is made -- HEAD stays at base_sha, matching the pre-fallback demotion's
+            # own fixture shape.
+            agent_output = (
+                '{"status":"success","commit_sha":"abc","session_id":"test-session",'
+                '"cards_done":[1]}\n'
+            )
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    agent_output,
+                    project_root,
+                    start_sha=base_sha,
+                    verify_cmd="exit 0",
+                    card_ids={1},
+                    card_commit_messages={1: "fix(implementer-common): never actually committed"},
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "stuck", f"expected status=stuck, got {data}"
+            assert data["stuck_type"] == "logic", f"expected stuck_type=logic, got {data}"
+            assert "no content commit" in data.get("reason", "").lower(), (
+                f"expected the existing no-content-commit reason, got {data}"
+            )
+            print(
+                "PASS: case 85b - a missing Commit: message leaves the scan"
+                " inconclusive, so the existing HEAD == start_sha demotion still fires"
+            )
+        except Exception as exc:
+            print(f"FAIL: case 85b ({exc})", file=sys.stderr)
             errors += 1
 
     if errors:

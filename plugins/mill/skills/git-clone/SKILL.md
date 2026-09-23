@@ -25,7 +25,7 @@ Clone a repo into the mill container layout (default), or as a standard clone (`
                          ← (task worktrees added by mill-spawn as siblings)
 ```
 
-mill-setup later adds `<repo>/wiki/`, `<repo>/codeguide/`, and `<repo>/portals/` as siblings of `wts/`.
+mill-setup later adds `<repo>/wiki/` and `<repo>/portals/` as siblings of `wts/`.
 
 **No bare-clone strategy.**
 The main worktree is a normal clone with `.git/` inside it.

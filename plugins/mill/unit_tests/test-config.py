@@ -1723,6 +1723,71 @@ def test_load_config_done_gate_key_present() -> None:
     print("PASS: pipeline.done_gate key present and null in template")
 
 
+def test_load_config_merge_conflicts_model_key_present() -> None:
+    """
+    Verify that the real mill-config.yaml template registers merge.conflicts_model (value "sonnet")
+    alongside the existing merge.model, and that loading it does not emit an unknown-key warning.
+    """
+    real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+    assert real_template_path.exists(), f"Real template not found at {real_template_path}"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        hub_root = tmp_path / "hub"
+        hub_root.mkdir(parents=True, exist_ok=True)
+        _git_init(hub_root)
+
+        with patch.object(
+            _config,
+            "resolve_plugin_template_path",
+            return_value=real_template_path
+        ):
+            with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
+                cfg = _config.load_config(hub_root, hub_root)
+                stderr_output = mock_stderr.getvalue()
+
+        merge_cfg = cfg.get("merge", {})
+        assert merge_cfg.get("conflicts_model") == "sonnet", (
+            f"merge.conflicts_model should be 'sonnet' in template, got {merge_cfg.get('conflicts_model')!r}"
+        )
+        assert merge_cfg.get("model") == "haiku", (
+            f"merge.model should remain 'haiku' in template, got {merge_cfg.get('model')!r}"
+        )
+        assert "conflicts_model" not in stderr_output, (
+            f"conflicts_model should not trigger unknown-key warning; stderr: {stderr_output!r}"
+        )
+
+    print("PASS: merge.conflicts_model present (value 'sonnet'), merge.model unaffected, no unknown-key warning")
+
+
+def test_load_config_merge_conflicts_model_absent_safe() -> None:
+    """
+    A hub overlay that omits merge.conflicts_model entirely must still resolve merge.model --
+    conflicts_model is absent-safe, matching the CLI's own fallback-to-'model' behavior.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        _setup_plugin_template(tmp_path)
+        wt_root = tmp_path / "hub"
+        _git_init(wt_root)
+        _write_yaml(wt_root / "mill-config.yaml", "merge:\n  model: haiku\n")
+
+        with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
+            with patch.object(
+                _config, "resolve_plugin_template_path",
+                return_value=tmp_path / "templates" / "mill-config.yaml"
+            ):
+                cfg = _config.load_config(wt_root, wt_root)
+
+        merge_cfg = cfg.get("merge", {})
+        assert merge_cfg.get("model") == "haiku", f"Unexpected merge cfg: {merge_cfg!r}"
+        assert merge_cfg.get("conflicts_model") is None, (
+            f"conflicts_model should be absent when not configured, got {merge_cfg.get('conflicts_model')!r}"
+        )
+
+    print("PASS: merge.conflicts_model is absent-safe when not configured")
+
+
 def test_load_config_auto_approve_on_cap_keys_present() -> None:
     """
     Verify that the real mill-config.yaml template registers auto_approve_on_cap with a
@@ -1981,6 +2046,8 @@ def main() -> int:
         test_no_repo_layer_config_anywhere_emits_note,
         test_load_config_rename_detect_pct_key_present,
         test_load_config_done_gate_key_present,
+        test_load_config_merge_conflicts_model_key_present,
+        test_load_config_merge_conflicts_model_absent_safe,
         test_load_config_auto_approve_on_cap_keys_present,
         test_load_config_stub_misuse_warning_nested_layout,
         test_load_config_stub_misuse_no_warning_flat_layout,

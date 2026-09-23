@@ -19,6 +19,12 @@ Public API:
     existing order and entries), write back only if the list
     actually changed, and return the resulting dict.
 
+    reconcile_destructive_denylist(settings_path)
+    Read settings_path (or start from {} if absent), retire any target-blind
+    rm -rf deny rules (RETIRED_DENY) from permissions.deny, add any missing
+    catastrophic-target rules (DESTRUCTIVE_DENY), write back only if the
+    list actually changed, and return the resulting dict.
+
 Module-level constant:
     MILL_SUBAGENT_TOOLS The union of mill-implementer.md's and mill-reviewer.md's `tools:`
     frontmatter -- the single source of truth Phase 4.8 passes as tool_names, so the allowlist and
@@ -31,6 +37,68 @@ from pathlib import Path
 
 # Union of mill-implementer.md's tools: (Read, Edit, Write, Bash, Grep, Glob, Skill) and mill-reviewer.md's tools: (Read, Grep, Glob, Write).
 MILL_SUBAGENT_TOOLS = ["Bash", "Read", "Edit", "Write", "Grep", "Glob", "Skill"]
+
+# Target-blind rm -rf deny rules being retired -- they block rm -rf against any target, including a
+# throwaway scratch dir, exactly as hard as they block rm -rf against ~ (#1127).
+RETIRED_DENY = ["Bash(rm -rf:*)", "Bash(rm -rf *)"]
+
+# Scoped catastrophic-target rules replacing RETIRED_DENY. User-root entries (/, ~, ~/, $HOME, /home,
+# /Users, /root) are exact-match only, so anything below those roots stays deletable. System-tree
+# entries (/etc, /usr, /var, /boot, /opt, /bin, /lib) are prefix-matched with :*, since nothing under
+# those roots is ever legitimately deleted recursively.
+DESTRUCTIVE_DENY = [
+    "Bash(rm -rf /)", "Bash(rm -rf /*)",
+    "Bash(rm -rf ~)", "Bash(rm -rf ~/)", "Bash(rm -rf $HOME)",
+    "Bash(rm -rf /home)", "Bash(rm -rf /Users)", "Bash(rm -rf /root)",
+    "Bash(rm -rf /etc:*)", "Bash(rm -rf /usr:*)", "Bash(rm -rf /var:*)",
+    "Bash(rm -rf /boot:*)", "Bash(rm -rf /opt:*)", "Bash(rm -rf /bin:*)",
+    "Bash(rm -rf /lib:*)",
+]
+
+
+def reconcile_destructive_denylist(settings_path: Path) -> dict:
+    """
+    Reconcile settings_path's permissions.deny list against RETIRED_DENY and DESTRUCTIVE_DENY.
+
+    Loads the existing settings.json (or starts from an empty dict if the file does not exist yet),
+    removes any entry present in RETIRED_DENY (target-blind rm -rf rules), then appends any entry
+    from DESTRUCTIVE_DENY not already present -- preserving the existing order and every other
+    pre-existing deny entry, and never touching permissions.allow,
+    permissions.additionalDirectories, or any other top-level key (env, model, hooks, etc.).
+    The file is only rewritten when the deny list actually changed, matching
+    merge_permission_allowlist's own idempotent no-op pattern.
+
+    Args:
+        settings_path: Path to the global ~/.claude/settings.json file.
+
+    Returns:
+        The resulting settings dict (same shape as the file's JSON), reflecting any reconciliation
+        performed.
+    """
+    data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+    permissions = data.setdefault("permissions", {})
+    deny = permissions.setdefault("deny", [])
+
+    changed = False
+
+    # Retire target-blind rm -rf rules -- they block rm -rf against any target as hard as against ~.
+    for entry in RETIRED_DENY:
+        if entry in deny:
+            deny.remove(entry)
+            changed = True
+
+    # Append only the scoped catastrophic-target rules not already present, preserving order and
+    # avoiding duplicates -- existing entries (including any not in DESTRUCTIVE_DENY) are left untouched.
+    for entry in DESTRUCTIVE_DENY:
+        if entry not in deny:
+            deny.append(entry)
+            changed = True
+
+    # Skip the write entirely when nothing changed, so a repeated mill-setup run does not touch the file's mtime or reformat unrelated content.
+    if changed:
+        settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    return data
 
 
 def merge_permission_allowlist(settings_path: Path, tool_names: list[str]) -> dict:

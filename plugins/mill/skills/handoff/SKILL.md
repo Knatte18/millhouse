@@ -23,7 +23,7 @@ Do not duplicate content already captured in other artifacts (specs, plans, ADRs
 - A merged PR's contents — already captured by the PR; reference its number/URL instead.
 - A review whose file is already committed at a known path — reference the path instead of restating its findings.
 
-**If this handoff replaces an existing handoff document, re-derive every section from this skill's own rules.** Treat the previous file only as a source of facts (e.g. "PR #183 is still open") — never as a section template or outline to inherit. Copying a prior handoff's structure carries forward any violation it contained.
+**If this handoff replaces an existing handoff document, draft the new document first — before opening the old file.** Draft every section from this skill's own rules (the "This document carries current state and durable facts" test, the anti-pattern-heading rejections, the "suggested skills" section, etc. — all already stated above), using only the current conversation and current state (git status, worktree state, task status); do not open the old handoff file at this stage. Only once that full draft is complete, read the previous handoff file once, as a fact-check pass: pick up any fact that is still true and still open (e.g. "PR #183 is still open", or an unresolved finding from an earlier session) and fold it into the already-drafted structure — never let the old file's own structure or section order influence the draft at this or any later point. Copying a prior handoff's structure carries forward any violation it contained.
 
 Redact any sensitive information, such as API keys, passwords, or personally identifiable information.
 

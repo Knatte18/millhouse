@@ -25,7 +25,6 @@ c:/Code/millhouse/               ← container
     millhouse/                   ← main worktree (hub)
     <slug>/                      ← task worktrees
   wiki/                          ← wiki clone
-  codeguide/                     ← codeguide clone
   portals/
     millhouse -> ../wts/millhouse
     <slug>    -> ../wts/<slug>/_mill/

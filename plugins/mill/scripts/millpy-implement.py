@@ -766,6 +766,11 @@ def main(argv=None) -> int:
     }
     # commit_none_card_ids: card numbers whose Commit: field is the literal none, computed from the batch file on disk -- feeds the no-content-commit gate's Commit: none carve-out (batch 6, cards 15-16), never trusted from the implementer's own self-report.
     commit_none_card_ids: set[int] = _plan_dag.parse_commit_none_card_ids(_batch_text)
+    # card_commit_messages: {card_number: Commit: message} for every card with a real Commit:
+    # message, computed from the same batch file on disk -- feeds _forward_output's full-batch-history
+    # fallback (#1061), which recognizes a self-resolve re-fire's already-committed cards even after a
+    # fresh start_sha has been minted.
+    card_commit_messages: dict[int, str] = _plan_dag.parse_card_commit_messages(_batch_text)
 
     # parent_branch: resolve non-interactively from status.md;
     # fall back to None on failure (makes the dirty gate a safe no-op rather than crashing).
@@ -812,6 +817,7 @@ def main(argv=None) -> int:
             status_path=status_path,
             card_ids=card_ids,
             commit_none_card_ids=commit_none_card_ids,
+            card_commit_messages=card_commit_messages,
             task_dir=status_path.parent,
             parent_branch=parent_branch,
             git_root=git_root,
@@ -1091,6 +1097,7 @@ def main(argv=None) -> int:
         status_path=status_path,
         card_ids=card_ids,
         commit_none_card_ids=commit_none_card_ids,
+        card_commit_messages=card_commit_messages,
         task_dir=status_path.parent,
         parent_branch=parent_branch,
         git_root=git_root,
