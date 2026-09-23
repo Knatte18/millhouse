@@ -1,0 +1,1 @@
+- Two symbol-branch exemption tests not migrated per card 5's own audit criterion: **Location:** `plugins/mill/unit_tests/test-plan-validate.py:4431-4466` (`test_check_context_completeness_symbol_prohibition_marker_exempt`) and `:4469-4504` (`test_check_context_completeness_symbol_citation_marker_exempt`)
