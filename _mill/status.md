@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-plan-verify-implement-misc-r3
 branch: hanf/mill-plan-verify-implement-misc-r3
 plan: _mill/plan
@@ -27,6 +27,7 @@ approved-status-path-coercion  '2026-09-23T12:08:30Z'
 approved-verify-guidance-docs  '2026-09-23T12:11:32Z'
 holistic-reviewing  '2026-09-23T12:12:00Z'
 holistic-approved  '2026-09-23T12:14:58Z'
+done  '2026-09-23T12:15:28Z'
 ```
 
 ## Batches
