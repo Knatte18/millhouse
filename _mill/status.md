@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-docs-baseline
+phase: holistic-reviewing
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -41,6 +41,7 @@ approved-implement-baseline-stage  '2026-09-23T10:39:05Z'
 approved-merge-in-baseline-recompute  '2026-09-23T10:46:38Z'
 approved-implementer-gate-cleanup  '2026-09-23T10:55:51Z'
 approved-skill-docs-baseline  '2026-09-23T10:59:19Z'
+holistic-reviewing  '2026-09-23T10:59:42Z'
 ```
 
 ## Batches
