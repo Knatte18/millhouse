@@ -1777,11 +1777,6 @@ def _forward_output(
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
                 batch_verify_baseline=batch_verify_baseline,
-                start_sha=start_sha,
-                status_path=status_path,
-                batch_name=batch_name,
-                git_name=git_name,
-                git_email=git_email,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
@@ -2007,11 +2002,6 @@ def _forward_output(
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
                                         batch_verify_baseline=batch_verify_baseline,
-                                        start_sha=start_sha,
-                                        status_path=status_path,
-                                        batch_name=batch_name,
-                                        git_name=git_name,
-                                        git_email=git_email,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
@@ -2119,11 +2109,6 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
-                        start_sha=start_sha,
-                        status_path=status_path,
-                        batch_name=batch_name,
-                        git_name=git_name,
-                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
@@ -2231,11 +2216,6 @@ def _forward_output(
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
                         batch_verify_baseline=batch_verify_baseline,
-                        start_sha=start_sha,
-                        status_path=status_path,
-                        batch_name=batch_name,
-                        git_name=git_name,
-                        git_email=git_email,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
