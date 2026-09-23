@@ -331,6 +331,138 @@ def _run_module_wide_standalone(
     return (module_wide_verify_cmd, effective_cwd, signatures)
 
 
+def _run_per_batch_baseline_standalone(
+    project_root: Path,
+    git_root: Path,
+    status_path: Path,
+    plan_base: Path,
+    timeout_seconds: float | None,
+    preflight_skip_reason: str | None,
+    module_wide_pair_seed: tuple[str, Path, list[str]] | None,
+) -> None:
+    """
+    Run the per-batch half of the eager baseline stage, per Decision `two-half-stage-ownership`.
+
+    Implements `capture-set-equals-gate-set` (enumerates every batch with a runnable `verify:`, not
+    the smaller, later-deletion-suppressed set `iter_batch_verifies` would return),
+    `per-batch-capture-driver` (drives `compute_batch_baselines` one batch per call so a single
+    hung/failing batch never aborts its siblings), `module-wide-verdict-source` (seeds the pair cache
+    from a module-wide half that computed fresh this same invocation), and key-presence idempotence
+    (a batch whose `verify_baseline_failures` key is already present -- even as `[]` -- is never
+    re-run).
+
+    Never raises at its own top level -- an individual batch's own failure is swallowed per step 6,
+    and a malformed-but-present overview degrades to an empty enumeration rather than propagating.
+
+    Args:
+        project_root: Absolute path to the task worktree root (the mill hub).
+        git_root: Absolute path to the repo root `git` commands run against.
+        status_path: Absolute path to the task's status.md file.
+        plan_base: Directory containing `00-overview.md` and the batch files it references.
+        timeout_seconds: Per-run wall-clock ceiling applied to each batch's verify command, or `None`
+            for no ceiling.
+        preflight_skip_reason: The precomputed skip reason from `_baseline_preflight_skip_reason`, or
+            `None` when the precondition holds. This function never calls that guard itself.
+        module_wide_pair_seed: `(module_wide_verify_cmd, effective_cwd, signatures)` from a
+            module-wide half that computed a fresh result this same invocation, or `None` when that
+            half was skipped, errored, or already cached.
+    """
+    # Step 1 (deferred detection): nothing to gate yet if ## Batches hasn't been seeded.
+    if not _status.read_batches(status_path):
+        print(
+            json.dumps(
+                {
+                    "stage": "baseline",
+                    "substage": "per_batch",
+                    "result": "deferred",
+                    "reason": "## Batches not yet seeded",
+                }
+            )
+        )
+        return
+
+    # Step 2 (preflight): this half's own tagged skip line.
+    if preflight_skip_reason is not None:
+        print(
+            json.dumps(
+                {
+                    "stage": "baseline",
+                    "substage": "per_batch",
+                    "result": "skipped",
+                    "reason": preflight_skip_reason,
+                }
+            )
+        )
+        return
+
+    # Step 3 (raw enumeration): every batch with a runnable verify command, per capture-set-equals-gate-set -- deliberately NOT _plan_dag.iter_batch_verifies, whose later-batch-deletion suppression filter is meaningless at pre-flight time.
+    overview_path = plan_base / "00-overview.md"
+    try:
+        batch_entries = _plan_dag.extract_batch_index(overview_path.read_text(encoding="utf-8"))
+    except (OSError, _plan_dag.PlanDAGError):
+        batch_entries = []
+
+    enumerated: list[tuple[str, str, Path | None]] = []
+    for entry in batch_entries:
+        batch_path = plan_base / entry["file"]
+        frontmatter = _plan_dag._read_batch_frontmatter(batch_path)
+        try:
+            verify_cmd, cwd_override = _plan_dag.parse_verify_field(
+                frontmatter, project_root, git_root
+            )
+        except ValueError:
+            # A malformed verify: mapping skips only this one batch, not the whole enumeration.
+            continue
+        if verify_cmd is None:
+            continue
+        enumerated.append((entry["name"], verify_cmd, cwd_override))
+
+    # Step 4 (idempotence by key presence): an empty [] list still counts as "already captured".
+    already_captured = {
+        b["name"] for b in _status.read_batches(status_path) if "verify_baseline_failures" in b
+    }
+    remaining = [c for c in enumerated if c[0] not in already_captured]
+    if not remaining:
+        print(json.dumps({"stage": "baseline", "substage": "per_batch", "result": "cached", "value": None}))
+        return
+
+    # Step 5 (seeding): reuse the module-wide half's own fresh result for a batch whose (command, cwd) matches it string-for-string.
+    pair_cache: dict[tuple[str, Path], list[str]] = {}
+    if module_wide_pair_seed is not None:
+        seed_cmd, seed_cwd, seed_signatures = module_wide_pair_seed
+        pair_cache[(seed_cmd, seed_cwd)] = seed_signatures
+
+    # Step 6 (per-batch driver): one batch per call, threading pair_cache across every call, wrapped in a before/after porcelain dirt-warning snapshot.
+    exclusion_prefixes = _baseline_exclusion_prefixes(project_root, git_root)
+    before_snapshot = _porcelain_snapshot(git_root)
+    captured_count = 0
+    for name, verify_cmd, cwd_override in remaining:
+        effective_cwd = cwd_override if cwd_override is not None else git_root
+        try:
+            batch_result = _verify_baseline.compute_batch_baselines(
+                [(name, verify_cmd, cwd_override)],
+                effective_cwd,
+                pair_cache=pair_cache,
+                timeout_seconds=timeout_seconds,
+            )
+        except Exception as e:
+            print(
+                f"[millpy-implement] per-batch baseline capture failed for {name!r}: {e}",
+                file=sys.stderr,
+            )
+            continue
+        _status.set_batch_field(status_path, name, "verify_baseline_failures", batch_result[name])
+        captured_count += 1
+    after_snapshot = _porcelain_snapshot(git_root)
+    _warn_new_dirt(before_snapshot, after_snapshot, exclusion_prefixes)
+
+    print(
+        json.dumps(
+            {"stage": "baseline", "substage": "per_batch", "result": "computed", "value": captured_count}
+        )
+    )
+
+
 def _run_baseline_stage(
     project_root: Path,
     git_root: Path,
@@ -338,28 +470,26 @@ def _run_baseline_stage(
     module_wide_verify_cmd: str | None,
     module_wide_cwd_override: Path | None,
     plan_base: Path,
-    baseline_prepare_cmd: str | None,
     verify_timeout_seconds: float | None = None,
 ) -> int:
     """
-    Compute (idempotent, no-op-if-already-cached) the module-wide baseline and persist it, and
-    idempotently pin the parent branch's tip SHA for later on-demand per-batch computation.
+    Drive the eager, in-worktree, per-batch baseline stage's two independent halves.
 
-    Two INDEPENDENT sub-steps run on every invocation, in either order, since neither depends on the
-    other's outcome: (1) the module-wide `module_verify_baseline` scalar, computed standalone via
-    `_run_module_wide_standalone`'s own `compute_baseline` checkout;
-    and (2) the cheap `baseline_parent_sha` pin via `_pin_baseline_parent_sha` (a `git rev-parse`,
-    not a checkout).
+    Runs the preflight-precondition-guard exactly ONCE per invocation -- via
+    `_baseline_preflight_skip_reason` -- and threads the resulting skip reason (or `None`) to both
+    halves rather than letting either half call the guard itself, per Decision
+    `preflight-precondition-guard`: (1) the module-wide `module_verify_baseline`/
+    `module_verify_baseline_signatures` pair, computed standalone via `_run_module_wide_standalone`
+    directly against the task worktree (`effective_cwd`), and (2) the eager per-batch
+    `verify_baseline_failures` capture via `_run_per_batch_baseline_standalone`, which enumerates
+    every batch with a runnable `verify:` command (Decision `capture-set-equals-gate-set`) and drives
+    `compute_batch_baselines` one batch at a time (Decision `per-batch-capture-driver`).
+    The module-wide half's own fresh result, when it computes one this invocation, seeds the
+    per-batch half's pair cache (Decision `module-wide-verdict-source`) -- a batch whose `verify:`
+    string and cwd match the module-wide command reuses that run instead of re-running the suite.
 
-    Per-batch `verify_baseline_failures` computation is NOT part of this stage -- it moved to an
-    on-demand call inside `_implementer_common._run_verify_gates` (#1102), which computes a batch's
-    own baseline lazily, only the first time that batch's own verify gate actually fails, instead of
-    eagerly for every batch before batch 1 ever dispatches.
-    `plan_base` and `baseline_prepare_cmd` remain accepted parameters -- unused by this simplified
-    function's own logic -- to keep both existing call sites in `main` unchanged; removing them would
-    force an unrelated change to every call site for no behavioral gain.
-
-    Never raises -- every failure path prints a JSON line describing the outcome and returns 0.
+    Never raises -- every failure path in either half prints a JSON line describing the outcome and
+    this function always returns 0.
 
     Args:
         project_root: Absolute path to the task worktree root.
@@ -370,31 +500,37 @@ def _run_baseline_stage(
         module_wide_cwd_override: The overview's module-wide verify cwd resolved by
             parse_verify_field -- one of project_root (hub_root), git_root, or None (plain-string
             verify: or absent).
-        plan_base: Unused by this function's own logic;
-            accepted for call-site parity.
-        baseline_prepare_cmd: Unused by this function's own logic;
-            accepted for call-site parity.
-        verify_timeout_seconds: Per-run wall-clock ceiling applied to the module-wide verify command,
-            or `None` for no ceiling -- read by the caller from
-            `pipeline.baseline_verify_timeout_minutes` in mill-config.yaml.
-            A timeout raises inside `_run_module_wide_standalone`, which already handles it as
-            "computation failed, leave the baseline unset."
+        plan_base: Directory containing `00-overview.md` and the batch files it references, threaded
+            to `_run_per_batch_baseline_standalone`'s enumeration step.
+        verify_timeout_seconds: Per-run wall-clock ceiling applied to every verify command this stage
+            runs (module-wide and per-batch alike), or `None` for no ceiling -- read by the caller
+            from `pipeline.baseline_verify_timeout_minutes` in mill-config.yaml.
+            A timeout is handled as "computation failed, leave the baseline unset" by both halves.
 
     Returns:
         Always 0 -- the baseline stage never signals a pre-launch error via exit code;
-        outcomes are communicated through the printed JSON line.
+        outcomes are communicated through the printed JSON lines.
     """
-    del plan_base, baseline_prepare_cmd  # unused; kept for call-site parity, see docstring.
+    preflight_skip_reason = _baseline_preflight_skip_reason(project_root, git_root, status_path)
 
-    _run_module_wide_standalone(
+    module_wide_pair_seed = _run_module_wide_standalone(
         project_root,
         git_root,
         status_path,
         module_wide_verify_cmd,
         module_wide_cwd_override,
+        preflight_skip_reason,
         verify_timeout_seconds,
     )
-    _pin_baseline_parent_sha(git_root, status_path)
+    _run_per_batch_baseline_standalone(
+        project_root,
+        git_root,
+        status_path,
+        plan_base,
+        verify_timeout_seconds,
+        preflight_skip_reason=preflight_skip_reason,
+        module_wide_pair_seed=module_wide_pair_seed,
+    )
     return 0
 
 
@@ -590,7 +726,6 @@ def main(argv=None) -> int:
 
     if args.stage == "baseline":
         pipeline_cfg = cfg.get("pipeline") or {}
-        baseline_prepare_cmd = pipeline_cfg.get("baseline_prepare_cmd")
         timeout_minutes = pipeline_cfg.get("baseline_verify_timeout_minutes")
         verify_timeout_seconds = float(timeout_minutes) * 60 if timeout_minutes else None
         return _run_baseline_stage(
@@ -600,7 +735,6 @@ def main(argv=None) -> int:
             module_wide_verify_cmd,
             module_wide_cwd_override,
             plan_base,
-            baseline_prepare_cmd,
             verify_timeout_seconds,
         )
 
