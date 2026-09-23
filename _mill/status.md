@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-deactivate-call-sites
+phase: approved-prose-cleanup
 slug: deactivate-codeguide
 branch: hanf/deactivate-codeguide
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-23T10:41:29Z'
 planned  '2026-09-23T10:41:44Z'
 implementing  '2026-09-23T10:42:29Z'
 approved-deactivate-call-sites  '2026-09-23T10:48:58Z'
+approved-prose-cleanup  '2026-09-23T10:52:31Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: 35fc327aedad035ef59ae86909a9e21b839831ad
     verify_baseline_failures: []
   - name: prose-cleanup
-    state: running
+    state: approved
     implementer_session: cb007c09-87bd-4bd0-b840-a0152361b37d
     start_sha: ae452a574ada1fd6a314352f8565cd5db80e8717
+    commit_sha: 6a269baaeeb40960e1eda1154186d818ee8addda
   - name: close-issue
     state: pending
     verify_baseline_failures: []
