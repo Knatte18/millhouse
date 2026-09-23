@@ -71,6 +71,7 @@ Checks performed (check keys):
 """
 from __future__ import annotations
 
+import bisect
 import os
 import re
 import yaml
@@ -1729,7 +1730,9 @@ def _is_prohibition_exempt(lowered_line: str) -> bool:
     )
 
 
-def _clause_bounds(lowered_line: str, start: int, end: int) -> tuple[int, int]:
+def _clause_bounds(
+    lowered_line: str, start: int, end: int, *, extra_boundaries: list[int] | None = None,
+) -> tuple[int, int]:
     """Return the (start, end) offsets of the clause containing the ``[start, end)`` span in
     ``lowered_line``.
 
@@ -1737,12 +1740,32 @@ def _clause_bounds(lowered_line: str, start: int, end: int) -> tuple[int, int]:
     or by the line's own edges when no such punctuation exists on that side.
     Shared by the negation-phrase and contrast-citation exemptions so neither reaches across an
     unrelated clause on the same Requirements: line.
+
+    ``extra_boundaries`` (a sorted list of offsets, used by the line-join-refactor Decision to cap a
+    clause at the current run's own physical-line boundaries) additionally stops the clause-start
+    search at the highest entry ``<= start`` and the clause-end search at the lowest entry ``>=
+    end``, each compared against the punctuation-based candidate on its own side -- whichever
+    candidate is CLOSER to ``start``/``end`` wins on each side independently. ``None`` (the default)
+    leaves behavior byte-for-byte identical to before this parameter existed.
     """
     clause_start = 0
     for boundary in _RE_CLAUSE_BOUNDARY.finditer(lowered_line[:start]):
         clause_start = boundary.end()
     boundary_after = _RE_CLAUSE_BOUNDARY.search(lowered_line, end)
     clause_end = boundary_after.start() if boundary_after else len(lowered_line)
+
+    if extra_boundaries:
+        line_boundary_start = max(
+            (b for b in extra_boundaries if b <= start), default=None,
+        )
+        if line_boundary_start is not None and line_boundary_start > clause_start:
+            clause_start = line_boundary_start
+        line_boundary_end = min(
+            (b for b in extra_boundaries if b >= end), default=None,
+        )
+        if line_boundary_end is not None and line_boundary_end < clause_end:
+            clause_end = line_boundary_end
+
     return clause_start, clause_end
 
 
@@ -1752,7 +1775,9 @@ _RE_NEGATION_WITHOUT_IMMEDIATE = re.compile(r"\bwithout\s*`?\s*$")
 _RE_NEGATION_IS_NOT_VERB = re.compile(r"\bis not\b.*\b(?:involved|needed|required|used)\b")
 
 
-def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+def _is_non_dependency_negation_exempt(
+    lowered_line: str, token_start: int, token_end: int, line_boundaries: list[int] | None = None,
+) -> bool:
     """
     Return True when the token occurrence at ``[token_start, token_end)`` in ``lowered_line`` is
     positioned by the surrounding prose as explicitly NOT a dependency, rather than merely
@@ -1772,8 +1797,14 @@ def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, toke
     "no" paired with any of its roughly twenty existing verb forms anywhere on the line would exempt
     a large share of ordinary Requirements prose that has nothing to do with the token being
     checked.
+
+    ``line_boundaries`` (line-join-refactor Decision) is forwarded straight through to
+    ``_clause_bounds``'s ``extra_boundaries`` keyword, capping the clause at the current run's own
+    physical-line boundaries when ``lowered_line`` spans more than one joined physical line.
     """
-    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    clause_start, clause_end = _clause_bounds(
+        lowered_line, token_start, token_end, extra_boundaries=line_boundaries,
+    )
     before = lowered_line[clause_start:token_start]
     after = lowered_line[token_end:clause_end]
 
@@ -1794,7 +1825,9 @@ def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, toke
 _CONTRAST_MARKERS = ("rather than", "instead of")
 
 
-def _is_contrast_citation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+def _is_contrast_citation_exempt(
+    lowered_line: str, token_start: int, token_end: int, line_boundaries: list[int] | None = None,
+) -> bool:
     """
     Return True when a contrast marker (``_CONTRAST_MARKERS``) shares the token occurrence's
     clause, per ``_clause_bounds``.
@@ -1802,8 +1835,14 @@ def _is_contrast_citation_exempt(lowered_line: str, token_start: int, token_end:
     Sharing a clause covers both directions the motivating phrasing takes -- the token can be the
     chosen alternative appearing before the marker, or the rejected one appearing after it -- since
     a clause by definition has no comma/semicolon/colon/period between its ends.
+
+    ``line_boundaries`` (line-join-refactor Decision) is forwarded straight through to
+    ``_clause_bounds``'s ``extra_boundaries`` keyword, capping the clause at the current run's own
+    physical-line boundaries when ``lowered_line`` spans more than one joined physical line.
     """
-    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    clause_start, clause_end = _clause_bounds(
+        lowered_line, token_start, token_end, extra_boundaries=line_boundaries,
+    )
     clause_text = lowered_line[clause_start:clause_end]
     return any(marker in clause_text for marker in _CONTRAST_MARKERS)
 
@@ -2878,23 +2917,57 @@ def _check_context_completeness(
             requirements_lines = requirements_text.splitlines()
             own_refs: set[str] | None = None  # lazily computed per card
             current_card_key = (batch_index, card_num)
+
+            # Line-join-refactor: build maximal runs of contiguous non-quoted physical lines. A
+            # quoted region (fenced or blockquoted) always starts a new run, so a backtick match can
+            # never span across one -- this is what keeps joined-text tokenization from bridging a
+            # dangling backtick across an elided quoted region. A fence-delimiter line itself is
+            # EXCLUDED from every run (both the opening and closing delimiter), a deliberate
+            # departure from the toggle-only judgment above: a delimiter's own literal backticks
+            # must never enter any run's joined_text, where a dangling/odd backtick on an adjacent
+            # included line could otherwise spuriously pair with one of them.
+            runs: list[list[tuple[int, str]]] = []
+            current_run: list[tuple[int, str]] = []
             in_fence = False
-
-            for line in requirements_lines:
-                # Quoted-material exemption: every token on a fenced or blockquoted line is quoted
-                # prose (a docs excerpt or another card's example), not this card's own claim about
-                # a dependency. The fence toggle below is evaluated on the CURRENT state (matching
-                # _parse_cards's convention) so the fence-delimiter line itself is judged by
-                # whichever state it opens or closes, not the state it produces.
-                line_is_quoted = in_fence or line.lstrip().startswith(">")
-                if line.lstrip().startswith("```"):
+            for line_idx, line in enumerate(requirements_lines):
+                lstripped = line.lstrip()
+                is_fence_marker = lstripped.startswith("```")
+                excluded = is_fence_marker or in_fence or lstripped.startswith(">")
+                if is_fence_marker:
                     in_fence = not in_fence
-                if line_is_quoted:
+                if excluded:
+                    if current_run:
+                        runs.append(current_run)
+                        current_run = []
                     continue
+                current_run.append((line_idx, line))
+            if current_run:
+                runs.append(current_run)
 
-                lowered_line = line.lower()
-                for match in backtick_re.finditer(line):
+            for run in runs:
+                joined_text = "\n".join(line_text for _, line_text in run)
+                lowered_joined = joined_text.lower()
+                line_starts: list[int] = []
+                offset = 0
+                for _, line_text in run:
+                    line_starts.append(offset)
+                    offset += len(line_text) + 1  # +1 accounts for the "\n" joiner between lines
+                # extra_boundaries for the two clause-bounded helpers: every boundary except offset
+                # 0, which needs no marker (it is already the run's own start).
+                clause_line_boundaries = line_starts[1:]
+
+                for match in backtick_re.finditer(joined_text):
                     token = match.group(1)
+                    # Locate the run line(s) this match's [start, end) span falls within -- normally
+                    # i == j (the common single-line case), but a token whose backtick span crosses
+                    # a physical line break inside this run yields j > i.
+                    i = bisect.bisect_right(line_starts, match.start(1)) - 1
+                    j = bisect.bisect_right(line_starts, match.end(1) - 1) - 1
+                    local_text = "\n".join(line_text for _, line_text in run[i : j + 1])
+                    local_offset_base = line_starts[i]
+                    lowered_local = local_text.lower()
+                    local_start = match.start(1) - local_offset_base
+                    local_end = match.end(1) - local_offset_base
                     # Shape gate: path-shaped tokens fall through unconditionally; non-path tokens
                     # fall through only when they look like a bare/dotted symbol candidate.
                     is_path_shaped = "/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)
@@ -2911,40 +2984,47 @@ def _check_context_completeness(
                             continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
-                    if _is_prohibition_exempt(lowered_line):
+                    if _is_prohibition_exempt(lowered_local):
                         continue
 
                     # Non-dependency negation phrasing exemption: the line positions this specific
                     # occurrence of the token as explicitly not-involved. This runs immediately
                     # after the prohibition-marker check and before the citation-marker check
                     # (rather than alongside it) so that it matches the exemption's own numbered
-                    # enumeration order in the docstring above.
-                    if _is_non_dependency_negation_exempt(lowered_line, match.start(1), match.end(1)):
+                    # enumeration order in the docstring above. Clause-bounded, so it runs against
+                    # the whole run's own joined text (never a different run's), capped at this
+                    # run's own physical-line boundaries.
+                    if _is_non_dependency_negation_exempt(
+                        lowered_joined, match.start(1), match.end(1), clause_line_boundaries,
+                    ):
                         continue
 
                     # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
-                    if any(marker in lowered_line for marker in _CITATION_MARKERS):
+                    if any(marker in lowered_local for marker in _CITATION_MARKERS):
                         continue
 
                     # Contrast-citation exemption: this occurrence shares a clause with "rather
                     # than"/"instead of", naming it as the chosen or rejected half of a comparison.
-                    if _is_contrast_citation_exempt(lowered_line, match.start(1), match.end(1)):
+                    # Clause-bounded, same run-scoping as the negation-phrasing exemption above.
+                    if _is_contrast_citation_exempt(
+                        lowered_joined, match.start(1), match.end(1), clause_line_boundaries,
+                    ):
                         continue
 
                     # Cross-card ownership exemption: the line names another card/batch as the
                     # owner of this token, not a dependency this card itself reads.
-                    if _is_cross_card_ownership_exempt(lowered_line):
+                    if _is_cross_card_ownership_exempt(lowered_local):
                         continue
 
                     # Literal-value enumeration exemption: 3+ backtick tokens on this line, at
                     # least one neither path- nor symbol-shaped, marks the whole line as a literal
                     # test-input enumeration rather than a dependency list.
-                    if _is_literal_enumeration_exempt(line, match.start(1), match.end(1)):
+                    if _is_literal_enumeration_exempt(local_text, local_start, local_end):
                         continue
 
                     # Illustrative-output exemption: the line describes a rendered/emitted output
                     # value, not a file read dependency.
-                    if _is_illustrative_output_exempt(lowered_line):
+                    if _is_illustrative_output_exempt(lowered_local):
                         continue
 
                     if is_path_shaped:
@@ -3052,7 +3132,7 @@ def _check_context_completeness(
                                 f"which is not in this card's "
                                 f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
                             ),
-                            "line": line.strip(),
+                            "line": run[i][1].strip(),
                         })
                     else:
                         # Check the shared cache before calling into _resolve_symbol_files at all --
@@ -3091,7 +3171,7 @@ def _check_context_completeness(
                                 f"which resolves to '{canonical}' -- not in this card's "
                                 f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
                             ),
-                            "line": line.strip(),
+                            "line": run[i][1].strip(),
                         })
 
     return errors

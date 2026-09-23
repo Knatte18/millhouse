@@ -2475,6 +2475,181 @@ def test_check_context_completeness_dirty_odd_backtick_count_line_field() -> int
             return 1
 
 
+def test_check_context_completeness_dirty_line_join_backtick_span_crosses_line_break() -> int:
+    """Reproduces the #1122-traced `millpy-fix.py` incident: a Requirements: field spanning two
+    physical lines, both inside the same run (no fence between them), where a single-backtick
+    inline-code span opens on the first line and does not close until partway through the second,
+    followed later on that same closing line by a genuine path-shaped dependency (absent from the
+    card's own refs). Mirrors `test_check_context_completeness_dirty_odd_backtick_count_line_field`'s
+    fixture shape, but splits the malformed span itself across the two physical lines -- the OLD
+    per-line tokenizer would silently swallow the trailing dependency (the opening backtick's own
+    line has no closing partner within that line, so the pre-fix per-line `finditer` finds zero
+    tokens on the first line and never connects the two lines at all). Assert exactly one
+    context-completeness error naming the genuine trailing dependency (line-join-refactor
+    Decision)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "a.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "b.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  See `src/a.py` for pattern, per config`\n"
+            "  src/other.py` too, then read `src/b.py` for confirmation.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["src/a.py"],
+            requirements=requirements,
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "src/b.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_line_join_backtick_span_crosses_line_break"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_dirty_line_join_backtick_span_crosses_line_break: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_line_join_unconditional_exemptions_stay_line_scoped() -> int:
+    """Proves the per-helper line-scoping split (line-join-refactor Decision, step 5) holds: a
+    card's Requirements: field has a genuine unlisted path-shaped dependency on one physical line,
+    and, on a DIFFERENT physical line elsewhere in the same field (same run -- no fence between
+    them), a phrase triggering `_is_cross_card_ownership_exempt` ("batch 8 fixes
+    `unrelated.py`"). Assert the genuine dependency on the first line is STILL flagged, proving the
+    joined-text extraction did not widen that exemption's reach to the whole run."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "dep.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Read `src/dep.py` for context.\n"
+            "  Meanwhile batch 8 fixes `unrelated.py` elsewhere.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=requirements,
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "src/dep.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_clean_line_join_unconditional_exemptions"
+                "_stay_line_scoped"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_line_join_unconditional_exemptions"
+                f"_stay_line_scoped: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_line_join_dangling_backtick_before_fence_not_bridged() -> int:
+    """Proves both (a) per-run processing (not a single whole-body joined text) and (b) always
+    excluding the fence-delimiter line itself from run membership together prevent a NEW
+    cross-region corruption class (line-join-refactor Decision). Fixture: a genuine unlisted
+    path-shaped dependency on one physical line, immediately followed by a second physical line
+    ending in an odd/dangling, never-closed backtick with trailing prose after it, immediately
+    followed by a fenced code block, immediately followed by a second genuine unlisted path-shaped
+    dependency several lines after the fence closes. Under the fixed per-run design (fence-delimiter
+    lines excluded from every run), the dangling backtick's own run ends at the fence with no
+    closing partner available within it, so it yields no token at all; the second dependency's own
+    run (starting fresh after the fence closes) tokenizes cleanly and independently. Assert exactly
+    two context-completeness errors, one naming each genuine dependency, and that neither message
+    references the other dependency's path or any fence/delimiter text."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "src").mkdir()
+        (project_root / "src" / "dep1.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "src" / "dep2.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        requirements = (
+            "  Read `src/dep1.py` for context.\n"
+            "  Note: then a stray backtick` appears here.\n"
+            "  ```\n"
+            "  some fenced content, never scanned\n"
+            "  ```\n"
+            "  Later, also read `src/dep2.py` for confirmation.\n"
+        )
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=requirements,
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 2, (
+                f"expected 2 context-completeness errors, got: {check_errors}"
+            )
+            paths = {e["path"] for e in check_errors}
+            assert paths == {"src/dep1.py", "src/dep2.py"}, f"wrong paths: {paths!r}"
+            for e in check_errors:
+                other_path = "src/dep2.py" if e["path"] == "src/dep1.py" else "src/dep1.py"
+                assert other_path not in e["message"], (
+                    f"message for {e['path']!r} leaked the other dependency: {e['message']!r}"
+                )
+                assert "```" not in e["message"], (
+                    f"message for {e['path']!r} leaked fence delimiter text: {e['message']!r}"
+                )
+            print(
+                "PASS test_check_context_completeness_clean_line_join_dangling_backtick_before"
+                "_fence_not_bridged"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_line_join_dangling_backtick_before"
+                f"_fence_not_bridged: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_clean_citation_marker() -> int:
     """Requirements: names a file via a _CITATION_MARKERS phrase -> zero errors (citation exemption)."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -14265,6 +14440,9 @@ def main() -> int:
         test_check_context_completeness_clean_directory_reference_not_on_disk,
         test_check_context_completeness_clean_double_slash_token,
         test_check_context_completeness_dirty_odd_backtick_count_line_field,
+        test_check_context_completeness_dirty_line_join_backtick_span_crosses_line_break,
+        test_check_context_completeness_clean_line_join_unconditional_exemptions_stay_line_scoped,
+        test_check_context_completeness_clean_line_join_dangling_backtick_before_fence_not_bridged,
         test_check_context_completeness_clean_citation_marker,
         test_check_context_completeness_dirty_citation_marker_absent,
         # inline-signature citation markers (validator-tests batch, Card 8)
