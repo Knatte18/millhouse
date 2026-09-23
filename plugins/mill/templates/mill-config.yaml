@@ -221,8 +221,10 @@ groom:
 # template will have it pre-populated.
 
 merge:
-  # model: LLM alias for the merge-in sub-agent (haiku is sufficient for conflict resolution)
+  # model: LLM alias for the merge-in verify-fix sub-agent (haiku is sufficient -- mechanical pass/fail against a test command)
   model: haiku
+  # conflicts_model: LLM alias for the merge-in conflicts-mode sub-agent (semantic judgment call -- haiku produced repeated correctness failures across three separate incidents, see #1059/#1065/#1047; falls back to 'model' when absent)
+  conflicts_model: sonnet
   verify_fix_rounds: 3
 
 # ---------------------------------------------------------------------------

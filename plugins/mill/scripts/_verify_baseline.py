@@ -386,9 +386,15 @@ def compute_batch_baselines(
     up that per-batch isolation.
 
     Each pair is run via `_run_verify_in` up to TWICE.
-    Each run's combined stdout+stderr is passed through `_extract_failure_signatures`;
+    Each run's combined stdout+stderr, together with that run's own return code, is passed through
+    `_extract_failure_signatures` -- so a non-test-format failure (e.g. a linter that fails ahead of
+    the test suite) still yields a synthetic signature instead of an empty extraction;
     the returned signature list for that pair is the union (deduplicated, order-preserving by
     first occurrence across both runs) of both runs' extracted (unnormalized) signatures.
+    A synthetic signature embeds that run's own first output line, so two runs of an intrinsically
+    non-deterministic non-test failure can persist as two distinct entries instead of deduping to
+    one -- accepted, since the target class (a deterministic compiler/linter diagnostic) does not
+    vary its first line across runs on identical content.
     Run 2 is SKIPPED when run 1 exits 0 with zero extracted signatures: there is nothing to
     corroborate, and a green parent branch is the normal state rather than the exception, so paying
     the retry cost there doubles every task's baseline pre-flight for no baseline content (#1098).
@@ -547,7 +553,7 @@ def _signatures_for_pair(
     seen: set[str] = set()
     for run_index in range(2):
         rc, output = _run_verify_in(command, effective_cwd, timeout_seconds)
-        for line in _extract_failure_signatures(output):
+        for line in _extract_failure_signatures(output, returncode=rc):
             if line not in seen:
                 seen.add(line)
                 signatures.append(line)
