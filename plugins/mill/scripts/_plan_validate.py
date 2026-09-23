@@ -82,6 +82,7 @@ Checks performed (check keys):
 """
 from __future__ import annotations
 
+import bisect
 import os
 import re
 import shlex
@@ -1791,7 +1792,9 @@ def _is_prohibition_exempt(lowered_line: str) -> bool:
     )
 
 
-def _clause_bounds(lowered_line: str, start: int, end: int) -> tuple[int, int]:
+def _clause_bounds(
+    lowered_line: str, start: int, end: int, *, extra_boundaries: list[int] | None = None,
+) -> tuple[int, int]:
     """Return the (start, end) offsets of the clause containing the ``[start, end)`` span in
     ``lowered_line``.
 
@@ -1799,12 +1802,32 @@ def _clause_bounds(lowered_line: str, start: int, end: int) -> tuple[int, int]:
     or by the line's own edges when no such punctuation exists on that side.
     Shared by the negation-phrase and contrast-citation exemptions so neither reaches across an
     unrelated clause on the same Requirements: line.
+
+    ``extra_boundaries`` (a sorted list of offsets, used by the line-join-refactor Decision to cap a
+    clause at the current run's own physical-line boundaries) additionally stops the clause-start
+    search at the highest entry ``<= start`` and the clause-end search at the lowest entry ``>=
+    end``, each compared against the punctuation-based candidate on its own side -- whichever
+    candidate is CLOSER to ``start``/``end`` wins on each side independently. ``None`` (the default)
+    leaves behavior byte-for-byte identical to before this parameter existed.
     """
     clause_start = 0
     for boundary in _RE_CLAUSE_BOUNDARY.finditer(lowered_line[:start]):
         clause_start = boundary.end()
     boundary_after = _RE_CLAUSE_BOUNDARY.search(lowered_line, end)
     clause_end = boundary_after.start() if boundary_after else len(lowered_line)
+
+    if extra_boundaries:
+        line_boundary_start = max(
+            (b for b in extra_boundaries if b <= start), default=None,
+        )
+        if line_boundary_start is not None and line_boundary_start > clause_start:
+            clause_start = line_boundary_start
+        line_boundary_end = min(
+            (b for b in extra_boundaries if b >= end), default=None,
+        )
+        if line_boundary_end is not None and line_boundary_end < clause_end:
+            clause_end = line_boundary_end
+
     return clause_start, clause_end
 
 
@@ -1814,7 +1837,9 @@ _RE_NEGATION_WITHOUT_IMMEDIATE = re.compile(r"\bwithout\s*`?\s*$")
 _RE_NEGATION_IS_NOT_VERB = re.compile(r"\bis not\b.*\b(?:involved|needed|required|used)\b")
 
 
-def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+def _is_non_dependency_negation_exempt(
+    lowered_line: str, token_start: int, token_end: int, line_boundaries: list[int] | None = None,
+) -> bool:
     """
     Return True when the token occurrence at ``[token_start, token_end)`` in ``lowered_line`` is
     positioned by the surrounding prose as explicitly NOT a dependency, rather than merely
@@ -1834,8 +1859,14 @@ def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, toke
     "no" paired with any of its roughly twenty existing verb forms anywhere on the line would exempt
     a large share of ordinary Requirements prose that has nothing to do with the token being
     checked.
+
+    ``line_boundaries`` (line-join-refactor Decision) is forwarded straight through to
+    ``_clause_bounds``'s ``extra_boundaries`` keyword, capping the clause at the current run's own
+    physical-line boundaries when ``lowered_line`` spans more than one joined physical line.
     """
-    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    clause_start, clause_end = _clause_bounds(
+        lowered_line, token_start, token_end, extra_boundaries=line_boundaries,
+    )
     before = lowered_line[clause_start:token_start]
     after = lowered_line[token_end:clause_end]
 
@@ -1856,7 +1887,9 @@ def _is_non_dependency_negation_exempt(lowered_line: str, token_start: int, toke
 _CONTRAST_MARKERS = ("rather than", "instead of")
 
 
-def _is_contrast_citation_exempt(lowered_line: str, token_start: int, token_end: int) -> bool:
+def _is_contrast_citation_exempt(
+    lowered_line: str, token_start: int, token_end: int, line_boundaries: list[int] | None = None,
+) -> bool:
     """
     Return True when a contrast marker (``_CONTRAST_MARKERS``) shares the token occurrence's
     clause, per ``_clause_bounds``.
@@ -1864,8 +1897,14 @@ def _is_contrast_citation_exempt(lowered_line: str, token_start: int, token_end:
     Sharing a clause covers both directions the motivating phrasing takes -- the token can be the
     chosen alternative appearing before the marker, or the rejected one appearing after it -- since
     a clause by definition has no comma/semicolon/colon/period between its ends.
+
+    ``line_boundaries`` (line-join-refactor Decision) is forwarded straight through to
+    ``_clause_bounds``'s ``extra_boundaries`` keyword, capping the clause at the current run's own
+    physical-line boundaries when ``lowered_line`` spans more than one joined physical line.
     """
-    clause_start, clause_end = _clause_bounds(lowered_line, token_start, token_end)
+    clause_start, clause_end = _clause_bounds(
+        lowered_line, token_start, token_end, extra_boundaries=line_boundaries,
+    )
     clause_text = lowered_line[clause_start:clause_end]
     return any(marker in clause_text for marker in _CONTRAST_MARKERS)
 
@@ -1895,22 +1934,18 @@ _PATH_CANDIDATE_EXTENSIONS = (
 # drifts if that constant's ordering or membership changes for unrelated (path-branch) reasons.
 _SYMBOL_SEARCH_EXTENSIONS = (".py", ".go", ".cs", ".ts")
 
-# Directory basenames pruned (never descended into) while walking a candidate root for symbol
-# resolution -- build artifacts and dependency trees that would otherwise dominate the search and
-# produce false ambiguous-matches.
-_SYMBOL_SEARCH_DENYLIST_DIRS = frozenset(
-    {".git", "node_modules", "vendor", "__pycache__", "dist", "build", ".venv"}
-)
-
-# Directory basenames (matched case-insensitively) treated as conventionally out-of-solution and
-# pruned alongside _SYMBOL_SEARCH_DENYLIST_DIRS -- e.g. a real declaration sitting inside a
-# `Deprecated/` C# tree should not count as a live match for the solution.
-_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS = frozenset({"deprecated", "legacy", "obsolete", "archive"})
-
 
 # Per-line backtick-token matcher, promoted from a local variable inside
 # _check_context_completeness so _is_literal_enumeration_exempt can reuse the identical pattern.
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
+
+# Matches an inline `modifier+ identifier = value` declaration (e.g. "private const double
+# StepDurationS = 10.0") that has no surrounding parens/braces for _compute_declared_symbols_union's
+# existing candidate-span detection to find. Requires at least one preceding whitespace-separated
+# token before the captured identifier, so a bare "identifier = value" span with nothing in front of
+# the identifier never matches -- that shape is ordinary prose citing an existing symbol's current
+# value, not a new declaration (#1119).
+_RE_INLINE_ASSIGN_DECLARATION = re.compile(r"^(?:\S+\s+)+([A-Za-z_]\w*)\s*=")
 
 # Ownership-attribution verb forms (lowercased, word-boundary matched, hand-spelled per verb --
 # base/3rd-person/past/gerund, "rewrite" given the same irregular 5-form treatment "write" gets
@@ -1957,33 +1992,38 @@ def _is_cross_card_ownership_exempt(lowered_line: str) -> bool:
 
 def _is_literal_enumeration_exempt(line: str, token_start: int, token_end: int) -> bool:
     """Return True when the token occurrence at ``[token_start, token_end)`` in ``line`` sits on a
-    line carrying 3 or more backtick-quoted tokens total, at least one of which (other than this
-    occurrence itself, matched by span, not by string equality, so a repeated literal value on the
-    same line is judged independently at each occurrence) is neither path-shaped
-    (``"/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)``) nor passes
-    ``_symbol_candidate_shape`` -- the presence of a clearly-non-path/non-symbol sibling in the
-    same enumeration is the signal that the whole line lists literal test-input values, not
-    dependencies. A genuine multi-file dependency enumeration ("reads `a.py`, `b.py`, and `c.py`")
-    contains only path-shaped tokens and never trips this rule. The 3-token threshold sits safely
-    above ordinary 2-token contrastive prose ("`x.py` and `y.py`"), which is common in genuine
-    dependency sentences and must never be swept in.
+    line carrying 3 or more backtick-quoted tokens total, where non-shaped tokens are a STRICT
+    majority of the line's backtick tokens (self-inclusive tally: the tested occurrence counts
+    toward both the total and its own shape classification) -- the signal that the whole line lists
+    literal test-input values, not dependencies.
 
-    Accepted tradeoff: a genuine dependency line that also names one non-path/non-symbol literal
-    (e.g. a CLI flag or sentinel string alongside real file paths) is wrongly swept in and its real
-    path tokens suppressed -- the same kind of tradeoff `_is_prohibition_exempt`'s and
+    Every match in the line (the tested occurrence included) is classified as shaped
+    (``"/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)`` OR ``_symbol_candidate_shape``
+    is not ``None``) or non-shaped; ``non_shaped_count`` must exceed ``shaped_count`` for the
+    exemption to fire. An exact tie is NOT a majority and does not exempt (literal-enumeration-
+    majority Decision, #1116/#1122). A genuine multi-file dependency enumeration ("reads `a.py`,
+    `b.py`, and `c.py`") contains only path-shaped tokens (0 non-shaped) and never trips this rule.
+    The 3-token threshold sits safely above ordinary 2-token contrastive prose ("`x.py` and
+    `y.py`"), which is common in genuine dependency sentences and must never be swept in.
+
+    Accepted tradeoff: a genuine dependency line whose non-path/non-symbol literals (e.g. CLI flags
+    or sentinel strings) outnumber its real file/symbol tokens is wrongly swept in and its real
+    tokens suppressed -- the same kind of tradeoff `_is_prohibition_exempt`'s and
     `_CITATION_MARKERS`' own docstrings already accept for their own line-wide mechanisms.
     """
     matches = list(_BACKTICK_RE.finditer(line))
     if len(matches) < 3:
         return False
+    shaped_count = 0
+    non_shaped_count = 0
     for m in matches:
-        if m.start(1) == token_start and m.end(1) == token_end:
-            continue
         other = m.group(1)
         other_is_path_shaped = "/" in other or other.endswith(_PATH_CANDIDATE_EXTENSIONS)
-        if not other_is_path_shaped and _symbol_candidate_shape(other) is None:
-            return True
-    return False
+        if other_is_path_shaped or _symbol_candidate_shape(other) is not None:
+            shaped_count += 1
+        else:
+            non_shaped_count += 1
+    return non_shaped_count > shaped_count
 
 
 # Output/rendering verb forms (lowercased, word-boundary matched, hand-spelled per verb --
@@ -2112,6 +2152,11 @@ _RE_TRAILING_GROUPS = (
 # letter or underscore. Matched AFTER line-range and call/generic-suffix stripping.
 _RE_SYMBOL_SHAPE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$")
 
+# Matches an optional leading `identifier(: Type)? = ` assignment-target prefix (e.g. "x = " or
+# "x: mod.Type = ") stripped once, unconditionally, from a symbol candidate token's base -- a no-op
+# when the token has no `=` (#1115).
+_RE_LEADING_ASSIGN_PREFIX = re.compile(r"^[A-Za-z_]\w*\s*(?::\s*[A-Za-z_][\w<>\[\], .]*)?\s*=\s*")
+
 
 def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     """Return the symbol search key (and dotted qualifier, if any) for a NOT-path-shaped
@@ -2122,8 +2167,9 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     re-check that.
     Strips a trailing ``:line-range`` suffix and any trailing call/generic suffix (one or more
     trailing balanced ``()``/``[...]``/``<...>`` groups, e.g. ``GetItems<T>()`` -> ``GetItems``),
-    then requires what remains to look like a bare identifier (``SaveState``) or a dotted
-    qualifier.identifier pair (``reedengine.New``).
+    then strips an optional leading ``identifier(: Type)? = `` assignment-target prefix once (e.g.
+    ``x = mod.get_value`` -> ``mod.get_value``, #1115), then requires what remains to look like a
+    bare identifier (``SaveState``) or a dotted qualifier.identifier pair (``reedengine.New``).
     A bare or trailing-segment identifier only "qualifies" as a symbol candidate -- as opposed to an
     ordinary lowercase English word like ``config`` -- when it is longer than one character AND
     either not entirely lowercase (contains an uppercase letter, including possibly its first
@@ -2157,6 +2203,11 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
                 break
         if not stripped_any:
             break
+
+    # Strip an optional leading "identifier(: Type)? = " assignment-target prefix once -- a no-op
+    # when the token has no "=" (#1115). Every downstream qualifies()/qualifier/dotted-pair check
+    # below operates on the resulting `base`, unmodified otherwise.
+    base = _RE_LEADING_ASSIGN_PREFIX.sub("", base, count=1)
 
     if not _RE_SYMBOL_SHAPE.match(base):
         return None
@@ -2207,50 +2258,36 @@ def _is_conventional_test_file(path: Path) -> bool:
 
 def _resolve_symbol_files(
     search_key: str,
-    project_root: Path,
-    root: str | None,
-    git_root: Path | None,
-    cache: dict[str, tuple[list[Path], Path | None]],
-) -> tuple[list[Path], Path | None]:
-    """Resolve ``search_key`` to its declaring file(s) via a first-match-wins filesystem walk.
+    candidate_files: list[Path],
+    cache: dict[str, list[Path]],
+) -> list[Path]:
+    """Resolve ``search_key`` to its declaring file(s) among ``candidate_files`` only.
 
-    Walks candidate roots in the same precedence order as ``resolve_existing_paths``
-    (``_review_common.py``'s "Resolution order (first match wins)"): (1) ``git_root / root`` when
-    both are set, (2) ``project_root / root`` (or bare ``project_root`` when ``root`` is None), (3)
-    bare ``git_root`` when set (tried unconditionally, mirroring that same precedence's own
-    unconditional trailing ``git_root`` candidate).
-    For each candidate root that exists on disk, recursively walks it -- pruning any directory whose
-    basename is in ``_SYMBOL_SEARCH_DENYLIST_DIRS``, or whose lowercased basename is in
-    ``_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS`` (a conventional out-of-solution marker such as
-    ``deprecated``/``legacy``), and skipping any file that ``_is_conventional_test_file`` identifies
-    as a conventional test file before its content is ever read (a symbol declared only in a test
-    file is never surfaced as a dependency) -- and, for every remaining file whose suffix is in
-    ``_SYMBOL_SEARCH_EXTENSIONS``, checks whether any line of its text matches a declaration-form
-    pattern for that extension (a top-level or grouped-block declaration for ``.go``, a type/member
-    declaration for ``.cs``, a ``def``/``class``/module-level-assignment for ``.py``, or a
-    function/class/interface/type/enum/const/let/var declaration for ``.ts``) -- a bare usage site,
-    comment, or string/template-literal occurrence of ``search_key`` no longer counts.
-    Stops at the first candidate root that yields one or more matching files -- a later root in the
-    precedence order is never walked, even if the winning root had more than one match.
+    ``candidate_files`` is the caller-supplied, already-resolved file set to search -- the plan-wide
+    union of files cited somewhere in the plan (``_compute_plan_wide_cited_files``), per the
+    resolution-scope-rework Decision. This function does no filesystem walking of its own and takes
+    no ``project_root``/``root``/``git_root`` -- narrowing *where* the search looks is the caller's
+    job now, not this function's.
+
+    For each file in ``candidate_files`` whose suffix is in ``_SYMBOL_SEARCH_EXTENSIONS`` and that
+    ``_is_conventional_test_file`` does not identify as a conventional test file (a symbol declared
+    only in a test file is never surfaced as a dependency), checks whether any line of its text
+    matches a declaration-form pattern for that extension (a top-level or grouped-block declaration
+    for ``.go``, a type/member declaration for ``.cs``, a ``def``/``class``/module-level-assignment
+    for ``.py``, or a function/class/interface/type/enum/const/let/var declaration for ``.ts``) -- a
+    bare usage site, comment, or string/template-literal occurrence of ``search_key`` no longer
+    counts.
 
     Memoized via ``cache`` (keyed by ``search_key``): a repeated call with the same key returns the
-    cached result without walking again, since a symbol name commonly recurs across many cards/
-    batches in one ``run()`` invocation.
+    cached result without re-reading any file, since a symbol name commonly recurs across many
+    cards/batches in one ``run()`` invocation.
 
     Returns:
-        ``(matching_file_paths, winning_root)`` -- ``winning_root`` is the candidate root that
-        produced the match (needed by the caller to canonicalize the match back to a relative path);
-        ``([], None)`` when no candidate root yields any match.
+        The list of matching file paths (from ``candidate_files``, in their original order) --
+        ``[]`` when none of ``candidate_files`` declares ``search_key``.
     """
     if search_key in cache:
         return cache[search_key]
-
-    candidate_roots: list[Path] = []
-    if root is not None and git_root is not None:
-        candidate_roots.append(git_root / root)
-    candidate_roots.append(project_root / root if root is not None else project_root)
-    if git_root is not None:
-        candidate_roots.append(git_root)
 
     sym = re.escape(search_key)
 
@@ -2315,35 +2352,22 @@ def _resolve_symbol_files(
             ts_type_re.search(line) or ts_var_re.search(line) for line in content.splitlines()
         )
 
-    for candidate_root in candidate_roots:
-        if not candidate_root.exists():
+    matches: list[Path] = []
+    for file_path in candidate_files:
+        if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
             continue
-        matches: list[Path] = []
-        for dirpath, dirnames, filenames in os.walk(candidate_root):
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in _SYMBOL_SEARCH_DENYLIST_DIRS
-                and d.lower() not in _SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS
-            ]
-            for filename in filenames:
-                file_path = Path(dirpath) / filename
-                if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
-                    continue
-                if _is_conventional_test_file(file_path):
-                    continue
-                try:
-                    content = file_path.read_text(encoding="utf-8", errors="replace")
-                except OSError:
-                    # Broken symlink, permission-denied, or any other unreadable-file condition
-                    # under an arbitrary real-world project tree -- skip it, don't crash the run.
-                    continue
-                if _has_declaration(file_path, content):
-                    matches.append(file_path)
-        if matches:
-            cache[search_key] = (matches, candidate_root)
-            return cache[search_key]
+        if _is_conventional_test_file(file_path):
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Broken symlink, permission-denied, or any other unreadable-file condition under an
+            # arbitrary real-world project tree -- skip it, don't crash the run.
+            continue
+        if _has_declaration(file_path, content):
+            matches.append(file_path)
 
-    cache[search_key] = ([], None)
+    cache[search_key] = matches
     return cache[search_key]
 
 
@@ -2641,6 +2665,58 @@ def _build_creates_declaring_card_map(batch_files: list[Path]) -> dict[str, tupl
     return declaring
 
 
+def _compute_plan_wide_cited_files(
+    batch_files: list[Path],
+    project_root: Path,
+    root: str | None,
+    *,
+    wiki_root: Path | None = None,
+    git_root: Path | None = None,
+) -> dict[str, Path]:
+    """
+    Return the plan-wide map of every already-cited raw token to its resolved, on-disk file.
+
+    For every batch file in ``batch_files`` (the caller-filtered, sorted, non-overview list
+    ``run()`` builds), for every ``(card_num, card_lines)`` pair returned by ``_parse_cards``, unions
+    ``_card_own_reference_set(card_text)``'s tokens into one plan-wide ``raw_tokens`` set -- every
+    card's ``Context:``/``Edits:``/``Creates:``/``Deletes:``/``Moves:`` token, across every batch.
+    For each token in ``sorted(raw_tokens)``, resolves it via ``resolve_existing_paths``; when that
+    returns exactly one path and the path is a file, adds ``token -> path`` to the returned dict. A
+    token resolving to zero paths (not yet on disk -- an unbuilt ``Creates:``/``Moves:``-target
+    token) or to a directory is silently omitted -- no fallback, matching the resolution-scope-rework
+    Decision's "unresolvable, never flagged" contract.
+
+    This is ``_resolve_symbol_files``'s new search space: the symbol branch of
+    ``_check_context_completeness`` no longer walks the whole repo tree, only the files this map's
+    values already name.
+
+    Args:
+        batch_files: Sorted list of batch file paths (00-overview.md excluded).
+        project_root: Root of the project (typically the worktree root).
+        root: Optional root subfolder for source refs.
+        wiki_root: Optional wiki root path for wiki/-prefixed refs.
+        git_root: Optional repo root for git_root-relative resolution.
+
+    Returns:
+        Dict mapping each resolvable raw token to its single resolved on-disk file path.
+    """
+    raw_tokens: set[str] = set()
+    for batch_path in batch_files:
+        text = batch_path.read_text(encoding="utf-8")
+        for _card_num, card_lines in _parse_cards(text):
+            card_text = "\n".join(card_lines)
+            raw_tokens.update(_card_own_reference_set(card_text))
+
+    cited: dict[str, Path] = {}
+    for token in sorted(raw_tokens):
+        resolved = resolve_existing_paths(
+            [token], project_root, root, wiki_root=wiki_root, git_root=git_root,
+        )
+        if len(resolved) == 1 and resolved[0].is_file():
+            cited[token] = resolved[0]
+    return cited
+
+
 def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
     """
     Return the plan-wide union of identifiers declared inside a signature- or struct-literal-shaped
@@ -2659,6 +2735,10 @@ def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
     whitespace-separated word to the result set when that word matches `^[A-Za-z_]\\w*$` -- the first
     word covers a Go/Rust-style `name Type` parameter order, the last word covers a C#/TS-style
     `Type name` order.
+
+    When a token has no `(...)`/`{...}` span at all, it is instead tried against
+    `_RE_INLINE_ASSIGN_DECLARATION` (a `modifier+ identifier = value` shape, e.g. `` `private const
+    double StepDurationS = 10.0` ``) and, on a match, the captured identifier is added directly (#1119).
 
     This is context-completeness's symbol-branch equivalent of `compute_creates_union`'s path-branch
     plan-wide union: a token this set contains is a symbol the PLAN ITSELF is introducing (a new
@@ -2694,6 +2774,11 @@ def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
                 if "{" in token and "}" in token:
                     candidate_spans.append((token.find("{"), token.rfind("}")))
                 if not candidate_spans:
+                    # No paren/brace span: try the inline "modifier+ identifier = value" shape
+                    # instead (e.g. "private const double StepDurationS = 10.0") before giving up.
+                    inline_match = _RE_INLINE_ASSIGN_DECLARATION.match(token)
+                    if inline_match:
+                        declared.add(inline_match.group(1))
                     continue
                 start, end = max(candidate_spans, key=lambda span: span[1] - span[0])
                 if end <= start:
@@ -2723,6 +2808,7 @@ def _check_context_completeness(
     git_root: Path | None = None,
     creates_declaring_card_map: dict[str, tuple[int, int]] | None = None,
     declared_symbols: set[str] | None = None,
+    cited_files_map: dict[str, Path] | None = None,
 ) -> list[dict]:
     """
     Flag a card's Requirements: prose citing a file or symbol absent from its own refs.
@@ -2743,10 +2829,11 @@ def _check_context_completeness(
     ``_symbol_candidate_shape`` -- it must look like a bare or dotted identifier (``SaveState``,
     ``reedengine.New``) that is not just an ordinary lowercase English word, else it is silently
     ignored (same as today's behavior for non-path tokens).
-    A token that passes the shape gate is resolved via ``_resolve_symbol_files``: a first-match-wins
-    filesystem walk (memoized per ``run()`` call) that finds every file, under the highest-precedence
-    candidate root that has any match at all, containing a declaration-form occurrence of the search
-    key.
+    A token that passes the shape gate is resolved via ``_resolve_symbol_files`` against the
+    plan-wide cited-files set (``cited_files_map``'s values, per the resolution-scope-rework
+    Decision): memoized per ``run()`` call, it finds every already-cited file containing a
+    declaration-form occurrence of the search key. There is no repo-wide fallback -- a symbol whose
+    declaring file is not cited anywhere in the plan yet is unresolvable and never flagged.
     A dotted token's qualifier segment (``reedengine`` in ``reedengine.New``) then participates in
     disambiguation: when the resolution above (fresh or cache hit) yields more than one candidate,
     ``_filter_matches_by_qualifier`` narrows it by package/namespace match, falling back to
@@ -2801,7 +2888,7 @@ def _check_context_completeness(
     token (e.g. "batch 8 fixes `x.py`", "card 23 corrects ... `y.py`") is not a dependency the card
     itself reads.
     12. Literal-value enumeration (path branch and symbol branch): a line with 3+ backtick tokens
-    where at least one other token is neither path- nor symbol-shaped is treated as a literal
+    where non-shaped tokens strictly outnumber path-/symbol-shaped tokens is treated as a literal
     test-input enumeration, not a dependency list.
     13. Illustrative-output framing: a line naming a rendered/emitted/printed/displayed/output value
     (e.g. "emitting the bare `x.md`") cites the string as a described output, not a read dependency.
@@ -2841,6 +2928,11 @@ def _check_context_completeness(
             14. Defaults to ``None`` and is materialized to an empty set on entry (a mutable default
             argument is never used directly in the signature) -- an empty set is the correct no-op
             default.
+        cited_files_map: Plan-wide map from ``_compute_plan_wide_cited_files``, the symbol branch's
+            search space (resolution-scope-rework Decision). Defaults to ``None`` and is
+            materialized to an empty dict on entry (a mutable default argument is never used
+            directly in the signature) -- an empty map yields an empty candidate-files set, so the
+            symbol branch never resolves anything, the correct no-op default.
 
     Returns:
         List of error dicts, one per unresolvable-elsewhere Requirements: reference.
@@ -2849,14 +2941,25 @@ def _check_context_completeness(
         creates_declaring_card_map = {}
     if declared_symbols is None:
         declared_symbols = set()
+    if cited_files_map is None:
+        cited_files_map = {}
     errors: list[dict] = []
     backtick_re = _BACKTICK_RE
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
     # recurring across the plan is only walked once (see _resolve_symbol_files's memoization).
-    search_cache: dict[str, tuple[list[Path], Path | None]] = {}
+    search_cache: dict[str, list[Path]] = {}
     # One git-ignore confirmation cache per run() call, keyed by resolved candidate path, so a path
     # recurring across cards costs one `git check-ignore` subprocess, not one per occurrence.
     ignore_memo: dict[Path, bool] = {}
+    # The symbol branch's search space: every already-cited file, in a stable (first-citing-token
+    # order) sequence. dict.fromkeys de-duplicates while preserving that order.
+    candidate_files = list(dict.fromkeys(cited_files_map.values()))
+    # Reverse map for canonicalizing a resolved match back to the token that cited it -- since
+    # cited_files_map is itself built by iterating sorted(raw_tokens), setdefault keeps whichever
+    # citing token sorts alphabetically first among duplicate-path spellings on a rare collision.
+    path_to_token: dict[Path, str] = {}
+    for token, path in cited_files_map.items():
+        path_to_token.setdefault(path, token)
 
     for batch_index, batch_path in enumerate(batch_files):
         text = batch_path.read_text(encoding="utf-8")
@@ -2876,23 +2979,57 @@ def _check_context_completeness(
             requirements_lines = requirements_text.splitlines()
             own_refs: set[str] | None = None  # lazily computed per card
             current_card_key = (batch_index, card_num)
+
+            # Line-join-refactor: build maximal runs of contiguous non-quoted physical lines. A
+            # quoted region (fenced or blockquoted) always starts a new run, so a backtick match can
+            # never span across one -- this is what keeps joined-text tokenization from bridging a
+            # dangling backtick across an elided quoted region. A fence-delimiter line itself is
+            # EXCLUDED from every run (both the opening and closing delimiter), a deliberate
+            # departure from the toggle-only judgment above: a delimiter's own literal backticks
+            # must never enter any run's joined_text, where a dangling/odd backtick on an adjacent
+            # included line could otherwise spuriously pair with one of them.
+            runs: list[list[tuple[int, str]]] = []
+            current_run: list[tuple[int, str]] = []
             in_fence = False
-
-            for line in requirements_lines:
-                # Quoted-material exemption: every token on a fenced or blockquoted line is quoted
-                # prose (a docs excerpt or another card's example), not this card's own claim about
-                # a dependency. The fence toggle below is evaluated on the CURRENT state (matching
-                # _parse_cards's convention) so the fence-delimiter line itself is judged by
-                # whichever state it opens or closes, not the state it produces.
-                line_is_quoted = in_fence or line.lstrip().startswith(">")
-                if line.lstrip().startswith("```"):
+            for line_idx, line in enumerate(requirements_lines):
+                lstripped = line.lstrip()
+                is_fence_marker = lstripped.startswith("```")
+                excluded = is_fence_marker or in_fence or lstripped.startswith(">")
+                if is_fence_marker:
                     in_fence = not in_fence
-                if line_is_quoted:
+                if excluded:
+                    if current_run:
+                        runs.append(current_run)
+                        current_run = []
                     continue
+                current_run.append((line_idx, line))
+            if current_run:
+                runs.append(current_run)
 
-                lowered_line = line.lower()
-                for match in backtick_re.finditer(line):
+            for run in runs:
+                joined_text = "\n".join(line_text for _, line_text in run)
+                lowered_joined = joined_text.lower()
+                line_starts: list[int] = []
+                offset = 0
+                for _, line_text in run:
+                    line_starts.append(offset)
+                    offset += len(line_text) + 1  # +1 accounts for the "\n" joiner between lines
+                # extra_boundaries for the two clause-bounded helpers: every boundary except offset
+                # 0, which needs no marker (it is already the run's own start).
+                clause_line_boundaries = line_starts[1:]
+
+                for match in backtick_re.finditer(joined_text):
                     token = match.group(1)
+                    # Locate the run line(s) this match's [start, end) span falls within -- normally
+                    # i == j (the common single-line case), but a token whose backtick span crosses
+                    # a physical line break inside this run yields j > i.
+                    i = bisect.bisect_right(line_starts, match.start(1)) - 1
+                    j = bisect.bisect_right(line_starts, match.end(1) - 1) - 1
+                    local_text = "\n".join(line_text for _, line_text in run[i : j + 1])
+                    local_offset_base = line_starts[i]
+                    lowered_local = local_text.lower()
+                    local_start = match.start(1) - local_offset_base
+                    local_end = match.end(1) - local_offset_base
                     # Shape gate: path-shaped tokens fall through unconditionally; non-path tokens
                     # fall through only when they look like a bare/dotted symbol candidate.
                     is_path_shaped = "/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)
@@ -2909,40 +3046,47 @@ def _check_context_completeness(
                             continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
-                    if _is_prohibition_exempt(lowered_line):
+                    if _is_prohibition_exempt(lowered_local):
                         continue
 
                     # Non-dependency negation phrasing exemption: the line positions this specific
                     # occurrence of the token as explicitly not-involved. This runs immediately
                     # after the prohibition-marker check and before the citation-marker check
                     # (rather than alongside it) so that it matches the exemption's own numbered
-                    # enumeration order in the docstring above.
-                    if _is_non_dependency_negation_exempt(lowered_line, match.start(1), match.end(1)):
+                    # enumeration order in the docstring above. Clause-bounded, so it runs against
+                    # the whole run's own joined text (never a different run's), capped at this
+                    # run's own physical-line boundaries.
+                    if _is_non_dependency_negation_exempt(
+                        lowered_joined, match.start(1), match.end(1), clause_line_boundaries,
+                    ):
                         continue
 
                     # Citation-marker exemption: the line names this token as an illustrative example or citation, so it is not an unlisted read dependency.
-                    if any(marker in lowered_line for marker in _CITATION_MARKERS):
+                    if any(marker in lowered_local for marker in _CITATION_MARKERS):
                         continue
 
                     # Contrast-citation exemption: this occurrence shares a clause with "rather
                     # than"/"instead of", naming it as the chosen or rejected half of a comparison.
-                    if _is_contrast_citation_exempt(lowered_line, match.start(1), match.end(1)):
+                    # Clause-bounded, same run-scoping as the negation-phrasing exemption above.
+                    if _is_contrast_citation_exempt(
+                        lowered_joined, match.start(1), match.end(1), clause_line_boundaries,
+                    ):
                         continue
 
                     # Cross-card ownership exemption: the line names another card/batch as the
                     # owner of this token, not a dependency this card itself reads.
-                    if _is_cross_card_ownership_exempt(lowered_line):
+                    if _is_cross_card_ownership_exempt(lowered_local):
                         continue
 
                     # Literal-value enumeration exemption: 3+ backtick tokens on this line, at
                     # least one neither path- nor symbol-shaped, marks the whole line as a literal
                     # test-input enumeration rather than a dependency list.
-                    if _is_literal_enumeration_exempt(line, match.start(1), match.end(1)):
+                    if _is_literal_enumeration_exempt(local_text, local_start, local_end):
                         continue
 
                     # Illustrative-output exemption: the line describes a rendered/emitted output
                     # value, not a file read dependency.
-                    if _is_illustrative_output_exempt(lowered_line):
+                    if _is_illustrative_output_exempt(lowered_local):
                         continue
 
                     if is_path_shaped:
@@ -3050,17 +3194,17 @@ def _check_context_completeness(
                                 f"which is not in this card's "
                                 f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
                             ),
-                            "line": line.strip(),
+                            "line": run[i][1].strip(),
                         })
                     else:
                         # Check the shared cache before calling into _resolve_symbol_files at all --
                         # a recurring search_key across cards/batches then costs one function call
                         # (the actual filesystem walk), not one call per occurrence.
                         if search_key in search_cache:
-                            matches, producing_root = search_cache[search_key]
+                            matches = search_cache[search_key]
                         else:
-                            matches, producing_root = _resolve_symbol_files(
-                                search_key, project_root, root, git_root, search_cache
+                            matches = _resolve_symbol_files(
+                                search_key, candidate_files, search_cache
                             )
                         # Qualifier-based disambiguation: applied on this (caller) side, after the
                         # cache hit or fresh resolution above -- _resolve_symbol_files's own cache
@@ -3071,7 +3215,7 @@ def _check_context_completeness(
                         if len(matches) != 1:
                             continue
 
-                        canonical = matches[0].relative_to(producing_root).as_posix()
+                        canonical = path_to_token[matches[0]]
 
                         if own_refs is None:
                             own_refs = _card_own_reference_set(card_text)
@@ -3089,7 +3233,7 @@ def _check_context_completeness(
                                 f"which resolves to '{canonical}' -- not in this card's "
                                 f"Context:/Edits:/Creates:/Deletes:/Moves:-source"
                             ),
-                            "line": line.strip(),
+                            "line": run[i][1].strip(),
                         })
 
     return errors
@@ -4798,6 +4942,13 @@ def run(
     # Computed once here and threaded into the checks that need them.
     moves_sources, moves_targets = compute_moves_union(plan_dir)
     declared_symbols = _compute_declared_symbols_union(plan_dir)
+    # The symbol branch's search space (resolution-scope-rework Decision): only files already cited
+    # somewhere in the plan, never a repo-wide fallback.
+    cited_files_map = _compute_plan_wide_cited_files(
+        batch_files, project_root, effective_root,
+        wiki_root=wiki_root,
+        git_root=git_root,
+    )
     # verify-mixed-cwd needs a concrete git_root to distinguish "cwd: hub" from "cwd: git_root" resolutions;
     # in a flat layout (no git_root supplied) the two roots collapse to the same Path, which correctly reports zero conflicts since there is nothing to mix.
     effective_git_root = git_root if git_root is not None else project_root
@@ -4845,6 +4996,7 @@ def run(
         git_root=git_root,
         creates_declaring_card_map=creates_declaring_card_map,
         declared_symbols=declared_symbols,
+        cited_files_map=cited_files_map,
     ))
     errors.extend(_check_requirements_quote_indent_drift(
         batch_files, project_root, effective_root,
