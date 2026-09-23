@@ -1,0 +1,26 @@
+MILL_REVIEW_BEGIN
+# Review: Deactivate codeguide integration in millhouse — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-23
+```
+
+## Findings
+
+### [NIT:consistency] Card 2 omits blank-line collapse guidance for its deletions
+**Location:** batch 1 / card 2 (mill-merge-in), Requirements 4 and 6. **Issue:** Verified against `plugins/mill/skills/mill-merge-in/SKILL.md`: req 4 deletes the whole `### 5. Codeguide update` block (lines 181-194), sitting between blank lines 180 and 195, and req 6 deletes the standalone paragraph at line 214, sitting between blank lines 213 and 215 — both deletions leave adjacent blank lines with no collapse instruction, unlike Card 1 (git-commit) which explicitly states "leaving exactly one blank line" and Card 4 (test-parent-branch.py) which explicitly says "collapsing any resulting double-blank-line down to a single blank line." **Fix:** Add the same single-blank-line collapse instruction to req 4 and req 6, matching Card 1/Card 4's precedent.
+
+### [NIT:scope] Discussion's suggested regression tests not wired into any batch verify
+**Location:** batch 1 (verify) / overview. **Issue:** discussion.md's Testing section recommends running `test-sibling.py`, `test-guards.py`, and `test-worktree-sibling-resolution.py` unmodified as an empirical regression check that files left untouched (`_sibling.py`, the codeguide plugin) still pass, but no batch `verify:` in the plan runs them — batch 1 only runs `test-parent-branch.py`. **Fix:** Optionally add these as an additional verify step in batch 1 or batch 3, or explicitly note in a Shared Decision why they're omitted (nothing in this plan touches their subject matter, so this is optional, not required).
+
+### [NIT:design] Card 12 doesn't guard the already-closed-issue case
+**Location:** batch 3 / card 12. **Issue:** Card 12 halts-and-reports if `gh auth status` fails but has no equivalent guard for `gh issue close 1137` failing (e.g., issue already closed by another actor) — the comment would still post but the close step could error unhandled. **Fix:** Add a one-line fallback: on `gh issue close` failure, report the comment succeeded and surface the close error rather than treating it as a hard failure.
+
+## Verdict
+
+APPROVE
+Plan is well-specified and source-verified; findings are cosmetic/optional, none blocking.
+MILL_REVIEW_END

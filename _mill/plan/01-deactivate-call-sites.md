@@ -59,7 +59,7 @@ No checkpoint, no verify, no codeguide-update.
 ```text
 No checkpoint, no verify.
 ```
-  4. Delete the entire `### 5. Codeguide update` section -- its heading, the `_codeguide/Overview.md`-existence-check paragraph, the five-item bulleted procedure (resolving `hub_root`, the `cd`, the Skill-tool invocation, the `--parent` argument, the restoring `cd`), the "Why the explicit `cd`" rationale paragraph, and the closing "If absent -> skip silently" paragraph -- everything from the `### 5. Codeguide update` heading through the sentence `This is the documented convention in \`plugins/mill/skills/git-commit/SKILL.md\` step 2 and we follow it here for symmetry.` Then rename the heading immediately following it, `### 5.5. Commit dispatch briefs`, to `### 5. Commit dispatch briefs`. Do not renumber `### 6. Report` -- it keeps its existing number.
+  4. Delete the entire `### 5. Codeguide update` section -- its heading, the `_codeguide/Overview.md`-existence-check paragraph, the five-item bulleted procedure (resolving `hub_root`, the `cd`, the Skill-tool invocation, the `--parent` argument, the restoring `cd`), the "Why the explicit `cd`" rationale paragraph, and the closing "If absent -> skip silently" paragraph -- everything from the `### 5. Codeguide update` heading through the sentence `This is the documented convention in \`plugins/mill/skills/git-commit/SKILL.md\` step 2 and we follow it here for symmetry.`, leaving exactly one blank line between the preceding `### 4. Verify` content and the following heading. Then rename the heading immediately following it, `### 5.5. Commit dispatch briefs`, to `### 5. Commit dispatch briefs`. Do not renumber `### 6. Report` -- it keeps its existing number.
   5. In the (now-renumbered) Step 5's "**Why staged-only, not unscoped porcelain:**" paragraph, replace the exact clause
 ```text
 since briefs (if added above) and codeguide docs (already staged by `codeguide_commit.py --mode inline` in Step 5) are the only two things this step ever stages or expects to find staged.
@@ -72,7 +72,7 @@ since briefs (if added above) are the only thing this step ever stages or expect
 ```text
 This also now picks up Step 5's inline-mode codeguide docs -- already `git add`-staged by `codeguide_commit.py --mode inline` back in Step 5, before this step runs -- which the prior `_mill/briefs`-scoped guard silently dropped whenever `_mill/briefs/` did not exist (#946).
 ```
-     in full.
+     in full, collapsing the resulting double-blank-line down to a single blank line between the surrounding paragraphs.
   7. In the paragraph beginning "This step runs on the success path only", replace the exact clause
 ```text
 Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written AND no codeguide docs were staged either -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
