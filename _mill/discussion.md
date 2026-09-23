@@ -133,7 +133,17 @@ whether another patch round is still the right call, or whether the check needs 
     first — real punctuation or the line break.
   - `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`, and `_is_illustrative_output_exempt`
     keep running against ONLY the token's own originating physical line (looked up via the offset table),
-    exactly as today. Each of these three is an unconditional, unbounded line-wide substring/pattern
+    exactly as today. `_is_literal_enumeration_exempt` is the one of these three that takes explicit
+    `token_start`/`token_end` position parameters (used to skip the tested occurrence via
+    `m.start(1) == token_start and m.end(1) == token_end` when scanning for a disqualifying sibling); since
+    token extraction now runs on the joined text, `token_start`/`token_end` arrive as joined-text-global
+    offsets and MUST be translated to offsets local to the looked-up originating physical line (subtract
+    that line's own start offset, from the same offset table, before the call) — passing global offsets
+    against a call that internally re-scans only the local line would make the self-skip comparison fail
+    for every line after the first, corrupting the `literal-enumeration-majority` tally by double-counting
+    the tested token as its own sibling. `_is_cross_card_ownership_exempt`/`_is_illustrative_output_exempt`
+    take no position parameters, so no offset translation applies to them.
+    Each of these three is an unconditional, unbounded line-wide substring/pattern
     match with no clause scoping, and each one's own docstring explicitly calibrates its accepted
     false-positive/negative tradeoff assuming single-physical-line scope (`_is_literal_enumeration_exempt`:
     "3+ backtick tokens... on the same line"; `_is_cross_card_ownership_exempt`: accepts its line-wide
