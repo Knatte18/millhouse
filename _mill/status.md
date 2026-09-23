@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implement-baseline-stage
+phase: approved-merge-in-baseline-recompute
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -38,6 +38,7 @@ approved-status-baseline-fields  '2026-09-23T10:05:11Z'
 approved-verify-baseline-core  '2026-09-23T10:17:59Z'
 approved-cleanup-orphan-removal  '2026-09-23T10:22:11Z'
 approved-implement-baseline-stage  '2026-09-23T10:39:05Z'
+approved-merge-in-baseline-recompute  '2026-09-23T10:46:38Z'
 ```
 
 ## Batches
@@ -69,9 +70,10 @@ batches:
     commit_sha: f8614e3c7b09257b195184c3527071f324196588
     verify_baseline_failures: []
   - name: merge-in-baseline-recompute
-    state: running
+    state: approved
     implementer_session: 3a5acd11-dd98-4aba-8659-bf7df4c5f262
     start_sha: c23bcebda6d9dede7cf723e6cc381ec5fc7dc87b
+    commit_sha: 1c3a2e2639cf3d96b323410defe24eb8c134905c
     verify_baseline_failures: []
   - name: implementer-gate-cleanup
     state: pending
