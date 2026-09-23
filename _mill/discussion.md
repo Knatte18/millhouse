@@ -109,9 +109,17 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
   matches, listed in the issue body), and `reconcile_destructive_denylist(settings_path: Path) ->
   dict`, added to `_claude_settings.py` next to the existing `merge_permission_allowlist`, called
   from mill-setup's Phase 4.8 block following the same idempotent read/change/write-only-if-changed
-  pattern. No unit test file exists yet for `_claude_settings.py` — mill-plan's batch adds one.
+  pattern. `plugins/mill/unit_tests/test-claude-settings.py` already exists and already covers
+  `merge_permission_allowlist`/`MILL_SUBAGENT_TOOLS` — mill-plan's batch adds test coverage for
+  `reconcile_destructive_denylist` to that existing file, not a new one.
 - Rationale: the issue's proposal is already fully specified, reviewed-shaped, and follows the
   existing function's exact conventions in the same file.
+- `DESTRUCTIVE_DENY`'s system-tree prefix set (`/etc`, `/usr`, `/var`, `/boot`) is the issue's own
+  proposed starting set, not a closed contract — it targets the roots a `sudo`-less operator's
+  Claude Code session could plausibly reach and where recursive deletion is never legitimate.
+  Other conventional system roots (`/root`, `/opt`, `/bin`, `/lib`) are a reasonable extension;
+  mill-plan may add them to `DESTRUCTIVE_DENY` at implementation time using the same `:*`
+  prefix-match rationale, without needing a fresh discussion round.
 - Rejected: using `permissions.ask` instead of `deny` — parks the session on an unanswerable prompt
   in background dispatch (the #631 failure mode `merge_permission_allowlist`'s own docstring already
   guards against), so `deny` is the only correct instrument here.
@@ -174,13 +182,11 @@ one round-3 cleanup task rather than five separate tasks because each is a few-l
   `plugins/mill/scripts/*.py` helper with existing test coverage under `unit_tests/`) that
   synthesizes a title from an apostrophe-containing source string and asserts a single apostrophe
   survives.
-- **#1127**: new unit test file for `_claude_settings.py` (none exists yet) covering
-  `reconcile_destructive_denylist`: retires a present `Bash(rm -rf:*)` entry, adds the
+- **#1127**: add test cases to the existing `plugins/mill/unit_tests/test-claude-settings.py`
+  covering `reconcile_destructive_denylist`: retires a present `Bash(rm -rf:*)` entry, adds the
   `DESTRUCTIVE_DENY` set, preserves unrelated existing `deny` entries, and is idempotent (second run
-  is a no-op) — mirroring `merge_permission_allowlist`'s existing test conventions if a
-  `test-claude-settings.py` pattern exists elsewhere for that function; if not, follow
-  `unit_tests/test-*.py`'s in-memory/tempfile fixture convention (`plugins/mill/unit_tests/`, no
-  real git/LLM).
+  is a no-op) — mirroring that file's existing `merge_permission_allowlist` test conventions
+  (in-memory/tempfile fixtures, no real git/LLM).
 - **#1138**: no automated test — prose/instruction-ordering change in a `SKILL.md`. Manual
   verification: confirm the reordered instructions read correctly and the "never a section template"
   rule is now structurally enforced (old file physically can't be open yet when drafting starts).
