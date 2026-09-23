@@ -972,11 +972,6 @@ def _run_verify_gates(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     batch_verify_baseline: list[str] | None = None,
-    start_sha: str | None = None,
-    status_path: Path | None = None,
-    batch_name: str | None = None,
-    git_name: str | None = None,
-    git_email: str | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1047,31 +1042,7 @@ def _run_verify_gates(
         for waiver: it is mathematically a subset of any set, so treating it
         as waivable would silently mask genuine new regressions and
         infrastructure failures alike.
-            When this parameter arrives empty/None and a batch failure
-        occurs, this function now attempts an on-demand computation via
-        status_path's baseline_parent_sha before falling back to strict
-        blocking (previously: strict blocking was the only behavior when no
-        baseline was cached).
-            Defaults to None (run strictly, as
-        before this parameter existed).
-        start_sha: The commit SHA this batch's implementer started from,
-            forwarded to _corroborate_batch_failure when a subset-diff mismatch occurs.
-            Defaults to None, which disables corroboration entirely (fully backward-compatible with
-            every existing caller that does not pass it).
-        status_path: Path to the task's status.md,
-            forwarded to _status.set_batch_field to persist an expanded verify_baseline_failures set
-            when corroboration succeeds.
-            Defaults to None, which disables the self-healing persist (corroboration can still waive
-            the batch for this call, but the expanded signature set is not saved for later batches).
-        batch_name: This batch's name,
-            forwarded to _status.set_batch_field alongside status_path.
-            Defaults to None, which disables the self-healing persist exactly like status_path=None.
-        git_name: Git commit identity (user.name) used to persist an expanded
-            verify_baseline_failures corroboration result to status.md.
-            Defaults to None, which disables the persist-commit.
-        git_email: Git commit identity (user.email) used to persist an expanded
-            verify_baseline_failures corroboration result to status.md.
-            Defaults to None, which disables the persist-commit.
+            Defaults to None (run strictly, as before this parameter existed).
 
     Returns:
         A stuck dict on the first gate that fails,
@@ -1087,66 +1058,6 @@ def _run_verify_gates(
         # or an empty/absent replay signature set -- blocks exactly as today, since an empty set is vacuously a subset of anything and must never be treated as waivable.
         replay_signatures = batch_result.get("signatures")
 
-        # On-demand compute prelude (#1102): fires only when there is no eager baseline yet -- the
-        # normal case now that per-batch precomputation is gone. Reads the pinned parent SHA and
-        # computes this batch's own baseline lazily, on demand, only now that the batch's verify
-        # gate has actually failed.
-        if (
-            not batch_verify_baseline
-            and replay_signatures
-            and status_path is not None
-            and verify_cmd is not None
-        ):
-            baseline_parent_sha = _status.get_baseline_parent_sha(status_path)
-            if baseline_parent_sha is not None:
-                import _verify_baseline
-
-                try:
-                    computed = _verify_baseline.compute_batch_baseline_on_demand(
-                        project_root,
-                        git_root or project_root,
-                        baseline_parent_sha,
-                        verify_cmd,
-                        cwd_override=cwd_override,
-                    )
-                except Exception:
-                    # Infrastructure failure: degrade to "gate strictly," the same fail-safe
-                    # direction the module-wide mechanism already uses.
-                    computed = None
-                if computed:
-                    batch_verify_baseline = computed
-                    # Persist for future batches: a computed baseline is valuable for a later
-                    # batch's failure even when it doesn't waive this one.
-                    if batch_name is not None:
-                        try:
-                            _status.set_batch_field(
-                                status_path,
-                                batch_name,
-                                "verify_baseline_failures",
-                                computed,
-                            )
-                        except Exception:
-                            pass
-                        else:
-                            if git_name is not None and git_email is not None:
-                                try:
-                                    _subprocess_util.run(
-                                        [
-                                            "git",
-                                            "add",
-                                            status_path.relative_to(project_root).as_posix(),
-                                        ],
-                                        cwd=project_root,
-                                    )
-                                    _subprocess_util.git_commit(
-                                        project_root,
-                                        f"mill-go: persist on-demand verify baseline for {batch_name}",
-                                        name=git_name,
-                                        email=git_email,
-                                    )
-                                except Exception:
-                                    pass
-
         if batch_verify_baseline and replay_signatures:
             normalized_replay = {
                 _normalize_failure_signature(line) for line in replay_signatures
@@ -1157,58 +1068,6 @@ def _run_verify_gates(
             if normalized_replay.issubset(normalized_baseline):
                 # Waived: fall through to the module-wide gate below exactly as the batch_result is None path already does.
                 batch_result = None
-            elif start_sha is None:
-                pass
-            else:
-                control_result = _corroborate_batch_failure(
-                    project_root, git_root, start_sha, verify_cmd, cwd_override
-                )
-                if control_result is not None:
-                    normalized_control = {
-                        _normalize_failure_signature(line)
-                        for line in (control_result.get("signatures") or [])
-                    }
-                    if normalized_replay.issubset(normalized_control):
-                        # Corroborated: this exact failure set also reproduces in a checkout that
-                        # predates this batch's own changes -- treat as pre-existing, waive, and
-                        # persist the expanded signature set so later batches in this task don't
-                        # re-pay the same false block.
-                        expanded = sorted(set(batch_verify_baseline) | set(replay_signatures))
-                        if status_path is not None and batch_name is not None:
-                            try:
-                                _status.set_batch_field(
-                                    status_path,
-                                    batch_name,
-                                    "verify_baseline_failures",
-                                    expanded,
-                                )
-                            except Exception:
-                                pass
-                            else:
-                                # Commit the status.md write immediately so the in-scope dirty-tree
-                                # gate (which runs later in the same finalize_from_output
-                                # invocation) never observes this write as uncommitted dirt (#954).
-                                # Best-effort: a commit failure here must never crash finalize --
-                                # the pre-existing dirty-tree gate is the fallback authority.
-                                if git_name is not None and git_email is not None:
-                                    try:
-                                        _subprocess_util.run(
-                                            [
-                                                "git",
-                                                "add",
-                                                status_path.relative_to(project_root).as_posix(),
-                                            ],
-                                            cwd=project_root,
-                                        )
-                                        _subprocess_util.git_commit(
-                                            project_root,
-                                            f"mill-go: persist corroborated verify baseline for {batch_name}",
-                                            name=git_name,
-                                            email=git_email,
-                                        )
-                                    except Exception:
-                                        pass
-                        batch_result = None
         if batch_result is not None:
             return batch_result
 
