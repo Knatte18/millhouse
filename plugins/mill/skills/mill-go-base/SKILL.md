@@ -944,8 +944,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   On `REQUEST_CHANGES` the implementer (not Builder) loads `mill-receiving-review` and applies findings.
   Builder passes a pointer to the review file;
   the implementer's warm session already knows the code.
-- **Commits go through `git-commit`.** `implementer-brief.md` already instructs this, but enforce it if the implementer asks for confirmation: every per-card commit invokes the `git-commit` skill so lint + `codeguide-update` run per-commit.
-  Batch N+1's implementer then reads a codeguide that already reflects batch N's additions.
+- **Commits go through `git-commit`.** `implementer-brief.md` already instructs this, but enforce it if the implementer asks for confirmation: every per-card commit invokes the `git-commit` skill so lint runs per-commit.
 - **One task per worktree.**
   The builder lock enforces this at runtime.
   Do not attempt to relax it.
