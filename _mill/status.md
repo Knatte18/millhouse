@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-conflict-and-verify-robustness
+phase: approved-self-resolve-card-insertion-auto-renumber
 slug: mill-go-merge-in-orchestration-robustness-r2
 branch: hanf/mill-go-merge-in-orchestration-robustness-r2
 plan: _mill/plan
@@ -36,6 +36,7 @@ approved-finalize-completeness-and-baseline-robustness  '2026-09-21T18:59:11Z'
 approved-orchestration-skill-doc-fixes  '2026-09-21T19:01:49Z'
 approved-plan-validate-build-tag-coverage  '2026-09-21T19:07:50Z'
 approved-merge-in-conflict-and-verify-robustness  '2026-09-21T19:14:15Z'
+approved-self-resolve-card-insertion-auto-renumber  '2026-09-23T10:18:42Z'
 ```
 
 ## Batches
@@ -63,7 +64,8 @@ batches:
     start_sha: 1e49765ef6625a645b1e70e4bfca30e7126ec72e
     commit_sha: 0f0345be7a6d1ebb0c8f60f9a741aba21fa4ea50
   - name: self-resolve-card-insertion-auto-renumber
-    state: running
+    state: approved
     implementer_session: 5d0628df-4262-44ad-bdc9-d0d4526d1748
     start_sha: 890f5b4a7a757bbf36e1317dc86b223e89ed34a7
+    commit_sha: 77efa68c6372f045438ea4d7633cc0746d4034e1
 ```
