@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: monitor-persistent-true-still-referenced
 branch: hanf/monitor-persistent-true-still-referenced
 plan: _mill/plan
@@ -18,4 +18,5 @@ discussing  '2026-09-23T10:03:50Z'
 discussion-fix-r1  '2026-09-23T10:17:21Z'
 discussed  '2026-09-23T10:17:21Z'
 planning  '2026-09-23T10:21:12Z'
+plan-review-r1  '2026-09-23T10:27:41Z'
 ```
