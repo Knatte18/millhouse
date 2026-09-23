@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-triage-title-escape
+phase: approved-handoff-draft-order
 slug: mill-setup-wiki-doc-misc-r3
 branch: hanf/mill-setup-wiki-doc-misc-r3
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-23T10:48:22Z'
 planned  '2026-09-23T10:48:54Z'
 implementing  '2026-09-23T10:49:26Z'
 approved-mill-triage-title-escape  '2026-09-23T10:51:27Z'
+approved-handoff-draft-order  '2026-09-23T10:52:40Z'
 ```
 
 ## Batches
@@ -35,9 +36,10 @@ batches:
     start_sha: 703710e6a2298aa81389974ad0d606270f842198
     commit_sha: 24de2a86ec5032371b9e84d2ce3fa21499138ecb
   - name: handoff-draft-order
-    state: running
+    state: approved
     implementer_session: 5011547f-7154-487e-a5f6-ad0f1b9323c3
     start_sha: 596bbe3a59e5c92bc949e7f65e8cbca0dfa5eea2
+    commit_sha: 4d6b8adab947229c8d89085c13f1241ac4a7959a
   - name: claude-settings-denylist
     state: pending
     verify_baseline_failures: []
