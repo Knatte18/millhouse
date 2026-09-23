@@ -64,94 +64,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import uuid
 from pathlib import Path
 
-import _junction
 import _subprocess_util
-import _worktree
 from _implementer_common import _extract_failure_signatures, _posix_shell_run_args
-
-# Fixed candidate list of gitignored dependency directories to reuse from the task worktree's already-installed state.
-# There is no existing mill-config.yaml venv/dependency-dir convention to mirror (confirmed absent from both the hub config and the template schema) -- this fixed probe-list IS the mechanism.
-_DEPENDENCY_DIR_CANDIDATES = (".venv", "venv", "node_modules", "vendor")
-
-
-def _checkout_parent_branch(project_root: Path, git_root: Path, parent_branch: str) -> Path:
-    """
-    Check out `parent_branch`'s current tip into a fresh transient worktree.
-
-    Resolves the parent branch's current tip SHA via `git rev-parse`, then creates a fresh,
-    uniquely-named subdirectory under `<project_root>/.scratch/` and runs `git worktree add`
-    (detached HEAD, no new branch) at that SHA, with `-c core.longpaths=true` scoped to this single
-    invocation (never a persistent git config write) so deep-path Windows repos don't hit a
-    transient "Filename too long" failure that would silently disable the baseline gate -- see the
-    module docstring and #615/#620.
-
-    Args:
-        project_root: Absolute path to the task worktree root (where `.scratch/` lives).
-        git_root: Absolute path to the repo root `git` commands run against.
-        parent_branch: Name of the parent branch to snapshot (e.g. "main").
-
-    Returns:
-        The absolute path to the newly-created transient worktree.
-
-    Raises:
-        RuntimeError: `git rev-parse` or `git worktree add` failed.
-    """
-    rev_parse_result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "rev-parse", parent_branch],
-    )
-    if rev_parse_result.returncode != 0:
-        raise RuntimeError(
-            f"git rev-parse {parent_branch!r} failed: {rev_parse_result.stderr.strip()}"
-        )
-    parent_sha = rev_parse_result.stdout.strip()
-
-    scratch_dir = project_root / ".scratch"
-    scratch_dir.mkdir(parents=True, exist_ok=True)
-    # 12 hex characters (~2^48 combinations) is effectively collision-free for a short-lived per-invocation scratch directory,
-    # and reclaims path budget for Windows MAX_PATH on repos with deep fixture trees (#629).
-    # This is a best-effort mitigation, not a guaranteed fix -- the non-blocking fail-safe in `_run_baseline_stage` (which never raises; on any failure it leaves the baseline field unset and the next `_run_verify_gates` call runs the gate strictly) remains the actual safety net regardless of whether this shortening is sufficient for any given repo's fixture depth.
-    tmp_path = scratch_dir / f"verify-baseline-{uuid.uuid4().hex[:12]}"
-
-    worktree_add_result = _subprocess_util.run(
-        ["git", "-C", str(git_root), "-c", "core.longpaths=true", "worktree", "add", str(tmp_path), parent_sha],
-    )
-    if worktree_add_result.returncode != 0:
-        raise RuntimeError(
-            f"git worktree add failed (target={tmp_path}, sha={parent_sha}): "
-            f"{worktree_add_result.stderr.strip()}"
-        )
-
-    return tmp_path
-
-
-def _link_dependency_dirs(project_root: Path, target_path: Path) -> None:
-    """
-    Junction every existing gitignored dependency dir into `target_path`.
-
-    For each name in `_DEPENDENCY_DIR_CANDIDATES` whose `project_root / name` exists, junctions it
-    into `target_path / name` via `_junction.create`.
-
-    Unlike the inline loop this was extracted from, this function does not branch on
-    `cwd_override_relative` -- the caller is responsible for resolving that into a single,
-    already-concrete `target_path` (either `tmp_path / cwd_override_relative` or plain `tmp_path`)
-    before calling.
-
-    Args:
-        project_root: Absolute path to the task worktree root, where gitignored dependency dirs are
-        probed for reuse.
-        target_path: The already-resolved effective checkout path to junction dependency dirs into.
-
-    Raises:
-        OSError: junction creation failed.
-        ValueError: link_path already exists (dependency dir collision).
-    """
-    for name in _DEPENDENCY_DIR_CANDIDATES:
-        src = project_root / name
-        if src.exists():
-            _junction.create(src, target_path / name)
 
 
 def compute_baseline(
