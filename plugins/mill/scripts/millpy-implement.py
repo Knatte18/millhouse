@@ -321,6 +321,8 @@ def _run_module_wide_standalone(
     except Exception as e:
         print(f"[millpy-implement] baseline computation failed: {e}", file=sys.stderr)
         print(json.dumps({"stage": "baseline", "substage": "module_wide", "result": "error", "reason": str(e)}))
+        after_snapshot = _porcelain_snapshot(git_root)
+        _warn_new_dirt(before_snapshot, after_snapshot, exclusion_prefixes)
         return None
     after_snapshot = _porcelain_snapshot(git_root)
     _warn_new_dirt(before_snapshot, after_snapshot, exclusion_prefixes)
