@@ -20,7 +20,6 @@ from _status import (
     append_phase,
     append_recovery_log,
     clear_module_verify_baseline,
-    get_baseline_parent_sha,
     get_module_verify_baseline,
     get_module_verify_baseline_signatures,
     init_batches,
@@ -35,7 +34,6 @@ from _status import (
     remove_batch,
     render_initial,
     resume_batch,
-    set_baseline_parent_sha,
     set_batch_field,
     set_batch_fields,
     set_blocked,
@@ -1080,56 +1078,6 @@ def main() -> int:
                 "module_verify_baseline_signatures should be cleared in the same call"
             )
             print("PASS: clear_module_verify_baseline clears both fields together")
-
-        # --- baseline_parent_sha tests ---
-        # Test 1: get_baseline_parent_sha returns None on a fresh file.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            value = get_baseline_parent_sha(sp)
-            assert value is None, f"expected None on fresh file, got {value!r}"
-            print("PASS: get_baseline_parent_sha returns None on a fresh file")
-
-        # Test 2: set_baseline_parent_sha inserts the row;
-        # a subsequent get_baseline_parent_sha round-trips the same value.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            sha_1 = "a" * 40
-            set_baseline_parent_sha(sp, sha_1)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_1, f"expected {sha_1!r}, got {value!r}"
-            print("PASS: set_baseline_parent_sha('<sha>') inserts the row")
-
-            # Test 3: a second set() with a different value rewrites the existing row in place -- exactly one baseline_parent_sha: line survives, not a duplicate.
-            sha_2 = "b" * 40
-            set_baseline_parent_sha(sp, sha_2)
-            value = get_baseline_parent_sha(sp)
-            assert value == sha_2, f"expected {sha_2!r}, got {value!r}"
-            raw = sp.read_text(encoding="utf-8")
-            occurrences = raw.count("baseline_parent_sha:")
-            assert occurrences == 1, f"expected exactly one row, found {occurrences}"
-            print("PASS: set_baseline_parent_sha rewrites the existing row in place")
-
-        # Test 4: set_baseline_parent_sha rejects an empty-string value.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            try:
-                set_baseline_parent_sha(sp, "")
-                assert False, "expected ValueError"
-            except ValueError:
-                pass
-            print("PASS: set_baseline_parent_sha rejects an empty-string value")
 
         # --- append_recovery_log tests ---
         ts_rl = "2026-07-29T08:00:00Z"
