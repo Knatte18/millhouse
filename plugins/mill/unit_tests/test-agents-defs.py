@@ -186,6 +186,50 @@ def test_implementer_xhigh_agent_definition() -> None:
     )
 
 
+def test_implementer_agents_background_verify_guidance() -> None:
+    """All six implementer agent-definition files carry identical background-verify guidance.
+
+    Guards against GitHub #1124: an implementer piping a backgrounded verify through `tail`
+    misreads the empty log as a hang and spawns unkillable redundant polling loops. Each file's
+    body (the text after the closing frontmatter fence) must mention `tail` and the "at most one
+    polling loop" guidance, and all six bodies must be byte-identical -- the tier files are
+    otherwise faithful copies of the base file (see `_check_tier_agent_definition`), so this new
+    guidance must be added to every one of them, not just the base.
+    """
+    agents_dir = HUB / "plugins" / "mill" / "agents"
+    implementer_files = [
+        agents_dir / "mill-implementer.md",
+        agents_dir / "mill-implementer-low.md",
+        agents_dir / "mill-implementer-medium.md",
+        agents_dir / "mill-implementer-high.md",
+        agents_dir / "mill-implementer-xhigh.md",
+        agents_dir / "mill-implementer-max.md",
+    ]
+
+    bodies = []
+    for agent_file in implementer_files:
+        assert agent_file.exists(), f"Agent file not found: {agent_file}"
+        text = agent_file.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        assert lines and lines[0].strip() == "---", f"No frontmatter in {agent_file}"
+        close_idx = next(
+            i for i in range(1, len(lines)) if lines[i].strip() == "---"
+        )
+        body = "\n".join(lines[close_idx + 1 :])
+
+        assert "tail" in body, f"{agent_file.name} body must mention 'tail'"
+        assert "at most one polling loop" in body, (
+            f"{agent_file.name} body must contain 'at most one polling loop'"
+        )
+        bodies.append(body)
+
+    assert all(body == bodies[0] for body in bodies[1:]), (
+        "All six implementer agent-definition file bodies must be byte-identical"
+    )
+
+    print("PASS test_implementer_agents_background_verify_guidance")
+
+
 def test_reviewer_agent_definition() -> None:
     """mill-reviewer may write only its own report: tools = {Read, Grep, Glob, Write}.
 
@@ -315,6 +359,7 @@ def main() -> int:
         test_implementer_high_agent_definition,
         test_implementer_max_agent_definition,
         test_implementer_xhigh_agent_definition,
+        test_implementer_agents_background_verify_guidance,
         test_plugin_json_registers_all_agent_files,
     ]
     failures: list[str] = []
