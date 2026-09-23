@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-fix-monitor-persistent-refs
+phase: holistic-reviewing
 slug: monitor-persistent-true-still-referenced
 branch: hanf/monitor-persistent-true-still-referenced
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-09-23T10:31:37Z'
 planned  '2026-09-23T10:32:23Z'
 implementing  '2026-09-23T10:32:58Z'
 approved-fix-monitor-persistent-refs  '2026-09-23T10:36:13Z'
+holistic-reviewing  '2026-09-23T10:36:37Z'
 ```
 
 ## Batches
