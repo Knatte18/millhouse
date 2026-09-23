@@ -1,0 +1,33 @@
+MILL_REVIEW_BEGIN
+# Review: _plan_validate context-completeness: further false-positive/false-negative gaps, round 3 — holistic
+
+```yaml
+verdict: REQUEST_CHANGES
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-23
+```
+
+## Findings
+
+### [BLOCKING:design] Card 2's worked example fails its own function's existing qualification gate
+**Location:** Batch 1, Card 2. **Issue:** verified against `_plan_validate.py`'s `_symbol_candidate_shape` (its `qualifies()` closure, ~line 2104): after Card 2's new leading-strip, `` `x = mod.func(args)` `` reduces to base `"mod.func"`, but trailing segment `"func"` is all-lowercase with no underscore, so `qualifies("func")` returns `False` and the whole call returns `None` — the token never reaches resolution, contradicting the card's claim it "proceeds through the existing logic" and the new test's asserted one error. Cross-checked against the existing test `test_check_context_completeness_symbol_dotted_trailing_segment_only`, which specifically uses capitalized `New` to satisfy this same unmodified gate.
+**Fix:** pick a worked example/test symbol whose trailing segment qualifies (has an uppercase letter or underscore), e.g. `` `x = mod.GetValue(args)` `` or `` `x = mod.get_value(args)` ``.
+
+### [BLOCKING:design] Card 5's blanket test-migration recipe breaks tests whose asserted outcome depends on mechanisms Card 4 deletes outright
+**Location:** Batch 1, Card 5 (interacting with Card 4). **Issue:** (a) the five `test_check_context_completeness_symbol_out_of_scope_{deprecated,legacy,obsolete,archive,pruned_leaves_outside_file_sole_survivor}` tests assert 0 errors specifically because `_SYMBOL_SEARCH_DENYLIST_DIRS`/`_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS` pruning (deleted by Card 4) hides the declaring file; Card 5 names "an out-of-scope/denylist-directory outcome" as a migration-required category, but citing that file per its own recipe makes it newly discoverable under the rewritten `_resolve_symbol_files` (no pruning left) and flips 0 errors to 1. (b) `test_check_context_completeness_symbol_first_match_wins_root_precedence` asserts exactly 1 error selected via multi-root precedence (`candidate_roots` order), a concept Card 4 deletes (`_resolve_symbol_files` no longer takes `project_root`/`root`/`git_root`); Card 5's literal instruction to cite "the same file path(s) the fixture already writes to disk" would cite both ambiguous same-symbol files, producing 2 matches (ambiguous) → 0 errors, not the asserted 1.
+**Fix:** carve these 6 tests out of Card 5's generic recipe explicitly — either delete them (dead-mechanism coverage) or rewrite them to test genuinely-surviving behavior, rather than relying on the "cite the fixture's declaring file(s)" migration step.
+
+### [NIT:consistency] Batch Scope references a non-existent "Testing decisions" section
+**Location:** Batch 1, Batch Scope paragraph. **Issue:** "each test-first per the Testing decisions below" — no heading or section named "Testing decisions" exists anywhere in this batch file or the overview; each card already states its own test requirements inline, so this is a dangling cross-reference.
+**Fix:** remove the phrase or add the referenced section.
+
+### [NIT:design] Card 5 bundles migration of ~50+ existing symbol-branch tests into one card
+**Location:** Batch 1, Card 5. **Issue:** the grep `^def test_check_context_completeness_symbol_` enumerates roughly 50-plus functions; one card auditing and conditionally editing all of them (deferring correctness entirely to a green run) is large relative to other cards' scope, though splitting is constrained by the single batch-level `verify:`.
+**Fix:** consider grouping by sub-mechanism (e.g. qualifier-disambiguation tests vs. plain-resolution tests) across two cards if feasible, or explicitly acknowledge the single-card size is intentional given the shared verify gate.
+
+## Verdict
+
+REQUEST_CHANGES
+Card 2's own worked example fails its unmodified qualification gate, and Card 5's generic test-migration recipe breaks 6 named pre-existing tests.
+MILL_REVIEW_END

@@ -15,8 +15,9 @@ This batch closes six filed bugs against `_plan_validate.py`'s `context-complete
 (`_check_context_completeness`, `_symbol_candidate_shape`, `_resolve_symbol_files` in
 `plugins/mill/scripts/_plan_validate.py`) plus one bug traced during exploration, entirely within
 this one file and its unit test file. The six cards are ordered so the three independent pure-
-function fixes land first (cards 1-3, each test-first per the Testing decisions below), then the two
-structural changes that touch `_check_context_completeness`'s own body land in sequence: the
+function fixes land first (cards 1-3, each with its own test coverage stated inline in its
+Requirements), then the two structural changes that touch `_check_context_completeness`'s own body
+land in sequence: the
 resolution-scope narrowing (card 4) plus its own existing-test migration (card 5), then the
 Requirements-text tokenization refactor (card 6), which builds on top of the now-narrowed resolution
 call. There is no external interface this batch hands to a later batch — this is the only batch in
@@ -82,16 +83,20 @@ the plan.
   `identifier(: Type)? = ` assignment-target prefix once, unconditionally — a no-op when the token
   has no `=`. Every downstream `qualifies()`/qualifier/dotted-pair check operates on the resulting
   `base` exactly as today, unmodified by this card.
-  Verified example (#1115): `` `x = mod.func(args)` `` — the existing trailing-suffix stripping
-  already removes the `(args)` call suffix (unchanged), leaving `base = "x = mod.func"`; the new
-  leading-prefix strip then removes `"x = "`, leaving `base = "mod.func"`, a `_RE_SYMBOL_SHAPE`-
+  Verified example (#1115): `` `x = mod.get_value(args)` `` — the existing trailing-suffix stripping
+  already removes the `(args)` call suffix (unchanged), leaving `base = "x = mod.get_value"`; the new
+  leading-prefix strip then removes `"x = "`, leaving `base = "mod.get_value"`, a `_RE_SYMBOL_SHAPE`-
   matchable two-segment dotted token that proceeds through the existing logic with qualifier `"mod"`
-  and trailing segment `"func"`.
+  and trailing segment `"get_value"` — the trailing segment must itself satisfy the existing,
+  unmodified `qualifies()` gate (an uppercase letter or an underscore; `"get_value"` qualifies via
+  its underscore, unlike an all-lowercase, no-underscore segment such as `"func"`, which `qualifies()`
+  rejects and would make the whole call return `None` before ever reaching resolution).
   New unit test in `test-plan-validate.py`, `test_check_context_completeness_symbol_dirty_assignment_expression_prefix`,
   mirroring `test_check_context_completeness_symbol_dotted_trailing_segment_only`'s existing fixture
-  shape: a card's Requirements: cites `` `x = mod.func(args)` `` with a fixture file declaring
-  `func` in package `mod`, absent from the card's own refs — exactly one context-completeness error
-  with `path == "x = mod.func(args)"` (the original, unstripped token) naming the resolved file.
+  shape: a card's Requirements: cites `` `x = mod.get_value(args)` `` with a fixture file declaring
+  `get_value` in package `mod`, absent from the card's own refs — exactly one context-completeness
+  error with `path == "x = mod.get_value(args)"` (the original, unstripped token) naming the resolved
+  file.
 - **Commit:** `fix(plan-validate): strip leading assignment-target prefix in _symbol_candidate_shape (#1115)`
 
 ### Card 3: `_is_literal_enumeration_exempt` majority-non-shaped rule (#1116, #1122)
@@ -247,6 +252,25 @@ the plan.
   wiki_root=wiki_root, git_root=git_root)`. Thread `cited_files_map=cited_files_map` into the
   existing `_check_context_completeness(...)` call alongside `declared_symbols=declared_symbols`.
 
+  Delete 6 existing test functions from `test-plan-validate.py` in this same card (not card 5) —
+  each one specifically exercises a mechanism this card deletes outright, so migrating them via
+  card 5's generic "cite the fixture's declaring file" recipe would silently change what they test
+  rather than preserve it: `test_check_context_completeness_symbol_out_of_scope_deprecated`,
+  `test_check_context_completeness_symbol_out_of_scope_legacy`,
+  `test_check_context_completeness_symbol_out_of_scope_obsolete`,
+  `test_check_context_completeness_symbol_out_of_scope_archive`, and
+  `test_check_context_completeness_symbol_out_of_scope_pruned_leaves_outside_file_sole_survivor`
+  (all five assert 0 errors specifically because `_SYMBOL_SEARCH_DENYLIST_DIRS`/
+  `_SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS` pruning hides the declaring file — once that pruning is deleted,
+  the declaring file becomes an ordinary, individually-citable candidate and citing it per card 5's
+  recipe would flip the asserted outcome from 0 errors to 1, testing the opposite of what these
+  functions are named for); and
+  `test_check_context_completeness_symbol_first_match_wins_root_precedence` (asserts exactly 1 error
+  selected via `candidate_roots` multi-root precedence, a concept this card removes entirely —
+  `_resolve_symbol_files` no longer takes `project_root`/`root`/`git_root` at all). Also remove these
+  6 functions from this file's own test-function reference list (the module-level list the
+  `__main__`/run-all.py discovery block iterates).
+
   New fixture-based tests in `test-plan-validate.py`:
   `test_check_context_completeness_symbol_resolution_scope_plan_wide_not_own_card` — a symbol
   (`CellLength`, from #1131's own false-positive list) declared in a fixture file cited by a SECOND
@@ -283,9 +307,14 @@ the plan.
 - **Requirements:** Card 4's resolution-scope-rework makes `_resolve_symbol_files` search only files
   already present in `_compute_plan_wide_cited_files`'s plan-wide map — a symbol declared solely in a
   file that no card's own `Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:` cites anywhere in a
-  fixture plan can no longer be found (Decision `resolution-scope-rework`'s accepted cost). Grep
+  fixture plan can no longer be found (Decision `resolution-scope-rework`'s accepted cost). Card 4
+  already deletes 6 test functions whose asserted outcome depends on mechanisms that card removes
+  outright (the 5 `..._out_of_scope_...` denylist/pruning tests and
+  `test_check_context_completeness_symbol_first_match_wins_root_precedence`'s multi-root precedence
+  test — see card 4's own Requirements for the full list and why); this card's generic recipe below
+  does not apply to those 6 and must not re-add or otherwise touch them. Grep
   `^def test_check_context_completeness_symbol_` in `plugins/mill/unit_tests/test-plan-validate.py`
-  to enumerate every existing symbol-branch test function. For each one whose fixture places its
+  to enumerate every REMAINING existing symbol-branch test function. For each one whose fixture places its
   target symbol's declaring file under `project_root` WITHOUT any card's `context=`/`edits=`/
   `creates=`/`deletes=`/`moves=` argument to `_make_batch_file` naming that same file anywhere in the
   fixture plan, AND whose assertions depend on that symbol actually being resolved (a
@@ -305,6 +334,12 @@ the plan.
   exemption case). Running `PYTHONPATH= uv run --project plugins/mill python
   plugins/mill/unit_tests/run-all.py --only test-plan-validate.py` to green is the authoritative
   completeness check for this card, not a manual tally of function names.
+  This card intentionally audits the whole remaining symbol-branch test population in one card
+  rather than splitting it further: every one of those tests already shares the batch's single
+  `verify:` command, the mechanical fixture-edit rule is identical across all of them, and splitting
+  by sub-mechanism (e.g. qualifier-disambiguation vs. plain-resolution) would not change which of
+  them need the edit — the split would add card-boundary bookkeeping without changing any test's
+  actual fix.
 - **Commit:** `fix(plan-validate): migrate existing symbol-branch test fixtures to resolution-scope-rework's plan-wide citation gate`
 
 ### Card 6: Joined-text Requirements tokenization for `_check_context_completeness` (line-join-refactor)
