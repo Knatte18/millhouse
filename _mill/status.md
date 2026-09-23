@@ -29,9 +29,14 @@ implementing  '2026-09-23T12:00:34Z'
 ```yaml
 batches:
   - name: plan-validate-dotnet-scoping
-    state: pending
+    state: running
+    implementer_session: b55388e1-a0bf-49bd-9b04-a0f30237b319
+    start_sha: 8be41647c03a31ac0e97fe6e523690dca68eecec
+    verify_baseline_failures: []
   - name: status-path-coercion
     state: pending
+    verify_baseline_failures: []
   - name: verify-guidance-docs
     state: pending
+    verify_baseline_failures: []
 ```
