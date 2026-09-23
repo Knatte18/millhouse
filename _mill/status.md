@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-verify-guidance-docs
+phase: holistic-reviewing
 slug: mill-plan-verify-implement-misc-r3
 branch: hanf/mill-plan-verify-implement-misc-r3
 plan: _mill/plan
@@ -25,6 +25,7 @@ implementing  '2026-09-23T12:00:34Z'
 approved-plan-validate-dotnet-scoping  '2026-09-23T12:05:27Z'
 approved-status-path-coercion  '2026-09-23T12:08:30Z'
 approved-verify-guidance-docs  '2026-09-23T12:11:32Z'
+holistic-reviewing  '2026-09-23T12:12:00Z'
 ```
 
 ## Batches
