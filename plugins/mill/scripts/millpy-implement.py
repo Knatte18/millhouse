@@ -807,7 +807,6 @@ def main(argv=None) -> int:
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_verify_baseline=module_verify_baseline,
             batch_verify_baseline=batch_verify_baseline,
-            batch_name=args.batch_name,
             status_path=status_path,
             card_ids=card_ids,
             commit_none_card_ids=commit_none_card_ids,
@@ -816,8 +815,6 @@ def main(argv=None) -> int:
             git_root=git_root,
             cwd_override=cwd_override,
             module_wide_cwd_override=module_wide_cwd_override,
-            git_name=git_name,
-            git_email=git_email,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -1089,7 +1086,6 @@ def main(argv=None) -> int:
         module_wide_verify_cmd=module_wide_verify_cmd,
         module_verify_baseline=module_verify_baseline,
         batch_verify_baseline=batch_verify_baseline,
-        batch_name=args.batch_name,
         status_path=status_path,
         card_ids=card_ids,
         commit_none_card_ids=commit_none_card_ids,
@@ -1098,8 +1094,6 @@ def main(argv=None) -> int:
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
-        git_name=git_name,
-        git_email=git_email,
     )
 
 
