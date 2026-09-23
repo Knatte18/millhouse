@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-golangci-lint-sandbox-fallback
+phase: holistic-reviewing
 slug: mill-setup-wiki-doc-misc-r3
 branch: hanf/mill-setup-wiki-doc-misc-r3
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-mill-triage-title-escape  '2026-09-23T10:51:27Z'
 approved-handoff-draft-order  '2026-09-23T10:52:40Z'
 approved-claude-settings-denylist  '2026-09-23T10:56:24Z'
 approved-golangci-lint-sandbox-fallback  '2026-09-23T10:57:37Z'
+holistic-reviewing  '2026-09-23T10:57:56Z'
 ```
 
 ## Batches
