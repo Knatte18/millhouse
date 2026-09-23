@@ -1,66 +1,64 @@
 """
-Transient-worktree computation of the module-wide verify baseline.
+No-checkout computation of the module-wide verify baseline.
 
 The baseline-aware verify gate (`_implementer_common._run_verify_gates`) needs a one-time,
 task-scoped answer to "does the parent branch's own module-wide verify command already fail,
 independent of anything this task's batches have done?"
-This module is the ONLY place that runs `module_wide_verify_cmd` against the parent branch's own
-content -- `_run_verify_gates` only ever reads the cached result `compute_baseline` produces (via
+This module is the ONLY place that runs `module_wide_verify_cmd` (and, via `compute_batch_baselines`,
+each batch's own `verify:` command) to answer that question -- `_run_verify_gates` only ever reads
+the cached result `compute_baseline` produces (via
 `_status.get_module_verify_baseline`/`set_module_verify_baseline`);
 it never computes or persists a baseline itself.
 
-The computation checks out the parent branch's current tip into a fresh, throwaway worktree under
-`<project_root>/.scratch/` (never the system temp directory, never the task worktree's own working
-tree/index), reuses the task worktree's already-installed gitignored dependency state via filesystem
-junctions, and runs `module_wide_verify_cmd` there.
+The computation runs directly against an already-resolved `cwd` inside the task worktree itself --
+never a checkout, never a transient worktree under `.scratch/`.
+This is safe because at `--stage baseline` time (before batch 1's implementer is ever dispatched)
+the task worktree's source content already equals the merge-base content, per Decision
+`capture-site` in `_mill/discussion.md`: there is nothing left for a parent-branch checkout to
+re-derive that the task worktree doesn't already hold.
 
-Return contract -- `compute_baseline` returns one of exactly two strings:
+Return contract -- `compute_baseline` returns a `tuple[str, list[str]]`:
 
-    "clean" -- the parent branch's own module-wide verify passes (directly, or after the
-    retry/control corroboration below rules out flakiness and path/environment mismatch).
-    "pre-existing-failures" -- the parent branch's own module-wide verify is genuinely broken,
-    confirmed by two consecutive transient-worktree failures AND a matching failure in the task
-    worktree itself.
+    verdict -- one of exactly two strings:
+        "clean" -- the module-wide verify passes (directly, or after the flakiness-guard retry
+        below rules out a spurious first failure).
+        "pre-existing-failures" -- the module-wide verify is genuinely broken, confirmed by two
+        consecutive failures at `cwd`.
+    signatures -- the deduplicated, order-preserving union of the raw failure-signature lines
+        extracted (via `_extract_failure_signatures`) from every run actually performed.
 
 A single failing run is never trusted on its own: caching "pre-existing-failures" on a first failure
 would silently disable the regression-catching gate this baseline check feeds (#541) for the rest of
 the task, which is the unsafe direction (a false "clean" merely costs one over-strict gate later; a
 false "pre-existing-failures" removes the gate entirely).
-See the retry-then-control-check sequence in `compute_baseline`'s docstring for the two
-corroboration steps.
+Two consecutive failures at `cwd` alone is now sufficient -- there is no control-check corroboration
+step, since there is no separate checkout whose path/environment could differ from `cwd`.
 
-`compute_baseline` raises on any INFRASTRUCTURE failure (parent-branch rev-parse failure, `git
-worktree add` failure, junction creation failure) -- it does not itself decide the fail-safe policy
-for those cases.
-The caller (`millpy-implement.py`'s `--stage baseline`) is responsible for catching such exceptions
+`compute_baseline` raises only `subprocess.TimeoutExpired` -- the caller treats that as "computation
+failed, leave the baseline unset," identically to before.
+The caller (`millpy-implement.py`'s `--stage baseline`) is responsible for catching that exception
 and falling back to "leave the baseline unset," which makes the next `_run_verify_gates` call run
 the module-wide gate strictly (the same fail-safe behavior as an inconclusive read).
 
 Public API:
-    compute_baseline(project_root, git_root, parent_branch, module_wide_verify_cmd) -> str
-    Returns "clean" or "pre-existing-failures". Raises RuntimeError /
-    OSError on infrastructure failure.
-    compute_batch_baselines(commands, checkout_path, project_root) -> dict[str, list[str]]
-    Per-batch, multi-command companion to compute_baseline: takes an
-    ALREADY-CHECKED-OUT checkout_path (no checkout/teardown of its own)
-    so many commands can share one transient checkout, and returns a
-    union-of-runs failure-signature list per command name instead
-    of a binary "clean"/"pre-existing-failures" verdict.
+    compute_baseline(cwd, module_wide_verify_cmd, *, timeout_seconds=None) -> tuple[str, list[str]]
+    Returns (verdict, signatures). Raises subprocess.TimeoutExpired on a
+    run exceeding timeout_seconds.
+    compute_batch_baselines(commands, cwd, *, pair_cache=None, timeout_seconds=None) -> dict[str, list[str]]
+    Per-batch, multi-command companion to compute_baseline: takes a
+    plain cwd (the default working directory used when a given
+    command's own cwd_override is None) so many commands can share one
+    verify run, and returns a union-of-runs failure-signature list per
+    command name instead of a binary "clean"/"pre-existing-failures"
+    verdict.
     Deduplicates work across names sharing one (command, cwd) pair and
     skips the corroboration re-run when run 1 is green. Pass a
     caller-owned `pair_cache` dict to make that dedup span calls.
-    compute_batch_baseline_on_demand(project_root, git_root, parent_sha, verify_cmd) -> list[str]
-    Single-batch companion to compute_batch_baselines that owns its own
-    transient-worktree checkout/teardown (mirroring compute_baseline's
-    structure) instead of requiring an already-checked-out
-    checkout_path -- the entry point for the "lazy" per-batch baseline
-    path (#1102), computed on demand only when a batch's own verify
-    gate fails and no baseline is cached yet.
 
 Both entry points accept `timeout_seconds`, a per-run wall-clock ceiling. `subprocess.TimeoutExpired`
 propagates to the caller, which applies the same "leave the baseline unset" fail-safe it applies to
-the infrastructure failures above -- a hung test runner would otherwise block the whole pre-flight
-indefinitely before batch 1 dispatches (#1101).
+a genuine "pre-existing-failures" verdict -- a hung test runner would otherwise block the whole
+pre-flight indefinitely before batch 1 dispatches (#1101).
 """
 from __future__ import annotations
 
