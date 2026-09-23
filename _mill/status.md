@@ -83,5 +83,7 @@ batches:
     commit_sha: 608795c3700ba247520f51bcdfc77e55fe34b8f9
     verify_baseline_failures: []
   - name: skill-docs-baseline
-    state: pending
+    state: running
+    implementer_session: 7010d82e-3723-4dd3-b5a9-e14dd96297d3
+    start_sha: 9eaf864521b0d7b7848b91f963d0e4bb616bc30a
 ```
