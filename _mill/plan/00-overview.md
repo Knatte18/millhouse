@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-plan/verify/implement pipeline: misc small bugs, round 3'
 slug: mill-plan-verify-implement-misc-r3
-approved: false
+approved: true
 started: 20260923-115220
 parent: main
 root: ""

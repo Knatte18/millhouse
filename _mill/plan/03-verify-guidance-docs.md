@@ -32,7 +32,7 @@ Both are one batch because both are prose-only guidance edits with no runtime co
   - In Phase: Plan, immediately after the paragraph that begins "**Self-run the validator gate** before committing" (and before the python code block that follows it), insert a new paragraph whose content is:
 
     ```text
-    **Extended timeout for every validator self-run.** Give every Bash-tool call that runs the validator self-run in this SKILL (this one and the full-validate gates in Phase: Plan Review steps 4b, 4c and 4d) an explicit Bash-tool `timeout` of 600000ms (10 minutes). The validator walks the whole source tree, spawns git subprocesses per declared path, and prints no progress output; on a large repo a single run has taken about two minutes, over the default 2-minute Bash timeout. This mirrors the finalize-stage timeout note in mill-go-base/SKILL.md.
+    **Extended timeout for every validator self-run.** Give every Bash-tool call that runs the validator self-run in this SKILL (this one and the full-validate gates in Phase: Plan Review steps 4b, 4c and 4d) an explicit Bash-tool `timeout` of 600000ms (10 minutes). The validator walks the whole source tree, spawns git subprocesses per declared path, and prints no progress output; on a large repo a single run has exceeded the default 2-minute Bash timeout. This mirrors the finalize-stage timeout note in mill-go-base/SKILL.md.
     ```
 
     Write it with semantic line breaks (one sentence per line) per the prose skill.
