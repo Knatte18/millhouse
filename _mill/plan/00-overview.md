@@ -45,18 +45,22 @@ batches:
 ### Decision: line-join-refactor
 
 - **Decision:** `_check_context_completeness`'s Requirements-text tokenization stops restarting
-  `_BACKTICK_RE.finditer` fresh on each physical line. Token EXTRACTION now runs once over the
-  fence/blockquote-filtered Requirements body joined into one continuous string, fixing a traced
-  backtick-line-wrap corruption bug (an inline-code span crossing a markdown line break silently
-  swallows every genuine token after it on the closing line). Which text an EXEMPTION helper is
-  checked against still splits per-helper: the two clause-bounded helpers
-  (`_is_non_dependency_negation_exempt`, `_is_contrast_citation_exempt`) run against the joined text
-  with `_clause_bounds` additionally capped at physical-line boundaries; the four unconditional
-  line-wide helpers (`_is_prohibition_exempt`, `_is_literal_enumeration_exempt`,
-  `_is_cross_card_ownership_exempt`, `_is_illustrative_output_exempt`) keep running against only the
-  physical line(s) the tested token's own backtick span crosses (normally exactly one line, joined
-  only for the rare cross-line-spanning token). This does NOT close `_is_prohibition_exempt`'s own
-  documented nested-bullet/multi-line-prohibition limitation — that remains open and out of scope.
+  `_BACKTICK_RE.finditer` fresh on each physical line. Token EXTRACTION now runs once per maximal
+  RUN of contiguous non-quoted physical lines (a quoted/fenced line always starts a new run), never
+  once over the whole fence/blockquote-filtered Requirements body joined as a single string — joining
+  the whole body would let a dangling backtick bridge across an entire elided quoted region and
+  spuriously pair with a real backtick far away, reintroducing the same corruption class this fix
+  targets. This fixes a traced backtick-line-wrap corruption bug (an inline-code span crossing a
+  markdown line break, within one run, silently swallows every genuine token after it on the closing
+  line). Which text an EXEMPTION helper is checked against still splits per-helper, always scoped to
+  the current run: the two clause-bounded helpers (`_is_non_dependency_negation_exempt`,
+  `_is_contrast_citation_exempt`) run against the run's own joined text with `_clause_bounds`
+  additionally capped at that run's own physical-line boundaries; the four unconditional line-wide
+  helpers (`_is_prohibition_exempt`, `_is_literal_enumeration_exempt`, `_is_cross_card_ownership_exempt`,
+  `_is_illustrative_output_exempt`) keep running against only the physical line(s), within that same
+  run, the tested token's own backtick span crosses (normally exactly one line, joined only for the
+  rare cross-line-spanning token). This does NOT close `_is_prohibition_exempt`'s own documented
+  nested-bullet/multi-line-prohibition limitation — that remains open and out of scope.
 - **Rationale:** `_compute_declared_symbols_union` already tokenizes in one pass with no per-line
   loop and never had this bug — it is untouched. `_check_context_completeness` restarts the regex
   per physical line, so an odd-backtick-count inline-code span that opens on one line and closes on

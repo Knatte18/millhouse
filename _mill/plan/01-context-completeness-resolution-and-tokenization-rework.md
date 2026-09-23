@@ -152,10 +152,17 @@ the plan.
   parens/brackets/angle-brackets to strip and, containing spaces and `=`, is not
   `_RE_SYMBOL_SHAPE`-matchable as a whole). 1 is not a strict majority over 2, so the exemption does
   not fire. Add a fixture file declaring `SteadyStateHydraulicSolver` (e.g. a `.cs` file with
-  `public class SteadyStateHydraulicSolver {}`), absent from the card's own refs, and assert exactly
-  one context-completeness error naming it (`"which resolves to '<path>'"` in the message) —
+  `public class SteadyStateHydraulicSolver {}`), absent from the TESTED card's own refs, and assert
+  exactly one context-completeness error naming it (`"which resolves to '<path>'"` in the message) —
   `WellboreCases.CaseHydraulic`'s trailing segment `CaseHydraulic` never resolves to any fixture
-  file, so it produces no additional finding.
+  file, so it produces no additional finding. Build this test's fixture plan with TWO batches from
+  the start (not one) — the tested card in the first batch, plus a second, citing-only batch whose
+  own `Context:` names the `.cs` fixture file — so the symbol resolves under BOTH the pre-card-4
+  repo-wide walk this test runs against immediately AND the post-card-4 plan-wide-cited-files walk.
+  This test's name does not match card 5's `^def test_check_context_completeness_symbol_` migration
+  grep (it is a literal-enumeration test, not a `_symbol_`-prefixed one), so it must be
+  narrowing-safe on its own from the moment it is written, not rely on a later migration pass ever
+  reaching it.
   Add a new regression test for #1122's traced literal-enumeration angle,
   `test_check_context_completeness_dirty_literal_enumeration_issue_1122`: Requirements text
   "Confirm `` `millpy-merge-in-subagent.py` ``'s `` `verify-fix` `` mode never calls
@@ -319,9 +326,32 @@ the plan.
   outright (the 5 `..._out_of_scope_...` denylist/pruning tests and
   `test_check_context_completeness_symbol_first_match_wins_root_precedence`'s multi-root precedence
   test — see card 4's own Requirements for the full list and why); this card's generic recipe below
-  does not apply to those 6 and must not re-add or otherwise touch them. Grep
+  does not apply to those 6 and must not re-add or otherwise touch them. Card 3's own new
+  `test_check_context_completeness_dirty_literal_enumeration_issue_1116` is already narrowing-safe by
+  construction (its own two-batch fixture already cites its symbol's declaring file from a second
+  batch) and is not `_symbol_`-prefixed, so it is correctly out of scope for this card's grep-driven
+  audit below and must not be touched here either.
+
+  **Two named exceptions to the generic "add a second batch" recipe below** — each of these two
+  existing tests ALREADY uses two TESTED batches (`alpha`/`beta`), both needing their own declaring
+  symbol resolved and flagged, with neither file cited anywhere: appending one MORE ("a second")
+  batch, per the generic recipe's literal wording, would only be this fixture's THIRD batch overall,
+  not its second — call this out explicitly rather than relying on the generic recipe's phrasing:
+  - `test_check_context_completeness_symbol_cache_invoked_once_per_key` — add a third, citing-only
+    batch whose own `Context:` names `internal/state.go` (the one file both `alpha` and `beta`
+    already write to disk and both already reference via bare `SaveState`), leaving both tested
+    batches' own refs unchanged; the existing `assert len(check_errors) == 2` and
+    `assert call_count[0] == 1` assertions are otherwise unaffected.
+  - `test_check_context_completeness_symbol_qualifier_cache_correctness_different_qualifiers` — add a
+    third, citing-only batch whose own `Context:` names BOTH `internal/reedengine/factory.go` and
+    `internal/otherpkg/factory.go` (the two files `alpha` and `beta` each already write and
+    reference via their own dotted qualifier token), leaving both tested batches' own refs unchanged;
+    the existing per-batch message assertions are otherwise unaffected.
+
+  For every OTHER remaining existing symbol-branch test: grep
   `^def test_check_context_completeness_symbol_` in `plugins/mill/unit_tests/test-plan-validate.py`
-  to enumerate every REMAINING existing symbol-branch test function. For each one whose fixture places its
+  to enumerate every REMAINING existing symbol-branch test function (excluding the 6 card-4-deleted
+  functions and the 2 named exceptions immediately above). For each one whose fixture places its
   target symbol's declaring file under `project_root` WITHOUT any card's `context=`/`edits=`/
   `creates=`/`deletes=`/`moves=` argument to `_make_batch_file` naming that same file anywhere in the
   fixture plan, AND whose assertions depend on that symbol actually being resolved (a
@@ -362,69 +392,98 @@ the plan.
   Replace `_check_context_completeness`'s current per-physical-line tokenization loop (the
   `requirements_lines = requirements_text.splitlines()` / `for line in requirements_lines:` structure,
   including its own `in_fence` toggle and the `for match in backtick_re.finditer(line):` inner loop)
-  with a joined-text pass:
-  1. Build `included_lines: list[tuple[int, str]]` by walking `requirements_lines` with the SAME
-     quoted-line skip logic already present (a line is quoted, and excluded from `included_lines`,
-     when `in_fence` is `True` on entry OR the line's lstripped form starts with `>`; the fence
-     toggle on a line starting with ` ``` ` is evaluated on the line's CURRENT state, exactly as
-     today) — collect `(original_line_index, line_text)` for every non-quoted line, in order.
-  2. Build `joined_text = "\n".join(text for _, text in included_lines)` and `line_starts: list[int]`
-     where `line_starts[i]` is `included_lines[i]`'s first-character offset in `joined_text`
-     (accounting for the `"\n"` separators between consecutive included lines).
-  3. Run `backtick_re.finditer(joined_text)` ONCE (replacing the per-line `finditer(line)` call).
-  4. For each match, find `i` (start line index) and `j >= i` (end line index) into `included_lines`/
-     `line_starts` such that the match's `[match.start(1), match.end(1))` span falls within those
-     lines' own `[line_starts[k], line_starts[k] + len(included_lines[k][1]))` ranges — normally
-     `i == j`. Compute `local_text = "\n".join(text for _, text in included_lines[i : j + 1])` and
+  with a per-run joined-text pass. A "run" is a maximal, CONTIGUOUS span of non-quoted physical lines
+  — contiguous in the sense of "no quoted line skipped in between," not in original-line-index
+  adjacency (a blank non-quoted line does not break a run; a fenced/blockquoted line does). Processing
+  per run, rather than joining the WHOLE Requirements body into one string, is deliberate: joining
+  across an entire elided fenced/blockquoted region would make two originally-distant included lines
+  textually adjacent, letting a dangling/odd backtick on one side of the gap spuriously pair with a
+  real backtick on the far side — reintroducing, across an elided-region gap, the exact class of
+  cross-line corruption this refactor exists to fix for ordinary line wraps. Per-run processing makes
+  that structurally impossible: a quoted region always starts a new run, so a backtick match can never
+  span across one.
+  1. Build `runs: list[list[tuple[int, str]]]` by walking `requirements_lines` with the SAME
+     quoted-line skip logic already present (a line is quoted when `in_fence` is `True` on entry OR
+     the line's lstripped form starts with `>`; the fence toggle on a line starting with ` ``` ` is
+     evaluated on the line's CURRENT state, exactly as today). Maintain a `current_run: list[tuple[int, str]]`;
+     append `(original_line_index, line_text)` to it for every non-quoted line; whenever a quoted line
+     is encountered, if `current_run` is non-empty, append it to `runs` and start a fresh empty
+     `current_run`. After the walk, append any non-empty `current_run` to `runs`.
+  2. For each `run` in `runs` independently: build `joined_text = "\n".join(text for _, text in run)`
+     and `line_starts: list[int]` where `line_starts[i]` is `run[i]`'s first-character offset in this
+     run's own `joined_text` (accounting for the `"\n"` separators between consecutive lines in the
+     run).
+  3. Run `backtick_re.finditer(joined_text)` ONCE per run (replacing the per-physical-line
+     `finditer(line)` call) — never once globally across the whole Requirements body.
+  4. For each match within this run, find `i` (start line index) and `j >= i` (end line index) into
+     `run`/`line_starts` such that the match's `[match.start(1), match.end(1))` span falls within
+     those lines' own `[line_starts[k], line_starts[k] + len(run[k][1]))` ranges — normally `i == j`.
+     Compute `local_text = "\n".join(text for _, text in run[i : j + 1])` and
      `local_offset_base = line_starts[i]`.
   5. Call the four unconditional, non-clause-bounded exemption helpers against the LOCAL span:
      `_is_prohibition_exempt(local_text.lower())`, `_is_literal_enumeration_exempt(local_text,
      match.start(1) - local_offset_base, match.end(1) - local_offset_base)`,
      `_is_cross_card_ownership_exempt(local_text.lower())`, `_is_illustrative_output_exempt(local_text.lower())`
      — same call order as today, only the `line`/`lowered_line`/offset arguments change.
-  6. Call the two clause-bounded helpers against the JOINED-text-global span:
-     `_is_non_dependency_negation_exempt(joined_text.lower(), match.start(1), match.end(1))` and
-     `_is_contrast_citation_exempt(joined_text.lower(), match.start(1), match.end(1))` — see the
-     `_clause_bounds` signature change below for how these stay line-capped.
-  7. The emitted error dict's `"line"` field becomes `included_lines[i][1].strip()` (the original,
-     unquoted physical line containing the token match's START offset) — replacing today's
-     `line.strip()`.
-  The exemption-check ORDER (prohibition -> non-dependency-negation -> citation-marker ->
-  contrast-citation -> cross-card-ownership -> literal-enumeration -> illustrative-output -> path/
-  symbol resolution) is unchanged; only which text/offsets each call receives changes, per steps 5-6.
+  6. Call the two clause-bounded helpers against THIS RUN's own joined-text-global span (never across
+     a different run): `_is_non_dependency_negation_exempt(joined_text.lower(), match.start(1),
+     match.end(1))` and `_is_contrast_citation_exempt(joined_text.lower(), match.start(1),
+     match.end(1))` — see the `_clause_bounds` signature change below for how these stay line-capped
+     within the run.
+  7. The emitted error dict's `"line"` field becomes `run[i][1].strip()` (the original, unquoted
+     physical line containing the token match's START offset) — replacing today's `line.strip()`.
+  Process every run in `runs` (in order) this way, accumulating findings across all of them exactly
+  as today's single loop accumulates across all physical lines. The exemption-check ORDER
+  (prohibition -> non-dependency-negation -> citation-marker -> contrast-citation ->
+  cross-card-ownership -> literal-enumeration -> illustrative-output -> path/symbol resolution) is
+  unchanged; only which text/offsets each call receives changes, per steps 5-6.
 
   Update `_clause_bounds`'s signature to
   `_clause_bounds(lowered_line: str, start: int, end: int, *, extra_boundaries: list[int] | None = None) -> tuple[int, int]`.
   When `extra_boundaries` is given (a sorted list of offsets — `_check_context_completeness` passes
-  `line_starts[1:]`, since offset 0 needs no boundary marker), the clause-start search additionally
-  stops at the highest `extra_boundaries` entry `<= start` and the clause-end search additionally
-  stops at the lowest `extra_boundaries` entry `>= end`, each compared against the existing
-  `_RE_CLAUSE_BOUNDARY`-based candidate on its own side — whichever candidate is CLOSER to
+  the CURRENT RUN's own `line_starts[1:]`, since offset 0 needs no boundary marker), the clause-start
+  search additionally stops at the highest `extra_boundaries` entry `<= start` and the clause-end
+  search additionally stops at the lowest `extra_boundaries` entry `>= end`, each compared against the
+  existing `_RE_CLAUSE_BOUNDARY`-based candidate on its own side — whichever candidate is CLOSER to
   `start`/`end` wins on each side independently. When `extra_boundaries` is `None` (the default),
   behavior is byte-for-byte identical to today. Add a `line_boundaries: list[int]` parameter to both
   `_is_non_dependency_negation_exempt` and `_is_contrast_citation_exempt`, forwarded straight through
-  to their own internal `_clause_bounds` call's new `extra_boundaries` keyword; thread
-  `line_starts[1:]` into both at their call sites (step 6 above).
+  to their own internal `_clause_bounds` call's new `extra_boundaries` keyword; thread the current
+  run's own `line_starts[1:]` into both at their call sites (step 6 above) — never a different run's.
 
   New regression test, `test_check_context_completeness_dirty_line_join_backtick_span_crosses_line_break`
   — reproduces the #1122-traced `millpy-fix.py` incident: a Requirements: field spanning two physical
-  lines where a single-backtick inline-code span opens on the first line and does not close until
-  partway through the second, followed later on that same closing line by a genuine path-shaped
-  dependency (absent from the card's own refs) that the OLD per-line tokenizer would silently
-  swallow into the mis-paired token (the opening backtick's own line has no closing partner within
-  that line, so the pre-fix per-line `finditer` finds zero tokens on the first line and never
-  connects the two lines at all). Mirror `test_check_context_completeness_dirty_odd_backtick_count_line_field`'s
-  fixture shape, but split the malformed span itself across the two physical lines. Assert exactly
-  one context-completeness error naming the genuine trailing dependency.
+  lines, BOTH inside the same run (no fence between them), where a single-backtick inline-code span
+  opens on the first line and does not close until partway through the second, followed later on that
+  same closing line by a genuine path-shaped dependency (absent from the card's own refs) that the OLD
+  per-line tokenizer would silently swallow into the mis-paired token (the opening backtick's own line
+  has no closing partner within that line, so the pre-fix per-line `finditer` finds zero tokens on the
+  first line and never connects the two lines at all). Mirror
+  `test_check_context_completeness_dirty_odd_backtick_count_line_field`'s fixture shape, but split the
+  malformed span itself across the two physical lines. Assert exactly one context-completeness error
+  naming the genuine trailing dependency.
 
   New negative-direction test,
   `test_check_context_completeness_clean_line_join_unconditional_exemptions_stay_line_scoped` —
   proves the per-helper line-scoping split (step 5 above) holds: a card's Requirements: field has a
   genuine unlisted path-shaped dependency on one physical line, and, on a DIFFERENT physical line
-  elsewhere in the same field, a phrase triggering `_is_cross_card_ownership_exempt` (e.g. "batch 8
-  fixes `unrelated.py`"). Assert the genuine dependency on the first line is STILL flagged (one
-  context-completeness error), proving the joined-text extraction did not widen that exemption's
-  reach to the whole joined Requirements body.
+  elsewhere in the same field (same run — no fence between them), a phrase triggering
+  `_is_cross_card_ownership_exempt` (e.g. "batch 8 fixes `unrelated.py`"). Assert the genuine
+  dependency on the first line is STILL flagged (one context-completeness error), proving the
+  joined-text extraction did not widen that exemption's reach to the whole run.
+
+  New regression test,
+  `test_check_context_completeness_clean_line_join_dangling_backtick_before_fence_not_bridged` —
+  proves the per-run design (not a single whole-body joined text) prevents a NEW cross-region
+  corruption class: a Requirements: field with an odd/dangling, never-closed backtick on a line
+  immediately BEFORE a fenced code block, and a genuine unlisted path-shaped dependency on a line
+  several lines AFTER the fence closes. Under a single-joined-text design (the design this refactor
+  rejects), the dangling backtick would search past the elided fenced content and spuriously pair
+  with the genuine dependency's own opening backtick, silently swallowing it and producing 0 errors;
+  under the per-run design, the dangling backtick's own run (ending at the fence) contains no
+  complete pair and yields no token from it, while the dependency's own run (starting after the fence
+  closes) tokenizes independently and correctly. Assert exactly one context-completeness error naming
+  the genuine dependency.
 - **Commit:** `fix(plan-validate): join fence-filtered Requirements text before tokenizing, fixing cross-line backtick-span corruption (line-join-refactor)`
 
 ## Batch Tests
