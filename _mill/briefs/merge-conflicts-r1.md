@@ -1,0 +1,617 @@
+# Conflict Resolution Brief
+
+Your sole job is to resolve git conflict markers in the listed files, stage each resolved file, and report success.
+Do NOT commit.
+Do NOT run `git merge --continue` — the SKILL does that after receiving `{"status":"success"}`.
+
+## Task intent
+
+These excerpts describe what THIS branch is trying to accomplish.
+When the merge introduces a parent-side change that conflicts with this branch's intent, the resolution preserves THIS branch's intent.
+In particular: if a file appears under a batch's `Deletes:` list and the merge introduces a modified version of that file from the parent, the resolution is to delete the file (your branch's intent overrides).
+Stage the deletion with `git -C /home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout rm <file>`.
+
+### From discussion.md
+
+# Discussion: compute_baseline: use the task worktree's own pre-edit state, not a parent-branch checkout
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+slug: baseline-uses-worktree-not-checkout
+status: discussing
+parent: main
+```
+
+## Problem
+
+`plugins/mill/scripts/_verify_baseline.py` answers one question for the verify gate: "does this verify command already fail, independent of anything this task did?"
+It answers it by materializing a throwaway git worktree under `.scratch/verify-baseline-<hash>/` at the parent branch's current tip, junctioning the task worktree's gitignored dependency dirs into it, and running the verify command there.
+
+The task worktree at its branch point already *is* the pre-implementation tree.
+`mill-start` and `mill-plan` write only under `_mill/`, so at the moment `millpy-implement.py --stage baseline` runs — before batch 1's implementer is ever dispatched — the worktree's source content is exactly the merge-base content.
+The checkout re-derives, at real cost, a state that is already on disk.
+
+Four consequences follow from that one wrong premise (GitHub issue [#1130](https://github.com/Knatte18/millhouse/issues/1130)):
+
+- `_checkout_parent_branch` resolves the parent's *current tip* via `git rev-parse <parent>`, not `git merge-base HEAD <parent>`. A sibling task merging into the shared parent mid-run makes that drift part of this task's "baseline".
+- The fresh checkout pays a full cold build on any compiled-language project. The dependency-dir junction list (`.venv`, `venv`, `node_modules`, `vendor`) only reuses *installed packages*, which helps interpreted ecosystems and does nothing for build output.
+- The cost repeats per mill-go invocation whenever a baseline is not already cached.
+- A whole support surface exists only to prop the checkout up: `millpy-cleanup.py`'s `.scratch/verify-baseline-*` orphan reaping, the `-c core.longpaths=true` scoping in `_checkout_parent_branch`, the 12-hex-char path-budget shortening, and the `pipeline.baseline_prepare_cmd` config key (a build-once warmup that exists solely because the checkout starts cold).
+
+**Why now:** #1130 filed the analysis; the task is claimed and the worktree spawned.
+
+## Scope
+
+**In:**
+
+- `plugins/mill/scripts/_verify_baseline.py` — remove the checkout entirely. `compute_baseline` and `compute_batch_baselines` run against the task worktree. Delete `_checkout_parent_branch`, `_link_dependency_dirs`, `_DEPENDENCY_DIR_CANDIDATES`, and `compute_batch_baseline_on_demand`.
+- `plugins/mill/scripts/millpy-implement.py` — `--stage baseline` becomes an eager, in-worktree capture of the module-wide command *and* every distinct batch `verify:` command. Remove `_pin_baseline_parent_sha`.
+- `plugins/mill/scripts/_implementer_common.py` — remove the on-demand compute prelude in `_run_verify_gates`, delete `_corroborate_batch_failure` plus its call site, and drop `start_sha` from `_run_verify_gates`'s signature and its forwarding call sites.
+- `plugins/mill/scripts/_status.py` — delete `get_baseline_parent_sha` / `set_baseline_parent_sha`; add `get_module_verify_baseline_signatures` / `set_module_verify_baseline_signatures` (and clear it alongside `clear_module_verify_baseline`), mirroring the existing scalar accessors' insert-in-place-or-append pattern, per Decision `module-wide-verdict-source`; no new *batch* helper is needed for Decision `merge-in-batch-baseline-staleness` — `set_batch_field(status_path, name, "verify_baseline_failures", None)` already removes the key (`_status.py:1086-1087` pops on a `None` value), so the merge-in path loops over `read_batches` and calls it per batch.
+- `plugins/mill/scripts/millpy-merge-in-subagent.py` — `--recompute-baseline` runs the module-wide command in the post-merge task worktree with an asymmetric verdict rule (Decision `merge-in-recompute`) and clears every batch's `verify_baseline_failures` (Decision `merge-in-batch-baseline-staleness`). Two further dispositions at this call site: the parent-branch resolve at `:257-261` and its `baseline: "error"` early return are **removed** — they existed solely to feed `compute_baseline`'s `parent_branch`, which no longer exists, and keeping a failure branch that aborts the recompute for an input nothing reads would be a new bug, not a preserved safeguard. And `:266`, which passes an absolute `cwd_override` into `cwd_override_relative` today, now resolves the cwd the same way every other call site does (`parse_verify_field` override, else `git_root`) and passes that absolute path as `compute_baseline`'s `cwd`.
+- `plugins/mill/scripts/millpy-cleanup.py` — delete `_scan_orphan_baseline_dirs`, `_apply_orphan_baseline_dir`, the `orphan_baseline_dirs` plan field, and its apply loop.
+- `mill-config.yaml` (hub) and `plugins/mill/templates/mill-config.yaml` — delete `pipeline.baseline_prepare_cmd`. Keep `pipeline.baseline_verify_timeout_minutes`, but rewrite its trailing comment: it currently enumerates the commands it ceilings as "(module-wide, per-batch, `baseline_prepare_cmd`)" and names the deleted key.
+- `plugins/mill/skills/mill-go-base/SKILL.md` — update the prose describing the transient checkout, the `baseline_parent_sha` pin, and the dependency-state-matches-parent-tip rationale; narrow §0.5's "the speculative run IS the complete baseline computation" to the module-wide half and change its speculative branch to re-invoke the stage (Decision `two-half-stage-ownership`); make both §0.5 sites select the JSON line by `substage` rather than positionally. The rewritten passage at `mill-go-base/SKILL.md:610` must drop its `_mill/discussion.md` citation rather than carry it forward — CLAUDE.md forbids a permanent doc citing an `_mill/`-rooted path, since `_mill/` is removed at merge time. State the rationale inline instead.
+- `plugins/mill/skills/mill-merge-in/SKILL.md` — the same checkout/pin prose, plus two statements step 3.5 currently makes that stop being true: `SKILL.md:113`'s "runs the same deterministic computation `millpy-implement.py --stage baseline` uses" (false once the asymmetric rule lands — the two now differ in exactly their verdict mapping), and the absence of any mention of the new unconditional clearing of every batch's `verify_baseline_failures`, which is operator-visible because it makes every remaining batch gate strict. The rewritten step-3.5 prose must also drop `SKILL.md:137`'s `_mill/discussion.md` citation, for the same CLAUDE.md reason as the `mill-go-base` passage above.
+- Tests: `plugins/mill/unit_tests/test-verify-baseline.py`, `test-implementer-common.py`, `test-millpy-implement.py`, `test-millpy-merge-in-subagent.py`, `test-status.py`, `test-cleanup.py`, and `plugins/mill/integration_tests/test-verify-baseline.py`, `test-baseline-waiver.py`.
+
+**Out:**
+
+- The **semantics** of the verify gate itself — `"clean"` / `"pre-existing-failures"`, the subset-diff waiver in `_run_verify_gates`, `_normalize_failure_signature`, and `_extract_failure_signatures` are unchanged. Only *how the baseline is obtained* changes.
+- `pipeline.done_gate_baseline_preflight` and the done-gate pre-flight in `mill-go-base/SKILL.md` §0.55 — a different mechanism that shares the word "baseline". Untouched.
+- `_worktree.remove_safe`, `_junction.*`, `millpy-bg.py` — still used elsewhere; only *this* module's calls into them go away.
+- The speculative early-launch mechanism's trigger and its `.millhouse/baseline-preflight-log.txt` restart/orphan reconciliation in `mill-go-base/SKILL.md` — unchanged. Its *consumption* logic at §0.5 does change (see Decision `two-half-stage-ownership`): the speculative result now covers the module-wide half only, so §0.5 invokes the stage again afterwards instead of treating the speculative run as complete.
+- Migration of in-flight `status.md` files carrying a `baseline_parent_sha:` row — the key is simply left unread (see Decision `delete-outright`).
+
+## Decisions
+
+### capture-site
+
+- **Decision:** Keep the capture at `millpy-implement.py --stage baseline`, mill-go's existing first action (and its speculative early launch during the mill-plan entry-gate wait). Do not move it to `mill-spawn`.
+- **Rationale:** At `--stage baseline` time the worktree is pre-edit (only `_mill/` has been written) *and* dependencies are installed and the tree is warm — which is the entire point of capturing in-worktree. At spawn time neither holds: no plan exists yet, so the verify commands are unknown, and nothing has been installed or built. The stage is already idempotent, already cached in `status.md`, and already wired into both the normal and speculative launch paths; reusing it means zero new skill surface.
+- **Rejected:** mill-spawn (no plan → no verify commands → cannot capture anything meaningful); a new standalone `--stage` (duplicates the existing one's guards and caching for nothing).
+
+### remove-all-three-checkouts
+
+- **Decision:** All three checkout consumers go, not just the module-wide one: `compute_baseline` (module-wide, eager pre-flight), `compute_batch_baseline_on_demand` (per-batch, lazy), and `_corroborate_batch_failure` (per-batch control check at `start_sha`).
+- **Rationale:** Leaving any one behind keeps `_checkout_parent_branch`, the dependency junctioning, `core.longpaths`, the `.scratch/verify-baseline-*` orphan surface, and `millpy-cleanup.py`'s reaper alive — i.e. the whole support surface the issue names, for a fraction of the benefit. The three consumers also motivate each other: the lazy path exists because the checkout was expensive, and the corroboration path exists because the lazy path's baseline is often absent.
+- **Rejected:** Converting only the module-wide path (issue's own analysis says the checkout removal *is* the fix; a partial conversion leaves every listed symptom in place).
+
+### eager-not-lazy
+
+- **Decision:** `--stage baseline` eagerly captures every distinct `(command, cwd)` pair: the overview's module-wide `verify:` plus every batch's `verify:`. Results land in the existing `status.md` fields — `module_verify_baseline:` (scalar) and each batch's `verify_baseline_failures:` (signature list). Delete the lazy on-demand path (#1102) that the eagerness replaces. The batch enumeration is raw, not `iter_batch_verifies` — see Decision `capture-set-equals-gate-set` — and the stage runs in two independently-owned halves, see Decision `two-half-stage-ownership`.
+- **Rationale:** Laziness (#1102) was introduced to avoid paying N cold checkouts before batch 1. Remove the checkout and that pressure is gone: an in-worktree capture runs against an already-built, already-installed tree, so the marginal cost is one test-suite run per distinct pair. In exchange the baseline is always present when a gate fails, which is what made the corroboration fallback necessary. Dedup on `(command, cwd)` — not on batch name — so a plan whose last batch verifies the union of earlier batches' commands pays once; `compute_batch_baselines`'s existing `pair_cache` already implements exactly this.
+- **Rejected:** Keeping the lazy path (needs a pre-edit tree at an arbitrary later moment, which is precisely what the task worktree no longer is once batch 1 has committed — it would force the checkout back).
+
+### merge-in-recompute
+
+- **Decision:** `millpy-merge-in-subagent.py --recompute-baseline` clears `module_verify_baseline`, then calls the simplified `compute_baseline` against the post-merge task worktree and maps its two-valued return **asymmetrically**: `"clean"` → cache `"clean"`; `"pre-existing-failures"` → leave the field unset (strict gating), matching this module's existing "computation failed → gate strictly" fail-safe. Reusing `compute_baseline` rather than a bare `_run_verify_in` is deliberate: the flakiness-guard retry applies here too, so a single flaky post-merge failure does not needlessly force strict gating for the rest of the task.
+- **Rationale:** This is the one call site where the task worktree genuinely cannot answer the checkout's question: after a merge-in, the tree is *parent content merged with this task's changes*, so a failure cannot be attributed to either side. But the asymmetry is sound in one direction — if the merged tree passes, then nothing is red and `"clean"` is correct by construction. A failure degrades to strict gating, which is the safe direction (a false `"clean"` costs one over-strict gate later; a false `"pre-existing-failures"` disables the regression gate entirely). The only thing lost versus today is auto-waiving a genuinely red *new* parent, which now surfaces to the operator as a module-wide gate failure instead — visible rather than silent.
+- **Rejected:** Keeping a checkout for this one site (post-merge-in the parent is an ancestor of HEAD, so the tip-vs-merge-base bug does not apply there and the checkout would be *correct* — but retaining it keeps the entire support surface alive for one fail-safe-able call site); dropping the recompute entirely and always gating strictly after a merge-in (loses the free, correct `"clean"` case).
+
+### delete-corroboration
+
+- **Decision:** Delete `_corroborate_batch_failure` and its call site in `_run_verify_gates`, along with the expanded-signature persistence and the `mill-go: persist corroborated verify baseline for <batch>` commit it drives.
+- **Rationale:** With `eager-not-lazy` in place, every batch has a real pre-edit baseline from before batch 1, so genuinely pre-existing failures are already waived by the subset-diff check. Corroboration's control ran at the batch's `start_sha`, so what it *additionally* waived was anything already present at that commit — which is two distinct populations: a failure introduced by an **earlier batch of this same task** (this task's own regression, which should block, not be waived), and a failure introduced by **parent content merged in mid-task** (real, but now handled explicitly by Decision `merge-in-batch-baseline-staleness` rather than absorbed silently). Removing corroboration makes the gate stricter for the first population, which is correct, and converts the second from an implicit side effect into a stated decision.
+- **Rejected:** Replacing it with a rolling per-batch capture (record each batch's post-verify signatures as the next batch's reference) — buys back the same wrong waiver, and adds per-batch state writes for it.
+
+### delete-outright
+
+- **Decision:** No compatibility window. Delete `millpy-cleanup.py`'s `.scratch/verify-baseline-*` reaping (`_scan_orphan_baseline_dirs`, `_apply_orphan_baseline_dir`, the `orphan_baseline_dirs` plan field and apply loop) and the `core.longpaths` / path-budget handling together with the checkout, in one change. Likewise, do not migrate existing `status.md` files carrying a `baseline_parent_sha:` row — the key is left in place and simply never read again.
+- **Rationale:** `.scratch/` is gitignored scratch; any orphan directories left on an operator's disk from the old code are removable by hand (`rm -rf .scratch/verify-baseline-*`, plus `git worktree prune` for any stale registry entry), and no *new* orphans can be produced once the checkout is gone. Keeping a reaper for code that no longer runs is dead weight. A stale `baseline_parent_sha:` row is an inert extra YAML key — `_status`'s readers are field-specific, so an unread key costs nothing.
+- **Rejected:** Keeping the reaper for one release (permanent dead code guarding a one-line manual cleanup); writing a migration that strips `baseline_parent_sha:` (mutates in-flight task status files for zero behavioural gain).
+
+### algorithm-simplification
+
+- **Decision:** The module-wide algorithm becomes: run once in the task worktree → exit 0 → `"clean"`; non-zero → re-run once (flakiness guard) → exit 0 → `"clean"`; second non-zero → `"pre-existing-failures"`. Delete the third "control check" run and its `path/environment-induced` stderr warning. `compute_batch_baselines`'s union-of-two-runs shape is unchanged, including its skip-run-2-when-run-1-is-green optimization.
+- **Rationale:** The third run existed to distinguish "the transient checkout's environment is broken" from "the parent branch is genuinely red" by re-running in `project_root`. With the first two runs now *already* in `project_root`, run 3 is the same command in the same directory — it can corroborate nothing. The flakiness-guard retry survives because flakiness is orthogonal to where the command runs.
+- **Rejected:** Keeping run 3 as a third flakiness sample (two consecutive failures is already the established threshold in `compute_batch_baselines`; a third run triples the cost of the red case for no new information).
+
+### per-batch-capture-driver
+
+- **Decision:** The per-batch half drives `compute_batch_baselines` **one batch per call**, inside a per-batch `try`/`except`, threading a single caller-owned `pair_cache` dict across every call. A pair that raises (`subprocess.TimeoutExpired` or any other exception) leaves only its own batch's `verify_baseline_failures` unset — that batch gates strictly, every other batch is captured and persisted normally. Persist each batch's result as it completes rather than batching the writes.
+- **Rationale:** `compute_batch_baselines` evaluates its whole `commands` list in one loop and propagates `TimeoutExpired`, so a single hung suite passed the whole list would abort every remaining batch's capture and lose the ones already computed in that call. Its own docstring already anticipates the per-batch driver shape — the shared `pair_cache` parameter exists precisely because the production caller drives a batch at a time and a call-local cache would never fire (#1101). Nothing is written to `pair_cache` for a pair whose evaluation raised, so a later batch declaring the same command retries it rather than inheriting a phantom result.
+- **Rejected:** One call with the whole `commands` list (one timeout discards every other batch's work); per-batch calls with no shared `pair_cache` (loses the cross-batch dedup that makes eager capture affordable, which is the premise of Decision `eager-not-lazy`).
+
+### two-half-stage-ownership
+
+- **Decision:** `--stage baseline` has two independently-owned halves. The **module-wide half** is task-scoped, needs no `## Batches` section, and is owned by whichever launch fires first — including the speculative early launch during the entry-gate wait. The **per-batch half** is owned by §0.5 alone: the stage detects an absent/empty `## Batches` section (via `_status.read_batches`), skips the per-batch capture, and reports `{"substage": "per_batch", "result": "deferred", "reason": "## Batches not yet seeded"}`. The per-batch line's `result` vocabulary is pinned the same way the module-wide line's `computed|cached|error|skipped` set is (`mill-go-base/SKILL.md:605`), since §0.5 branches on it: **`computed`** (at least one batch captured this invocation), **`cached`** (every batch's key was already present), **`deferred`** (no `## Batches` yet), **`skipped`** (no batch declares a `verify:`, or `preflight-precondition-guard` refused), **`error`** (enumeration failed). The SKILL.md edit must describe all five. §0.5 then always invokes the stage once more after consuming any speculative result — the module-wide half no-ops as `"cached"`, and the per-batch half runs for real.
+- **Rationale:** The speculative launch fires in `mill-go-base/SKILL.md`'s entry-gate wait, which precedes `## Prepare`'s `_status.init_batches`. `_status.set_batch_field` raises `ValueError: Batch <name> not present in ## Batches` (`_status.py:1092`) when that section is absent, so an undeferred per-batch capture in the speculative path would run every batch's suite and then throw away every result. Detection beats a new CLI flag: it needs no extra surface, it stays idempotent, and it degrades correctly whichever launch path fires first. §0.5's current statement that the speculative run "IS the complete baseline computation" must be narrowed to the module-wide half, and its speculative branch changed from "do not launch a fresh job" to "consume the speculative module-wide result, then invoke the stage anyway".
+- **Rejected:** Having the speculative launch seed `## Batches` itself (a write to `status.md` from a path whose whole design point is that it touches no git state and races a live mill-plan session); deferring the *whole* stage until after Prepare (throws away the speculative launch's entire value, which is overlapping a long module-wide suite with mill-plan's runtime); a `--skip-batches` CLI flag (two launch sites would have to stay manually in sync with a structural fact the stage can just read).
+
+### capture-set-equals-gate-set
+
+- **Decision:** Enumerate batches for the capture **raw** — `_plan_dag.extract_batch_index(overview_text)`, then `_read_batch_frontmatter` + `parse_verify_field` per batch file — mirroring exactly how the per-batch gate resolves its own `verify_cmd` (`millpy-implement.py:547` and `:819`). Do not use `_plan_dag.iter_batch_verifies`.
+- **Rationale:** `iter_batch_verifies` applies a suppression filter the gate does not: a batch whose `verify:` references a path a strictly-later batch declares it deletes is dropped from the returned list (`_plan_dag.py:672-681`), and with `status_path=None` that filter is at its broadest, since every later batch counts as a remover regardless of state. The gate applies no such filter. Using it would silently produce a capture set smaller than the gate set, leaving exactly those batches gating with no baseline. The filter also has no meaning at pre-flight time: it exists for merge-in replay, where a later batch's deletion has actually happened, whereas at pre-flight **nothing has been deleted yet**, so the condition it tests for cannot hold. A separate, pre-existing wrinkle is unaffected either way: a batch whose `verify:` targets a test file that same batch creates — the dominant TDD shape in this repo's plans — is not runnable pre-edit, and its capture records a collection/not-found signature set. That is noisy but harmless, and it is not a regression: the deleted on-demand path computed at the parent SHA and produced the same shape.
+- **Rejected:** Using `iter_batch_verifies` and accepting strict gating for suppressed batches (silently reintroduces the false-block class this whole baseline mechanism exists to prevent, for the batches most likely to need a waiver); passing `status_path` to narrow the filter (worse, not better — `_plan_dag.py:663` skips every batch whose state is not `approved`, and at pre-flight none is, so the enumeration returns `[]` and nothing is captured at all).
+
+### module-wide-verdict-source
+
+- **Decision:** The module-wide capture keeps its own exit-code-driven algorithm (Decision `algorithm-simplification`) and is **not** routed through `compute_batch_baselines`. `compute_baseline`'s return type changes from `str` to `tuple[str, list[str]]` — the same `"clean"` / `"pre-existing-failures"` verdict, plus the union (deduplicated, order-preserving by first occurrence) of the signatures `_extract_failure_signatures` pulls from each run it performed. `_run_module_wide_verify_algorithm` accumulates them; today both it and `compute_baseline` discard each run's output (`_verify_baseline.py:292-313`), so the extraction is new work inside the existing loop rather than a new caller-side run. The `--stage baseline` caller persists both halves of the tuple. The second call site, `millpy-merge-in-subagent.py:264`, unpacks the tuple but consumes the verdict only and persists no signatures — a post-merge tree is not pre-edit, so its signatures describe nothing usable as a baseline.
+
+  Those signatures are **persisted** to a new `status.md` scalar-block field, `module_verify_baseline_signatures:`, written in the same place as `module_verify_baseline:` but **not** with the same writer: the scalar accessors use `quote_scalar`, which is string-only, so the list value serialises as a flow-sequence via `yaml.safe_dump(..., default_flow_style=True, width=10**9)` — the form `_status.py:689-696` already uses for `verify_baseline_failures`, whose code comments record the `str()`-repr pitfall this avoids, **plus an explicit `width` override**. The override is not optional: PyYAML wraps at its 80-column `best_width`, and two realistic failure signatures already exceed that. The surrounding accessors are strictly single-line — `set_module_verify_baseline` rewrites in place through a line regex (`_status.py:383-385`) and `clear_module_verify_baseline` does `del lines[i]` (`:426`) — so a wrapped value would strand continuation lines on the next clear or re-set, and since `read()` `yaml.safe_load`s the entire top block (`:204`), every subsequent `_status` read would raise for the rest of the task. The value must serialise to exactly one physical line. The per-batch half reads that field and seeds the shared `pair_cache` from it under the module-wide `(command, cwd)` key, so a batch whose `verify:` matches the module-wide command string-for-string in the same cwd reuses the result instead of re-running.
+- **Rationale:** `_signatures_for_pair` returns a signature list and discards the exit code, and it returns `[]` for a non-zero exit that produced no extractable signature line — so a run collapsed into the pair list cannot distinguish `"clean"` from `"pre-existing-failures"`. The two entry points answer genuinely different questions (a binary verdict vs. a signature set) and must keep separate algorithms. The two run schedules are identical except in one case: `_signatures_for_pair` skips its second run only when run 1 exits 0 **and** extracted zero signatures (`_verify_baseline.py:554`), whereas the module-wide algorithm returns `"clean"` on any zero exit. A run that exits 0 but still emits an extractable failure line therefore seeds a one-run signature set where the pair path would have unioned two. That divergence is accepted: the seeded set can only be narrower, never wider, and a narrower baseline waives less, which is the safe direction.
+
+  The seeding must cross a **process boundary**, which is why it is persisted rather than held in memory. Decision `two-half-stage-ownership` puts the module-wide half and the per-batch half in different `--stage baseline` invocations whenever the speculative early launch fires — and that is the default path, not an edge case. An in-process `pair_cache` would therefore be empty exactly when it matters: the §0.5 invocation finds module-wide `"cached"` and never re-runs it, so nothing would seed the cache, and a single-batch plan whose batch `verify:` equals the module-wide command would pay the whole suite twice. Persisting also makes the seeding survive a mill-go restart, for free, via the same `status.md` read every other cached field already uses.
+- **Rejected:** Adding an exit-code component to `_signatures_for_pair`/`pair_cache` so one code path serves both (widens a shared helper's contract for one caller, and the two consumers still need different reductions of it); running the module-wide command separately with no seeding (re-runs a whole module-wide suite for a batch that declares the identical command — the common single-batch-plan shape); keeping the seeding in-process and best-effort (empty on the default speculative path, which is precisely when it would have paid off).
+
+### preflight-precondition-guard
+
+- **Decision:** Before capturing anything, `--stage baseline` verifies the pre-edit precondition and skips the whole capture when it does not hold, leaving every baseline field unset (strict gating). It emits **one tagged line per half it skipped**, never an untagged line — `{"stage": "baseline", "substage": "module_wide", "result": "skipped", "reason": "worktree is not pre-edit"}` and the same with `"substage": "per_batch"` — because `two-half-stage-ownership` requires both §0.5 sites to select by `substage`, and an untagged line would match neither selector. This matches the existing payload builder, which already tags every module-wide line (`millpy-implement.py:112-122`), and it is what makes the per-batch `skipped` value in that decision's pinned vocabulary reachable. **One gating condition, one advisory:** the capture is skipped only when (1) `git -C <git_root> diff --name-only $(git -C <git_root> merge-base HEAD <parent>) HEAD` lists a path outside the exclusion set. A dirty working tree — (2) `git -C <git_root> status --porcelain` reporting a modified tracked path outside the exclusion set — produces the same ASCII stderr warning `preflight-dirt-warning` emits, naming each path, but does **not** skip the capture. The skip writes no baseline field and **clears none**: on the default two-invocation path the §0.5 invocation may find `module_verify_baseline` already written by the speculative one, and that value stays. **Both commands run against `git_root` and emit repo-root-relative paths, so the exclusion set is `_mill/` and `.millhouse/` re-anchored to the hub fragment** — `project_root.relative_to(git_root)` prepended to each, which is the empty fragment in a flat layout and therefore degenerates to the bare prefixes there.
+- **Rationale:** Every correctness claim in this task rests on "at `--stage baseline` time the worktree's source content equals the merge-base content". Today that holds because only mill-start and mill-plan have run, but it is an unguarded runtime assumption — a resumed task, a hand-edited worktree, or an out-of-order invocation would capture a *post-edit* tree and cache `"pre-existing-failures"` for the task's own breakage. `_verify_baseline`'s module docstring already names that as the unsafe direction: a false `"clean"` costs one over-strict gate later, a false `"pre-existing-failures"` disables the regression gate for the rest of the task. The guard is two cheap git commands and it fails toward strict gating, matching every other fail-safe in this module. **Why a dirty tree only warns.** `mill-go-base/SKILL.md`'s §0.55 done-gate pre-flight runs immediately before §0.5, and its stated purpose (`SKILL.md:574`) is to let a self-capturing regression/snapshot suite write its baseline into the tree — `_done_gate.run_preflight` executes an arbitrary `done_gate` command with `cwd=git_root` (`_done_gate.py:115-117`). Tracked-file writes outside `_mill/`/`.millhouse/` are therefore the *intended* behaviour for any hub with `done_gate_baseline_preflight: true`. A gating porcelain condition would silently disable this task's entire capture for every such hub — the same silent-task-wide-failure mode the guard exists to prevent. Condition (1) is the load-bearing check anyway: it asks whether implementation work has been **committed** to this branch, which is what "pre-edit" actually means. The accepted cost is that an uncommitted hand-edit to a source file is captured rather than refused; it is warned about by path, and it is a far narrower exposure than disabling the mechanism for a supported configuration. This supersedes the earlier framing under `preflight-dirt-warning`, which treated a failing porcelain check on a later invocation as an acceptable fail-safe — with §0.55 in the picture that outcome is not a rare fail-safe but the default for those hubs.
+
+  `merge-base`, not the parent tip, is the comparison point — using the tip would reintroduce exactly the sibling-merge drift bug this task exists to remove. The coordinate space is load-bearing: `git status --porcelain` and `git diff --name-only` both emit repo-root-relative paths, while `_mill/` and `.millhouse/` are hub-relative. In a nested-hub layout an unanchored comparison would never match a mill-plan write (which lands as `<hub-frag>/_mill/...`), so the guard would report "not pre-edit" and silently disable the capture for the whole task — the exact silent-task-wide-failure mode the guard exists to prevent, inverted. This is the same `git_root`-vs-`project_root` distinction `millpy-implement.py:76-91`'s `_relative_cwd_fragment` exists for.
+- **Where `<parent>` comes from:** `_run_module_wide_standalone`'s existing `_parent_branch.resolve(status_path, interactive=False)` block and its `{"result": "error"}` early return (`millpy-implement.py:150-154`) are **retained and repointed** — they move up to the guard, which is now the stage's only consumer of the parent branch. (`compute_baseline` itself no longer takes `parent_branch`; the *stage* still needs it, which is why this block survives where the analogous merge-in block at `:257-261` does not.) An unresolvable parent, or a non-zero `git merge-base`, **skips the capture** exactly as a failed condition (1) does — never proceed unguarded, since an unverifiable precondition is indistinguishable from a violated one.
+- **Rejected:** Accepting the risk with stated reasoning (the failure mode is silent and task-wide, and the check costs two git calls); blocking rather than skipping when the precondition fails (the pre-flight's standing contract is that it never blocks the task); checking only the working tree's cleanliness (misses the case where a prior batch's work is already *committed* on the branch).
+
+### merge-in-batch-baseline-staleness
+
+- **Decision:** `--recompute-baseline` additionally clears **every** batch's `verify_baseline_failures` in `status.md`. The clearing runs **before** `_run_recompute_baseline`'s early returns — ahead of the `module_wide_verify_cmd is None` skip at `:242-252` and the error returns at `:224-228` and `:234-240` — not alongside the `module_verify_baseline` reset at `:255`. Nothing is recaptured — the post-merge worktree is not pre-edit, so `preflight-precondition-guard` would refuse the capture anyway. Batch gates run strictly for the remainder of the task. There is no recapture path: §0.5 invokes the stage only for the task's first batch, and after a mid-task merge-in the worktree is never pre-edit again, so `preflight-precondition-guard` would refuse a capture even if one were attempted.
+- **Rationale:** A per-batch baseline captured before a mid-task merge-in describes the *old* parent. After the merge the tree contains parent content that baseline never saw, so the stored signature set is stale in both directions: it can waive a failure the new parent introduced (unsafe) and it cannot waive a failure the new parent introduced that the old one lacked. Until now `_corroborate_batch_failure` masked this — its control checkout at the batch's `start_sha` included any merged-in parent content, so it silently absorbed newly-merged-parent failures too. Deleting corroboration removes that mask, which makes the staleness an explicit decision rather than an accident. Clearing is the only option that is safe in both directions; strict gating surfaces a red merged parent to the operator instead of silently waiving it, consistent with Decision `merge-in-recompute`'s asymmetric rule. Placing the clearing ahead of the early returns is load-bearing: per-batch staleness is entirely independent of whether an overview-level module-wide `verify:` is configured, so a task with per-batch commands but no module-wide one — which `:242-252` exits early with `baseline: "skipped"` — would otherwise keep every stale pre-merge signature set, the exact unsafe-direction waiver this decision exists to remove. The same reasoning covers the two error returns: a failure to compute the *module-wide* verdict says nothing about whether the per-batch baselines are still valid, and they are not.
+- **Rejected:** Leaving the per-batch baselines as captured (stale in the unsafe direction — waives failures the new parent introduced); recomputing them post-merge (the tree is not pre-edit; the capture would attribute the task's own changes to the parent); keeping corroboration solely to cover this case (retains the checkout and the whole support surface this task removes, and it waives same-task regressions as a side effect — see `delete-corroboration`).
+
+### start-sha-parameter
+
+- **Decision:** Remove `start_sha` from `_run_verify_gates`'s signature and drop the argument at every call site that forwards it into that function. `start_sha` remains a parameter of the enclosing finalize functions, which read it for the no-content-commit gate, the content-commit count, the in-scope path gate, and the Go build-tag gate.
+- **Rationale:** Inside `_run_verify_gates`, `start_sha` is read at exactly two places (`_implementer_common.py:1237` and `:1241`) and both belong to the corroboration branch this task deletes. Keeping an accepted-but-ignored parameter leaves a forwarding chain whose only purpose is a deleted feature, and the next reader has to re-derive that it is dead. Removing it is a mechanical signature edit confined to one module.
+- **Same treatment for the other parameters this task strands.** `git_name` / `git_email` exist in `_implementer_common.py` solely to drive the two persist-commits being deleted (`:1208-1222`, `:1270-1284`); once those go they are dead through `_run_verify_gates` (`:1055-1056`), `_forward_output` (`:1903-1904`), `finalize_from_output` (`:1739-1740`) and both CLI call sites (`millpy-fix.py:490`, `millpy-implement.py`). `status_path` and `batch_name` are likewise unread **inside `_run_verify_gates`** once the on-demand prelude and the corroboration branch are gone. All four are removed from `_run_verify_gates`'s signature and from the forwarding chain that exists only to reach it; the three docstring passages that justify them by the deleted feature (`:1146-1151`, `:1798-1801`, `:1969`) go with them. Where an enclosing function reads a parameter for its own purposes, it keeps it — the removal is scoped to the forwarding that served the deleted persist-commits, exactly as with `start_sha`.
+- **Rejected:** Retaining any of them as accepted-but-ignored arguments (dead parameter, dead forwarding, and a misleading docstring to maintain — the rationale above applies verbatim to all five).
+
+### preflight-dirt-warning
+
+- **Decision:** `--stage baseline` takes a `git status --porcelain` snapshot before its first verify run and again after its last, and prints an ASCII-only stderr warning naming any path that is newly dirty. It never blocks, never reverts, and never fails the stage. A verify command that dirties a tracked file during invocation 1 is warned about there and warned about again by invocation 2's guard, but does not skip invocation 2's capture — see `preflight-precondition-guard`'s "Why a dirty tree only warns". This warning and that guard's advisory check are the same check reported twice, not two policies. It reuses `preflight-precondition-guard`'s exclusion set verbatim — hub-fragment-anchored `_mill/` and `.millhouse/`, compared against the same repo-root-relative porcelain output from `git -C <git_root>` — so the two checks cannot drift apart.
+- **Rationale:** The pre-flight's verify runs now mutate the real task worktree rather than a throwaway checkout. Verify commands are expected to be non-mutating — they already run in-worktree at every batch gate — but a command that writes a tracked file would now do so *before* batch 1's `start_sha` is taken, silently attributing the dirt to batch 1's implementer and potentially tripping the in-scope dirty-tree gate in finalize. A porcelain diff plus a warning is a few lines and turns an opaque downstream failure into a named cause. `_mill/` is excluded because a concurrently-running mill-plan session writes there during the speculative early launch (see `mill-go-base/SKILL.md`'s entry-gate wait), which is legitimate and unrelated.
+- **Rejected:** No guard at all (a real new failure mode, cheap to make debuggable); blocking or auto-reverting on detected dirt (the pre-flight's standing contract is that it never blocks the task, and reverting could destroy a legitimate concurrent write).
+
+## Technical context
+
+**The three checkout consumers, and what replaces each:**
+
+| Call site | Today | After |
+|---|---|---|
+| `millpy-implement.py:_run_module_wide_standalone` → `_verify_baseline.compute_baseline` | checkout at parent tip, 3-run algorithm | in-worktree, 2-run algorithm |
+| `_implementer_common._run_verify_gates` on-demand prelude → `compute_batch_baseline_on_demand` | lazy checkout at pinned `baseline_parent_sha` | deleted; eager capture at `--stage baseline` |
+| `_implementer_common._corroborate_batch_failure` → `_verify_baseline._checkout_parent_branch(project_root, git_root, start_sha)` | checkout at batch's `start_sha` | deleted |
+| `millpy-merge-in-subagent._run_recompute_baseline` → `compute_baseline` | checkout at parent tip | in-worktree, pass ⇒ `"clean"` / fail ⇒ unset |
+
+**Key files and line anchors (as of `29a69040`):**
+
+- `plugins/mill/scripts/_verify_baseline.py` — the whole module. `_checkout_parent_branch` (~line 90), `_link_dependency_dirs`, `compute_baseline`, `_run_module_wide_verify_algorithm`, `_run_verify_in`, `compute_batch_baselines`, `compute_batch_baseline_on_demand`, `_signatures_for_pair`. After the change, `_run_verify_in`, `_signatures_for_pair`, `compute_batch_baselines`, and a simplified `compute_baseline` survive; the module docstring's entire "transient worktree" framing must be rewritten, not patched. `compute_batch_baselines` keeps its logic but not its checkout-shaped surface: its `checkout_path` parameter is renamed `cwd` (the caller now passes the gate-resolved verify cwd, not a checkout root), its unused `project_root` parameter is dropped along with the `del project_root` line, and its docstring — including the "ALREADY-CHECKED-OUT" contract and the "never share a `pair_cache` across checkouts" warning, which has no referent once nothing is checked out — is rewritten rather than left describing a mechanism that no longer exists.
+- `plugins/mill/scripts/millpy-implement.py` — `_module_wide_skip_or_cached_payload` (~line 95), `_run_module_wide_standalone` (~line 126), `_pin_baseline_parent_sha` (~line 176, delete), `_run_baseline_stage` (~line 220). `_run_baseline_stage` currently `del`s its `plan_base` and `baseline_prepare_cmd` parameters as unused; `plan_base` becomes *used* again (it locates `00-overview.md` and the batch files for the raw enumeration) and `baseline_prepare_cmd` is removed from the signature and both call sites (~line 477).
+- `plugins/mill/scripts/_implementer_common.py` — `_corroborate_batch_failure` (~line 965, delete), `_run_verify_gates`'s on-demand prelude (~lines 1166–1225, delete), the corroboration branch and expanded-signature persistence (~lines 1240–1285, delete). The subset-diff waiver itself (~lines 1227–1240) stays. `_run_verify_gates`'s `start_sha` parameter is removed per Decision `start-sha-parameter`; its only readers inside that function are the two corroboration lines being deleted.
+- `plugins/mill/scripts/_status.py` — `get_baseline_parent_sha` (~line 432) / `set_baseline_parent_sha` (~line 458) and their two docstring mentions in the module's Public API block (~lines 38–39). `get/set/clear_module_verify_baseline` and the `verify_baseline_failures` batch field (~lines 602, 678) all stay.
+- `plugins/mill/scripts/millpy-cleanup.py` — `_scan_orphan_baseline_dirs` (~line 121), `_apply_orphan_baseline_dir` (~line 503), the `orphan_baseline_dirs` field on the plan dataclass, its population in `build_plan`, and the apply loop (~line 801).
+- `plugins/mill/scripts/millpy-fix.py` (~lines 423–495) — reads `module_verify_baseline` and `verify_baseline_failures` from `status.md` and forwards them. Pure consumer of the cached fields; no change needed, but verify it still type-checks after the `_run_verify_gates` signature edit.
+
+**Helpers to reuse, not reinvent:**
+
+- `_plan_dag.extract_batch_index(overview_text)` + `_read_batch_frontmatter(plan_dir / file_ref)` + `parse_verify_field(frontmatter, hub_root, git_root)` is the raw enumeration Decision `capture-set-equals-gate-set` requires; skipping a batch whose resolved command is `None` yields exactly the `(name, command, cwd)` triples `compute_batch_baselines` accepts. Deliberately **not** `iter_batch_verifies`, whose suppression filter the per-batch gate does not share.
+- `_plan_dag.parse_verify_field(frontmatter, hub_root, git_root)` resolves the plain-string vs `{cwd, command}` mapping forms. `--stage baseline` already calls it for the module-wide command.
+- `compute_batch_baselines`'s `pair_cache` parameter already implements cross-call `(command, cwd)` dedup. The module-wide command is *not* fed into that pair list — see Decision `module-wide-verdict-source` for why, and for how its run seeds the cache instead.
+- `_status.set_batch_field(status_path, batch_name, "verify_baseline_failures", signatures)` is the existing writer; the field is already in `_status`'s known-batch-field list.
+- `_subprocess_util.run` / `_subprocess_util.git_commit` for the porcelain snapshot and any status commit.
+
+**Gotchas found during exploration:**
+
+- **`compute_baseline`'s surviving signature.** With the checkout gone, `project_root` (no `.scratch/`, no dependency probing, no run-3 control), `git_root` (no rev-parse, no `worktree add`) and `parent_branch` (no branch to check out) are all unread **by `compute_baseline`**. The stage that calls it still resolves the parent branch, for `preflight-precondition-guard`'s `merge-base` — that is a caller concern now, not a callee parameter. The post-change signature is `compute_baseline(cwd: Path, module_wide_verify_cmd: str, *, timeout_seconds: float | None = None) -> tuple[str, list[str]]`. **The caller resolves the absolute cwd** — mirroring `_run_verify_gate` per the `git_root` vs `project_root` gotcha below — so the callee has no fallback chain of its own and `cwd` is always a concrete absolute path, never `None`.
+- **`cwd_override` coordinate spaces.** `compute_baseline`'s `cwd_override_relative` is a *hub-relative fragment* (re-anchored inside the temp checkout), while `compute_batch_baselines`'s `cwd_override` is an *already-resolved absolute path*. With the checkout gone there is no re-anchoring to do: both become "the absolute cwd to run in", and `millpy-implement.py`'s `_relative_cwd_fragment` helper exists only to produce the fragment form. Collapse to the absolute form; do not preserve the fragment parameter for symmetry.
+- **`--stage baseline` needs the plan, and may run before it exists.** The speculative early launch fires during the mill-plan entry-gate wait and is skipped when the overview isn't present/approved. The non-speculative launch at §0.5 runs after the plan exists. Since the module-wide command *already* comes from `00-overview.md`, adding batch enumeration introduces no new dependency on the overview — but the raw enumeration must degrade to `[]` (not raise) if a referenced batch file is missing or unparseable, **and equally if `extract_batch_index` raises `PlanDAGError`** on a present-but-malformed overview with no usable `batches:` block, **or if `parse_verify_field` raises `ValueError`** on a well-formed-YAML but malformed `verify:` mapping (`_plan_dag.py:483,490,491` — `_plan_validate.py`'s `verify-malformed-cwd` check catches this upstream for an approved plan, but the speculative launch can fire against a plan that has not been validated yet). Otherwise the stage breaks its standing "never raises, prints a JSON line" contract on the speculative path, where no operator is watching. A batch whose `verify:` fails to parse is skipped individually; it does not abort the enumeration. The separate question of the `## Batches` section not existing yet is settled by Decision `two-half-stage-ownership`.
+- **The stage's JSON output shape is consumed by SKILL.md prose.** `mill-go-base/SKILL.md` §0.5 parses `{"stage": "baseline", "substage": "module_wide", "result": ..., "value": ...}` and explicitly says the speculative launch's *single module-wide result IS the complete baseline computation*. Adding per-batch output means either a second `"substage": "per_batch"` JSON line (and a SKILL.md update telling the orchestrator to expect it) or folding batch counts into the existing line. Prefer a second line plus the SKILL.md edit — both §0.5's speculative branch and its main flow already extract with `grep '^{' <log-path>`, which tolerates multiple JSON lines, but both then describe parsing *the one* JSON line. Update both to select by the `substage` key rather than positionally.
+- **Idempotence must survive the widening.** The stage no-ops when `module_verify_baseline` is already cached. With batch captures added, "already cached" is per-pair: skip any batch whose `verify_baseline_failures` **key is present** in its `read_batches` entry, and skip the module-wide run when its scalar is set. Key presence, never truthiness — a green batch's baseline is `[]`, which `set_batch_field`/`_write_batches` store as a present key (`_status.py:685,694`) but which is falsy, so a truthiness test would re-run every green batch's entire suite on a restarted mill-go: exactly what this bullet forbids, and the majority case.
+- **`git_root` vs `project_root`.** The old code ran the verify in the checkout (mirroring `git_root`) and the control run in `project_root` (the task worktree / hub root). In-worktree, the capture must resolve its cwd **exactly as `_run_verify_gate` does** (`_implementer_common.py:865-869`): the `parse_verify_field` override when present, else `git_root`, else `project_root` only when `git_root` is absent. Note the default is `git_root`, not `project_root` — `_run_verify_gates` always passes a real `git_root` (`:1158-1160`), and today's module-wide path agrees because `_relative_cwd_fragment` collapses both `None` and `git_root` to "run at the checkout root". Getting this wrong is not cosmetic: in a nested-hub layout a plain-string `verify:` would be captured in a different directory than it is gated in, which breaks Decision `capture-set-equals-gate-set`'s premise and makes `module-wide-verdict-source`'s `(command, cwd)` seed key never match, so the dedup would silently never fire. Both halves normalise the key through this same resolution. Nested-hub layouts are the case this distinction exists for; don't flatten it.
+- **CLAUDE.md verify-command shape.** This is a Python project, so every plan batch's `verify:` must start with a literal empty `PYTHONPATH=` prefix (`_plan_validate.py`'s `verify-not-isolated` check).
+- **No `sed`.** Use `Edit`/`Read`/`Write` or `awk`/`grep`/`cat` for all edits, including in any dispatched implementer's prompt.
+
+## Testing
+
+**`plugins/mill/unit_tests/test-verify-baseline.py`** — the heaviest rewrite. Today it fakes `git worktree add`/`rev-parse` and asserts checkout/teardown behaviour; all of that goes.
+
+- TDD candidate: the simplified module-wide algorithm, asserted against the new `tuple[str, list[str]]` return. Table-drive the run sequence — `(0)` → `("clean", …)` after one run; `(1, 0)` → `("clean", …)` after two; `(1, 1)` → `("pre-existing-failures", …)` after exactly two. Assert the *run count*, since deleting run 3 is a behavioural change a count assertion pins and an outcome assertion does not. Separately assert the signature half: the returned list is the deduplicated, order-preserving union across every run actually performed.
+- Assert `compute_baseline` runs in the cwd it was handed and performs no git operation of any kind — a "no subprocess call whose argv[0] is `git`" assertion is the regression guard that keeps the checkout from creeping back.
+- `compute_batch_baselines`'s existing `(command, cwd)` dedup, `pair_cache` sharing, skip-run-2-when-green, independent-list-per-name, and union-order-preservation tests carry over unchanged — they never depended on the checkout.
+- `subprocess.TimeoutExpired` still propagates from both entry points.
+
+**`plugins/mill/unit_tests/test-millpy-implement.py`**
+
+- TDD candidate: eager capture. Given a fake plan with three batches where two share a `(command, cwd)` pair and one matches the module-wide command, assert each distinct pair runs exactly once and every batch name gets its own `verify_baseline_failures` entry.
+- Idempotence: a second `--stage baseline` invocation with everything already cached runs zero verify commands.
+- Partial idempotence: module-wide cached but batch B uncaptured → only B's command runs.
+- Missing/unparseable *batch files* (the overview itself present) → the batch enumeration degrades to `[]`, the stage prints a JSON line and returns 0, runs nothing, raises nothing. A missing `00-overview.md` is out of this claim's scope: `millpy-implement.py:458-460` prints to stderr and returns 1 before the `--stage baseline` branch is reached, which is pre-existing behaviour this task does not change.
+- TDD candidate: `two-half-stage-ownership`. With no `## Batches` section in `status.md`, the stage captures the module-wide baseline, runs zero batch verify commands, raises no `ValueError`, and reports the per-batch half as `"deferred"`. A second invocation after `init_batches` reports module-wide `"cached"` and captures every batch for real.
+- `per-batch-capture-driver`: with three batches where the second's command raises `TimeoutExpired`, batches one and three are captured and persisted and only the second is left unset. A nested-hub fixture (`project_root` below `git_root`) where mill-plan has written `_mill/` must pass `preflight-precondition-guard`, not skip — the regression guard for the path-anchoring bug.
+- `capture-set-equals-gate-set`: a plan where batch A's `verify:` references a path batch B declares it deletes must still capture a baseline for A — the regression guard against reintroducing `iter_batch_verifies`'s suppression filter here.
+- TDD candidate: `preflight-precondition-guard`. Four cases — a source file differing between `merge-base` and `HEAD` (skip, zero verify commands, no field written, one `result: "skipped"` line per half, each carrying its `substage` tag); an unresolvable parent branch or non-zero `merge-base` (same skip); a **dirty** tracked source file with a clean `merge-base`-vs-`HEAD` diff (captures normally, emits the warning — the §0.55 done-gate case, and a gating assertion here would be the regression); and a tree where only `_mill/`/`.millhouse/` differ (captures normally, no warning). Also assert a skip on an invocation that finds `module_verify_baseline` already set leaves that value intact rather than clearing it. Compare against `merge-base`, never the parent tip — a test that advances the parent branch after the task branched and still expects a normal capture is the regression guard for the drift bug this task removes.
+- `module-wide-verdict-source`: a batch whose `verify:` string and cwd match the module-wide command runs once, not twice, and receives the module-wide run's signature set — asserted across *two separate stage invocations* (module-wide captured in the first, batch captured in the second), since that split is the default path and an in-process cache would pass a single-invocation test while failing in production.
+- Idempotence with a falsy value: a batch whose captured baseline is `[]` is not re-run on a second invocation. This is the key-presence-vs-truthiness guard, and `[]` is the majority case.
+- `preflight-dirt-warning`: a verify command that touches a tracked file produces the stderr warning naming that path and still returns 0; one that touches only `_mill/` produces no warning.
+- Assert `baseline_parent_sha` is never written.
+
+**`plugins/mill/unit_tests/test-implementer-common.py`**
+
+- Scenarios that previously exercised the on-demand prelude and corroboration must now assert the *absence* of that behaviour: a batch gate failure with no cached baseline gates strictly and performs no checkout.
+- The subset-diff waiver's own tests (waive on subset, block on non-subset, never waive an empty replay set) stay and are the guard that this change didn't touch gate semantics.
+
+**`plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`**
+
+- TDD candidate: the asymmetric verdict, expressed in terms of `compute_baseline`'s return value, not a raw exit code. `"clean"` → `module_verify_baseline` set to `"clean"`; `"pre-existing-failures"` → field left unset (and explicitly *not* `"pre-existing-failures"`). Include the fail-then-pass case, which `compute_baseline`'s flakiness retry resolves to `"clean"` — a test written against a raw exit code would pass for the wrong implementation here. The clear-first behaviour survives in both branches, so a stale pre-merge `"pre-existing-failures"` is never carried forward.
+- TDD candidate: `merge-in-batch-baseline-staleness`. Given a `status.md` with several batches carrying non-empty `verify_baseline_failures`, `--recompute-baseline` leaves every one of them cleared, on both the pass and the fail branch — the clearing is unconditional and must not be coupled to the module-wide verdict. Include the no-module-wide-verify case (overview `verify:` null, per-batch commands present): the batches must still be cleared even though the module-wide half exits early with `baseline: "skipped"`. Same for an error early return.
+- Exit code stays 0 on every path; the JSON line still reports the outcome.
+
+**`plugins/mill/unit_tests/test-status.py`** — delete the `baseline_parent_sha` accessor tests; leave the `module_verify_baseline` and `verify_baseline_failures` tests untouched. Add round-trip coverage for the new `get/set_module_verify_baseline_signatures` accessors (including the insert-in-place-vs-append behaviour the existing scalar accessors are tested for, and an empty list, which must survive as a present-but-empty field). TDD candidate: a signature list long enough to exceed PyYAML's 80-column `best_width` must still write exactly one physical line, and a subsequent `set` then `clear` then `read` round-trip on that value must leave `status.md` parseable — the regression guard for the line-stranding bug that would otherwise brick every later `_status` read. and assert `clear_module_verify_baseline` now clears the signatures field alongside the scalar — the two must never go out of sync, since a stale signature set paired with a cleared verdict would seed the dedup from a run that no longer has a verdict.
+
+**`plugins/mill/unit_tests/test-cleanup.py`** — delete the orphan-baseline-dir scan/apply tests. Assert the cleanup plan no longer carries the field, so a stray `.scratch/verify-baseline-*` directory is now simply ignored rather than reaped.
+
+**`plugins/mill/integration_tests/`** — `test-verify-baseline.py` and `test-baseline-waiver.py` both drive real git. Rework them against a real task worktree with a real dirty/clean verify command and no second checkout; the waiver test's end-to-end assertion (a pre-existing failure is waived, a newly-introduced one blocks) is the highest-value surviving coverage and should be preserved in shape even though its setup changes completely.
+
+**Full-suite gate:** `plugins/mill/unit_tests/run-all.py` must pass. Ad-hoc lint via `uvx ruff check .`.
+
+## Q&A log
+
+- **Q:** Where should the in-worktree pre-edit capture run — mill-go's `--stage baseline` (current position) or mill-spawn? **A:** [auto-pick] mill-go `--stage baseline`. **Why:** At spawn there is no plan, so no verify commands are known, and nothing is installed or built; at `--stage baseline` the tree is both pre-edit and warm, and the stage is already idempotent and wired into the speculative launch path.
+- **Q:** Convert all three checkout consumers (module-wide, per-batch on-demand, `start_sha` corroboration), or only the module-wide one? **A:** [auto-pick] All three. **Why:** Leaving any one behind retains `_checkout_parent_branch`, the dependency junctioning, `core.longpaths`, and the cleanup reaper — the whole surface the issue names — for a fraction of the benefit.
+- **Q:** After removing the on-demand path, capture per-batch baselines eagerly at pre-flight or keep them lazy? **A:** [auto-pick] Eagerly, deduped on `(command, cwd)`. **Why:** Laziness existed to avoid N cold checkouts; against an already-built worktree the marginal cost is one suite run per distinct pair, and an always-present baseline is what removes the need for the corroboration fallback.
+- **Q:** What happens to `--recompute-baseline` after a merge-in, where the worktree is no longer pre-edit? **A:** [auto-pick] Run in-worktree with an asymmetric rule — pass ⇒ `"clean"`, fail ⇒ leave unset (gate strictly). **Why:** A passing merged tree proves nothing is red, so `"clean"` is correct by construction; a failure cannot be attributed to parent vs. task, and degrading to strict gating is the safe direction and matches the module's existing fail-safe.
+- **Q:** Delete `_corroborate_batch_failure` or replace it with a rolling per-batch capture? **A:** [auto-pick] Delete it. **Why:** With an eager pre-edit baseline, genuinely pre-existing failures are already waived by the subset-diff check; what corroboration additionally waived was a regression introduced by an earlier batch of this same task, which should block.
+- **Q:** Do `millpy-cleanup.py`'s `.scratch/verify-baseline-*` reaping, the `core.longpaths` handling, and existing `baseline_parent_sha:` status rows need a compatibility window? **A:** [auto-pick] No — delete outright, no migration. **Why:** `.scratch/` is gitignored and no new orphans can be produced once the checkout is gone; leftovers are a one-line manual `rm -rf`, and an unread YAML key is inert.
+- **Q:** Keep the module-wide algorithm's third "control check" run? **A:** [auto-pick] Delete it; keep the single flakiness-guard retry. **Why:** Run 3 existed to compare the checkout's environment against the task worktree's; with runs 1 and 2 already in the task worktree it is the same command in the same directory and can corroborate nothing.
+- **Q:** Does the pre-flight need a guard now that its verify runs mutate the real worktree? **A:** [auto-pick] A `git status --porcelain` before/after diff that warns on stderr, excluding `_mill/`; never blocks, never reverts. **Why:** Dirt created before batch 1's `start_sha` would be silently attributed to batch 1's implementer and could trip finalize's in-scope dirty-tree gate; a warning turns an opaque downstream failure into a named cause without violating the pre-flight's never-block contract.
+- **Q:** Remove `pipeline.baseline_prepare_cmd` from the hub config and the template? **A:** [auto-pick] Yes; keep `baseline_verify_timeout_minutes`. **Why:** The prepare command exists solely to warm a cold transient checkout's build, which no longer happens; the timeout still guards against a hung test runner blocking the pre-flight.
+- **Q:** (r2) The module-wide verdict is binary but `_signatures_for_pair` discards exit codes — collapse the module-wide command into the shared pair list anyway, or keep it separate? **A:** [auto-pick] Keep it separate with its own exit-code algorithm, and seed `pair_cache` from its runs. **Why:** A pair-list run cannot distinguish `"clean"` from `"pre-existing-failures"`, but the module-wide algorithm's run schedule matches `_signatures_for_pair`'s exactly, so seeding recovers the dedup without widening a shared helper's contract.
+- **Q:** (r2) What happens to per-batch `verify_baseline_failures` across a mid-task merge-in, now that corroboration is gone? **A:** [auto-pick] `--recompute-baseline` clears them all; nothing is recaptured; batch gates run strictly afterwards. **Why:** A pre-merge baseline describes the old parent and is stale in the unsafe direction; the post-merge tree is not pre-edit so it cannot be recaptured, and strict gating surfaces a red merged parent instead of silently waiving it.
+- **Q:** (r2) Should `--stage baseline` enforce the pre-edit precondition, or accept the risk? **A:** [auto-pick] Enforce it — `merge-base`-vs-`HEAD` diff plus a porcelain check, both limited to paths outside `_mill/`/`.millhouse/`; skip the capture and leave fields unset when either fails. **Why:** Every correctness claim rests on that precondition, capturing against a post-edit tree caches `"pre-existing-failures"` (the direction the module's own docstring calls unsafe), and the guard is two git calls that fail toward strict gating.
+- **Q:** (r2) Is `start_sha` removed from `_run_verify_gates` or retained as an ignored argument? **A:** [auto-pick] Removed, along with the argument at its forwarding call sites. **Why:** Its only readers inside that function are the two corroboration lines being deleted; an ignored parameter leaves a forwarding chain and a docstring serving a deleted feature.
+- **Q:** (r3) The speculative early launch fires before `## Batches` is seeded, and `set_batch_field` raises when that section is absent — who owns the per-batch capture? **A:** [auto-pick] Split the stage in two halves: module-wide owned by whichever launch fires first, per-batch deferred (detected via `_status.read_batches`) and owned by §0.5, which always re-invokes the stage. **Why:** An undeferred per-batch capture in the speculative path would run every batch's suite and then throw the results away; detection needs no new CLI flag and stays idempotent whichever path fires first.
+- **Q:** (r3) Use `iter_batch_verifies` for the capture enumeration, or enumerate raw? **A:** [auto-pick] Raw, mirroring the gate's own frontmatter resolution. **Why:** `iter_batch_verifies` suppresses batches whose verify targets a later batch's declared deletion, a filter the gate does not apply — using it would leave exactly those batches gating with no baseline, and the filter is meaningless at pre-flight since nothing has been deleted yet.
+- **Q:** (r9) Can the new signatures field wrap across physical lines? **A:** [auto-pick] No — `safe_dump(..., default_flow_style=True, width=10**9)`, exactly one line. **Why:** The neighbouring accessors rewrite and delete by single-line regex, so a wrapped value strands continuation lines and every later `_status.read` raises for the rest of the task.
+- **Q:** (r9) Where does the per-batch clearing run relative to `_run_recompute_baseline`'s early returns? **A:** [auto-pick] Before all of them. **Why:** Per-batch staleness is independent of whether a module-wide `verify:` exists, so a task with only per-batch commands would otherwise keep every stale pre-merge signature set.
+- **Q:** (r9) Are `git_name`/`git_email`/`status_path`/`batch_name` removed along with `start_sha`? **A:** [auto-pick] Yes, from `_run_verify_gates` and the forwarding that exists only to reach it. **Why:** They serve only the deleted persist-commits; the dead-forwarding rationale for `start_sha` applies verbatim.
+- **Q:** (r9) Does the guard's skip line carry a `substage` tag? **A:** [auto-pick] Yes — one tagged line per skipped half. **Why:** §0.5 selects by `substage`, so an untagged line matches neither selector and the per-batch `skipped` value would be unreachable.
+- **Q:** (r8) §0.55's done-gate pre-flight intentionally dirties the tree right before §0.5 — does the guard's porcelain condition then disable the capture for those hubs? **A:** [auto-pick] Demote the porcelain check to advisory; only the `merge-base`-vs-`HEAD` diff gates. **Why:** Tracked writes outside `_mill/` are §0.55's *intended* behaviour, so a gating check would silently disable the capture for every hub with `done_gate_baseline_preflight: true`; the committed-diff check is the load-bearing one, since "pre-edit" means no implementation work committed.
+- **Q:** (r8) Where does the guard get `<parent>`, and what if it can't resolve? **A:** [auto-pick] Retain and repoint `_run_module_wide_standalone`'s existing `_parent_branch.resolve` block; an unresolvable parent or non-zero `merge-base` skips the capture. **Why:** An unverifiable precondition is indistinguishable from a violated one, so it must not proceed unguarded.
+- **Q:** (r6) What is the capture's default verify cwd when `verify:` is a plain string? **A:** [auto-pick] `git_root`, falling back to `project_root` only when `git_root` is absent — mirroring `_run_verify_gate` exactly. **Why:** Stating `project_root` would capture a plain-string `verify:` in a different directory than the gate runs it in under a nested hub, breaking the capture-set-equals-gate-set premise and silently killing the `(command, cwd)` dedup.
+- **Q:** (r6) How does the module-wide half get signatures out, given `compute_baseline` returns a bare string and discards run output? **A:** [auto-pick] Change its return to `tuple[str, list[str]]`; the merge-in call site unpacks it and uses the verdict only. **Why:** The extraction belongs inside the existing run loop, where the output already exists, rather than in a caller that would have to re-run the command to see it.
+- **Q:** (r5) `pair_cache` is in-process, but the two stage halves run in different processes — is the module-wide seeding best-effort, or persisted? **A:** [auto-pick] Persisted, as a new `module_verify_baseline_signatures:` field in `status.md`. **Why:** The split across processes is the default path (the speculative early launch), so an in-process cache would be empty exactly when it would have paid off, making a single-batch plan run the module-wide suite twice; persisting also survives a mill-go restart for free.
+- **Q:** (r5) Does `--recompute-baseline` call `compute_baseline` or run the command once directly? **A:** [auto-pick] `compute_baseline`, mapping `"pre-existing-failures"` → unset. **Why:** It inherits the flakiness-guard retry, so one flaky post-merge failure doesn't force strict gating for the rest of the task — and the distinction is testable, since a raw-exit-code test would pass for the wrong implementation.
+- **Q:** (r4) Which coordinate space do the precondition guard's `_mill/`/`.millhouse/` exclusion prefixes live in? **A:** [auto-pick] Repo-root-relative, re-anchored to the hub fragment via `project_root.relative_to(git_root)`; both git commands run against `git_root`. **Why:** Porcelain and diff output is repo-root-relative while the prefixes are hub-relative, so an unanchored comparison would never match in a nested-hub layout and would silently skip the capture for the entire task.
+- **Q:** (r4) Does one batch's timeout abort the remaining batches' captures? **A:** [auto-pick] No — one call per batch, per-batch `try`/`except`, shared `pair_cache`. **Why:** `compute_batch_baselines` propagates `TimeoutExpired` out of a whole-list loop, so a single hung suite would discard every other batch's already-computed work.
+- **Q:** (r3) Is the `pair_cache` seeding really run-schedule-identical to `_signatures_for_pair`? **A:** [auto-pick] No — narrow the claim. **Why:** `_signatures_for_pair` skips run 2 only on a zero exit with zero signatures, while module-wide returns `clean` on any zero exit; the seeded set can be narrower, which waives less and is the safe direction.
+- **Q:** (r3) Does `baseline_verify_timeout_minutes`'s comment need rewriting when `baseline_prepare_cmd` is deleted? **A:** [auto-pick] Yes — it enumerates the deleted key by name in both the hub config and the template. **Why:** Leaving it would leave the surviving key documenting a key that no longer exists.
+
+
+### From _mill/plan/00-overview.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+slug: baseline-uses-worktree-not-checkout
+approved: true
+started: 20260923-091042
+parent: main
+root: ""
+verify: null
+discussion_sha: 5de408e5c686d5349a912f064c5850e3b3d05139
+skip_checks: ["wiki-config-mutation"]
+```
+
+### From _mill/plan/01-status-baseline-fields.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: status-baseline-fields
+number: 1
+cards: 2
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-status.py
+depends-on: []
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/_status.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-status.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/02-verify-baseline-core.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: verify-baseline-core
+number: 2
+cards: 7
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-verify-baseline.py test-worktree.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-verify-baseline.py
+depends-on: []
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/_verify_baseline.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_verify_baseline.py`
+  - `plugins/mill/unit_tests/test-worktree.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_verify_baseline.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_verify_baseline.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_verify_baseline.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-verify-baseline.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/integration_tests/test-verify-baseline.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/03-implement-baseline-stage.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: implement-baseline-stage
+number: 3
+cards: 9
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-implement.py
+depends-on: [1, 2]
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `mill-config.yaml`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/templates/mill-config.yaml`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/04-implementer-gate-cleanup.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: implementer-gate-cleanup
+number: 4
+cards: 8
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-implementer-common.py test-fix-finalize.py test-millpy-fix.py test-status.py
+depends-on: [3]
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/_implementer_common.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_implementer_common.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_implementer_common.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_implementer_common.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-implement.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-fix.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-implementer-common.py`
+  - `plugins/mill/unit_tests/test-fix-finalize.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/_status.py`
+  - `plugins/mill/unit_tests/test-status.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/05-merge-in-baseline-recompute.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: merge-in-baseline-recompute
+number: 5
+cards: 3
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-merge-in-subagent.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-baseline-waiver.py
+depends-on: [2]
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/millpy-merge-in-subagent.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/integration_tests/test-baseline-waiver.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/06-cleanup-orphan-removal.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: cleanup-orphan-removal
+number: 6
+cards: 4
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-cleanup.py
+depends-on: []
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/scripts/millpy-cleanup.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-cleanup.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/scripts/millpy-cleanup.py`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/unit_tests/test-cleanup.py`
+- **Creates:** none
+- **Deletes:** none
+
+### From _mill/plan/07-skill-docs-baseline.md
+
+
+```yaml
+task: 'compute_baseline: use the task worktree''s own pre-edit state, not a parent-branch checkout'
+batch: skill-docs-baseline
+number: 7
+cards: 2
+verify: null
+depends-on: [3, 5]
+```
+
+
+
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+- **Edits:**
+  - `plugins/mill/skills/mill-merge-in/SKILL.md`
+- **Creates:** none
+- **Deletes:** none
+
+## Conflicting files
+
+- `plugins/mill/scripts/_implementer_common.py`
+- `plugins/mill/unit_tests/test-implementer-common.py`
+- `plugins/mill/unit_tests/test-verify-baseline.py`
+
+## Instructions
+
+For each file listed above:
+
+1. Read the file and locate every conflict block (`<<<<<<<`, `=======`, `>>>>>>>`).
+2. Understand both sides of the conflict — what each branch intended.
+3. Write a resolution that preserves the intent of both sides.
+   When both sides modify **different, non-overlapping parts** of the same conflict region — for example, different columns of one table row, different keys of one object, or disjoint lines of a prose block — **combine both edits** into a single resolved structure.
+   Do NOT pick one side wholesale just because the region overlaps syntactically;
+   picking one side wholesale is correct only when the two changes are genuinely mutually exclusive (e.g. the same key is renamed to two different values).
+   Worked example: if `ours` changes column A and `theirs` changes column B of the same table row, the resolution keeps both column changes in a single row — it does not discard either.
+4. Before keeping content from either side inside a conflict hunk, search the rest of the file (outside the hunk) for that same content.
+   This judgment call is scoped narrowly — it applies only when a hunk's content might be a moved duplicate of content living elsewhere in the file;
+   it does NOT apply to every ordinary step-3 disjoint-region combine (e.g. the column-A/column-B worked example above), which remains today's silent, high-confidence success path.
+   Two branches:
+   - **Confident case:** if the content clearly already exists elsewhere and the surrounding context makes it unambiguous that this is the same item having been moved (not two independent, separately-intended copies) — do not re-add it in the hunk;
+     keep only the other side's unrelated edit.
+     Worked example: one side moves a roadmap item from `## Planned` to `## Done`, while the other side makes an unrelated edit elsewhere in the file.
+     The resolution keeps the item only under `## Done`;
+     it is not re-added under `## Planned`.
+   - **Ambiguous case:** if you cannot confidently tell whether this is the same moved content or a legitimate independent duplication — fall back to step 3's default (keep both) rather than guessing, and report the ambiguity via the `discarded` field (see Report section) with the description `"kept both sides of a conflict, ambiguous move-vs-duplicate"`.
+     Worked example: a similarly-worded item appears in two different sections and you cannot tell whether it is the same item moved or a legitimate second, independently-added item.
+     The resolution keeps both occurrences and reports the ambiguity via `discarded`.
+5. Run `git -C /home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout add <file>` to stage the resolved file.
+6. For modify/delete (DU) conflicts: if Task intent above lists this file under a batch's `Deletes:`, run `git -C /home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout rm <file>` instead of editing;
+   that stages the intentional deletion.
+7. For UD conflicts — files this branch **modified** that the parent branch **deleted**: do not silently keep the modification.
+   Instead: a. Run `git log --diff-filter=D --oneline MERGE_HEAD -- <file>` to find the deletion commit on the parent. b. Run `git show <deletion-commit>` to inspect context. c. If the deletion commit message mentions a replacement file (e.g. "replaced by", "moved to", "consolidated into"),
+   or the commit also adds a file in the same directory with overlapping content: stage the deletion — `git -C /home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout rm <file>`. d. If detection is inconclusive: report `{"status":"stuck","stuck_type":"logic","reason":"modify/delete conflict on <file>: cannot determine if parent deletion is a replacement -- operator must decide"}` and halt.
+   Do NOT silently keep the modification.
+8. Before reporting `{"status":"success"}` (with or without `discarded`), re-read each file listed in Conflicting files in full and explicitly verify no contradictory losing-side claims survive the resolution — e.g. a stale value from one side of the conflict left alongside the correct value from the other side, or a claim that only made sense before the other side's edit was applied.
+   If you find a contradiction you missed, fix it before reporting.
+   If you find a contradiction you cannot confidently resolve, report `{"status":"stuck","stuck_type":"logic","reason":"self-verification found an unresolved contradiction in <file>: <description>"}` instead of `{"status":"success"}`.
+
+Never use `git checkout --ours` or `git checkout --theirs` — they silently discard one side of the conflict.
+
+## Report
+
+Your last output line MUST be a bare JSON object (no code fence, no backticks):
+
+On success (nothing discarded):
+
+{"status":"success"}
+
+On success with discarded content — if you had to drop content from one side (e.g. two sides made mutually exclusive changes and only one could survive), list each dropped item:
+
+{"status":"success","discarded":["<short description of what was dropped from which side>"]}
+
+An empty or absent `discarded` field means nothing was lost.
+If anything was discarded, you MUST list it;
+an empty list when content was actually dropped is a protocol violation. `discarded` also carries the step 4 ambiguous-case entry `"kept both sides of a conflict, ambiguous move-vs-duplicate"` — even though nothing was technically dropped in that case, the field's purpose is to surface anything the operator should double-check before `git merge --continue`, which covers both a genuine drop and a kept-both ambiguity.
+The `mill-merge-in` frontend reads this field and surfaces any losses (or ambiguities) to the operator before continuing, rather than silently running `git merge --continue`.
+
+If you cannot resolve one or more conflicts:
+
+{"status":"stuck","stuck_type":"logic","reason":"<one-line description of what you could not resolve>"}
+
+Anything other than this JSON object on the last line is a protocol violation;
+the merge-in dispatcher treats that as stuck_type: logic with reason "no structured report" — your work is lost.
+Do not wrap the JSON in a code fence;
+do not add commentary after it.
+
+## Tools
+
+Available: Read, Edit, Write, Bash, Grep, Glob.
+Use `git -C /home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout` for any git commands;
+do not `cd`.
+Worktree cwd is `/home/hanf/Code/millhouse/wts/baseline-uses-worktree-not-checkout`.
