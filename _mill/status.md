@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-setup-wiki-doc-misc-r3
 branch: hanf/mill-setup-wiki-doc-misc-r3
 plan: _mill/plan
@@ -21,4 +21,19 @@ planning  '2026-09-23T10:42:15Z'
 plan-review-r1  '2026-09-23T10:48:01Z'
 plan-fix-r1  '2026-09-23T10:48:22Z'
 planned  '2026-09-23T10:48:54Z'
+implementing  '2026-09-23T10:49:26Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: mill-triage-title-escape
+    state: pending
+  - name: handoff-draft-order
+    state: pending
+  - name: claude-settings-denylist
+    state: pending
+  - name: golangci-lint-sandbox-fallback
+    state: pending
 ```
