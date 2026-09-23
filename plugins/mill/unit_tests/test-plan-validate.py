@@ -3316,6 +3316,106 @@ def test_check_context_completeness_symbol_clean_declared_struct_field_cross_car
             return 1
 
 
+def test_check_context_completeness_symbol_clean_declared_inline_assignment_same_card() -> int:
+    """A card's own Requirements: declares `` `private const double StepDurationS = 10.0` `` (no
+    parens/braces -- the inline modifier+ identifier = value shape) then bare-references
+    `StepDurationS` later in the same Requirements: text -> zero errors, even though an unrelated
+    fixture file declares a real `StepDurationS` symbol that would otherwise resolve and fire
+    (#1119)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        # Unrelated real declaration of the same identifier -- would otherwise resolve and fire.
+        (project_root / "internal" / "solver.go").write_text(
+            "package internal\n\nvar StepDurationS = 5.0\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  Declare `private const double StepDurationS = 10.0` and reuse "
+                "`StepDurationS` for every solver step.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print(
+                "PASS test_check_context_completeness_symbol_clean_declared_inline_assignment_same_card"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_clean_declared_inline_assignment_same_card: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dirty_bare_assignment_not_a_declaration() -> int:
+    """A card's Requirements: cites `` `bare_timeout_value = 30` `` with no modifier token in front
+    (a zero-modifier assignment span), then bare-references `bare_timeout_value` elsewhere where a
+    real fixture file declares that exact symbol, absent from the card's own refs -- the
+    zero-modifier form contributes nothing to the declared-symbols union, so the reference still
+    resolves and fires (#1119)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "config.go").write_text(
+            "package internal\n\nvar bare_timeout_value = 1\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  The example `bare_timeout_value = 30` is illustrative; read "
+                "`bare_timeout_value` from config at startup.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "bare_timeout_value", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/config.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_symbol_dirty_bare_assignment_not_a_declaration"
+            )
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_dirty_bare_assignment_not_a_declaration: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_check_context_completeness_symbol_dirty_not_a_declared_symbol() -> int:
     """A bare symbol NOT present in any signature/struct-shaped backtick anywhere in the plan still
     resolves and fires normally -- the declared-symbols exemption must not over-suppress."""
@@ -3705,6 +3805,53 @@ def test_check_context_completeness_symbol_dotted_trailing_segment_only() -> int
         except AssertionError as exc:
             print(
                 "FAIL test_check_context_completeness_symbol_dotted_trailing_segment_only: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_symbol_dirty_assignment_expression_prefix() -> int:
+    """A card's Requirements: cites `` `x = mod.get_value(args)` `` -- the existing trailing-suffix
+    stripping removes the `(args)` call suffix, leaving `x = mod.get_value`, then the new leading-
+    prefix strip removes `x = `, leaving the qualifying dotted pair `mod.get_value` -- resolvable
+    to a fixture file declaring `get_value` in package `mod`, absent from the card's own refs ->
+    exactly one error with the ORIGINAL, unstripped token as path (#1115)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal" / "mod").mkdir(parents=True)
+        (project_root / "internal" / "mod" / "values.go").write_text(
+            "package mod\n\nfunc get_value() {}\n", encoding="utf-8"
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements="  Compute `x = mod.get_value(args)` for the batch.\n",
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "x = mod.get_value(args)", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/mod/values.go'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_symbol_dirty_assignment_expression_prefix")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_symbol_dirty_assignment_expression_prefix: "
                 f"{exc}",
                 file=sys.stderr,
             )
@@ -7605,10 +7752,15 @@ def test_check_context_completeness_dirty_ownership_separate_line_not_exempted()
             return 1
 
 
-def test_check_context_completeness_clean_literal_enumeration_mixed_shapes() -> int:
-    """The verbatim #984 test-input list -- a line with many backtick tokens, several neither
-    path- nor symbol-shaped -- exempts every token on the line, including the path-shaped
-    `README.md` -> zero errors."""
+def test_check_context_completeness_dirty_literal_enumeration_mixed_shapes_majority_not_reached() -> int:
+    """The verbatim #984 test-input list -- a line with 8 backtick tokens: 5 shaped (symbol-shaped
+    `TestIsGlyphTarget`/`isGlyphTarget`; path-shaped `a/b#C`/`a/b` via the `"/" in token` rule and
+    `README.md` via its `.md` extension) and only 3 non-shaped (`#x`, `a#b#c`, `.`) -- does NOT
+    reach a strict non-shaped majority under the literal-enumeration-majority Decision, so the
+    exemption no longer fires -> exactly one error naming the fixture's own `README.md` (the only
+    token both independently resolvable to an on-disk file and absent from the card's own refs;
+    `TestIsGlyphTarget`/`isGlyphTarget` never resolve via the symbol branch, and `a/b#C`/`a/b` do
+    not exist on disk so the path branch's resolvable gate excludes them)."""
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         plan_dir = tmp / "plan"
@@ -7631,15 +7783,21 @@ def test_check_context_completeness_clean_literal_enumeration_mixed_shapes() -> 
         result = _plan_validate.run(plan_dir, project_root)
         check_errors = [e for e in result if e["check"] == "context-completeness"]
         try:
-            assert len(check_errors) == 0, (
-                f"expected 0 context-completeness errors, got: {check_errors}"
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
             )
-            print("PASS test_check_context_completeness_clean_literal_enumeration_mixed_shapes")
+            assert check_errors[0]["path"] == "README.md", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print(
+                "PASS test_check_context_completeness_dirty_literal_enumeration_mixed_shapes"
+                "_majority_not_reached"
+            )
             return 0
         except AssertionError as exc:
             print(
-                f"FAIL test_check_context_completeness_clean_literal_enumeration_mixed_shapes:"
-                f" {exc}",
+                "FAIL test_check_context_completeness_dirty_literal_enumeration_mixed_shapes"
+                f"_majority_not_reached: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -7723,6 +7881,164 @@ def test_check_context_completeness_dirty_literal_enumeration_all_path_shaped_no
             print(
                 "FAIL test_check_context_completeness_dirty_literal_enumeration_all_path_shaped"
                 f"_not_exempted: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_clean_literal_enumeration_majority_non_shaped() -> int:
+    """A Requirements: line with 4 backtick tokens -- three non-shaped literal test-input values
+    (`"a"`, `"b"`, `42`) and one path-shaped fixture file (`README.md`, on disk, absent from the
+    card's own refs) -- reaches a strict non-shaped majority (3 over 1), so the exemption still
+    fires -> zero errors (the exemption survives the literal-enumeration-majority Decision for a
+    genuine non-shaped-majority line, #1116/#1122)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+        (project_root / "README.md").write_text("# fixture", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                '  Accepts test values `"a"`, `"b"`, `42`, or `README.md` as literal inputs.\n'
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 0, (
+                f"expected 0 context-completeness errors, got: {check_errors}"
+            )
+            print("PASS test_check_context_completeness_clean_literal_enumeration_majority_non_shaped")
+            return 0
+        except AssertionError as exc:
+            print(
+                "FAIL test_check_context_completeness_clean_literal_enumeration_majority_non_shaped: "
+                f"{exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_literal_enumeration_issue_1116() -> int:
+    """Regression for #1116's own reported repro line: a Requirements: line with 3 backtick tokens
+    -- 2 symbol-shaped (`WellboreCases.CaseHydraulic(includeCirculationSub: true)`, whose trailing
+    `(...)` call suffix strips to the qualifying dotted pair `WellboreCases.CaseHydraulic`; the bare
+    identifier `SteadyStateHydraulicSolver`) and 1 non-shaped (`EpsForConvergence =
+    DefaultSolverScalings.Pressure * 10`, containing spaces and `=`, not `_RE_SYMBOL_SHAPE`-
+    matchable as a whole) -- 1 is not a strict majority over 2, so the exemption does not fire.
+    `SteadyStateHydraulicSolver` resolves to a fixture file cited only by a second, citing-only
+    batch (never the tested card's own refs) -> exactly one error naming it;
+    `WellboreCases.CaseHydraulic`'s trailing segment `CaseHydraulic` never resolves to any fixture
+    file, so it produces no additional finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "internal").mkdir()
+        (project_root / "internal" / "solver.cs").write_text(
+            "public class SteadyStateHydraulicSolver {}\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md", "number": 1, "depends-on": []},
+            {"name": "beta", "file": "02-beta.md", "number": 2, "depends-on": []},
+        ])
+        batch_a = _make_batch_file(
+            "alpha",
+            card_num=1,
+            edits=["other.py"],
+            requirements=(
+                "  construct `WellboreCases.CaseHydraulic(includeCirculationSub: true)`, seed it "
+                "with a converged `SteadyStateHydraulicSolver` at `EpsForConvergence = "
+                "DefaultSolverScalings.Pressure * 10`\n"
+            ),
+        )
+        batch_b = _make_batch_file(
+            "beta",
+            card_num=2,
+            context=["internal/solver.cs"],
+        )
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [
+            e for e in result if e["check"] == "context-completeness" and e["batch"] == "01-alpha"
+        ]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            e = check_errors[0]
+            assert e["path"] == "SteadyStateHydraulicSolver", f"wrong path: {e['path']!r}"
+            assert "which resolves to 'internal/solver.cs'" in e["message"], (
+                f"wrong message: {e['message']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_literal_enumeration_issue_1116")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_literal_enumeration_issue_1116: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
+def test_check_context_completeness_dirty_literal_enumeration_issue_1122() -> int:
+    """Regression for #1122's traced literal-enumeration angle: a Requirements: line with 3
+    backtick tokens -- `millpy-merge-in-subagent.py` (path-shaped), `verify-fix` (non-shaped -- the
+    hyphen is not a `\\w` character, so `_RE_SYMBOL_SHAPE` never matches it), and
+    `finalize_from_output` (symbol-shaped) -- 1 non-shaped is not a strict majority over 2 shaped,
+    so the exemption does not fire; `millpy-merge-in-subagent.py` is on disk and absent from the
+    card's own refs -> exactly one error naming it -- `finalize_from_output` never resolves to any
+    fixture file in this test, so it produces no additional finding."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+        (project_root / "millpy-merge-in-subagent.py").write_text(
+            "# placeholder fixture\n", encoding="utf-8",
+        )
+        (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
+
+        overview = _make_overview([{"name": "alpha", "file": "01-alpha.md"}])
+        batch = _make_batch_file(
+            "alpha",
+            edits=["other.py"],
+            requirements=(
+                "  Confirm `millpy-merge-in-subagent.py`'s `verify-fix` mode never calls "
+                "`finalize_from_output`.\n"
+            ),
+        )
+        _write_plan(plan_dir, overview, [("01-alpha.md", batch)])
+
+        result = _plan_validate.run(plan_dir, project_root)
+        check_errors = [e for e in result if e["check"] == "context-completeness"]
+        try:
+            assert len(check_errors) == 1, (
+                f"expected 1 context-completeness error, got: {check_errors}"
+            )
+            assert check_errors[0]["path"] == "millpy-merge-in-subagent.py", (
+                f"wrong path: {check_errors[0]['path']!r}"
+            )
+            print("PASS test_check_context_completeness_dirty_literal_enumeration_issue_1122")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_check_context_completeness_dirty_literal_enumeration_issue_1122: {exc}",
                 file=sys.stderr,
             )
             return 1
@@ -13533,6 +13849,8 @@ def main() -> int:
         test_check_context_completeness_symbol_dirty_missing,
         test_check_context_completeness_symbol_clean_declared_param_same_card,
         test_check_context_completeness_symbol_clean_declared_struct_field_cross_card,
+        test_check_context_completeness_symbol_clean_declared_inline_assignment_same_card,
+        test_check_context_completeness_symbol_dirty_bare_assignment_not_a_declaration,
         test_check_context_completeness_symbol_dirty_not_a_declared_symbol,
         test_check_context_completeness_symbol_clean_test_file_excluded_all_languages,
         test_check_context_completeness_symbol_clean_zero_matches,
@@ -13542,6 +13860,7 @@ def main() -> int:
         test_check_context_completeness_symbol_all_lowercase_dotted_not_candidate,
         test_check_context_completeness_symbol_single_capitalized_is_candidate,
         test_check_context_completeness_symbol_dotted_trailing_segment_only,
+        test_check_context_completeness_symbol_dirty_assignment_expression_prefix,
         test_check_context_completeness_symbol_dotted_ambiguous_trailing_segment,
         test_check_context_completeness_symbol_dotted_qualifying_prefix_nonqualifying_trailing,
         test_check_context_completeness_symbol_single_letter_qualifier_not_candidate,
@@ -13639,9 +13958,12 @@ def main() -> int:
         test_check_context_completeness_clean_ownership_possessive,
         test_check_context_completeness_dirty_ownership_no_number_not_exempted,
         test_check_context_completeness_dirty_ownership_separate_line_not_exempted,
-        test_check_context_completeness_clean_literal_enumeration_mixed_shapes,
+        test_check_context_completeness_dirty_literal_enumeration_mixed_shapes_majority_not_reached,
         test_check_context_completeness_dirty_literal_enumeration_below_threshold_not_exempted,
         test_check_context_completeness_dirty_literal_enumeration_all_path_shaped_not_exempted,
+        test_check_context_completeness_clean_literal_enumeration_majority_non_shaped,
+        test_check_context_completeness_dirty_literal_enumeration_issue_1116,
+        test_check_context_completeness_dirty_literal_enumeration_issue_1122,
         test_check_context_completeness_clean_illustrative_output_emitting,
         test_check_context_completeness_clean_illustrative_output_rendering,
         test_check_context_completeness_clean_illustrative_output_printing,

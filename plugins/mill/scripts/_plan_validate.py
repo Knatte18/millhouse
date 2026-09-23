@@ -1850,6 +1850,14 @@ _SYMBOL_SEARCH_OUT_OF_SCOPE_DIRS = frozenset({"deprecated", "legacy", "obsolete"
 # _check_context_completeness so _is_literal_enumeration_exempt can reuse the identical pattern.
 _BACKTICK_RE = re.compile(r"`([^`]+)`")
 
+# Matches an inline `modifier+ identifier = value` declaration (e.g. "private const double
+# StepDurationS = 10.0") that has no surrounding parens/braces for _compute_declared_symbols_union's
+# existing candidate-span detection to find. Requires at least one preceding whitespace-separated
+# token before the captured identifier, so a bare "identifier = value" span with nothing in front of
+# the identifier never matches -- that shape is ordinary prose citing an existing symbol's current
+# value, not a new declaration (#1119).
+_RE_INLINE_ASSIGN_DECLARATION = re.compile(r"^(?:\S+\s+)+([A-Za-z_]\w*)\s*=")
+
 # Ownership-attribution verb forms (lowercased, word-boundary matched, hand-spelled per verb --
 # base/3rd-person/past/gerund, "rewrite" given the same irregular 5-form treatment "write" gets
 # in _PROHIBITION_VERB_FORMS): a same-line "batch|card <N> <verb>" phrase names another card/batch
@@ -1895,33 +1903,38 @@ def _is_cross_card_ownership_exempt(lowered_line: str) -> bool:
 
 def _is_literal_enumeration_exempt(line: str, token_start: int, token_end: int) -> bool:
     """Return True when the token occurrence at ``[token_start, token_end)`` in ``line`` sits on a
-    line carrying 3 or more backtick-quoted tokens total, at least one of which (other than this
-    occurrence itself, matched by span, not by string equality, so a repeated literal value on the
-    same line is judged independently at each occurrence) is neither path-shaped
-    (``"/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)``) nor passes
-    ``_symbol_candidate_shape`` -- the presence of a clearly-non-path/non-symbol sibling in the
-    same enumeration is the signal that the whole line lists literal test-input values, not
-    dependencies. A genuine multi-file dependency enumeration ("reads `a.py`, `b.py`, and `c.py`")
-    contains only path-shaped tokens and never trips this rule. The 3-token threshold sits safely
-    above ordinary 2-token contrastive prose ("`x.py` and `y.py`"), which is common in genuine
-    dependency sentences and must never be swept in.
+    line carrying 3 or more backtick-quoted tokens total, where non-shaped tokens are a STRICT
+    majority of the line's backtick tokens (self-inclusive tally: the tested occurrence counts
+    toward both the total and its own shape classification) -- the signal that the whole line lists
+    literal test-input values, not dependencies.
 
-    Accepted tradeoff: a genuine dependency line that also names one non-path/non-symbol literal
-    (e.g. a CLI flag or sentinel string alongside real file paths) is wrongly swept in and its real
-    path tokens suppressed -- the same kind of tradeoff `_is_prohibition_exempt`'s and
+    Every match in the line (the tested occurrence included) is classified as shaped
+    (``"/" in token or token.endswith(_PATH_CANDIDATE_EXTENSIONS)`` OR ``_symbol_candidate_shape``
+    is not ``None``) or non-shaped; ``non_shaped_count`` must exceed ``shaped_count`` for the
+    exemption to fire. An exact tie is NOT a majority and does not exempt (literal-enumeration-
+    majority Decision, #1116/#1122). A genuine multi-file dependency enumeration ("reads `a.py`,
+    `b.py`, and `c.py`") contains only path-shaped tokens (0 non-shaped) and never trips this rule.
+    The 3-token threshold sits safely above ordinary 2-token contrastive prose ("`x.py` and
+    `y.py`"), which is common in genuine dependency sentences and must never be swept in.
+
+    Accepted tradeoff: a genuine dependency line whose non-path/non-symbol literals (e.g. CLI flags
+    or sentinel strings) outnumber its real file/symbol tokens is wrongly swept in and its real
+    tokens suppressed -- the same kind of tradeoff `_is_prohibition_exempt`'s and
     `_CITATION_MARKERS`' own docstrings already accept for their own line-wide mechanisms.
     """
     matches = list(_BACKTICK_RE.finditer(line))
     if len(matches) < 3:
         return False
+    shaped_count = 0
+    non_shaped_count = 0
     for m in matches:
-        if m.start(1) == token_start and m.end(1) == token_end:
-            continue
         other = m.group(1)
         other_is_path_shaped = "/" in other or other.endswith(_PATH_CANDIDATE_EXTENSIONS)
-        if not other_is_path_shaped and _symbol_candidate_shape(other) is None:
-            return True
-    return False
+        if other_is_path_shaped or _symbol_candidate_shape(other) is not None:
+            shaped_count += 1
+        else:
+            non_shaped_count += 1
+    return non_shaped_count > shaped_count
 
 
 # Output/rendering verb forms (lowercased, word-boundary matched, hand-spelled per verb --
@@ -2050,6 +2063,11 @@ _RE_TRAILING_GROUPS = (
 # letter or underscore. Matched AFTER line-range and call/generic-suffix stripping.
 _RE_SYMBOL_SHAPE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$")
 
+# Matches an optional leading `identifier(: Type)? = ` assignment-target prefix (e.g. "x = " or
+# "x: mod.Type = ") stripped once, unconditionally, from a symbol candidate token's base -- a no-op
+# when the token has no `=` (#1115).
+_RE_LEADING_ASSIGN_PREFIX = re.compile(r"^[A-Za-z_]\w*\s*(?::\s*[A-Za-z_][\w<>\[\], .]*)?\s*=\s*")
+
 
 def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     """Return the symbol search key (and dotted qualifier, if any) for a NOT-path-shaped
@@ -2060,8 +2078,9 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     re-check that.
     Strips a trailing ``:line-range`` suffix and any trailing call/generic suffix (one or more
     trailing balanced ``()``/``[...]``/``<...>`` groups, e.g. ``GetItems<T>()`` -> ``GetItems``),
-    then requires what remains to look like a bare identifier (``SaveState``) or a dotted
-    qualifier.identifier pair (``reedengine.New``).
+    then strips an optional leading ``identifier(: Type)? = `` assignment-target prefix once (e.g.
+    ``x = mod.get_value`` -> ``mod.get_value``, #1115), then requires what remains to look like a
+    bare identifier (``SaveState``) or a dotted qualifier.identifier pair (``reedengine.New``).
     A bare or trailing-segment identifier only "qualifies" as a symbol candidate -- as opposed to an
     ordinary lowercase English word like ``config`` -- when it is longer than one character AND
     either not entirely lowercase (contains an uppercase letter, including possibly its first
@@ -2095,6 +2114,11 @@ def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
                 break
         if not stripped_any:
             break
+
+    # Strip an optional leading "identifier(: Type)? = " assignment-target prefix once -- a no-op
+    # when the token has no "=" (#1115). Every downstream qualifies()/qualifier/dotted-pair check
+    # below operates on the resulting `base`, unmodified otherwise.
+    base = _RE_LEADING_ASSIGN_PREFIX.sub("", base, count=1)
 
     if not _RE_SYMBOL_SHAPE.match(base):
         return None
@@ -2598,6 +2622,10 @@ def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
     word covers a Go/Rust-style `name Type` parameter order, the last word covers a C#/TS-style
     `Type name` order.
 
+    When a token has no `(...)`/`{...}` span at all, it is instead tried against
+    `_RE_INLINE_ASSIGN_DECLARATION` (a `modifier+ identifier = value` shape, e.g. `` `private const
+    double StepDurationS = 10.0` ``) and, on a match, the captured identifier is added directly (#1119).
+
     This is context-completeness's symbol-branch equivalent of `compute_creates_union`'s path-branch
     plan-wide union: a token this set contains is a symbol the PLAN ITSELF is introducing (a new
     parameter name, a new struct field) rather than a pre-existing repo symbol, so a bare reference
@@ -2632,6 +2660,11 @@ def _compute_declared_symbols_union(plan_dir: Path) -> set[str]:
                 if "{" in token and "}" in token:
                     candidate_spans.append((token.find("{"), token.rfind("}")))
                 if not candidate_spans:
+                    # No paren/brace span: try the inline "modifier+ identifier = value" shape
+                    # instead (e.g. "private const double StepDurationS = 10.0") before giving up.
+                    inline_match = _RE_INLINE_ASSIGN_DECLARATION.match(token)
+                    if inline_match:
+                        declared.add(inline_match.group(1))
                     continue
                 start, end = max(candidate_spans, key=lambda span: span[1] - span[0])
                 if end <= start:
