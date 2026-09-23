@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-review-r3
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -30,4 +30,5 @@ plan-review-r1  '2026-09-23T09:31:58Z'
 plan-fix-r1  '2026-09-23T09:32:07Z'
 plan-review-r2  '2026-09-23T09:44:15Z'
 plan-fix-r2  '2026-09-23T09:44:24Z'
+plan-review-r3  '2026-09-23T09:52:23Z'
 ```
