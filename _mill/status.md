@@ -69,7 +69,9 @@ batches:
     commit_sha: f8614e3c7b09257b195184c3527071f324196588
     verify_baseline_failures: []
   - name: merge-in-baseline-recompute
-    state: pending
+    state: running
+    implementer_session: 3a5acd11-dd98-4aba-8659-bf7df4c5f262
+    start_sha: c23bcebda6d9dede7cf723e6cc381ec5fc7dc87b
     verify_baseline_failures: []
   - name: implementer-gate-cleanup
     state: pending
