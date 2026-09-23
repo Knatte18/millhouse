@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-baseline-fields
+phase: approved-verify-baseline-core
 slug: baseline-uses-worktree-not-checkout
 branch: hanf/baseline-uses-worktree-not-checkout
 plan: _mill/plan
@@ -35,6 +35,7 @@ plan-fix-r3  '2026-09-23T09:52:49Z'
 planned  '2026-09-23T09:53:04Z'
 implementing  '2026-09-23T10:00:12Z'
 approved-status-baseline-fields  '2026-09-23T10:05:11Z'
+approved-verify-baseline-core  '2026-09-23T10:17:59Z'
 ```
 
 ## Batches
@@ -48,9 +49,10 @@ batches:
     commit_sha: 6a6f242ec8843123abd91203a763b2cb7639366b
     verify_baseline_failures: []
   - name: verify-baseline-core
-    state: running
+    state: approved
     implementer_session: 6ec9c215-d097-4d22-8518-d45487f1f901
     start_sha: 3925a07b36991e2b85ecc8d8832653d471526bf7
+    commit_sha: 610616b5ece0e9354d20e61942b95b5af2182f08
     verify_baseline_failures: []
   - name: cleanup-orphan-removal
     state: pending
