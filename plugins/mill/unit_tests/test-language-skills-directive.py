@@ -5,7 +5,7 @@ Covers:
   - Python-only files: detects python-comments, python-testing, code-quality
   - C#-only files: detects csharp-comments, csharp-testing, code-quality
   - Mixed languages: both sets present, code-quality once
-  - Non-recognized languages (md, yaml): code-quality only
+  - Non-recognized languages (md, yaml): prose and code-quality only
   - Context: vs Edits/Creates: Context files excluded from detection
   - Rendering: directive renders into both implementer and fixer briefs
   - Tools section: both briefs include Skill in Available tools
@@ -64,6 +64,7 @@ def test_go_files_only() -> None:
         assert "`golang-comments`" in directive, "Missing golang-comments"
         assert "`golang-testing`" in directive, "Missing golang-testing"
         assert "`code-quality`" in directive, "Missing code-quality"
+        assert "`prose`" in directive, "Missing prose"
         assert "Go" in directive, "Missing 'Go' language name"
         assert "`python-comments`" not in directive, "Should not have python-comments"
         print("PASS test_go_files_only")
@@ -79,6 +80,7 @@ def test_python_files_only() -> None:
         assert "`python-comments`" in directive, "Missing python-comments"
         assert "`python-testing`" in directive, "Missing python-testing"
         assert "`code-quality`" in directive, "Missing code-quality"
+        assert "`prose`" in directive, "Missing prose"
         assert "Python" in directive, "Missing 'Python' language name"
         assert "`golang-comments`" not in directive, "Should not have golang-comments"
         print("PASS test_python_files_only")
@@ -94,6 +96,7 @@ def test_csharp_files_only() -> None:
         assert "`csharp-comments`" in directive, "Missing csharp-comments"
         assert "`csharp-testing`" in directive, "Missing csharp-testing"
         assert "`code-quality`" in directive, "Missing code-quality"
+        assert "`prose`" in directive, "Missing prose"
         assert "C#" in directive, "Missing 'C#' language name"
         assert "`golang-comments`" not in directive, "Should not have golang-comments"
         print("PASS test_csharp_files_only")
@@ -119,6 +122,9 @@ def test_mixed_languages() -> None:
         # code-quality appears exactly once
         count = directive.count("`code-quality`")
         assert count == 1, f"code-quality should appear once, got {count}"
+        # prose appears exactly once
+        count_prose = directive.count("`prose`")
+        assert count_prose == 1, f"prose should appear once, got {count_prose}"
         # Language names mentioned
         assert "Go" in directive, "Missing 'Go' language name"
         assert "Python" in directive, "Missing 'Python' language name"
@@ -126,13 +132,14 @@ def test_mixed_languages() -> None:
 
 
 def test_no_recognized_languages() -> None:
-    """Batch with only .md/.yaml files detects code-quality only, no -comments/-testing."""
+    """Batch with only .md/.yaml files detects prose and code-quality only, no -comments/-testing."""
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file(Path(tmp), edits="`README.md`, `config.yaml`")
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
         assert "`code-quality`" in directive, "Missing code-quality"
+        assert "`prose`" in directive, "Missing prose"
         assert "`python-comments`" not in directive, "Should not have python-comments"
         assert "`golang-comments`" not in directive, "Should not have golang-comments"
         assert "`csharp-comments`" not in directive, "Should not have csharp-comments"
@@ -153,6 +160,7 @@ def test_context_excluded() -> None:
         # Should detect Python from Edits
         assert "`python-comments`" in directive, "Missing python-comments"
         assert "`python-testing`" in directive, "Missing python-testing"
+        assert "`prose`" in directive, "Missing prose"
         # Should NOT detect Go from Context
         assert "`golang-comments`" not in directive, "Should not have golang-comments (Context is excluded)"
         assert "Python" in directive, "Missing 'Python' language name"
@@ -293,6 +301,7 @@ def test_move_only_batch_detects_go_language() -> None:
             "golang-testing missing from Move-only Go batch"
         )
         assert "`code-quality`" in directive, "Missing code-quality"
+        assert "`prose`" in directive, "Missing prose"
         assert "Go" in directive, "Missing 'Go' language name in directive"
         # Python/C# skills must not appear when no Python/C# files are involved.
         assert "`python-comments`" not in directive, (

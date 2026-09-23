@@ -65,7 +65,7 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 - The `verdict:` value is none of the three emitted values above (`APPROVE`, `REQUEST_CHANGES`, `NEED_CONTEXT`) **and** is not the historical `GAPS_FOUND` value, which `parse_verdict()` accepts without raising and normalises to `REQUEST_CHANGES` (see the Verdict vocabulary table below).
   This is the asymmetry the `gaps-found-back-compat` Decision creates: the emitted set is three values wide, the accepted-input set is four.
 
-Note: `---`-style YAML frontmatter is reserved for SKILL.md and plugin manifests per the markdown skill. Review output files must never use `---` frontmatter.
+Note: `---`-style YAML frontmatter is reserved for SKILL.md and plugin manifests per `prose`'s Markdown section. Review output files must never use `---` frontmatter.
 
 ---
 

@@ -59,8 +59,8 @@ def _extract_frontmatter(text: str, path: Path) -> dict | None:
 or None if no block is present.
 
     Frontmatter is the block delimited by `---` lines at the very top of the file.
-    This matches the SKILL.md convention — it is the one place `---` frontmatter is allowed by the
-    markdown skill.
+    This matches the SKILL.md convention — it is the one place `---` frontmatter is
+    allowed by the `prose` skill's Markdown section.
 
     Raises:
         FrontmatterParseError: if a `---`-delimited block is present but its contents are not valid

@@ -9,7 +9,7 @@ Write a handoff document summarising the current conversation so a fresh agent c
 
 If the arguments include a file path, save there instead (resolved relative to the current working directory unless absolute).
 
-The document's first line instructs the next agent to load `mill:conversation` before reading the rest of the document.
+The document's first line instructs the next agent to load `mill:prose`, then `mill:conversation` before reading the rest of the document.
 
 Include a "suggested skills" section in the document, naming which skills the next agent should call the Skill tool for.
 

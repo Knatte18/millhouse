@@ -145,6 +145,16 @@ Banned: TodoWrite, WebFetch, WebSearch.
 Use `git -C <PROJECT_ROOT>` for commits;
 do not `cd`.
 
+## Writing style
+
+State the point first — no preamble, and no restating a point before making it.
+Cut empty intensifiers ("actually", "really", "simply", "just", "completely"): remove the word, and if the sentence still means the same thing it was padding.
+Say each thing once; do not restate it in a summary or a closing recap.
+Do not narrate what is already visible in the quoted code or the surrounding context.
+Don't pin a perishable specific — a tally, a list of the current callers of a symbol, or a name cited descriptively rather than as a stable identifier: name the source, not the snapshot.
+Apply a per-sentence cut test: would the reader act differently if this sentence were missing? If not, cut it.
+For any multi-line prose written into a file, use semantic line breaks — one sentence per line, never fixed-column hard-wrap, plain newlines only (never a trailing double-space or backslash).
+
 ## Cross-worktree isolation
 
 You run inside a task worktree.
