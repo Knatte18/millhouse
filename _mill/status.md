@@ -41,17 +41,25 @@ implementing  '2026-09-23T10:00:12Z'
 ```yaml
 batches:
   - name: status-baseline-fields
-    state: pending
+    state: running
+    implementer_session: c8c7da89-2adf-480e-8cd8-c48ff7365335
+    start_sha: f8ac9afcb4fdedd3329db288f736caf5766ab78e
+    verify_baseline_failures: []
   - name: verify-baseline-core
     state: pending
+    verify_baseline_failures: []
   - name: cleanup-orphan-removal
     state: pending
+    verify_baseline_failures: []
   - name: implement-baseline-stage
     state: pending
+    verify_baseline_failures: []
   - name: merge-in-baseline-recompute
     state: pending
+    verify_baseline_failures: []
   - name: implementer-gate-cleanup
     state: pending
+    verify_baseline_failures: []
   - name: skill-docs-baseline
     state: pending
 ```
