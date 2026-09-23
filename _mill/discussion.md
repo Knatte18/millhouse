@@ -305,9 +305,10 @@ whether another patch round is still the right call, or whether the check needs 
   so "first card before accumulation" was a misleading frame for this boundary case).
 - `line-join-refactor` needs a regression test reproducing the exact traced incident: a Requirements body
   where one inline-code span opens on one physical line and closes on the next, followed by a genuine
-  path-shaped dependency later on the closing line — must now be flagged. Also cover the
-  already-documented `_is_prohibition_exempt` multi-line-prohibition limitation as a bonus regression
-  test, since the refactor incidentally fixes it too.
+  path-shaped dependency later on the closing line — must now be flagged. (The already-documented
+  `_is_prohibition_exempt` multi-line-prohibition limitation is NOT fixed by this refactor — see Decision
+  `line-join-refactor` — so it needs no test here; this bullet's earlier draft wrongly claimed otherwise,
+  corrected in discussion-review round 7.)
 - `line-join-refactor` also needs a negative-direction test proving the per-helper split holds: a card
   whose Requirements text has a genuine unlisted dependency on one physical line and, on a *different*
   physical line elsewhere in the same field, an unrelated phrase that would trigger
