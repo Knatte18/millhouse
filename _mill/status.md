@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-tasks-render
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r1  '2026-09-24T06:15:19Z'
 plan-fix-r1  '2026-09-24T06:15:28Z'
 planned  '2026-09-24T06:15:35Z'
 implementing  '2026-09-24T06:15:45Z'
+approved-tasks-render  '2026-09-24T06:17:47Z'
 ```
 
 ## Batches
@@ -31,9 +32,10 @@ implementing  '2026-09-24T06:15:45Z'
 ```yaml
 batches:
   - name: tasks-render
-    state: running
+    state: approved
     implementer_session: a736784f-9d14-4782-850a-d33ccb25da05
     start_sha: bbe6313f3b839e7a92a96d470899acfdeb080785
+    commit_sha: b5cd548299393167c218f4e7f5389ff9aef689ba
   - name: keybindings
     state: pending
   - name: session-tasks-cli
