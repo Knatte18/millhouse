@@ -22,7 +22,7 @@ Typical triggers:
 
 ## Preconditions
 
-- `.millhouse/wiki` junction exists in the current clone (if not: run `/mill-setup` first).
+- `.wiki` junction exists in the current clone (if not: run `/mill-setup` first).
 - Working directory is a mill-enabled clone (hub or any worktree).
 - For the GH path (`--issue`): `gh auth status` must succeed.
 

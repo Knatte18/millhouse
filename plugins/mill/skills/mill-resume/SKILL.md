@@ -113,7 +113,7 @@ Skip Step 3's confirmation prompt (the operator already approved this relocation
 Present as a numbered-options prompt:
 
 ```
-Worktree at <cwd> is task '<slug>' but is missing .millhouse/.wiki
+Worktree at <cwd> is task '<slug>' but is missing .wiki
 scaffolding.
   1) Relocate to <canonical> and scaffold it (recommended)
   2) Cancel, do nothing

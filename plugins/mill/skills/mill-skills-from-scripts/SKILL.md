@@ -57,7 +57,7 @@ for script_path in _skill_writer.iter_target_scripts(plugins_root):
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-<X>.py" <args from Usage block>
    ```
 
-   <2–3 lines of must-know constraints — e.g. "no wiki lock taken", "exits 1 if no .millhouse/wiki", or other tight invariants visible in the script docstring>
+   <2–3 lines of must-know constraints — e.g. "no wiki lock taken", "exits 1 if no .wiki", or other tight invariants visible in the script docstring>
    ```
 
 4. Call `_skill_writer.write_skill_file(skill_name, body, plugins_root)` for each script. The helper creates the `plugins/mill/skills/<skill_name>/` directory if needed and always overwrites the file.

@@ -2,7 +2,7 @@
 Cross-platform directory-junction helpers.
 
 Mill places junctions inside ``.millhouse/`` to stitch each working clone to a single shared wiki
-clone (``.millhouse/wiki``) and to the currently active task directory (``.millhouse/.active``).
+clone (``.wiki``) and to the currently active task directory (``.active``).
 We need one abstraction that works on both Windows (the primary dev platform) and POSIX (CI, macOS
 contributors).
 
@@ -195,7 +195,7 @@ def create(target: Path, link_path: Path) -> None:
         raise ValueError(f"{link_path} already exists — remove it before creating a junction")
 
     # Ensure the parent directory exists.
-    # Lets callers create ``.millhouse/.active`` without a separate mkdir step.
+    # Lets callers create a junction under a not-yet-existing directory without a separate mkdir step.
     link_path.parent.mkdir(parents=True, exist_ok=True)
 
     if os.name == "nt":
@@ -227,7 +227,7 @@ def remove(link_path: Path) -> None:
     The function never recurses into the target.
     A regular file or non-empty directory at ``link_path`` raises ``ValueError`` rather than being
     silently deleted — this guardrail exists because an earlier version of mill once wiped a real
-    ``.millhouse/wiki/`` directory that had been promoted to a full clone instead of a junction.
+    ``.wiki/`` directory that had been promoted to a full clone instead of a junction.
 
     Args:
         link_path: Path of the junction or symlink to remove.

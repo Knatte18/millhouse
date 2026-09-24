@@ -28,7 +28,7 @@ Typical triggers:
 
 Preconditions:
 
-- `.millhouse/wiki` junction exists (if not: run `/mill-setup` first)
+- `.wiki` junction exists (if not: run `/mill-setup` first)
 - Working directory is a mill-enabled clone (hub or any worktree)
 
 ## How to derive the fields
@@ -200,7 +200,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 | Script exit | Likely cause | What you do |
 |---|---|---|
 | `Invalid slug ...` | Slug fails the regex | Ask user for a new slug that matches `[a-z][a-z0-9-]*` |
-| `No .millhouse/wiki junction found` | mill-setup has not run in this clone | Offer to run `/mill-setup` |
+| `No .wiki junction found` | mill-setup has not run in this clone | Offer to run `/mill-setup` |
 | `Slug ... already present in Home.md` | A task with that slug already exists | Show the existing entry; ask user whether to pick a new slug or update the old task (update = out-of-scope for mill-add; edit wiki manually or wait for mill-groom) |
 | `Proposal file ... already exists` | Stale proposal from a previous aborted run | Show the user the existing file; ask whether to reuse its content or pick a new slug |
 | `git push failed ...` | Network, auth, or concurrent writer | Surface stderr verbatim; suggest rerun |
