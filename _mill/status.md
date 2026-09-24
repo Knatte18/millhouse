@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-spawn-parent-thread
+phase: approved-templates-skills-fixtures
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-09-24T10:23:53Z'
 reviewing-status-core-r1  '2026-09-24T10:26:48Z'
 approved-status-core  '2026-09-24T10:26:58Z'
 approved-spawn-parent-thread  '2026-09-24T10:28:49Z'
+approved-templates-skills-fixtures  '2026-09-24T10:30:24Z'
 ```
 
 ## Batches
@@ -46,9 +47,10 @@ batches:
     commit_sha: 54aaa8194b966abc921720c7a006e7603c13f58e
     verify_baseline_failures: []
   - name: templates-skills-fixtures
-    state: running
+    state: approved
     implementer_session: 9f0d70b1-1320-485d-9a3b-921b2b798ded
     start_sha: e4dba777f9f6bb603d7abafc30cbaefc11b51268
+    commit_sha: 379d6cb667d644de4cca3992102f97e21cc9c957
     verify_baseline_failures: []
 ```
 ## Inferred-success log
