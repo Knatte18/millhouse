@@ -6,6 +6,7 @@ slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
 plan: _mill/plan
 parent: main
+baseline_parent_sha: f56dd23f731e4e7803d2737a0661627cc4e3afcd
 task: _plan_validate and baseline verify gate gaps
 task_description: |
   _plan_validate and baseline verify gate gaps
@@ -29,7 +30,9 @@ implementing  '2026-09-24T06:09:47Z'
 ```yaml
 batches:
   - name: plan-validate-checks
-    state: pending
+    state: running
+    implementer_session: 9218d322-27a9-42bf-82ec-b3aa62f14842
+    start_sha: 4c8d8746e00f90e94dfe52e1a5f5c9eb9dad30c8
   - name: baseline-short-circuit
     state: pending
 ```
