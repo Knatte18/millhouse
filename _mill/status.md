@@ -29,9 +29,15 @@ implementing  '2026-09-24T09:18:54Z'
 ```yaml
 batches:
   - name: core-helpers
-    state: pending
+    state: running
+    implementer_session: de75e4bb-2517-4295-a3bf-4d7337f258c2
+    start_sha: d13bf2d58474efd28b92d33a430d333af63c7d7a
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
+    exit 1: --only: unknown test file(s): [''test-paths-short-name.py'', ''test-setup-short-name.py'']']
   - name: session-name-callers
     state: pending
+    verify_baseline_failures: []
   - name: docs-and-setup
     state: pending
+    verify_baseline_failures: []
 ```
