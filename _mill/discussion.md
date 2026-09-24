@@ -68,6 +68,10 @@ The holistic reviews do the real review work and stay.
   - `test-millpy-fix.py`
   - `test-language-skills-directive.py` (its `fixer-batch-brief.md` case)
   - `test-moves-check.py` (delete)
+  - `test-fix-finalize.py`: Test 5 (nested-layout batch-scope verify `cwd_override` at finalize) and Test 6 (`--scope batch` forwards `batch_verify_baseline`) both invoke `millpy-fix.py --scope batch --batch-name test-batch`.
+    Delete Test 6, since Test 7 already covers baseline forwarding for holistic scope.
+    Rewrite Test 5 against `--scope holistic`, so that `cwd_override` threading at the finalize stage keeps coverage; mock `iter_batch_verifies` to return one batch with the nested-hub cwd.
+    Drop it only if an existing holistic test already asserts that threading.
   - `test-reviewers.py`, `test-review-cli.py`, `test-review-cli-error-envelope.py`, `test-review-prepare-envelope.py` and `_test_cfg.py`, where they reference batch-scope config or flags
 
 **Out:**
