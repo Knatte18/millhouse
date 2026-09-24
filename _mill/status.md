@@ -35,5 +35,7 @@ batches:
     start_sha: 99cd20a855faae218de0b14c8d74e571e1e10cf6
     commit_sha: adf8050d2c2b00d323153945cebb073e192a58dd
   - name: commit-none-and-done-gate
-    state: pending
+    state: running
+    implementer_session: e8092f32-dc81-4434-b51b-ee5ac8a67b7f
+    start_sha: eeb4942dd7a45d8dc71257265a8f049b4175be4e
 ```
