@@ -3,7 +3,7 @@
 ```yaml
 task: Remove batch review (plan-review.batch / code-review.batch)
 slug: remove-batch-review
-approved: false
+approved: true
 started: 20260924-074604
 parent: main
 root: ""
