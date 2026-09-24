@@ -50,6 +50,10 @@ Public API:
     Return the canonical worktree path for ``slug`` under
     ``container_path``, with no existence check.
 
+    resolve_short_name(cfg, repo_name) / short_name_is_derived(cfg)
+    The configured ``repo.short_name`` or its derived fallback, and a
+    predicate that is True exactly when the fallback would be used.
+
     resolve_hub_relative_path(worktree_root, hub_subpath)
     Translate the ``hub_relative_path`` value from
     ``.millhouse/config.local.yaml`` into an absolute path.
@@ -120,6 +124,7 @@ __all__ = [
     "resolve_mill_config_path",
     "resolve_worktrees_dir",
     "resolve_short_name",
+    "short_name_is_derived",
     "resolve_hub_relative_path",
     "resolve_active_worktree",
     "resolve_active_hub",
@@ -338,6 +343,19 @@ def resolve_short_name(cfg: dict, repo_name: str) -> str:
     if short:
         return short
     return repo_name[:2].upper() if len(repo_name) >= 2 else repo_name.upper()
+
+
+def short_name_is_derived(cfg: dict) -> bool:
+    """
+    Return True exactly when ``resolve_short_name`` would use its derived fallback.
+
+    That is the case when the ``repo:`` block is absent or null, ``short_name`` is missing,
+    or its value is falsy (e.g. an empty string).
+    """
+    repo_block = cfg.get("repo") or {}
+    if not isinstance(repo_block, dict):
+        return True
+    return not repo_block.get("short_name")
 
 
 def resolve_hub_relative_path(worktree_root: Path, hub_subpath: str) -> Path:

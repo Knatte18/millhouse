@@ -1,0 +1,8 @@
+,
+        {
+            "label": "mill: orch",
+            "type": "shell",
+            "command": "<CMD_ORCH>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        }

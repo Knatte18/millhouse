@@ -16,7 +16,7 @@ Flow:
         7. Recreate junctions from the wiki config's ``junctions:`` block inside the new worktree.
         8. Pick a non-green VS Code title-bar colour not in use by sibling worktrees;
         write ``.vscode/settings.json`` via ``_vscode``,
-        and ``.vscode/tasks.json`` (session launch tasks named ``<slug>:<phase>``) via ``_vscode_tasks``.
+        and ``.vscode/tasks.json`` (session launch tasks named ``<short_name>:<slug>:<phase>``, lower-cased) via ``_vscode_tasks``.
         9. Write the initial ``_mill/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
@@ -48,7 +48,7 @@ import _vscode
 import _vscode_tasks
 import _worktree
 from _config import load_config as _load_config
-from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
+from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir, short_name_is_derived
 from _spawn_core import pick_worktree_color
 from wiki import _client as wiki
 
@@ -264,7 +264,13 @@ def main(argv: list[str] | None = None) -> int:
         # The palette scans the *existing* sibling worktrees in the shared worktrees dir;
         # the newly created one has no settings.json yet, so it does not self-contribute to the "used" set.
         color = pick_worktree_color(worktrees_dir)
-        short = resolve_short_name(cfg, git_root.name)
+        short = resolve_short_name(cfg, resolve_main_worktree_root(git_root).name)
+        if short_name_is_derived(cfg):
+            print(
+                f"[spawn] WARNING: repo.short_name is not set; using derived short name '{short}'. "
+                "Set repo.short_name in mill-config.yaml or run /mill-setup.",
+                file=sys.stderr,
+            )
         vscode_settings_path = dest_hub / ".vscode" / "settings.json"
         _vscode.write_settings(color_hex=color, target=vscode_settings_path, short_name=short, slug=slug)
         # Rollback: delete the .vscode/settings.json written above.
@@ -273,7 +279,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         tasks_path = dest_hub / ".vscode" / "tasks.json"
-        _vscode_tasks.write_tasks(tasks_path, slug, (cfg.get("spawn") or {}).get("sessions"))
+        _vscode_tasks.write_tasks(
+            tasks_path, _vscode_tasks.session_prefix(short, slug), (cfg.get("spawn") or {}).get("sessions")
+        )
         # Rollback: delete the .vscode/tasks.json written above.
         _cleanup_stack.append(lambda: tasks_path.unlink(missing_ok=True))
 
