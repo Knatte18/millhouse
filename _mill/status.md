@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-spawn-wiring
+phase: approved-setup-docs
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-tasks-render  '2026-09-24T06:17:47Z'
 approved-keybindings  '2026-09-24T06:20:19Z'
 approved-session-tasks-cli  '2026-09-24T06:21:48Z'
 approved-spawn-wiring  '2026-09-24T06:23:21Z'
+approved-setup-docs  '2026-09-24T06:24:22Z'
 ```
 
 ## Batches
@@ -55,7 +56,8 @@ batches:
     start_sha: 025f95093ebeabdadb33b51deb9f906007e54f8c
     commit_sha: 81a9ddddf334deaf80e32096f08025ca5cf86327
   - name: setup-docs
-    state: running
+    state: approved
     implementer_session: 93b2fb64-5230-44ea-bdf3-3663ff4e1690
     start_sha: 7f095609883f61c7a037884ef4cac93986db9148
+    commit_sha: 4af5273223b9902c859941f9734193d76451594e
 ```
