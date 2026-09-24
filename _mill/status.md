@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-go-skill-text
+phase: self-resolved-verify-logic
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-fixer-and-gates  '2026-09-24T08:08:33Z'
 approved-review-common-and-templates  '2026-09-24T08:12:48Z'
 approved-config  '2026-09-24T08:14:19Z'
 approved-mill-go-skill-text  '2026-09-24T08:16:28Z'
+self-resolved-verify-logic  '2026-09-24T08:18:06Z'
 ```
 
 ## Batches

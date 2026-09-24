@@ -4,10 +4,16 @@
 task: Remove batch review (plan-review.batch / code-review.batch)
 batch: remaining-skills-docs-and-gate
 number: 7
-cards: 3
+cards: 4
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py
 depends-on: [6]
 ```
+
+## Prior failure
+
+- Round 1: `{"status":"stuck","stuck_type":"logic","reason":"final grep gate hits outside allowed list: unit_tests/test-millpy-fix.py:2012,2018,2023 (--batch-name absence test) and unit_tests/test-review-templates.py:194 (deleted template names absence test); verify passes 118/118"}`.
+  Both hits are absence tests asserting the removed flag and templates stay gone; Card 22's allowed list now includes them.
+  `holistic-review.md` also kept dangling per-batch references; Card 23 rewords them.
 
 ## Batch Scope
 
@@ -77,10 +83,27 @@ Removes the last references to per-batch review from `mill-plan/SKILL.md`, `mill
   - anything under `_mill/`;
   - `RENAMED_KEY_HINTS` entries in `plugins/mill/scripts/_config.py`;
   - `plugins/mill/unit_tests/test-config.py`'s stale-key and template/`ENV_REGISTRY` absence tests, and synthetic fixture templates in that file;
+  - `plugins/mill/unit_tests/test-millpy-fix.py`'s `--batch-name` argparse-rejection test and `plugins/mill/unit_tests/test-review-templates.py`'s deleted-template-name absence assertion;
   - `plugins/mill/scripts/millpy-review-summary.py`'s own `_RE_BATCH` (the pattern `RE_BATCH` matches it; it is kept on purpose; no file read needed).
 
   Any other hit is a straggler from an earlier card: report `stuck_type: logic` naming each file and line, and do not edit files in this card.
 - **Commit:** none
+
+### Card 23: Reword dangling per-batch references in holistic-review.md
+
+- **Context:**
+  - `plugins/mill/skills/mill-go-base/SKILL.md`
+- **Edits:**
+  - `plugins/mill/skills/mill-go-base/holistic-review.md`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:**
+  `plugins/mill/skills/mill-go-base/SKILL.md` no longer has a per-batch review loop, so `holistic-review.md` must stop pointing at it.
+  Run `grep -n "per-batch" plugins/mill/skills/mill-go-base/holistic-review.md` and reword each hit that refers to the removed per-batch review section, its loop step 3, its APPROVE branch or its NEED_CONTEXT handling, so it stands on its own or points at the still-existing SKILL.md text (`### Stuck escalation`, `## Agent-mode dispatch`) it means.
+  Leave the hit that describes historical per-batch files from older tasks embedded in review filenames unchanged.
+  Do not change any other behaviour.
+- **Commit:** `docs(mill-go-base): drop dangling per-batch references in holistic-review`
 
 ## Batch Tests
 
