@@ -73,7 +73,7 @@ def main() -> int:
         )
         thread_lines = out_thread.splitlines()
         branch_idx = next(i for i, ln in enumerate(thread_lines) if ln.startswith("parent_branch:"))
-        assert thread_lines[branch_idx + 1] == "parent_thread: 'mh:orch'", (
+        assert thread_lines[branch_idx + 1] == f"parent_thread: {quote_scalar('mh:orch')}", (
             f"parent_thread row misplaced: {thread_lines[branch_idx + 1]!r}"
         )
         with tempfile.TemporaryDirectory() as tmp_thread:

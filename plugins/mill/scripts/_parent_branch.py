@@ -2,7 +2,7 @@
 Resolve the parent branch of the active task.
 
 mill-merge and mill-merge-in both need to know which branch to merge to / from.
-The source of truth is the ``parent:`` field in ``<WIKI_PATH>/active/<slug>/status.md``'s top
+The source of truth is the ``parent_branch:`` field (legacy ``parent:`` is still read as a fallback) in ``<WIKI_PATH>/active/<slug>/status.md``'s top
 fenced-yaml block, written by mill-spawn at the moment the task branch was created.
 If that field is missing we fall through to an interactive prompt — config-level overrides were
 considered and dropped (config.yaml is meant to be stable per repo; parent-branch is per-task).
@@ -10,10 +10,10 @@ considered and dropped (config.yaml is meant to be stable per repo; parent-branc
 Public API:
     ParentBranchError — raised when no parent can be resolved non-interactively resolve(status_path,
     *, interactive=True, expected_slug=None) -> str Return the parent branch name.
-    Raises ParentBranchError when status.md is missing the ``parent:`` row and ``interactive`` is
+    Raises ParentBranchError when status.md has neither a ``parent_branch:`` nor a legacy ``parent:`` row and ``interactive`` is
     False (auto-merge path in mill-go).
     When ``expected_slug`` is given and status.md's ``slug:`` row does not match it, the
-    ``parent:`` row is treated as absent — protects against reading a stacked-branch worktree's
+    parent row is treated as absent — protects against reading a stacked-branch worktree's
     stale status.md by identity.
     check_liveness(branch, git_root) -> bool Return True if branch currently exists on origin
     (``git ls-remote --exit-code``) or as a live local branch ref (``git rev-parse --verify``).
@@ -41,18 +41,20 @@ _YAML_FENCE = "```yaml"
 
 
 def _parse_parent_from_yaml_text(text: str, *, expected_slug: str | None = None) -> str | None:
-    """Return the ``parent:`` row value from a status.md yaml block, or None.
+    """Return the parent branch from a status.md yaml block, or None.
 
     Scans the first fenced ```yaml``` block.
-    Returns the first matching ``parent: <value>`` row with any surrounding quotes stripped.
-    Absent row / malformed block -> None;
+    Returns the ``parent_branch: <value>`` row with any surrounding quotes stripped,
+    falling back to the legacy ``parent: <value>`` row when ``parent_branch:`` is absent or empty.
+    ``parent_thread:`` rows never feed either value.
+    Absent rows / malformed block -> None;
     caller decides whether to prompt.
 
     Args:
         expected_slug: when not None, also scans the same block for a ``slug:`` row.
             If that row is present and its stripped value differs from ``expected_slug``, the
-                function returns None -- identical to the "no parent: row" case -- even though a
-                ``parent:`` row was found.
+                function returns None -- identical to the "no parent row" case -- even though a
+                parent row was found.
             This guards against resolving the parent branch from a different task's status.md
                 (stacked worktrees can share a checked-out file layout).
             A ``slug:`` row that is absent,
@@ -60,6 +62,7 @@ def _parse_parent_from_yaml_text(text: str, *, expected_slug: str | None = None)
     """
     lines = text.splitlines()
     in_block = False
+    parent_branch_value: str | None = None
     parent_value: str | None = None
     slug_value: str | None = None
     for line in lines:
@@ -68,19 +71,21 @@ def _parse_parent_from_yaml_text(text: str, *, expected_slug: str | None = None)
             continue
         if in_block and line.strip() == "```":
             break
+        if in_block and line.strip().startswith("parent_branch:"):
+            parent_branch_value = line.strip()[len("parent_branch:"):].strip().strip('"').strip("'")
         if in_block and line.strip().startswith("parent:"):
             parent_value = line.strip()[len("parent:"):].strip().strip('"').strip("'")
         if in_block and line.strip().startswith("slug:"):
             slug_value = line.strip()[len("slug:"):].strip().strip('"').strip("'")
     if expected_slug is not None and slug_value is not None and slug_value != expected_slug:
         return None
-    return parent_value or None
+    return parent_branch_value or parent_value or None
 
 
 def _read_parent_from_status(
     status_path: Path, *, expected_slug: str | None = None
 ) -> str | None:
-    """Read status.md and return its ``parent:`` row value, or None.
+    """Read status.md and return its ``parent_branch:`` (or legacy ``parent:``) value, or None.
 
     Missing file -> None.
     See ``_parse_parent_from_yaml_text`` for the yaml-block parsing rules and the
@@ -129,8 +134,10 @@ def resolve_dead_parent(
 
     Each hop reads the pre-cleanup-commit status.md at ``archive/<slug>~1`` (checking the
     ``_mill/status.md`` layout first, then the legacy ``task/status.md`` layout) to recover that
-    ancestor's own recorded ``parent:`` row, then checks whether that parent is alive via
+    ancestor's own recorded parent branch, then checks whether that parent is alive via
     ``check_liveness``.
+    Archived status.md files carry the legacy ``parent:`` key and are read through the fallback in
+    ``_parse_parent_from_yaml_text``.
     A dead parent becomes the next hop's branch to resolve;
     the walk is capped at ``max_hops`` iterations to guard against a pathological cycle.
 
@@ -189,7 +196,7 @@ def resolve(
     """Return the task's parent branch.
 
     Lookup order:
-    1. ``status.md`` ``parent:`` row.
+    1. ``status.md`` ``parent_branch:`` row, falling back to the legacy ``parent:`` row.
     2. Interactive prompt — only when ``interactive=True``.
         The prompt reads a single line from stdin;
         the caller is responsible for only asking this in a tty-attached context.
@@ -200,7 +207,7 @@ def resolve(
 
     Args:
         expected_slug: forwarded to ``_read_parent_from_status``.
-        A mismatched ``slug:`` row makes the lookup behave exactly as if ``parent:`` were absent --
+        A mismatched ``slug:`` row makes the lookup behave exactly as if the parent row were absent --
         falling through to the prompt (or ``ParentBranchError`` when non-interactive) below.
     """
     parent = _read_parent_from_status(status_path, expected_slug=expected_slug)
@@ -208,18 +215,18 @@ def resolve(
         return parent
     if not interactive:
         raise ParentBranchError(
-            f"No parent: in {status_path} and non-interactive context; "
-            "set status.md's parent: row and re-run mill-merge manually."
+            f"No parent_branch: in {status_path} and non-interactive context; "
+            "set status.md's parent_branch: row and re-run mill-merge manually."
         )
     prompt = (
-        "[_parent_branch] status.md has no parent: row. "
+        "[_parent_branch] status.md has no parent_branch: row. "
         "Enter parent branch name (e.g. main): "
     )
     try:
         response = input(prompt).strip()
     except EOFError:
         raise ParentBranchError(
-            f"No parent: in {status_path} and stdin not attached"
+            f"No parent_branch: in {status_path} and stdin not attached"
         )
     if not response:
         raise ParentBranchError("Empty parent branch name")
