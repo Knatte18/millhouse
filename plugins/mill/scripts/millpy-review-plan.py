@@ -5,15 +5,9 @@ prints JSON to stdout.
 
 Flags:
     --slug <slug> Override active-slug detection (run from hub/main).
-    --holistic-only Skip per-batch reviews;
-        run only the holistic plan review.
-    --max-rounds <N> Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds
-        (overrides both scopes) for this invocation.
-        Default: use config values.
-    --no-holistic Skip the holistic plan review;
-        run per-batch reviews only.
+    --max-rounds <N> Override roles.plan-review.holistic.rounds for this invocation.
+        Default: use the config value.
     --reviewer <alias> Override roles.plan-review.holistic.reviewer for this invocation only.
-        Holistic scope only -- batch-scope reviewer is unaffected.
         Default: use config value.
     --skip-check <CHECK> Skip a named validator check (repeatable).
         Silently ignores unknown names.
@@ -63,20 +57,9 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help=(
-            "Override roles.plan-review.batch.rounds and roles.plan-review.holistic.rounds "
-            "(overrides both scopes) for this invocation. Default: use config values."
+            "Override roles.plan-review.holistic.rounds for this invocation. "
+            "Default: use the config value."
         ),
-    )
-    scope_group = parser.add_mutually_exclusive_group()
-    scope_group.add_argument(
-        "--holistic-only",
-        action="store_true",
-        help="Skip per-batch reviews; run only the holistic plan review.",
-    )
-    scope_group.add_argument(
-        "--no-holistic",
-        action="store_true",
-        help="Skip the holistic plan review; run per-batch reviews only.",
     )
     parser.add_argument(
         "--skip-validate",
@@ -123,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--reviewer",
         default=None,
-        help="Override roles.plan-review.holistic.reviewer for this invocation only (e.g. sonnetmax). Holistic scope only -- batch-scope reviewer is unaffected. Nothing is written back to config.",
+        help="Override roles.plan-review.holistic.reviewer for this invocation only (e.g. sonnetmax). Nothing is written back to config.",
     )
     parser.add_argument(
         "--reviews-subdir",
@@ -212,7 +195,6 @@ def main(argv: list[str] | None = None) -> int:
     mill_dir = project_root / ".millhouse"
 
     if args.stage == "prepare":
-        # Agent mode uses holistic scope only
         try:
             if not args.skip_validate:
                 from _plan_validate import run as validate_run
@@ -242,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(json.dumps({"errors": errors, "summary": summary}))
                     return 1
             prepare_result = prepare(
-                cfg, slug, scope=None, mill_dir=mill_dir, project_root=project_root,
+                cfg, slug, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, agent_mode=True,
                 reviewer_override=args.reviewer, reviews_subdir=args.reviews_subdir,
                 allow_missing_refs=args.allow_missing_refs,
@@ -298,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 else ""
             )
             review_entry = finalize(
-                cfg, slug, raw_text, scope=None, round_n=round_n,
+                cfg, slug, raw_text, round_n=round_n,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=git_root,
                 actual_model=args.actual_model,
@@ -358,8 +340,6 @@ def main(argv: list[str] | None = None) -> int:
                 project_root,
                 git_root=git_root,
                 max_rounds=args.max_rounds,
-                holistic_only=args.holistic_only,
-                no_holistic=args.no_holistic,
                 reviewer_override=args.reviewer,
                 reviews_subdir=args.reviews_subdir,
                 allow_missing_refs=args.allow_missing_refs,
