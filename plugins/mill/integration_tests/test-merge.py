@@ -137,7 +137,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         f"slug: {slug}\n"
         "approved: true\n"
         "started: 20260422-120000\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         'root: ""\n'
         "verify: null\n"
         "```\n"
@@ -169,7 +169,7 @@ def _setup_trio(container: Path) -> tuple[Path, Path, Path, str]:
         "```yaml\n"
         "phase: done\n"
         "task: Demo merge\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n"
         "\n"
         "## Timeline\n"
@@ -373,6 +373,7 @@ def _setup_nested_hub_scenario(
     )
 
     # Child adds its own _mill/status.md (for nested-merge task, not other-task).
+    # Legacy `parent:` key is deliberate: fallback coverage for in-flight worktrees.
     (task_dir / "status.md").write_text(
         "# Status\n"
         "\n"
@@ -471,7 +472,7 @@ def _setup_nested_verify_plan(container: Path) -> tuple[Path, Path, Path]:
         "slug: nested-verify-cwd\n"
         "approved: true\n"
         "started: 20260706-120000\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         'root: ""\n'
         "verify: null\n"
         "```\n"
@@ -1144,6 +1145,7 @@ def main() -> int:
 
         parent_task_mill = repo_dead / "_mill"
         parent_task_mill.mkdir()
+        # Legacy `parent:` key is deliberate: fallback coverage for archived status.md.
         (parent_task_mill / "status.md").write_text(
             "```yaml\nphase: done\ntask: Parent task\nparent: main\n```\n", encoding="utf-8"
         )

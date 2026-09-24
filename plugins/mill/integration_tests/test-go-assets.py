@@ -128,7 +128,7 @@ def test_review_code_end_to_end(scratch: Path) -> None:
         "slug: demo\n"
         "approved: true\n"
         "started: 20260422-120000\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         'root: ""\n'
         "verify: null\n"
         "```\n"
@@ -267,7 +267,7 @@ def test_status_batches_round_trip(scratch: Path) -> None:
         "```yaml\n"
         "phase: planned\n"
         "task: Demo\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n"
         "\n"
         "## Timeline\n"

@@ -233,7 +233,7 @@ def _setup_fixture(container: Path) -> tuple[Path, Path, Path, str]:
         f"slug: {SLUG}\n"
         "task: Test Baseline Waiver\n"
         f"branch: {BRANCH_PREFIX}{SLUG}\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n\n"
         "## Timeline\n\n"
         "```text\n"
