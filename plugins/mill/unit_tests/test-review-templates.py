@@ -36,9 +36,7 @@ ANTI_LADDER_SENTENCE = (
 
 TEMPLATE_NAMES = [
     "review-discussion",
-    "review-code-batch",
     "review-code-holistic",
-    "review-plan-batch",
     "review-plan-holistic",
 ]
 
@@ -52,17 +50,10 @@ _COMMON_TOKENS = {
     "reviewer_model": "claude-sonnet-4-6",
 }
 
-# Per-template additions: review-code-* also needs prior_nonblocking;
-# the batch variants additionally need batch_name (the holistic variants do not).
+# Per-template additions: review-code-holistic also needs prior_nonblocking.
 TEMPLATE_TOKENS = {
     "review-discussion": dict(_COMMON_TOKENS),
-    "review-code-batch": {
-        **_COMMON_TOKENS,
-        "prior_nonblocking": "(none)",
-        "batch_name": "sample-batch",
-    },
     "review-code-holistic": {**_COMMON_TOKENS, "prior_nonblocking": "(none)"},
-    "review-plan-batch": {**_COMMON_TOKENS, "batch_name": "sample-batch"},
     "review-plan-holistic": dict(_COMMON_TOKENS),
 }
 
@@ -113,7 +104,7 @@ def test_deleted_prose_stays_deleted() -> None:
 
 def test_reviewer_self_id_removed_from_templates() -> None:
     """reviewer_self_id was removed from the three templates that used to carry it (#989)."""
-    for name in ["review-discussion", "review-plan-holistic", "review-plan-batch"]:
+    for name in ["review-discussion", "review-plan-holistic"]:
         source = _read_template_source(name)
         assert "reviewer_self_id" not in source, (
             f"{name} still contains reviewer_self_id"
@@ -137,7 +128,7 @@ def test_plan_criteria_bullets_present() -> None:
     """The two new plan-review criteria bullets (All Files Touched scope, platform-behavior-claim
     verification) are present verbatim in both plan-review templates' raw source.
 """
-    for name in ["review-plan-holistic", "review-plan-batch"]:
+    for name in ["review-plan-holistic"]:
         source = _read_template_source(name)
         assert (
             "the overview's `## All Files Touched` section lists the union of"
@@ -155,9 +146,7 @@ def test_plan_mechanism_claim_rule_present() -> None:
 """
     for name in [
         "review-plan-holistic",
-        "review-plan-batch",
         "review-code-holistic",
-        "review-code-batch",
     ]:
         source = _read_template_source(name)
         assert "Mechanism claims must be source-verified." in source, (
@@ -176,7 +165,7 @@ def test_context_completeness_exemption_enumeration_present() -> None:
     directories, and forward cross-card Creates: references) -- a future editor removing it
     reintroduces the false-positive review rounds this task fixed.
     """
-    for name in ["review-plan-holistic", "review-plan-batch"]:
+    for name in ["review-plan-holistic"]:
         source = _read_template_source(name)
         assert "mentioned, not read" in source, (
             f"{name} missing the 'mentioned, not read' escape marker"
@@ -185,6 +174,26 @@ def test_context_completeness_exemption_enumeration_present() -> None:
             f"{name} missing the forward-reference-to-a-later-card exemption"
         )
     print("PASS test_context_completeness_exemption_enumeration_present")
+
+
+def test_holistic_templates_inline_severity_and_verdict_rules() -> None:
+    """The holistic plan/code templates carry their own Severity/Verdict blocks and no per-batch reference."""
+    for name in ["review-plan-holistic", "review-code-holistic"]:
+        rendered = _review_common.render_prompt(name, **TEMPLATE_TOKENS[name])
+        for bullet in (
+            "Severity:",
+            "- `BLOCKING` — must fix before the",
+            "- `NIT` — record but do not block.",
+            "Verdict:",
+            "- `APPROVE` — zero BLOCKINGs.",
+            "- `REQUEST_CHANGES` — one or more BLOCKINGs.",
+            "- `NEED_CONTEXT` —",
+        ):
+            assert bullet in rendered, f"{name} rendered text missing {bullet!r}"
+        source = _read_template_source(name)
+        for deleted in ("review-plan-batch.md", "review-code-batch.md"):
+            assert deleted not in source, f"{name} still references {deleted}"
+    print("PASS test_holistic_templates_inline_severity_and_verdict_rules")
 
 
 def test_no_output_file_token() -> None:
@@ -251,6 +260,7 @@ def main() -> int:
         test_plan_criteria_bullets_present,
         test_plan_mechanism_claim_rule_present,
         test_context_completeness_exemption_enumeration_present,
+        test_holistic_templates_inline_severity_and_verdict_rules,
         test_no_output_file_token,
         test_unified_vocabulary_and_class_taxonomy,
     ]

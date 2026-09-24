@@ -145,7 +145,7 @@ def main() -> int:
                     "end-to-end"
                 )
 
-        # Case 14: matches_wait_trigger — the six widened Entry-gate phase values mill-go-base/SKILL.md's "Mid-execution phase-gate widening" subsection routes on.
+        # Case 14: matches_wait_trigger — the four widened Entry-gate phase values mill-go-base/SKILL.md's "Mid-execution phase-gate widening" subsection routes on.
         widened_exact = {
             "implementing",
             "reviewing",
@@ -155,25 +155,24 @@ def main() -> int:
         }
         widened_regexes = [
             r"^approved-.*$",
-            r"^reviewing-.*-r\d+$",
-            r"^fixing-.*-r\d+$",
             r"^holistic-reviewing$",
         ]
         assert matches_wait_trigger("approved-foo", widened_exact, widened_regexes)
-        assert matches_wait_trigger("reviewing-foo-r1", widened_exact, widened_regexes)
-        assert matches_wait_trigger("fixing-foo-r3", widened_exact, widened_regexes)
         assert matches_wait_trigger("holistic-reviewing", widened_exact, widened_regexes)
         assert matches_wait_trigger(
             "self-resolved-verify-logic", widened_exact, widened_regexes
         )
         assert matches_wait_trigger("holistic-approved", widened_exact, widened_regexes)
         print(
-            "PASS: matches_wait_trigger matches all six widened "
+            "PASS: matches_wait_trigger matches all four widened "
             "Entry-gate phase values"
         )
 
         assert not matches_wait_trigger("blocked", widened_exact, widened_regexes)
         assert not matches_wait_trigger("done", widened_exact, widened_regexes)
+        # Per-batch review phases no longer exist, so they no longer widen the gate.
+        assert not matches_wait_trigger("reviewing-foo-r1", widened_exact, widened_regexes)
+        assert not matches_wait_trigger("fixing-foo-r3", widened_exact, widened_regexes)
         # Near-miss: no trailing "-{name}", must not full-match "^approved-.*$".
         assert not matches_wait_trigger("approved", widened_exact, widened_regexes)
         print(

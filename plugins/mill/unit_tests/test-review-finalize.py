@@ -366,7 +366,7 @@ def test_review_plan_finalize_receives_raw_text_byte_identical() -> bool:
                 ["--stage", "finalize", "--round", "1", "--agent-output", str(output_file)]
             )
 
-        # raw_text is the third positional argument to finalize(cfg, slug, raw_text, scope=None, round_n=..., ...).
+        # raw_text is the third positional argument to finalize(cfg, slug, raw_text, round_n=..., ...).
         # Read it outside any exception-swallowing block so a mismatch surfaces as False.
         return mock_modules["_review_plan"].finalize.call_args.args[2] == "Q&amp;A send &lt;guid&gt;"
 

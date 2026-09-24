@@ -57,15 +57,11 @@ these skills are loaded defensively in case a future addition needs `mill:conver
      See step 6 for the explicit "do not treat PR-pending as termination" rule.
    - `pipeline.entry_wait` — master on/off switch for the entry-gate blocking wait (default `true` if the key is absent).
    - `pipeline.entry_wait_timeout_minutes` — give-up timeout in minutes for the entry-gate wait (default `240` if the key is absent).
-   - `roles.code-review.batch.rounds` — max review rounds per batch.
-   - `roles.code-review.batch.min_rounds` — floor: the per-batch review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" under `### 3. Code Review loop` below.
-   - `roles.code-review.batch.auto_approve_on_cap` — when `true`, a round-cap exhausted with the last round's verdict `REQUEST_CHANGES` is treated as an implicit approval instead of a halt (default `false` when absent). See step 5 "Max-rounds exhaustion" under `### 3. Code Review loop` below.
    - `roles.code-review.holistic.rounds` — max holistic review rounds (parallel cap for the holistic scope, default 1).
    - `roles.code-review.holistic.min_rounds` — floor: the holistic review loop may not terminate on APPROVE before this round (default `1` when absent). See "Convergence gate" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.code-review.holistic.auto_approve_on_cap` — when `true`, a round-cap exhausted with `REQUEST_CHANGES` still returned is treated as an implicit approval instead of a halt (default `false` when absent). See step 7 "Rounds exhausted" in `plugins/mill/skills/mill-go-base/holistic-review.md`.
    - `roles.implementer.self_fix_rounds` — passed to the implementer brief.
    - `roles.code-review.holistic.reviewer` — if non-null, run one holistic code review after all batches approve.
-   - `roles.code-review.batch.reviewer` — if null (or rounds: 0), skip per-batch code review for all batches.
 3. Read the task slug: `slug = _marker.slug_from_branch(git_root, wiki_path, cfg)`.
    On `MarkerError` → halt with `str(e)` (the exception's own message). `signature: _marker.slug_from_branch(git_root: Path, wiki_path: Path, cfg: dict) -> str`
 4. Acquire the builder lock:
@@ -117,7 +113,7 @@ these skills are loaded defensively in case a future addition needs `mill:conver
    | phase | action |
    | --- | --- |
    | `planned` | fresh run — continue to Prepare |
-   | `implementing` / `reviewing` / `fixing`, or matching the widened batch-scoped set (see "### Mid-execution phase-gate widening" below) | resume or routed continuation — see subsection |
+   | `implementing` / `reviewing` / `fixing`, or matching the widened set (see "### Mid-execution phase-gate widening" below) | resume or routed continuation — see subsection |
    | `blocked` | surface `blocked_reason` from status.md and halt |
    | `discussed` / `discussing` / `planning`, or matching `^plan-review-r\d+$` / `^plan-fix-r\d+$` / `^discussion-fix-r\d+$` / `^discussion-gap-fix-r\d+$` | wait for `phase: planned` (see "Entry-gate wait for upstream mill-plan" below) if `pipeline.entry_wait` is true; otherwise tell user to finish mill-plan and halt |
    | `done` | tell user the task is complete; suggest `/mill-finalize` if auto-merge was off |
@@ -137,13 +133,13 @@ This is the documented recovery path for a `blocked` batch entry (see the fallba
 
 ### Mid-execution phase-gate widening
 
-Whenever the phase-table lookup above lands on the widened `implementing`/`reviewing`/`fixing` row, compute the match to determine which of the seven branches fired:
+Whenever the phase-table lookup above lands on the widened `implementing`/`reviewing`/`fixing` row, compute the match to determine which of the five branches fired:
 
 ```python
 matched = _phase_wait.matches_wait_trigger(
     phase,
     {"implementing", "reviewing", "fixing", "self-resolved-verify-logic", "holistic-approved"},
-    [r"^approved-.*$", r"^reviewing-.*-r\d+$", r"^fixing-.*-r\d+$", r"^holistic-reviewing$"],
+    [r"^approved-.*$", r"^holistic-reviewing$"],
 )
 ```
 
@@ -151,8 +147,6 @@ matched = _phase_wait.matches_wait_trigger(
 Route on the current `phase` value:
 
 - `implementing` / `reviewing` / `fixing` (bare, unsuffixed) — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`), unchanged from today.
-- `reviewing-{batch_name}-rN` / `fixing-{batch_name}-rN` — route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`).
-  That batch's `state` in `## Batches` genuinely is `reviewing`/`fixing`, so Resume's step 1 (locate the entry whose `state` is non-terminal: `running`, `reviewing`, or `fixing`) matches it unchanged.
 - `approved-{batch_name}` — fires *between* batches: the just-finished batch is `state: approved`, every other batch is either already `approved` or still `pending`, so no batch entry is `running`/`reviewing`/`fixing` and Resume's (`plugins/mill/skills/mill-go-base/resume.md`) step 1 has nothing to match.
   **Liveness check first.** Starting a batch's implementer (dispatching, setting `state: running`, recording `start_sha`/`implementer_session`) does not call `_status.append_phase`, so an interruption right after dispatching the next batch can leave `phase:` on-disk still reading `approved-{batch_name}` even though the next batch is genuinely mid-implementation. Before applying the assumption above, call `_status.read_batches(status_path)` and check whether any entry's `state` is `running`, `reviewing`, or `fixing`. If one is found, route to `## Resume` (`plugins/mill/skills/mill-go-base/resume.md`) instead — its step 1 will correctly locate and resume that batch.
   Only when no entry is non-terminal does the following apply, unchanged:
@@ -373,7 +367,7 @@ This three-step pattern applies at every dispatch point:
    The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
    For a **reviewer** dispatch, skip this step entirely — the reviewer holds its own `Write` grant and already wrote `.out.md` itself;
    the orchestrator does not write it a second time.
-   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" (see step 3 of "Code Review loop") and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
+   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
 
 5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
    For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
@@ -399,9 +393,9 @@ This three-step pattern applies at every dispatch point:
    Implementer, fixer, and merge-in finalize invocations are unchanged — they take no
    `--duration-s`/`--tool-calls`/`--cost-usd` flags at all.
 
-   For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope`, `--batch-name` (batch scope only), and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs.
+   For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope` and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs.
    Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms (10 minutes) — whenever that CLI's finalize stage replays a batch's `verify:` command as a regression guard: this currently applies to both `millpy-fix.py --stage finalize` and `millpy-implement.py --stage finalize`, each of which replays every batch's `verify:` command sequentially, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites.
-   This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, both batch and holistic scope) and implementer-CLI;
+   This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, holistic scope) and implementer-CLI;
    review-CLI finalize calls don't run verify commands and aren't affected.
    `--stage finalize`'s verify replay (`_run_verify_gate` in `_implementer_common.py`) runs the batch's `verify:` command via `subprocess.run` with no `env=` override, so it inherits whatever PATH the **orchestrator's own Bash-tool shell** happens to have at the moment `--stage finalize` is invoked — not the implementer subagent's own shell environment, which is a separate process the orchestrator cannot introspect.
    If a project's `verify:` command depends on a toolchain directory that is not on the orchestrator's default PATH (e.g. `$HOME/go/bin` for `gopls`-dependent Go tooling), export it in the orchestrator's shell before running `/mill-go`, or `--stage finalize`'s regression replay can spuriously report `stuck_type: verify` even though the implementer's own verify run (in its own session) passed cleanly.
@@ -468,7 +462,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
 
 **Tree-guard checkpoint block.** Referenced by name from every dispatch call site in this file and from the skill's companion files, which name it as `**Tree-guard checkpoint block**` in `plugins/mill/skills/mill-go-base/SKILL.md`. Exactly two forms, both sharing the same body:
 - **Pre-dispatch form** — invoked immediately before a dispatch.
-- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retries at `### 3. Code Review loop` sub-step 4.5 and `plugins/mill/skills/mill-go-base/holistic-review.md` sub-step 3.5 are separate dispatch points, each with its own pre/post pair — not sub-cycles of the dispatch that preceded them.
+- **Post-dispatch form** — invoked once per dispatch, immediately after that dispatch's prepare-through-finalize sequence returns. The ERROR-only-aggregate retry at `plugins/mill/skills/mill-go-base/holistic-review.md` sub-step 3.5 is a separate dispatch point with its own pre/post pair — not a sub-cycle of the dispatch that preceded it.
 
 Body (both forms): `result = _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root)`; `if result["triggered"]: _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"])`.
 `signature: _treeguard.check_and_restore(worktree: Path, tracked_root: str = "_mill", *, git_root: Path | None = None) -> dict` returning `{"triggered": bool, "restored_paths": list[str], "timestamp": str | None}`.
@@ -648,9 +642,9 @@ The implementer's last output line must be JSON:
 {"status":"success|stuck","commit_sha":"...","session_id":"...", ...}
 ```
 
-- `status: success` → continue to Code Review.
+- `status: success` → continue to step 2b (cleanliness gate).
 - `status: stuck, stuck_type: transient` → auto-retry ONCE: re-invoke `millpy-implement.py <batch_name>` (no `--resume` flag — a fresh batch start).
-  Record `review_round: 0`, do not change batch state.
+  Do not change batch state.
   If the second invocation also reports `stuck_type: transient` → escalate per *Stuck escalation* below.
 - `status: stuck, stuck_type: verify | logic` → route to *Stuck escalation*, which self-resolves once before escalating.
 - Malformed / missing JSON line → treat as `stuck_type: logic` reason "no structured report".
@@ -730,146 +724,12 @@ If `in_scope_dirt` is non-empty (and not `None`; genuine implementer-introduced 
 
 If `in_scope_dirt` is empty (and not `None`), record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
 Then continue to "3.
-Code Review loop" as normal.
+Complete batch" as normal.
 
-### 3. Code Review loop
+### 3. Complete batch
 
-If `roles.code-review.batch.reviewer` is null (or rounds: 0): set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name} (per-batch review disabled)"`, and continue to the next batch.
-Skip the rest of this section.
-
-- Set batch state → `reviewing`, `review_round: 1`.
-- `extra_files = []`.
-- `min_batch_rounds = cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("min_rounds", 1)`.
-- `auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("auto_approve_on_cap", False)`.
-
-**Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (step 4's `APPROVE` branch below), compute:
-
-```
-converged = (N >= min_batch_rounds) and not any(f.get("demoted") for f in envelope["findings"])
-```
-
-`envelope["findings"]` is the top-level field the JSON envelope already carries (`ReviewResult.findings`) — no backend change needed to read it. This site has no approved-batch carryforward concept, so `envelope["findings"]` is read directly, unfiltered.
-
-- `converged is True`: proceed exactly as step 4's `APPROVE` branch describes (no behavior change).
-- `converged is False` AND `N < roles.code-review.batch.rounds`: the NIT-fix dispatch (when `nit_count > 0`) still runs — real, safe work — but do NOT execute the branch's terminal actions (`_status.append_phase(status_path, f"approved-{batch_name}", ...)`, the approve-commit, the loop break). Instead continue the loop to round N+1 (re-dispatch code review for this batch).
-- `converged is False` AND `N >= roles.code-review.batch.rounds` (last allowed round): treat as an implicit approval — run the branch's existing terminal actions exactly as if `converged` were `True`, but append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the approve-commit message (`"<VARIANT_LABEL>: approve batch {batch_name}"`) so the shortfall is auditable.
-- Step 5 (Max-rounds exhaustion) is untouched — it only fires when verdict never reached `APPROVE` (BLOCKINGs remained the whole time), orthogonal to this gate's implicit-approve-at-cap fallback, which lives inside the `APPROVE` branch itself.
-
-For each round `N` from 1 to `roles.code-review.batch.rounds`:
-
-- Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — before the append_phase/commit below.
-- `_status.append_phase(status_path, f"reviewing-{batch_name}-r{N}", _timestamp.now_utc_iso())`.
-  Commit immediately: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: reviewing batch {batch_name} round {N}"` — mirrors the Holistic Review loop's own existing pattern at the same file (`_status.append_phase(status_path, "holistic-reviewing", ...)` immediately followed by an equivalent commit).
-  This closes the window where an uncommitted phase-append could itself be the file a tree-guard restore later discards — see `_mill/discussion.md`'s "Closing the same-file modify-then-delete window in mill-go's per-batch loop" Decision.
-
-1. **Crash-recovery check.**
-   Before firing the CLI, scan `reviews_dir` for a file matching `*-code-review-{batch_name}-r{N}.md`.
-   If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, f"reviewing-{batch_name}-r{N}", occurrence=1)`;
-   treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`.
-   If freshness validation passes, parse its verdict from the fenced yaml block via `_review_common.parse_verdict(file_content)` and skip to step 4 below.
-   This covers the case where mill-go crashed after writing the review but before committing state.
-   If the file is stale (mtime before `ref_ts`) or `ref_ts` is None, ignore the file and fall through to firing the CLI.
-
-   Freshness validation in inline Python:
-   ```python
-   from datetime import datetime, timezone
-   from pathlib import Path
-   ref_ts_str = "<iso-timestamp-string>"  # result from phase_entry_timestamp
-   file_path = Path("<review-file-path>")
-   ref_ts = datetime.fromisoformat(ref_ts_str.strip('"')).replace(tzinfo=timezone.utc) if ref_ts_str else None
-   file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime, tz=timezone.utc)
-   is_fresh = ref_ts is not None and file_mtime >= ref_ts
-   ```
-
-   State explicitly: ERROR-only retries still do NOT consume the round counter;
-   freshness — not counter consumption — is what rejects stale pre-retry files. `signature: _review_common.parse_verdict(text: str) -> str`
-   `signature: _status.phase_entry_timestamp(status_path: Path, phase: str, *, occurrence: int = 1) -> str | None`
-
-1.5.
-**Prior-notes digest (round N > 1 only).**
-If `N > 1`: scan the prior round's review file (from round `N-1`) for every line matching `### [NIT] <title>` (case-insensitive NIT marker); the heading may carry a class suffix, so `### [NIT:consistency] <title>` matches as well as `### [NIT] <title>`, and the title is the heading text after the closing bracket in either form.
-A heading carrying a `**Demoted-from:** BLOCKING` line on the line below it was demoted by the stage ceiling and is a genuine NIT for the purposes of this prior-non-blocking-items list, not a suppressed BLOCKING.
-Extract the title text and the next non-empty line (which should contain Location and Issue fields).
-Build a digest: one line per NIT finding, in format "- Title: issue context" (ASCII-only, all non-ASCII replaced with closest ASCII), write to `<briefs_dir>/prior-nonblocking-<batch_name>-r<N>.txt`, and pass `--prior-notes <digest-path>` to the `millpy-review-code.py` invocation below.
-The `reviews/` read-ban is unchanged — only the curated digest reaches the reviewer.
-Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
-
-2. Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before the Agent-mode dispatch below.
-
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...] [--prior-notes <digest-path>]`.
-   The CLI prints one JSON line `{"type":"code","round":N,"verdict":"...","reviews":[...]}`.
-
-Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after the Agent-mode dispatch pattern above returns (prepare through finalize).
-
-3. **Builder reads only the JSON envelope verdict, never the findings.**
-   Loading `mill-receiving-review` is the dispatched implementer's job (see Principles below).
-   Builder does not load the skill.
-   Before branching on the verdict, print the cost line for this round per "## Review cost line"
-   above, with `<type> = code` and `<scope> = <batch_name>`.
-   Printing the cost line does not relax the read-ban above: the Builder still never reads the
-   findings, only the envelope fields the cost line names.
-
-4. Branch on verdict:
-   - `APPROVE` — If `nit_count > 0` in the envelope, dispatch one cold-start NIT-only fix pass:
-   
-     `nit_count` is derived from the envelope's post-ceiling `findings` list; the per-finding `title`, `severity`, and `class` are available there too, if the fixer brief needs them.
-
-     **Dispatch the NIT-fix pass whenever `nit_count > 0` — there is no exception to this for the Builder, even under time or performance pressure.
-     'Non-blocking' does NOT mean optional: deferred nits re-surface as BLOCKING in later rounds and cost more total rounds.**
-     The fixer, not the Builder, decides what to leave: within the pass, the fixer may leave a nit unfixed only when the reviewer explicitly marked it 'no action required' — that latitude governs the fixer's in-pass judgment, not the Builder's dispatch decision, and never excuses skipping the dispatch itself.
-
-     **Prior-blocking digest.**
-     ```bash
-     PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
-     import _prior_blocking, pathlib
-     digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='batch', batch_name='<batch_name>')
-     pathlib.Path('<briefs_dir>/prior-blocking-<batch_name>-r<N>.txt').write_text(digest, encoding='utf-8')
-     "
-     ```
-     Unlike the existing prior-notes digest above, this is called at every round with no `N > 1` guard — `build_digest` returns `""` when there is no prior BLOCKING history yet, and `millpy-fix.py` renders an empty digest file as `"(none)"`, so the round-1 case needs no special-casing here.
-
-     Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N> --nits-only --prior-blocking <briefs_dir>/prior-blocking-<batch_name>-r<N>.txt`.
-     The fixer loads `mill-receiving-review` and applies the NITs from the APPROVE'd review file. Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior. Do NOT re-review — the NIT fix is trusted. The NIT-fix session commits its own source-file changes atomically; on stuck → escalate via the existing Stuck escalation path.
-     After the dispatch's `<task-notification>` is accepted: capture the notification to `<brief_path>.out.md` (step 4 of the Agent-mode dispatch pattern), then run `--stage finalize` (step 5 of that same pattern) — this is what appends the `nits-fixed-<batch_name>` marker Handoff's nit-enforcement gate requires. Only after finalize completes does the next sentence's `converged` computation happen; do not skip straight from the dispatch notification to computing `converged`.
-     After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-     If `converged`, or `N >= roles.code-review.batch.rounds` (implicit-approve-at-cap): set batch state → `approved`, `review_file: <path>`. `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`. Use the `file` field from `reviews[0]` in the JSON summary (or the crash-recovery scan path) as `<review_file_path>`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message. Break out of the loop → next batch.
-     If not `converged` and `N < roles.code-review.batch.rounds`: skip the terminal actions above and continue to round N+1 (re-dispatch code review for this batch).
-   - `NEED_CONTEXT` — read the `## Missing context` bullets from the review file.
-     For each listed path, if it exists under the worktree, append to `extra_files` for the NEXT round. `_notify.notify("<VARIANT_LABEL>.review-need-context", f"batch {batch_name} round {N}", slug=slug, files=len(missing))`.
-     Record this gap for mill-self-report (see `plugins/mill/skills/mill-go-base/handoff.md`).
-     Increment round and continue the loop.
-     If ALL the missing files are paths already in `extra_files` from a prior round (no new info), treat as a stuck-logic failure and break.
-     Reading the structured `## Missing context` bullet list does not require `mill-receiving-review` -- only finding-handling does. `signature: _notify.notify(event: str, detail: str, **context) -> None`
-   - `REQUEST_CHANGES` — Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-fix.py` and `<args> = --scope batch --batch-name <batch_name> --review-file <review-file-abs-path> --round <N>`.
-
-     The CLI atomically: resolves the batch plan, sets batch state → `fixing`, calls `_status.append_phase` for `fixing-{batch_name}-r{N}`, commits and pushes (status.md plus the review file), and dispatches a cold-start fixer session with the fix prompt (which instructs the fixer to load `mill-receiving-review` and apply findings).
-     Parse the JSON report the same way as step 2 — including the exit-code-1-with-stuck-JSON behavior described under "1.
-     Implement".
-     On stuck → escalate.
-
-4.5.
-**Step 4.5: ERROR-only-aggregate retry (no round consumed)**
-
-   **Usage-error immediate halt (checked first, every round).** Before evaluating the trigger condition below, inspect the JSON envelope's `reviews[]` array (when present) for any entry with `error_kind: "usage"`. If found, halt immediately on this occurrence — no retry, no round consumed — regardless of what any other entry in the same `reviews[]` list contains. Reuse this same step's existing second-pass halt mechanics below (including whatever batch-state/commit mechanics that halt already implies via the shared *Blocked* section this SKILL.md defines), but halt with `BLOCKED: code review usage error: <message>` (where `<message>` is the offending entry's `error` field) and surface it to the user — distinct wording from the existing `ERROR-only round {N}` phrasing.
-
-   When no entry in `reviews[]` is `error_kind: "usage"` (per the immediate halt above), and the JSON envelope from sub-step 2 has top-level `verdict: "ERROR"` (or, equivalently, every remaining entry in `reviews[]` has `verdict: "ERROR"`), skip sub-step 4 entirely and immediately re-run:
-
-   Tree-guard checkpoint block, pre-dispatch form (see "## Agent-mode dispatch" above) — immediately before this retry's Agent-mode dispatch.
-
-   Follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" above) with `<cli> = millpy-review-code.py` and `<args> = --batch <batch_name> [--extra-file <p> ...]`.
-
-   Tree-guard checkpoint block, post-dispatch form (see "## Agent-mode dispatch" above) — immediately after it returns.
-
-   The round counter `N` is **not** consumed — the round produced no reviewable output.
-   On the **second** consecutive run that still has top-level `verdict: "ERROR"`, halt with `BLOCKED: code review ERROR-only round {N}` and surface each entry's `error` string from `reviews[]` to the user.
-   Do NOT auto-retry beyond the second pass.
-   The two-pass cap mirrors mill-plan's existing step 3.5. *(Closes #228 — rate-limit errors no longer mis-dispatch the implementer with a null review file.)*
-
-5. **Max-rounds exhaustion.**
-   After `roles.code-review.batch.rounds` rounds without APPROVE: branch on the most recently completed round's verdict (round `N = roles.code-review.batch.rounds`, already read at step 3/4 for that round).
-
-   - **If `auto_approve_on_cap` is `True` AND that round's verdict was `REQUEST_CHANGES`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — set batch state → `approved`, `review_file: <path>` (using the `file` field from that round's `reviews[0]` as `<review_file_path>`, same as step 4's own convention); `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"`. Also emit `_notify.notify("<VARIANT_LABEL>.review-exhausted-auto-approved", f"batch {batch_name}", slug=slug, rounds=N)` so the auto-approval is still observable, not silent. Continue to the next batch — do NOT go to *Blocked*.
-   - **Otherwise** (flag is `False`, or that round's verdict was `NEED_CONTEXT`): `_notify.notify("<VARIANT_LABEL>.review-exhausted", f"batch {batch_name}", slug=slug, rounds=N)`, set batch state → `blocked`, `blocked_reason: "review rounds exhausted"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} after {N} rounds"`. Go to *Blocked* below.
+Set batch state → `approved`, `_status.append_phase(status_path, f"approved-{batch_name}", _timestamp.now_utc_iso())`, commit on the task branch: `git -C <worktree> add <status_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: approve batch {batch_name}"`, and continue to the next batch.
+Code review runs once, holistically, after every batch is approved — see `## Holistic code review`.
 
 ### Stuck escalation
 
@@ -886,7 +746,7 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
   If the second invocation also reports `stuck_type: transient`, escalate per the routing below.
 - `transient` (already retried once):
   - **If `commits_made > 0` in the stuck JSON** (the implementer timed out after committing some work): skip re-invocation of the implementer;
-    proceed directly to the per-batch cleanliness gate (scope violations check) then code review as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
+    proceed directly to the per-batch cleanliness gate (scope violations check) then batch completion as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
   - **Otherwise** (no commits made, the field is absent,
     or the timeout happened before any commit) → self-resolve once: re-fire the implementer fresh (no `--resume`) — a first-occurrence timeout with no commits is most often a transient LLM/network hiccup, so no plan edit is needed for this attempt.
     If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.

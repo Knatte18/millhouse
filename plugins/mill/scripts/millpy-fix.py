@@ -1,12 +1,10 @@
 """millpy-fix.py — unified fixer dispatch CLI.
 
 Dispatches a cold-start fixer session to fix findings from a code review.
-Supports both per-batch and holistic scopes.
 Always cold-start (resume=False).
 
 Flags:
-    --scope {batch,holistic} (required) fix scope: "batch" for per-batch, "holistic" for cross-batch
-    --batch-name NAME (required iff --scope batch) batch name from the plan overview's Batch Index
+    --scope {holistic} (required) fix scope; the only supported value
     --review-file PATH (required) absolute or relative path to the code review output file --round N
     fix-cycle round number (int, default 1)
 
@@ -217,14 +215,9 @@ def main(argv=None) -> int:
     )
     parser.add_argument(
         "--scope",
-        choices=["batch", "holistic"],
+        choices=["holistic"],
         required=True,
-        help="Fix scope: 'batch' for per-batch, 'holistic' for cross-batch.",
-    )
-    parser.add_argument(
-        "--batch-name",
-        default=None,
-        help="Batch name (required iff --scope batch).",
+        help="Fix scope (only 'holistic' is supported).",
     )
     parser.add_argument(
         "--review-file",
@@ -272,14 +265,6 @@ def main(argv=None) -> int:
         ),
     )
     args = parser.parse_args(argv)
-
-    # Validate mutual constraints
-    if args.scope == "batch" and not args.batch_name:
-        print("--batch-name is required when --scope batch", file=sys.stderr)
-        return 1
-    if args.scope == "holistic" and args.batch_name:
-        print("--batch-name must not be set when --scope holistic", file=sys.stderr)
-        return 1
 
     if args.review_file is None:
         print("--review-file is required", file=sys.stderr)
@@ -429,52 +414,31 @@ def main(argv=None) -> int:
         )
         module_verify_baseline = _status.get_module_verify_baseline(status_path)
 
-        # Resolve verify command for batch/holistic fixes.
-        # cwd_override is pre-initialized to None here (before branching on args.scope) because the batch-scope read below is nested inside `if batch_entry is not None:` and the holistic-scope read inside `if batch_verifies:` -- either guard can be false, leaving the pre-initialized None value, exactly matching pre-#604 behavior.
+        # Resolve the joined verify command across all batches.
+        # verify_cmd / cwd_override stay None when no batch declares a runnable verify command.
         verify_cmd = None
         cwd_override = None
-        # batch_verify_baseline must be defined unconditionally (both scope arms below only
-        # reassign it inside their own guard), since it is read regardless of scope when
-        # building the finalize_from_output call below.
         batch_verify_baseline = None
-        if args.scope == "batch":
-            batch_entry = next(
-                (b for b in batches if b["name"] == args.batch_name), None
-            )
-            if batch_entry is not None:
-                batch_file = plan_base / batch_entry["file"]
-                batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-                verify_cmd, cwd_override = _plan_dag.parse_verify_field(
-                    batch_frontmatter, project_root, git_root
-                )
-            batch_status = next(
-                (b for b in _status.read_batches(status_path) if b.get("name") == args.batch_name),
-                None,
-            )
-            batch_verify_baseline = (
-                batch_status.get("verify_baseline_failures") if batch_status is not None else None
-            )
-        elif args.scope == "holistic":
-            # Derive concatenated verify_cmd from all batch verify commands in DAG order
-            batch_verifies = _plan_dag.iter_batch_verifies(
-                plan_base, project_root, git_root, status_path=status_path
-            )
-            _report_skipped_verifies(
-                plan_base, project_root, git_root, status_path, batch_verifies
-            )
-            if batch_verifies:
-                verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
-            # Union every contributing batch's cached verify-baseline failure set, so the
-            # holistic waiver covers pre-existing/unrelated failures from any batch this
-            # fix round spans -- not just one arbitrarily-chosen batch's baseline.
-            _all_batches_status = _status.read_batches(status_path)
-            _union_baseline: set[str] = set()
-            for _bv_name, _bv_cmd, _bv_cwd in batch_verifies:
-                _bv_status = next((b for b in _all_batches_status if b.get("name") == _bv_name), None)
-                if _bv_status is not None and _bv_status.get("verify_baseline_failures"):
-                    _union_baseline.update(_bv_status["verify_baseline_failures"])
-            batch_verify_baseline = sorted(_union_baseline) if _union_baseline else None
-        nits_scope = args.batch_name if args.scope == "batch" else "holistic"
+        # Derive concatenated verify_cmd from all batch verify commands in DAG order
+        batch_verifies = _plan_dag.iter_batch_verifies(
+            plan_base, project_root, git_root, status_path=status_path
+        )
+        _report_skipped_verifies(
+            plan_base, project_root, git_root, status_path, batch_verifies
+        )
+        if batch_verifies:
+            verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
+        # Union every contributing batch's cached verify-baseline failure set, so the
+        # holistic waiver covers pre-existing/unrelated failures from any batch this
+        # fix round spans -- not just one arbitrarily-chosen batch's baseline.
+        _all_batches_status = _status.read_batches(status_path)
+        _union_baseline: set[str] = set()
+        for _bv_name, _bv_cmd, _bv_cwd in batch_verifies:
+            _bv_status = next((b for b in _all_batches_status if b.get("name") == _bv_name), None)
+            if _bv_status is not None and _bv_status.get("verify_baseline_failures"):
+                _union_baseline.update(_bv_status["verify_baseline_failures"])
+        batch_verify_baseline = sorted(_union_baseline) if _union_baseline else None
+        nits_scope = "holistic"
         return finalize_from_output(
             Path(args.agent_output),
             project_root,
@@ -516,156 +480,71 @@ def main(argv=None) -> int:
     else:
         prior_blocking_text = "(none)"
 
-    # Branch on scope (for prepare and full stages)
-    if args.scope == "batch":
-        # Per-batch fixer dispatch
-        batch_entry = next((b for b in batches if b["name"] == args.batch_name), None)
-        if batch_entry is None:
-            print(f"batch {args.batch_name!r} not found in overview", file=sys.stderr)
-            return 1
+    # Holistic fixer dispatch: derive the concatenated verify_cmd from all batch verify commands in DAG order.
+    batch_verifies = _plan_dag.iter_batch_verifies(
+        plan_base, project_root, git_root, status_path=status_path
+    )
+    _report_skipped_verifies(
+        plan_base, project_root, git_root, status_path, batch_verifies
+    )
+    verify_cmd, cwd_override = (
+        _resolve_holistic_verify(batch_verifies) if batch_verifies else (None, None)
+    )
+    batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
 
-        batch_file = plan_base / batch_entry["file"]
-        # Resolve batch verify command for batch-scope fixes
-        batch_frontmatter = _plan_dag._read_batch_frontmatter(batch_file)
-        verify_cmd, cwd_override = _plan_dag.parse_verify_field(
-            batch_frontmatter, project_root, git_root
-        )
+    _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
 
-        _status.set_batch_fields(
-            status_path,
-            args.batch_name,
-            {
-                "state": "fixing",
-                "review_round": args.round,
-                "review_file": str(review_file),
-            },
-        )
-        _status.append_phase(
-            status_path,
-            f"fixing-{args.batch_name}-r{args.round}",
-            _timestamp.now_utc_iso(),
-        )
+    result = _subprocess_util.run(
+        [
+            "git",
+            "add",
+            status_path.relative_to(project_root).as_posix(),
+            review_file_arg,
+        ],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
 
-        result = _subprocess_util.run(
-            [
-                "git",
-                "add",
-                status_path.relative_to(project_root).as_posix(),
-                review_file_arg,
-            ],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
+    result = _subprocess_util.git_commit(
+        project_root,
+        f"mill-go: holistic fix round {args.round}",
+        name=git_name,
+        email=git_email,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
 
-        result = _subprocess_util.git_commit(
-            project_root,
-            f"mill-go: fixing batch {args.batch_name} round {args.round}",
-            name=git_name,
-            email=git_email,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
+    result = _subprocess_util.run(
+        ["git", "push", "origin", branch],
+        cwd=project_root,
+    )
+    if result.returncode != 0:
+        print(result.stderr, file=sys.stderr)
+        return 1
 
-        result = _subprocess_util.run(
-            ["git", "push", "origin", branch],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
+    template_path = plugin_root / "templates" / "fixer-holistic-brief.md"
+    prompt_text = _render.render(
+        template_path,
+        {
+            "TASK_TITLE": task_title,
+            "SLUG": slug,
+            "OVERVIEW_FILE": str(overview_path),
+            "REVIEW_FILE": str(review_file),
+            "PROJECT_ROOT": str(project_root),
+            "WIKI_PATH": str(wiki_path),
+            "SESSION_ID": session_id,
+            "ROUND": str(args.round),
+            "SELF_FIX_ROUNDS": str(self_fix_rounds),
+            "BATCH_FILES": batch_files_text,
+            "NITS_ONLY_CARVEOUT": nits_only_carveout,
+            "PRIOR_BLOCKING": prior_blocking_text,
+        },
+    )
 
-        template_path = plugin_root / "templates" / "fixer-batch-brief.md"
-        prompt_text = _render.render(
-            template_path,
-            {
-                "TASK_TITLE": task_title,
-                "SLUG": slug,
-                "BATCH_NAME": args.batch_name,
-                "BATCH_FILE": str(batch_file),
-                "OVERVIEW_FILE": str(overview_path),
-                "REVIEW_FILE": str(review_file),
-                "PROJECT_ROOT": str(project_root),
-                "WIKI_PATH": str(wiki_path),
-                "SESSION_ID": session_id,
-                "ROUND": str(args.round),
-                "SELF_FIX_ROUNDS": str(self_fix_rounds),
-                "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(
-                    batch_file
-                ),
-                "NITS_ONLY_CARVEOUT": nits_only_carveout,
-                "PRIOR_BLOCKING": prior_blocking_text,
-            },
-        )
-
-    else:  # args.scope == "holistic"
-        # Holistic fixer dispatch Derive concatenated verify_cmd from all batch verify commands in DAG order
-        batch_verifies = _plan_dag.iter_batch_verifies(
-            plan_base, project_root, git_root, status_path=status_path
-        )
-        _report_skipped_verifies(
-            plan_base, project_root, git_root, status_path, batch_verifies
-        )
-        verify_cmd, cwd_override = (
-            _resolve_holistic_verify(batch_verifies) if batch_verifies else (None, None)
-        )
-        batch_files_text = "\n".join(str(plan_base / b["file"]) for b in batches)
-
-        _status.append_phase(status_path, "holistic-fixing", _timestamp.now_utc_iso())
-
-        result = _subprocess_util.run(
-            [
-                "git",
-                "add",
-                status_path.relative_to(project_root).as_posix(),
-                review_file_arg,
-            ],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        result = _subprocess_util.git_commit(
-            project_root,
-            f"mill-go: holistic fix round {args.round}",
-            name=git_name,
-            email=git_email,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        result = _subprocess_util.run(
-            ["git", "push", "origin", branch],
-            cwd=project_root,
-        )
-        if result.returncode != 0:
-            print(result.stderr, file=sys.stderr)
-            return 1
-
-        template_path = plugin_root / "templates" / "fixer-holistic-brief.md"
-        prompt_text = _render.render(
-            template_path,
-            {
-                "TASK_TITLE": task_title,
-                "SLUG": slug,
-                "OVERVIEW_FILE": str(overview_path),
-                "REVIEW_FILE": str(review_file),
-                "PROJECT_ROOT": str(project_root),
-                "WIKI_PATH": str(wiki_path),
-                "SESSION_ID": session_id,
-                "ROUND": str(args.round),
-                "SELF_FIX_ROUNDS": str(self_fix_rounds),
-                "BATCH_FILES": batch_files_text,
-                "NITS_ONLY_CARVEOUT": nits_only_carveout,
-                "PRIOR_BLOCKING": prior_blocking_text,
-            },
-        )
-
-    # Shared dispatch tail for both scopes
+    # Dispatch tail
     _sha_result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
     start_sha = _sha_result.stdout.strip() if _sha_result.returncode == 0 else None
 
@@ -686,11 +565,10 @@ def main(argv=None) -> int:
     if args.stage == "prepare":
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(fixer_model)
-        scope_label = args.batch_name if args.scope == "batch" else "holistic"
         return emit_prepare(
             briefs_dir,
             "fix",
-            scope_label,
+            "holistic",
             args.round,
             prompt_text,
             model_tier,
@@ -736,7 +614,6 @@ def main(argv=None) -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    nits_scope = args.batch_name if args.scope == "batch" else "holistic"
     return _forward_output(
         output,
         project_root,
@@ -745,7 +622,7 @@ def main(argv=None) -> int:
         verify_cmd=verify_cmd,
         nits_only=args.nits_only,
         status_path=status_path,
-        nits_scope=nits_scope,
+        nits_scope="holistic",
         git_root=git_root,
         cwd_override=cwd_override,
     )

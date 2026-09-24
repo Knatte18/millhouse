@@ -101,7 +101,6 @@ def _make_run_result(
 
 
 from _review_common import (  # noqa: E402
-    RE_BATCH,
     RE_SIMPLE,
     DisplayRoots,
     ReviewError,
@@ -117,12 +116,10 @@ from _review_common import (  # noqa: E402
     build_reattached_section,
     build_tool_rule,
     bulk_files,
-    bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
     compute_moves_union,
     count_unrecognized_severity_findings,
-    detect_resume_round,
     discover_round,
     finalize_scope,
     find_active_slug,
@@ -135,6 +132,7 @@ from _review_common import (  # noqa: E402
     parse_moves,
     parse_verdict,
     render_prompt,
+    resolve_blocking_classes,
     resolve_existing_paths,
     resolve_large_prompt_timeout,
     resolve_path,
@@ -168,82 +166,45 @@ def main() -> int:
     assert discover_round(Path("/tmp/__nx_reviews__"), "discussion", "holistic") == 1
     print("PASS: discover_round nonexistent dir returns 1")
 
-    # RE_SIMPLE matches holistic plan file; RE_BATCH is NOT applied
+    # RE_SIMPLE matches a holistic plan file
     holistic_name = "20260418-001200-plan-review-r1.md"
     m = RE_SIMPLE.match(holistic_name)
     assert m is not None
     assert m.group("type") == "plan"
     assert m.group("n") == "1"
-    _ = RE_BATCH.match(holistic_name)  # noqa: F841 — documented ambiguity
-    print("PASS: RE_SIMPLE matches plan-holistic before RE_BATCH could mis-identify")
+    print("PASS: RE_SIMPLE matches plan-holistic filename")
 
-    # discover_round cross-type isolation
+    # discover_round counts RE_SIMPLE files of the requested type and ignores leftover per-batch files
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r2.md").write_text("x")
+        (reviews / "20260418-001200-plan-review-r2.md").write_text("x")
+        (reviews / "20260418-001300-plan-review-01-setup-r5.md").write_text("x")
         assert discover_round(reviews, "discussion", "holistic") == 1
-        print(
-            "PASS: discover_round cross-type isolation (plan-batch ignored for discussion)"
-        )
-        result = discover_round(reviews, "plan", "01-setup")
-        assert result == 3, f"expected 3, got {result}"
-        print(f"PASS: discover_round for plan with batch file: {result}")
-        assert discover_round(reviews, "plan", "holistic") == 1
-        print("PASS: discover_round plan holistic unaffected by batch file")
-        assert discover_round(reviews, "plan", "other-batch") == 1
-        print("PASS: discover_round plan other-batch unaffected by 01-setup file")
+        assert discover_round(reviews, "plan", "holistic") == 3
+        assert discover_round(reviews, "code", "holistic") == 1
+        print("PASS: discover_round cross-type isolation and leftover per-batch file ignored")
 
-    # discover_round per-scope isolation across all five (review_type, scope) axes
     with _test_helpers.safe_temp_dir() as tmpdir:
         reviews = tmpdir
-        # discussion holistic: 2 files
-        (reviews / "20260418-001200-discussion-review-r1.md").write_text("x")
-        (reviews / "20260418-001300-discussion-review-r2.md").write_text("x")
-        # plan holistic: 1 file
-        (reviews / "20260418-001400-plan-review-r1.md").write_text("x")
-        # plan batch-a: 2 files
-        (reviews / "20260418-001500-plan-review-batch-a-r1.md").write_text("x")
-        (reviews / "20260418-001600-plan-review-batch-a-r2.md").write_text("x")
-        # plan batch-b: 1 file
-        (reviews / "20260418-001700-plan-review-batch-b-r1.md").write_text("x")
-        # code holistic: 1 file
-        (reviews / "20260418-001800-code-review-r1.md").write_text("x")
-        # code batch-a: 1 file
-        (reviews / "20260418-001900-code-review-batch-a-r1.md").write_text("x")
-
-        result = discover_round(reviews, "discussion", "holistic")
-        assert result == 3, f"expected 3, got {result}"
-        print(f"PASS: discover_round per-scope discussion/holistic: {result}")
-
-        result = discover_round(reviews, "plan", "holistic")
-        assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope plan/holistic: {result}")
-
-        result = discover_round(reviews, "plan", "batch-a")
-        assert result == 3, f"expected 3, got {result}"
-        print(f"PASS: discover_round per-scope plan/batch-a: {result}")
-
-        result = discover_round(reviews, "plan", "batch-b")
-        assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope plan/batch-b: {result}")
-
-        result = discover_round(reviews, "plan", "batch-c")
-        assert result == 1, f"expected 1, got {result}"
-        print(f"PASS: discover_round per-scope plan/batch-c (absent): {result}")
-
+        (reviews / "20260418-001800-code-review-r2.md").write_text("x")
+        (reviews / "20260418-001900-code-review-01-alpha-r5.md").write_text("x")
         result = discover_round(reviews, "code", "holistic")
-        assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope code/holistic: {result}")
+        assert result == 3, f"expected 3, got {result}"
+        print(f"PASS: discover_round code/holistic ignores leftover per-batch file: {result}")
 
-        result = discover_round(reviews, "code", "batch-a")
-        assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope code/batch-a: {result}")
+    # discover_round rejects a non-holistic scope
+    try:
+        discover_round(Path("/tmp/__nx_reviews__"), "plan", "01-setup")
+        raise AssertionError("discover_round should raise ValueError for a batch scope")
+    except ValueError as exc:
+        assert "only 'holistic' is supported" in str(exc)
+    print("PASS: discover_round non-holistic scope raises ValueError")
 
-        result = discover_round(reviews, "code", "batch-b")
-        assert result == 1, f"expected 1, got {result}"
-        print(
-            f"PASS: discover_round per-scope code/batch-b (absent for code): {result}"
-        )
+    # resolve_blocking_classes reads the holistic key for scope None and "holistic"
+    holistic_cfg = {"roles": {"plan-review": {"holistic": {"blocking_classes": ["design"]}}}}
+    for scope in (None, "holistic"):
+        assert resolve_blocking_classes(holistic_cfg, "plan", scope) == frozenset({"design"})
+    print("PASS: resolve_blocking_classes reads roles.<role>.holistic.blocking_classes")
 
     # find_active_slug: not on a task branch -> MarkerError re-raised as ReviewError
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -716,17 +677,16 @@ def main() -> int:
         assert path.exists() and "discussion-review-r1" in path.name
         print(f"PASS: write_review_file discussion: {path.name}")
 
-        path2 = write_review_file(reviews, "plan", 1, "content", scope="01-setup")
-        assert "plan-review-01-setup-r1" in path2.name
-        print(f"PASS: write_review_file plan-batch: {path2.name}")
+        try:
+            write_review_file(reviews, "plan", 1, "content", scope="01-setup")
+            raise AssertionError("batch-name scope should raise ValueError")
+        except ValueError:
+            pass
+        print("PASS: write_review_file rejects a batch-name scope")
 
         path3 = write_review_file(reviews, "plan", 1, "content", scope="holistic")
         assert "plan-review-r1" in path3.name and "holistic" not in path3.name
         print(f"PASS: write_review_file plan-holistic: {path3.name}")
-
-        path4 = write_review_file(reviews, "code", 1, "content", scope="foundation")
-        assert "code-review-foundation-r1" in path4.name
-        print(f"PASS: write_review_file code-batch: {path4.name}")
 
     # apply_actual_model_override: rewrites an existing well-formed reviewer_model line
     raw = "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
@@ -831,7 +791,7 @@ def main() -> int:
             "code",
             1,
             raw,
-            scope="01-setup",
+            scope="holistic",
             duration_s=12.3,
             tool_calls=37,
             cost_usd=0.4212,
@@ -846,7 +806,7 @@ def main() -> int:
         print("PASS: finalize_scope threads cost metadata into both dict and written file")
 
         # Omitting all three leaves the written file byte-identical to today's output.
-        unmodified = finalize_scope(reviews, "code", 1, raw, scope="02-setup")
+        unmodified = finalize_scope(reviews, "code", 1, raw, scope="holistic")
         assert unmodified["duration_s"] is None
         assert unmodified["tool_calls"] is None
         assert unmodified["cost_usd"] is None
@@ -860,14 +820,14 @@ def main() -> int:
         raw = "```yaml\nverdict: APPROVE\nreviewer_model: sonnetmax\n```\n"
 
         overridden = finalize_scope(
-            reviews, "code", 1, raw, scope="01-setup", actual_model="sonnet"
+            reviews, "code", 1, raw, scope="holistic", actual_model="sonnet"
         )
         overridden_content = Path(overridden["file"]).read_text(encoding="utf-8")
         assert "reviewer_model: sonnet\n" in overridden_content
         assert "sonnetmax" not in overridden_content
         print("PASS: finalize_scope applies actual_model override to written file")
 
-        unmodified = finalize_scope(reviews, "code", 1, raw, scope="01-setup")
+        unmodified = finalize_scope(reviews, "code", 1, raw, scope="holistic")
         unmodified_content = Path(unmodified["file"]).read_text(encoding="utf-8")
         assert unmodified_content == raw
         print("PASS: finalize_scope without actual_model reproduces unmodified behavior")
@@ -897,26 +857,6 @@ def main() -> int:
             "opener must precede closer for p1"
         )
         print("PASS: bulk_files END FILE delimiters present and ordered")
-
-    # bulk_files_with_diff: END FILE delimiter present
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        p1 = Path(tmpdir) / "a.py"
-        p2 = Path(tmpdir) / "b.py"
-        p1.write_text("content-a", encoding="utf-8")
-        p2.write_text("content-b", encoding="utf-8")
-        result = bulk_files_with_diff([p1, p2], None, Path(tmpdir), 0.25)
-        assert f"--- END FILE: {p1} ---" in result, (
-            f"END FILE missing for p1: {result!r}"
-        )
-        assert f"--- END FILE: {p2} ---" in result, (
-            f"END FILE missing for p2: {result!r}"
-        )
-        assert result.index(f"--- FILE: {p1}") < result.index(f"--- END FILE: {p1}"), (
-            "opener must precede closer for p1"
-        )
-        print(
-            "PASS: bulk_files_with_diff END FILE delimiters present and ordered (start_sha=None)"
-        )
 
     # bulk_files: roots supplied -> relative FILE/END FILE delimiters
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -954,14 +894,13 @@ def main() -> int:
     try:
         tool_rule = build_tool_rule("bulk")
         prompt = render_prompt(
-            "review-code-batch",
+            "review-code-holistic",
             task_title="Test Task",
             tool_rule=tool_rule,
             artefact_section="test section",
             constraints="test constraints",
             round=2,
             reviewer_model="test-model",
-            batch_name="test-batch",
             prior_nonblocking="- Item 1: description\n- Item 2: description",
         )
         assert "Item 1: description" in prompt, (
@@ -991,14 +930,13 @@ def main() -> int:
     try:
         tool_rule = build_tool_rule("bulk")
         prompt_r1 = render_prompt(
-            "review-code-batch",
+            "review-code-holistic",
             task_title="Test Task",
             tool_rule=tool_rule,
             artefact_section="test section",
             constraints="test constraints",
             round=1,
             reviewer_model="test-model",
-            batch_name="test-batch",
             prior_nonblocking="(none)",
         )
         assert "(none)" in prompt_r1, (
@@ -2382,36 +2320,6 @@ def main() -> int:
             "PASS: resolve_existing_paths wiki/ prefix routes through wiki_root unchanged"
         )
 
-    # Per-scope counters survive interleaved per-batch + holistic writes (regression for #21, #62, #63)
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        ts = "20260418-002000"
-        (reviews / f"{ts}-code-review-helper-modules-r1.md").write_text("x")
-
-        result = discover_round(reviews, "code", "helper-modules")
-        assert result == 2, f"expected 2, got {result}"
-        print(f"PASS: discover_round per-scope code/helper-modules after r1: {result}")
-
-        result = discover_round(reviews, "code", "spawn-core")
-        assert result == 1, f"expected 1, got {result}"
-        print(
-            f"PASS: discover_round per-scope code/spawn-core (different batch, fresh count): {result}"
-        )
-
-        (reviews / f"{ts}-code-review-r1.md").write_text("x")
-
-        result = discover_round(reviews, "code", "holistic")
-        assert result == 2, f"expected 2, got {result}"
-        print(
-            f"PASS: discover_round per-scope code/holistic independent after holistic r1: {result}"
-        )
-
-        result = discover_round(reviews, "code", "helper-modules")
-        assert result == 2, f"expected 2, got {result}"
-        print(
-            f"PASS: discover_round per-scope code/helper-modules still independent of holistic: {result}"
-        )
-
     # ---------------------------------------------------------------------------
     # parse_missing_context
     # ---------------------------------------------------------------------------
@@ -2756,7 +2664,7 @@ def main() -> int:
             "### [MAJOR] bar\n"
             "### [NIT] baz\n"
         )
-        result = finalize_scope(reviews, "plan", 1, raw, scope="01-setup")
+        result = finalize_scope(reviews, "plan", 1, raw, scope="holistic")
         assert result["blocking_count"] == 2, (
             f"expected blocking_count 2, got {result['blocking_count']}"
         )
@@ -2776,7 +2684,7 @@ def main() -> int:
             "```\n"
             "### [MEDIUM] borderline concern\n"
         )
-        result = finalize_scope(reviews, "plan", 2, raw_medium_only, scope="01-setup")
+        result = finalize_scope(reviews, "plan", 2, raw_medium_only, scope="holistic")
         assert result["blocking_count"] == 1, (
             f"expected blocking_count 1, got {result['blocking_count']}"
         )
@@ -2929,362 +2837,6 @@ def main() -> int:
         "_load_root_from_overview should be callable"
     )
     print("PASS: _load_root_from_overview importable from _review_common")
-
-    # ---------------------------------------------------------------------------
-    # detect_resume_round
-    # ---------------------------------------------------------------------------
-
-    # reviews_dir does not exist -> None
-    result = detect_resume_round(Path("/tmp/__nx_detect_resume__"), "plan")
-    assert result is None, f"Got {result}"
-    print("PASS: detect_resume_round nonexistent dir -> None")
-
-    # no files -> None
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        result = detect_resume_round(Path(tmpdir), "plan")
-        assert result is None, f"Got {result}"
-        print("PASS: detect_resume_round empty dir -> None")
-
-    # per-batch round-1 files + holistic round-1 file -> None
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
-        (reviews / "20260418-001300-plan-review-r1.md").write_text("x")
-        result = detect_resume_round(reviews, "plan")
-        assert result is None, f"Got {result}"
-        print("PASS: detect_resume_round per-batch r1 + holistic r1 -> None")
-
-    # per-batch round-1 files + no holistic round-1 -> 1
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
-        (reviews / "20260418-001300-plan-review-02-wire-r1.md").write_text("x")
-        result = detect_resume_round(reviews, "plan")
-        assert result == 1, f"Got {result}"
-        print("PASS: detect_resume_round per-batch r1 + no holistic -> 1")
-
-    # per-batch rounds 1 and 2 + holistic round-1 + no holistic round-2 -> 2
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
-        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
-        (reviews / "20260418-001400-plan-review-r1.md").write_text("x")  # holistic r1
-        result = detect_resume_round(reviews, "plan")
-        assert result == 2, f"Got {result}"
-        print("PASS: detect_resume_round per-batch r1+r2, holistic r1 only -> 2")
-
-    # per-batch round 2 partial (some at r2, some at r1) + no holistic r2 -> 2
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
-        (reviews / "20260418-001300-plan-review-01-setup-r2.md").write_text("x")
-        (reviews / "20260418-001400-plan-review-02-wire-r1.md").write_text("x")
-        # no holistic at any round
-        result = detect_resume_round(reviews, "plan")
-        assert result == 2, f"Got {result}"
-        print(
-            "PASS: detect_resume_round partial r2 batches, no holistic -> 2 (highest batch round)"
-        )
-
-    # type isolation: plan per-batch files don't affect code detect_resume_round
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        reviews = tmpdir
-        (reviews / "20260418-001200-plan-review-01-setup-r1.md").write_text("x")
-        result = detect_resume_round(reviews, "code")
-        assert result is None, f"Got {result}"
-        print("PASS: detect_resume_round type isolation: plan files ignored for code")
-
-    # ---------------------------------------------------------------------------
-    # bulk_files_with_diff
-    # ---------------------------------------------------------------------------
-
-    # Test A — file with small diff uses DIFF delimiter
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir)
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        src = repo / "src"
-        src.mkdir()
-        (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        start_sha = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        with open(src / "a.py", "a", encoding="utf-8") as fh:
-            fh.write("y\n" * 10)
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "small change"],
-            check=True,
-            capture_output=True,
-        )
-        result = bulk_files_with_diff([repo / "src" / "a.py"], start_sha, repo, 0.25)
-        assert "--- DIFF:" in result, f"expected DIFF delimiter, got: {result[:200]!r}"
-        assert "--- FILE: " not in result, (
-            f"expected no FILE delimiter, got: {result[:200]!r}"
-        )
-        assert start_sha[:8] in result, (
-            f"expected start_sha[:8] in result, got: {result[:200]!r}"
-        )
-        print("PASS: bulk_files_with_diff small diff -> DIFF delimiter")
-
-    # Test B — file with large diff uses FILE delimiter
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir)
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        src = repo / "src"
-        src.mkdir()
-        (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        start_sha = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/b.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "large change"],
-            check=True,
-            capture_output=True,
-        )
-        result = bulk_files_with_diff([repo / "src" / "b.py"], start_sha, repo, 0.25)
-        assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
-        assert "--- DIFF:" not in result, (
-            f"expected no DIFF delimiter, got: {result[:200]!r}"
-        )
-        print("PASS: bulk_files_with_diff large diff -> FILE delimiter")
-
-    # Test C — unchanged file (empty diff) uses FILE delimiter
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir)
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        src = repo / "src"
-        src.mkdir()
-        (src / "c.py").write_text("hello\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/c.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        start_sha = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        (src / "other.py").write_text("z\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/other.py"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "other file"],
-            check=True,
-            capture_output=True,
-        )
-        result = bulk_files_with_diff([repo / "src" / "c.py"], start_sha, repo, 0.25)
-        assert "--- FILE: " in result, f"expected FILE delimiter, got: {result[:200]!r}"
-        print(
-            "PASS: bulk_files_with_diff empty diff (unchanged file) -> FILE delimiter"
-        )
-
-    # Test D — non-existent file is skipped
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir)
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        (repo / "dummy.py").write_text("x\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "dummy.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        start_sha = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        result = bulk_files_with_diff([repo / "nonexistent.py"], start_sha, repo, 0.25)
-        assert result == "", f"expected empty string, got: {result!r}"
-        print("PASS: bulk_files_with_diff non-existent file skipped")
-
-    # Test E — git diff failure falls back to full file
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir)
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        src = repo / "src"
-        src.mkdir()
-        (src / "a.py").write_text("hello\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/a.py"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        result = bulk_files_with_diff(
-            [repo / "src" / "a.py"], "deadbeef" * 5, repo, 0.25
-        )
-        assert "--- FILE: " in result, (
-            f"expected FILE delimiter fallback, got: {result[:200]!r}"
-        )
-        assert "--- DIFF:" not in result, (
-            f"expected no DIFF delimiter, got: {result[:200]!r}"
-        )
-        print("PASS: bulk_files_with_diff git diff failure -> FILE delimiter fallback")
-
-    # Test F — roots supplied relativizes both FILE and DIFF delimiter pairs;
-    # git-diff scoping still resolves (rel_path stays project_root-relative independent of roots).
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        repo = Path(tmpdir).resolve()
-        subprocess.run(
-            ["git", "-C", str(repo), "init"], check=True, capture_output=True
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.email", "t@t.com"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "config", "user.name", "T"],
-            check=True,
-            capture_output=True,
-        )
-        src = repo / "src"
-        src.mkdir()
-        (src / "a.py").write_text("x\n" * 2000, encoding="utf-8")
-        (src / "b.py").write_text("x\n" * 20, encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "init"],
-            check=True,
-            capture_output=True,
-        )
-        start_sha = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        with open(src / "a.py", "a", encoding="utf-8") as fh:
-            fh.write("y\n" * 10)
-        (src / "b.py").write_text("y\n" * 20, encoding="utf-8")
-        subprocess.run(
-            ["git", "-C", str(repo), "add", "src/a.py", "src/b.py"],
-            check=True,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "-C", str(repo), "commit", "-m", "change"],
-            check=True,
-            capture_output=True,
-        )
-        roots = DisplayRoots(project_root=repo)
-        result = bulk_files_with_diff(
-            [src / "a.py", src / "b.py"], start_sha, repo, 0.25, roots=roots
-        )
-        assert "--- DIFF: src/a.py " in result, f"Got {result[:200]!r}"
-        assert "--- END DIFF: src/a.py ---" in result, f"Got {result[:200]!r}"
-        assert "--- FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
-        assert "--- END FILE: src/b.py ---" in result, f"Got {result[:200]!r}"
-        assert str(repo) not in result, f"Unexpected absolute prefix: {result[:200]!r}"
-        print(
-            "PASS: bulk_files_with_diff with roots -> relative FILE and DIFF delimiters"
-        )
 
     # _read_for_bulk: code-cell-only notebook -> source concatenated with \n\n
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -3449,13 +3001,15 @@ def main() -> int:
             assert "holistic" not in path.name
             print("PASS: write_review_file UTC timestamp (code, scope=holistic)")
 
-            # Test case 3: code review with batch scope
-            path = write_review_file(
-                reviews_dir, "code", 1, "content", scope="01-foundation"
-            )
-            assert "20260102-030405" in path.name
-            assert "code-review-01-foundation-r1" in path.name
-            print("PASS: write_review_file UTC timestamp (code, scope=batch)")
+            # Test case 3: code review with batch scope is rejected
+            try:
+                write_review_file(
+                    reviews_dir, "code", 1, "content", scope="01-foundation"
+                )
+                raise AssertionError("scope='01-foundation' should raise ValueError")
+            except ValueError:
+                pass
+            print("PASS: write_review_file rejects batch scope (code)")
 
             # Test case 4: discussion review (scope ignored)
             path = write_review_file(reviews_dir, "discussion", 1, "content")
@@ -3463,13 +3017,15 @@ def main() -> int:
             assert "discussion-review-r1" in path.name
             print("PASS: write_review_file UTC timestamp (discussion)")
 
-            # Test case 5: plan review with batch scope
-            path = write_review_file(
-                reviews_dir, "plan", 1, "content", scope="01-foundation"
-            )
-            assert "20260102-030405" in path.name
-            assert "plan-review-01-foundation-r1" in path.name
-            print("PASS: write_review_file UTC timestamp (plan, scope=batch)")
+            # Test case 5: plan review with batch scope is rejected
+            try:
+                write_review_file(
+                    reviews_dir, "plan", 1, "content", scope="01-foundation"
+                )
+                raise AssertionError("scope='01-foundation' should raise ValueError")
+            except ValueError:
+                pass
+            print("PASS: write_review_file rejects batch scope (plan)")
 
     # Test: write_review_file holistic naming (#316)
     # Regression: ensure "-holistic-review-" substring never appears in filenames.
@@ -3498,14 +3054,13 @@ def main() -> int:
                 f"scope='holistic' should have code-review-r1 pattern: {path2.name}"
             )
 
-            # Case 3: scope="01-foo" (per-batch)
-            path3 = write_review_file(reviews_dir, "code", 1, "content", scope="01-foo")
-            assert "-holistic-review-" not in path3.name, (
-                f"scope='01-foo' should not contain '-holistic-review-': {path3.name}"
-            )
-            assert "code-review-01-foo-r1" in path3.name, (
-                f"scope='01-foo' should have code-review-01-foo-r1 pattern: {path3.name}"
-            )
+            # Case 3: a batch-name scope is rejected
+            try:
+                write_review_file(reviews_dir, "code", 1, "content", scope="01-foo")
+                raise AssertionError("scope='01-foo' should raise ValueError")
+            except ValueError:
+                pass
+
 
             print("PASS: write_review_file holistic naming regression (#316)")
     except AssertionError as exc:

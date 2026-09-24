@@ -33,13 +33,10 @@ def make_minimal_cfg(**overrides) -> dict:
                 "holistic": {"rounds": 2, "reviewer": "test_stub"},
             },
             "plan-review": {
-                "batch": {"rounds": 3, "reviewer": "test_stub"},
                 "holistic": {"rounds": 3, "reviewer": "test_stub"},
             },
             "code-review": {
-                "batch": {"rounds": 3, "reviewer": "test_stub"},
                 "holistic": {"rounds": 1, "reviewer": "test_stub"},
-                "diff_scope_threshold": 0.25,
             },
             "implementer": {
                 "self_fix_rounds": 0,

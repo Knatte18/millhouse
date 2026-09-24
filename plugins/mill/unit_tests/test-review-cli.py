@@ -495,10 +495,6 @@ def test_plan_prepare_brief_path_uses_git_root() -> int:
                         "rounds": 1,
                         "reviewer": "sonnetmax",
                     },
-                    "batch": {
-                        "rounds": 1,
-                        "reviewer": "sonnetmax",
-                    },
                 }
             },
             "spawn": {
@@ -600,10 +596,6 @@ def test_code_prepare_brief_path_uses_git_root() -> int:
             "roles": {
                 "code-review": {
                     "holistic": {
-                        "rounds": 1,
-                        "reviewer": "sonnetmax",
-                    },
-                    "batch": {
                         "rounds": 1,
                         "reviewer": "sonnetmax",
                     },

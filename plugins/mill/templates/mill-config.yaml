@@ -11,9 +11,7 @@
 # Environment-variable overrides (when set, takes precedence over config file values):
 #   MILL_DISCUSSION_REVIEWER        -> roles.discussion-review.holistic.reviewer
 #   MILL_PLAN_REVIEWER              -> roles.plan-review.holistic.reviewer
-#   MILL_PLAN_BATCH_REVIEWER        -> roles.plan-review.batch.reviewer
 #   MILL_CODE_REVIEWER              -> roles.code-review.holistic.reviewer
-#   MILL_CODE_BATCH_REVIEWER        -> roles.code-review.batch.reviewer
 #   MILL_IMPLEMENTER                -> roles.implementer.model
 #
 # Unknown keys emit a stderr warning at load time; load proceeds.
@@ -138,7 +136,6 @@ pipeline:
   baseline_verify_timeout_minutes: null  # Per-run wall-clock ceiling (minutes) for every verify command --stage baseline runs (module-wide, per-batch); null = no ceiling. A timeout is treated as "computation failed, leave the baseline unset", the same fail-safe as any other infrastructure failure, so a hung test runner cannot block the pre-flight indefinitely before batch 1 dispatches. (#1101)
   max_cards_per_batch: 10  # batch-oversized validator gate (#371)
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
-  rename_detect_pct: 30  # similarity threshold (%) for git find-renames in per-batch code review; lower values catch surgical-edit renames that drop below git's default 50%
   entry_wait: true  # master on/off switch for the mill-go/mill-plan entry-gate blocking wait; see _phase_wait.py
   entry_wait_timeout_minutes: 240  # give-up timeout (minutes) for the entry-gate wait before halting
 
@@ -165,10 +162,6 @@ roles:
       blocking_classes: [design]
 
   plan-review:
-    batch:
-      rounds: 0
-      reviewer: null
-      blocking_classes: [design, scope]
     holistic:
       rounds: 4
       min_rounds: 1
@@ -181,12 +174,6 @@ roles:
       blocking_classes: [design, scope]
 
   code-review:
-    batch:
-      rounds: 0
-      min_rounds: 1
-      auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
-      reviewer: null
-      blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 4
       min_rounds: 1
@@ -199,14 +186,13 @@ roles:
       #   threshold_ktok: 100    # switch when estimated tok count >= this (char/4000)
       #   reviewer: null         # override reviewer from agents.yaml; null = disabled
       blocking_classes: [design, scope, decision, consistency]
-    diff_scope_threshold: 0.25
 
   implementer:
     self_fix_rounds: 2
     model: sonnethigh
 
   fixer:
-    # roles.fixer.model and roles.code-review.<scope>.reviewer should generally be escalated
+    # roles.fixer.model and roles.code-review.holistic.reviewer should generally be escalated
     # together -- millpy-fix.py warns (stderr, non-blocking) when it detects this asymmetry.
     model: haiku
 

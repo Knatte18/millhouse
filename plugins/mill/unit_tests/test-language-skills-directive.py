@@ -205,43 +205,6 @@ def test_render_implementer_brief() -> None:
         print("PASS test_render_implementer_brief")
 
 
-def test_render_fixer_brief() -> None:
-    """Directive renders into fixer-batch-brief.md and Skill appears in Tools."""
-    with tempfile.TemporaryDirectory() as tmp:
-        batch_path = _write_batch_file(Path(tmp), edits="`test.go`")
-
-        template_path = TEMPLATES_DIR / "fixer-batch-brief.md"
-        assert template_path.exists(), f"Template not found: {template_path}"
-
-        # Render with actual directive
-        tokens = {
-            "TASK_TITLE": "Test",
-            "SLUG": "test",
-            "BATCH_NAME": "test-batch",
-            "BATCH_FILE": str(batch_path),
-            "OVERVIEW_FILE": str(Path(tmp) / "overview.md"),
-            "REVIEW_FILE": str(Path(tmp) / "review.md"),
-            "PROJECT_ROOT": str(Path(tmp)),
-            "WIKI_PATH": str(Path(tmp) / "wiki"),
-            "SESSION_ID": "test-session-id",
-            "ROUND": "1",
-            "SELF_FIX_ROUNDS": "2",
-            "LANGUAGE_SKILLS": _agent_dispatch.language_skills_directive(batch_path),
-            "NITS_ONLY_CARVEOUT": ".",
-            "PRIOR_BLOCKING": "(none)",
-        }
-        rendered = _render.render(template_path, tokens)
-
-        # Check directive content appears
-        assert "## Required skills" in rendered, "Required skills heading not in rendered template"
-        assert "golang-comments" in rendered, "golang-comments not in rendered template"
-        # Check Skill is in Tools section
-        assert "Skill" in rendered, "Skill not in rendered template"
-        tools_section = rendered[rendered.find("## Tools"):rendered.find("##", rendered.find("## Tools") + 1)]
-        assert "Skill" in tools_section, "Skill not in Tools section"
-        print("PASS test_render_fixer_brief")
-
-
 def _write_batch_file_with_moves(
     tmp_dir: Path,
     edits: str = "none",
@@ -323,7 +286,6 @@ def main() -> int:
         test_context_excluded,
         test_move_only_batch_detects_go_language,
         test_render_implementer_brief,
-        test_render_fixer_brief,
     ]
     failures: list[str] = []
     for fn in tests:

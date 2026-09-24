@@ -202,74 +202,6 @@ class TestMillpyFix(unittest.TestCase):
             rc = millpy_fix.main(argv)
         return rc, buf.getvalue()
 
-    def test_batch_happy_path(self):
-        """Batch scope with --batch-name -> success JSON, fixing-test-batch-r1 in timeline."""
-        status_path = self.tmp_path / "_mill" / "status.md"
-
-        captured = {}
-        call_count = [0]  # Use list to allow mutation in nested function
-
-        def mock_subprocess_run(argv, **kwargs):
-            # Track git rev-parse calls to return different values (start_sha vs final HEAD)
-            if argv[0:2] == ["git", "rev-parse"]:
-                call_count[0] += 1
-                # First call (start_sha): return the abc1234...
-                # full SHA Second call (final HEAD check): return the def5678...
-                # full SHA to simulate a commit was made
-                if call_count[0] == 1:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="abc1234000000000000000000000000000000000\n", stderr=""
-                    )
-                else:
-                    return subprocess.CompletedProcess(
-                        args=argv, returncode=0, stdout="def5678000000000000000000000000000000000\n", stderr=""
-                    )
-            # All other calls use the standard mock
-            return self.mock_subprocess_run.return_value
-
-        def mock_run(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
-            captured["prompt_text"] = prompt_text
-            captured["resume"] = resume
-            return ('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake-session")
-
-        with unittest.mock.patch.object(
-            millpy_fix._subprocess_util, "run",
-            side_effect=mock_subprocess_run,
-        ):
-            with unittest.mock.patch.object(
-                millpy_fix._implementer_claude, "run",
-                side_effect=mock_run,
-            ):
-                rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
-                    "--review-file", str(self.review_file),
-                    "--round", "1",
-                ])
-
-        self.assertEqual(rc, 0)
-        data = json.loads(out.strip().splitlines()[-1])
-        self.assertEqual(data["status"], "success")
-
-        # Check that fixing-test-batch-r1 was appended to timeline
-        full = millpy_fix._status.read_full(status_path)
-        self.assertTrue(
-            any(e.startswith("fixing-test-batch-r1") for e in full["timeline"]),
-            f"Expected fixing-test-batch-r1 in timeline, got: {full['timeline']}",
-        )
-
-        # Check batch state was set to fixing
-        batches = millpy_fix._status.read_batches(status_path)
-        batch_state = next((b for b in batches if b["name"] == "test-batch"), None)
-        self.assertIsNotNone(batch_state)
-        self.assertEqual(batch_state.get("state"), "fixing")
-
-        # Check resume=False was passed
-        self.assertFalse(captured["resume"], "resume must be False for fixer dispatch")
-
-        # Check prompt contains absolute review file path
-        self.assertIn(str(self.review_file), captured["prompt_text"])
-
     def test_load_config_uses_hub_root_when_hub_in_subdirectory(self):
         """#728 repro: hub lives in a subdirectory of the outer git repo.
 
@@ -321,8 +253,7 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._implementer_claude, "run", side_effect=mock_run,
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(review_file),
                 "--round", "1",
             ])
@@ -377,8 +308,7 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._implementer_claude, "run", side_effect=mock_run,
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(review_file),
                 "--round", "1",
             ])
@@ -393,25 +323,6 @@ class TestMillpyFix(unittest.TestCase):
         # fixer timeout passed to _implementer_claude.run must come from the reloaded config's llm.implementer_timeout (999), not the bootstrap config's (111).
         # fixer_spec has no "timeout" key here so the cfg fallback is exercised.
         self.assertEqual(captured["timeout"], 999)
-
-    def test_batch_missing_batch_name(self):
-        """Batch scope without --batch-name -> exit 1, stdout empty."""
-        rc, out = self._run_main([
-            "--scope", "batch",
-            "--review-file", str(self.review_file),
-        ])
-        self.assertEqual(rc, 1)
-        self.assertEqual(out.strip(), "")
-
-    def test_batch_unknown_batch_name(self):
-        """Batch scope with nonexistent batch name -> exit 1, stdout empty."""
-        rc, out = self._run_main([
-            "--scope", "batch",
-            "--batch-name", "nonexistent",
-            "--review-file", str(self.review_file),
-        ])
-        self.assertEqual(rc, 1)
-        self.assertEqual(out.strip(), "")
 
     def test_holistic_happy_path(self):
         """Holistic scope -> success JSON, holistic-fixing in timeline, no BATCH_SESSION_IDS."""
@@ -487,17 +398,7 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(out.strip(), "")
 
     def test_review_file_not_found(self):
-        """Both scopes when review file doesn't exist -> exit 1, stdout empty."""
-        # Test batch scope
-        rc, out = self._run_main([
-            "--scope", "batch",
-            "--batch-name", "test-batch",
-            "--review-file", "nonexistent.md",
-        ])
-        self.assertEqual(rc, 1)
-        self.assertEqual(out.strip(), "")
-
-        # Test holistic scope
+        """Review file that doesn't exist -> exit 1, stdout empty."""
         rc, out = self._run_main([
             "--scope", "holistic",
             "--review-file", "nonexistent.md",
@@ -512,8 +413,7 @@ class TestMillpyFix(unittest.TestCase):
             side_effect=millpy_fix._llm_claude.LLMError("timeout"),
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
 
@@ -575,8 +475,7 @@ class TestMillpyFix(unittest.TestCase):
             side_effect=millpy_fix._llm_claude.LLMError("WinError 32: file in use"),
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
 
@@ -593,8 +492,7 @@ class TestMillpyFix(unittest.TestCase):
             side_effect=millpy_fix._llm_claude.LLMError("timeout"),
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
 
@@ -610,8 +508,7 @@ class TestMillpyFix(unittest.TestCase):
             return_value=("no json here\n", "sess"),
         ):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
 
@@ -621,7 +518,7 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(data["stuck_type"], "logic")
 
     def test_resume_false_always_passed(self):
-        """Regression guard: both batch and holistic pass resume=False."""
+        """Regression guard: the fixer passes resume=False."""
         resume_values = []
 
         def capture_resume(prompt_text, *, model, effort, session_id, resume, cwd, timeout):
@@ -632,23 +529,13 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._implementer_claude, "run",
             side_effect=capture_resume,
         ):
-            # Test batch scope
-            rc, _ = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
-                "--review-file", str(self.review_file),
-            ])
-            self.assertEqual(rc, 0)
-
-            # Test holistic scope in same patch context
             rc, _ = self._run_main([
                 "--scope", "holistic",
                 "--review-file", str(self.review_file),
             ])
             self.assertEqual(rc, 0)
 
-            # Verify both passed resume=False
-            self.assertEqual(resume_values, [False, False])
+            self.assertEqual(resume_values, [False])
 
     def test_start_sha_captured_and_passed_to_forward_output(self):
         """start_sha is captured from git rev-parse HEAD and passed to _forward_output."""
@@ -676,36 +563,13 @@ class TestMillpyFix(unittest.TestCase):
                     return_value=('{"status":"success","commit_sha":"abc","session_id":"fake"}\n', "fake"),
                 ):
                     rc, _ = self._run_main([
-                        "--scope", "batch",
-                        "--batch-name", "test-batch",
+                        "--scope", "holistic",
                         "--review-file", str(self.review_file),
                     ])
 
         self.assertEqual(rc, 0)
         self.assertIn("start_sha", captured_kwargs, "start_sha must be passed to _forward_output")
         self.assertEqual(captured_kwargs["start_sha"], known_sha, f"expected start_sha={known_sha}, got {captured_kwargs.get('start_sha')}")
-
-    def test_stage_prepare_batch_scope(self):
-        """--stage prepare batch scope: renders brief, calls emit_prepare, no LLM call."""
-        with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
-            with unittest.mock.patch.object(
-                millpy_fix._implementer_claude, "run"
-            ) as mock_run:
-                rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
-                    "--review-file", str(self.review_file),
-                    "--stage", "prepare",
-                ])
-
-        self.assertEqual(rc, 0)
-        # LLM should not be called in prepare stage
-        mock_run.assert_not_called()
-        # Output should be prepare JSON envelope
-        data = json.loads(out.strip())
-        self.assertEqual(data["stage"], "prepare")
-        self.assertEqual(data["role"], "fix")
-        self.assertEqual(data["scope"], "test-batch")
 
     def test_project_root_rebind_uses_resolve_active_hub_not_original_hub_path(self):
         """project_root rebinds to resolve_active_hub's value, not the file's original (escaped)
@@ -730,8 +594,7 @@ class TestMillpyFix(unittest.TestCase):
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                 ])
@@ -743,15 +606,14 @@ class TestMillpyFix(unittest.TestCase):
         self.assertEqual(brief_path.parent, corrected_root / "_mill" / "briefs")
         self.assertFalse(brief_path.is_relative_to(self.tmp_path / "_mill" / "briefs"))
 
-    def test_stage_prepare_batch_scope_with_nits_only(self):
+    def test_stage_prepare_holistic_scope_with_nits_only(self):
         """--stage prepare --nits-only: prepare envelope carries nits_only:true (#619)."""
         with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
             with unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                     "--nits-only",
@@ -764,15 +626,14 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertIs(data["nits_only"], True)
 
-    def test_stage_prepare_batch_scope_without_nits_only_omits_field(self):
+    def test_stage_prepare_holistic_scope_without_nits_only_omits_field(self):
         """--stage prepare without --nits-only: prepare envelope omits nits_only entirely (#619)."""
         with unittest.mock.patch.object(millpy_fix._render, "render", return_value="Brief text"):
             with unittest.mock.patch.object(
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                 ])
@@ -784,7 +645,7 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertNotIn("nits_only", data)
 
-    def test_stage_prepare_batch_scope_includes_effort_from_fixer_spec(self):
+    def test_stage_prepare_holistic_scope_includes_effort_from_fixer_spec(self):
         """--stage prepare envelope carries the resolved fixer spec's effort tier (#628, #633).
 
         Overrides the default haiku-spec mock (no effort field) with a sonnethigh-style spec that
@@ -801,8 +662,7 @@ class TestMillpyFix(unittest.TestCase):
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                 ])
@@ -833,34 +693,6 @@ class TestMillpyFix(unittest.TestCase):
         data = json.loads(out.strip())
         self.assertEqual(data["stage"], "prepare")
         self.assertEqual(data["scope"], "holistic")
-
-    def test_stage_prepare_batch_scope_prior_blocking_threaded_into_render(self):
-        """--stage prepare --scope batch --prior-blocking <path>: PRIOR_BLOCKING token equals the
-        fixture file's exact text (#02 Card 5)."""
-        prior_blocking_file = self.tmp_path / "prior-blocking.md"
-        prior_blocking_file.write_text(
-            "### [BLOCKING] some earlier finding\nDo not reintroduce this.\n",
-            encoding="utf-8",
-        )
-        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
-            mock_render.return_value = "Brief text"
-            with unittest.mock.patch.object(
-                millpy_fix._implementer_claude, "run"
-            ) as mock_run:
-                rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
-                    "--review-file", str(self.review_file),
-                    "--stage", "prepare",
-                    "--prior-blocking", str(prior_blocking_file),
-                ])
-
-        self.assertEqual(rc, 0)
-        mock_run.assert_not_called()
-        self.assertEqual(
-            mock_render.call_args[0][1]["PRIOR_BLOCKING"],
-            prior_blocking_file.read_text(encoding="utf-8"),
-        )
 
     def test_stage_prepare_holistic_scope_prior_blocking_threaded_into_render(self):
         """--stage prepare --scope holistic --prior-blocking <path>: PRIOR_BLOCKING token equals the
@@ -897,8 +729,7 @@ class TestMillpyFix(unittest.TestCase):
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                 ])
@@ -918,8 +749,7 @@ class TestMillpyFix(unittest.TestCase):
                 millpy_fix._implementer_claude, "run"
             ) as mock_run:
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--stage", "prepare",
                     "--prior-blocking", str(prior_blocking_file),
@@ -941,8 +771,7 @@ class TestMillpyFix(unittest.TestCase):
             millpy_fix._implementer_claude, "run"
         ) as mock_run:
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
                 "--stage", "finalize",
                 "--agent-output", str(agent_output_path),
@@ -964,8 +793,7 @@ class TestMillpyFix(unittest.TestCase):
         stderr_buf = io.StringIO()
         with unittest.mock.patch("sys.stderr", stderr_buf):
             rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
+                "--scope", "holistic",
                 "--review-file", str(self.review_file),
                 "--round", "1",
             ])
@@ -982,7 +810,7 @@ class TestMillpyFix(unittest.TestCase):
             "roles": {
                 "implementer": {"self_fix_rounds": 2, "model": "sonnethigh"},
                 "fixer": {"model": "haiku"},
-                "code-review": {"batch": {"reviewer": "opushigh"}},
+                "code-review": {"holistic": {"reviewer": "opushigh"}},
             },
             "llm": {"implementer_timeout": 1800},
         }
@@ -997,8 +825,7 @@ class TestMillpyFix(unittest.TestCase):
             with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
                 with unittest.mock.patch("sys.stderr", stderr_buf):
                     rc, out = self._run_main([
-                        "--scope", "batch",
-                        "--batch-name", "test-batch",
+                        "--scope", "holistic",
                         "--review-file", str(self.review_file),
                         "--stage", "prepare",
                     ])
@@ -1015,8 +842,7 @@ class TestMillpyFix(unittest.TestCase):
             with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
                 with unittest.mock.patch("sys.stderr", stderr_buf):
                     rc, out = self._run_main([
-                        "--scope", "batch",
-                        "--batch-name", "test-batch",
+                        "--scope", "holistic",
                         "--review-file", str(self.review_file),
                         "--stage", "prepare",
                     ])
@@ -1483,7 +1309,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         }
         with unittest.mock.patch.object(millpy_fix._render, "render", return_value="x" * 20):
             with unittest.mock.patch.object(millpy_fix._implementer_claude, "run") as mock_run:
-                rc, out = self._run_main(["--scope", "batch", "--batch-name", "test-batch", "--round", "1", "--review-file", str(self.review_file)])
+                rc, out = self._run_main(["--scope", "holistic", "--round", "1", "--review-file", str(self.review_file)])
 
         self.assertEqual(rc, 0)
         data = json.loads(out.strip().splitlines()[-1])
@@ -1510,7 +1336,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                     "fake-session",
                 ),
             ) as mock_run:
-                rc, out = self._run_main(["--scope", "batch", "--batch-name", "test-batch", "--round", "1", "--review-file", str(self.review_file)])
+                rc, out = self._run_main(["--scope", "holistic", "--round", "1", "--review-file", str(self.review_file)])
 
         self.assertEqual(rc, 0)
         # Verify that _implementer_claude.run was called (the guard did not fire)
@@ -1555,8 +1381,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                 side_effect=mock_run,
             ):
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--round", "1",
                     "--nits-only",
@@ -1569,11 +1394,11 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         # Check that nits_applied flag was added
         self.assertTrue(data.get("nits_applied"), "nits_applied flag must be True when --nits-only is used")
 
-        # Check that nits-fixed-test-batch marker was appended to timeline
+        # Check that nits-fixed-holistic marker was appended to timeline
         full = millpy_fix._status.read_full(status_path)
         self.assertTrue(
-            any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),
-            f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
+            any(e.startswith("nits-fixed-holistic") for e in full["timeline"]),
+            f"Expected nits-fixed-holistic in timeline, got: {full['timeline']}",
         )
 
     def test_nits_only_all_pushback_zero_commit_is_success_not_stuck(self):
@@ -1607,8 +1432,7 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
                 side_effect=mock_run,
             ):
                 rc, out = self._run_main([
-                    "--scope", "batch",
-                    "--batch-name", "test-batch",
+                    "--scope", "holistic",
                     "--review-file", str(self.review_file),
                     "--round", "1",
                     "--nits-only",
@@ -1623,11 +1447,11 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
             "nits_applied flag must be True on the zero-commit all-pushback success path",
         )
 
-        # Check that nits-fixed-test-batch marker was still appended to timeline.
+        # Check that nits-fixed-holistic marker was still appended to timeline.
         full = millpy_fix._status.read_full(status_path)
         self.assertTrue(
-            any(e.startswith("nits-fixed-test-batch") for e in full["timeline"]),
-            f"Expected nits-fixed-test-batch in timeline, got: {full['timeline']}",
+            any(e.startswith("nits-fixed-holistic") for e in full["timeline"]),
+            f"Expected nits-fixed-holistic in timeline, got: {full['timeline']}",
         )
 
     def test_holistic_derived_verify_cmd_two_batches_failing(self):
@@ -1976,58 +1800,6 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         data = json.loads(out.strip().splitlines()[-1])
         self.assertEqual(data["status"], "success", f"expected success status, got {data}")
 
-    def test_batch_scope_nested_layout_cwd_hub_threads_cwd_override(self):
-        """Nested layout: batch verify: {cwd: hub, command: ...} resolves and threads cwd_override (Card 19)."""
-        nested_hub = self.tmp_path / "hub"
-        nested_hub.mkdir(parents=True, exist_ok=True)
-        _make_fixture(nested_hub)
-
-        batch_file = nested_hub / "_mill" / "plan" / "01-test-batch.md"
-        batch_file.write_text(
-            "```yaml\n"
-            "verify:\n"
-            "  cwd: hub\n"
-            "  command: exit 0\n"
-            "```\n\n"
-            "# Batch: test-batch\n",
-            encoding="utf-8",
-        )
-
-        captured_kwargs = {}
-
-        def mock_forward_output(output, project_root, **kwargs):
-            captured_kwargs.update(kwargs)
-            return 0
-
-        with (
-            unittest.mock.patch.object(
-                millpy_fix._paths, "resolve_hub_path", return_value=nested_hub
-            ),
-            # The rebind (Card 10) supersedes resolve_hub_path's value with resolve_active_hub's for project_root -- override it here too so this nested-hub simulation still resolves project_root to nested_hub.
-            unittest.mock.patch.object(
-                millpy_fix._paths, "resolve_active_hub", return_value=nested_hub
-            ),
-            unittest.mock.patch.object(
-                millpy_fix, "_forward_output", side_effect=mock_forward_output
-            ),
-            unittest.mock.patch.object(
-                millpy_fix._implementer_claude, "run",
-                return_value=(
-                    '{"status":"success","commit_sha":"abc","session_id":"fake"}\n',
-                    "fake",
-                ),
-            ),
-        ):
-            rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "test-batch",
-                "--review-file", str(self.review_file),
-            ])
-
-        self.assertEqual(rc, 0)
-        self.assertEqual(captured_kwargs.get("verify_cmd"), "exit 0")
-        self.assertEqual(captured_kwargs.get("cwd_override"), nested_hub)
-
     def test_holistic_scope_uniform_cwd_hub_threads_cwd_override(self):
         """Holistic scope: batches all resolving to cwd: hub join and thread cwd_override (Card 20)."""
         nested_hub = self.tmp_path / "hub"
@@ -2198,35 +1970,6 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         self.assertEqual(joined_command, "(echo hi)")
         self.assertIsNone(cwd_override)
 
-    def test_finalize_stage_batch_not_found_cwd_override_stays_none(self):
-        """Finalize stage regression: batch_entry is None keeps cwd_override at pre-initialized None, not a NameError (Card 19)."""
-        agent_output_path = self.tmp_path / "agent-output.txt"
-        agent_output_path.write_text(
-            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
-            encoding="utf-8",
-        )
-
-        captured_kwargs = {}
-
-        def mock_finalize_from_output(agent_output_path_arg, project_root, **kwargs):
-            captured_kwargs.update(kwargs)
-            return 0
-
-        with unittest.mock.patch.object(
-            millpy_fix, "finalize_from_output", side_effect=mock_finalize_from_output
-        ):
-            rc, out = self._run_main([
-                "--scope", "batch",
-                "--batch-name", "nonexistent-batch",
-                "--review-file", str(self.review_file),
-                "--stage", "finalize",
-                "--agent-output", str(agent_output_path),
-            ])
-
-        self.assertEqual(rc, 0)
-        self.assertIsNone(captured_kwargs.get("verify_cmd"))
-        self.assertIsNone(captured_kwargs.get("cwd_override"))
-
     def test_finalize_stage_holistic_empty_batch_verifies_cwd_override_stays_none(self):
         """Finalize stage regression: holistic scope with empty batch_verifies keeps cwd_override at None (Card 19/20)."""
         agent_output_path = self.tmp_path / "agent-output.txt"
@@ -2255,19 +1998,35 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         self.assertIsNone(captured_kwargs.get("verify_cmd"))
         self.assertIsNone(captured_kwargs.get("cwd_override"))
 
+    def test_scope_batch_rejected_by_argparse(self):
+        """--scope batch is no longer a valid choice: argparse exits non-zero naming the choice."""
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            with self.assertRaises(SystemExit) as raised:
+                self._run_main(["--scope", "batch", "--review-file", str(self.review_file)])
+
+        self.assertNotEqual(raised.exception.code, 0)
+        self.assertIn("invalid choice: 'batch'", stderr_buf.getvalue())
+
+    def test_batch_name_flag_rejected_by_argparse(self):
+        """--batch-name no longer exists: argparse exits non-zero as an unrecognised argument."""
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            with self.assertRaises(SystemExit) as raised:
+                self._run_main([
+                    "--scope", "holistic",
+                    "--batch-name", "test-batch",
+                    "--review-file", str(self.review_file),
+                ])
+
+        self.assertNotEqual(raised.exception.code, 0)
+        self.assertIn("unrecognized arguments: --batch-name", stderr_buf.getvalue())
+
     def test_brief_contains_unsatisfiable_demand_instruction(self):
-        """Assert fixer briefs contain unsatisfiable-demand instruction."""
-        # Read the brief templates
-        batch_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-batch-brief.md"
+        """Assert the fixer brief contains the unsatisfiable-demand instruction."""
         holistic_brief_path = Path(__file__).resolve().parent.parent / "templates" / "fixer-holistic-brief.md"
 
-        batch_brief = batch_brief_path.read_text(encoding="utf-8")
         holistic_brief = holistic_brief_path.read_text(encoding="utf-8")
-
-        # Check batch brief contains unsatisfiable-demand instruction
-        self.assertIn("unsatisfiable", batch_brief.lower(), "fixer-batch-brief.md must contain unsatisfiable-demand instruction")
-        self.assertIn("stuck_type: logic", batch_brief, "fixer-batch-brief.md must mention stuck_type: logic")
-        self.assertIn("cannot pass", batch_brief.lower(), "fixer-batch-brief.md must reference cannot pass")
 
         # Check holistic brief contains unsatisfiable-demand instruction
         self.assertIn("unsatisfiable", holistic_brief.lower(), "fixer-holistic-brief.md must contain unsatisfiable-demand instruction")

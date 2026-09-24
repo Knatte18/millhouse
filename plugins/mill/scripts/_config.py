@@ -45,15 +45,17 @@ __all__ = [
 ENV_REGISTRY = {
     "MILL_DISCUSSION_REVIEWER": ("roles", "discussion-review", "holistic", "reviewer"),
     "MILL_PLAN_REVIEWER":       ("roles", "plan-review",       "holistic", "reviewer"),
-    "MILL_PLAN_BATCH_REVIEWER": ("roles", "plan-review",       "batch",    "reviewer"),
     "MILL_CODE_REVIEWER":       ("roles", "code-review",       "holistic", "reviewer"),
-    "MILL_CODE_BATCH_REVIEWER": ("roles", "code-review",       "batch",    "reviewer"),
     "MILL_IMPLEMENTER":         ("roles", "implementer",       "model"),
 }
 
 RENAMED_KEY_HINTS = {
     "pipeline.max_review_rounds": "round caps now live at roles.<role>.<scope>.rounds, e.g. roles.plan-review.holistic.rounds -- this key has no effect",
     "pipeline.max_discussion_review_rounds": "round caps now live at roles.<role>.<scope>.rounds, e.g. roles.discussion-review.holistic.rounds -- this key has no effect",
+    "roles.plan-review.batch": "per-batch plan review was removed; only roles.plan-review.holistic is read -- this block has no effect",
+    "roles.code-review.batch": "per-batch code review was removed; only roles.code-review.holistic is read -- this block has no effect",
+    "pipeline.rename_detect_pct": "the per-batch rename check was removed with per-batch code review -- this key has no effect",
+    "roles.code-review.diff_scope_threshold": "diff-scoped code review was removed with per-batch code review -- this key has no effect",
 }
 
 

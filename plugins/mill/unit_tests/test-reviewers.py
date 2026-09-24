@@ -446,9 +446,9 @@ def test_resolve_test_stub_special_case() -> None:
 def test_resolve_role_null_reviewer_returns_none() -> None:
     """resolve_role returns None when reviewer is null."""
     cfg = make_minimal_cfg()
-    cfg["roles"]["plan-review"]["batch"]["reviewer"] = None
+    cfg["roles"]["plan-review"]["holistic"]["reviewer"] = None
     registry = make_minimal_registry()
-    result = _reviewers.resolve_role(cfg, registry, "plan-review", "batch")
+    result = _reviewers.resolve_role(cfg, registry, "plan-review", "holistic")
     assert result is None
     print("PASS: resolve_role null reviewer returns None")
 
@@ -456,9 +456,9 @@ def test_resolve_role_null_reviewer_returns_none() -> None:
 def test_resolve_role_rounds_zero_returns_none() -> None:
     """resolve_role returns None when rounds is 0."""
     cfg = make_minimal_cfg()
-    cfg["roles"]["plan-review"]["batch"]["rounds"] = 0
+    cfg["roles"]["plan-review"]["holistic"]["rounds"] = 0
     registry = make_minimal_registry()
-    result = _reviewers.resolve_role(cfg, registry, "plan-review", "batch")
+    result = _reviewers.resolve_role(cfg, registry, "plan-review", "holistic")
     assert result is None
     print("PASS: resolve_role rounds==0 returns None")
 
@@ -466,9 +466,9 @@ def test_resolve_role_rounds_zero_returns_none() -> None:
 def test_resolve_role_valid_name_returns_spec() -> None:
     """resolve_role returns resolved spec for a valid reviewer name."""
     cfg = make_minimal_cfg()
-    cfg["roles"]["plan-review"]["batch"]["reviewer"] = "sonnetmax"
+    cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "sonnetmax"
     registry = make_minimal_registry()
-    spec = _reviewers.resolve_role(cfg, registry, "plan-review", "batch")
+    spec = _reviewers.resolve_role(cfg, registry, "plan-review", "holistic")
     assert spec is not None
     assert spec["type"] == "single"
     assert spec["provider"] == "claude"
@@ -478,7 +478,6 @@ def test_resolve_role_valid_name_returns_spec() -> None:
 def test_validate_role_refs_happy_path() -> None:
     """validate_role_refs passes when all reviewer names exist in registry."""
     cfg = make_minimal_cfg()
-    cfg["roles"]["plan-review"]["batch"]["reviewer"] = "sonnetmax"
     cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "sonnetmax"
     registry = make_minimal_registry()
     _reviewers.validate_role_refs(cfg, registry)  # must not raise
@@ -488,7 +487,7 @@ def test_validate_role_refs_happy_path() -> None:
 def test_validate_role_refs_missing_raises() -> None:
     """validate_role_refs raises listing all missing reviewer names."""
     cfg = make_minimal_cfg()
-    cfg["roles"]["plan-review"]["batch"]["reviewer"] = "typo-reviewer"
+    cfg["roles"]["plan-review"]["holistic"]["reviewer"] = "typo-reviewer"
     cfg["roles"]["code-review"]["holistic"]["reviewer"] = "another-typo"
     registry = make_minimal_registry()
     try:
@@ -1124,11 +1123,11 @@ def test_fixer_weaker_than_reviewer_warning_fires_when_reviewer_stronger() -> No
     fixer_spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
     reviewer_spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
     warning = _reviewers.fixer_weaker_than_reviewer_warning(
-        fixer_spec, reviewer_spec, fixer_name="haiku", reviewer_name="opushigh", scope="batch"
+        fixer_spec, reviewer_spec, fixer_name="haiku", reviewer_name="opushigh", scope="holistic"
     )
     assert warning is not None
     assert "roles.fixer.model='haiku'" in warning
-    assert "roles.code-review.batch.reviewer='opushigh'" in warning
+    assert "roles.code-review.holistic.reviewer='opushigh'" in warning
     print("PASS: fixer_weaker_than_reviewer_warning fires when reviewer stronger")
 
 
@@ -1136,7 +1135,7 @@ def test_fixer_weaker_than_reviewer_warning_silent_when_equal() -> None:
     """Warning is silent (returns None) when fixer and reviewer resolve to identical tiers."""
     spec = {"type": "single", "provider": "claude", "model": "claude-sonnet-4-6", "effort": "medium"}
     warning = _reviewers.fixer_weaker_than_reviewer_warning(
-        spec, dict(spec), fixer_name="sonnet", reviewer_name="sonnet", scope="batch"
+        spec, dict(spec), fixer_name="sonnet", reviewer_name="sonnet", scope="holistic"
     )
     assert warning is None
     print("PASS: fixer_weaker_than_reviewer_warning silent when equal")
@@ -1147,7 +1146,7 @@ def test_fixer_weaker_than_reviewer_warning_silent_when_fixer_stronger() -> None
     fixer_spec = {"type": "single", "provider": "claude", "model": "claude-opus-4-7", "effort": "high"}
     reviewer_spec = {"type": "single", "provider": "claude", "model": "claude-haiku-4-5-20251001"}
     warning = _reviewers.fixer_weaker_than_reviewer_warning(
-        fixer_spec, reviewer_spec, fixer_name="opushigh", reviewer_name="haiku", scope="batch"
+        fixer_spec, reviewer_spec, fixer_name="opushigh", reviewer_name="haiku", scope="holistic"
     )
     assert warning is None
     print("PASS: fixer_weaker_than_reviewer_warning silent when fixer stronger")
@@ -1162,15 +1161,15 @@ def test_fixer_weaker_than_reviewer_warning_silent_when_either_not_comparable() 
 
     # non-comparable reviewer, weak fixer -- still silent
     assert _reviewers.fixer_weaker_than_reviewer_warning(
-        haiku_spec, gemini_spec, fixer_name="haiku", reviewer_name="g25pro", scope="batch"
+        haiku_spec, gemini_spec, fixer_name="haiku", reviewer_name="g25pro", scope="holistic"
     ) is None
     # non-comparable fixer, strong reviewer -- still silent
     assert _reviewers.fixer_weaker_than_reviewer_warning(
-        gemini_spec, opus_spec, fixer_name="g25pro", reviewer_name="opushigh", scope="batch"
+        gemini_spec, opus_spec, fixer_name="g25pro", reviewer_name="opushigh", scope="holistic"
     ) is None
     # cluster reviewer -- still silent
     assert _reviewers.fixer_weaker_than_reviewer_warning(
-        haiku_spec, cluster_spec, fixer_name="haiku", reviewer_name="mycluster", scope="batch"
+        haiku_spec, cluster_spec, fixer_name="haiku", reviewer_name="mycluster", scope="holistic"
     ) is None
     print("PASS: fixer_weaker_than_reviewer_warning silent when either side not comparable")
 
