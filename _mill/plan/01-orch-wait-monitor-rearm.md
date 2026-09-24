@@ -67,6 +67,7 @@ No batch-local decisions differ from `## Shared Decisions`.
   Apply the same wording rules as card 1's requirements: semantic line breaks, and no "persistent" left in the file.
   The rewritten paragraph must state:
   - Each slug's wait is armed in this session via `Monitor(command=cmd, timeout_ms: 1800000, description=...)`, where `cmd` is the same inline file-exists poll `orch-wait` Step 2 gives, polling `<worktree>/_mill/discussion.md` for that slug (30-second interval, echoing `READY` or `TIMEOUT after <N>s ...`).
+    The echoed filename in the `TIMEOUT` line reads `discussion.md` instead of `orch-review.md`, and the polled path is that slug's `discussion.md`.
   - `giveup_s` is read from `pipeline.entry_wait_timeout_minutes` exactly as `orch-wait` reads it, not hardcoded.
   - `wait_started_epoch` (from `date +%s`, recorded once per slug before that slug's first arm) and `task_id` are tracked per slug, so each slug's expiry is handled independently.
   - On an event-less expiry for a slug, the orchestrator recomputes that slug's `remaining_s = giveup_s - (now - wait_started_epoch)`; `remaining_s <= 0` takes the existing timeout branch in Step 3, otherwise it re-arms that slug's `Monitor` with the poll bounded by `remaining_s` and records the new `task_id`.
@@ -86,7 +87,7 @@ No batch-local decisions differ from `## Shared Decisions`.
 - **Deletes:** none
 - **Moves:** none
 - **Requirements:** In `harness-tool-contracts.md`, update every place that enumerates the entry-gate consumers so it also covers the two orch skills, keeping all other text unchanged:
-  - The intro sentence "Four skill files already carry inline copies of this material" becomes "Six skill files", and the count stays accurate.
+  - The intro sentence "Four skill files already carry inline copies of this material" keeps the four inline copies and adds that `orch-wait` and `orch-review` are two further consumers of this contract, referencing it rather than carrying inline copies; the count of four inline copies is not changed.
   - The re-arm sentence in the `## Monitor tool` section's schema-confirmation paragraph, currently ending "the two entry-gate wait sections cited at the bottom of this section now document the resulting design", names all four wait sections (the two entry-gate sections plus the `orch-wait` Step 2 wait and the `orch-review` Step 2 wait) instead of "the two entry-gate wait sections".
   - The last bullet of the Monitor tool bullet list (the expiry bullet ending "Both entry-gate wait sections below re-arm on this outcome") says all four wait sections re-arm.
   - The closing "See ..." line lists four consumers: the `mill-go-base` entry-gate section, the `mill-plan` entry-gate section, `orch-wait` Step 2, and `orch-review` Step 2 (with `orch-review` tracking `wait_started_epoch` and `task_id` per slug), replacing "two independent consumers".

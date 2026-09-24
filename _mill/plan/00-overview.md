@@ -3,7 +3,7 @@
 ```yaml
 task: 'Entry-gate wait: drop nonexistent Monitor persistent:true'
 slug: 'monitor-persistent-entry-wait'
-approved: false
+approved: true
 discussion_sha: '115b7c097bc755266a68b307fa9c833101034c9d'
 started: '20260924-060354'
 parent: 'main'
