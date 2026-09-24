@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-core
+phase: approved-spawn-parent-thread
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -25,6 +25,7 @@ planned  '2026-09-24T10:23:34Z'
 implementing  '2026-09-24T10:23:53Z'
 reviewing-status-core-r1  '2026-09-24T10:26:48Z'
 approved-status-core  '2026-09-24T10:26:58Z'
+approved-spawn-parent-thread  '2026-09-24T10:28:49Z'
 ```
 
 ## Batches
@@ -39,9 +40,10 @@ batches:
     review_round: 1
     verify_baseline_failures: []
   - name: spawn-parent-thread
-    state: running
+    state: approved
     implementer_session: 39931c5a-bb09-4f2c-a465-4342db005524
     start_sha: dc61c585b3d47606612588233ed856609da145b5
+    commit_sha: 54aaa8194b966abc921720c7a006e7603c13f58e
     verify_baseline_failures: []
   - name: templates-skills-fixtures
     state: pending
