@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: mill-go-plan-doc-gaps
 branch: hanf/mill-go-plan-doc-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-inferred-success-log  '2026-09-24T06:37:02Z'
 approved-commit-none-and-done-gate  '2026-09-24T06:38:13Z'
 holistic-reviewing  '2026-09-24T06:38:20Z'
 holistic-approved  '2026-09-24T06:38:53Z'
+done  '2026-09-24T06:39:03Z'
 ```
 
 ## Batches
