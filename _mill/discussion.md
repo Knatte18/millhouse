@@ -22,7 +22,7 @@ The holistic reviews do the real review work and stay.
 **In:**
 
 - Config: `roles.plan-review.batch` and `roles.code-review.batch` blocks in the hub `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml`.
-  Also the `MILL_PLAN_BATCH_REVIEWER` and `MILL_CODE_BATCH_REVIEWER` env overrides: the template header comment and the `ENV_OVERRIDES` entries in `plugins/mill/scripts/_config.py`.
+  Also the `MILL_PLAN_BATCH_REVIEWER` and `MILL_CODE_BATCH_REVIEWER` env overrides: the template header comment and the `ENV_REGISTRY` entries in `plugins/mill/scripts/_config.py`.
   Also `pipeline.rename_detect_pct` in both config files, because only per-batch code review uses it (see Decisions).
 - Templates: delete `review-plan-batch.md`, `review-code-batch.md` and `fixer-batch-brief.md`.
   Both `review-plan-holistic.md` and `review-code-holistic.md` currently say "Severity / verdict rules match review-<type>-batch.md".
@@ -47,6 +47,8 @@ The holistic reviews do the real review work and stay.
   - `mill-go-base/resume.md`: the batch-review resume branches (batch `state` `reviewing` / `fixing`, which re-dispatch `millpy-review-code.py --batch` / `millpy-fix.py --scope batch`).
   - `mill-go-base/handoff.md`: the per-batch forms in the prior-blocking digest and NIT-fix re-dispatch.
   - `mill-plan/SKILL.md`: line ~473 "plan batch review is disabled in this hub" and lines ~528–530, which describe the scope flags.
+  - `mill-go2/SKILL.md` line ~50: narrow "`{scope}` is the batch name, or `holistic`" to "`{scope}` is `holistic`" for the fixer fork-fallback log, notify and commit-message forms.
+    The implementer fork-fallback text there (`{batch_name}`, "once per batch") is about plan batches and stays.
   - Any other skill text that describes batch review as a live stage, found by grep during planning.
 - Tests: delete or rewrite every test that exercises the batch stage, then extend the tests listed under Testing.
   Known files:
@@ -88,7 +90,7 @@ The holistic reviews do the real review work and stay.
 - Decision: after the `batch:` blocks are gone from the template, a hub or `config.local.yaml` that still carries `roles.plan-review.batch` or `roles.code-review.batch` loads normally.
   `_config.warn_unknown_keys` reports the block through its existing unknown-key path.
   Add both paths, plus `pipeline.rename_detect_pct`, to `_config.RENAMED_KEY_HINTS`, with a hint that per-batch review was removed and the key has no effect.
-  The hint must match nested keys under the removed block: check how `walk_unknown_keys` reports a whole unknown subtree, whether as the block path or as each leaf, and make the hint lookup match that form.
+  `walk_unknown_keys` reports a whole unknown subtree as one dotted block path (`roles.plan-review.batch`), not per leaf, so a `RENAMED_KEY_HINTS` entry on the block path matches.
 - Rationale: many hubs and local overrides still carry these blocks, because the template seeded them.
   A hard failure would break every existing hub on its next plugin update.
   The warn path already exists for `pipeline.max_review_rounds`, so this follows an established pattern.
@@ -167,7 +169,7 @@ The holistic reviews do the real review work and stay.
 - Config loading: `_config.load_config(hub_root, worktree_root)` deep-merges the plugin template, the hub `mill-config.yaml` and `.millhouse/config.local.yaml`, then calls `warn_unknown_keys(check_cfg, template_cfg, ...)`.
   `walk_unknown_keys` walks the actual config against the template, so any key missing from the template is reported as unknown.
   `RENAMED_KEY_HINTS` maps dotted paths to hint text.
-  `ENV_OVERRIDES` (lines ~46–52) maps `MILL_*` env vars to config paths.
+  `ENV_REGISTRY` (lines ~45–52) maps `MILL_*` env vars to config paths.
 - `_review_common.py` wrapper `load_config` and `resolve_blocking_classes` (~line 2873) choose the scope key `"holistic"` vs `"batch"`.
   `DEFAULT_BLOCKING_CLASSES` is keyed per role, not per scope.
 - `_review_plan.run` (~line 789) is the subprocess `--stage full` legacy API.
@@ -212,7 +214,7 @@ The holistic reviews do the real review work and stay.
 - `test-config.py`:
   - A config carrying `roles.plan-review.batch` / `roles.code-review.batch` blocks and `pipeline.rename_detect_pct` loads without raising and prints the removed-key hint to stderr.
   - The template no longer contains either batch block.
-  - `MILL_PLAN_BATCH_REVIEWER` / `MILL_CODE_BATCH_REVIEWER` are gone from `ENV_OVERRIDES`.
+  - `MILL_PLAN_BATCH_REVIEWER` / `MILL_CODE_BATCH_REVIEWER` are gone from `ENV_REGISTRY`.
   - Replace `test_load_config_rename_detect_pct_key_present` with the stale-key warning test.
 - `test-review-common.py`: `discover_round` for holistic scope still counts `RE_SIMPLE` files, and ignores a leftover per-batch-named file in the reviews dir.
   `resolve_blocking_classes` resolves holistic for `None` and `"holistic"`.
@@ -225,7 +227,7 @@ The holistic reviews do the real review work and stay.
   Add a case where `--scope batch` is rejected by argparse.
 - `test-prior-blocking.py`, `test-nit-gate.py`: remove batch-scope cases.
   Add a NIT-gate case where a timeline with `approved-<batch>` rows and a holistic review with NITs requires only `nits-fixed-holistic`.
-- `test-review-summary` (if present) or a new case: a reviews dir with historical per-batch filenames still parses.
+- `test-review-summary.py`: add a case where a reviews dir with historical per-batch filenames still parses.
 - Grep gate as a final check: `git grep -n -E "plan-review\.batch|code-review\.batch|BATCH_REVIEWER|review-(plan|code)-batch|fixer-batch-brief|rename_detect_pct|--holistic-only|--no-holistic|--batch-name"` returns hits only in:
   - `doc/turn-reduction-audit.md`;
   - `_mill/`;

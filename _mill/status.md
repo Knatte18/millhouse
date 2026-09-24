@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-24T07:22:09Z'
+discussion-fix-r1  '2026-09-24T07:28:34Z'
 ```
