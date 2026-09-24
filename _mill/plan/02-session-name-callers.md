@@ -101,6 +101,7 @@ Warning text shape, shared by all three (only the `[<tool>]` tag differs): `[<to
   - POSIX branch: patch `mill_terminal._load_config` to return `{"repo": {"short_name": "MH"}}` and `mill_terminal.wiki.list_tasks_brief` to return `[]`, a single active worktree `solo-task`; the captured argv is `["claude", "--name", "mh:solo-task"]` and captured stderr has no `repo.short_name is not set`.
   - `nt` branch: same setup plus `patch("mill_terminal.os", types.SimpleNamespace(name="nt"))` (the script reads only `os.name`); argv is `["cmd", "/c", "claude", "--name", "mh:solo-task"]`.
   - Fallback: `_load_config` returns `{}`, `mill_terminal.resolve_main_worktree_root` patched to return a path ending in `millhouse`; argv carries `--name mi:solo-task` and stderr has one warning line naming `'MI'`.
+  - Invalid short name: `_load_config` returns `{"repo": {"short_name": "M:H"}}`; `main` returns 1, `subprocess.run` is never called, and stderr contains `[mill-terminal] invalid session name:`.
   Capture stderr with `contextlib.redirect_stderr`.
 - **Commit:** `feat(terminal): prefix terminal session name with repo short name`
 

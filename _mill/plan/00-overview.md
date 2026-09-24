@@ -3,7 +3,7 @@
 ```yaml
 task: Prefix session names with repo short name; add MH:orch session
 slug: session-name-short-prefix
-approved: false
+approved: true
 started: 20260924-090947
 parent: main
 root: ""
