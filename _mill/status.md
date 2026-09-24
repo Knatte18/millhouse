@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
 plan: _mill/plan
@@ -21,4 +21,15 @@ discussed  '2026-09-24T06:04:34Z'
 planning  '2026-09-24T06:08:23Z'
 plan-review-r1  '2026-09-24T06:09:24Z'
 planned  '2026-09-24T06:09:31Z'
+implementing  '2026-09-24T06:09:47Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-validate-checks
+    state: pending
+  - name: baseline-short-circuit
+    state: pending
 ```
