@@ -588,7 +588,7 @@ def fixer_weaker_than_reviewer_warning(
         reviewer_spec: Resolved spec for roles.code-review.<scope>.reviewer.
         fixer_name: The raw reviewer-registry name configured for the fixer.
         reviewer_name: The raw reviewer-registry name configured for the reviewer.
-        scope: The code-review scope being fixed (e.g. "batch").
+        scope: The code-review scope being fixed (e.g. "holistic").
 
     Returns:
         A one-line warning string when the reviewer strictly outranks the fixer,
