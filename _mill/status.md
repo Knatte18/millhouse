@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -22,4 +22,17 @@ discussed  '2026-09-24T10:12:00Z'
 planning  '2026-09-24T10:17:14Z'
 plan-review-r1  '2026-09-24T10:23:22Z'
 planned  '2026-09-24T10:23:34Z'
+implementing  '2026-09-24T10:23:53Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: status-core
+    state: pending
+  - name: spawn-parent-thread
+    state: pending
+  - name: templates-skills-fixtures
+    state: pending
 ```
