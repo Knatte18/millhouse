@@ -1,0 +1,48 @@
+// managed by mill
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "mill: start",
+            "type": "shell",
+            "command": "<CMD_START>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        },
+        {
+            "label": "mill: start-auto",
+            "type": "shell",
+            "command": "<CMD_START_AUTO>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        },
+        {
+            "label": "mill: start-orch",
+            "type": "shell",
+            "command": "<CMD_START_ORCH>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        },
+        {
+            "label": "mill: plan",
+            "type": "shell",
+            "command": "<CMD_PLAN>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        },
+        {
+            "label": "mill: go",
+            "type": "shell",
+            "command": "<CMD_GO>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        },
+        {
+            "label": "mill: quick",
+            "type": "shell",
+            "command": "<CMD_QUICK>",
+            "presentation": {"reveal": "always", "panel": "new", "focus": true},
+            "problemMatcher": []
+        }
+    ]
+}

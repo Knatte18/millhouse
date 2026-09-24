@@ -15,7 +15,8 @@ Flow:
         6. Propagate ``.millhouse/`` (minus ``wiki``, ``active`` junctions).
         7. Recreate junctions from the wiki config's ``junctions:`` block inside the new worktree.
         8. Pick a non-green VS Code title-bar colour not in use by sibling worktrees;
-        write ``.vscode/settings.json`` via ``_vscode``.
+        write ``.vscode/settings.json`` via ``_vscode``,
+        and ``.vscode/tasks.json`` (session launch tasks named ``<slug>:<phase>``) via ``_vscode_tasks``.
         9. Write the initial ``_mill/status.md`` (phase=discussing) and commit+push.
    10. Print worktree-path, branch, and status path on stdout.
 
@@ -44,6 +45,7 @@ import _setup
 import _spawn_core
 import _subprocess_util
 import _vscode
+import _vscode_tasks
 import _worktree
 from _config import load_config as _load_config
 from _paths import resolve_container_path, resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_main_worktree_root, resolve_short_name, resolve_wiki_path, resolve_worktrees_dir
@@ -269,6 +271,11 @@ def main(argv: list[str] | None = None) -> int:
         _cleanup_stack.append(
             lambda: vscode_settings_path.unlink(missing_ok=True)
         )
+
+        tasks_path = dest_hub / ".vscode" / "tasks.json"
+        _vscode_tasks.write_tasks(tasks_path, slug, (cfg.get("spawn") or {}).get("sessions"))
+        # Rollback: delete the .vscode/tasks.json written above.
+        _cleanup_stack.append(lambda: tasks_path.unlink(missing_ok=True))
 
         # When hub lives in a subfolder, write a bootstrap stub at worktree root so terminal/vscode discovery can find dest_hub without walking the tree.
         if hub_subpath != ".":

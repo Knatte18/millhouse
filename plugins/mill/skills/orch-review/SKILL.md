@@ -31,7 +31,16 @@ If the printed path does not exist for a slug, do not arm a wait for it — repo
 
 ### Step 2 — Arm a `Monitor` wait per slug, in this session
 
-For each remaining slug, start the blocking wait for `<worktree>/_mill/discussion.md` to exist **in this session**: same idiom as `orch-wait`'s own wait (persistent background bash poll, not a fixed `sleep`, polling every 30 seconds), armed via the `Monitor` tool so this turn ends and this session resumes when the file appears — giving up after the same configured `pipeline.entry_wait_timeout_minutes` `orch-wait` reads (load config the same way — do not hardcode). When there is more than one slug, arm all of their waits before ending this turn, so they proceed concurrently rather than one-at-a-time.
+For each remaining slug, start the blocking wait for `<worktree>/_mill/discussion.md` to exist **in this session**.
+Each slug's wait is armed via `Monitor(command=cmd, timeout_ms: 1800000, description=...)`, so this turn ends and this session resumes when the file appears.
+`cmd` is the same inline file-exists poll `orch-wait` Step 2 gives, polling that slug's `<worktree>/_mill/discussion.md` every 30 seconds and echoing `READY` or `TIMEOUT after <N>s ...`; the echoed filename in the `TIMEOUT` line reads `discussion.md` instead of `orch-review.md`.
+`giveup_s` is read from `pipeline.entry_wait_timeout_minutes` exactly as `orch-wait` reads it, not hardcoded.
+`wait_started_epoch` (from `date +%s`, recorded once per slug before that slug's first arm) and `task_id` are tracked per slug, so each slug's expiry is handled independently.
+On an event-less expiry for a slug, recompute that slug's `remaining_s = giveup_s - (now - wait_started_epoch)`.
+When `remaining_s <= 0`, take the existing timeout branch in Step 3.
+Otherwise re-arm that slug's `Monitor` with the poll bounded by `remaining_s` and record the new `task_id`.
+The remaining `<event>` branching (`READY`, `TIMEOUT after ...`) follows the "Entry-gate wait for upstream mill-plan" section of `mill-go-base/SKILL.md`, with `plugins/mill/docs/harness-tool-contracts.md` cited for the two-notification shape.
+When there is more than one slug, arm all of their waits before ending this turn, so they proceed concurrently rather than one-at-a-time.
 
 Tell the user once, e.g.:
 
@@ -42,7 +51,7 @@ each as soon as its file appears. Not blocking this session; you'll be notified 
 
 ### Step 3 — On each slug's trigger: timeout, or fork
 
-When a given slug's `Monitor` wait fires:
+When a given slug's wait delivers a `READY` or `TIMEOUT after ...` event (an event-less expiry is re-armed per Step 2 and never reaches this step):
 
 - **Timeout:** halt for that slug only and report `"<slug>: discussion.md not written after <N>h -- is the worker still running mill-start --orch?"`. Make no `status.md` writes of any kind — the worker owns all `status.md` mutations; if it is actually stuck, that is diagnosed and fixed on the worker side, not here. Other slugs' waits are unaffected.
 - **`discussion.md` now exists:** launch a fork (`Agent` tool, `subagent_type: "fork"`) for that slug only, right now — do not batch it with other slugs' triggers, since they fire independently. The fork's prompt names the slug and its already-resolved worktree path, and tells it to skip straight to "Fork-side steps" below (this skill's own Orchestrator-side steps do not apply inside the fork — it is already the fork), e.g.:
