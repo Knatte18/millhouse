@@ -30,9 +30,14 @@ implementing  '2026-09-24T10:23:53Z'
 ```yaml
 batches:
   - name: status-core
-    state: pending
+    state: running
+    implementer_session: 707992d5-dc4e-4b1b-a81d-b9a701eaa22d
+    start_sha: 7895ba7acc65f7dc0533e4631a297862af324c29
+    verify_baseline_failures: []
   - name: spawn-parent-thread
     state: pending
+    verify_baseline_failures: []
   - name: templates-skills-fixtures
     state: pending
+    verify_baseline_failures: []
 ```
