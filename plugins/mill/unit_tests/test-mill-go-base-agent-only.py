@@ -24,7 +24,7 @@ SKILLS = HUB / "plugins" / "mill" / "skills"
 
 BASE_DIR = SKILLS / "mill-go-base"
 COMPANIONS = ("resume.md", "holistic-review.md", "handoff.md")
-BANNED_LITERALS = ("psmux","dispatch == subprocess")
+BANNED_LITERALS = ("psmux", "dispatch == subprocess")
 
 
 def _check_no_dead_dispatch_literals() -> list[str]:
