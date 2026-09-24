@@ -22,7 +22,8 @@ Flow:
 
 Usage:
     python plugins/mill/scripts/mill-spawn.py [--slug <slug>] # skip the picker, claim this specific
-        slug [--dry-run] # print decisions;
+        slug [--parent <name>]  # record the spawning session as status.md parent_thread:
+        [--dry-run] # print decisions;
         make no changes
 
 Exit codes:
@@ -91,7 +92,18 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print what would happen; make no changes.",
     )
+    parser.add_argument(
+        "--parent",
+        default=None,
+        help="Name of the session spawning this task; recorded as status.md parent_thread:.",
+    )
     args = parser.parse_args(argv)
+
+    parent_thread = args.parent.strip() if args.parent is not None else None
+    if not parent_thread:
+        parent_thread = None
+    if parent_thread is not None and any(ord(c) < 32 or ord(c) == 127 for c in parent_thread):
+        raise SystemExit("[spawn] ERROR: --parent must not contain newlines or control characters.")
 
     git_root = resolve_git_root()
     hub = resolve_hub_path()
@@ -168,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[DryRun] Branch:   {branch_name}")
         print(f"[DryRun] Worktree: {worktree_path}")
         print(f"[DryRun] Status:   {_paths.status_path(dest_hub, cfg)}")
+        if parent_thread is not None:
+            print(f"[DryRun] Parent:   {parent_thread}")
         return 0
 
     # Claim the task under the wiki lock.
@@ -303,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
             parent_branch=parent_branch,
             branch=branch_name,
             cfg=cfg,
+            parent_thread=parent_thread,
         )
 
     except Exception as exc:
