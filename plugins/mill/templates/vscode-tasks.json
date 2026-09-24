@@ -43,6 +43,6 @@
             "command": "<CMD_QUICK>",
             "presentation": {"reveal": "always", "panel": "new", "focus": true},
             "problemMatcher": []
-        }
+        }<HUB_TASKS>
     ]
 }

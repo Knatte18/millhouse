@@ -49,7 +49,9 @@
 # ---------------------------------------------------------------------------
 # Repo identity
 # ---------------------------------------------------------------------------
-# short_name -- 2-4 character prefix used in VS Code window titles.
+# short_name -- 2-4 character prefix used in VS Code window titles; also the (lower-cased)
+#   prefix of Claude Code session names: <short_name>:<phase> on the hub,
+#   <short_name>:<slug>:<phase> in a worktree.
 #   Hub form:      "<short_name>"
 #   Worktree form: "<short_name>: <slug>"
 #   Default when absent or empty: <repo>[:2].upper() (e.g. "millhouse" -> "MI").
@@ -74,6 +76,7 @@ junctions:
 #   effort levels are low, medium, high, xhigh, max. `quick` defaults to the same values as `go`.
 #   Override per worktree in .millhouse/config.local.yaml; run `millpy-session-tasks` after
 #   changing values to refresh an existing worktree's .vscode/tasks.json.
+#   `orch` applies to the hub's .vscode/tasks.json only and starts with no initial prompt.
 
 spawn:
   branch_prefix: ""
@@ -82,6 +85,7 @@ spawn:
     plan: { model: opus, effort: medium }
     go: { model: sonnet, effort: high }
     quick: { model: sonnet, effort: high }
+    orch: { model: opus, effort: high }
 
 # ---------------------------------------------------------------------------
 # Git integration

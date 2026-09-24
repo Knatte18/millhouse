@@ -14,11 +14,13 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _vscode_tasks import (  # noqa: E402
     DEFAULT_SESSIONS,
+    HUB_TASK_SPECS,
     LABEL_PREFIX,
     MANAGED_MARKER,
     TASK_SPECS,
     render_tasks,
     resolve_sessions,
+    session_prefix,
     write_tasks,
 )
 
@@ -55,6 +57,69 @@ def _test_render(errors: list[int]) -> None:
     assert all("runOptions" not in t for t in tasks)
     assert "runOptions" not in rendered
     print("PASS: no task has runOptions")
+
+
+def _test_worktree_prefix_render(errors: list[int]) -> None:
+    rendered = render_tasks(session_prefix("MH", "my-task"))
+    assert "<HUB_TASKS>" not in rendered
+    tasks = _parse(rendered)
+    assert [t["label"] for t in tasks] == [LABEL_PREFIX + key for key in EXPECTED_KEYS]
+    for (key, phase, flag), task in zip(TASK_SPECS, tasks):
+        model = DEFAULT_SESSIONS[phase]["model"]
+        effort = DEFAULT_SESSIONS[phase]["effort"]
+        prompt = f"/mill-{phase}" + (f" {flag}" if flag else "")
+        expected = f'claude -n "mh:my-task:{phase}" --model {model} --effort {effort} "{prompt}"'
+        assert task["command"] == expected, task["command"]
+    print("PASS: worktree render uses lower-cased prefix and has no orch task")
+
+
+def _test_hub_render(errors: list[int]) -> None:
+    rendered = render_tasks(session_prefix("MH"), hub=True)
+    assert "<HUB_TASKS>" not in rendered
+    tasks = _parse(rendered)
+    assert [t["label"] for t in tasks] == [LABEL_PREFIX + spec[0] for spec in HUB_TASK_SPECS]
+    assert [t["label"] for t in tasks[:-1]] == [LABEL_PREFIX + key for key in EXPECTED_KEYS]
+    assert tasks[0]["command"].startswith('claude -n "mh:start"')
+    assert tasks[-1]["label"] == "mill: orch"
+    assert tasks[-1]["command"] == 'claude -n "mh:orch" --model opus --effort high'
+    print("PASS: hub render adds a prompt-less orch task last")
+
+    override = {"orch": {"model": "sonnet", "effort": "max"}}
+    orch = _parse(render_tasks("mh", override, hub=True))[-1]
+    assert orch["command"] == 'claude -n "mh:orch" --model sonnet --effort max'
+    print("PASS: spawn.sessions.orch override reaches the hub orch command")
+
+    bad = {"orch": {"model": "a b"}}
+    try:
+        render_tasks("mh", bad, hub=True)
+    except ValueError as exc:
+        assert "orch.model" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for hub render with bad orch value")
+    render_tasks("mh:slug", bad)
+    print("PASS: invalid orch value fails the hub render only")
+
+
+def _test_session_prefix_and_phases(errors: list[int]) -> None:
+    assert session_prefix("MH") == "mh"
+    assert session_prefix("MH", "my-task") == "mh:my-task"
+    for bad in ("", "M:H", 'M"H'):
+        try:
+            session_prefix(bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"expected ValueError for short name {bad!r}")
+    print("PASS: session_prefix lower-cases and rejects invalid short names")
+
+    assert resolve_sessions({}, phases=["go"]) == {"go": DEFAULT_SESSIONS["go"]}
+    assert resolve_sessions(None) == DEFAULT_SESSIONS
+    try:
+        resolve_sessions({}, phases=["nope"])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError for unknown phase")
+    print("PASS: resolve_sessions is phase-scoped")
 
 
 def _test_sessions(errors: list[int]) -> None:
@@ -108,6 +173,12 @@ def _test_write(errors: list[int]) -> None:
 
     with tempfile.TemporaryDirectory() as tmpdir:
         target = Path(tmpdir) / "tasks.json"
+        assert write_tasks(target, "mh", hub=True) == "created"
+        assert target.read_text(encoding="utf-8") == render_tasks("mh", hub=True)
+        print("PASS: write_tasks(hub=True) writes the hub render")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        target = Path(tmpdir) / "tasks.json"
         target.write_text('{"version": "2.0.0", "tasks": []}\n', encoding="utf-8")
         assert write_tasks(target, SLUG) == "replaced"
         assert (Path(tmpdir) / "tasks.json.bak").read_text(encoding="utf-8") == '{"version": "2.0.0", "tasks": []}\n'
@@ -124,7 +195,8 @@ def _test_template_defaults_consistent(errors: list[int]) -> None:
 
 def main() -> int:
     errors = [0]
-    for test in (_test_render, _test_sessions, _test_write, _test_template_defaults_consistent):
+    for test in (_test_render, _test_worktree_prefix_render, _test_hub_render,
+                 _test_session_prefix_and_phases, _test_sessions, _test_write, _test_template_defaults_consistent):
         try:
             test(errors)
         except AssertionError as exc:
