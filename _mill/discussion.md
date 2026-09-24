@@ -16,7 +16,7 @@ Sources: GitHub issues #1147 and #1146.
   `scripts/millpy-validate-plan.py:56` now passes `done_gate=cfg.get("pipeline", {}).get("done_gate")` to `_plan_validate.run`, but the test's fake `_fake_plan_validate_run(plan_dir_arg, project_root_arg, *, wiki_root, skip_checks)` (line 327) does not accept it.
 - `test-mill-go-base-agent-only.py` fails with `contains banned literal 'millpy-bg'` on `skills/mill-go-base/SKILL.md`.
   `BANNED_LITERALS = ("psmux", "millpy-bg", "dispatch == subprocess")` (line 27) was written when subprocess dispatch was stripped.
-  SKILL.md now legitimately uses `millpy-bg` (4 occurrences: speculative baseline launch ~line 197/202, and the subprocess/psmux review-dispatch branch ~lines 592/595).
+  SKILL.md now legitimately uses `millpy-bg` (4 occurrences: speculative baseline launch ~line 197/202, and the review-dispatch section ~lines 592/595).
 
 ## Scope
 
