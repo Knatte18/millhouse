@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-24T09:37:28Z'
+discussion-fix-r1  '2026-09-24T10:03:21Z'
 ```

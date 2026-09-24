@@ -69,15 +69,17 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
   Value goes through `quote_scalar`.
   Every skill site that today calls `_status.update_field(status_path, "parent", resolved_branch)` switches to `_status.set_parent_branch(status_path, resolved_branch)`.
 - Rationale: `update_field` requires the key to exist; after the rename, skills calling `update_field(..., "parent_branch", ...)` would raise on legacy files, and calling it with `"parent"` would raise on new files.
-  One helper hides the dual-key logic from four skill sites.
+  One helper hides the dual-key logic from five call lines in four files (both `mill-merge-in` lines included — see Technical context).
 - Rejected: have skills call `update_field` with a key chosen by reading the file first — duplicates logic in prose at every site.
   Rejected: make `update_field` alias keys — a generic helper should not know about one field's history.
 
 ### Insertion anchor for baseline rows
 
-- Decision: `set_module_verify_baseline` and `set_module_verify_baseline_signatures` insert after the `parent_branch:` row, falling back to the `parent:` row; `ValueError` only when neither exists.
-  Match with anchored regexes (`^parent_branch:\s*` / `^parent:\s*`) so neither matches the other or `parent_thread:`.
+- Decision: `set_module_verify_baseline` and `set_module_verify_baseline_signatures` insert after the `parent_thread:` row when present, else after `parent_branch:`, else after legacy `parent:`; `ValueError` only when none of the three exists.
+  Match with anchored regexes (`^parent_thread:\s*`, `^parent_branch:\s*`, `^parent:\s*`) so none matches another.
 - Rationale: these functions run on in-flight legacy files and new files alike.
+  Anchoring after `parent_thread:` keeps the two parent rows adjacent once baseline rows are written.
+- Rejected: always anchor after `parent_branch:` — splits `parent_branch:` from `parent_thread:` after the first baseline write.
 
 ### `parent_thread` rendering
 
@@ -93,7 +95,9 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
 
 - Decision: `--parent NAME` (`default=None`, help text: name of the session spawning this task, recorded as status.md `parent_thread:`).
   Value passed through unchanged except for `strip()`; empty string equals omitted.
-  No format validation — session names are free-form strings produced by `_vscode_tasks` / config.
+  Right after `parse_args`, before the wiki claim or any worktree work, reject a value containing a newline or other control character (`any(ord(c) < 32 or ord(c) == 127 for c in value)`) with `SystemExit` and an ASCII message naming `--parent`.
+  Without this check, `quote_scalar` would raise a bare `ValueError` from `write_initial_status` after the claim and worktree creation.
+  No other format validation — session names are free-form strings produced by `_vscode_tasks` / config.
   `--dry-run` output mentions the value when given.
 - Rationale: scripts cannot read their own session name; the caller supplies it.
 - Rejected: validating against `<short_name>:<...>` — couples spawn to session-naming config for no gain.
@@ -147,20 +151,20 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
   with `None` and `""` no `parent_thread` row;
   `read_parent_branch` on new key, legacy key, both keys (new wins), neither (None);
   `set_parent_branch` rewrites new key, migrates legacy key in place (no `parent:` row left, order preserved), raises when neither;
-  `set_module_verify_baseline(_signatures)` insert after `parent_branch:` and after legacy `parent:`.
+  `set_module_verify_baseline(_signatures)` insert after `parent_thread:` when present, else after `parent_branch:`, else after legacy `parent:`.
 - `test-parent-branch.py`: `resolve` and `resolve_dead_parent` with archived status.md content using `parent_branch:` and legacy `parent:`; `expected_slug` mismatch still yields None for both keys; `parent_thread:` row never mistaken for the branch.
 - `test-spawn-core.py`: `write_initial_status` forwards `parent_thread`; default omits the row.
-- `test-millpy-spawn.py`: `--parent mh:orch` reaches `write_initial_status` as `parent_thread`; omitted flag passes `None`.
+- `test-millpy-spawn.py`: `--parent mh:orch` reaches `write_initial_status` as `parent_thread`; omitted flag passes `None`; a `--parent` value with a newline exits before any claim or worktree call.
 - `integration_tests/test-spawn.py`: spawned status.md contains `parent_branch: main`; with `--parent`, contains `parent_thread:`.
 - Existing merge/cleanup/merge-in tests keep passing; at least one merge path test keeps a legacy `parent:` fixture to prove in-flight worktrees still merge.
 
 ## Q&A log
 
 - **Q:** Is the legacy `parent:` fallback permanent or removed after a migration? **A:** [auto-pick] Permanent. **Why:** `resolve_dead_parent` reads archived status.md from `archive/<slug>` tags, which cannot be migrated.
-- **Q:** How do skills rebind the parent branch when the file may carry either key? **A:** [auto-pick] New `_status.set_parent_branch` that rewrites `parent_branch:` or migrates a legacy `parent:` row in place. **Why:** `update_field` is strict on key presence; one helper replaces dual-key prose at four sites.
+- **Q:** How do skills rebind the parent branch when the file may carry either key? **A:** [auto-pick] New `_status.set_parent_branch` that rewrites `parent_branch:` or migrates a legacy `parent:` row in place. **Why:** `update_field` is strict on key presence; one helper replaces dual-key prose at five call lines in four files.
 - **Q:** Which key wins when both are present? **A:** [auto-pick] `parent_branch:`. **Why:** new key is authoritative; halting would block merges for no benefit.
 - **Q:** How is the optional `parent_thread` row rendered? **A:** [auto-pick] `render_initial(..., parent_thread=None)` inserts a quoted row after `parent_branch:` when non-empty; template has no token. **Why:** templates cannot express an optional line and unresolved tokens raise.
 - **Q:** Does `millpy-claim` also get `--parent`? **A:** [auto-pick] No. **Why:** brief scopes the flag to `millpy-spawn`; in-place claim has no orchestrator dispatch path today.
 - **Q:** Should any caller (mill-pool, orch skills) start passing `--parent` now? **A:** [auto-pick] No; only document the flag in `mill-spawn/SKILL.md`. **Why:** brief says no behaviour change; wiring belongs to `parent-thread-escalation`.
 - **Q:** Rename `parent:` in the `discussion.md` and `plan-overview.md` template yaml too? **A:** [auto-pick] Yes, both. **Why:** same value, same meaning; keeps one key name across generated files. No code parses these rows.
-- **Q:** Validate the `--parent` value format? **A:** [auto-pick] No; strip only, empty equals omitted. **Why:** session names are config-driven free-form strings.
+- **Q:** Validate the `--parent` value format? **A:** [auto-pick] Strip, empty equals omitted, reject control characters before the claim; nothing else. **Why:** session names are config-driven free-form strings, but a newline would fail late inside `quote_scalar`.
