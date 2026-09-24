@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: session-naming
 branch: hanf/session-naming
 plan: null
@@ -15,4 +15,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-24T05:29:49Z'
+discussion-fix-r1  '2026-09-24T06:07:03Z'
 ```

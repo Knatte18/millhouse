@@ -26,6 +26,7 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 - A mill-owned `.vscode/tasks.json`, seeded by `mill-spawn` into each new worktree and by `mill-setup` into its own (hub) worktree.
   Six tasks, none auto-run: `mill: start`, `mill: start-auto`, `mill: start-orch`, `mill: plan`, `mill: go`, `mill: quick`.
 - Per-phase `model` and `effort` in `mill-config.yaml` (and its plugin template) under `spawn.sessions`, overridable in `config.local.yaml`.
+- A small re-render CLI, `millpy-session-tasks.py`, that rewrites the current worktree's `tasks.json` from the current merged config (see "Stale config after spawn").
 - Keyboard-shortcut seeding: `mill-setup` merges six `alt+shift+1` … `alt+shift+6` bindings into the user's global VS Code `keybindings.json`.
 - `terminal.integrated.commandsToSkipShell` in the seeded `.vscode/settings.json` template so the shortcuts also work while focus is inside a terminal.
 - Unit tests for the new rendering and merge helpers.
@@ -98,6 +99,16 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
   `quick` was not specified by the user; it defaults to the same as `go` (sonnet/high).
 - Rejected: hard-coded defaults in Python; a separate config file.
 
+### Stale config after spawn
+
+- Decision: model and effort are baked into `tasks.json` when it is rendered, so editing `mill-config.yaml` or `config.local.yaml` later does not change worktrees that already exist.
+  A new script `plugins/mill/scripts/millpy-session-tasks.py` re-renders the current worktree's `tasks.json` from the current merged config (slug from `_marker.slug_from_branch`; hub worktree: short name), reusing `_vscode_tasks.write_tasks` and the same idempotent/backup rules.
+  Re-running `mill-setup` also refreshes the hub's file.
+  New spawns always pick up the current config.
+  The script gets the usual shortcut wrapper entry in `_shortcuts.SHORTCUT_SCRIPTS`.
+- Rationale: user requirement is that values are easy to change; a re-render command makes "change config, run one command" the whole workflow without VS Code reading mill config at runtime.
+- Rejected: accepting staleness silently; resolving model/effort at task run time (would need a wrapper script between VS Code and claude on both platforms).
+
 ### Keyboard shortcuts
 
 - Decision: `alt+shift+1` … `alt+shift+6` in this order: start, start-auto, start-orch, plan, go, quick.
@@ -116,8 +127,10 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 - Locations: Linux `~/.config/Code/User/keybindings.json`; Windows `%APPDATA%\Code\User\keybindings.json`; macOS `~/Library/Application Support/Code/User/keybindings.json`.
 - The file is JSONC (comments allowed; the user's has `//` comments), so it must not be round-tripped through a strict JSON parse/dump.
   Insert/replace a marker-delimited block (`// mill:begin` … `// mill:end`) textually inside the top-level array; create the file with the block if it is missing.
-- If a target key (`alt+shift+N`) is already bound by an entry outside the mill block, skip that binding and print a warning naming the key and command.
+- Conflict detection: strip `//` line comments and `/* */` block comments outside string literals with a small tokenizer, tolerate trailing commas, then `json.loads` the result and inspect entries outside the mill block (compare `key` case-insensitively, ignoring whitespace).
+  If a target key (`alt+shift+N`) is already bound by such an entry, skip that binding and print a warning naming the key and command.
   Never overwrite.
+- If the file cannot be parsed after stripping, skip all six bindings, leave the file untouched, and print a warning; `mill-setup` continues.
 - Rejected: overwrite on conflict; writing keybindings from `mill-spawn` on every spawn.
 
 ### Terminal-focus behaviour
@@ -125,6 +138,8 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 - Decision: add `"terminal.integrated.commandsToSkipShell": ["workbench.action.tasks.runTask"]` to `plugins/mill/templates/vscode-settings.json`.
   Without it, VS Code forwards the keypress to the terminal instead of running the command when focus is in a terminal (the normal state when a claude session is open).
   mill-plan must verify this against VS Code docs/behaviour, since it is stated from knowledge, not tested.
+  Fallback if verification shows the key is unnecessary: drop it from the template.
+  Fallback if the shortcuts still do not fire with terminal focus: keep the key, document in the mill-setup report that the shortcuts work with editor focus or via Run Task, and do not add further workarounds.
 - `mill-setup` Phase 7 currently skips an already-green `.vscode/settings.json`.
   Extend the skip condition: skip only if the colour is green **and** `commandsToSkipShell` already contains `workbench.action.tasks.runTask`; otherwise back up to `.bak` and overwrite, as the existing "different" rows do.
 - `task.allowAutomaticTasks: "on"` is already in the template; no change (harmless with no auto-run tasks).
@@ -159,6 +174,8 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 - `_paths.resolve_short_name(cfg, repo_name)`: hub-side name for `mill-setup`.
 - `claude --help` (2.1.281): `-n/--name`, `--model <model>`, `--effort <low|medium|high|xhigh|max>`, positional `[prompt]`.
   That an initial prompt of `/mill-start …` is executed as a slash command in interactive mode is expected but must be verified by mill-plan/implementer before relying on it.
+  Fallback if it is passed as plain text instead: render the task prompt as `Invoke the mill:mill-<skill> skill with args "<flag>"` (omit args when there is no flag), which makes the model call the Skill tool; the task labels, session names and everything else stay the same.
+  The hub worktree's session names use `<short_name>:<phase>` (no task slug exists there).
 - User's existing model shortcuts (`~/.config/Code/User/keybindings.json`) use `workbench.action.terminal.newWithProfile` with `ctrl+shift+alt+{o,f,s}`; they are untouched and cannot collide with `alt+shift+<digit>`.
 - Repo conventions: `print()` output ASCII only; no `sed`; no junction paths to Python helpers; `_mill/` paths never cited from permanent docs.
 
@@ -174,6 +191,8 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 
 - **`_vscode_tasks`** (TDD candidate): rendered JSON parses after stripping the leading comment; six tasks with the expected labels; slug and per-phase model/effort appear in the command strings; `start-auto`/`start-orch` carry the flag and the `:start` session name; missing config keys fall back to defaults; overridden values are honoured.
 - **`_vscode_keybindings`** (TDD candidate): creates the file when missing; inserts the block into an existing JSONC array without disturbing comments or other entries; re-running is idempotent (no diff); updates the block when bindings change; skips and reports a conflicting `alt+shift+N` bound outside the block; leaves entries inside the block replaceable; platform path resolution for linux/win/darwin.
+- **`millpy-session-tasks.py`**: re-render after a config change updates model/effort in the existing file; unchanged config leaves the file byte-identical; hub versus task-worktree name selection.
+- **Keybindings parser**: comments inside and outside strings (`//` in a string value is not a comment), trailing commas, and unparsable input (nothing written, warning emitted).
 - **`millpy-spawn`**: existing spawn tests extended to assert `tasks.json` exists in `dest_hub/.vscode/` with the literal slug, including the `hub_relative_path != "."` layout, and that rollback removes it.
 - **`test-vscode.py`**: template now contains `commandsToSkipShell`.
 - **mill-setup**: Phase 7 skip-rule change and Phase 7b idempotency are skill prose; cover the helper-level behaviour in unit tests and list manual verification steps in the plan (open a worktree, press `Alt+Shift+4` inside and outside a terminal).
