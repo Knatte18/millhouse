@@ -2,7 +2,9 @@
 mill-session-tasks — re-render the current worktree's VS Code session tasks.
 
 Rewrites ``.vscode/tasks.json`` under the hub path from the current merged config.
-The session name is the task slug on a task worktree and the repo short name on the hub.
+Session names are ``<short_name>:<slug>:<phase>`` on a task worktree and ``<short_name>:<phase>`` on the hub,
+lower-cased; the hub also gets the ``mill: orch`` task.
+The fallback short name comes from the main worktree's directory name, with a warning on stderr.
 Model and effort come from ``spawn.sessions``; they are baked into the file, so re-run this
 after changing those values.
 
@@ -21,7 +23,14 @@ import sys
 import _marker
 import _vscode_tasks
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_hub_path, resolve_short_name, resolve_wiki_path
+from _paths import (
+    resolve_git_root,
+    resolve_hub_path,
+    resolve_main_worktree_root,
+    resolve_short_name,
+    resolve_wiki_path,
+    short_name_is_derived,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,11 +62,23 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
+        short = resolve_short_name(cfg, resolve_main_worktree_root(git_root).name)
         try:
-            name = _marker.slug_from_branch(git_root, wiki_path, cfg)
+            slug = _marker.slug_from_branch(git_root, wiki_path, cfg)
+            name = _vscode_tasks.session_prefix(short, slug)
+            hub_render = False
         except _marker.MarkerError:
-            name = resolve_short_name(cfg, git_root.name)
-        status = _vscode_tasks.write_tasks(target, name, (cfg.get("spawn") or {}).get("sessions"))
+            name = _vscode_tasks.session_prefix(short)
+            hub_render = True
+        if short_name_is_derived(cfg):
+            print(
+                f"[mill-session-tasks] WARNING: repo.short_name is not set; using derived short name '{short}'. "
+                "Set repo.short_name in mill-config.yaml or run /mill-setup.",
+                file=sys.stderr,
+            )
+        status = _vscode_tasks.write_tasks(
+            target, name, (cfg.get("spawn") or {}).get("sessions"), hub=hub_render
+        )
     except (Exception, SystemExit) as exc:
         message = " ".join(str(exc).split()).encode("ascii", "replace").decode("ascii")
         print(f"[mill-session-tasks] failed: {message}", file=sys.stderr)
