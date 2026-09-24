@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-templates-skills-fixtures
+phase: holistic-reviewing
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -27,6 +27,7 @@ reviewing-status-core-r1  '2026-09-24T10:26:48Z'
 approved-status-core  '2026-09-24T10:26:58Z'
 approved-spawn-parent-thread  '2026-09-24T10:28:49Z'
 approved-templates-skills-fixtures  '2026-09-24T10:30:24Z'
+holistic-reviewing  '2026-09-24T10:30:31Z'
 ```
 
 ## Batches
