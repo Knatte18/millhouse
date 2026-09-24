@@ -4,36 +4,19 @@ Review backend for code artefacts.
 The LLM reviewer does NOT look at git diff.
 It reads the approved plan and the source files the plan says were touched, then asks: "does the
 implementation on disk realise what the plan promised?"
-The orchestrator (mill-go) invokes this once per batch after the implementer commits that batch,
-and optionally one holistic review at end-of-task.
+The orchestrator (mill-go) invokes this once at end-of-task as a holistic review.
+It bulks ``00-overview.md`` + every batch file + the union of all referenced files.
 
-The backend itself uses git deterministically in two places:
-- ``bulk_files_with_diff`` (in ``prepare``) scopes large source files to their diff against
-    ``start_sha`` so the reviewer sees a focused diff rather than the full file content.
-- The mechanical rename check (in ``finalize``) runs ``git diff --name-status --find-renames`` to
-    detect whether planned ``Moves:`` pairs landed as git-detected renames;
-    advisory NIT findings are spliced into the review text for any pair that did not.
-
-Two modes, selected by ``scope``:
-
-- ``scope="<name>"`` -- per-batch review.
-    Bulks ``00-overview.md`` + the single ``NN-<batch>.md`` + every file under that batch's
-        ``Context:`` / ``Edits:`` / ``Creates:`` lines plus Move targets (the relocated files exist
-        post-implementation).
-- ``scope="holistic"`` -- holistic review.
-    Bulks ``00-overview.md`` + every batch file + the union of all referenced files.
-
-Both modes accept ``extra_files`` -- source files the orchestrator has decided to include in the
-bulk this round, typically because a previous round returned ``verdict: NEED_CONTEXT`` pointing at
-them.
+``extra_files`` are source files the orchestrator has decided to include in the bulk this round,
+typically because a previous round returned ``verdict: NEED_CONTEXT`` pointing at them.
 
 Public API:
-    prepare(cfg, slug, *, scope, mill_dir, project_root, wiki_root, git_root, extra_files=None) -> dict
+    prepare(cfg, slug, *, mill_dir, project_root, wiki_root, git_root, extra_files=None) -> dict
     Render prompt and resolve spec;
         return prepare dict.
-    finalize(cfg, slug, raw_text, *, scope, round_n, reviews_dir, mill_dir, project_root, wiki_root, git_root) -> ReviewResult
+    finalize(cfg, slug, raw_text, *, round_n, reviews_dir, mill_dir, project_root, wiki_root, git_root) -> ReviewResult
     Parse verdict from raw_text and return ReviewResult.
-    run(cfg, slug, mill_dir, wiki_root, project_root, *, batch_name=None, extra_files=None) -> ReviewResult Legacy API;
+    run(cfg, slug, mill_dir, wiki_root, project_root, *, git_root, extra_files=None) -> ReviewResult Legacy API;
     calls prepare -> reviewer -> finalize.
 """
 from __future__ import annotations
@@ -41,16 +24,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import re
-
-import _moves_check
-import _paths
 import _reviewer_single
 import _reviewers
-import _subprocess_util
 from _llm_common import LLMError
-from _plan_dag import PlanDAGError, extract_batch_index
-import _status
 from _review_common import (
     DisplayRoots,
     ReviewError,
@@ -62,7 +38,6 @@ from _review_common import (
     build_reattached_section,
     build_tool_rule,
     bulk_files,
-    bulk_files_with_diff,
     compute_creates_union,
     compute_deletes_union,
     compute_moves_union,
@@ -73,7 +48,6 @@ from _review_common import (
     maybe_switch_spec_for_large_prompt,
     parse_batch_refs,
     parse_missing_context,
-    parse_moves,
     parse_verdict,
     read_constraints_md,
     render_prompt,
@@ -96,42 +70,14 @@ def _aggregate_top_verdict(reviews_list: list[dict], parsed_verdict: str) -> str
     )
 
 
-def _collect_batch_files(
-    plan_dir: Path,
-    batch_name: str | None,
-    overview_path: Path,
-) -> list[Path]:
-    """Return the batch files this review covers.
-
-    ``batch_name=None`` → every ``NN-<name>.md`` in ``plan_dir`` except ``00-overview.md``.
-    ``batch_name="<name>"`` → the single batch file the overview's Batch Index maps ``<name>`` to.
-    """
-    if batch_name is None:
-        files = sorted(
-            p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
-        )
-        if not files:
-            raise ReviewError(f"No batch files found in {plan_dir}")
-        return files
-
-    overview_text = overview_path.read_text(encoding="utf-8")
-    try:
-        batches = extract_batch_index(overview_text)
-    except PlanDAGError as exc:
-        raise ReviewError(f"Could not parse Batch Index: {exc}") from exc
-
-    entry = next((b for b in batches if b.get("name") == batch_name), None)
-    if entry is None:
-        known = ", ".join(repr(b.get("name")) for b in batches) or "(none)"
-        raise ReviewError(
-            f"Batch {batch_name!r} not found in Batch Index; known: {known}"
-        )
-    batch_file = plan_dir / entry["file"]
-    if not batch_file.exists():
-        raise ReviewError(
-            f"Batch {batch_name!r} declared but file missing: {batch_file}"
-        )
-    return [batch_file]
+def _collect_batch_files(plan_dir: Path) -> list[Path]:
+    """Return every ``NN-<name>.md`` batch file in ``plan_dir`` except ``00-overview.md``."""
+    files = sorted(
+        p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md"
+    )
+    if not files:
+        raise ReviewError(f"No batch files found in {plan_dir}")
+    return files
 
 
 def _build_artefact_section(
@@ -142,9 +88,6 @@ def _build_artefact_section(
     ancestors_on_disk: list[Path],
     deletes_union: set[str],
     *,
-    start_sha: str | None = None,
-    diff_threshold: float = 0.25,
-    project_root: Path | None = None,
     roots: DisplayRoots | None = None,
 ) -> str:
     """Return the ``<ARTEFACT_SECTION>`` block for the prompt.
@@ -182,18 +125,7 @@ def _build_artefact_section(
             "`## Path roots` block above and must be resolved against it before reading."
         )
     else:
-        # Always bulk overview + batch files + ancestors at full content.
-        # source_files use diff-scoping if start_sha is set.
-        plan_and_ancestors = [overview_path, *batch_files, *ancestors_on_disk]
-        if start_sha is not None and project_root is not None:
-            scoped_sources = bulk_files_with_diff(
-                source_files, start_sha, project_root, diff_threshold, roots=roots
-            )
-            bulked = bulk_files(plan_and_ancestors, roots=roots) + (
-                "\n\n" + scoped_sources if scoped_sources else ""
-            )
-        else:
-            bulked = bulk_files(all_bulked, roots=roots)
+        bulked = bulk_files(all_bulked, roots=roots)
         body = (
             f"{manifest}\n\n"
             "## Plan + source content (overview + batch files + referenced source + ancestor creates)\n"
@@ -209,7 +141,6 @@ def prepare(
     cfg: dict,
     slug: str,
     *,
-    scope: str | None,
     mill_dir: Path,
     project_root: Path,
     wiki_root: Path,
@@ -219,12 +150,11 @@ def prepare(
     prior_notes: Path | None = None,
     agent_mode: bool = False,
 ) -> dict:
-    """Prepare a code review by rendering the prompt for a single scope.
+    """Prepare the holistic code review by rendering its prompt.
 
     Args:
-        scope: Batch name (e.g., "01-setup") or None for holistic.
         extra_files: Additional source files to include in the bulk.
-        max_rounds: Override the configured round cap for this scope.
+        max_rounds: Override the configured holistic round cap.
         prior_notes: Path to a file containing prior-round non-blocking findings digest.
         agent_mode: When True, build_tool_rule returns the agent-mode cell (adds the single Write
             carve-out for the .out.md report).
@@ -237,15 +167,11 @@ def prepare(
     # 1. Paths + round counter
     plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
     reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
-    scope_label = scope or "holistic"
-    round_n = discover_round(reviews_dir, "code", scope_label)
+    round_n = discover_round(reviews_dir, "code", "holistic")
 
     # Round cap check.
     # The max_rounds kwarg overrides the configured cap (mirrors run()'s pre-refactor behaviour); enforcing here covers both the full path and the agent-mode CLI prepare stage.
-    if scope is not None:
-        configured_max = cfg["roles"]["code-review"]["batch"]["rounds"]
-    else:
-        configured_max = cfg["roles"]["code-review"]["holistic"]["rounds"]
+    configured_max = cfg["roles"]["code-review"]["holistic"]["rounds"]
     effective_max = max_rounds if max_rounds is not None else configured_max
     if round_n > effective_max:
         raise ReviewError(
@@ -259,27 +185,7 @@ def prepare(
     root = _load_root_from_overview(overview_path)
 
     # 3. Target batch files + referenced source files
-    batch_files = _collect_batch_files(plan_dir, scope, overview_path)
-
-    # Per-batch diff-scoping: read start_sha from status.md if scope is set.
-    start_sha: str | None = None
-    diff_threshold: float = cfg["roles"]["code-review"].get("diff_scope_threshold", 0.25)
-    if scope is not None:
-        try:
-            status_path = _paths.status_path(project_root, cfg)
-            batches_list = _status.read_batches(status_path)
-            entry = next((b for b in batches_list if b.get("name") == scope), None)
-            start_sha = entry.get("start_sha") if entry else None
-            if start_sha is None:
-                print(
-                    f"[_review_code] no start_sha for batch {scope!r}; using full file content",
-                    file=sys.stderr,
-                )
-        except Exception as exc:
-            print(
-                f"[_review_code] warning: could not read start_sha for batch {scope!r}: {exc}; using full file content",
-                file=sys.stderr,
-            )
+    batch_files = _collect_batch_files(plan_dir)
 
     # Context: refs are split from Edits:/Creates:/Deletes: refs so only the former can soft-fail on a confirmed git-ignore hit (#733) -- a missing Edits:/Creates:/Deletes: ref still hard-fails unconditionally, since those name files the batch is expected to produce or touch.
     context_only_refs: dict[str, None] = {}
@@ -331,8 +237,8 @@ def prepare(
 
     if not source_files and not (extra_files or []):
         print(
-            f"[_review_code] warning: no source files resolved for scope={scope_label}; "
-            f"reviewer will only see plan content",
+            "[_review_code] warning: no source files resolved for the holistic scope; "
+            "reviewer will only see plan content",
             file=sys.stderr,
         )
 
@@ -346,29 +252,23 @@ def prepare(
     ancestors_on_disk = [p for p in ancestors_on_disk if p not in source_files]
 
     # 4. Reviewer + prompt
-    if scope is not None:
-        reviewer_name = cfg["roles"]["code-review"]["batch"]["reviewer"]
-    else:
-        reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
+    reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
     if reviewer_name is None:
         raise ReviewError(
-            f"code-review {'batch' if scope else 'holistic'} reviewer is null; "
-            f"the orchestrator should not have invoked this scope"
+            "code-review holistic reviewer is null; "
+            "the orchestrator should not have invoked this scope"
         )
     hub_dir = project_root
     registry = _reviewers.load(hub_dir)
     spec = _reviewers.resolve(registry, reviewer_name)
 
-    template_name = "review-code-batch" if scope else "review-code-holistic"
+    template_name = "review-code-holistic"
     mode = "tool-use" if spec.get("tooluse") else "bulk"
     tool_rule = build_tool_rule(mode, agent_mode)
     roots = DisplayRoots(project_root=project_root, git_root=git_root, wiki_root=wiki_root)
     artefact_section = _build_artefact_section(
         mode, overview_path, batch_files, source_files, ancestors_on_disk,
         deletes_union,
-        start_sha=start_sha,
-        diff_threshold=diff_threshold,
-        project_root=project_root,
         roots=roots,
     )
 
@@ -388,15 +288,12 @@ def prepare(
         "reviewer_model": reviewer_name,
         "prior_nonblocking": prior_nonblocking,
     }
-    if scope:
-        prompt_kwargs["batch_name"] = scope
 
     prompt_text = render_prompt(template_name, **prompt_kwargs)
 
-    if scope is None:
-        spec, reviewer_name = maybe_switch_spec_for_large_prompt(
-            prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
-        )
+    spec, reviewer_name = maybe_switch_spec_for_large_prompt(
+        prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
+    )
 
     return {
         "prompt_text": prompt_text,
@@ -404,134 +301,8 @@ def prepare(
         "effort": spec.get("effort"),
         "round": round_n,
         "reviews_dir": reviews_dir,
-        "scope": scope_label,
+        "scope": "holistic",
     }
-
-
-def _splice_rename_nit_findings(
-    raw_text: str,
-    scope: str,
-    slug: str,
-    cfg: dict,
-    project_root: Path,
-) -> str:
-    """
-    Attempt to splice mechanical rename NIT findings into raw_text.
-
-    Resolves the batch's start_sha from status.md (same logic as ``prepare``), finds the batch file,
-    reads its ``Moves:`` declarations, runs ``git diff --name-status --find-renames=<thr>%
-    <start_sha>..HEAD``, and for any planned move pair that did not land as a git-detected rename,
-    inserts an advisory NIT finding block into the ``## Findings`` section of raw_text before
-    ``finalize_scope`` parses it.
-
-    Returns raw_text unchanged when any precondition fails (no start_sha, empty Moves, git error)
-    because the rename check is advisory only.
-
-    Args:
-        raw_text: Extracted review text (after MILL_REVIEW_BEGIN stripping).
-        scope: Batch name (guaranteed non-None by caller).
-        slug: Task slug, used to resolve plan_dir via resolve_path.
-        cfg: Merged mill configuration dict.
-        project_root: Absolute path to the worktree root.
-    """
-    # Resolve plan_dir and locate the batch file.
-    try:
-        plan_dir = resolve_path(cfg["paths"]["plan_dir"], slug)
-        overview_path = plan_dir / "00-overview.md"
-        if not overview_path.exists():
-            return raw_text
-        batch_files = _collect_batch_files(plan_dir, scope, overview_path)
-        batch_file = batch_files[0]
-    except Exception:
-        # Any resolution failure (missing overview, unknown batch) is treated as a skip rather than an error;
-        # the check is advisory.
-        return raw_text
-
-    # Check whether this batch declares any moves.
-    moves = parse_moves(batch_file)
-    if not moves:
-        return raw_text
-
-    # Read start_sha from status.md (mirrors prepare's resolution).
-    try:
-        status_path = _paths.status_path(project_root, cfg)
-        batches_list = _status.read_batches(status_path)
-        entry = next((b for b in batches_list if b.get("name") == scope), None)
-        start_sha = entry.get("start_sha") if entry else None
-    except Exception:
-        return raw_text
-
-    if not start_sha:
-        return raw_text
-
-    # Run git diff to detect which moves landed as git-recognised renames.
-    # The threshold comes from the pipeline config;
-    # defaults to 30% per the mechanical-rename-check-advisory Shared Decision.
-    rename_threshold = cfg.get("pipeline", {}).get("rename_detect_pct", 30)
-    try:
-        result = _subprocess_util.run([
-            "git", "-C", str(project_root),
-            "diff", "--name-status",
-            f"--find-renames={rename_threshold}%",
-            f"{start_sha}..HEAD",
-        ])
-        if result.returncode != 0:
-            return raw_text
-        name_status_text = result.stdout
-    except Exception:
-        return raw_text
-
-    # Compute advisory NIT finding blocks for undetected renames.
-    nit_blocks = _moves_check.planned_rename_findings(name_status_text, moves)
-    if not nit_blocks:
-        return raw_text
-
-    # Splice NITs into the ## Findings section before ## Verdict.
-    # The NITs are advisory;
-    # they do not alter the verdict yaml block and therefore cannot change the verdict or blocking_count.
-    return _insert_nit_blocks_before_verdict(raw_text, nit_blocks)
-
-
-def _insert_nit_blocks_before_verdict(raw_text: str, nit_blocks: list[str]) -> str:
-    """
-    Insert NIT finding blocks into raw_text's ## Findings section.
-
-    Locates the ``## Verdict`` heading and inserts the NIT blocks immediately before it so they
-    appear inside the findings section.
-    If ``## Verdict`` is absent, the NITs are appended at the end.
-    When no ``## Findings`` section exists either, a bare ``## Findings`` heading is prepended
-    before the NITs so the review retains valid structure.
-
-    Args:
-        raw_text: Extracted review text.
-        nit_blocks: List of NIT finding block strings to insert.
-
-    Returns:
-        Modified raw_text with NIT blocks spliced in.
-    """
-    nit_text = "\n\n".join(nit_blocks)
-
-    # Prefer inserting just before ## Verdict so all findings appear together in the findings section.
-    verdict_match = re.search(r"^## Verdict\s*$", raw_text, re.MULTILINE)
-    if verdict_match:
-        insert_pos = verdict_match.start()
-        findings_match = re.search(r"^## Findings\s*$", raw_text, re.MULTILINE)
-        if not findings_match:
-            # No findings section yet -- create one with the NITs.
-            return (
-                raw_text[:insert_pos]
-                + "## Findings\n\n"
-                + nit_text
-                + "\n\n"
-                + raw_text[insert_pos:]
-            )
-        return raw_text[:insert_pos] + nit_text + "\n\n" + raw_text[insert_pos:]
-
-    # No ## Verdict heading: append NITs at the end of the text.
-    findings_match = re.search(r"^## Findings\s*$", raw_text, re.MULTILINE)
-    if not findings_match:
-        return raw_text + "\n\n## Findings\n\n" + nit_text
-    return raw_text + "\n\n" + nit_text
 
 
 def finalize(
@@ -539,7 +310,6 @@ def finalize(
     slug: str,
     raw_text: str,
     *,
-    scope: str | None,
     round_n: int,
     reviews_dir: Path,
     mill_dir: Path,
@@ -553,17 +323,8 @@ def finalize(
 ) -> ReviewResult:
     """Finalize a code review by parsing verdict and writing the review file.
 
-    For per-batch scope (``scope`` is not None), attempts to splice advisory mechanical rename NIT
-    findings into ``raw_text`` before verdict parsing.
-    The NIT check uses ``git diff --name-status --find-renames`` against the batch's ``start_sha``;
-    it is skipped silently on any failure (no start_sha, git error, no Moves declared).
-    NITs never change the verdict or blocking_count.
-    The splice runs before ``apply_cost_metadata`` in the ``except ReviewError`` branch's text flow,
-    so the written raw text still contains whatever the splice produced.
-
     Args:
         raw_text: Raw review output from the reviewer.
-        scope: Batch name or None for holistic.
         round_n: Round number.
         reviews_dir: Directory where review files are stored.
         actual_model: The model that actually produced this review, used to correct an unreliable
@@ -580,18 +341,10 @@ def finalize(
     Returns:
         ReviewResult with verdict, blocking count, and review entries.
     """
-    scope_label = scope or "holistic"
-
-    # Mechanical rename check: per-batch only, advisory NITs, never changes verdict or blocking_count.
-    # Holistic scope is skipped (no start_sha context);
-    # any git or resolution failure is swallowed.
-    if scope is not None:
-        raw_text = _splice_rename_nit_findings(raw_text, scope, slug, cfg, project_root)
-
-    blocking_classes = resolve_blocking_classes(cfg, "code", scope)
+    blocking_classes = resolve_blocking_classes(cfg, "code", "holistic")
     try:
         review_entry = finalize_scope(
-            reviews_dir, "code", round_n, raw_text, scope=scope, actual_model=actual_model,
+            reviews_dir, "code", round_n, raw_text, scope="holistic", actual_model=actual_model,
             blocking_classes=blocking_classes,
             duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
@@ -604,7 +357,7 @@ def finalize(
             "code",
             round_n,
             raw_text,
-            scope=scope,
+            scope="holistic",
         )
         return ReviewResult(
             type="code",
@@ -612,7 +365,7 @@ def finalize(
             verdict="ERROR",
             blocking_count=0,
             reviews=[{
-                "scope": scope_label,
+                "scope": "holistic",
                 "verdict": "ERROR",
                 "file": str(path),
                 "error": f"parse_verdict failed: {exc}",
@@ -633,7 +386,7 @@ def finalize(
         nit_count=review_entry["nit_count"],
         findings=review_entry["findings"],
         reviews=[{
-            "scope": scope_label,
+            "scope": "holistic",
             "verdict": review_entry["verdict"],
             "file": review_entry["file"],
             "findings": review_entry["findings"],
@@ -654,24 +407,18 @@ def run(
     *,
     git_root: Path,
     max_rounds: int | None = None,
-    batch_name: str | None = None,
     extra_files: list[Path] | None = None,
     prior_notes: Path | None = None,
 ) -> ReviewResult:
     """Review the code produced for a task.
 
-    ``batch_name`` selects per-batch vs. holistic mode. ``extra_files`` are additional source files
-    to bulk this round. ``prior_notes`` is a path to a file containing prior-round non-blocking
+    ``extra_files`` are additional source files to bulk this round. ``prior_notes`` is a path to a file containing prior-round non-blocking
     findings digest.
     """
     with worktree_snapshot_guard(project_root, expected_paths=[cfg["paths"]["reviews_dir"]]):
         # Check if review is disabled
-        scope_label = batch_name or "holistic"
         reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
-        if batch_name is not None:
-            effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["batch"]["rounds"]
-        else:
-            effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
+        effective_max = max_rounds if max_rounds is not None else cfg["roles"]["code-review"]["holistic"]["rounds"]
         if effective_max == 0:
             print(
                 "[_review_code] rounds=0 -- review disabled, returning APPROVE",
@@ -683,7 +430,7 @@ def run(
                 verdict="APPROVE",
                 blocking_count=0,
                 reviews=[{
-                    "scope": scope_label,
+                    "scope": "holistic",
                     "verdict": "APPROVE",
                     "file": None,
                     "skipped": True,
@@ -696,7 +443,7 @@ def run(
 
         # Prepare
         prepare_result = prepare(
-            cfg, slug, scope=batch_name, mill_dir=mill_dir, project_root=project_root,
+            cfg, slug, mill_dir=mill_dir, project_root=project_root,
             wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
             max_rounds=max_rounds, prior_notes=prior_notes,
         )
@@ -705,17 +452,13 @@ def run(
         reviews_dir = prepare_result["reviews_dir"]
 
         # Get spec for reviewer call
-        if batch_name is not None:
-            reviewer_name = cfg["roles"]["code-review"]["batch"]["reviewer"]
-        else:
-            reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
+        reviewer_name = cfg["roles"]["code-review"]["holistic"]["reviewer"]
         registry = _reviewers.load(project_root)
         spec = _reviewers.resolve(registry, reviewer_name)
-        timeout = cfg["llm"]["holistic_timeout"] if batch_name is None else cfg["llm"]["bulk_timeout"]
-        if batch_name is None:
-            spec, _ = maybe_switch_spec_for_large_prompt(
-                prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
-            )
+        timeout = cfg["llm"]["holistic_timeout"]
+        spec, _ = maybe_switch_spec_for_large_prompt(
+            prompt_text, spec, reviewer_name, cfg, "code-review", "holistic", registry
+        )
 
         # Invoke reviewer
         try:
@@ -732,7 +475,7 @@ def run(
                 verdict="ERROR",
                 blocking_count=0,
                 reviews=[{
-                    "scope": scope_label,
+                    "scope": "holistic",
                     "verdict": "ERROR",
                     "file": None,
                     "error": str(exc),
@@ -756,7 +499,7 @@ def run(
                 "code",
                 round_n,
                 raw,
-                scope=batch_name,
+                scope="holistic",
             )
             return ReviewResult(
                 type="code",
@@ -764,7 +507,7 @@ def run(
                 verdict="ERROR",
                 blocking_count=0,
                 reviews=[{
-                    "scope": scope_label,
+                    "scope": "holistic",
                     "verdict": "ERROR",
                     "file": str(path),
                     "error": f"parse_verdict failed: {exc}",
@@ -816,7 +559,7 @@ def run(
                         verdict="ERROR",
                         blocking_count=0,
                         reviews=[{
-                            "scope": scope_label,
+                            "scope": "holistic",
                             "verdict": "ERROR",
                             "file": None,
                             "error": f"resume retry failed: {exc}",
@@ -838,7 +581,7 @@ def run(
                         "code",
                         round_n,
                         raw,
-                        scope=batch_name,
+                        scope="holistic",
                     )
                     return ReviewResult(
                         type="code",
@@ -846,7 +589,7 @@ def run(
                         verdict="ERROR",
                         blocking_count=0,
                         reviews=[{
-                            "scope": scope_label,
+                            "scope": "holistic",
                             "verdict": "ERROR",
                             "file": str(path),
                             "error": f"parse_verdict failed: {exc}",
@@ -860,7 +603,7 @@ def run(
 
         # Finalize
         result = finalize(
-            cfg, slug, raw, scope=batch_name, round_n=round_n, reviews_dir=reviews_dir,
+            cfg, slug, raw, scope="holistic", round_n=round_n, reviews_dir=reviews_dir,
             mill_dir=mill_dir, project_root=project_root, wiki_root=wiki_root, git_root=git_root,
             duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )
