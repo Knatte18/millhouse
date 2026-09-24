@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-approved
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -31,6 +31,8 @@ approved-spawn-wiring  '2026-09-24T06:23:21Z'
 approved-setup-docs  '2026-09-24T06:24:22Z'
 holistic-reviewing  '2026-09-24T06:24:30Z'
 holistic-fixing  '2026-09-24T06:25:13Z'
+nits-fixed-holistic  '2026-09-24T06:26:17Z'
+holistic-approved  '2026-09-24T06:26:23Z'
 ```
 
 ## Batches
