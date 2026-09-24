@@ -324,7 +324,7 @@ def test_cli_uses_resolve_hub_path_not_cwd_for_project_root() -> int:
 
         plan_validate_calls = []
 
-        def _fake_plan_validate_run(plan_dir_arg, project_root_arg, *, wiki_root, skip_checks):
+        def _fake_plan_validate_run(plan_dir_arg, project_root_arg, *, wiki_root, skip_checks, done_gate=None):
             plan_validate_calls.append(project_root_arg)
             return []
 
