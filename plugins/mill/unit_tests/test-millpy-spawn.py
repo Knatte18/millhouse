@@ -10,6 +10,8 @@ Verifies:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import types
 from pathlib import Path
@@ -759,7 +761,10 @@ def _run_spawn_real_fs(
     omit_source_config: bool = False,
     fail_status_write: bool = False,
     extra_cfg: dict | None = None,
-) -> tuple[int, Path, MagicMock, MagicMock]:
+    main_root: Path | None = None,
+    short_name_side_effect=None,
+    derived: bool = False,
+) -> tuple[int, Path, MagicMock, MagicMock, str]:
     """
     Run spawn main() with ``tmpdir`` as the root filesystem.
 
@@ -767,7 +772,10 @@ def _run_spawn_real_fs(
     lets Python file I/O happen.
     ``fail_status_write`` makes write_initial_status raise so rollback runs;
     ``extra_cfg`` is merged into the patched merged config.
-    Returns ``(exit_code, worktree_path, vscode_mock, setup_mock)``.
+    ``main_root`` is the patched ``resolve_main_worktree_root`` result (default: the hub);
+    ``short_name_side_effect`` replaces the fixed ``"MI"`` short name;
+    ``derived`` is the patched ``short_name_is_derived`` result.
+    Returns ``(exit_code, worktree_path, vscode_mock, setup_mock, captured_stderr)``.
     """
     import importlib.util
     import yaml
@@ -853,6 +861,12 @@ def _run_spawn_real_fs(
             fake_cfg["hub_relative_path"] = hub_subpath
         fake_cfg.update(extra_cfg or {})
 
+        if short_name_side_effect is None:
+            short_name_patch = patch.object(mod, "resolve_short_name", return_value="MI")
+        else:
+            short_name_patch = patch.object(mod, "resolve_short_name", side_effect=short_name_side_effect)
+
+        captured_stderr = io.StringIO()
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
             patch.object(mod, "resolve_hub_path", return_value=hub),
@@ -860,13 +874,15 @@ def _run_spawn_real_fs(
             patch.object(mod, "resolve_wiki_path", return_value=wiki),
             patch.object(mod, "resolve_worktrees_dir", return_value=worktrees),
             patch.object(mod, "resolve_container_path", return_value=container),
-            patch.object(mod, "resolve_main_worktree_root", return_value=hub),
+            patch.object(mod, "resolve_main_worktree_root", return_value=main_root or hub),
             patch.object(
                 mod, "resolve_hub_relative_path",
                 side_effect=lambda wt, sub: wt if sub == "." else wt / sub,
             ),
-            patch.object(mod, "resolve_short_name", return_value="MI"),
+            short_name_patch,
+            patch.object(mod, "short_name_is_derived", return_value=derived),
             patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
+            contextlib.redirect_stderr(captured_stderr),
         ):
             try:
                 exit_code = mod.main([])
@@ -879,7 +895,7 @@ def _run_spawn_real_fs(
             else:
                 sys.modules[name] = original
 
-    return exit_code, worktree_path, vscode_mock, setup_mock
+    return exit_code, worktree_path, vscode_mock, setup_mock, captured_stderr.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -890,7 +906,7 @@ def _run_spawn_real_fs(
 def test_spawn_standard_layout_regression() -> None:
     """Standard layout (no hub_relative_path): hub state lands at worktree_path/.millhouse/."""
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(tmpdir, ".")
+        exit_code, wt, vscode_mock, setup_mock, _stderr = _run_spawn_real_fs(tmpdir, ".")
 
         if exit_code != 0:
             raise AssertionError(f"expected exit 0, got {exit_code}")
@@ -930,9 +946,11 @@ def test_spawn_standard_layout_regression() -> None:
         tasks_text = (wt / ".vscode" / "tasks.json").read_text(encoding="utf-8")
         if not tasks_text.startswith("// managed by mill"):
             raise AssertionError("tasks.json must start with the managed marker")
-        for command in ("test-task:start", "test-task:plan", "test-task:go", "test-task:quick"):
+        for command in ("mi:test-task:start", "mi:test-task:plan", "mi:test-task:go", "mi:test-task:quick"):
             if command not in tasks_text:
                 raise AssertionError(f"tasks.json missing {command!r}")
+        if "mill: orch" in tasks_text:
+            raise AssertionError("worktree tasks.json must not carry the hub-only orch task")
 
     print("PASS: test_spawn_standard_layout_regression")
 
@@ -948,7 +966,7 @@ def test_spawn_subfolder_install_destination_layout() -> None:
 
     hub_subpath = "src/Models"
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, vscode_mock, setup_mock = _run_spawn_real_fs(
+        exit_code, wt, vscode_mock, setup_mock, _stderr = _run_spawn_real_fs(
             tmpdir, hub_subpath, slug="subfolder-task", title="Subfolder Task"
         )
 
@@ -1009,7 +1027,7 @@ def test_spawn_self_heals_missing_config_local_yaml_standard_layout() -> None:
     import yaml
 
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+        exit_code, wt, _vscode_mock, _setup_mock, _stderr = _run_spawn_real_fs(
             tmpdir, ".", omit_source_config=True
         )
 
@@ -1035,7 +1053,7 @@ def test_spawn_self_heals_missing_config_local_yaml_subfolder_layout() -> None:
 
     hub_subpath = "src/Models"
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+        exit_code, wt, _vscode_mock, _setup_mock, _stderr = _run_spawn_real_fs(
             tmpdir,
             hub_subpath,
             slug="subfolder-self-heal",
@@ -1543,7 +1561,7 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
 def test_spawn_removes_tasks_json_when_status_write_fails() -> None:
     """A failing initial status write rolls back the seeded tasks.json."""
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+        exit_code, wt, _vscode_mock, _setup_mock, _stderr = _run_spawn_real_fs(
             tmpdir, ".", fail_status_write=True
         )
         if exit_code == 0:
@@ -1556,7 +1574,7 @@ def test_spawn_removes_tasks_json_when_status_write_fails() -> None:
 def test_spawn_propagates_session_config_to_tasks_json() -> None:
     """spawn.sessions from the merged config reaches the rendered go command only."""
     with _test_helpers.safe_temp_dir() as tmpdir:
-        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+        exit_code, wt, _vscode_mock, _setup_mock, _stderr = _run_spawn_real_fs(
             tmpdir,
             ".",
             extra_cfg={"spawn": {"sessions": {"go": {"model": "haiku", "effort": "low"}}}},
@@ -1568,10 +1586,50 @@ def test_spawn_propagates_session_config_to_tasks_json() -> None:
         tasks = json.loads("\n".join(text.splitlines()[1:]))["tasks"]
         by_label = {task["label"]: task["command"] for task in tasks}
         if "--model haiku --effort low" not in by_label["mill: go"]:
-            raise AssertionError(f"go command lacks configured model: {by_label['test-task:go']!r}")
+            raise AssertionError(f"go command lacks configured model: {by_label['mill: go']!r}")
         if "--model haiku" in by_label["mill: plan"]:
             raise AssertionError("plan must keep its defaults")
     print("PASS: test_spawn_propagates_session_config_to_tasks_json")
+
+
+def test_spawn_session_names_use_main_worktree_fallback() -> None:
+    """The derived short name comes from the main worktree directory, not the slug."""
+    seen_names: list[str] = []
+
+    def derive_short_name(cfg: dict, name: str) -> str:
+        seen_names.append(name)
+        return name[:2].upper()
+
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        main_root = tmpdir / "millhouse"
+        main_root.mkdir()
+        exit_code, wt, _vscode_mock, _setup_mock, stderr_text = _run_spawn_real_fs(
+            tmpdir, ".", main_root=main_root, short_name_side_effect=derive_short_name, derived=True
+        )
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+        tasks_text = (wt / ".vscode" / "tasks.json").read_text(encoding="utf-8")
+        if "mi:test-task:start" not in tasks_text:
+            raise AssertionError("tasks.json missing 'mi:test-task:start'")
+        if seen_names != ["millhouse"]:
+            raise AssertionError(f"resolve_short_name should receive 'millhouse', got {seen_names!r}")
+        warnings = [line for line in stderr_text.splitlines() if "WARNING: repo.short_name is not set" in line]
+        if len(warnings) != 1 or "'MI'" not in warnings[0]:
+            raise AssertionError(f"expected one warning naming 'MI', got {warnings!r}")
+        if not warnings[0].isascii():
+            raise AssertionError("warning must be ASCII")
+    print("PASS: test_spawn_session_names_use_main_worktree_fallback")
+
+
+def test_spawn_no_warning_when_short_name_set() -> None:
+    """No derived-name warning is printed when repo.short_name is configured."""
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        exit_code, _wt, _vscode_mock, _setup_mock, stderr_text = _run_spawn_real_fs(tmpdir, ".")
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+        if "repo.short_name is not set" in stderr_text:
+            raise AssertionError(f"unexpected warning in stderr: {stderr_text!r}")
+    print("PASS: test_spawn_no_warning_when_short_name_set")
 
 
 # ---------------------------------------------------------------------------
@@ -1601,6 +1659,8 @@ def main() -> int:
         test_spawn_rolls_back_when_write_initial_status_fails,
         test_spawn_removes_tasks_json_when_status_write_fails,
         test_spawn_propagates_session_config_to_tasks_json,
+        test_spawn_session_names_use_main_worktree_fallback,
+        test_spawn_no_warning_when_short_name_set,
     ]
 
     failures: list[str] = []
