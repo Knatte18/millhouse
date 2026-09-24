@@ -3,7 +3,7 @@
 ```yaml
 task: "_plan_validate and baseline verify gate gaps"
 slug: "plan-verify-gate-gaps"
-approved: false
+approved: true
 started: "20260924-060625"
 parent: "main"
 root: ""

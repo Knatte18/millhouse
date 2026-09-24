@@ -1,0 +1,15 @@
+MILL_REVIEW_BEGIN
+# Review: _plan_validate and baseline verify gate gaps — holistic
+
+```yaml
+verdict: APPROVE
+reviewer_model: sonnethigh
+reviewed_file: plan/
+date: 2026-09-24
+```
+
+## Verdict
+
+APPROVE
+Plan is well-grounded in source (_check_card_numbering, _requirements_fence_aware_body, compute_batch_baselines, driver steps 5/6 verified); no blocking gaps.
+MILL_REVIEW_END
