@@ -352,6 +352,8 @@ def _run_per_batch_baseline_standalone(
     from a module-wide half that computed fresh this same invocation), and key-presence idempotence
     (a batch whose `verify_baseline_failures` key is already present -- even as `[]` -- is never
     re-run).
+    A batch whose compound (`&&`) verify short-circuited has an "unknown" baseline: its key stays
+    absent, so it is retried next invocation and the strict gate applies meanwhile.
 
     Never raises at its own top level -- an individual batch's own failure is swallowed per step 6,
     and a malformed-but-present overview degrades to an empty enumeration rather than propagating.
@@ -429,10 +431,12 @@ def _run_per_batch_baseline_standalone(
         return
 
     # Step 5 (seeding): reuse the module-wide half's own fresh result for a batch whose (command, cwd) matches it string-for-string.
-    pair_cache: dict[tuple[str, Path], list[str]] = {}
+    # A short-circuited compound seed is "unknown", so it is not seeded and the batch computes its own result.
+    pair_cache: dict[tuple[str, Path], list[str] | None] = {}
     if module_wide_pair_seed is not None:
         seed_cmd, seed_cwd, seed_signatures = module_wide_pair_seed
-        pair_cache[(seed_cmd, seed_cwd)] = seed_signatures
+        if not _verify_baseline._is_short_circuit_baseline(seed_cmd, seed_signatures):
+            pair_cache[(seed_cmd, seed_cwd)] = seed_signatures
 
     # Step 6 (per-batch driver): one batch per call, threading pair_cache across every call, wrapped in a before/after porcelain dirt-warning snapshot.
     exclusion_prefixes = _baseline_exclusion_prefixes(project_root, git_root)
@@ -450,6 +454,14 @@ def _run_per_batch_baseline_standalone(
         except Exception as e:
             print(
                 f"[millpy-implement] per-batch baseline capture failed for {name!r}: {e}",
+                file=sys.stderr,
+            )
+            continue
+        # Unknown (short-circuited compound) -> the key stays absent: it is retried next invocation and the strict gate applies meanwhile. Writing None would count as captured.
+        if batch_result[name] is None:
+            print(
+                f"[millpy-implement] per-batch baseline for {name!r} left unset: "
+                "compound verify short-circuited",
                 file=sys.stderr,
             )
             continue
