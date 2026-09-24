@@ -24,7 +24,7 @@ from typing import Callable
 
 from _llm_common import ReviewerCallResult
 
-# Module-level state — shared across threads so ThreadPoolExecutor workers spawned by `_review_plan.run` see the same seeded queue as the test thread. `deque.popleft()` is atomic under the GIL, so the hot path needs no lock;
+# Module-level state -- the queue is module-level so every reviewer call in a test sees the same seeded queue. `deque.popleft()` is atomic under the GIL, so the hot path needs no lock;
 # mutations from `seed()` and `captured_prompts()` are guarded by `_lock` to avoid races during test setup/teardown.
 _queue: deque[tuple[str, str]] = deque()
 _prompts: list[tuple[str, dict]] = []
