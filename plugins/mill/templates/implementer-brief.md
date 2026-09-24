@@ -63,8 +63,17 @@ Before implementing any cards, identify which cards are already committed: run `
 When `<START_SHA>` is empty, derive the range start via `git -C <PROJECT_ROOT> log --grep="^mill-go: start batch" -n 1 --format=%H`.
 Implement only the remaining cards — do not re-edit or re-commit cards whose `Commit:` message already appears in the log.
 A card whose Commit: is "none" never appears in this log by definition -- exclude it from this matching scan entirely.
-Treat a Commit: none card as complete once you have (re-)performed its Requirements: verification step this turn (or a prior turn, per your own judgment from the batch's current state);
+Treat a Commit: none card as complete once its Requirements are satisfied:
+re-run pure verification steps freely, but re-perform an external action only after the state check described in "External side effects in Commit: none cards" below shows it has not yet happened;
 it needs no log entry to be considered done.
+
+**External side effects in Commit: none cards.**
+This applies on every dispatch: fresh, re-fired, resumed, or warm-resumed, whatever `<START_SHA>` holds.
+A prior session may already have performed the action, and the git log cannot show that.
+Before performing any external or hard-to-reverse side effect, query the current external state first.
+Such effects include network/API calls (`gh issue comment`, `gh issue close`, `gh pr ...`), pushes to other remotes, messages, and wiki or tracker mutations.
+Skip the action when the state already reflects the intended outcome, e.g. run `gh issue view <n> --json state,comments` before commenting on or closing an issue.
+When the card's Requirements name a state check, run exactly that check.
 
 1. Work through `## Cards` in order.
    For each card:
