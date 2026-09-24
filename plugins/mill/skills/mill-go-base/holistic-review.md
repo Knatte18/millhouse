@@ -102,9 +102,9 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    **Exit handling.**
    If the finalize envelope is absent, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line to the user.
    If a JSON envelope IS present (even with `verdict: ERROR`), drop through to sub-step 3.5 ERROR-only retry as normal.
-   Matches `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch section's "only treat exit 1 as unrecoverable when JSON line is absent" branch.
+   Matches `plugins/mill/skills/mill-go-base/SKILL.md`'s "### 1. Implement" rule "only treat exit 1 as unrecoverable when JSON line is absent" branch.
    Whenever a JSON envelope is present, print the cost line for this round per `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Review cost line", with `<type> = code` and `<scope> = holistic`, before dropping through to sub-step 3.5.
-   Printing the cost line does not relax the read-ban documented in `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch loop step 3: the Builder still never reads the findings, only the envelope fields the cost line names.
+   Printing the cost line does not relax the Builder's rule against reading review findings (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Principles"): the Builder still never reads the findings, only the envelope fields the cost line names.
 
    Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after that Agent-mode dispatch pattern returns (prepare through finalize).
 
@@ -168,7 +168,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    The fixer loads `mill-receiving-review` and applies the NITs. Do NOT re-review — the NIT fix is trusted. On stuck → escalate via the existing Stuck escalation path.
    After the dispatch's `<task-notification>` is accepted: capture the notification to `<brief_path>.out.md` (step 4 of the Agent-mode dispatch pattern), then run `--stage finalize` (step 5 of that same pattern) — this is what appends the `nits-fixed-holistic` marker Handoff's nit-enforcement gate requires. Only after finalize completes does the next sentence's `converged` computation happen; do not skip straight from the dispatch notification to computing `converged`.
    After the NIT-fix completes successfully (or is skipped because `nit_count = 0`): compute `converged` per the Convergence gate above.
-   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). This mirrors `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch APPROVE branch, which already stages its review file. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`).
+   If `converged`, or `H >= max_holistic_rounds` (implicit-approve-at-cap): `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`. Commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug}"` — when not `converged` (implicit-approve-at-cap fired), append `" (min_rounds/demoted-predicate not satisfied by round cap)"` to the commit message — where `<review_file_path>` is the `file` field from `reviews[0]` of the JSON envelope (or the crash-recovery branch (a) scan path). The commit stages the review file so it is not left untracked. If a NIT-fix pass ran for the holistic scope this round, the fixer already committed its own changes; this commit still stages the review file plus the `holistic-approved` status row. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`).
    If not `converged` and `H < max_holistic_rounds`: skip the terminal actions above and continue to round H+1.
 
 5. On `REQUEST_CHANGES`: the holistic-fix CLI dispatches a fresh fixer;
@@ -176,7 +176,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    Builder does not load the skill.
 
    Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <abs-path-to-holistic-review-file> --round {H}`.
-   Parse stdout JSON (same last-`{"status":...}`-line pattern as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling).
+   Parse stdout JSON (same last-`{"status":...}`-line pattern as `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch").
    The CLI handles `holistic-fixing` phase + commit + push itself.
    - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-dispatch once with a fresh session.
      If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
@@ -209,7 +209,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
      If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
    - On success: increment H and loop.
 
-6. On `NEED_CONTEXT`: apply the same extra-files / notify path as `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch handling.
+6. On `NEED_CONTEXT`: append the files the reviewer asked for to `extra_files` (passed as `--extra-file <p>` in sub-step 3), emit `_notify.notify("<VARIANT_LABEL>.need-context", ..., slug=slug, round=H)`, and re-run the round.
 
 7. **Rounds exhausted** (`H > max_holistic_rounds`, `REQUEST_CHANGES` still returned):
 
