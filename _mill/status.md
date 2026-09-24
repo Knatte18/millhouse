@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: fix-stale-unit-tests
 branch: hanf/fix-stale-unit-tests
 plan: _mill/plan
@@ -21,4 +21,13 @@ discussed  '2026-09-24T05:41:20Z'
 planning  '2026-09-24T05:42:08Z'
 plan-review-r1  '2026-09-24T05:42:55Z'
 planned  '2026-09-24T05:43:03Z'
+implementing  '2026-09-24T05:43:16Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: repair-stale-tests
+    state: pending
 ```
