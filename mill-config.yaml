@@ -2,6 +2,11 @@ repo:
   short_name: MH
 spawn:
   branch_prefix: hanf/
+  sessions:
+    start: { model: opus, effort: medium }
+    plan: { model: opus, effort: medium }
+    go: { model: sonnet, effort: high }
+    quick: { model: sonnet, effort: high }
 git:
   parent-branch: null
   require_pr_to_base: false
