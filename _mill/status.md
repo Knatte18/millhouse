@@ -58,7 +58,9 @@ batches:
     commit_sha: 89c25b48a8a1f574f013e0a2ccdf2b4622efea92
     verify_baseline_failures: []
   - name: config
-    state: pending
+    state: running
+    implementer_session: 34e934f4-dcdc-4a30-b7d3-2c3759d23d63
+    start_sha: 49effee7dc5c4da1b3c096c7696a7858be35a6c9
     verify_baseline_failures: []
   - name: mill-go-skill-text
     state: pending
