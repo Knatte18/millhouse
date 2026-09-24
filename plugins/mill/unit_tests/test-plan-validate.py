@@ -11,6 +11,9 @@ Check coverage:
       gitignore-aware Context: soft-fail, #868)
   check 2 — card-missing-field
   check 3 — card-numbering (within-batch gap, cross-batch duplicate)
+  renumber_after_collision (#1057) — shifts every card >= a colliding number up by one, across
+      every batch file, cascading through later batches, so a retried compute_next_card_number
+      succeeds
   check 4 — depends-on-unknown
   check 5 — parallel-modifies-overlap
   cross-batch-creates-no-depends-on (#887) — Context:/Edits: reference to a file another batch
@@ -752,6 +755,109 @@ def test_check_card_numbering_dirty_cross_batch() -> int:
             return 0
         except AssertionError as exc:
             print(f"FAIL test_check_card_numbering_dirty_cross_batch: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_renumber_after_collision_two_batches() -> int:
+    """Batch A owns cards 7-14, batch B owns cards 15-20 (a contiguous, adjacent range) -- so
+    inserting a new card 15 into batch A collides with batch B.
+    ``renumber_after_collision(plan_dir, 15)`` must shift every card >= 15 (all of batch B) up by
+    one to 16-21, leave batch A's own 7-14 untouched, and let a retried
+    ``compute_next_card_number`` return 15 cleanly.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md"},
+            {"name": "beta", "file": "02-beta.md"},
+        ])
+        batch_a = _make_batch_file_cards("alpha", list(range(7, 15)))
+        batch_b = _make_batch_file_cards("beta", list(range(15, 21)))
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+        ])
+
+        try:
+            _plan_validate.compute_next_card_number(plan_dir, "01-alpha")
+            raise AssertionError("expected PlanDAGError before renumbering")
+        except _plan_validate.PlanDAGError:
+            pass
+
+        _plan_validate.renumber_after_collision(plan_dir, 15)
+
+        alpha_text = (plan_dir / "01-alpha.md").read_text(encoding="utf-8")
+        beta_text = (plan_dir / "02-beta.md").read_text(encoding="utf-8")
+        alpha_nums = sorted(n for n, _ in _plan_validate._parse_cards(alpha_text))
+        beta_nums = sorted(n for n, _ in _plan_validate._parse_cards(beta_text))
+
+        try:
+            assert alpha_nums == list(range(7, 15)), f"batch A shifted unexpectedly: {alpha_nums}"
+            assert beta_nums == list(range(16, 22)), f"batch B did not shift correctly: {beta_nums}"
+            next_num = _plan_validate.compute_next_card_number(plan_dir, "01-alpha")
+            assert next_num == 15, f"expected retry to return 15, got {next_num}"
+            print("PASS test_renumber_after_collision_two_batches")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_renumber_after_collision_two_batches: {exc}", file=sys.stderr)
+            return 1
+
+
+def test_renumber_after_collision_cascades_three_batches() -> int:
+    """A three-batch chain (alpha 1-3, beta 4-6, gamma 7-9) confirms the shift cascades through
+    every later batch, not just the immediate neighbor: renumbering at 4 must shift beta AND
+    gamma, leaving alpha untouched.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        plan_dir = tmp / "plan"
+        project_root = tmp / "project"
+        project_root.mkdir()
+
+        overview = _make_overview([
+            {"name": "alpha", "file": "01-alpha.md"},
+            {"name": "beta", "file": "02-beta.md"},
+            {"name": "gamma", "file": "03-gamma.md"},
+        ])
+        batch_a = _make_batch_file_cards("alpha", [1, 2, 3])
+        batch_b = _make_batch_file_cards("beta", [4, 5, 6])
+        batch_c = _make_batch_file_cards("gamma", [7, 8, 9])
+        _write_plan(plan_dir, overview, [
+            ("01-alpha.md", batch_a),
+            ("02-beta.md", batch_b),
+            ("03-gamma.md", batch_c),
+        ])
+
+        _plan_validate.renumber_after_collision(plan_dir, 4)
+
+        alpha_nums = sorted(
+            n for n, _ in _plan_validate._parse_cards(
+                (plan_dir / "01-alpha.md").read_text(encoding="utf-8")
+            )
+        )
+        beta_nums = sorted(
+            n for n, _ in _plan_validate._parse_cards(
+                (plan_dir / "02-beta.md").read_text(encoding="utf-8")
+            )
+        )
+        gamma_nums = sorted(
+            n for n, _ in _plan_validate._parse_cards(
+                (plan_dir / "03-gamma.md").read_text(encoding="utf-8")
+            )
+        )
+
+        try:
+            assert alpha_nums == [1, 2, 3], f"batch A shifted unexpectedly: {alpha_nums}"
+            assert beta_nums == [5, 6, 7], f"batch B did not cascade correctly: {beta_nums}"
+            assert gamma_nums == [8, 9, 10], f"batch C did not cascade correctly: {gamma_nums}"
+            print("PASS test_renumber_after_collision_cascades_three_batches")
+            return 0
+        except AssertionError as exc:
+            print(f"FAIL test_renumber_after_collision_cascades_three_batches: {exc}", file=sys.stderr)
             return 1
 
 
@@ -13555,6 +13661,9 @@ def main() -> int:
         test_check_card_numbering_clean,
         test_check_card_numbering_dirty_gap,
         test_check_card_numbering_dirty_cross_batch,
+        # renumber_after_collision (self-resolve auto-renumber, #1057)
+        test_renumber_after_collision_two_batches,
+        test_renumber_after_collision_cascades_three_batches,
         test_check_depends_on_unknown_clean,
         test_check_depends_on_unknown_dirty,
         test_check_depends_on_unknown_dirty_legacy_string,
