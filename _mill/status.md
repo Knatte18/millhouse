@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-session-name-callers
+phase: approved-docs-and-setup
 slug: session-name-short-prefix
 branch: hanf/session-name-short-prefix
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-09-24T09:18:36Z'
 implementing  '2026-09-24T09:18:54Z'
 approved-core-helpers  '2026-09-24T09:21:58Z'
 approved-session-name-callers  '2026-09-24T09:24:28Z'
+approved-docs-and-setup  '2026-09-24T09:25:58Z'
 ```
 
 ## Batches
@@ -44,9 +45,10 @@ batches:
     commit_sha: 150500db84a6e6d98c4d518643a7900da6074df4
     verify_baseline_failures: []
   - name: docs-and-setup
-    state: running
+    state: approved
     implementer_session: 65f4124e-3a5a-44a1-80f3-6b0f8d67b219
     start_sha: fee4a630d839abaa828649b61aa27bc07217ae44
+    commit_sha: befa696a60d16b419a7d81c4db04bb8e8bd20238
     verify_baseline_failures: []
 ```
 ## Inferred-success log
