@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: self-resolved-verify-logic
+phase: approved-remaining-skills-docs-and-gate
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-review-common-and-templates  '2026-09-24T08:12:48Z'
 approved-config  '2026-09-24T08:14:19Z'
 approved-mill-go-skill-text  '2026-09-24T08:16:28Z'
 self-resolved-verify-logic  '2026-09-24T08:18:06Z'
+approved-remaining-skills-docs-and-gate  '2026-09-24T08:19:46Z'
 ```
 
 ## Batches
@@ -73,9 +74,10 @@ batches:
     commit_sha: 00387cb9e217a533af354dc471a3791cb9cc7825
     verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
-    state: running
+    state: approved
     implementer_session: fbf1231a-ffef-400a-ad2e-20b4717a0131
     start_sha: 26d35322450956f7ed9653107b0b476b7aa494e4
+    commit_sha: fad7d94828cb915e7137e7cf753f354f3c9c57be
     verify_baseline_failures: []
     self_resolve_remint_at: '2026-09-24T08:18:06Z'
 ```
