@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussion-fix-r2  '2026-09-24T06:07:51Z'
 discussed  '2026-09-24T06:07:51Z'
 planning  '2026-09-24T06:13:53Z'
 plan-review-r1  '2026-09-24T06:15:19Z'
+plan-fix-r1  '2026-09-24T06:15:28Z'
 ```

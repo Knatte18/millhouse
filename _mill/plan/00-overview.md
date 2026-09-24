@@ -3,7 +3,7 @@
 ```yaml
 task: "Auto-name task sessions <slug>:<phase>"
 slug: "session-naming"
-approved: false
+approved: true
 started: "20260924-061400"
 parent: "main"
 root: ""
