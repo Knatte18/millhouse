@@ -55,5 +55,7 @@ batches:
     start_sha: 025f95093ebeabdadb33b51deb9f906007e54f8c
     commit_sha: 81a9ddddf334deaf80e32096f08025ca5cf86327
   - name: setup-docs
-    state: pending
+    state: running
+    implementer_session: 93b2fb64-5230-44ea-bdf3-3663ff4e1690
+    start_sha: 7f095609883f61c7a037884ef4cac93986db9148
 ```
