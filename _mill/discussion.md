@@ -46,7 +46,12 @@ The holistic reviews do the real review work and stay.
   - `mill-go-base/SKILL.md` Agent-mode dispatch: the `--batch-name (batch scope only)` wording.
   - `mill-go-base/resume.md`: the batch-review resume branches (batch `state` `reviewing` / `fixing`, which re-dispatch `millpy-review-code.py --batch` / `millpy-fix.py --scope batch`).
   - `mill-go-base/handoff.md`: the per-batch forms in the prior-blocking digest and NIT-fix re-dispatch.
-  - `mill-plan/SKILL.md`: line ~473 "plan batch review is disabled in this hub" and lines ~528–530, which describe the scope flags.
+  - `mill-plan/SKILL.md`: grep the file for `--holistic-only|--no-holistic|plan-review\.batch|per-batch` and fix every hit, not just the descriptive ones.
+    Known today:
+    - two operative dispatch sites pass `<args> = --holistic-only` (Phase: Plan Review step 2's Agent-mode dispatch, ~line 471, and the ERROR-only retry, ~line 558); drop the flag from both, keeping the `--skip-check` args;
+    - the "plan batch review is disabled in this hub" note (~line 473);
+    - the cost-line aside about a per-batch scope printing one line per scope (~line 510);
+    - the scope-flag description (~lines 528–530).
   - `mill-go2/SKILL.md` line ~50: narrow "`{scope}` is the batch name, or `holistic`" to "`{scope}` is `holistic`" for the fixer fork-fallback log, notify and commit-message forms.
     The implementer fork-fallback text there (`{batch_name}`, "once per batch") is about plan batches and stays.
   - Any other skill text that describes batch review as a live stage, found by grep during planning.
