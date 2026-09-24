@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-config
+phase: approved-mill-go-skill-text
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-code-review-backend  '2026-09-24T08:05:14Z'
 approved-fixer-and-gates  '2026-09-24T08:08:33Z'
 approved-review-common-and-templates  '2026-09-24T08:12:48Z'
 approved-config  '2026-09-24T08:14:19Z'
+approved-mill-go-skill-text  '2026-09-24T08:16:28Z'
 ```
 
 ## Batches
@@ -65,9 +66,10 @@ batches:
     commit_sha: de4dc86d921f276b1cbc0630846d7c205c3293e9
     verify_baseline_failures: []
   - name: mill-go-skill-text
-    state: running
+    state: approved
     implementer_session: 924c3016-7444-4f3a-8e8f-1cbff4dffc53
     start_sha: d0be305c74215d4fd904d4d9a543faf282a6633a
+    commit_sha: 00387cb9e217a533af354dc471a3791cb9cc7825
     verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
     state: pending
