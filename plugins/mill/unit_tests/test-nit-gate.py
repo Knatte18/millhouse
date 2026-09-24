@@ -1,10 +1,10 @@
 """Unit tests for _nit_gate.py.
 
 Tests the compute_unfixed_nits function's gate logic across various scenarios:
-- Scopes with nits but markers present (should not be flagged)
-- Scopes with nits but no markers (should be flagged)
-- Scopes with zero nits (should not be flagged)
-- Per-batch and holistic scopes handled together
+- Holistic scope with nits but marker present (should not be flagged)
+- Holistic scope with nits but no marker (should be flagged)
+- Holistic scope with zero nits in the final review (should not be flagged)
+- approved-<batch> rows and leftover per-batch review files never create a gate scope
 """
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ def _create_review_file(
     """
     Create a synthetic review file in reviews_dir.
 
-    For per-batch scopes:
-        Format: YYYYMMDD-HHMMSS-<type>-review-<scope>-r<round>.md
-
     For holistic scope:
         Format: YYYYMMDD-HHMMSS-<type>-review-r<round>.md
+
+    For any other scope (a leftover per-batch file):
+        Format: YYYYMMDD-HHMMSS-<type>-review-<scope>-r<round>.md
     """
     if scope == "holistic":
         filename = f"{timestamp}-{review_type}-review-r{round_n}.md"
@@ -86,25 +86,16 @@ class TestNitGate(unittest.TestCase):
         status_path.write_text(content, encoding="utf-8")
         return status_path
 
-    def test_gate_returns_empty_when_all_nitted_scopes_have_markers(self):
+    def test_gate_returns_empty_when_nitted_scope_has_marker(self):
         """
-        Test (a): gate returns empty list when every nitted scope has a nits-fixed marker.
+        Test (a): gate returns empty list when the holistic scope has a nits-fixed marker.
         """
-        # Create a per-batch code review with nits
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-100000",
-            "code",
-            "batch1",
-            1,
-            has_nits=True,
-        )
+        _create_review_file(self.reviews_dir, "20260601-100000", "code", "holistic", 1, has_nits=True)
 
-        # Timeline: approved-batch1 and nits-fixed-batch1
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
-            "nits-fixed-batch1  2026-06-01T10:35:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
+            "nits-fixed-holistic  2026-06-01T10:35:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
@@ -113,95 +104,53 @@ class TestNitGate(unittest.TestCase):
 
     def test_gate_flags_scope_with_nits_and_no_marker(self):
         """
-        Test (b): gate flags a scope whose final review has NIT headings and no marker.
+        Test (b): gate flags the holistic scope whose final review has NIT headings and no marker.
         """
-        # Create a per-batch code review with nits
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-100000",
-            "code",
-            "batch1",
-            1,
-            has_nits=True,
-        )
+        _create_review_file(self.reviews_dir, "20260601-100000", "code", "holistic", 1, has_nits=True)
 
-        # Timeline: approved-batch1 but NO nits-fixed-batch1
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
-        self.assertEqual(result, ["batch1"])
+        self.assertEqual(result, ["holistic"])
 
     def test_gate_ignores_scope_with_zero_nits_in_final_review(self):
         """
         Test (c): gate ignores a scope whose final (APPROVE) review has zero nits, even if an
         earlier round had nits.
         """
-        # Create two code reviews for batch2: round 1 with nits, round 2 without nits
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-100000",
-            "code",
-            "batch2",
-            1,
-            has_nits=True,
-        )
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-110000",
-            "code",
-            "batch2",
-            2,
-            has_nits=False,
-        )
+        _create_review_file(self.reviews_dir, "20260601-100000", "code", "holistic", 1, has_nits=True)
+        _create_review_file(self.reviews_dir, "20260601-110000", "code", "holistic", 2, has_nits=False)
 
-        # Timeline: approved-batch2 referencing the round 2 review (the gate will find the latest review, which is round 2, which has zero nits)
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch2  2026-06-01T11:30:00Z",
+            "holistic-approved  2026-06-01T11:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
         self.assertEqual(result, [])
 
-    def test_gate_handles_per_batch_and_holistic_together(self):
+    def test_gate_ignores_approved_batch_rows_and_leftover_batch_reviews(self):
         """
-        Test (d): both per-batch and holistic scopes handled in one timeline.
+        An approved-<batch> row and a leftover per-batch code-review file create no gate scope;
+        only the holistic scope is returned.
         """
-        # Create reviews: batch1 with nits (no marker), holistic with nits (has marker)
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-100000",
-            "code",
-            "batch1",
-            1,
-            has_nits=True,
-        )
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-105000",
-            "code",
-            "holistic",
-            1,
-            has_nits=True,
-        )
+        _create_review_file(self.reviews_dir, "20260601-100000", "code", "01-alpha", 1, has_nits=True)
+        _create_review_file(self.reviews_dir, "20260601-105000", "code", "holistic", 1, has_nits=True)
 
-        # Timeline: both approved, but only holistic has a marker
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "approved-01-alpha  2026-06-01T10:30:00Z",
             "holistic-approved  2026-06-01T11:00:00Z",
-            "nits-fixed-holistic  2026-06-01T11:05:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
-        # Only batch1 should be flagged (holistic has its marker)
-        self.assertEqual(result, ["batch1"])
+        self.assertEqual(result, ["holistic"])
 
     def test_gate_returns_empty_when_no_approved_scopes(self):
         """Gate returns empty when no approved scopes exist in timeline."""
@@ -223,7 +172,7 @@ class TestNitGate(unittest.TestCase):
         """Gate returns empty when reviews directory does not exist."""
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
         nonexistent_reviews = self.tmp_path / "nonexistent_reviews"
@@ -237,7 +186,7 @@ class TestNitGate(unittest.TestCase):
         is flagged, proving batch 1's widened `parse_blocking_count` pattern reaches this call site
         with no change to `_nit_gate.py` itself.
         """
-        filename = "20260601-100000-code-review-batch1-r1.md"
+        filename = "20260601-100000-code-review-r1.md"
         content = (
             "# Review\n\n"
             "### [NIT:consistency] contradicts an earlier statement\n"
@@ -247,12 +196,12 @@ class TestNitGate(unittest.TestCase):
 
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
-        self.assertEqual(result, ["batch1"])
+        self.assertEqual(result, ["holistic"])
 
     def test_gate_counts_demoted_nit_heading_exactly_once(self):
         """
@@ -260,7 +209,7 @@ class TestNitGate(unittest.TestCase):
         `**Demoted-from:** BLOCKING` field line is counted exactly once -- the inserted field line
         must not inflate the nit count.
         """
-        filename = "20260601-100000-code-review-batch1-r1.md"
+        filename = "20260601-100000-code-review-r1.md"
         content = (
             "# Review\n\n"
             "### [NIT:scope] work inventory incomplete\n"
@@ -271,37 +220,29 @@ class TestNitGate(unittest.TestCase):
 
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
 
         result = _nit_gate.compute_unfixed_nits(self.tmp_path, self.reviews_dir, status_path)
         # Flagged (unfixed) proves the heading was seen; the real assertion is the exactly-once
         # count, checked directly against parse_blocking_count below.
-        self.assertEqual(result, ["batch1"])
+        self.assertEqual(result, ["holistic"])
         nit_count = _review_common.parse_blocking_count(content, severity="NIT")
         self.assertEqual(nit_count, 1)
 
     def test_marker_precedes_approve_row(self):
         """
-        Verify that nits-fixed marker can precede the approved- row in the timeline.
+        Verify that nits-fixed marker can precede the holistic-approved row in the timeline.
         The gate should not impose a positional constraint.
         """
-        # Create review with nits
-        _create_review_file(
-            self.reviews_dir,
-            "20260601-100000",
-            "code",
-            "batch1",
-            1,
-            has_nits=True,
-        )
+        _create_review_file(self.reviews_dir, "20260601-100000", "code", "holistic", 1, has_nits=True)
 
-        # Timeline: marker BEFORE approved row (normal order when NIT-fix dispatch precedes approve write)
+        # Marker BEFORE approved row (normal order when NIT-fix dispatch precedes approve write)
         timeline = [
             "implementing  2026-06-01T10:00:00Z",
-            "nits-fixed-batch1  2026-06-01T10:25:00Z",
-            "approved-batch1  2026-06-01T10:30:00Z",
+            "nits-fixed-holistic  2026-06-01T10:25:00Z",
+            "holistic-approved  2026-06-01T10:30:00Z",
         ]
         status_path = self._make_status_file(timeline)
 

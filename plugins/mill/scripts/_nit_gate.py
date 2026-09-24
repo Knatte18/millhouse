@@ -1,14 +1,15 @@
 """
-Detect approved scopes with unfixed nits.
+Detect an approved holistic review with unfixed nits.
 
-This module provides a gate to prevent tasks from completing when approved scopes have pending nits.
-It reads the status timeline to find all approved scopes, checks whether their final code-review
-files contain NIT headings, and verifies that nits-fixed markers are present in the timeline.
+This module provides a gate to prevent tasks from completing when the holistic review was approved
+with pending nits.
+It reads the status timeline for a `holistic-approved` row, checks whether the final holistic
+code-review file contains NIT headings, and verifies that a nits-fixed-holistic marker is present.
 
 Public API:
     compute_unfixed_nits(worktree, reviews_dir, status_path) -> list[str]
-    Returns a list of approved scope names that have nits in their final
-    review file but lack a nits-fixed-<scope> marker in the timeline.
+    Returns ["holistic"] when the final holistic review has nits but the timeline lacks a
+    nits-fixed-holistic marker, else [].
 """
 from __future__ import annotations
 
@@ -27,11 +28,10 @@ def compute_unfixed_nits(
     """
     Compute the list of approved scopes with unfixed nits.
 
-    Reads the status timeline to find all approved scopes (per-batch scopes from `approved-<batch>`
-    rows and `holistic` from `holistic-approved` rows).
-    For each approved scope, locates the latest-timestamp code-review file matching RE_BATCH
-    (per-batch) or RE_SIMPLE (holistic) patterns, counts `### [NIT]` headings via
-    parse_blocking_count, and includes the scope in the result when nit_count > 0 AND no
+    The only approved scope is `holistic`, taken from a `holistic-approved` timeline row;
+    `approved-<batch>` rows are ignored.
+    Locates the latest-timestamp code-review file matching RE_SIMPLE, counts `### [NIT]` headings
+    via parse_blocking_count, and includes the scope in the result when nit_count > 0 AND no
     nits-fixed-<scope> row exists in the timeline.
 
     Args:
@@ -59,12 +59,8 @@ def compute_unfixed_nits(
         if not parts:
             continue
         phase = parts[0]
-        # Match approved-<batch> pattern
-        if phase.startswith("approved-"):
-            scope = phase[len("approved-"):]
-            approved_scopes.add(scope)
-        # Match holistic-approved
-        elif phase == "holistic-approved":
+        # approved-<batch> rows are still written but do not create a gate scope.
+        if phase == "holistic-approved":
             approved_scopes.add("holistic")
 
     # Extract all nits-fixed markers from the timeline
@@ -86,7 +82,7 @@ def compute_unfixed_nits(
             continue
 
         # Locate the final code-review file for this scope
-        final_review_text = _find_final_code_review(reviews_dir, scope)
+        final_review_text = _find_final_code_review(reviews_dir)
         if final_review_text is None:
             # No review file found for this scope; skip it
             continue
@@ -102,18 +98,16 @@ def compute_unfixed_nits(
     return sorted(unfixed)
 
 
-def _find_final_code_review(reviews_dir: Path, scope: str) -> str | None:
+def _find_final_code_review(reviews_dir: Path) -> str | None:
     """
-    Find the latest code-review file for the given scope.
+    Find the latest holistic code-review file.
 
-    For per-batch scopes, searches for files matching RE_BATCH with type=code and batch=<scope>.
-    For holistic scope, searches for files matching RE_SIMPLE with type=code.
+    Searches for files matching RE_SIMPLE with type=code; leftover per-batch files never match.
     Returns the file contents of the latest-timestamp match,
     or None if no match is found.
 
     Args:
         reviews_dir: Path to the reviews directory.
-        scope: Scope name ("holistic" or batch name).
 
     Returns:
         The text contents of the final review file,
@@ -128,19 +122,11 @@ def _find_final_code_review(reviews_dir: Path, scope: str) -> str | None:
             continue
 
         filename = file_path.name
-        # Holistic scope uses RE_SIMPLE
-        if scope == "holistic":
-            match = _review_common.RE_SIMPLE.match(filename)
-            if match and match.group("type") == "code":
-                # Extract timestamp from filename for sorting
-                timestamp = filename[:15]  # YYYYMMDD-HHMMSS
-                candidate_files.append((timestamp, file_path))
-        else:
-            # Per-batch scope uses RE_BATCH
-            match = _review_common.RE_BATCH.match(filename)
-            if match and match.group("type") == "code" and match.group("batch") == scope:
-                timestamp = filename[:15]  # YYYYMMDD-HHMMSS
-                candidate_files.append((timestamp, file_path))
+        match = _review_common.RE_SIMPLE.match(filename)
+        if match and match.group("type") == "code":
+            # Extract timestamp from filename for sorting
+            timestamp = filename[:15]  # YYYYMMDD-HHMMSS
+            candidate_files.append((timestamp, file_path))
 
     if not candidate_files:
         return None
