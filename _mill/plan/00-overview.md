@@ -3,7 +3,7 @@
 ```yaml
 task: "Repair two failing unit tests on main"
 slug: "fix-stale-unit-tests"
-approved: false
+approved: true
 started: "20260924-054200"
 parent: "main"
 root: ""
