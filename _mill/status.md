@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -33,6 +33,7 @@ self-resolved-verify-logic  '2026-09-24T08:18:06Z'
 approved-remaining-skills-docs-and-gate  '2026-09-24T08:19:46Z'
 holistic-reviewing  '2026-09-24T08:19:55Z'
 holistic-approved  '2026-09-24T08:20:21Z'
+done  '2026-09-24T08:20:33Z'
 ```
 
 ## Batches
