@@ -23,6 +23,7 @@ Public API:
     read_branch(status_path, *, cfg, slug) -> str
     phase_entry_timestamp(status_path, phase, *, occurrence=1, latest=False) -> str | None
     update_field(status_path, key, value) -> None
+    set_parent_branch(status_path, value) -> None
     set_blocked(status_path, reason, *, timestamp) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
@@ -272,6 +273,40 @@ def update_field(status_path: Path | str, key: str, value: str) -> None:
         status_path.write_text("".join(lines), encoding="utf-8")
         return
     raise ValueError(f"Key {key!r} not found in yaml block of {status_path}")
+
+
+def set_parent_branch(status_path: Path | str, value: str) -> None:
+    """
+    Rewrite the parent-branch row in the top ``` ```yaml ``` ``` block of ``status_path``.
+
+    Skills rebind the parent branch on status files that carry either the current
+    ``parent_branch:`` key or the legacy ``parent:`` key, so both are accepted:
+    an existing ``parent_branch:`` row is rewritten in place;
+    otherwise a legacy ``parent:`` row is replaced in place by ``parent_branch:``
+    (migrate-on-write, row order preserved).
+
+    Args:
+        status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
+        value: The new parent branch, written via ``_yaml_writer.quote_scalar``.
+
+    Raises:
+        ValueError: the file lacks a yaml block, the block is unterminated, or it has neither a
+        ``parent_branch:`` nor a ``parent:`` row.
+    """
+    status_path = _as_path(status_path, "set_parent_branch")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start, end = _split_fences(text, _YAML_FENCE)
+    for key_pattern in (r"^parent_branch:\s*", r"^parent:\s*"):
+        for i in range(start, end):
+            stripped = lines[i].rstrip("\r\n")
+            if re.match(key_pattern, stripped):
+                eol = lines[i][len(stripped):]
+                lines[i] = f"parent_branch: {quote_scalar(value)}{eol}"
+                status_path.write_text("".join(lines), encoding="utf-8")
+                return
+    raise ValueError(f"parent_branch: key missing from yaml block of {status_path}")
 
 
 def set_blocked(status_path: Path | str, reason: str, *, timestamp: str) -> None:
@@ -910,12 +945,14 @@ def read_full(status_path: Path | str) -> dict:
 
 
 def read_parent_branch(status_path: Path | str) -> str | None:
-    """Return the ``parent:`` value from the top yaml block of ``status_path``.
+    """Return the ``parent_branch:`` value from the top yaml block of ``status_path``.
 
     Used by ``mill-cleanup`` to determine which branch to check out after an in-place task is
     cleaned up.
-    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or the
-    ``parent:`` key is not present — callers that need the value to exist must raise their own
+    Falls back to the legacy ``parent:`` key when ``parent_branch:`` is absent or empty;
+    ``parent_branch:`` wins when both are present.
+    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or neither
+    key holds a usable value — callers that need the value to exist must raise their own
     error.
 
     Args:
@@ -929,10 +966,11 @@ def read_parent_branch(status_path: Path | str) -> str | None:
     status_path = _as_path(status_path, "read_parent_branch")
     try:
         full = read_full(status_path)
-        value = full["yaml"].get("parent")
-        if not isinstance(value, str) or not value.strip():
-            return None
-        return value.strip()
+        for key in ("parent_branch", "parent"):
+            value = full["yaml"].get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
     except (ValueError, KeyError, TypeError):
         return None
 

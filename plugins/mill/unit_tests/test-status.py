@@ -29,6 +29,7 @@ from _status import (
     read_branch,
     read_fixer_fork_fallback_log,
     read_full,
+    read_parent_branch,
     read_slug,
     read_status,
     remove_batch,
@@ -39,6 +40,7 @@ from _status import (
     set_blocked,
     set_module_verify_baseline,
     set_module_verify_baseline_signatures,
+    set_parent_branch,
     update_field,
 )
 from _yaml_writer import quote_scalar
@@ -1673,6 +1675,51 @@ def main() -> int:
                 "PASS: read_fixer_fork_fallback_log skips a non-matching row inside the fence "
                 "rather than raising"
             )
+
+        # --- read_parent_branch / set_parent_branch ---
+        def _yaml_status(rows: str) -> str:
+            return f"# Status\n\n```yaml\nphase: discussing\n{rows}task: T\n```\n\n## Timeline\n\n```text\n```\n"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            cases = [
+                ("parent_branch: main\n", "main"),
+                ("parent: main\n", "main"),
+                ("parent_branch: feat\nparent: main\n", "feat"),
+                ("", None),
+            ]
+            for rows, expected in cases:
+                sp.write_text(_yaml_status(rows), encoding="utf-8")
+                assert read_parent_branch(sp) == expected, (
+                    f"read_parent_branch({rows!r}) = {read_parent_branch(sp)!r}, expected {expected!r}"
+                )
+            print("PASS: read_parent_branch prefers parent_branch, falls back to legacy parent")
+
+            sp.write_text(_yaml_status("parent_branch: main\n"), encoding="utf-8")
+            set_parent_branch(sp, "feat/x")
+            assert read_full(sp)["yaml"]["parent_branch"] == "feat/x"
+            assert sp.read_text(encoding="utf-8").count("parent_branch:") == 1
+            print("PASS: set_parent_branch rewrites an existing parent_branch row")
+
+            sp.write_text(_yaml_status("parent: main\nslug: s\n"), encoding="utf-8")
+            before_lines = sp.read_text(encoding="utf-8").splitlines()
+            old_idx = before_lines.index("parent: main")
+            set_parent_branch(sp, "feat")
+            after_lines = sp.read_text(encoding="utf-8").splitlines()
+            assert not any(ln.startswith("parent:") for ln in after_lines), "legacy row survived"
+            assert after_lines[old_idx] == "parent_branch: feat", f"row misplaced: {after_lines!r}"
+            assert [ln for i, ln in enumerate(after_lines) if i != old_idx] == [
+                ln for i, ln in enumerate(before_lines) if i != old_idx
+            ], "other rows changed"
+            print("PASS: set_parent_branch migrates a legacy parent row in place")
+
+            sp.write_text(_yaml_status(""), encoding="utf-8")
+            try:
+                set_parent_branch(sp, "main")
+                assert False, "expected ValueError"
+            except ValueError as exc:
+                assert "parent_branch: key missing" in str(exc)
+            print("PASS: set_parent_branch raises ValueError with neither key")
 
         print("All _status unit tests passed.")
         return 0
