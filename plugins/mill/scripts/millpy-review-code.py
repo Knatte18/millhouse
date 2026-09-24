@@ -5,15 +5,12 @@ prints JSON to stdout.
 
 Flags:
     --slug <slug> Override active-slug detection (run from hub/main).
-    --batch <name> run a per-batch review against the named batch in the plan's Batch Index.
-        Omit for a holistic review covering every batch in one reviewer call.
     --extra-file <path> (repeatable) additional source file to include in the reviewer's bulk.
         Used by mill-go on a ``NEED_CONTEXT`` retry: the prior round listed the files it could not
             find;
         the orchestrator passes them explicitly here.
-    --max-rounds <N> Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds
-        (overrides the active scope) for this invocation.
-        Default: use config values.
+    --max-rounds <N> Override roles.code-review.holistic.rounds for this invocation.
+        Default: use the config value.
     --duration-s <seconds> Finalize-stage only, orchestrator-supplied wall-clock seconds the
         reviewer call took;
         written into the review file's yaml header and the JSON envelope.
@@ -51,11 +48,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Override active-slug detection. Allows running from hub/main branch.",
     )
     parser.add_argument(
-        "--batch",
-        default=None,
-        help="Batch name from the plan's Batch Index. Omit for holistic review.",
-    )
-    parser.add_argument(
         "--extra-file",
         action="append",
         default=[],
@@ -70,8 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help=(
-            "Override roles.code-review.batch.rounds and roles.code-review.holistic.rounds "
-            "(overrides the active scope) for this invocation. Default: use config values."
+            "Override roles.code-review.holistic.rounds for this invocation. "
+            "Default: use the config value."
         ),
     )
     parser.add_argument(
@@ -190,20 +182,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     mill_dir = project_root / ".millhouse"
 
-    # Guard for per-batch reviews: ensure status.md exists before calling review backend
-    if args.batch is not None:
-        try:
-            _paths.require_status_path(project_root, cfg)
-        except _paths.TaskHubError as e:
-            print(str(e), file=sys.stderr)
-            return 1
-
     if args.stage == "prepare":
         try:
-            scope = args.batch or "holistic"
             prior_notes_path = Path(args.prior_notes) if args.prior_notes else None
             prepare_result = prepare(
-                cfg, slug, scope=args.batch, mill_dir=mill_dir, project_root=project_root,
+                cfg, slug, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=git_root, extra_files=extra_files,
                 max_rounds=args.max_rounds, prior_notes=prior_notes_path, agent_mode=True,
             )
@@ -253,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             reviews_dir = resolve_path(cfg["paths"]["reviews_dir"], slug)
             result = finalize(
-                cfg, slug, raw_text, scope=args.batch, round_n=args.round,
+                cfg, slug, raw_text, round_n=args.round,
                 reviews_dir=reviews_dir, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=git_root,
                 actual_model=args.actual_model,
@@ -277,7 +260,6 @@ def main(argv: list[str] | None = None) -> int:
                 project_root,
                 git_root=git_root,
                 max_rounds=args.max_rounds,
-                batch_name=args.batch,
                 extra_files=extra_files,
                 prior_notes=prior_notes_path,
             )
