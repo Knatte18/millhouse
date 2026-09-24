@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
-plan: null
+plan: _mill/plan
 parent: main
 task: _plan_validate and baseline verify gate gaps
 task_description: |
@@ -18,4 +18,5 @@ discussing  '2026-09-24T05:52:09Z'
 discussion-fix-r1  '2026-09-24T06:03:49Z'
 discussion-fix-r2  '2026-09-24T06:04:34Z'
 discussed  '2026-09-24T06:04:34Z'
+planning  '2026-09-24T06:08:23Z'
 ```
