@@ -159,7 +159,14 @@ _REQUIRED_CARD_FIELDS = ["Context", "Edits", "Creates", "Deletes", "Moves", "Req
 # ---------------------------------------------------------------------------
 
 def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
-    """Return list of (card_number, card_lines) pairs.
+    """Return list of (card_number, card_lines) pairs; see ``_parse_cards_positioned``."""
+    return [(number, lines) for number, lines, _ in _parse_cards_positioned(batch_text)]
+
+
+def _parse_cards_positioned(batch_text: str) -> list[tuple[int, list[str], int]]:
+    """Return list of (card_number, card_lines, start_line) triples.
+
+    ``start_line`` is the 1-based batch-file line of the card's ``### Card N:`` heading.
 
     Each card block starts at a ``### Card N:`` line and ends just before the next ``### ``
     heading or at EOF. A ``### `` line inside a fenced code block (delimited by lines whose
@@ -167,21 +174,23 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
     ``_requirements_fence_aware_body``'s convention) never starts or ends a card block.
     """
     lines = batch_text.splitlines()
-    cards: list[tuple[int, list[str]]] = []
+    cards: list[tuple[int, list[str], int]] = []
     current_num: int | None = None
     current_lines: list[str] = []
+    current_start_line = 0
     in_fence = False
 
-    for line in lines:
+    for index, line in enumerate(lines):
         m = re.match(r"^###\s+Card\s+(\d+)\s*:", line) if not in_fence else None
         if m:
             if current_num is not None:
-                cards.append((current_num, current_lines))
+                cards.append((current_num, current_lines, current_start_line))
             current_num = int(m.group(1))
             current_lines = [line]
+            current_start_line = index + 1
         elif current_num is not None:
             if not in_fence and line.startswith("### "):
-                cards.append((current_num, current_lines))
+                cards.append((current_num, current_lines, current_start_line))
                 current_num = None
                 current_lines = []
             else:
@@ -190,7 +199,7 @@ def _parse_cards(batch_text: str) -> list[tuple[int, list[str]]]:
             in_fence = not in_fence
 
     if current_num is not None:
-        cards.append((current_num, current_lines))
+        cards.append((current_num, current_lines, current_start_line))
 
     return cards
 
@@ -3363,6 +3372,19 @@ def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
     SKILL.md's ``### Phase: X`` heading or ``- **Field:**``-shaped bullet is not mistaken for this
     field's own boundary, which would truncate the fence body.
     """
+    span = _requirements_fence_aware_span(card_lines)
+    if span is None:
+        return None
+    start, end = span
+    return "\n".join(card_lines[start:end])
+
+
+def _requirements_fence_aware_span(card_lines: list[str]) -> tuple[int, int] | None:
+    """Return ``(header_index, end_index_exclusive)`` of the Requirements: body in ``card_lines``.
+
+    Same scan as ``_requirements_fence_aware_body`` (which documents the fence-aware stop
+    condition); returns ``None`` when no ``- **Requirements:**`` header line exists.
+    """
     header_re = re.compile(r"^-\s*\*\*Requirements:\*\*")
     any_field_header_re = re.compile(r"^-\s*\*\*[A-Za-z]+:\*\*")
 
@@ -3374,7 +3396,6 @@ def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
     if start is None:
         return None
 
-    collected = [card_lines[start]]
     in_fence = False
     j = start + 1
     while j < len(card_lines):
@@ -3383,10 +3404,43 @@ def _requirements_fence_aware_body(card_lines: list[str]) -> str | None:
             break
         if line.lstrip().startswith("```"):
             in_fence = not in_fence
-        collected.append(line)
         j += 1
 
-    return "\n".join(collected)
+    return start, j
+
+
+def _requirements_fence_open_lines(card_lines: list[str], card_start_line: int) -> list[int]:
+    """
+    Return the 1-based batch-file line of each fence's opening delimiter in the Requirements: body.
+
+    Element k-1 is the line of fence k's opening delimiter; ``card_start_line`` is the batch-file
+    line of the card's ``### Card N:`` heading (``card_lines[0]``).
+    """
+    span = _requirements_fence_aware_span(card_lines)
+    if span is None:
+        return []
+    start, end = span
+    open_lines: list[int] = []
+    in_fence = False
+    for index in range(start + 1, end):
+        if card_lines[index].lstrip().startswith("```"):
+            in_fence = not in_fence
+            if in_fence:
+                open_lines.append(card_start_line + index)
+    return open_lines
+
+
+def _line_locator(line: int | None, suffix: str | None = None) -> str:
+    """
+    Render the ``(line L)`` message fragment, or an empty string when ``line`` is unknown.
+
+    A non-empty result carries a trailing space so it splices between message words;
+    ``suffix`` (e.g. ``new/replacement code``) is appended inside the parentheses after a comma.
+    """
+    if line is None:
+        return f"({suffix}) " if suffix else ""
+    inner = f"line {line}, {suffix}" if suffix else f"line {line}"
+    return f"({inner}) "
 
 
 def _check_requirements_quote_indent_drift(
@@ -3457,8 +3511,8 @@ def _check_requirements_quote_indent_drift(
 
     for batch_path in batch_files:
         text = batch_path.read_text(encoding="utf-8")
-        cards = _parse_cards(text)
-        for card_num, card_lines in cards:
+        cards = _parse_cards_positioned(text)
+        for card_num, card_lines, card_start_line in cards:
             card_text = "\n".join(card_lines)
             edits_tokens = _card_edits_tokens(card_text)
             if not edits_tokens:
@@ -3492,10 +3546,12 @@ def _check_requirements_quote_indent_drift(
             if not ordered_resolved_tokens:
                 continue
 
+            fence_open_lines = _requirements_fence_open_lines(card_lines, card_start_line)
             last_matched_indent: int | None = None
             last_matched_token: str | None = None
             for fence_idx, fence_body in enumerate(fence_bodies, start=1):
                 fence_body = re.sub(r"\n[ \t]*\Z", "", fence_body)
+                fence_line = fence_open_lines[fence_idx - 1] if fence_idx <= len(fence_open_lines) else None
                 # Already byte-exact -- nothing to flag.
                 # This also correctly no-ops for a fence with zero leading whitespace, since every N >= 1 strip on such a fence is a no-op that reduces to this same already-checked raw content.
                 clean_match_token = None
@@ -3522,8 +3578,10 @@ def _check_requirements_quote_indent_drift(
                             "batch": batch_path.stem,
                             "card": card_num,
                             "path": matched_token,
+                            "line": fence_line,
                             "message": (
                                 f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"{_line_locator(fence_line)}"
                                 f"matches '{matched_token}' after stripping {n} "
                                 f"leading spaces per line (found N={n})"
                             ),
@@ -3557,8 +3615,10 @@ def _check_requirements_quote_indent_drift(
                             "batch": batch_path.stem,
                             "card": card_num,
                             "path": matched_token,
+                            "line": fence_line,
                             "message": (
                                 f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"{_line_locator(fence_line)}"
                                 f"matches '{matched_token}' after adding {n} "
                                 f"leading spaces per line (found N={n})"
                             ),
@@ -3581,9 +3641,11 @@ def _check_requirements_quote_indent_drift(
                             "batch": batch_path.stem,
                             "card": card_num,
                             "path": last_matched_token,
+                            "line": fence_line,
                             "message": (
-                                f"card {card_num}'s Requirements: fence {fence_idx} (new/replacement "
-                                f"code) immediately follows matched fence {fence_idx - 1}, but its "
+                                f"card {card_num}'s Requirements: fence {fence_idx} "
+                                f"({_line_locator(fence_line, 'new/replacement code')}) "
+                                f"immediately follows matched fence {fence_idx - 1}, but its "
                                 f"first line is indented {sibling_indent} spaces vs the anchor fence's "
                                 f"{last_matched_indent} spaces"
                             ),
