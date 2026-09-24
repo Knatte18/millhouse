@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-tasks-render
+phase: approved-keybindings
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r1  '2026-09-24T06:15:28Z'
 planned  '2026-09-24T06:15:35Z'
 implementing  '2026-09-24T06:15:45Z'
 approved-tasks-render  '2026-09-24T06:17:47Z'
+approved-keybindings  '2026-09-24T06:20:19Z'
 ```
 
 ## Batches
@@ -37,9 +38,10 @@ batches:
     start_sha: bbe6313f3b839e7a92a96d470899acfdeb080785
     commit_sha: b5cd548299393167c218f4e7f5389ff9aef689ba
   - name: keybindings
-    state: running
+    state: approved
     implementer_session: 0ebbff54-8b9c-4281-9572-ad2fe3a9f592
     start_sha: b7161c7b62fee2ac2ad146c027dc26e6f93990ac
+    commit_sha: ea79f80d0405f4faed502707307d9d9489a773af
   - name: session-tasks-cli
     state: pending
   - name: spawn-wiring
