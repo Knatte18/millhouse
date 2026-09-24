@@ -27,7 +27,7 @@ Both still say "persistent bash poll" and give no re-arm rule, so a wait past 30
 **In:**
 - Rewrite the wait idiom in `orch-wait` Step 2 and `orch-review` Step 2: drop "persistent", arm `Monitor` with `timeout_ms: 1800000`, and add the wall-clock re-arm rule for an event-less expiry.
 - Cross-reference `plugins/mill/docs/harness-tool-contracts.md` from both.
-- Update `harness-tool-contracts.md` line 26 and line 37 so the consumers list includes the two orch skills.
+- Update `harness-tool-contracts.md` so every consumer reference includes the two orch skills: the intro at line 3 ("Four skill files already carry inline copies"), the re-arm sentence at line 26 and line 35, and the consumers line at line 37.
 
 **Out:**
 - `mill-plan` and `mill-go-base` entry-gate sections: already fixed by `f6966798`; do not touch.
@@ -41,6 +41,7 @@ Both still say "persistent bash poll" and give no re-arm rule, so a wait past 30
 
 - Decision: each orch wait uses `Monitor(command=..., timeout_ms: 1800000, description=...)`, records `wait_started_epoch` once via `date +%s`, and on an event-less expiry recomputes `remaining_s = giveup_s - (now - wait_started_epoch)`.
   If `remaining_s <= 0` it takes the existing timeout branch, otherwise it re-arms with a poll script bounded by `remaining_s`.
+  For `orch-review`, which arms several concurrent waits, `wait_started_epoch` and `task_id` are tracked per slug, and each slug re-arms independently.
 - Rationale: identical to the already-merged mill-plan/mill-go-base design; no `Monitor` build holds a wait open indefinitely.
 - Rejected: a detached background `Bash` run (one uncapped notification, per #1141) — diverges from the documented `Monitor` contract and from the two sibling sections.
 
