@@ -61,6 +61,10 @@ For each grouped **new** task, draft:
   must not collide with an existing slug from Step 2).
 - A title (free text).
 - A brief theme statement (1–2 sentences).
+- `depends_on`: slugs of other tasks this one should run after, chosen without operator prompting.
+  Add a dependency when tasks edit the same files or skills (serialise to avoid merge conflicts), when one task's tests or baseline are repaired by another (repair goes first), or when one task builds on another's output.
+  Targets may be other new tasks from this run or existing backlog tasks from Step 2; never the task itself, and no cycles.
+  Leave it empty when tasks are independent — do not add dependencies for thematic similarity alone.
 
 For each fold-in candidate, apply the **unchanged** unclaimed-only guard from `millpy-fold.py`'s `unclaimed-only-allowlist` decision: from the already-loaded task list (Step 2), find the task with matching slug and inspect its `status` and `deferred` flag.
 A fold target must be unclaimed: `status is None and not deferred`.
@@ -87,7 +91,7 @@ Write the consolidated proposal to `.scratch/triage-proposal.md` (note: NOT `.sc
 The proposal must include:
 
 1. A decisions table listing every item — displayed as `contract["ref_prefix"] + ref` — and its routing (New task / Fold-in / Skip).
-2. A "New tasks (grouped)" section listing each drafted slug, title, and brief, with the source items grouped under each.
+2. A "New tasks (grouped)" section listing each drafted slug, title, brief, and `depends_on` (with a one-line reason per dependency), with the source items grouped under each.
 3. A "Fold-ins" section listing each target slug and its source items.
 4. A "Skipped" section listing skipped items and their skip reasons.
 
@@ -117,7 +121,8 @@ Immediately after that bullet:
 
 1. **New tasks.**
    For each grouped new task, concatenate every source item's block (in grouping order) to form the full task body.
-   Write `slug`, `title`, `brief` (the theme statement), and `body` to a fresh temp JSON file via the `Write` tool at `.scratch/mill-triage-upsert-<n>.json` (a JSON object with keys `slug`, `title`, `brief`, `body`; `<n>` a per-call counter starting at 1, one file per new task), then call:
+   Write `slug`, `title`, `brief` (the theme statement), `body`, and `depends_on` (a list, possibly empty) to a fresh temp JSON file via the `Write` tool at `.scratch/mill-triage-upsert-<n>.json` (a JSON object with keys `slug`, `title`, `brief`, `body`, `depends_on`; `<n>` a per-call counter starting at 1, one file per new task), then call.
+   Create every new task first and apply `depends_on` in a second pass, so a dependency on another new task from this run always resolves:
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import json
@@ -130,6 +135,15 @@ Immediately after that bullet:
        brief=data['brief'],
        body=data['body']
    )
+   "
+   ```
+   Second pass, once all new tasks exist, for each task whose `depends_on` is non-empty:
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   from wiki import _client
+   data = json.load(open('.scratch/mill-triage-upsert-<n>.json', encoding='utf-8'))
+   _client.upsert_task(<wiki_path>, data['slug'], depends_on=data['depends_on'])
    "
    ```
    `<wiki_path>` stays as direct literal substitution — it is an agent-resolved filesystem path, never derived from source-item text, and carries no injection risk. The temp file's path — never the item's own `title`/`brief`/`body`/`slug` content — is the only piece of item-derived text substituted into the command, so no source item's text can break the command's quoting.
