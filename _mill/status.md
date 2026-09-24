@@ -6,6 +6,7 @@ slug: monitor-persistent-entry-wait
 branch: hanf/monitor-persistent-entry-wait
 plan: _mill/plan
 parent: main
+baseline_parent_sha: f56dd23f731e4e7803d2737a0661627cc4e3afcd
 task: 'Entry-gate wait: drop nonexistent Monitor persistent:true'
 task_description: |
   Entry-gate wait: drop nonexistent Monitor persistent:true
@@ -29,5 +30,7 @@ implementing  '2026-09-24T06:06:00Z'
 ```yaml
 batches:
   - name: orch-wait-monitor-rearm
-    state: pending
+    state: running
+    implementer_session: 244ea99f-207d-4b15-a205-c14fe6d4864d
+    start_sha: 7078a5f9bda8d2a35495d351e83dd015c0a7f2e8
 ```
