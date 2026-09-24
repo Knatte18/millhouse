@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-remaining-skills-docs-and-gate
+phase: holistic-reviewing
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-config  '2026-09-24T08:14:19Z'
 approved-mill-go-skill-text  '2026-09-24T08:16:28Z'
 self-resolved-verify-logic  '2026-09-24T08:18:06Z'
 approved-remaining-skills-docs-and-gate  '2026-09-24T08:19:46Z'
+holistic-reviewing  '2026-09-24T08:19:55Z'
 ```
 
 ## Batches
