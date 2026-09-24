@@ -103,6 +103,9 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 
 - Decision: model and effort are baked into `tasks.json` when it is rendered, so editing `mill-config.yaml` or `config.local.yaml` later does not change worktrees that already exist.
   A new script `plugins/mill/scripts/millpy-session-tasks.py` re-renders the current worktree's `tasks.json` from the current merged config (slug from `_marker.slug_from_branch`; hub worktree: short name), reusing `_vscode_tasks.write_tasks` and the same idempotent/backup rules.
+  Hub-vs-task rule: the script calls `_marker.slug_from_branch` (wiki path via `_paths.resolve_wiki_path`) and on `MarkerError` treats the worktree as the hub, using `resolve_short_name(cfg, <repo-name>)` as the name;
+  any other failure (unreadable config, missing `.vscode/`) exits non-zero with a one-line ASCII message on stderr and writes nothing.
+  A spawned child renders from the spawning worktree's merged config; overrides in the child's own `config.local.yaml` take effect only after running this script inside the child.
   Re-running `mill-setup` also refreshes the hub's file.
   New spawns always pick up the current config.
   The script gets the usual shortcut wrapper entry in `_shortcuts.SHORTCUT_SCRIPTS`.
@@ -192,6 +195,7 @@ one keypress opens a correctly named, correctly configured (model + effort) clau
 - **`_vscode_tasks`** (TDD candidate): rendered JSON parses after stripping the leading comment; six tasks with the expected labels; slug and per-phase model/effort appear in the command strings; `start-auto`/`start-orch` carry the flag and the `:start` session name; missing config keys fall back to defaults; overridden values are honoured.
 - **`_vscode_keybindings`** (TDD candidate): creates the file when missing; inserts the block into an existing JSONC array without disturbing comments or other entries; re-running is idempotent (no diff); updates the block when bindings change; skips and reports a conflicting `alt+shift+N` bound outside the block; leaves entries inside the block replaceable; platform path resolution for linux/win/darwin.
 - **`millpy-session-tasks.py`**: re-render after a config change updates model/effort in the existing file; unchanged config leaves the file byte-identical; hub versus task-worktree name selection.
+- **Shortcut wrappers**: adding `millpy-session-tasks` to `_shortcuts.SHORTCUT_SCRIPTS` (`_shortcuts.py:30`) can change counts or expected lists in `test-shortcut-wrapper.py`; the plan must check and update those tests, and mill-setup Phase 4.7 prose that lists the wrapped scripts.
 - **Keybindings parser**: comments inside and outside strings (`//` in a string value is not a comment), trailing commas, and unparsable input (nothing written, warning emitted).
 - **`millpy-spawn`**: existing spawn tests extended to assert `tasks.json` exists in `dest_hub/.vscode/` with the literal slug, including the `hub_relative_path != "."` layout, and that rollback removes it.
 - **`test-vscode.py`**: template now contains `commandsToSkipShell`.
