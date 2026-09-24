@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-validate-checks
+phase: approved-baseline-short-circuit
 slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r1  '2026-09-24T06:09:24Z'
 planned  '2026-09-24T06:09:31Z'
 implementing  '2026-09-24T06:09:47Z'
 approved-plan-validate-checks  '2026-09-24T06:12:09Z'
+approved-baseline-short-circuit  '2026-09-24T06:14:16Z'
 ```
 
 ## Batches
@@ -36,7 +37,8 @@ batches:
     start_sha: 4c8d8746e00f90e94dfe52e1a5f5c9eb9dad30c8
     commit_sha: 6fd1bc2d6199323601a8155a14167ac01ae89620
   - name: baseline-short-circuit
-    state: running
+    state: approved
     implementer_session: ff765993-847a-4b65-b606-9fecee8807f1
     start_sha: 312b36440d0a3df55969c54d766c35b00e358d92
+    commit_sha: a598334ee0a0a34094f7609a32dfde88a22fdd75
 ```
