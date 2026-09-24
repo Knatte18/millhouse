@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussion-fix-r2  '2026-09-24T07:33:44Z'
 discussion-fix-r3  '2026-09-24T07:37:55Z'
 discussed  '2026-09-24T07:39:29Z'
 planning  '2026-09-24T07:51:16Z'
+plan-review-r1  '2026-09-24T07:56:19Z'
 ```
