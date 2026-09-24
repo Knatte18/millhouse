@@ -3,7 +3,7 @@
 ```yaml
 task: "mill-go-base / mill-plan documentation gaps"
 slug: "mill-go-plan-doc-gaps"
-approved: false
+approved: true
 started: "20260924-063248"
 parent: "main"
 root: ""
