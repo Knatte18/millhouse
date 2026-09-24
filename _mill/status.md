@@ -41,3 +41,9 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-24T09:21:50Z'  core-helpers  round 1
+```
