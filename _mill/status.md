@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-repair-stale-tests
 slug: fix-stale-unit-tests
 branch: hanf/fix-stale-unit-tests
 plan: _mill/plan
@@ -23,6 +23,7 @@ planning  '2026-09-24T05:42:08Z'
 plan-review-r1  '2026-09-24T05:42:55Z'
 planned  '2026-09-24T05:43:03Z'
 implementing  '2026-09-24T05:43:16Z'
+approved-repair-stale-tests  '2026-09-24T05:44:22Z'
 ```
 
 ## Batches
@@ -30,7 +31,8 @@ implementing  '2026-09-24T05:43:16Z'
 ```yaml
 batches:
   - name: repair-stale-tests
-    state: running
+    state: approved
     implementer_session: 26a50b98-8139-4060-b96c-05bb5c9a49a8
     start_sha: a2820c3aafcc9572d3655e12173448c3344189a2
+    commit_sha: e6911a708ab52fd2aeecbd4328007bf4f53a1637
 ```
