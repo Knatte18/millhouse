@@ -46,7 +46,9 @@ batches:
     commit_sha: 54aaa8194b966abc921720c7a006e7603c13f58e
     verify_baseline_failures: []
   - name: templates-skills-fixtures
-    state: pending
+    state: running
+    implementer_session: 9f0d70b1-1320-485d-9a3b-921b2b798ded
+    start_sha: e4dba777f9f6bb603d7abafc30cbaefc11b51268
     verify_baseline_failures: []
 ```
 ## Inferred-success log
