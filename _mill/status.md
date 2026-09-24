@@ -65,7 +65,9 @@ batches:
     commit_sha: de4dc86d921f276b1cbc0630846d7c205c3293e9
     verify_baseline_failures: []
   - name: mill-go-skill-text
-    state: pending
+    state: running
+    implementer_session: 924c3016-7444-4f3a-8e8f-1cbff4dffc53
+    start_sha: d0be305c74215d4fd904d4d9a543faf282a6633a
     verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
     state: pending
