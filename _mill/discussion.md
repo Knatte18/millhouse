@@ -111,6 +111,7 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
   `mill-spawn/SKILL.md` documents `--parent <name>` in its Run line and one sentence on `parent_thread:`.
   `mill-start/SKILL.md` Phase: Active says "`parent_branch:` (or legacy `parent:`)"; Phase: Discussion File's `<PARENT_BRANCH>` substitution reads the branch via `_status.read_parent_branch`.
 - Rationale: prose must match the key the scripts write, and legacy mentions only where a reader of the skill could meet an old file.
+- Rejected: leaving skill prose saying `parent:` — contradicts the renamed key and would mislead a reader of a freshly spawned status.md.
 
 ## Technical context
 
