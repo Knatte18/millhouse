@@ -1721,6 +1721,36 @@ def main() -> int:
                 assert "parent_branch: key missing" in str(exc)
             print("PASS: set_parent_branch raises ValueError with neither key")
 
+        # --- baseline row anchoring ---
+        anchor_cases = [
+            ("parent_branch: main\nparent_thread: t\n", "parent_thread:"),
+            ("parent_branch: main\n", "parent_branch:"),
+            ("parent: main\n", "parent:"),
+        ]
+        setters = [
+            (set_module_verify_baseline, "clean", "module_verify_baseline:"),
+            (set_module_verify_baseline_signatures, ["sig"], "module_verify_baseline_signatures:"),
+        ]
+        for setter, setter_value, new_key in setters:
+            with tempfile.TemporaryDirectory() as tmp:
+                sp = Path(tmp) / "status.md"
+                for rows, anchor_prefix in anchor_cases:
+                    sp.write_text(_yaml_status(rows), encoding="utf-8")
+                    setter(sp, setter_value)
+                    file_lines = sp.read_text(encoding="utf-8").splitlines()
+                    new_idx = next(i for i, ln in enumerate(file_lines) if ln.startswith(new_key))
+                    assert file_lines[new_idx - 1].startswith(anchor_prefix), (
+                        f"{setter.__name__}: row landed after {file_lines[new_idx - 1]!r}, "
+                        f"expected after {anchor_prefix!r}"
+                    )
+                sp.write_text(_yaml_status(""), encoding="utf-8")
+                try:
+                    setter(sp, setter_value)
+                    assert False, "expected ValueError"
+                except ValueError:
+                    pass
+            print(f"PASS: {setter.__name__} anchors after parent_thread/parent_branch/legacy parent")
+
         print("All _status unit tests passed.")
         return 0
     except AssertionError as exc:

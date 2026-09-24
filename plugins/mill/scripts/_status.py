@@ -413,15 +413,32 @@ def get_module_verify_baseline(status_path: Path | str) -> str | None:
     return data.get("module_verify_baseline")
 
 
+def _baseline_anchor_index(lines: list[str], start: int, end: int, status_path: Path) -> int:
+    """
+    Return the index of the yaml row after which a new baseline row is inserted.
+
+    The anchor is the first ``parent_thread:`` row when present, else the first ``parent_branch:``
+    row, else the first legacy ``parent:`` row, so baseline rows stay next to the parent fields.
+
+    Raises:
+        ValueError: none of the three anchor rows exists in ``lines[start:end]``.
+    """
+    for anchor_pattern in (r"^parent_thread:\s*", r"^parent_branch:\s*", r"^parent:\s*"):
+        for i in range(start, end):
+            if re.match(anchor_pattern, lines[i].rstrip("\r\n")):
+                return i
+    raise ValueError(f"parent_branch: key missing from yaml block of {status_path}")
+
+
 def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
     """
     Write ``module_verify_baseline:`` in the top yaml block of ``status_path``.
 
     Mirrors ``set_blocked``'s insert-in-place-or-append pattern for ``blocked_reason:``: if a
     ``module_verify_baseline:`` row already exists in the block it is rewritten in place;
-    otherwise a new row is inserted immediately after ``parent:`` -- that field's natural neighbor
-    in the template's field ordering, since the row does not exist in ``status-discussing.md``'s
-    template and must be inserted the first time a baseline is computed.
+    otherwise a new row is inserted immediately after ``parent_thread:`` when present, else
+    ``parent_branch:``, else legacy ``parent:`` -- the row does not exist in
+    ``status-discussing.md``'s template and must be inserted the first time a baseline is computed.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -432,7 +449,8 @@ def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
 
     Raises:
         ValueError: ``value`` is not one of the two allowed states, the file lacks a yaml block, the
-        block is unterminated, or the block has no ``parent:`` row to insert after.
+        block is unterminated, or the block has none of the ``parent_thread:`` / ``parent_branch:`` /
+        legacy ``parent:`` anchor rows to insert after.
     """
     status_path = _as_path(status_path, "set_module_verify_baseline")
     if value not in _MODULE_VERIFY_BASELINE_STATES:
@@ -453,16 +471,8 @@ def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
             status_path.write_text("".join(lines), encoding="utf-8")
             return
 
-    # Absent: insert a new row immediately after parent:.
-    parent_idx: int | None = None
-    for i in range(start, end):
-        stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^parent:\s*", stripped):
-            parent_idx = i
-            break
-    if parent_idx is None:
-        raise ValueError(f"parent: key missing from yaml block of {status_path}")
-    lines.insert(parent_idx + 1, f"module_verify_baseline: {quote_scalar(value)}\n")
+    anchor_idx = _baseline_anchor_index(lines, start, end, status_path)
+    lines.insert(anchor_idx + 1, f"module_verify_baseline: {quote_scalar(value)}\n")
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
@@ -534,8 +544,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
     Mirrors ``set_module_verify_baseline``'s insert-in-place-or-append pattern: if a
     ``module_verify_baseline_signatures:`` row already exists in the block it is rewritten in
     place;
-    otherwise a new row is inserted immediately after ``parent:``, that field's natural neighbor in
-    the template's field ordering.
+    otherwise a new row is inserted immediately after ``parent_thread:`` when present, else
+    ``parent_branch:``, else legacy ``parent:``.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -548,8 +558,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
             exactly one physical line.
 
     Raises:
-        ValueError: the file lacks a yaml block, the block is unterminated, or the block has no
-        ``parent:`` row to insert after.
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block has none of
+        the ``parent_thread:`` / ``parent_branch:`` / legacy ``parent:`` anchor rows to insert after.
     """
     status_path = _as_path(status_path, "set_module_verify_baseline_signatures")
     text = status_path.read_text(encoding="utf-8")
@@ -566,16 +576,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
             status_path.write_text("".join(lines), encoding="utf-8")
             return
 
-    # Absent: insert a new row immediately after parent:.
-    parent_idx: int | None = None
-    for i in range(start, end):
-        stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^parent:\s*", stripped):
-            parent_idx = i
-            break
-    if parent_idx is None:
-        raise ValueError(f"parent: key missing from yaml block of {status_path}")
-    lines.insert(parent_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
+    anchor_idx = _baseline_anchor_index(lines, start, end, status_path)
+    lines.insert(anchor_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
