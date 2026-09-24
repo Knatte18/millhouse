@@ -461,30 +461,6 @@ def test_env_override_plan_reviewer() -> None:
     print("PASS load_config — MILL_PLAN_REVIEWER env override")
 
 
-def test_env_override_plan_batch_reviewer() -> None:
-    """MILL_PLAN_BATCH_REVIEWER env var overrides config."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        _setup_plugin_template(tmp_path)
-        wt_root = tmp_path / "hub"
-        _git_init(wt_root)
-        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: test\n")
-
-        os.environ["MILL_PLAN_BATCH_REVIEWER"] = "custom_batch"
-        try:
-            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
-                with patch.object(
-                    _config, "resolve_plugin_template_path",
-                    return_value=tmp_path / "templates" / "mill-config.yaml"
-                ):
-                    cfg = _config.load_config(wt_root, wt_root)
-
-            assert cfg["roles"]["plan-review"]["batch"]["reviewer"] == "custom_batch"
-        finally:
-            os.environ.pop("MILL_PLAN_BATCH_REVIEWER", None)
-    print("PASS load_config — MILL_PLAN_BATCH_REVIEWER env override")
-
-
 def test_env_override_code_reviewer() -> None:
     """MILL_CODE_REVIEWER env var overrides config."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -507,30 +483,6 @@ def test_env_override_code_reviewer() -> None:
         finally:
             os.environ.pop("MILL_CODE_REVIEWER", None)
     print("PASS load_config — MILL_CODE_REVIEWER env override")
-
-
-def test_env_override_code_batch_reviewer() -> None:
-    """MILL_CODE_BATCH_REVIEWER env var overrides config."""
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        _setup_plugin_template(tmp_path)
-        wt_root = tmp_path / "hub"
-        _git_init(wt_root)
-        _write_yaml(wt_root / "mill-config.yaml", "spawn:\n  branch_prefix: test\n")
-
-        os.environ["MILL_CODE_BATCH_REVIEWER"] = "custom_code_batch"
-        try:
-            with patch.object(_paths, "resolve_wiki_path", side_effect=SystemExit):
-                with patch.object(
-                    _config, "resolve_plugin_template_path",
-                    return_value=tmp_path / "templates" / "mill-config.yaml"
-                ):
-                    cfg = _config.load_config(wt_root, wt_root)
-
-            assert cfg["roles"]["code-review"]["batch"]["reviewer"] == "custom_code_batch"
-        finally:
-            os.environ.pop("MILL_CODE_BATCH_REVIEWER", None)
-    print("PASS load_config — MILL_CODE_BATCH_REVIEWER env override")
 
 
 def test_env_override_empty_string_is_noop() -> None:
@@ -1652,38 +1604,72 @@ def test_git_unknown_subkey_still_warns() -> None:
     print("PASS load_config -- git subkey typo still warns")
 
 
-def test_load_config_rename_detect_pct_key_present() -> None:
+def test_load_config_stale_batch_review_keys_warn() -> None:
     """
-    Verify that the real mill-config.yaml template registers pipeline.rename_detect_pct with a
-    default value of 30 and that loading it does not emit an unknown-key warning.
+    A hub config still carrying the removed per-batch review keys loads without raising and
+    prints each key's removal hint from RENAMED_KEY_HINTS.
     """
     real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
-    assert real_template_path.exists(), f"Real template not found at {real_template_path}"
+    stale_paths = [
+        "roles.plan-review.batch",
+        "roles.code-review.batch",
+        "pipeline.rename_detect_pct",
+        "roles.code-review.diff_scope_threshold",
+    ]
 
     with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        hub_root = tmp_path / "hub"
+        hub_root = Path(tmp) / "hub"
         hub_root.mkdir(parents=True, exist_ok=True)
         _git_init(hub_root)
+        _write_yaml(
+            hub_root / "mill-config.yaml",
+            "pipeline:\n"
+            "  rename_detect_pct: 30\n"
+            "roles:\n"
+            "  plan-review:\n"
+            "    batch:\n"
+            "      rounds: 0\n"
+            "      reviewer: null\n"
+            "  code-review:\n"
+            "    batch:\n"
+            "      rounds: 0\n"
+            "      reviewer: null\n"
+            "    diff_scope_threshold: 0.25\n",
+        )
 
-        with patch.object(
-            _config,
-            "resolve_plugin_template_path",
-            return_value=real_template_path
-        ):
+        with patch.object(_config, "resolve_plugin_template_path", return_value=real_template_path):
             with patch("sys.stderr", new=io.StringIO()) as mock_stderr:
-                cfg = _config.load_config(hub_root, hub_root)
+                _config.load_config(hub_root, hub_root)
                 stderr_output = mock_stderr.getvalue()
 
-        rename_detect_pct = cfg.get("pipeline", {}).get("rename_detect_pct")
-        assert rename_detect_pct == 30, (
-            f"pipeline.rename_detect_pct should be 30 in template, got {rename_detect_pct!r}"
-        )
-        assert "rename_detect_pct" not in stderr_output, (
-            f"rename_detect_pct should not trigger unknown-key warning; stderr: {stderr_output!r}"
-        )
+        for path in stale_paths:
+            assert f"unknown key: {path}" in stderr_output, (
+                f"Expected unknown-key warning for {path}; stderr: {stderr_output!r}"
+            )
+            assert _config.RENAMED_KEY_HINTS[path] in stderr_output, (
+                f"Expected removal hint for {path}; stderr: {stderr_output!r}"
+            )
 
-    print("PASS: pipeline.rename_detect_pct present (value 30) and no unknown-key warning")
+    print("PASS: stale per-batch review keys load and warn with removal hints")
+
+
+def test_template_has_no_batch_review_keys() -> None:
+    """The real template no longer carries the per-batch review keys."""
+    real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
+    template = yaml.safe_load(real_template_path.read_text(encoding="utf-8"))
+    roles = template["roles"]
+    assert "batch" not in roles["plan-review"]
+    assert "batch" not in roles["code-review"]
+    assert "rename_detect_pct" not in template["pipeline"]
+    assert "diff_scope_threshold" not in roles["code-review"]
+    print("PASS: template has no per-batch review keys")
+
+
+def test_env_registry_has_no_batch_reviewer_entries() -> None:
+    """The per-batch reviewer env overrides are gone from ENV_REGISTRY."""
+    assert "MILL_PLAN_BATCH_REVIEWER" not in _config.ENV_REGISTRY
+    assert "MILL_CODE_BATCH_REVIEWER" not in _config.ENV_REGISTRY
+    print("PASS: ENV_REGISTRY has no per-batch reviewer entries")
 
 
 def test_load_config_done_gate_key_present() -> None:
@@ -1791,9 +1777,9 @@ def test_load_config_merge_conflicts_model_absent_safe() -> None:
 def test_load_config_auto_approve_on_cap_keys_present() -> None:
     """
     Verify that the real mill-config.yaml template registers auto_approve_on_cap with a
-    default value of False under roles.plan-review.holistic, roles.code-review.batch,
-    roles.code-review.holistic, and roles.discussion-review.holistic, and that loading
-    it does not emit an unknown-key warning for any of the four.
+    default value of False under roles.plan-review.holistic, roles.code-review.holistic, and
+    roles.discussion-review.holistic, and that loading it does not emit an unknown-key
+    warning for any of the three.
     """
     real_template_path = Path(__file__).resolve().parent.parent / "templates" / "mill-config.yaml"
     assert real_template_path.exists(), f"Real template not found at {real_template_path}"
@@ -1816,9 +1802,6 @@ def test_load_config_auto_approve_on_cap_keys_present() -> None:
         assert cfg.get("roles", {}).get("plan-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
             f"roles.plan-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('plan-review', {}).get('holistic', {})!r}"
         )
-        assert cfg.get("roles", {}).get("code-review", {}).get("batch", {}).get("auto_approve_on_cap") is False, (
-            f"roles.code-review.batch.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('code-review', {}).get('batch', {})!r}"
-        )
         assert cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap") is False, (
             f"roles.code-review.holistic.auto_approve_on_cap should be False; got {cfg.get('roles', {}).get('code-review', {}).get('holistic', {})!r}"
         )
@@ -1828,9 +1811,6 @@ def test_load_config_auto_approve_on_cap_keys_present() -> None:
 
         assert "unknown key: roles.plan-review.holistic.auto_approve_on_cap" not in stderr_output, (
             f"roles.plan-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
-        )
-        assert "unknown key: roles.code-review.batch.auto_approve_on_cap" not in stderr_output, (
-            f"roles.code-review.batch.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
         )
         assert "unknown key: roles.code-review.holistic.auto_approve_on_cap" not in stderr_output, (
             f"roles.code-review.holistic.auto_approve_on_cap should not trigger unknown-key warning; stderr: {stderr_output!r}"
@@ -1997,9 +1977,7 @@ def main() -> int:
         test_env_override_impl,
         test_env_override_discussion_reviewer,
         test_env_override_plan_reviewer,
-        test_env_override_plan_batch_reviewer,
         test_env_override_code_reviewer,
-        test_env_override_code_batch_reviewer,
         test_env_override_empty_string_is_noop,
         test_list_replace_semantics,
         test_unknown_key_warning_emitted,
@@ -2044,7 +2022,9 @@ def main() -> int:
         test_review_common_load_config_container_layout,
         test_review_common_load_config_unparseable_repo_layer_does_not_raise,
         test_no_repo_layer_config_anywhere_emits_note,
-        test_load_config_rename_detect_pct_key_present,
+        test_load_config_stale_batch_review_keys_warn,
+        test_template_has_no_batch_review_keys,
+        test_env_registry_has_no_batch_reviewer_entries,
         test_load_config_done_gate_key_present,
         test_load_config_merge_conflicts_model_key_present,
         test_load_config_merge_conflicts_model_absent_safe,

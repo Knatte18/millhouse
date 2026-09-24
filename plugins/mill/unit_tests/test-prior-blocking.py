@@ -1,13 +1,11 @@
 """Unit tests for _prior_blocking.py.
 
-Tests the build_digest function's extraction and scoping logic:
+Tests the build_digest function's extraction logic:
 - Single holistic-scope file with a plain and a classed BLOCKING heading.
 - Demoted findings (rendered as NIT with a Demoted-from marker) are excluded.
-- Cumulative aggregation across rounds within one batch.
-- Cross-scope and cross-batch aggregation for holistic scope.
-- Batch scope excludes other batches' findings.
+- Cumulative aggregation across holistic rounds.
+- A leftover per-batch-named code-review file is ignored.
 - Empty / non-existent reviews_dir returns "".
-- A batch literally named "retry-fix" is never misclassified as holistic.
 """
 from __future__ import annotations
 
@@ -47,7 +45,7 @@ class TestPriorBlocking(unittest.TestCase):
             "# Review\n\n### [BLOCKING] Missing null check\nThe function does not guard against None.\n",
         )
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="holistic")
+        digest = _prior_blocking.build_digest(self.reviews_dir)
         self.assertIn("Missing null check", digest)
 
     def test_holistic_classed_heading_included(self):
@@ -58,7 +56,7 @@ class TestPriorBlocking(unittest.TestCase):
             "# Review\n\n### [BLOCKING:design] Wrong abstraction layer\nThis violates layering.\n",
         )
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="holistic")
+        digest = _prior_blocking.build_digest(self.reviews_dir)
         self.assertIn("Wrong abstraction layer", digest)
 
     def test_demoted_finding_excluded(self):
@@ -74,28 +72,28 @@ class TestPriorBlocking(unittest.TestCase):
             ),
         )
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="holistic")
+        digest = _prior_blocking.build_digest(self.reviews_dir)
         self.assertNotIn("Formerly blocking issue", digest)
 
-    def test_batch_scope_cumulative_across_rounds(self):
-        """Case 4: two rounds of the same batch both contribute their BLOCKING findings."""
+    def test_cumulative_across_holistic_rounds(self):
+        """Case 4: two holistic rounds both contribute their BLOCKING findings."""
         _write_review(
             self.reviews_dir,
-            "20260601-100000-code-review-foo-r1.md",
+            "20260601-100000-code-review-r1.md",
             "# Review\n\n### [BLOCKING] Round one issue\nDetails for round one.\n",
         )
         _write_review(
             self.reviews_dir,
-            "20260601-110000-code-review-foo-r2.md",
+            "20260601-110000-code-review-r2.md",
             "# Review\n\n### [BLOCKING] Round two issue\nDetails for round two.\n",
         )
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="batch", batch_name="foo")
+        digest = _prior_blocking.build_digest(self.reviews_dir)
         self.assertIn("Round one issue", digest)
         self.assertIn("Round two issue", digest)
 
-    def test_holistic_cross_scope_and_cross_batch_aggregation(self):
-        """Case 5: holistic scope aggregates findings across two batches plus a holistic file."""
+    def test_per_batch_named_file_ignored(self):
+        """Case 5: a leftover per-batch-named code-review file's BLOCKING headings are excluded."""
         _write_review(
             self.reviews_dir,
             "20260601-100000-code-review-foo-r1.md",
@@ -103,8 +101,8 @@ class TestPriorBlocking(unittest.TestCase):
         )
         _write_review(
             self.reviews_dir,
-            "20260601-110000-code-review-bar-r1.md",
-            "# Review\n\n### [BLOCKING] Bar batch issue\nDetails for bar.\n",
+            "20260601-110000-code-review-retry-fix-r1.md",
+            "# Review\n\n### [BLOCKING] Retry fix batch issue\nDetails for retry-fix.\n",
         )
         _write_review(
             self.reviews_dir,
@@ -112,87 +110,21 @@ class TestPriorBlocking(unittest.TestCase):
             "# Review\n\n### [BLOCKING] Holistic round issue\nDetails for holistic.\n",
         )
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="holistic")
-        self.assertIn("Foo batch issue", digest)
-        self.assertIn("Bar batch issue", digest)
-        self.assertIn("Holistic round issue", digest)
-
-    def test_batch_scope_excludes_other_batches(self):
-        """Case 6: batch scope includes its own batch plus the holistic file, but excludes other batches."""
-        _write_review(
-            self.reviews_dir,
-            "20260601-100000-code-review-foo-r1.md",
-            "# Review\n\n### [BLOCKING] Foo batch issue\nDetails for foo.\n",
-        )
-        _write_review(
-            self.reviews_dir,
-            "20260601-110000-code-review-bar-r1.md",
-            "# Review\n\n### [BLOCKING] Bar batch issue\nDetails for bar.\n",
-        )
-        _write_review(
-            self.reviews_dir,
-            "20260601-120000-code-review-r1.md",
-            "# Review\n\n### [BLOCKING] Holistic round issue\nDetails for holistic.\n",
-        )
-
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="batch", batch_name="foo")
-        self.assertIn("Foo batch issue", digest)
-        self.assertIn("Holistic round issue", digest)
-        self.assertNotIn("Bar batch issue", digest)
+        digest = _prior_blocking.build_digest(self.reviews_dir)
+        self.assertEqual(digest, "- Holistic round issue: Details for holistic.")
 
     def test_empty_reviews_dir_returns_empty_string(self):
-        """Case 7: an empty (or non-matching-only) reviews_dir returns ""."""
+        """Case 6: an empty (or non-matching-only) reviews_dir returns ""."""
         _write_review(self.reviews_dir, "not-a-review.txt", "irrelevant content\n")
 
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="holistic")
+        digest = _prior_blocking.build_digest(self.reviews_dir)
         self.assertEqual(digest, "")
 
-    def test_retry_fix_batch_name_not_misclassified_as_holistic(self):
-        """
-        Case 8: a batch literally named "retry-fix" is matched correctly by RE_BATCH when its own
-        batch scope is requested, and is never misclassified as a holistic-classified file via an
-        unanchored match.
-
-        RE_SIMPLE requires "-review-r<digits>.md" to immediately follow the type token, which
-        "...-code-review-retry-fix-r1.md" does not satisfy, so this file must classify as
-        batch-scope (batch="retry-fix"), not holistic-scope.
-        Since holistic-classified files are included under every batch scope (any batch_name),
-        while batch-classified files are included only under their own batch_name, the
-        distinguishing proof is that this file is ABSENT from a different batch's digest -- if it
-        had been misclassified as holistic-classified, it would incorrectly appear there too.
-        """
-        _write_review(
-            self.reviews_dir,
-            "20260601-100000-code-review-retry-fix-r1.md",
-            "# Review\n\n### [BLOCKING] Retry fix batch issue\nDetails for retry-fix.\n",
-        )
-        _write_review(
-            self.reviews_dir,
-            "20260601-110000-code-review-r1.md",
-            "# Review\n\n### [BLOCKING] Genuine holistic issue\nDetails for holistic.\n",
-        )
-
-        digest = _prior_blocking.build_digest(self.reviews_dir, scope="batch", batch_name="retry-fix")
-        self.assertIn("Retry fix batch issue", digest)
-
-        only_retry_fix_dir = self.tmp_path / "reviews-only-retry-fix"
-        only_retry_fix_dir.mkdir(parents=True, exist_ok=True)
-        _write_review(
-            only_retry_fix_dir,
-            "20260601-100000-code-review-retry-fix-r1.md",
-            "# Review\n\n### [BLOCKING] Retry fix batch issue\nDetails for retry-fix.\n",
-        )
-
-        other_batch_digest = _prior_blocking.build_digest(
-            only_retry_fix_dir, scope="batch", batch_name="unrelated-batch"
-        )
-        self.assertEqual(other_batch_digest, "")
-
     def test_nonexistent_reviews_dir_returns_empty_string(self):
-        """Case 9: reviews_dir pointing at a non-existent path returns "" without raising."""
+        """Case 7: reviews_dir pointing at a non-existent path returns "" without raising."""
         nonexistent = self.tmp_path / "does-not-exist"
 
-        digest = _prior_blocking.build_digest(nonexistent, scope="holistic")
+        digest = _prior_blocking.build_digest(nonexistent)
         self.assertEqual(digest, "")
 
 

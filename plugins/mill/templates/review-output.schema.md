@@ -51,7 +51,7 @@ The fenced ` ```yaml ` block placed immediately after the `# Review: ...` headin
 | `duration_s` | number | no | wall-clock seconds for the whole round, including any resume-retry or fast-fail-retry |
 | `tool_calls` | integer | no | tool-use blocks the reviewer made, or the CLI's native turn count when it reports one |
 | `cost_usd` | number | no | reported dollar cost of the round |
-| `reviewed_file` | string | yes | path to the artefact reviewed (discussion file, batch file, or `plan/`) |
+| `reviewed_file` | string | yes | path to the artefact reviewed (discussion file or `plan/`) |
 | `date` | string | yes | UTC date in `YYYY-MM-DD` format |
 
 `reviewer_model` is orchestrator-supplied — dictated to the reviewer up front — and `apply_actual_model_override()` (invoked via the CLIs' `--actual-model` flag) can rewrite it after the fact.
@@ -139,19 +139,16 @@ Review files are named by `write_review_file()` according to these patterns:
 | Review type | Filename pattern |
 |---|---|
 | Discussion / code / plan holistic | `<ts>-<type>-review-r<N>.md` |
-| Plan per-batch | `<ts>-plan-review-<batch-name>-r<N>.md` |
 
 Where:
 - `<ts>` = `YYYYMMDD-HHMMSS` UTC timestamp
 - `<type>` = `discussion`, `code`, or `plan`
 - `<N>` = 1-indexed round number
-- `<batch-name>` = batch stem from `plan/NN-<name>.md`, matching `[a-z0-9-]+`
 
 Examples:
 - `20260418-001200-discussion-review-r1.md`
 - `20260418-143300-code-review-r2.md`
 - `20260418-143300-plan-review-r1.md`
-- `20260418-143300-plan-review-03-templates-r1.md`
 
 ---
 

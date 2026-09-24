@@ -3,7 +3,7 @@
 Uses _reviewer_test_stub as the reviewer backend.
     All tests run in-process
 with no real LLM, no network calls. Covers the bugs fixed in batches 01-05:
-- Per-scope round counter (#21/#62/#63)
+- Holistic round counter (#21/#62/#63)
 - Manifest presence in prompts (#5/#7 prevention)
 - creates_union suppression (#60)
 - Hard-fail on missing refs (#41/#43)
@@ -244,51 +244,24 @@ def main() -> int:
     errors = 0
 
     # ------------------------------------------------------------------
-    # Test 1 — per-scope round counter on sequential per-batch calls Regression pin for #21/#62/#63: holistic must start at r1 even after multiple per-batch rounds have been recorded.
+    # Test 1 — holistic round counter increments per call
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # alpha round 1
-            _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            assert r.round == 1, f"expected round 1, got {r.round}"
-            assert r.verdict == "APPROVE"
-            fname = Path(r.reviews[0]["file"]).name
-            assert "code-review-alpha-r1" in fname, f"unexpected filename: {fname}"
-            assert str(project_root / "reviews") in r.reviews[0]["file"], (
-                f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
-            )
-            print(f"PASS test1a: alpha r1 -> {fname}")
-
-            # alpha round 2 (counter increments per-scope)
-            _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            assert r.round == 2, f"expected round 2, got {r.round}"
-            fname = Path(r.reviews[0]["file"]).name
-            assert "code-review-alpha-r2" in fname, f"unexpected filename: {fname}"
-            print(f"PASS test1b: alpha r2 -> {fname}")
-
-            # beta round 1 (fresh per-scope counter, not r3)
-            _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
-            assert r.round == 1, f"expected round 1 for beta, got {r.round}"
-            fname = Path(r.reviews[0]["file"]).name
-            assert "code-review-beta-r1" in fname, f"unexpected filename: {fname}"
-            print(f"PASS test1c: beta r1 (independent of alpha counter) -> {fname}")
-
-            # holistic round 1 (independent of both per-batch counters)
-            _seed_approve(1)
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
-            assert r.round == 1, f"expected holistic round 1, got {r.round}"
-            fname = Path(r.reviews[0]["file"]).name
-            assert "code-review-r1" in fname, f"unexpected holistic filename: {fname}"
-            assert "alpha" not in fname and "beta" not in fname, (
-                f"batch name leaked into holistic filename: {fname}"
-            )
-            print(f"PASS test1d: holistic r1 (per-scope regression #21/#62/#63) -> {fname}")
+            for expected_round in (1, 2):
+                _seed_approve(1)
+                r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+                assert r.round == expected_round, f"expected round {expected_round}, got {r.round}"
+                assert r.verdict == "APPROVE"
+                fname = Path(r.reviews[0]["file"]).name
+                assert f"code-review-r{expected_round}" in fname, f"unexpected holistic filename: {fname}"
+                assert str(project_root / "reviews") in r.reviews[0]["file"], (
+                    f"review file must be under worktree/reviews/, got {r.reviews[0]['file']!r}"
+                )
+                print(f"PASS test1: holistic r{expected_round} -> {fname}")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test1: {exc}", file=sys.stderr)
@@ -307,7 +280,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
@@ -383,7 +356,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            r = code_run(cfg3, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
+            r = code_run(cfg3, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             print("PASS test3: creates_union suppresses missing cross-batch Reads ref (#60)")
         except AssertionError as exc:
@@ -443,7 +416,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            code_run(cfg4, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            code_run(cfg4, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             errors += 1
             print("FAIL test4: expected ReviewError for missing ref, none raised", file=sys.stderr)
         except ReviewError as exc:
@@ -477,7 +450,7 @@ def main() -> int:
             (APPROVE_TEXT,      "sid-2"),
         ])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
@@ -514,7 +487,7 @@ def main() -> int:
             (NEED_CONTEXT_TEXT, "sid-2"),
         ])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "NEED_CONTEXT", (
                 f"expected NEED_CONTEXT propagation, got {r.verdict}"
             )
@@ -581,16 +554,16 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Pre-populate 3 review files for batch "foo"
+            # Pre-populate 3 holistic review files
             _seed_approve(3)
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
-            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
+            code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             # Round 4 without kwarg: cfg.rounds == 3 -> ReviewError
             try:
                 _seed_approve(1)
-                code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo")
+                code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
                 errors += 1
                 print("FAIL test7: expected ReviewError for round 4 with cfg max=3", file=sys.stderr)
             except Exception as exc:
@@ -602,10 +575,10 @@ def main() -> int:
 
             # Round 4 with max_rounds=5 kwarg: should succeed
             _seed_approve(1)
-            r4 = code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="foo", max_rounds=5)
+            r4 = code_run(cfg7, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, max_rounds=5)
             assert r4.round == 4, f"expected round 4, got {r4.round}"
             fname4 = Path(r4.reviews[0]["file"]).name
-            assert "code-review-foo-r4" in fname4, f"unexpected filename: {fname4}"
+            assert "code-review-r4" in fname4, f"unexpected filename: {fname4}"
             print(f"PASS test7b: round 4 succeeds with max_rounds=5 -> {fname4}")
 
         except AssertionError as exc:
@@ -633,12 +606,12 @@ def main() -> int:
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([(three_blockings, "sid-b1")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.blocking_count == 3, f"expected blocking_count=3, got {r.blocking_count}"
             print("PASS test8a: three BLOCKING headings -> blocking_count == 3")
 
             stub.seed([(APPROVE_TEXT, "sid-b2")])
-            r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
+            r2 = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r2.blocking_count == 0, f"expected blocking_count=0, got {r2.blocking_count}"
             print("PASS test8b: no BLOCKING headings -> blocking_count == 0")
 
@@ -649,39 +622,6 @@ def main() -> int:
             errors += 1
             print(f"FAIL test8 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
-            os.chdir(orig_dir)
-
-    # ------------------------------------------------------------------
-    # Test 9 — ERROR parity: initial LLM call raises (per-batch)
-    # ------------------------------------------------------------------
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        original_run = stub.run
-        def _raise_boom(prompt_text, **kw):
-            raise LLMError("seeded boom")
-        stub.run = _raise_boom
-        stub.seed([])  # clear prompts log
-        try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
-            assert len(r.reviews) == 1
-            rev = r.reviews[0]
-            assert rev["verdict"] == "ERROR", f"expected ERROR entry, got {rev['verdict']}"
-            assert rev["file"] is None, f"expected file=None, got {rev['file']}"
-            assert "seeded boom" in rev["error"], f"error field wrong: {rev['error']}"
-            assert rev["session_id"] is None
-            assert all(rv["verdict"] == "ERROR" for rv in r.reviews), f"expected all sub-reviews ERROR, got {[rv['verdict'] for rv in r.reviews]}"
-            print("PASS test9: initial LLM failure -> ReviewResult(ERROR) not raise")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test9: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test9 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            stub.run = original_run
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
@@ -697,7 +637,7 @@ def main() -> int:
         stub.run = _raise_boom
         stub.seed([])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
@@ -733,7 +673,7 @@ def main() -> int:
         stub.seed([(NEED_CONTEXT_TEXT, "sid-1")])
         stub.run = _seq
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", f"expected ERROR for all-ERROR run, got {r.verdict}"
             rev = r.reviews[0]
             assert rev["verdict"] == "ERROR"
@@ -803,7 +743,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            code_run(cfg12, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            code_run(cfg12, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
             first_prompt = prompts[0][0]
@@ -824,7 +764,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 13 — timeout plumbing: bulk_timeout and holistic_timeout forwarded
+    # Test 13 — timeout plumbing: holistic_timeout forwarded
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
@@ -834,17 +774,7 @@ def main() -> int:
         cfg["llm"]["holistic_timeout"] = 1800
         try:
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            _, kwargs = prompts[0]
-            assert kwargs["timeout"] == 900, (
-                f"per-batch call: expected timeout=900, got {kwargs['timeout']}"
-            )
-            print("PASS test13a: bulk_timeout=900 forwarded to reviewer for per-batch call")
-
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             prompts = stub.captured_prompts()
             _, kwargs = prompts[0]
             assert kwargs["timeout"] == 1800, (
@@ -861,179 +791,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 14 — diff-scoping (effort threading removed; covered by test-reviewer-single.py)
-    # ------------------------------------------------------------------
-
-    # 14c: per-batch with start_sha present -> prompt contains DIFF delimiter
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.name", "T"],
-                check=True, capture_output=True,
-            )
-            (project_root / "src" / "a.py").write_text("x\n" * 2000, encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
-                check=True, capture_output=True,
-            )
-            start_sha = subprocess.run(
-                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-                check=True, capture_output=True, text=True,
-            ).stdout.strip()
-            with open(project_root / "src" / "a.py", "a", encoding="utf-8") as fh:
-                fh.write("y\n" * 5)
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "small change"],
-                check=True, capture_output=True,
-            )
-            (project_root / "_mill").mkdir(exist_ok=True)
-            (project_root / "_mill" / "status.md").write_text(
-                "# Status\n\n"
-                "```yaml\n"
-                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
-                "plan: plan\nparent: main\ntask: test\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            assert "--- DIFF:" in prompts[0][0], (
-                f"expected DIFF delimiter in prompt; prompt[:300]={prompts[0][0][:300]!r}"
-            )
-            print("PASS test14c: per-batch with start_sha uses diff-scoping (DIFF delimiter in prompt)")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test14c: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test14c (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # 14d: per-batch with missing start_sha -> prompt uses FILE delimiter (no DIFF)
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            (project_root / "status.md").write_text(
-                "# Status\n\n"
-                "```yaml\n"
-                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
-                "plan: plan\nparent: main\ntask: test\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    state: approved\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            assert "--- DIFF:" not in prompts[0][0], (
-                "expected no DIFF delimiter when start_sha is absent"
-            )
-            print("PASS test14d: per-batch with missing start_sha falls back to full file content")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test14d: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test14d (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # 14e: per-batch with large diff -> prompt uses FILE delimiter (not DIFF)
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.name", "T"],
-                check=True, capture_output=True,
-            )
-            (project_root / "src" / "a.py").write_text("x\n" * 20, encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
-                check=True, capture_output=True,
-            )
-            start_sha = subprocess.run(
-                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-                check=True, capture_output=True, text=True,
-            ).stdout.strip()
-            (project_root / "src" / "a.py").write_text("y\n" * 20, encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "large rewrite"],
-                check=True, capture_output=True,
-            )
-            (project_root / "status.md").write_text(
-                "# Status\n\n"
-                "```yaml\n"
-                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
-                "plan: plan\nparent: main\ntask: test\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            prompts = stub.captured_prompts()
-            assert prompts, "expected at least one captured prompt"
-            assert "--- DIFF:" not in prompts[0][0], (
-                "expected no DIFF delimiter when diff exceeds threshold"
-            )
-            print("PASS test14e: per-batch with large diff falls back to full file content")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test14e: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test14e (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # ------------------------------------------------------------------
     # Test 15 — code review parse_verdict failure returns ERROR envelope (#315)
-    # Tests both holistic (batch_name=None) and per-batch (batch_name="alpha").
     # Unparseable output -> ERROR entry with file path.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
@@ -1041,11 +799,10 @@ def main() -> int:
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
-            # Test holistic mode (batch_name=None)
             stub.seed([
                 ("# Raw prose without yaml block\n\nCode looks good.", "sid-hol"),
             ])
-            r_hol = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
+            r_hol = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r_hol.verdict in ("ERROR", "REQUEST_CHANGES"), (
                 f"expected ERROR or REQUEST_CHANGES, got {r_hol.verdict}"
             )
@@ -1059,25 +816,6 @@ def main() -> int:
             assert r_hol.reviews[0]["file"] is not None, "ERROR entry should have a file path"
             file_path_hol = Path(r_hol.reviews[0]["file"])
             assert file_path_hol.exists(), f"review file should exist on disk: {file_path_hol}"
-
-            # Test per-batch mode (batch_name="alpha")
-            stub.seed([
-                ("# Raw prose\n\nBatch code OK.", "sid-batch"),
-            ])
-            r_batch = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
-            assert r_batch.verdict in ("ERROR", "REQUEST_CHANGES"), (
-                f"expected ERROR or REQUEST_CHANGES for per-batch, got {r_batch.verdict}"
-            )
-            assert len(r_batch.reviews) >= 1, f"expected at least 1 review, got {len(r_batch.reviews)}"
-            assert r_batch.reviews[0]["verdict"] == "ERROR", (
-                f"expected ERROR verdict for per-batch, got {r_batch.reviews[0]['verdict']}"
-            )
-            assert "parse_verdict failed" in r_batch.reviews[0].get("error", ""), (
-                f"error message missing 'parse_verdict failed': {r_batch.reviews[0].get('error')}"
-            )
-            assert r_batch.reviews[0]["file"] is not None, "per-batch ERROR entry should have a file path"
-            file_path_batch = Path(r_batch.reviews[0]["file"])
-            assert file_path_batch.exists(), f"review file should exist on disk: {file_path_batch}"
 
             print("PASS test15: code review parse_verdict failure emits ERROR envelope (#315)")
         except AssertionError as exc:
@@ -1098,7 +836,7 @@ def main() -> int:
         os.chdir(project_root)
         cfg["roles"]["code-review"]["holistic"]["rounds"] = 0
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name=None)
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE for rounds=0, got {r.verdict}"
             assert r.round == 0, f"expected round=0, got {r.round}"
             assert r.blocking_count == 0, f"expected blocking_count=0, got {r.blocking_count}"
@@ -1130,7 +868,7 @@ def main() -> int:
             )
             _seed_approve(0)
             stub.seed([(review_with_nits, "sid-nits")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert r.nit_count == 3, f"expected nit_count=3, got {r.nit_count}"
             print("PASS test17a: nit_count=3 computed from review with 3 [NIT] headings")
@@ -1143,7 +881,7 @@ def main() -> int:
             )
             _seed_approve(0)
             stub.seed([(review_no_nits, "sid-no-nits")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="beta")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             assert r.nit_count == 0, f"expected nit_count=0, got {r.nit_count}"
             print("PASS test17b: nit_count=0 when no [NIT] headings present")
@@ -1178,7 +916,7 @@ def main() -> int:
             _seed_approve(1)
             r = code_run(
                 cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root,
-                batch_name="alpha", prior_notes=prior_notes_path
+                prior_notes=prior_notes_path
             )
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
 
@@ -1202,7 +940,7 @@ def main() -> int:
             orig_dir2 = os.getcwd()
             os.chdir(project_root2)
             _seed_approve(1)
-            r2 = code_run(cfg2, SLUG, mill_dir2, wiki_root2, project_root2, git_root=project_root2, batch_name="alpha")
+            r2 = code_run(cfg2, SLUG, mill_dir2, wiki_root2, project_root2, git_root=project_root2)
             assert r2.verdict == "APPROVE"
             prompts2 = stub.captured_prompts()
             prompt_text2 = prompts2[-1][0]  # last prompt
@@ -1281,7 +1019,7 @@ def main() -> int:
             )
 
             _seed_approve(1)
-            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
 
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
@@ -1296,122 +1034,6 @@ def main() -> int:
         except Exception as exc:
             errors += 1
             print(f"FAIL test19 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # ------------------------------------------------------------------
-    # Test 21 — Rename NIT spliced into per-batch finalize (Card 21)
-    # When a batch declares Moves: and git diff reports add+delete (not a rename), finalize must splice an advisory [NIT] into the written review file without changing the verdict from APPROVE.
-    # ------------------------------------------------------------------
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            plan_dir = project_root / "plan"
-            # Overwrite the alpha batch file to declare a move pair.
-            def _make_batch_with_moves_for_finalize(name: str, moves: list[tuple[str, str]]) -> str:
-                """Return minimal batch file text with a Moves: field."""
-                if moves:
-                    moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
-                    moves_part = f"\n{moves_lines}"
-                else:
-                    moves_part = " none"
-                return (
-                    f"# Batch: {name}\n\n"
-                    "```yaml\n"
-                    f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
-                    "```\n\n"
-                    "## Cards\n\n### Card 1\n\n"
-                    "- **Context:** none\n"
-                    "- **Edits:** none\n"
-                    "- **Creates:** none\n"
-                    "- **Deletes:** none\n"
-                    f"- **Moves:**{moves_part}\n"
-                )
-
-            (plan_dir / "01-alpha.md").write_text(
-                _make_batch_with_moves_for_finalize(
-                    "alpha",
-                    [("old/module.py", "new/module.py")],
-                ),
-                encoding="utf-8",
-            )
-
-            # Write status.md with a start_sha so _splice_rename_nit_findings can find a start_sha for the batch.
-            # The SHA value is a plausible git hash;
-            # the actual git diff is mocked so validity does not matter.
-            fake_start_sha = "aabbccdd1234567890abcdef1234567890abcdef"
-            mill_state_dir = project_root / "_mill"
-            mill_state_dir.mkdir(parents=True, exist_ok=True)
-            (mill_state_dir / "status.md").write_text(
-                "# Status: test-slug\n\n"
-                "```yaml\n"
-                "phase: implement\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    start_sha: {fake_start_sha}\n"
-                "```\n",
-                encoding="utf-8",
-            )
-
-            # Mock _subprocess_util.run so git diff returns an add+delete diff (no R-status line), which the rename check must flag as a NIT.
-            add_delete_diff = "A\tnew/module.py\nD\told/module.py\n"
-            fake_completed = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=add_delete_diff, stderr=""
-            )
-
-            reviews_dir = project_root / "reviews"
-            reviews_dir.mkdir(parents=True, exist_ok=True)
-
-            approve_raw = (
-                "# Review: test\n\n"
-                "```yaml\nverdict: APPROVE\n```\n\n"
-                "## Findings\n\n(none)\n\n"
-                "## Verdict\n\nAPPROVE\n"
-            )
-
-            with unittest.mock.patch("_subprocess_util.run", return_value=fake_completed):
-                result = code_finalize(
-                    cfg,
-                    SLUG,
-                    approve_raw,
-                    scope="alpha",
-                    round_n=1,
-                    reviews_dir=reviews_dir,
-                    mill_dir=mill_dir,
-                    project_root=project_root,
-                    wiki_root=wiki_root,
-                    git_root=project_root,
-                )
-
-            assert result.verdict == "APPROVE", (
-                f"NIT must not change verdict from APPROVE, got {result.verdict!r}"
-            )
-            assert result.blocking_count == 0, (
-                f"NIT must not increment blocking_count, got {result.blocking_count}"
-            )
-            # Read the written review file and confirm the [NIT] block is present.
-            review_files = list(reviews_dir.glob("*.md"))
-            assert review_files, "finalize must have written a review file"
-            review_text = review_files[0].read_text(encoding="utf-8")
-            assert "[NIT]" in review_text, (
-                "advisory rename NIT was not spliced into the review file"
-            )
-            assert "old/module.py" in review_text, (
-                "NIT must reference the undetected move source path"
-            )
-            assert "new/module.py" in review_text, (
-                "NIT must reference the undetected move destination path"
-            )
-            print("PASS test21: rename NIT spliced into finalize; verdict unchanged")
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test21: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test21 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
         finally:
             os.chdir(orig_dir)
 
@@ -1560,7 +1182,7 @@ def main() -> int:
         os.chdir(project_root)
         _seed_approve(1)
         try:
-            r = code_run(cfg23, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg23, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             prompts = stub.captured_prompts()
             assert prompts, "expected at least one captured prompt"
@@ -1608,7 +1230,7 @@ def main() -> int:
                 "```yaml\nverdict: REQUEST_CHANGES\n```\n"
             )
             stub.seed([(classed_text, "sid-classed")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "REQUEST_CHANGES", f"expected REQUEST_CHANGES, got {r.verdict}"
             assert r.blocking_count == 4, f"expected blocking_count=4, got {r.blocking_count}"
             assert len(r.findings) == 4, f"expected 4 findings, got {len(r.findings)}"
@@ -1634,116 +1256,6 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 25 — advisory rename-check NITs spliced by _splice_rename_nit_findings appear in the
-    # finalize envelope's findings list, confirming the splice happens before extraction (Card 18,
-    # check 2).
-    # ------------------------------------------------------------------
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            plan_dir = project_root / "plan"
-
-            def _make_batch_with_moves_for_splice(name: str, moves: list[tuple[str, str]]) -> str:
-                """Return minimal batch file text with a Moves: field."""
-                moves_lines = "\n".join(f"  - `{s}` -> `{d}`" for s, d in moves)
-                return (
-                    f"# Batch: {name}\n\n"
-                    "```yaml\n"
-                    f"task: test\nbatch: {name}\ncards: 1\nverify: null\ndepends-on: []\n"
-                    "```\n\n"
-                    "## Cards\n\n### Card 1\n\n"
-                    "- **Context:** none\n"
-                    "- **Edits:** none\n"
-                    "- **Creates:** none\n"
-                    "- **Deletes:** none\n"
-                    f"- **Moves:**\n{moves_lines}\n"
-                )
-
-            (plan_dir / "01-alpha.md").write_text(
-                _make_batch_with_moves_for_splice(
-                    "alpha", [("old/module.py", "new/module.py")]
-                ),
-                encoding="utf-8",
-            )
-
-            fake_start_sha = "aabbccdd1234567890abcdef1234567890abcdef"
-            mill_state_dir = project_root / "_mill"
-            mill_state_dir.mkdir(parents=True, exist_ok=True)
-            (mill_state_dir / "status.md").write_text(
-                "# Status: test-slug\n\n"
-                "```yaml\n"
-                "phase: implement\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    start_sha: {fake_start_sha}\n"
-                "```\n",
-                encoding="utf-8",
-            )
-
-            add_delete_diff = "A\tnew/module.py\nD\told/module.py\n"
-            fake_completed = subprocess.CompletedProcess(
-                args=[], returncode=0, stdout=add_delete_diff, stderr=""
-            )
-
-            reviews_dir = project_root / "reviews"
-            reviews_dir.mkdir(parents=True, exist_ok=True)
-
-            approve_raw = (
-                "# Review: test\n\n"
-                "```yaml\nverdict: APPROVE\n```\n\n"
-                "## Findings\n\n(none)\n\n"
-                "## Verdict\n\nAPPROVE\n"
-            )
-
-            with unittest.mock.patch("_subprocess_util.run", return_value=fake_completed):
-                result = code_finalize(
-                    cfg,
-                    SLUG,
-                    approve_raw,
-                    scope="alpha",
-                    round_n=1,
-                    reviews_dir=reviews_dir,
-                    mill_dir=mill_dir,
-                    project_root=project_root,
-                    wiki_root=wiki_root,
-                    git_root=project_root,
-                )
-
-            assert result.verdict == "APPROVE", (
-                f"advisory rename NIT must not change verdict from APPROVE, got {result.verdict!r}"
-            )
-            assert len(result.findings) == 1, (
-                f"expected the spliced NIT to appear once in the envelope's findings list, "
-                f"got {result.findings}"
-            )
-            spliced_finding = result.findings[0]
-            assert spliced_finding["severity"] == "NIT", (
-                f"expected the spliced finding's severity to be NIT, got {spliced_finding}"
-            )
-            assert "old/module.py" in spliced_finding["title"] and "new/module.py" in spliced_finding["title"], (
-                f"expected the spliced finding's title to reference both move-pair paths, "
-                f"got {spliced_finding['title']!r}"
-            )
-            assert result.reviews[0]["findings"] == result.findings, (
-                "per-scope reviews[] findings must match the top-level findings list"
-            )
-            print(
-                "PASS test25: rename-check advisory NIT spliced before extraction appears in "
-                "finalize envelope's findings list (Card 18)"
-            )
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test25: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test25 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # ------------------------------------------------------------------
     # Test 26 — cost metadata happy path: reviews[0] carries duration_s/tool_calls/cost_usd
     # and the written file's yaml header has an injected duration_s: line.
     # ------------------------------------------------------------------
@@ -1753,7 +1265,7 @@ def main() -> int:
         os.chdir(project_root)
         try:
             stub.seed([(APPROVE_TEXT, "sid-cost-happy")])
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE, got {r.verdict}"
             entry = r.reviews[0]
             # The stub's ReviewerCallResult carries duration_s=0.0 (a real in-process call
@@ -1805,7 +1317,7 @@ def main() -> int:
         stub.run = _seq_summation
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
             entry = r.reviews[0]
             assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
@@ -1854,7 +1366,7 @@ def main() -> int:
         stub.run = _seq_none_absorbing
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
             entry = r.reviews[0]
             assert entry["duration_s"] == 15.0, f"expected summed duration_s=15.0, got {entry['duration_s']!r}"
@@ -1896,7 +1408,7 @@ def main() -> int:
         stub.run = _raise_with_duration
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
             entry = r.reviews[0]
             assert entry["duration_s"] == 12.5, f"expected duration_s=12.5, got {entry['duration_s']!r}"
@@ -1941,7 +1453,7 @@ def main() -> int:
         stub.run = _seq_retry_failure
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
             entry = r.reviews[0]
             assert entry["duration_s"] == 14.0, (
@@ -1985,7 +1497,7 @@ def main() -> int:
         stub.run = _return_unparseable
         stub.seed([])  # clear prompts log
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "ERROR", f"expected ERROR, got {r.verdict}"
             entry = r.reviews[0]
             assert entry["duration_s"] == 7.25, f"expected duration_s=7.25, got {entry['duration_s']!r}"
@@ -2011,7 +1523,7 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 32 — prepare() batch-mode bulk prompt (no start_sha) carries no
+    # Test 32 — prepare() holistic bulk prompt (no start_sha) carries no
     # absolute project_root prefix, states the Context: token plan-relative,
     # and opens with a ## Path roots block.
     # ------------------------------------------------------------------
@@ -2021,22 +1533,22 @@ def main() -> int:
         os.chdir(project_root)
         try:
             result = prepare(
-                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
+                cfg, SLUG, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=project_root,
             )
             prompt_text = result["prompt_text"]
             files_section = prompt_text.split("## Files included", 1)[-1]
             assert str(project_root) not in files_section, (
-                "prepare() batch-mode bulk prompt leaks an absolute project_root path"
+                "prepare() holistic bulk prompt leaks an absolute project_root path"
                 " beyond the ## Path roots header"
             )
             assert "src/a.py" in prompt_text, (
-                "prepare() batch-mode bulk prompt is missing the plan-relative Context: token"
+                "prepare() holistic bulk prompt is missing the plan-relative Context: token"
             )
             assert "## Path roots" in prompt_text, (
-                "prepare() batch-mode bulk prompt is missing the ## Path roots header"
+                "prepare() holistic bulk prompt is missing the ## Path roots header"
             )
-            print("PASS test32: prepare() batch-mode bulk prompt (no start_sha) is plan-relative")
+            print("PASS test32: prepare() holistic bulk prompt (no start_sha) is plan-relative")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test32: {exc}", file=sys.stderr)
@@ -2047,102 +1559,13 @@ def main() -> int:
             os.chdir(orig_dir)
 
     # ------------------------------------------------------------------
-    # Test 33 — prepare() batch-mode bulk prompt WITH a start_sha-bearing
-    # fixture: exercises the diff-scoped branch's own bulk_files(plan_and_ancestors)
-    # call, not just the else branch's single bulk_files(all_bulked) call that
-    # test32 covers. Asserts no absolute project_root prefix while both a
-    # --- DIFF: and a --- FILE: delimiter are present, so both bulking calls
-    # on the diff-scoped branch are covered by the one assertion.
-    # ------------------------------------------------------------------
-    with _test_helpers.safe_temp_dir() as tmpdir:
-        mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        orig_dir = os.getcwd()
-        os.chdir(project_root)
-        try:
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.email", "t@t.com"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "config", "user.name", "T"],
-                check=True, capture_output=True,
-            )
-            (project_root / "src" / "a.py").write_text("x\n" * 2000, encoding="utf-8")
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "initial a.py"],
-                check=True, capture_output=True,
-            )
-            start_sha = subprocess.run(
-                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
-                check=True, capture_output=True, text=True,
-            ).stdout.strip()
-            with open(project_root / "src" / "a.py", "a", encoding="utf-8") as fh:
-                fh.write("y\n" * 5)
-            subprocess.run(
-                ["git", "-C", str(project_root), "add", "src/a.py"],
-                check=True, capture_output=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(project_root), "commit", "-m", "small change"],
-                check=True, capture_output=True,
-            )
-            (project_root / "_mill").mkdir(exist_ok=True)
-            (project_root / "_mill" / "status.md").write_text(
-                "# Status\n\n"
-                "```yaml\n"
-                f"phase: coding\nslug: {SLUG}\nbranch: {SLUG}\n"
-                "plan: plan\nparent: main\ntask: test\n"
-                "```\n\n"
-                "## Batches\n\n"
-                "```yaml\n"
-                f"batches:\n  - name: alpha\n    state: approved\n    start_sha: {start_sha}\n"
-                "```\n",
-                encoding="utf-8",
-            )
-            result = prepare(
-                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
-                wiki_root=wiki_root, git_root=project_root,
-            )
-            prompt_text = result["prompt_text"]
-            files_section = prompt_text.split("## Files included", 1)[-1]
-            assert str(project_root) not in files_section, (
-                "prepare() batch-mode diff-scoped prompt leaks an absolute project_root path"
-                " beyond the ## Path roots header"
-            )
-            assert "--- DIFF:" in prompt_text, (
-                "expected a diff-scoped DIFF delimiter (bulk_files_with_diff branch) in prompt"
-            )
-            assert "--- FILE:" in prompt_text, (
-                "expected a plain FILE delimiter (bulk_files(plan_and_ancestors) branch) in prompt"
-            )
-            assert "## Path roots" in prompt_text, (
-                "prepare() batch-mode diff-scoped prompt is missing the ## Path roots header"
-            )
-            print(
-                "PASS test33: prepare() batch-mode diff-scoped prompt (start_sha set) is"
-                " plan-relative on both the DIFF and FILE bulking calls"
-            )
-        except AssertionError as exc:
-            errors += 1
-            print(f"FAIL test33: {exc}", file=sys.stderr)
-        except Exception as exc:
-            errors += 1
-            print(f"FAIL test33 (unexpected {type(exc).__name__}): {exc}", file=sys.stderr)
-        finally:
-            os.chdir(orig_dir)
-
-    # ------------------------------------------------------------------
-    # Test 34 — prepare() batch-mode tool-use prompt: the read_list bullets,
+    # Test 34 — prepare() holistic tool-use prompt: the read_list bullets,
     # Overview:/Batch file(s): lines, and resolve-against-root instruction
     # sentence are all plan-relative with no absolute project_root prefix.
     # ------------------------------------------------------------------
     with _test_helpers.safe_temp_dir() as tmpdir:
         mill_dir, wiki_root, project_root, cfg = _make_fixture(tmpdir)
-        cfg["roles"]["code-review"]["batch"]["reviewer"] = "test_stub_tooluse"
+        cfg["roles"]["code-review"]["holistic"]["reviewer"] = "test_stub_tooluse"
         orig_dir = os.getcwd()
         os.chdir(project_root)
         try:
@@ -2151,25 +1574,25 @@ def main() -> int:
                 test_stub_tooluse={"type": "single", "provider": "test_stub", "model": "test-stub-model", "tooluse": True},
             )
             result = prepare(
-                cfg, SLUG, scope="alpha", mill_dir=mill_dir, project_root=project_root,
+                cfg, SLUG, mill_dir=mill_dir, project_root=project_root,
                 wiki_root=wiki_root, git_root=project_root,
             )
             prompt_text = result["prompt_text"]
             files_section = prompt_text.split("## Files included", 1)[-1]
             assert str(project_root) not in files_section, (
-                "prepare() batch-mode tool-use prompt leaks an absolute project_root path"
+                "prepare() holistic tool-use prompt leaks an absolute project_root path"
                 " beyond the ## Path roots header"
             )
             assert "- `src/a.py`" in prompt_text, (
-                "prepare() batch-mode tool-use prompt is missing the plan-relative read_list bullet"
+                "prepare() holistic tool-use prompt is missing the plan-relative read_list bullet"
             )
             assert "## Path roots" in prompt_text, (
-                "prepare() batch-mode tool-use prompt is missing the ## Path roots header"
+                "prepare() holistic tool-use prompt is missing the ## Path roots header"
             )
             assert "relative to the root stated in the" in prompt_text, (
-                "prepare() batch-mode tool-use prompt is missing the resolve-against-stated-root instruction"
+                "prepare() holistic tool-use prompt is missing the resolve-against-stated-root instruction"
             )
-            print("PASS test34: prepare() batch-mode tool-use prompt is plan-relative")
+            print("PASS test34: prepare() holistic tool-use prompt is plan-relative")
         except AssertionError as exc:
             errors += 1
             print(f"FAIL test34: {exc}", file=sys.stderr)
@@ -2194,7 +1617,7 @@ def main() -> int:
             (APPROVE_TEXT,      "sid-2"),
         ])
         try:
-            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root, batch_name="alpha")
+            r = code_run(cfg, SLUG, mill_dir, wiki_root, project_root, git_root=project_root)
             assert r.verdict == "APPROVE", f"expected APPROVE after retry, got {r.verdict}"
             prompts = stub.captured_prompts()
             assert len(prompts) == 2, f"expected 2 captured prompts, got {len(prompts)}"
@@ -2238,7 +1661,6 @@ def main() -> int:
                 {},
                 "test-slug",
                 "# Raw prose without any yaml block\n\nNo verdict here.",
-                scope=None,
                 round_n=1,
                 reviews_dir=reviews_dir,
                 mill_dir=reviews_dir.parent,
@@ -2470,7 +1892,7 @@ def test_context_only_gitignored_ref_soft_fails_prepare() -> int:
         os.chdir(project_root)
         try:
             result = prepare(
-                cfg, SLUG, scope="alpha", mill_dir=mill_dir,
+                cfg, SLUG, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=project_root,
             )
             missing_ref = project_root / ".scratch" / "probe.md"
@@ -2520,7 +1942,7 @@ def test_context_only_gitignored_ref_soft_fails_prepare() -> int:
         os.chdir(project_root)
         try:
             prepare(
-                cfg, SLUG, scope="alpha", mill_dir=mill_dir,
+                cfg, SLUG, mill_dir=mill_dir,
                 project_root=project_root, wiki_root=wiki_root, git_root=project_root,
             )
             errors += 1

@@ -381,7 +381,7 @@ def main() -> int:
             print(f"FAIL: test 4 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Test 5: nested-layout batch-scope verify cwd threads cwd_override at the finalize stage (Card 19), distinct from the prepare/full-stage coverage added by batch 5's Card 21.
+    # Test 5: nested-layout holistic verify cwd threads cwd_override at the finalize stage (Card 19), distinct from the prepare/full-stage coverage added by batch 5's Card 21.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         (project_root / "_mill").mkdir(parents=True)
@@ -428,17 +428,15 @@ def main() -> int:
             mock_modules["_reviewers"].resolve = unittest.mock.MagicMock(
                 return_value={"model": "claude-haiku-4-5-20251001"}
             )
-            # A single batch named "test-batch" is present in the overview so the finalize-stage batch-scope lookup (`batch_entry is not None`) resolves.
-            mock_modules["_plan_dag"].extract_batch_index = unittest.mock.MagicMock(
-                return_value=[{"name": "test-batch", "file": "01-test-batch.md", "depends-on": []}]
+            mock_modules["_status"].read_batches = unittest.mock.MagicMock(return_value=[])
+            mock_modules["_plan_dag"].extract_batch_index = unittest.mock.MagicMock(return_value=[])
+            # One contributing batch whose verify resolved to the nested hub cwd, mirroring what iter_batch_verifies returns for a real `verify: {cwd: hub, command: exit 0}` mapping.
+            mock_modules["_plan_dag"].iter_batch_verifies = unittest.mock.MagicMock(
+                return_value=[("test-batch", "exit 0", nested_hub)]
             )
-            mock_modules["_plan_dag"]._read_batch_frontmatter = unittest.mock.MagicMock(
-                return_value={"verify": {"cwd": "hub", "command": "exit 0"}}
-            )
-            # parse_verify_field is the single normalizer (batch 3) that millpy-fix.py's finalize-stage batch-scope site must route through;
-            # stub its resolution to the nested hub root, mirroring what it would return for a real `verify: {cwd: hub, command: exit 0}` mapping.
+            # The overview itself declares no module-wide verify.
             mock_modules["_plan_dag"].parse_verify_field = unittest.mock.MagicMock(
-                return_value=("exit 0", nested_hub)
+                return_value=(None, None)
             )
 
             def mock_subprocess_run(*args, **kwargs):
@@ -483,9 +481,7 @@ def main() -> int:
                     millpy_fix.main(
                         [
                             "--scope",
-                            "batch",
-                            "--batch-name",
-                            "test-batch",
+                            "holistic",
                             "--review-file",
                             str(review_file),
                             "--round",
@@ -502,11 +498,11 @@ def main() -> int:
                     if mock_finalize.called:
                         call_args = mock_finalize.call_args
                         if (
-                            call_args[1].get("verify_cmd") == "exit 0"
+                            call_args[1].get("verify_cmd") == "(exit 0)"
                             and call_args[1].get("cwd_override") == nested_hub
                         ):
                             print(
-                                "PASS: nested-layout batch-scope verify threads cwd_override at finalize stage"
+                                "PASS: nested-layout holistic verify threads cwd_override at finalize stage"
                             )
                         else:
                             print(
@@ -519,172 +515,6 @@ def main() -> int:
                         errors += 1
         except Exception as exc:
             print(f"FAIL: test 5 ({exc})", file=sys.stderr)
-            errors += 1
-
-    # Test 6: --scope batch forwards batch_verify_baseline from status.md's batch entry,
-    # and forwards module_wide_verify_cmd/module_wide_cwd_override derived from the overview's
-    # own verify frontmatter (#916 -- Card 6/7).
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        (project_root / "_mill").mkdir(parents=True)
-        (project_root / "_mill/plan").mkdir(parents=True)
-        review_file = project_root / "review.json"
-        review_file.write_text("{}", encoding="utf-8")
-        agent_output_file = project_root / "agent_output.txt"
-        agent_output_file.write_text("test output", encoding="utf-8")
-
-        overview_file = project_root / "_mill/plan/00-overview.md"
-        overview_file.write_text("```yaml\nbatches: []\n```", encoding="utf-8")
-
-        # Sentinel resolved cwds distinguishing the module-wide (overview) verify from the
-        # batch-scope verify -- proves the two `_plan_dag.parse_verify_field` calls are kept
-        # separate rather than one accidentally reusing the other's result.
-        module_wide_cwd = project_root / "module-wide-hub"
-        batch_cwd = project_root / "batch-hub"
-        overview_frontmatter = {"verify": "module-wide-verify-cmd"}
-        batch_frontmatter = {"verify": {"cwd": "hub", "command": "exit 0"}}
-
-        try:
-            import importlib.util
-
-            mock_modules = {
-                "_review_common": unittest.mock.MagicMock(),
-                "_marker": unittest.mock.MagicMock(),
-                "_status": unittest.mock.MagicMock(),
-                "_reviewers": unittest.mock.MagicMock(),
-                "_plan_dag": unittest.mock.MagicMock(),
-                "_subprocess_util": unittest.mock.MagicMock(),
-                "_paths": unittest.mock.MagicMock(),
-                "_agent_dispatch": unittest.mock.MagicMock(),
-                "_render": unittest.mock.MagicMock(),
-                "_timestamp": unittest.mock.MagicMock(),
-            }
-
-            mock_modules["_review_common"].load_config = unittest.mock.MagicMock(
-                return_value={
-                    "paths": {"reviews_dir": "_mill/reviews/", "status_md": "_mill/status.md", "plan_dir": "_mill/plan/"},
-                    "roles": {"fixer": {"model": "haiku"}, "implementer": {"self_fix_rounds": 2}},
-                }
-            )
-            mock_modules["_marker"].slug_from_branch = unittest.mock.MagicMock(return_value="test-slug")
-            mock_modules["_status"].read_full = unittest.mock.MagicMock(
-                return_value={"yaml": {"task": "Test", "branch": "test-branch"}, "timeline": []}
-            )
-            mock_modules["_status"].read_branch = unittest.mock.MagicMock(return_value="test-branch")
-            mock_modules["_status"].read_batches = unittest.mock.MagicMock(
-                return_value=[
-                    {"name": "test-batch", "verify_baseline_failures": ["sigA", "sigB"]},
-                ]
-            )
-            mock_modules["_status"].get_module_verify_baseline = unittest.mock.MagicMock(
-                return_value="pre-existing-failures"
-            )
-            mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
-            mock_modules["_reviewers"].resolve = unittest.mock.MagicMock(
-                return_value={"model": "claude-haiku-4-5-20251001"}
-            )
-            mock_modules["_plan_dag"].extract_batch_index = unittest.mock.MagicMock(
-                return_value=[{"name": "test-batch", "file": "01-test-batch.md", "depends-on": []}]
-            )
-
-            def mock_read_frontmatter(path):
-                if Path(path).name == "00-overview.md":
-                    return overview_frontmatter
-                return batch_frontmatter
-
-            mock_modules["_plan_dag"]._read_batch_frontmatter = unittest.mock.MagicMock(
-                side_effect=mock_read_frontmatter
-            )
-
-            def mock_parse_verify_field(frontmatter, project_root_arg, git_root_arg):
-                if frontmatter is overview_frontmatter:
-                    return ("module-wide-verify-cmd", module_wide_cwd)
-                return ("exit 0", batch_cwd)
-
-            mock_modules["_plan_dag"].parse_verify_field = unittest.mock.MagicMock(
-                side_effect=mock_parse_verify_field
-            )
-
-            def mock_subprocess_run(*args, **kwargs):
-                result = unittest.mock.MagicMock()
-                result.returncode = 0
-                if args and ("user.name" in str(args) or "user.email" in str(args)):
-                    result.stdout = "Test User" if "user.name" in str(args) else "test@example.com"
-                else:
-                    result.stdout = ""
-                result.stderr = ""
-                return result
-
-            def mock_resolve_task_path(project_root_arg, rel_path):
-                return project_root / rel_path.lstrip("/")
-
-            mock_modules["_subprocess_util"].run = unittest.mock.MagicMock(side_effect=mock_subprocess_run)
-            mock_modules["_paths"].status_path = unittest.mock.MagicMock(
-                return_value=project_root / "_mill/status.md"
-            )
-            mock_modules["_paths"].resolve_task_path = unittest.mock.MagicMock(
-                side_effect=mock_resolve_task_path
-            )
-            mock_modules["_paths"].resolve_git_root = unittest.mock.MagicMock(return_value=project_root)
-            mock_modules["_paths"].resolve_wiki_path = unittest.mock.MagicMock(return_value=project_root)
-
-            with unittest.mock.patch.dict(sys.modules, mock_modules):
-                spec = importlib.util.spec_from_file_location(
-                    "millpy_fix_test6",
-                    HUB / "plugins/mill/scripts/millpy-fix.py",
-                )
-                millpy_fix = importlib.util.module_from_spec(spec)
-
-                mock_finalize = unittest.mock.MagicMock(return_value=0)
-
-                sys.modules["millpy_fix_test6"] = millpy_fix
-                with unittest.mock.patch.object(
-                    millpy_fix, "finalize_from_output", mock_finalize, create=True
-                ):
-                    spec.loader.exec_module(millpy_fix)
-                    millpy_fix.finalize_from_output = mock_finalize
-
-                    millpy_fix.main(
-                        [
-                            "--scope",
-                            "batch",
-                            "--batch-name",
-                            "test-batch",
-                            "--review-file",
-                            str(review_file),
-                            "--round",
-                            "1",
-                            "--stage",
-                            "finalize",
-                            "--agent-output",
-                            str(agent_output_file),
-                            "--session-id",
-                            "sid-xyz",
-                        ]
-                    )
-
-                    if mock_finalize.called:
-                        call_args = mock_finalize.call_args
-                        if (
-                            call_args.kwargs.get("batch_verify_baseline") == ["sigA", "sigB"]
-                            and call_args.kwargs.get("module_wide_verify_cmd") == "module-wide-verify-cmd"
-                            and call_args.kwargs.get("module_wide_cwd_override") == module_wide_cwd
-                            and call_args.kwargs.get("module_verify_baseline") == "pre-existing-failures"
-                        ):
-                            print(
-                                "PASS: --scope batch forwards batch_verify_baseline and module-wide verify derivation"
-                            )
-                        else:
-                            print(
-                                f"FAIL: batch-scope baseline forwarding - call_args={call_args}",
-                                file=sys.stderr,
-                            )
-                            errors += 1
-                    else:
-                        print("FAIL: finalize_from_output not called", file=sys.stderr)
-                        errors += 1
-        except Exception as exc:
-            print(f"FAIL: test 6 ({exc})", file=sys.stderr)
             errors += 1
 
     # Test 7: --scope holistic forwards batch_verify_baseline as the sorted union of every

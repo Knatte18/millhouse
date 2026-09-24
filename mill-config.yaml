@@ -31,7 +31,6 @@ pipeline:
   auto_report: true
   max_cards_per_batch: 20
   max_batch_context_tokens: 700000
-  rename_detect_pct: 30
   entry_wait: true  # master on/off switch for the mill-go/mill-plan entry-gate blocking wait; see _phase_wait.py
   entry_wait_timeout_minutes: 240  # give-up timeout (minutes) for the entry-gate wait before halting
   done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) even when a full test run is skipped as too slow. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561)
@@ -57,10 +56,6 @@ roles:
       reviewer: sonnethigh
       blocking_classes: [design]
   plan-review:
-    batch:
-      rounds: 0
-      reviewer: null
-      blocking_classes: [design, scope]
     holistic:
       rounds: 7
       min_rounds: 1
@@ -68,12 +63,6 @@ roles:
       reviewer: sonnethigh
       blocking_classes: [design, scope]
   code-review:
-    batch:
-      rounds: 0
-      min_rounds: 1
-      auto_approve_on_cap: true
-      reviewer: null
-      blocking_classes: [design, scope, decision, consistency]
     holistic:
       rounds: 5
       min_rounds: 1
@@ -83,7 +72,6 @@ roles:
       fallback_on:
       - rate-limit
       blocking_classes: [design, scope, decision, consistency]
-    diff_scope_threshold: 0.25
   implementer:
     self_fix_rounds: 2
     model: sonnetmedium

@@ -14,7 +14,6 @@ Public API:
     build_path_roots_section() — return a `## Path roots` markdown block naming the roots a
     DisplayRoots renders against
     RE_SIMPLE — regex matching simple review filenames
-    RE_BATCH — regex matching plan-batch review filenames
     find_active_slug() — branch-based slug detection;
     skips the daemon when a _mill/*.active marker confirms the current branch, else falls back to
     the marker only if the daemon call fails
@@ -24,9 +23,7 @@ Public API:
     read_constraints_md()— read CONSTRAINTS.md, empty string if absent
     resolve_path() — locate a path inside the active hub (where task/ lives) from a config template
     discover_round()     — determine next review round number per (review_type, scope)
-    detect_resume_round() — return highest per-batch-only round (no holistic yet), or None
     bulk_files() — concatenate file contents with FILE delimiters
-    bulk_files_with_diff() — like bulk_files but substitutes git diff output for small-diff files
     build_manifest_section() — return a `## Files included` markdown block listing every bulked file
     build_deletes_section() — return a `## Intentionally deleted` markdown block listing deleted
     tokens
@@ -99,15 +96,9 @@ from _config import (
 # Module-level regex constants
 # ---------------------------------------------------------------------------
 
-# Matches simple (non-batch) review filenames: 20260418-001200-discussion-review-r1.md 20260418-143300-code-review-r2.md 20260418-143300-plan-review-r1.md (plan holistic)
+# Matches review filenames: 20260418-001200-discussion-review-r1.md 20260418-143300-code-review-r2.md 20260418-143300-plan-review-r1.md
 RE_SIMPLE = re.compile(
     r"^\d{8}-\d{6}-(?P<type>discussion|code|plan)-review-r(?P<n>\d+)\.md$"
-)
-
-# Matches plan / code per-batch review filenames: 20260418-143300-plan-review-01-setup-r1.md 20260418-143300-code-review-foundation-r1.md RE_SIMPLE is checked first;
-# a file matching RE_SIMPLE is excluded from RE_BATCH matching (prevents holistic files from being mis-identified).
-RE_BATCH = re.compile(
-    r"^\d{8}-\d{6}-(?P<type>plan|code)-review-(?P<batch>[a-z0-9-]+)-r(?P<n>\d+)\.md$"
 )
 
 
@@ -590,26 +581,20 @@ def resolve_path(path_tmpl: str, slug: str) -> Path:
 
 
 def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
-    """Scan reviews_dir and return the next round number for (review_type, scope).
+    """
+    Scan reviews_dir and return the next round number for review_type.
 
-    ``scope`` is either ``"holistic"`` (for discussion reviews and plan/code holistic reviews) or a
-    batch name string (for per-batch plan/code reviews).
+    ``scope`` must be ``"holistic"``; any other value raises ``ValueError``.
+    Counts files matching RE_SIMPLE whose type equals ``review_type``.
+    Files with any other name (including leftover per-batch review files) are ignored.
 
     If ``reviews_dir`` does not exist, return 1.
-
-    Scope semantics:
-    - ``scope == "holistic"``: count files where RE_SIMPLE matches AND ``m.group("type") ==
-        review_type``.
-        RE_BATCH matches are ignored entirely.
-    - ``scope == <batch_name>``: count files where RE_SIMPLE does NOT match AND RE_BATCH matches AND
-        ``m.group("type") == review_type`` AND ``m.group("batch") == scope``.
-
-    RE_SIMPLE is checked before RE_BATCH for every file, matching the existing convention that
-    prevents a plan-holistic file (e.g. …-plan-review-r1.md) from being mis-identified as a batch
-    review via RE_BATCH.
-
-    Return ``max(found) + 1`` if any matching files exist, else 1.
+    Otherwise return ``max(found) + 1`` if any matching files exist, else 1.
     """
+    if scope != "holistic":
+        raise ValueError(
+            f"discover_round: unsupported scope {scope!r}; only 'holistic' is supported"
+        )
     if not reviews_dir.exists():
         return 1
 
@@ -617,63 +602,11 @@ def discover_round(reviews_dir: Path, review_type: str, scope: str) -> int:
     for entry in reviews_dir.iterdir():
         if not entry.is_file():
             continue
-        name = entry.name
-        m_simple = RE_SIMPLE.match(name)
-        if m_simple:
-            if scope == "holistic" and m_simple.group("type") == review_type:
-                found.append(int(m_simple.group("n")))
-            # RE_SIMPLE matched — skip RE_BATCH for this file regardless.
-            continue
-        # RE_SIMPLE did not match — try RE_BATCH (per-batch scope only).
-        if scope != "holistic":
-            m_batch = RE_BATCH.match(name)
-            if (
-                m_batch
-                and m_batch.group("type") == review_type
-                and m_batch.group("batch") == scope
-            ):
-                found.append(int(m_batch.group("n")))
+        m_simple = RE_SIMPLE.match(entry.name)
+        if m_simple and m_simple.group("type") == review_type:
+            found.append(int(m_simple.group("n")))
 
     return max(found) + 1 if found else 1
-
-
-def detect_resume_round(reviews_dir: Path, review_type: str) -> int | None:
-    """Return the highest per-batch-only round for review_type, or None.
-
-    Returns the highest round number ``N`` such that at least one per-batch review file exists for
-    round ``N`` AND no holistic review file exists for round ``N``.
-    Returns ``None`` when no such round exists (either all rounds have a holistic file, no per-batch
-    files exist at all, or ``reviews_dir`` does not exist).
-
-    Uses RE_SIMPLE (checked first per convention) to identify holistic files and RE_BATCH to
-    identify per-batch files, both filtered by ``review_type``.
-
-    Consumed by ``_review_plan.run`` to detect a partially-complete run where per-batch reviews are
-    done but the holistic pass has not yet fired.
-    """
-    if not reviews_dir.exists():
-        return None
-
-    batch_rounds: set[int] = set()
-    holistic_rounds: set[int] = set()
-
-    for entry in reviews_dir.iterdir():
-        if not entry.is_file():
-            continue
-        name = entry.name
-        m_simple = RE_SIMPLE.match(name)
-        if m_simple:
-            if m_simple.group("type") == review_type:
-                holistic_rounds.add(int(m_simple.group("n")))
-            continue
-        m_batch = RE_BATCH.match(name)
-        if m_batch and m_batch.group("type") == review_type:
-            batch_rounds.add(int(m_batch.group("n")))
-
-    candidates = batch_rounds - holistic_rounds
-    if not candidates:
-        return None
-    return max(candidates)
 
 
 # Regex constants for parse_batch_refs.
@@ -1305,93 +1238,6 @@ def bulk_files(file_paths: list[Path], *, roots: DisplayRoots | None = None) -> 
             continue
         display = roots.render(p) if roots is not None else str(p)
         parts.append(f"--- FILE: {display} ---\n{contents}\n--- END FILE: {display} ---")
-    return "\n\n".join(parts)
-
-
-def bulk_files_with_diff(
-    file_paths: list[Path],
-    start_sha: str,
-    project_root: Path,
-    threshold: float,
-    *,
-    roots: DisplayRoots | None = None,
-) -> str:
-    """Like bulk_files but substitutes git diff output for small-diff files.
-
-    For each file: if the diff from start_sha to HEAD is smaller than threshold * file_content_size,
-    include the diff instead of full content.
-    Files with no diff (unchanged between start_sha and HEAD) are included at full content so the
-    reviewer has all context.
-
-    When ``roots`` is not ``None``, every ``--- FILE: ... ---`` / ``--- END FILE: ... ---`` /
-    ``--- DIFF: ... ---`` / ``--- END DIFF: ... ---`` delimiter uses `roots.render(p)` instead of the
-    raw absolute path.
-    Defaults to ``None`` so existing callers keep emitting today's absolute delimiters unchanged.
-    The stderr warnings on a missing/unreadable path or a failed git diff always name the absolute
-    path -- those are operator diagnostics, not prompt text.
-    The ``rel_path`` local used to scope the ``git diff`` invocation is computed independently of
-    the display string: it is always relative to ``project_root``, because the git invocation needs
-    a path relative to the repository it runs ``git -C`` against, which is not necessarily the root
-    the display helper selects.
-    """
-    parts: list[str] = []
-    for p in file_paths:
-        try:
-            file_content = _read_for_bulk(p)
-        except (FileNotFoundError, PermissionError):
-            print(
-                f"[bulk_files_with_diff] warning: {p} not found or not readable, skipping",
-                file=sys.stderr,
-            )
-            continue
-
-        try:
-            rel_path = p.relative_to(project_root).as_posix()
-        except ValueError:
-            rel_path = str(p)
-
-        display = roots.render(p) if roots is not None else str(p)
-
-        result = _subprocess_util.run(
-            [
-                "git",
-                "-C",
-                str(project_root),
-                "diff",
-                f"{start_sha}..HEAD",
-                "--",
-                rel_path,
-            ],
-        )
-
-        if result.returncode != 0:
-            print(
-                f"[bulk_files_with_diff] warning: git diff failed for {p} (returncode={result.returncode}), using full file",
-                file=sys.stderr,
-            )
-            parts.append(
-                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
-            )
-            continue
-
-        diff_text = result.stdout
-
-        if not diff_text:
-            parts.append(
-                f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
-            )
-            continue
-
-        if len(diff_text) < threshold * len(file_content):
-            parts.append(
-                f"--- DIFF: {display} (from {start_sha[:8]}) ---\n{diff_text}\n--- END DIFF: {display} ---"
-            )
-            continue
-
-        parts.append(
-            f"--- FILE: {display} ---\n{file_content}\n--- END FILE: {display} ---"
-        )
-
     return "\n\n".join(parts)
 
 
@@ -2502,18 +2348,17 @@ def write_review_file(
     """Build a canonical review filename, create dirs, write content, return path.
 
     Filename rules:
-    - Discussion / code / plan-holistic: <ts>-<type>-review-r<N>.md
-    - Plan per-batch (scope is a batch name, e.g. '01-setup'): <ts>-plan-review-<scope>-r<N>.md
-    - Plan holistic (scope == 'holistic'): <ts>-plan-review-r<N>.md
+    - Every review type: <ts>-<type>-review-r<N>.md
 
+    ``scope`` must be ``None`` or ``"holistic"``; any other value raises ``ValueError``.
     Timestamp is UTC, formatted as YYYYMMDD-HHMMSS.
     """
+    if scope is not None and scope != "holistic":
+        raise ValueError(
+            f"write_review_file: unsupported scope {scope!r}; only None or 'holistic' is supported"
+        )
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-
-    if review_type in ("plan", "code") and scope is not None and scope != "holistic":
-        filename = f"{ts}-{review_type}-review-{scope}-r{round_num}.md"
-    else:
-        filename = f"{ts}-{review_type}-review-r{round_num}.md"
+    filename = f"{ts}-{review_type}-review-r{round_num}.md"
 
     reviews_dir.mkdir(parents=True, exist_ok=True)
     out_path = reviews_dir / filename
@@ -2750,7 +2595,7 @@ def finalize_scope(
         review_type: Type of review ("discussion", "code", or "plan").
         round_n: Round number (integer).
         raw_text: Raw review output text to parse and write.
-        scope: Optional scope name ("holistic" or batch name);
+        scope: Optional scope name ("holistic");
             if None defaults to "holistic".
         actual_model: The model that actually produced this review, used to correct an unreliable
             self-reported `reviewer_model:` line before parsing or writing;
@@ -2873,11 +2718,10 @@ _REVIEW_TYPE_TO_ROLE = {
 def resolve_blocking_classes(cfg: dict, review_type: str, scope: str | None) -> frozenset[str]:
     """Return the set of classes that stay BLOCKING at this review stage.
 
-    Reads `cfg["roles"][<role>][<scope_key>]["blocking_classes"]` defensively -- every level in that
+    Reads `cfg["roles"][<role>]["holistic"]["blocking_classes"]` defensively -- every level in that
     path may be missing or None -- where `<role>` is `review_type` mapped through
     _REVIEW_TYPE_TO_ROLE ("discussion" -> "discussion-review", "plan" -> "plan-review", "code" ->
-    "code-review") and `<scope_key>` is "holistic" when `scope` is None or the literal "holistic",
-    else "batch".
+    "code-review"). The `scope` argument is accepted for call-site compatibility and ignored.
 
     When the config key is present and is a non-empty list of strings, returns
     `frozenset(value)`. Otherwise falls back to DEFAULT_BLOCKING_CLASSES[role] -- a hub whose
@@ -2892,11 +2736,9 @@ def resolve_blocking_classes(cfg: dict, review_type: str, scope: str | None) -> 
     if role is None:
         return frozenset(RECOGNIZED_CLASSES)
 
-    scope_key = "holistic" if scope is None or scope == "holistic" else "batch"
-
     roles_cfg = cfg.get("roles") if isinstance(cfg, dict) else None
     role_cfg = roles_cfg.get(role) if isinstance(roles_cfg, dict) else None
-    scope_cfg = role_cfg.get(scope_key) if isinstance(role_cfg, dict) else None
+    scope_cfg = role_cfg.get("holistic") if isinstance(role_cfg, dict) else None
     value = scope_cfg.get("blocking_classes") if isinstance(scope_cfg, dict) else None
 
     if isinstance(value, list) and value:

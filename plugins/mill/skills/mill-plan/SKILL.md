@@ -347,7 +347,7 @@ Use this variable for all review file path references in this phase.
 When `revise_from_blocked` is set (bound at Entry step 4's `--revise` pre-check), compute `blocked_resume_round = _review_common.discover_round(reviews_dir, "plan", "holistic")` against this plain, un-namespaced `reviews_dir`, before applying the namespacing override below.
 
 When `revise_requested` is set **and `revise_from_blocked` is not set** (carried forward from Step 0.5/step 4), compute a namespaced override before using `reviews_dir` for anything else in this phase: scan `<reviews_dir>/` for existing `revise-<N>` subdirectories (matching the literal pattern `revise-` followed by an integer), take the max `N` found (or `0` if none exist), and reassign `reviews_dir = reviews_dir / f"revise-{N+1}"` for the remainder of this phase.
-This mirrors `discover_round`'s own `max(found) + 1` pattern (in `_review_common.py`), applied one level up at the subdirectory level, and supports any number of `--revise` passes on the same task over time — a second `--revise` (e.g. after the first revision was re-approved and mill-go later needs another correction) resolves to `revise-2`, never colliding with or overwriting `revise-1`'s files, since `RE_SIMPLE`/`RE_BATCH` (the fixed-shape filename regexes `discover_round` matches against) have no room for a distinguishing prefix and only work correctly once scoped to a distinct directory.
+This mirrors `discover_round`'s own `max(found) + 1` pattern (in `_review_common.py`), applied one level up at the subdirectory level, and supports any number of `--revise` passes on the same task over time — a second `--revise` (e.g. after the first revision was re-approved and mill-go later needs another correction) resolves to `revise-2`, never colliding with or overwriting `revise-1`'s files, since `RE_SIMPLE` (the fixed-shape filename regex `discover_round` matches against) has no room for a distinguishing prefix and only work correctly once scoped to a distinct directory.
 Every prepare/finalize CLI invocation dispatched later in this same Plan Review round (both the Agent-mode branch's `--stage prepare`/`--stage finalize` calls and the subprocess/psmux branch's `millpy-review-plan.py` invocation via `millpy-bg`) must pass a new `--reviews-subdir revise-{N+1}` flag whenever `revise_requested` is set and `revise_from_blocked` is not set, mirroring the existing `--reviewer` flag's documented contract: "override for this invocation only, nothing written back to config."
 When `revise_requested` is not set, or `revise_from_blocked` is set, omit `--reviews-subdir` entirely and use `reviews_dir` exactly as resolved today — this override never activates for a normal (non-`--revise`) Plan Review run, nor for a blocked-resume `--revise` (a blocked-resume is a continuation of the same never-approved round sequence, not a fresh revision pass over an approved plan — reviews continue writing into the plain `reviews_dir`, picking up at `blocked_resume_round` via the normal `discover_round` mechanism).
 This namespacing does not alter `reviews_dir`'s use anywhere else in this file (e.g. Phase: Plan's own writes, which are unaffected by `--revise` since `--revise` only ever re-enters Phase: Plan Review, never Phase: Plan).
@@ -468,10 +468,8 @@ converged = (round >= min_review_rounds)
 
    **Finalize advances the round.** `--stage finalize` is what writes the review file into `reviews_dir` and is therefore what makes the next `--stage prepare`'s round-discovery advance past this round number — reading the reviewer's `.out.md` file directly is not equivalent to calling finalize. Always call `--stage finalize` before evaluating or acting on a round's findings, even when the findings are already fully visible in the `.out.md` file; skipping it silently re-issues the same round number next time, since `write_brief`'s own next call for this round unconditionally deletes the just-produced `.out.md` before writing a fresh brief (see `_agent_dispatch.write_brief` in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section).
 
-   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty).
+   If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args>` = one `--skip-check <name>` per entry in `plan_skip_checks` (empty when `plan_skip_checks` is empty).
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
-   Because plan batch review is disabled in this hub (`roles.plan-review.batch.reviewer: null`), the agent-mode branch targets the holistic scope only.
-   If per-batch plan review is ever enabled, the SKILL loops the three-step flow once per enabled scope.
    The finalize invocation also carries `--duration-s`, supplied by the shared "## Agent-mode dispatch" section's reviewer-only elapsed-time measurement in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`; `--tool-calls` and `--cost-usd` are never passed under agent-mode.
    If `subprocess` or `psmux`: use the subprocess branch below.
 
@@ -507,7 +505,7 @@ converged = (round >= min_review_rounds)
    This brackets the whole out-of-process reviewer-execution window that worktree_snapshot_guard cannot see under Agent-mode dispatch (see _mill/discussion.md's "Closing the Agent-mode bracketing gap" Decision).
    Do not add this checkpoint inside the shared "## Agent-mode dispatch" section itself in ${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md — it belongs at this call site only, since that shared section also serves non-review Implement/Fix/merge-in dispatch, which is out of scope.
 
-   Print this round's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic` (the hub runs holistic-only plan review; a per-batch scope, should batch plan review ever be enabled, prints one line per scope).
+   Print this round's cost line per the shared "## Review cost line" section in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, with `<type> = plan` and `<scope> = holistic`.
 
    **Subprocess/psmux branch — Invoke the CLI as a subprocess:**
 
@@ -525,10 +523,6 @@ converged = (round >= min_review_rounds)
        "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-review-plan.py"
    ```
 
-   The CLI accepts two optional scope flags (mutually exclusive): `--holistic-only` skips per-batch reviews and runs only the holistic plan review;
-   `--no-holistic` skips the holistic plan review and runs per-batch reviews only.
-   Default — both run per the `roles.plan-review.batch.reviewer` and `roles.plan-review.holistic.reviewer` config keys.
-   Append the flag to the inner `uv run …millpy-review-plan.py` portion of the millpy-bg invocation when needed.
    Append one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty) to that same inner invocation.
 
    This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until `[mill-bg] EXIT` appears, then run `grep '^{' <log-path> | tail -1` to extract the JSON summary line.
@@ -555,7 +549,7 @@ converged = (round >= min_review_rounds)
 
    > When a live operator-raised round-cap override is active (see "Live operator-raised round-cap override" below), append ` --max-rounds <operator_max_review_rounds>` to `<args>` for this retry too — the Step 3.5 retry is explicitly included in that override's dispatch sites.
 
-   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args> = --holistic-only`, plus one `--skip-check <name>` per entry in `plan_skip_checks` (when non-empty), exactly as step 2's dispatch above.
+   **Agent-mode:** follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-review-plan.py` and `<args>` = one `--skip-check <name>` per entry in `plan_skip_checks` (empty when `plan_skip_checks` is empty), exactly as step 2's dispatch above.
    Thread `--round <round>` from the prepare envelope into the finalize invocation unchanged (finalize has no round-cap check and never needs `--max-rounds`), and also pass `--agent-output <output_path>`, where `<output_path>` is the prepare envelope's `output_path` field read verbatim (extracted at the general Agent-mode dispatch pattern's step 1 in `${CLAUDE_PLUGIN_ROOT}/skills/mill-go-base/SKILL.md`, used verbatim at its step 5) — `millpy-review-plan.py --stage finalize` exits 1 with `"ERROR: --agent-output required for finalize stage"` when this flag is omitted.
 
    Tree-guard checkpoint (Agent-mode only, post-dispatch): when this retry used the Agent-mode branch, call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) again immediately after it returns, and on trigger call _status.append_recovery_log the same way.

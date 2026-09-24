@@ -45,9 +45,7 @@ import _review_common  # noqa: E402
 
 TEMPLATE_NAMES = [
     "review-discussion",
-    "review-code-batch",
     "review-code-holistic",
-    "review-plan-batch",
     "review-plan-holistic",
 ]
 
@@ -65,13 +63,7 @@ _COMMON_TOKENS = {
 
 TEMPLATE_TOKENS = {
     "review-discussion": dict(_COMMON_TOKENS),
-    "review-code-batch": {
-        **_COMMON_TOKENS,
-        "prior_nonblocking": "(none)",
-        "batch_name": "sample-batch",
-    },
     "review-code-holistic": {**_COMMON_TOKENS, "prior_nonblocking": "(none)"},
-    "review-plan-batch": {**_COMMON_TOKENS, "batch_name": "sample-batch"},
     "review-plan-holistic": dict(_COMMON_TOKENS),
 }
 

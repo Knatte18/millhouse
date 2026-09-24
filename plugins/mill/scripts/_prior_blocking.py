@@ -1,5 +1,5 @@
 """
-Builds a cumulative, cross-scope digest of prior rounds' `### [BLOCKING...]` findings from
+Builds a cumulative, cross-round digest of prior rounds' `### [BLOCKING...]` findings from
 `_mill/reviews/` code-review files.
 
 The digest feeds a `--nits-only` fixer dispatch (`millpy-fix.py --prior-blocking`) so the fixer has
@@ -9,7 +9,7 @@ This is distinct from the pre-existing prose-driven `prior-nonblocking-*` NIT di
 mill-go/SKILL.md, which this module does not touch or unify with.
 
 Public API:
-    build_digest() -- scan every code-review file on disk for the given scope and return a
+    build_digest() -- scan every holistic code-review file on disk and return a
     newline-joined digest of BLOCKING finding titles (and their first context line), or "" when
     no such file or finding exists.
 """
@@ -30,9 +30,9 @@ _BLOCKING_HEADING_RE = re.compile(
 )
 
 
-def build_digest(reviews_dir: Path, scope: str, batch_name: str | None = None) -> str:
+def build_digest(reviews_dir: Path) -> str:
     """
-    Scan every code-review file on disk relevant to scope and extract every BLOCKING finding.
+    Scan every holistic code-review file on disk and extract every BLOCKING finding.
 
     Per the digest-scans-current-disk-state-no-round-boundary decision, this function takes no
     round parameter: it scans every review file currently on disk and extracts every
@@ -43,49 +43,21 @@ def build_digest(reviews_dir: Path, scope: str, batch_name: str | None = None) -
 
     Args:
         reviews_dir: the `_mill/reviews/` directory to scan.
-        scope: "batch" or "holistic".
-            "holistic" selects every holistic-scope code-review file plus every batch-scope
-            code-review file (any batch name).
-            "batch" selects every holistic-scope code-review file plus only the batch-scope
-            code-review files whose batch equals batch_name.
-        batch_name: required iff scope == "batch"; the batch whose per-batch reviews to include.
+            Leftover per-batch code-review files (`<ts>-code-review-<batch>-r<N>.md`) are ignored.
 
     Returns:
         A newline-joined string of "- <title>: <context>" (or "- <title>" when no context line
         exists) lines, one per BLOCKING finding, in file-then-heading order.
         "" when reviews_dir does not exist or no selected file contributes a BLOCKING heading.
     """
-    assert scope in ("batch", "holistic")
-    assert scope != "batch" or batch_name is not None
-
     if not reviews_dir.exists():
         return ""
 
-    # Classify every review file on disk as holistic-scope or batch-scope (with its batch name),
-    # trying RE_SIMPLE first and excluding a RE_SIMPLE match from RE_BATCH matching -- the same
-    # convention _review_common.py documents beside its own RE_BATCH definition.
-    holistic_files: list[Path] = []
-    batch_files: dict[str, list[Path]] = {}
+    selected_files: list[Path] = []
     for candidate in sorted(reviews_dir.iterdir()):
-        if not candidate.name.endswith(".md"):
-            continue
         simple_match = _review_common.RE_SIMPLE.match(candidate.name)
         if simple_match and simple_match.group("type") == "code":
-            holistic_files.append(candidate)
-            continue
-        batch_match = _review_common.RE_BATCH.match(candidate.name)
-        if batch_match and batch_match.group("type") == "code":
-            batch_files.setdefault(batch_match.group("batch"), []).append(candidate)
-
-    # Build the selected file list per scope: holistic always includes every batch's files;
-    # batch scope includes only its own named batch's files.
-    selected_files = list(holistic_files)
-    if scope == "holistic":
-        for files in batch_files.values():
-            selected_files.extend(files)
-    else:
-        selected_files.extend(batch_files.get(batch_name, []))
-    selected_files.sort()
+            selected_files.append(candidate)
 
     # Extract every BLOCKING heading from each selected file, in file-then-heading order.
     lines: list[str] = []
