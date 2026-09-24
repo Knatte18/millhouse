@@ -47,7 +47,7 @@ cold, consuming the retry budget:
 - `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: fork-fallback for fixer {scope} r{N}"`
 
 Commit **before** the cold retry -- resume reconstructs `fork_attempted` from it;
-`{scope}` is the batch name, or `holistic`.
+`{scope}` is `holistic`.
 
 Risks: inherits the driver's broader tool grant (scope discipline still comes
 from the brief/`scope_violations`); forfeits `roles.fixer.model` -- drive from

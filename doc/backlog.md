@@ -329,7 +329,7 @@ cluster mechanics stay inside its module.
 
 ### Config wiring
 
-`review.<type>.{reviewer|batch|holistic}: cluster_g25flash_handler_sonnet` — same config slot as simple reviewers. Zero changes to backends or schemas.
+`review.<type>.{reviewer|holistic}: cluster_g25flash_handler_sonnet` — same config slot as simple reviewers. Zero changes to backends or schemas.
 
 ---
 
