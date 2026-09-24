@@ -37,7 +37,9 @@ batches:
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
     exit 1: --only: unknown test file(s): [''test-paths-short-name.py'', ''test-setup-short-name.py'']']
   - name: session-name-callers
-    state: pending
+    state: running
+    implementer_session: 627b2a00-bf91-4781-9f41-cd0553d0c907
+    start_sha: 3d8701550ee8a89616a519eab3e30b48dcb42ef9
     verify_baseline_failures: []
   - name: docs-and-setup
     state: pending
