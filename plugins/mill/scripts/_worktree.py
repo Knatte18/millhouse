@@ -293,8 +293,8 @@ def remove_safe(
     Sequence:
         1. Strip every junction declared in ``junctions_cfg`` inside ``path`` via
             ``_junction.strip_all_in_worktree``.
-            Mandatory: any subsequent recursive removal would otherwise follow `.millhouse/wiki`,
-                `.others`, and `.active` and wipe the wiki, the portals dir, or sibling worktrees.
+            Mandatory: any subsequent recursive removal would otherwise follow `.wiki`,
+                `.portals`, and `.active` and wipe the wiki, the portals dir, or sibling worktrees.
         2. Kill stale processes holding handles into the worktree (e.g.
             bash poll-loops) via ``kill_stale_holders``.
             Best-effort, all errors swallowed.

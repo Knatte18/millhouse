@@ -2,7 +2,7 @@
 mill-add — append a task entry to the wiki's Home.md and regenerate the sidebar.
 
 Resolves the wiki clone via ``_paths.resolve_wiki_path``.
-Note: ``.millhouse/wiki``
+Note: ``.wiki``
 is a junction for IDE/terminal convenience only — scripts never use it as a code path.
 Acquires the shared `.mill-lock` (Home.md is a multi-writer file per `ref-formats.md`),
 appends a `## <Title> [<slug>]` section to Home.md — or `## <Title> [[<slug>]] (proposal-<slug>)`

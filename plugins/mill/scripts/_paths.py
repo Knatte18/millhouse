@@ -2,7 +2,7 @@
 Single home for path resolution in the mill plugin.
 
 Collects helpers that turn (git context, config) into concrete paths.
-Scripts MUST use these helpers instead of reaching for ``.millhouse/wiki`` or other junctions
+Scripts MUST use these helpers instead of reaching for ``.wiki`` or other junctions
 directly — junctions are IDE/terminal convenience, not a code contract.
 See CLAUDE.md ``## Path invariants``.
 
@@ -526,7 +526,7 @@ def resolve_wiki_path(git_toplevel: Path) -> Path:
     the ``paths.wiki:`` override is read from the real config at ``hub / .millhouse /
     config.local.yaml``.
 
-    The ``.millhouse/wiki`` junction is never consulted.
+    The ``.wiki`` junction is never consulted.
     Junctions are IDE/terminal convenience;
     the real wiki path is computed from the repo's own git-toplevel.
     """

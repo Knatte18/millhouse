@@ -2,7 +2,7 @@
 mill-fold — append a fold entry to a task in the wiki's Home.md.
 
 Resolves the wiki clone via ``_paths.resolve_wiki_path``.
-Note: ``.millhouse/wiki`` is a junction for IDE/terminal convenience only — scripts never use it as
+Note: ``.wiki`` is a junction for IDE/terminal convenience only — scripts never use it as
 a code path.
 Acquires the shared ``.mill-lock`` around the read-append-sidebar-commit sequence, then optionally
 closes the GitHub issue after the wiki commit succeeds and the lock is released.
