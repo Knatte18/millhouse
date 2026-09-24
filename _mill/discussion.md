@@ -29,7 +29,7 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 - A new hub-only `orch` session task, `mill: orch`, launching a session named `<short_name>:orch` (e.g. `mh:orch`).
 - `spawn.sessions.orch` model/effort config key with a built-in default.
 - `mill-setup` prompts for `repo.short_name` when the hub `mill-config.yaml` has none, and writes it.
-- A one-line stderr warning from `millpy-spawn` and `millpy-session-tasks` when the short name comes from the derived fallback.
+- A one-line stderr warning from `millpy-spawn`, `millpy-session-tasks` and `millpy-terminal` when the short name comes from the derived fallback.
 - Docstrings, SKILL.md prose, config-template comments and unit tests that mention the old `<slug>:<phase>` form or the task list.
 
 **Out:**
@@ -122,6 +122,9 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 - Decision: add a mill-setup step right after Phase 3.1 (mill-config.yaml seed/upsert): if the hub `mill-config.yaml` has no non-empty `repo.short_name`, prompt the operator as a numbered list per `mill:conversation`.
   Option 1 is the derived value from `resolve_short_name` (marked Recommended), option 2 lets the operator type a different value as free text.
   Validate against `^[A-Za-z0-9]{2,4}$` (the template comment already documents 2-4 characters); re-prompt on failure.
+  The derived value is offered as option 1 only when it passes that regex itself.
+  It can fail for a 1-character repo name (`resolve_short_name` then returns 1 character) or a repo name whose first two characters are not alphanumeric (e.g. `a-b` -> `A-`).
+  In that case the prompt has no recommended option and asks only for a typed value.
   Write the value into `mill-config.yaml` and stage/commit it the same way Phase 3.1 commits its upsert.
   When `repo.short_name` is already set, the step is a silent no-op (idempotent).
 - Decision: the write goes through a new helper in `_setup.py` (e.g. `set_repo_short_name(config_path, value)`) that edits the file at line level: replace the value on the `short_name:` line inside the `repo:` block, or insert a `repo:` block with `short_name:` at the top of the file when absent.
@@ -133,10 +136,10 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 ### Fallback warning
 
 - Decision: add a small predicate in `_paths.py` next to `resolve_short_name`, e.g. `short_name_is_derived(cfg) -> bool` (true when `repo.short_name` is absent or empty).
-  `millpy-spawn.py` and `millpy-session-tasks.py` each print one ASCII-only line to stderr when it is true, naming the derived value and pointing at `repo.short_name` in `mill-config.yaml` / `/mill-setup`.
+  `millpy-spawn.py`, `millpy-session-tasks.py` and `millpy-terminal.py` each print one ASCII-only line to stderr when it is true, naming the derived value and pointing at `repo.short_name` in `mill-config.yaml` / `/mill-setup`.
   The derived value in the warning is the one computed from the main worktree's name (see "Where the prefix is built"), so it matches the name that was baked in.
   mill-setup's new step covers its own case by prompting, so it does not warn separately.
-- Rationale: spawn and session-tasks are where the short name gets baked into session names, so they cover repos that never re-run mill-setup.
+- Rationale: these three scripts are every place outside mill-setup where a short name becomes part of a session name (tasks.json for spawn and session-tasks, the live `claude --name` for terminal), so they cover repos that never re-run mill-setup.
   A warning, not an error: the fallback still produces a working name.
 - Rejected: warning inside `resolve_short_name` (it is also called by `millpy-color`, `millpy-claim` and `_vscode` paths, which would get noisy, and a path resolver should not print).
 
@@ -189,7 +192,7 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 - New tests for the `_paths` derived-short-name predicate: absent `repo` block, empty string, and set value.
 - `session_prefix` tests in `test-vscode-tasks.py` (TDD candidate): hub form lower-cases `MH` to `mh`; worktree form gives `mh:my-task`; a short name containing `:`, an empty short name, or one with a forbidden character raises `ValueError`.
 - Worktree fallback test (in `test-millpy-session-tasks.py`, and the same shape in `test-millpy-spawn.py`): the current worktree directory is slug-named (e.g. `session-name-short-prefix`), the main worktree is `millhouse`, `repo.short_name` is unset; the rendered names use `mi:` (derived from `millhouse`), not `se:`, and the warning names `MI`.
-- `plugins/mill/unit_tests/test-millpy-terminal.py`: the launched argv carries `--name <short>:<slug>` lower-cased, on both the `nt` and POSIX branches.
+- `plugins/mill/unit_tests/test-millpy-terminal.py`: the launched argv carries `--name <short>:<slug>` lower-cased, on both the `nt` and POSIX branches; the fallback warning appears on stderr only when `repo.short_name` is unset.
 - Run the full suite via `run-all.py`.
 
 ## Q&A log
