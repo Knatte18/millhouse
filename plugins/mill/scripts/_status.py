@@ -1400,7 +1400,7 @@ def append_inferred_success_log(
     This function is the caller's explicit, separate audit-append step.
     The finalize-side no-JSON commit-count recount itself never calls this function or touches
     ``status.md`` — the recount already produces the correct outcome on its own;
-    callers (mill-go's step 4(b) and step 6.5 call sites) call this helper themselves after
+    the caller (step 6 of mill-go-base's Agent-mode dispatch, the single call site) calls this helper itself after
     inspecting the finalize envelope's ``inferred`` field.
 
     Args:

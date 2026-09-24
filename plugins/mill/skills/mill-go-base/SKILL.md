@@ -336,7 +336,7 @@ This three-step pattern applies at every dispatch point:
    Do NOT re-dispatch fresh immediately.
    Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
    Finalize inspects the commit count against the batch's card count and returns one of:
-   - **`status: success`** (all cards committed and the tree is clean) — when the finalize envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`) and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`) before proceeding — when `inferred` is absent or `false` (the implementer reported the JSON line normally), this call is skipped entirely and the existing success path is otherwise unchanged — proceed normally to step 6.
+   - **`status: success`** (all cards committed and the tree is clean) — proceed to step 6, whose inferred-success rule logs the audit row when `inferred` is `true`.
    - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 5 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
      Do **NOT** route this to the Stuck escalation transient `commits_made > 0` skip-to-cleanliness path: that path accepts the partial batch as done and is exactly the #574 false-success bug.
      The whole point of the `incomplete` classification (see Shared Decision `stuck_type: incomplete is a new first-class classification`) is that the remaining cards must be finished, never accepted as complete.
@@ -440,13 +440,18 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       Record the new `agentId` this re-dispatch returns, in case a further resume is needed.
    3. **After recovery.**
       Re-parse the finalize envelope and branch in step 6.
-      A `status: success` (or inferred success) means the batch finished — when the re-parsed envelope's `inferred` field is `true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` and commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name} (post-recovery)"`), before proceeding normally.
-      This is a structurally separate check from the step 3(b) Clean mid-work stop call site — finalize's envelope after an `incomplete` recovery is examined here independently, so an implementer that goes `incomplete` on its first turn and then completes cleanly without emitting JSON on the resumed turn is caught only by this call site, not the other one.
-      When `inferred` is absent or `false`, skip this call entirely.
+      A `status: success` (or inferred success) means the batch finished — step 6's inferred-success rule logs the audit row when `inferred` is `true`, with the ` (post-recovery)` commit-message suffix, then proceeds normally.
       If the envelope is **still** `stuck_type: incomplete` after one warm resume and one `--resume-incomplete` fallback, hand it to the `### Stuck escalation` `incomplete` branch (it does not silently loop).
 
 6. **Branch on verdict:** The envelope's `status`, `verdict`, and `stuck_type` fields are what the caller branches on.
    The agent-mode `incomplete` recovery (step 5.5) is the one addition: an `incomplete` envelope routes through the warm-`SendMessage` / `--resume-incomplete` recovery before any escalation.
+   **Inferred-success audit (single call site).**
+   Before branching, when the finalize envelope has `status: success` and `inferred: true`, call `_status.append_inferred_success_log(status_path, batch_name, round, timestamp)` (`signature: _status.append_inferred_success_log(status_path: Path, batch_name: str, round: int, timestamp: str) -> None`).
+   This applies on every path that reaches step 6: plain first-turn success, clean mid-work stop (step 3(b)), and post-`incomplete` recovery (step 5.5).
+   Commit the resulting `status.md` change on the task branch (`git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: log inferred-success for {batch_name}"`), then continue with the branching below.
+   When the envelope came from step 5.5's recovery, append ` (post-recovery)` to that commit message.
+   Skip this call when `inferred` is absent or `false`, or when `status` is not `success` (some `inferred: true` envelopes are `status: stuck`).
+   This is the only place this call is made; steps 3(b) and 5.5 defer to it.
 
 **Agent-mode properties:**
 - No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
