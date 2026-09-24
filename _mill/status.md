@@ -44,7 +44,9 @@ batches:
     commit_sha: 9cfeab703e9b610de8388dbdf9dad9f7c99926ab
     verify_baseline_failures: []
   - name: fixer-and-gates
-    state: pending
+    state: running
+    implementer_session: b2fd2900-6e42-4fa9-a641-dd328a9758f4
+    start_sha: 9e85887ef8d57310db4822bd2b3cd81510e2c2c1
     verify_baseline_failures: []
   - name: review-common-and-templates
     state: pending
