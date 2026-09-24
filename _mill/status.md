@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: session-name-short-prefix
 branch: hanf/session-name-short-prefix
-plan: null
+plan: _mill/plan
 parent: main
 task: Prefix session names with repo short name; add MH:orch session
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-24T07:53:59Z'
 discussion-fix-r3  '2026-09-24T08:57:17Z'
 discussed  '2026-09-24T09:06:36Z'
+planning  '2026-09-24T09:12:43Z'
 ```
