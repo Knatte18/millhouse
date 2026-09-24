@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-orch-wait-monitor-rearm
+phase: holistic-reviewing
 slug: monitor-persistent-entry-wait
 branch: hanf/monitor-persistent-entry-wait
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-fix-r1  '2026-09-24T06:05:35Z'
 planned  '2026-09-24T06:05:44Z'
 implementing  '2026-09-24T06:06:00Z'
 approved-orch-wait-monitor-rearm  '2026-09-24T06:07:23Z'
+holistic-reviewing  '2026-09-24T06:07:29Z'
 ```
 
 ## Batches
