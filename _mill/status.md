@@ -43,7 +43,9 @@ batches:
     start_sha: b7161c7b62fee2ac2ad146c027dc26e6f93990ac
     commit_sha: ea79f80d0405f4faed502707307d9d9489a773af
   - name: session-tasks-cli
-    state: pending
+    state: running
+    implementer_session: 04a41ad9-cc16-42fe-9ef0-42c36816cd37
+    start_sha: 725e9ef56d29e2c80c1b39a13d138a932269af9d
   - name: spawn-wiring
     state: pending
   - name: setup-docs
