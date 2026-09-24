@@ -30,6 +30,7 @@ from _spawn_core import (  # noqa: E402
 from wiki._parse import parse_home_md  # noqa: E402
 from wiki._client import upsert_task  # noqa: E402
 from _test_helpers import safe_temp_dir  # noqa: E402
+import _status  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -366,8 +367,10 @@ def test_write_initial_status() -> None:
         text = status_path.read_text(encoding="utf-8")
         if "Task One" not in text:
             raise AssertionError("title not in status.md")
-        if "parent: main" not in text:
+        if "parent_branch: main" not in text:
             raise AssertionError("parent_branch not in status.md")
+        if any(line.startswith("parent_thread:") for line in text.splitlines()):
+            raise AssertionError("default call must not write a parent_thread row")
         if "task-one" not in text:
             raise AssertionError("slug not in status.md")
 
@@ -385,6 +388,30 @@ def test_write_initial_status() -> None:
         if not status_path.is_absolute():
             raise AssertionError("write_initial_status should return an absolute path")
     print("PASS: write_initial_status writes status.md at worktree root, commits on task branch, returns abs path")
+
+
+def test_write_initial_status_records_parent_thread() -> None:
+    with safe_temp_dir() as tmp:
+        repo = _make_git_repo(tmp, branch="main")
+        subprocess.run(
+            ["git", "-C", str(repo), "checkout", "-b", "hanf/task-one"],
+            check=True,
+            capture_output=True,
+        )
+        status_path = write_initial_status(
+            worktree_path=repo,
+            slug="task-one",
+            title="Task One",
+            ts="2026-04-26T10:00:00Z",
+            parent_branch="main",
+            branch="hanf/task-one",
+            cfg={"paths": {"status_md": "_mill/status.md"}},
+            parent_thread="mh:orch",
+        )
+        recorded = _status.read(status_path).get("parent_thread")
+        if recorded != "mh:orch":
+            raise AssertionError(f"expected parent_thread 'mh:orch', got {recorded!r}")
+    print("PASS: write_initial_status records parent_thread in status.md")
 
 
 def test_write_initial_status_forced_failure_raises_runtime_error() -> None:
@@ -1155,6 +1182,7 @@ def main() -> int:
         test_capture_parent_branch_returns_branch_name,
         test_capture_parent_branch_on_non_repo_raises,
         test_write_initial_status,
+        test_write_initial_status_records_parent_thread,
         test_write_initial_status_forced_failure_raises_runtime_error,
         test_write_initial_status_push_failure_raises_runtime_error,
         test_recreate_active_junction_creates_link,

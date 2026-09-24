@@ -81,7 +81,7 @@ def test_overview_template_renders(scratch: Path) -> None:
     )
     _assert("# Plan: Demo task" in rendered, "title not substituted")
     _assert("slug: demo-task" in rendered, "slug yaml not substituted")
-    _assert("parent: main" in rendered, "parent yaml not substituted")
+    _assert("parent_branch: main" in rendered, "parent_branch yaml not substituted")
     _assert("approved: false" in rendered, "approved default missing")
     _assert("## Batch Index" in rendered, "Batch Index heading missing")
     _assert("## Shared Decisions" in rendered, "Shared Decisions heading missing")
@@ -126,7 +126,7 @@ def test_plan_dag_accepts_minimal_plan(scratch: Path) -> None:
         'slug: demo\n'
         'approved: false\n'
         'started: 20260422-120000\n'
-        'parent: main\n'
+        'parent_branch: main\n'
         'root: ""\n'
         'verify: null\n'
         "```\n"

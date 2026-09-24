@@ -43,7 +43,7 @@ Read these config keys from the deep-merged config (`cfg`):
 
 - `require_pr = bool(cfg.get("git", {}).get("require_pr_to_base", False))` — default false.
 - `base_branch = cfg.get("git", {}).get("base_branch", "main")` — default "main".
-- `parent_branch = _parent_branch.resolve(status_path, interactive=False, expected_slug=slug)` — reads `parent:` from status.md. `expected_slug` is defense-in-depth: this read always runs before Step 3's own restore-path corruption within a single mill-finalize invocation, so it costs nothing to protect and only matters on an unusual re-run after a prior partial failure.
+- `parent_branch = _parent_branch.resolve(status_path, interactive=False, expected_slug=slug)` — reads `parent_branch:` (legacy `parent:` accepted) from status.md. `expected_slug` is defense-in-depth: this read always runs before Step 3's own restore-path corruption within a single mill-finalize invocation, so it costs nothing to protect and only matters on an unusual re-run after a prior partial failure.
   On `ParentBranchError` → halt with the error message.
 
 **PR mode** activates when `require_pr is True`.

@@ -16,8 +16,10 @@ The preferred way to start work on a new task.
 ## Run it
 
 ```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py" [--slug <slug>] [--dry-run]
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-spawn.py" [--slug <slug>] [--parent <name>] [--dry-run]
 ```
+
+`--parent <name>` records the spawning session's name as status.md's optional `parent_thread:` row (omitted when the flag is absent); the parent branch is recorded as `parent_branch:`.
 
 Exits 0 (not 1) when the backlog is empty.
 Prints worktree path, branch, and status path on success.

@@ -129,7 +129,7 @@ def main() -> int:
             "slug: test-slug\n"
             "task: Test Task\n"
             "branch: hanf/test-task\n"
-            "parent: main\n"
+            "parent_branch: main\n"
             "```\n\n"
             "## Timeline\n\n"
             "```text\n"

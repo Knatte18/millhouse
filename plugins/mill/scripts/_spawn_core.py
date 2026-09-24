@@ -48,7 +48,7 @@ Public API:
     capture_parent_branch(git_root) -> str
     Return the current HEAD branch name via ``git rev-parse --abbrev-ref HEAD``.
     Raises ``RuntimeError`` on non-zero exit.
-    write_initial_status(worktree_path, slug, title, ts, parent_branch, branch, *, cfg) -> Path
+    write_initial_status(worktree_path, slug, title, ts, parent_branch, branch, *, cfg, parent_thread=None) -> Path
     Render + write ``_mill/status.md`` at worktree root;
         stage + commit on
     task branch;
@@ -641,6 +641,7 @@ def write_initial_status(
     branch: str,
     *,
     cfg: dict,
+    parent_thread: str | None = None,
 ) -> Path:
     """
     Render + write ``_mill/status.md`` at worktree root;
@@ -656,11 +657,14 @@ def write_initial_status(
         title: Human-readable task title used both as the ``task:`` value and as the description
             placeholder.
         ts: ISO-8601 UTC timestamp for the timeline entry.
-        parent_branch: Hub branch name recorded so mill-merge knows where to merge back to.
+        parent_branch: Hub branch name recorded as the ``parent_branch:`` row so mill-merge knows
+            where to merge back to.
         branch: The task branch the worktree is on; recorded so the status file is self-describing
             without inferring from per-developer cfg.branch_prefix.
         cfg: Loaded mill config dict;
             supplies cfg["paths"]["status_md"] to _paths.status_path.
+        parent_thread: Name of the session that spawned the task, recorded as status.md
+            ``parent_thread:``; the row is omitted when ``None`` or empty.
 
     Returns:
         Absolute path to the written ``status.md``.
@@ -676,6 +680,7 @@ def write_initial_status(
         parent_branch=parent_branch,
         slug=slug,
         branch=branch,
+        parent_thread=parent_thread,
     )
     status_abs = _paths.status_path(worktree_path, cfg)
     status_abs.parent.mkdir(parents=True, exist_ok=True)

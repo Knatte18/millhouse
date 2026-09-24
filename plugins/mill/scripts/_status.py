@@ -15,7 +15,7 @@ Keeping ``batches:`` in its own section lets us parse and rewrite just that bloc
 the top block.
 
 Public API:
-    render_initial(task_title, task_description, timestamp, parent_branch, slug, branch) -> str
+    render_initial(task_title, task_description, timestamp, parent_branch, slug, branch, *, parent_thread=None) -> str
     read(status_path) -> dict
     read_full(status_path) -> dict
     read_parent_branch(status_path) -> str | None
@@ -23,6 +23,7 @@ Public API:
     read_branch(status_path, *, cfg, slug) -> str
     phase_entry_timestamp(status_path, phase, *, occurrence=1, latest=False) -> str | None
     update_field(status_path, key, value) -> None
+    set_parent_branch(status_path, value) -> None
     set_blocked(status_path, reason, *, timestamp) -> None
     append_phase(status_path, phase, timestamp) -> None
     init_batches(status_path, names) -> None
@@ -120,6 +121,8 @@ def render_initial(
     parent_branch: str,
     slug: str,
     branch: str,
+    *,
+    parent_thread: str | None = None,
 ) -> str:
     """
     Render the phase=discussing status.md for ``task_title``.
@@ -137,11 +140,17 @@ def render_initial(
             the template's `` `` indent applies to the first line only, so multi-line values remain
                 valid YAML only when the caller does not include leading spaces.
         timestamp: ISO-8601 UTC timestamp for the timeline entry, e.g. ``"2026-04-22T14:32:05Z"``.
-        parent_branch: The branch the hub was on at spawn time.
+        parent_branch: The branch the hub was on at spawn time, written as the ``parent_branch:`` key.
             mill-merge / mill-cleanup read this to know where to merge back to.
+        parent_thread: The spawning session's name, recorded for the follow-up escalation task.
+            The ``parent_thread:`` row is omitted when ``None`` or empty.
 
     Returns:
         The rendered status.md text, including trailing newline.
+
+    Raises:
+        KeyError: the template has an unresolved token.
+        ValueError: ``parent_thread`` is set but the template has no ``parent_branch:`` row.
     """
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     body = _strip_leading_comment(template)
@@ -162,6 +171,15 @@ def render_initial(
     if unresolved:
         raise KeyError(
             f"Unresolved tokens in status template: {unresolved!r}"
+        )
+    if isinstance(parent_thread, str) and parent_thread.strip():
+        body_lines = body.split("\n")
+        for index, line in enumerate(body_lines):
+            if re.match(r"^parent_branch:\s*", line):
+                body_lines.insert(index + 1, f"parent_thread: {quote_scalar(parent_thread.strip())}")
+                return "\n".join(body_lines)
+        raise ValueError(
+            f"No parent_branch: row in {_TEMPLATE_PATH.name}; cannot place parent_thread (template drift)"
         )
     return body
 
@@ -255,6 +273,40 @@ def update_field(status_path: Path | str, key: str, value: str) -> None:
         status_path.write_text("".join(lines), encoding="utf-8")
         return
     raise ValueError(f"Key {key!r} not found in yaml block of {status_path}")
+
+
+def set_parent_branch(status_path: Path | str, value: str) -> None:
+    """
+    Rewrite the parent-branch row in the top ``` ```yaml ``` ``` block of ``status_path``.
+
+    Skills rebind the parent branch on status files that carry either the current
+    ``parent_branch:`` key or the legacy ``parent:`` key, so both are accepted:
+    an existing ``parent_branch:`` row is rewritten in place;
+    otherwise a legacy ``parent:`` row is replaced in place by ``parent_branch:``
+    (migrate-on-write, row order preserved).
+
+    Args:
+        status_path: Absolute path to the status.md file.
+            Accepts a ``pathlib.Path``, ``str``, or other ``os.PathLike``; coerced to ``Path``.
+        value: The new parent branch, written via ``_yaml_writer.quote_scalar``.
+
+    Raises:
+        ValueError: the file lacks a yaml block, the block is unterminated, or it has neither a
+        ``parent_branch:`` nor a ``parent:`` row.
+    """
+    status_path = _as_path(status_path, "set_parent_branch")
+    text = status_path.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    start, end = _split_fences(text, _YAML_FENCE)
+    for key_pattern in (r"^parent_branch:\s*", r"^parent:\s*"):
+        for i in range(start, end):
+            stripped = lines[i].rstrip("\r\n")
+            if re.match(key_pattern, stripped):
+                eol = lines[i][len(stripped):]
+                lines[i] = f"parent_branch: {quote_scalar(value)}{eol}"
+                status_path.write_text("".join(lines), encoding="utf-8")
+                return
+    raise ValueError(f"parent_branch: key missing from yaml block of {status_path}")
 
 
 def set_blocked(status_path: Path | str, reason: str, *, timestamp: str) -> None:
@@ -361,15 +413,32 @@ def get_module_verify_baseline(status_path: Path | str) -> str | None:
     return data.get("module_verify_baseline")
 
 
+def _baseline_anchor_index(lines: list[str], start: int, end: int, status_path: Path) -> int:
+    """
+    Return the index of the yaml row after which a new baseline row is inserted.
+
+    The anchor is the first ``parent_thread:`` row when present, else the first ``parent_branch:``
+    row, else the first legacy ``parent:`` row, so baseline rows stay next to the parent fields.
+
+    Raises:
+        ValueError: none of the three anchor rows exists in ``lines[start:end]``.
+    """
+    for anchor_pattern in (r"^parent_thread:\s*", r"^parent_branch:\s*", r"^parent:\s*"):
+        for i in range(start, end):
+            if re.match(anchor_pattern, lines[i].rstrip("\r\n")):
+                return i
+    raise ValueError(f"parent_branch: key missing from yaml block of {status_path}")
+
+
 def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
     """
     Write ``module_verify_baseline:`` in the top yaml block of ``status_path``.
 
     Mirrors ``set_blocked``'s insert-in-place-or-append pattern for ``blocked_reason:``: if a
     ``module_verify_baseline:`` row already exists in the block it is rewritten in place;
-    otherwise a new row is inserted immediately after ``parent:`` -- that field's natural neighbor
-    in the template's field ordering, since the row does not exist in ``status-discussing.md``'s
-    template and must be inserted the first time a baseline is computed.
+    otherwise a new row is inserted immediately after ``parent_thread:`` when present, else
+    ``parent_branch:``, else legacy ``parent:`` -- the row does not exist in
+    ``status-discussing.md``'s template and must be inserted the first time a baseline is computed.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -380,7 +449,8 @@ def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
 
     Raises:
         ValueError: ``value`` is not one of the two allowed states, the file lacks a yaml block, the
-        block is unterminated, or the block has no ``parent:`` row to insert after.
+        block is unterminated, or the block has none of the ``parent_thread:`` / ``parent_branch:`` /
+        legacy ``parent:`` anchor rows to insert after.
     """
     status_path = _as_path(status_path, "set_module_verify_baseline")
     if value not in _MODULE_VERIFY_BASELINE_STATES:
@@ -401,16 +471,8 @@ def set_module_verify_baseline(status_path: Path | str, value: str) -> None:
             status_path.write_text("".join(lines), encoding="utf-8")
             return
 
-    # Absent: insert a new row immediately after parent:.
-    parent_idx: int | None = None
-    for i in range(start, end):
-        stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^parent:\s*", stripped):
-            parent_idx = i
-            break
-    if parent_idx is None:
-        raise ValueError(f"parent: key missing from yaml block of {status_path}")
-    lines.insert(parent_idx + 1, f"module_verify_baseline: {quote_scalar(value)}\n")
+    anchor_idx = _baseline_anchor_index(lines, start, end, status_path)
+    lines.insert(anchor_idx + 1, f"module_verify_baseline: {quote_scalar(value)}\n")
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
@@ -482,8 +544,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
     Mirrors ``set_module_verify_baseline``'s insert-in-place-or-append pattern: if a
     ``module_verify_baseline_signatures:`` row already exists in the block it is rewritten in
     place;
-    otherwise a new row is inserted immediately after ``parent:``, that field's natural neighbor in
-    the template's field ordering.
+    otherwise a new row is inserted immediately after ``parent_thread:`` when present, else
+    ``parent_branch:``, else legacy ``parent:``.
 
     Args:
         status_path: Absolute path to the status.md file.
@@ -496,8 +558,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
             exactly one physical line.
 
     Raises:
-        ValueError: the file lacks a yaml block, the block is unterminated, or the block has no
-        ``parent:`` row to insert after.
+        ValueError: the file lacks a yaml block, the block is unterminated, or the block has none of
+        the ``parent_thread:`` / ``parent_branch:`` / legacy ``parent:`` anchor rows to insert after.
     """
     status_path = _as_path(status_path, "set_module_verify_baseline_signatures")
     text = status_path.read_text(encoding="utf-8")
@@ -514,16 +576,8 @@ def set_module_verify_baseline_signatures(status_path: Path | str, value: list[s
             status_path.write_text("".join(lines), encoding="utf-8")
             return
 
-    # Absent: insert a new row immediately after parent:.
-    parent_idx: int | None = None
-    for i in range(start, end):
-        stripped = lines[i].rstrip("\r\n")
-        if re.match(r"^parent:\s*", stripped):
-            parent_idx = i
-            break
-    if parent_idx is None:
-        raise ValueError(f"parent: key missing from yaml block of {status_path}")
-    lines.insert(parent_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
+    anchor_idx = _baseline_anchor_index(lines, start, end, status_path)
+    lines.insert(anchor_idx + 1, f"module_verify_baseline_signatures: {flow_value}\n")
     status_path.write_text("".join(lines), encoding="utf-8")
 
 
@@ -893,12 +947,14 @@ def read_full(status_path: Path | str) -> dict:
 
 
 def read_parent_branch(status_path: Path | str) -> str | None:
-    """Return the ``parent:`` value from the top yaml block of ``status_path``.
+    """Return the ``parent_branch:`` value from the top yaml block of ``status_path``.
 
     Used by ``mill-cleanup`` to determine which branch to check out after an in-place task is
     cleaned up.
-    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or the
-    ``parent:`` key is not present — callers that need the value to exist must raise their own
+    Falls back to the legacy ``parent:`` key when ``parent_branch:`` is absent or empty;
+    ``parent_branch:`` wins when both are present.
+    Returns ``None`` when the file is missing, the yaml block is absent or unparseable, or neither
+    key holds a usable value — callers that need the value to exist must raise their own
     error.
 
     Args:
@@ -912,10 +968,11 @@ def read_parent_branch(status_path: Path | str) -> str | None:
     status_path = _as_path(status_path, "read_parent_branch")
     try:
         full = read_full(status_path)
-        value = full["yaml"].get("parent")
-        if not isinstance(value, str) or not value.strip():
-            return None
-        return value.strip()
+        for key in ("parent_branch", "parent"):
+            value = full["yaml"].get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
     except (ValueError, KeyError, TypeError):
         return None
 

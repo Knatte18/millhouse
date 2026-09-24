@@ -79,7 +79,7 @@ def _make_implementer_fixture(tmp_path: Path) -> None:
         "slug: test-slug\n"
         "task: Test Task\n"
         "branch: test-branch\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n\n"
         "## Timeline\n\n"
         "```text\n"

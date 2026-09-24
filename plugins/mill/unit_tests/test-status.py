@@ -29,6 +29,7 @@ from _status import (
     read_branch,
     read_fixer_fork_fallback_log,
     read_full,
+    read_parent_branch,
     read_slug,
     read_status,
     remove_batch,
@@ -39,6 +40,7 @@ from _status import (
     set_blocked,
     set_module_verify_baseline,
     set_module_verify_baseline_signatures,
+    set_parent_branch,
     update_field,
 )
 from _yaml_writer import quote_scalar
@@ -57,9 +59,38 @@ def main() -> int:
         assert out.startswith("# Status\n"), "Leading HTML comment should be stripped"
         assert "Fix bug in widget handler" in out
         assert "2026-04-22T14:32:05Z" in out
-        assert "parent: main" in out
+        assert "parent_branch: main" in out
+        assert not any(line.startswith("parent:") for line in out.splitlines()), (
+            "legacy parent: row must not be rendered"
+        )
         assert "<TASK_TITLE>" not in out and "<TIMESTAMP>" not in out
         print("PASS: render_initial() substitutes tokens and strips header")
+
+        # parent_thread: optional row placed immediately after parent_branch:.
+        out_thread = render_initial(
+            "T", "D", "2026-04-22T14:32:05Z", "main",
+            slug="t-slug", branch="hanf/t-slug", parent_thread="mh:orch",
+        )
+        thread_lines = out_thread.splitlines()
+        branch_idx = next(i for i, ln in enumerate(thread_lines) if ln.startswith("parent_branch:"))
+        assert thread_lines[branch_idx + 1] == f"parent_thread: {quote_scalar('mh:orch')}", (
+            f"parent_thread row misplaced: {thread_lines[branch_idx + 1]!r}"
+        )
+        with tempfile.TemporaryDirectory() as tmp_thread:
+            sp_thread = Path(tmp_thread) / "status.md"
+            sp_thread.write_text(out_thread, encoding="utf-8")
+            assert read(sp_thread)["parent_thread"] == "mh:orch"
+        print("PASS: render_initial parent_thread row follows parent_branch and round-trips")
+
+        for empty_thread in (None, "", "   "):
+            out_empty = render_initial(
+                "T", "D", "2026-04-22T14:32:05Z", "main",
+                slug="t-slug", branch="hanf/t-slug", parent_thread=empty_thread,
+            )
+            assert not any(ln.startswith("parent_thread:") for ln in out_empty.splitlines()), (
+                f"parent_thread={empty_thread!r} must not render a row"
+            )
+        print("PASS: render_initial omits parent_thread row for None/empty/whitespace")
 
         # Colon in task_title: YAML must parse cleanly.
         out_colon = render_initial(
@@ -580,7 +611,7 @@ def main() -> int:
             assert isinstance(r["yaml"], dict), "yaml should be a dict"
             assert r["yaml"]["phase"] == "discussed", f"phase mismatch: {r['yaml']['phase']}"
             assert r["yaml"]["task"] == "Full task", f"task mismatch: {r['yaml']['task']}"
-            assert "parent" in r["yaml"], "parent key should be present"
+            assert "parent_branch" in r["yaml"], "parent_branch key should be present"
             assert isinstance(r["timeline"], list), "timeline should be a list"
             assert len(r["timeline"]) == 2, f"expected 2 timeline entries, got {len(r['timeline'])}"
             assert any("discussing" in line for line in r["timeline"]), "discussing entry missing"
@@ -856,7 +887,7 @@ def main() -> int:
             assert result["phase"] == "discussing", f"phase mismatch: {result.get('phase')!r}"
             assert result["slug"] == "test-slug", f"slug mismatch: {result.get('slug')!r}"
             assert result["branch"] == "hanf/test-slug", f"branch mismatch: {result.get('branch')!r}"
-            assert result["parent"] == "main", f"parent mismatch: {result.get('parent')!r}"
+            assert result["parent_branch"] == "main", f"parent_branch mismatch: {result.get('parent_branch')!r}"
             assert result["task"] == "Test Task", f"task mismatch: {result.get('task')!r}"
             assert "task_description" in result, "task_description key missing"
             assert "plan" in result, "plan key missing"
@@ -1644,6 +1675,81 @@ def main() -> int:
                 "PASS: read_fixer_fork_fallback_log skips a non-matching row inside the fence "
                 "rather than raising"
             )
+
+        # --- read_parent_branch / set_parent_branch ---
+        def _yaml_status(rows: str) -> str:
+            return f"# Status\n\n```yaml\nphase: discussing\n{rows}task: T\n```\n\n## Timeline\n\n```text\n```\n"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            cases = [
+                ("parent_branch: main\n", "main"),
+                ("parent: main\n", "main"),
+                ("parent_branch: feat\nparent: main\n", "feat"),
+                ("", None),
+            ]
+            for rows, expected in cases:
+                sp.write_text(_yaml_status(rows), encoding="utf-8")
+                assert read_parent_branch(sp) == expected, (
+                    f"read_parent_branch({rows!r}) = {read_parent_branch(sp)!r}, expected {expected!r}"
+                )
+            print("PASS: read_parent_branch prefers parent_branch, falls back to legacy parent")
+
+            sp.write_text(_yaml_status("parent_branch: main\n"), encoding="utf-8")
+            set_parent_branch(sp, "feat/x")
+            assert read_full(sp)["yaml"]["parent_branch"] == "feat/x"
+            assert sp.read_text(encoding="utf-8").count("parent_branch:") == 1
+            print("PASS: set_parent_branch rewrites an existing parent_branch row")
+
+            sp.write_text(_yaml_status("parent: main\nslug: s\n"), encoding="utf-8")
+            before_lines = sp.read_text(encoding="utf-8").splitlines()
+            old_idx = before_lines.index("parent: main")
+            set_parent_branch(sp, "feat")
+            after_lines = sp.read_text(encoding="utf-8").splitlines()
+            assert not any(ln.startswith("parent:") for ln in after_lines), "legacy row survived"
+            assert after_lines[old_idx] == "parent_branch: feat", f"row misplaced: {after_lines!r}"
+            assert [ln for i, ln in enumerate(after_lines) if i != old_idx] == [
+                ln for i, ln in enumerate(before_lines) if i != old_idx
+            ], "other rows changed"
+            print("PASS: set_parent_branch migrates a legacy parent row in place")
+
+            sp.write_text(_yaml_status(""), encoding="utf-8")
+            try:
+                set_parent_branch(sp, "main")
+                assert False, "expected ValueError"
+            except ValueError as exc:
+                assert "parent_branch: key missing" in str(exc)
+            print("PASS: set_parent_branch raises ValueError with neither key")
+
+        # --- baseline row anchoring ---
+        anchor_cases = [
+            ("parent_branch: main\nparent_thread: t\n", "parent_thread:"),
+            ("parent_branch: main\n", "parent_branch:"),
+            ("parent: main\n", "parent:"),
+        ]
+        setters = [
+            (set_module_verify_baseline, "clean", "module_verify_baseline:"),
+            (set_module_verify_baseline_signatures, ["sig"], "module_verify_baseline_signatures:"),
+        ]
+        for setter, setter_value, new_key in setters:
+            with tempfile.TemporaryDirectory() as tmp:
+                sp = Path(tmp) / "status.md"
+                for rows, anchor_prefix in anchor_cases:
+                    sp.write_text(_yaml_status(rows), encoding="utf-8")
+                    setter(sp, setter_value)
+                    file_lines = sp.read_text(encoding="utf-8").splitlines()
+                    new_idx = next(i for i, ln in enumerate(file_lines) if ln.startswith(new_key))
+                    assert file_lines[new_idx - 1].startswith(anchor_prefix), (
+                        f"{setter.__name__}: row landed after {file_lines[new_idx - 1]!r}, "
+                        f"expected after {anchor_prefix!r}"
+                    )
+                sp.write_text(_yaml_status(""), encoding="utf-8")
+                try:
+                    setter(sp, setter_value)
+                    assert False, "expected ValueError"
+                except ValueError:
+                    pass
+            print(f"PASS: {setter.__name__} anchors after parent_thread/parent_branch/legacy parent")
 
         print("All _status unit tests passed.")
         return 0

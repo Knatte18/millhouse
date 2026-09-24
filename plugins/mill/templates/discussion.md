@@ -13,7 +13,7 @@ Delete this HTML comment before writing. -->
 task: <TASK_TITLE>
 slug: <SLUG>
 status: discussing
-parent: <PARENT_BRANCH>
+parent_branch: <PARENT_BRANCH>
 ```
 
 ## Problem

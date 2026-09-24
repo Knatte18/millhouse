@@ -63,7 +63,7 @@ def _make_fixture(tmp_path: Path) -> Path:
         "slug: test-slug\n"
         "task: Test Task\n"
         "branch: test-branch\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n\n"
         "## Timeline\n\n"
         "```text\n"

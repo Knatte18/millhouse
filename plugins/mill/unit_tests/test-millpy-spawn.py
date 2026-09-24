@@ -15,7 +15,7 @@ import io
 import sys
 import types
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from unittest.mock import MagicMock, patch
 
 HUB = Path(__file__).resolve().parent.parent.parent.parent
@@ -127,9 +127,13 @@ def _run_main_with_mocks(
     pick_raises: Optional[Exception] = None,
     capture_branch_raises: Optional[Exception] = None,
     parent_branch: str = "main",
+    on_mocks: Optional[Callable[[MagicMock], None]] = None,
 ) -> tuple[int, MagicMock, MagicMock]:
     """
     Run ``mill_spawn.main(argv)`` with all external calls mocked.
+
+    ``on_mocks``, when given, receives the spawn_core mock before ``main`` runs,
+    so callers can inspect it after ``main`` raises ``SystemExit``.
 
     Returns ``(exit_code, spawn_core_mock, wiki_mock)``.
     """
@@ -223,6 +227,8 @@ def _run_main_with_mocks(
             patch.object(Path, "read_text", return_value="# Home\n"),
             patch.object(Path, "mkdir", return_value=None),
         ):
+            if on_mocks is not None:
+                on_mocks(spawn_core_mock)
             exit_code = mod.main(argv)
     finally:
         for name, original in saved.items():
@@ -1632,6 +1638,45 @@ def test_spawn_no_warning_when_short_name_set() -> None:
     print("PASS: test_spawn_no_warning_when_short_name_set")
 
 
+def test_parent_option_forwarded_as_parent_thread() -> None:
+    _, sc, _ = _run_main_with_mocks(["--parent", "mh:orch"])
+    actual = sc.write_initial_status.call_args.kwargs["parent_thread"]
+    if actual != "mh:orch":
+        raise AssertionError(f"expected parent_thread 'mh:orch', got {actual!r}")
+    print("PASS: test_parent_option_forwarded_as_parent_thread")
+
+
+def test_parent_option_absent_passes_none() -> None:
+    _, sc, _ = _run_main_with_mocks([])
+    actual = sc.write_initial_status.call_args.kwargs["parent_thread"]
+    if actual is not None:
+        raise AssertionError(f"expected parent_thread None, got {actual!r}")
+    print("PASS: test_parent_option_absent_passes_none")
+
+
+def test_parent_option_blank_passes_none() -> None:
+    _, sc, _ = _run_main_with_mocks(["--parent", "  "])
+    actual = sc.write_initial_status.call_args.kwargs["parent_thread"]
+    if actual is not None:
+        raise AssertionError(f"expected parent_thread None, got {actual!r}")
+    print("PASS: test_parent_option_blank_passes_none")
+
+
+def test_parent_option_rejects_control_characters() -> None:
+    for bad_value in ("a\nb", "a\x01b"):
+        holder: list[MagicMock] = []
+        try:
+            _run_main_with_mocks(["--parent", bad_value], on_mocks=holder.append)
+        except SystemExit:
+            pass
+        else:
+            raise AssertionError(f"expected SystemExit for --parent {bad_value!r}")
+        sc = holder[0]
+        if sc.claim_in_wiki.called or sc.write_initial_status.called:
+            raise AssertionError(f"work started before rejecting --parent {bad_value!r}")
+    print("PASS: test_parent_option_rejects_control_characters")
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -1641,6 +1686,10 @@ def main() -> int:
     tests = [
         test_smoke_import,
         test_main_happy_path_calls_spawn_core_in_order,
+        test_parent_option_forwarded_as_parent_thread,
+        test_parent_option_absent_passes_none,
+        test_parent_option_blank_passes_none,
+        test_parent_option_rejects_control_characters,
         test_write_settings_uses_short_name_and_slug,
         test_main_backlog_empty_exits_zero,
         test_main_value_error_from_picker_exits_one,

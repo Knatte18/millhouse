@@ -150,7 +150,7 @@ If the task is missing or has any other status, halt with a message explaining w
 ### Phase: Active
 
 The initial status file (at `status_path`) was written by `mill-spawn` and committed on the task branch with `phase: discussing`.
-Verify it exists and the `parent:` branch is recorded.
+Verify it exists and the parent branch is recorded as `parent_branch:` (or legacy `parent:`).
 No edit needed here.
 
 ### Phase: Explore
@@ -232,7 +232,7 @@ Wait for user approval before moving on.
 
 ### Phase: Discussion File
 
-Render `plugins/mill/templates/discussion.md` into `discussion_path`, substituting `<TASK_TITLE>`, `<SLUG>`, `<PARENT_BRANCH>` from `status_path`.
+Render `plugins/mill/templates/discussion.md` into `discussion_path`, substituting `<TASK_TITLE>` and `<SLUG>` from `status_path`, and `<PARENT_BRANCH>` from `_status.read_parent_branch(status_path)`.
 Fill every section — the file must be **self-contained**: a fresh mill-plan session with zero conversation history must be able to write a complete implementation plan from this file alone.
 
 Commit on the task branch: `git -C <worktree> add <discussion_path> && git commit -m "mill-start: write discussion.md for {slug}"`.

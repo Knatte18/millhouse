@@ -33,7 +33,7 @@ def _make_status_md(phase: str, parent: str = "main") -> str:
         "# Status\n\n"
         "```yaml\n"
         f"phase: {phase}\n"
-        f"parent: {parent}\n"
+        f"parent_branch: {parent}\n"
         "task: test task\n"
         "task_description: |\n"
         "  test\n"
@@ -263,7 +263,7 @@ def main() -> int:
             assert result is None, f"Expected None for missing file, got {result!r}"
             print("PASS read_parent_branch — missing file -> None")
 
-        # --- read_parent_branch: absent parent: key -> None ---
+        # --- read_parent_branch: absent parent_branch: key -> None ---
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             no_parent_status = (
@@ -282,8 +282,8 @@ def main() -> int:
             status_path = tmp / "status.md"
             status_path.write_text(no_parent_status, encoding="utf-8")
             result = _status.read_parent_branch(status_path)
-            assert result is None, f"Expected None for absent parent: key, got {result!r}"
-            print("PASS read_parent_branch — absent parent: key -> None")
+            assert result is None, f"Expected None for absent parent_branch: key, got {result!r}"
+            print("PASS read_parent_branch — absent parent_branch: key -> None")
 
         # --- read_parent_branch: well-formed -> correct branch string ---
         with tempfile.TemporaryDirectory() as tmp:

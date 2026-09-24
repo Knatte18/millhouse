@@ -34,7 +34,7 @@ task: <TASK_TITLE_YAML>
 slug: <SLUG>
 approved: false
 started: <STARTED>
-parent: <PARENT_BRANCH>
+parent_branch: <PARENT_BRANCH>
 root: ""
 verify: null
 ```
