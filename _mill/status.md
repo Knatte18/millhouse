@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: monitor-persistent-entry-wait
 branch: hanf/monitor-persistent-entry-wait
 plan: _mill/plan
@@ -20,4 +20,5 @@ discussed  '2026-09-24T06:03:13Z'
 planning  '2026-09-24T06:04:38Z'
 plan-review-r1  '2026-09-24T06:05:35Z'
 plan-fix-r1  '2026-09-24T06:05:35Z'
+planned  '2026-09-24T06:05:44Z'
 ```
