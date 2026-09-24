@@ -6,6 +6,7 @@ slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
 parent: main
+baseline_parent_sha: f56dd23f731e4e7803d2737a0661627cc4e3afcd
 task: Auto-name task sessions <slug>:<phase>
 task_description: |
   Auto-name task sessions <slug>:<phase>
@@ -30,7 +31,9 @@ implementing  '2026-09-24T06:15:45Z'
 ```yaml
 batches:
   - name: tasks-render
-    state: pending
+    state: running
+    implementer_session: a736784f-9d14-4782-850a-d33ccb25da05
+    start_sha: bbe6313f3b839e7a92a96d470899acfdeb080785
   - name: keybindings
     state: pending
   - name: session-tasks-cli
