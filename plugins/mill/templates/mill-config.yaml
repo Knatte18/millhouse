@@ -69,9 +69,19 @@ junctions:
 # branch_prefix -- prepended directly to the slug (no separator added).
 #   Include any separator in the prefix itself, e.g. "hanf/" -> "hanf/<slug>".
 #   Empty string -> branch == slug.
+# sessions -- model and effort per phase for the session tasks in each worktree's
+#   .vscode/tasks.json. Values are passed verbatim to `claude --model` / `--effort`;
+#   effort levels are low, medium, high, xhigh, max. `quick` defaults to the same values as `go`.
+#   Override per worktree in .millhouse/config.local.yaml; run `millpy-session-tasks` after
+#   changing values to refresh an existing worktree's .vscode/tasks.json.
 
 spawn:
   branch_prefix: ""
+  sessions:
+    start: { model: opus, effort: medium }
+    plan: { model: opus, effort: medium }
+    go: { model: sonnet, effort: high }
+    quick: { model: sonnet, effort: high }
 
 # ---------------------------------------------------------------------------
 # Git integration

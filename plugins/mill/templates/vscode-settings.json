@@ -17,6 +17,7 @@
     "breadcrumbs.enabled": false,
     "window.commandCenter": false,
     "task.allowAutomaticTasks": "on",
+    "terminal.integrated.commandsToSkipShell": ["workbench.action.tasks.runTask"],
     "terminal.integrated.profiles.windows": {
         "PowerShell 7": {
             "path": "pwsh"

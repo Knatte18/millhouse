@@ -13,7 +13,11 @@ from pathlib import Path
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-from _plan_validate import compute_next_card_number, PlanDAGError  # noqa: E402
+from _plan_validate import (  # noqa: E402
+    PlanDAGError,
+    _check_card_numbering,
+    compute_next_card_number,
+)
 
 
 def _write_batch_file(plan_dir: Path, filename: str, card_nums: list[int]) -> None:
@@ -80,8 +84,60 @@ def test_compute_next_card_number_unknown_batch_raises() -> None:
     print("PASS: test_compute_next_card_number_unknown_batch_raises")
 
 
+def _numbering_errors(files: dict[str, list[int]]) -> list[dict]:
+    with tempfile.TemporaryDirectory() as tmp:
+        plan_dir = Path(tmp)
+        for filename, nums in files.items():
+            _write_batch_file(plan_dir, filename, nums)
+        paths = [plan_dir / filename for filename in sorted(files)]
+        return _check_card_numbering(paths)
+
+
+def test_card_numbering_starts_above_one_flagged() -> None:
+    errors = _numbering_errors({"01-a.md": [2, 3]})
+    if len(errors) != 1 or errors[0]["card"] != 1:
+        raise AssertionError(f"expected one card-1 error, got {errors}")
+    if "starts at 2, not 1" not in errors[0]["message"]:
+        raise AssertionError(f"minimum not named: {errors[0]['message']}")
+    print("PASS: test_card_numbering_starts_above_one_flagged")
+
+
+def test_card_numbering_starts_at_one_clean() -> None:
+    errors = _numbering_errors({"01-a.md": [1, 2]})
+    if errors:
+        raise AssertionError(f"expected no errors, got {errors}")
+    print("PASS: test_card_numbering_starts_at_one_clean")
+
+
+def test_card_numbering_two_batches_clean() -> None:
+    errors = _numbering_errors({"01-a.md": [1, 2], "02-b.md": [3, 4]})
+    if errors:
+        raise AssertionError(f"expected no errors, got {errors}")
+    print("PASS: test_card_numbering_two_batches_clean")
+
+
+def test_card_numbering_minimum_in_later_batch_named() -> None:
+    errors = _numbering_errors({"01-a.md": [3, 4], "02-b.md": [2]})
+    starts = [e for e in errors if "starts at" in e["message"]]
+    if len(starts) != 1 or starts[0]["batch"] != "02-b":
+        raise AssertionError(f"expected error naming 02-b, got {errors}")
+    print("PASS: test_card_numbering_minimum_in_later_batch_named")
+
+
+def test_card_numbering_empty_plan_clean() -> None:
+    errors = _numbering_errors({"01-a.md": [], "02-b.md": []})
+    if errors:
+        raise AssertionError(f"expected no errors, got {errors}")
+    print("PASS: test_card_numbering_empty_plan_clean")
+
+
 def main() -> int:
     try:
+        test_card_numbering_starts_above_one_flagged()
+        test_card_numbering_starts_at_one_clean()
+        test_card_numbering_two_batches_clean()
+        test_card_numbering_minimum_in_later_batch_named()
+        test_card_numbering_empty_plan_clean()
         test_compute_next_card_number_simple()
         test_compute_next_card_number_empty_batch()
         test_compute_next_card_number_collision_raises()

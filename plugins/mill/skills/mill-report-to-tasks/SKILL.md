@@ -18,7 +18,7 @@ the operator must always name the file explicitly.
 
 ## Entry checks
 
-1. `.millhouse/wiki/` junction must exist.
+1. `.wiki` junction must exist in the worktree root.
    If not, stop and tell the user to run `mill-setup`.
 2. The given path must exist as a file, parse as JSON, and pass `_sandbox_report.read()` validation.
    On any failure (missing path, invalid JSON, `SandboxReportError`), stop with the error message `_sandbox_report.read()` raised — do not catch and reword it.
