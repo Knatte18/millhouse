@@ -1006,6 +1006,21 @@ def _check_card_numbering(batch_files: list[Path]) -> list[dict]:
                     ),
                 })
 
+    # Starts-at-1: the lowest card number across the plan must be 1.
+    if all_cards:
+        min_stem, min_card = min(all_cards, key=lambda t: (t[1], t[0]))
+        if min_card != 1:
+            errors.append({
+                "check": "card-numbering",
+                "batch": min_stem,
+                "card": 1,
+                "path": None,
+                "message": (
+                    f"card 1 breaks sequential numbering within batch {min_stem} "
+                    f"(numbering starts at {min_card}, not 1)"
+                ),
+            })
+
     return errors
 
 
