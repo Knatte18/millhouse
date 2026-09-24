@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -22,4 +22,25 @@ discussed  '2026-09-24T07:39:29Z'
 planning  '2026-09-24T07:51:16Z'
 plan-review-r1  '2026-09-24T07:56:19Z'
 planned  '2026-09-24T07:56:29Z'
+implementing  '2026-09-24T07:56:40Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: plan-review-backend
+    state: pending
+  - name: code-review-backend
+    state: pending
+  - name: fixer-and-gates
+    state: pending
+  - name: review-common-and-templates
+    state: pending
+  - name: config
+    state: pending
+  - name: mill-go-skill-text
+    state: pending
+  - name: remaining-skills-docs-and-gate
+    state: pending
 ```
