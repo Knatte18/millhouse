@@ -63,7 +63,7 @@ def _make_fixture(tmp_path: Path) -> None:
         "slug: test-slug\n"
         "task: Test Task\n"
         "branch: test-branch\n"
-        "parent: main\n"
+        "parent_branch: main\n"
         "```\n\n"
         "## Timeline\n\n"
         "```text\n"
@@ -1361,7 +1361,7 @@ class TestMillpyImplement(unittest.TestCase):
             "slug: test-slug\n"
             "task: Test Task\n"
             "branch: test-branch\n"
-            "parent: main\n"
+            "parent_branch: main\n"
             "```\n\n"
             "## Timeline\n\n"
             "```text\n"
@@ -1529,7 +1529,7 @@ class TestMillpyImplement(unittest.TestCase):
             "slug: test-slug\n"
             "task: Test Task\n"
             "branch: test-branch\n"
-            "parent: main\n"
+            "parent_branch: main\n"
             "```\n\n"
             "## Timeline\n\n"
             "```text\n"
@@ -1913,7 +1913,7 @@ class TestMillpyImplement(unittest.TestCase):
             "slug: test-slug\n"
             "task: Test Task\n"
             "branch: test-branch\n"
-            "parent: main\n"
+            "parent_branch: main\n"
             "```\n\n"
             "## Timeline\n\n"
             "```text\n"
@@ -2557,7 +2557,7 @@ SESSION_ID equals retained session.
             "slug: test-slug\n"
             "task: Test Task\n"
             "branch: test-branch\n"
-            "parent: main\n"
+            "parent_branch: main\n"
             "```\n\n"
             "## Timeline\n\n"
             "```text\n"
@@ -2758,7 +2758,7 @@ class TestBaselinePreflightSkipReason(unittest.TestCase):
         self.tmp_path = Path(tempfile.mkdtemp())
         self.addCleanup(_safe_rmtree.safe_rmtree, self.tmp_path, allowed_root=self.tmp_path, ignore_errors=True)
         self.status_path = self.tmp_path / "status.md"
-        self.status_path.write_text("```yaml\nparent: main\n```\n", encoding="utf-8")
+        self.status_path.write_text("```yaml\nparent_branch: main\n```\n", encoding="utf-8")
 
     def _routing(self, *, merge_base_rc=0, merge_base_sha="deadbeef", diff_rc=0, diff_paths=()):
         def _fake_run(argv, **kwargs):

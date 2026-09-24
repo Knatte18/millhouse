@@ -1139,7 +1139,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self, verify_frontmatter_yaml: str, batch_names: list[str] | None = None
     ) -> None:
         """
-        Write a status.md (with a resolvable ``parent:`` row) and a ``00-overview.md`` plan
+        Write a status.md (with a resolvable ``parent_branch:`` row) and a ``00-overview.md`` plan
         fixture carrying ``verify_frontmatter_yaml`` as the ``verify:`` field, under
         ``self.tmp_path``, and point ``self.mock_load_config`` at the matching ``paths`` section
         -- the minimum fixture shape ``_run_recompute_baseline`` needs end-to-end.
@@ -1156,7 +1156,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         mill_dir = self.tmp_path / "_mill"
         plan_dir = mill_dir / "plan"
         plan_dir.mkdir(parents=True, exist_ok=True)
-        status_text = "```yaml\nslug: test-slug\nparent: main\n```\n"
+        status_text = "```yaml\nslug: test-slug\nparent_branch: main\n```\n"
         if batch_names:
             batches_yaml = "\n".join(
                 f"  - name: {name}\n    state: pending\n"
