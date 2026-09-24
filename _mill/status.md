@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r3
+phase: discussed
 slug: session-name-short-prefix
 branch: hanf/session-name-short-prefix
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-24T07:53:59Z'
 discussion-fix-r3  '2026-09-24T08:57:17Z'
+discussed  '2026-09-24T09:06:36Z'
 ```
