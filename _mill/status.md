@@ -74,9 +74,10 @@ batches:
     verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
     state: running
-    implementer_session: f52c1d5b-635d-489c-a2ee-092e4aca7323
-    start_sha: 139c203ca630f40117716ee19aac82f94e1a98c1
+    implementer_session: fbf1231a-ffef-400a-ad2e-20b4717a0131
+    start_sha: 26d35322450956f7ed9653107b0b476b7aa494e4
     verify_baseline_failures: []
+    self_resolve_remint_at: '2026-09-24T08:18:06Z'
 ```
 ## Inferred-success log
 
