@@ -44,7 +44,9 @@ batches:
     commit_sha: 150500db84a6e6d98c4d518643a7900da6074df4
     verify_baseline_failures: []
   - name: docs-and-setup
-    state: pending
+    state: running
+    implementer_session: 65f4124e-3a5a-44a1-80f3-6b0f8d67b219
+    start_sha: fee4a630d839abaa828649b61aa27bc07217ae44
     verify_baseline_failures: []
 ```
 ## Inferred-success log
