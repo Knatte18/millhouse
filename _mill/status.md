@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-go-plan-doc-gaps
 branch: hanf/mill-go-plan-doc-gaps
 plan: _mill/plan
@@ -20,4 +20,15 @@ discussed  '2026-09-24T06:31:33Z'
 planning  '2026-09-24T06:34:15Z'
 plan-review-r1  '2026-09-24T06:35:21Z'
 planned  '2026-09-24T06:35:31Z'
+implementing  '2026-09-24T06:35:44Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: inferred-success-log
+    state: pending
+  - name: commit-none-and-done-gate
+    state: pending
 ```
