@@ -1094,6 +1094,77 @@ class TestMillpyFix(unittest.TestCase):
             stderr_buf.getvalue(),
         )
 
+    def test_holistic_finalize_baseline_union_skips_unknown_baseline_batch(self):
+        """
+        A batch with no `verify_baseline_failures` key (unknown baseline) contributes nothing to
+        the holistic union; only recorded lists do, and with no recorded key at all the kwarg is None.
+        """
+        plan_dir = self.tmp_path / "_mill" / "plan"
+        overview_text = (
+            "# Plan: Test Task\n\n"
+            "```yaml\n"
+            "task: Test Task\n"
+            "slug: test-slug\n"
+            "approved: true\n"
+            "```\n\n"
+            "## Batch Index\n\n"
+            "```yaml\n"
+            "batches:\n"
+            "  - name: batch1\n"
+            "    file: 01-batch1.md\n"
+            "    depends-on: []\n"
+            "    verify: 'exit 0'\n"
+            "  - name: batch2\n"
+            "    file: 02-batch2.md\n"
+            "    depends-on: [1]\n"
+            "    verify: 'exit 0'\n"
+            "```\n"
+        )
+        (plan_dir / "00-overview.md").write_text(overview_text, encoding="utf-8")
+        (plan_dir / "01-batch1.md").write_text("# Batch: batch1\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+        (plan_dir / "02-batch2.md").write_text("# Batch: batch2\n\n```yaml\nverify: exit 0\n```\n", encoding="utf-8")
+
+        status_path = self.tmp_path / "_mill" / "status.md"
+        millpy_fix._status.init_batches(status_path, ["batch1", "batch2"])
+        millpy_fix._status.set_batch_field(status_path, "batch1", "state", "approved")
+        millpy_fix._status.set_batch_field(status_path, "batch2", "state", "approved")
+
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text(
+            '{"status":"success","commit_sha":"xyz","session_id":"fake"}\n',
+            encoding="utf-8",
+        )
+
+        def run_holistic_finalize() -> dict:
+            captured_kwargs: dict = {}
+
+            def mock_finalize_from_output(agent_output_path_arg, project_root, **kwargs):
+                captured_kwargs.update(kwargs)
+                return 0
+
+            with unittest.mock.patch.object(
+                millpy_fix, "finalize_from_output", side_effect=mock_finalize_from_output
+            ):
+                rc, _ = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--stage", "finalize",
+                    "--agent-output", str(agent_output_path),
+                ])
+            self.assertEqual(rc, 0)
+            return captured_kwargs
+
+        # Neither batch has the key: no baseline at all.
+        self.assertIsNone(run_holistic_finalize().get("batch_verify_baseline"))
+
+        # batch1 recorded, batch2 unknown (key absent): the union is exactly batch1's list.
+        millpy_fix._status.set_batch_field(
+            status_path, "batch1", "verify_baseline_failures", ["--- FAIL: TestA (0.01s)"]
+        )
+        self.assertEqual(
+            run_holistic_finalize().get("batch_verify_baseline"), ["--- FAIL: TestA (0.01s)"]
+        )
+
     def test_holistic_finalize_status_path_logs_target_removed_skip(self):
         """Card 5: an approved batch whose verify command references a path a later approved batch's
         Deletes: removes is filtered by iter_batch_verifies (reason 2/3b),
