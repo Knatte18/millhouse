@@ -20,7 +20,7 @@ Leaving claimed-but-open issues on GitHub is a forgetting hazard — that's why 
 1. `gh auth status` must succeed.
    If not, stop:
    > `gh` is not authenticated. Run `gh auth login` and re-invoke `/mill-ghissues-to-tasks`.
-2. `.millhouse/wiki/` junction must exist.
+2. `.wiki` junction must exist in the worktree root.
    If not, stop and tell the user to run `mill-setup`.
 
 ## Step 1 — Fetch and build the contract

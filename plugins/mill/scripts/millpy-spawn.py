@@ -2,7 +2,7 @@
 mill-spawn — claim one task from the wiki Home.md and spin up a worktree for it.
 
 Flow:
-    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.millhouse/wiki`` is a junction
+    1. Resolve the wiki clone via ``_paths.resolve_wiki_path`` (``.wiki`` is a junction
         for IDE/terminal convenience only).
         2. Fast-forward pull the wiki so we pick against current state.
         3. Parse ``Home.md``;
