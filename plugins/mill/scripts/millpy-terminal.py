@@ -21,9 +21,19 @@ from pathlib import Path
 
 import _spawn_core
 import _subprocess_util
+import _vscode_tasks
 from wiki import _client as wiki
 from _config import load_config as _load_config
-from _paths import resolve_git_root, resolve_hub_path, resolve_hub_relative_path, resolve_wiki_path, resolve_worktrees_dir
+from _paths import (
+    resolve_git_root,
+    resolve_hub_path,
+    resolve_hub_relative_path,
+    resolve_main_worktree_root,
+    resolve_short_name,
+    resolve_wiki_path,
+    resolve_worktrees_dir,
+    short_name_is_derived,
+)
 
 
 def _load_spawn_main():
@@ -39,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
 
     Resolves the worktrees directory from config, discovers all active worktrees via
     ``_spawn_core.discover_active_worktrees``, presents a numbered picker (or auto-selects when only
-    one is found), then spawns Claude with ``--name <slug>`` in the chosen worktree path.
+    one is found), then spawns Claude with ``--name <short>:<slug>`` (lower-cased) in the chosen worktree path.
 
     Args:
         argv: Argument vector (unused — no CLI flags for this entrypoint).
@@ -99,6 +109,24 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         selected_path, selected_slug, _ = active[num - 1]
 
+    try:
+        repo_name = resolve_main_worktree_root(git_root).name
+    except (SystemExit, Exception):
+        repo_name = git_root.name
+    short = resolve_short_name(cfg, repo_name)
+    try:
+        session_name = _vscode_tasks.session_prefix(short, selected_slug)
+    except ValueError as exc:
+        message = " ".join(str(exc).split()).encode("ascii", "replace").decode("ascii")
+        print(f"[mill-terminal] invalid session name: {message}", file=sys.stderr)
+        return 1
+    if short_name_is_derived(cfg):
+        print(
+            f"[mill-terminal] WARNING: repo.short_name is not set; using derived short name '{short}'. "
+            "Set repo.short_name in mill-config.yaml or run /mill-setup.",
+            file=sys.stderr,
+        )
+
     # Load per-worktree stub config to honour hub_relative_path.
     hub_subpath = "."
     stub_path = selected_path / ".millhouse" / "config.local.yaml"
@@ -112,15 +140,15 @@ def main(argv: list[str] | None = None) -> int:
     launch_path = resolve_hub_relative_path(selected_path, hub_subpath)
 
     print(f"Launching Claude Code in: {launch_path}", file=sys.stderr)
-    print(f"Session name: {selected_slug}", file=sys.stderr)
+    print(f"Session name: {session_name}", file=sys.stderr)
     if os.name == "nt":
         # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
         subprocess.run(
-            ["cmd", "/c", "claude", "--name", selected_slug], cwd=launch_path, env=_subprocess_util.scrub_env()
+            ["cmd", "/c", "claude", "--name", session_name], cwd=launch_path, env=_subprocess_util.scrub_env()
         )
     else:
         # Interactive launcher — must keep its console; do NOT route through _subprocess_util.run.
-        subprocess.run(["claude", "--name", selected_slug], cwd=launch_path, env=_subprocess_util.scrub_env())
+        subprocess.run(["claude", "--name", session_name], cwd=launch_path, env=_subprocess_util.scrub_env())
     return 0
 
 

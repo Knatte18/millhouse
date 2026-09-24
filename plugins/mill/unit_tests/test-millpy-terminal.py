@@ -5,11 +5,14 @@ All discover_active_worktrees calls are mocked with return_value which accepts t
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import os
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -46,8 +49,78 @@ def _make_git_repo(tmp: Path) -> Path:
     return tmp
 
 
+def _run_solo_task(cfg: dict, *, nt: bool = False, main_root: Path | None = None) -> tuple[int, list, str]:
+    """
+    Run main() with a single active worktree ``solo-task`` and the given config.
+
+    Returns ``(exit_code, captured subprocess argv lists, captured stderr)``.
+    """
+    argvs: list = []
+    stderr = io.StringIO()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        worktree = root / "worktrees" / "solo-task"
+        worktree.mkdir(parents=True)
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch("mill_terminal.resolve_git_root", return_value=root))
+            stack.enter_context(patch("mill_terminal.resolve_wiki_path", return_value=root / "wiki"))
+            stack.enter_context(patch("mill_terminal.resolve_hub_path", return_value=root))
+            stack.enter_context(patch("mill_terminal._load_config", return_value=cfg))
+            stack.enter_context(patch("mill_terminal.wiki.list_tasks_brief", return_value=[]))
+            stack.enter_context(patch("mill_terminal.resolve_worktrees_dir", return_value=root / "worktrees"))
+            stack.enter_context(patch("mill_terminal.resolve_main_worktree_root", return_value=main_root or root))
+            stack.enter_context(
+                patch(
+                    "mill_terminal._spawn_core.discover_active_worktrees",
+                    return_value=[(worktree, "solo-task", "Solo")],
+                )
+            )
+            stack.enter_context(
+                patch("mill_terminal.subprocess.run", side_effect=lambda argv, **kwargs: argvs.append(argv))
+            )
+            if nt:
+                stack.enter_context(patch("mill_terminal.os", types.SimpleNamespace(name="nt")))
+            stack.enter_context(contextlib.redirect_stderr(stderr))
+            rc = mill_terminal.main([])
+    return rc, argvs, stderr.getvalue()
+
+
 def main() -> int:
     errors = 0
+
+    # ------------------------------------------------------------------
+    # Tests: session name is <short>:<slug>, lower-cased, on both launch branches.
+    # ------------------------------------------------------------------
+    configured = {"repo": {"short_name": "MH"}}
+    rc, argvs, err = _run_solo_task(configured)
+    if rc == 0 and argvs == [["claude", "--name", "mh:solo-task"]] and "repo.short_name is not set" not in err:
+        print("PASS: POSIX launch names the session mh:solo-task without a warning")
+    else:
+        print(f"FAIL: POSIX session name: rc={rc} argvs={argvs} err={err!r}", file=sys.stderr)
+        errors += 1
+
+    rc, argvs, err = _run_solo_task(configured, nt=True)
+    if rc == 0 and argvs == [["cmd", "/c", "claude", "--name", "mh:solo-task"]]:
+        print("PASS: nt launch names the session mh:solo-task")
+    else:
+        print(f"FAIL: nt session name: rc={rc} argvs={argvs}", file=sys.stderr)
+        errors += 1
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        rc, argvs, err = _run_solo_task({}, main_root=Path(tmpdir) / "millhouse")
+    warnings = [line for line in err.splitlines() if "repo.short_name is not set" in line]
+    if rc == 0 and argvs == [["claude", "--name", "mi:solo-task"]] and len(warnings) == 1 and "'MI'" in warnings[0]:
+        print("PASS: fallback derives MI from the main worktree and warns once")
+    else:
+        print(f"FAIL: fallback: rc={rc} argvs={argvs} warnings={warnings}", file=sys.stderr)
+        errors += 1
+
+    rc, argvs, err = _run_solo_task({"repo": {"short_name": "M:H"}})
+    if rc == 1 and not argvs and "[mill-terminal] invalid session name:" in err:
+        print("PASS: invalid short name returns 1 without launching")
+    else:
+        print(f"FAIL: invalid short name: rc={rc} argvs={argvs} err={err!r}", file=sys.stderr)
+        errors += 1
 
     # ------------------------------------------------------------------
     # Test: two worktrees present, user picks first -> subprocess called with first worktree's path.
