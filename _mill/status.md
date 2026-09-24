@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-plan-review-backend
+phase: approved-code-review-backend
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r1  '2026-09-24T07:56:19Z'
 planned  '2026-09-24T07:56:29Z'
 implementing  '2026-09-24T07:56:40Z'
 approved-plan-review-backend  '2026-09-24T08:02:47Z'
+approved-code-review-backend  '2026-09-24T08:05:14Z'
 ```
 
 ## Batches
@@ -37,9 +38,10 @@ batches:
     commit_sha: 28340e9422db100d8383d5eb0b9ab1e0b22ae4e8
     verify_baseline_failures: []
   - name: code-review-backend
-    state: running
+    state: approved
     implementer_session: 2db7337e-7dd7-4b18-8dba-724e92ff3ba3
     start_sha: fbce3371a813e1bce09aa157ddb5cafd3a56d9c2
+    commit_sha: 9cfeab703e9b610de8388dbdf9dad9f7c99926ab
     verify_baseline_failures: []
   - name: fixer-and-gates
     state: pending
