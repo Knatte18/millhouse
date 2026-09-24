@@ -88,4 +88,5 @@ batches:
 '2026-09-24T08:12:48Z'  review-common-and-templates  round 1
 '2026-09-24T08:14:19Z'  config  round 1
 '2026-09-24T08:16:27Z'  mill-go-skill-text  round 1
+'2026-09-24T08:19:46Z'  remaining-skills-docs-and-gate  round 1
 ```
