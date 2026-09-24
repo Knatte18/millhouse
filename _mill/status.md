@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: fix-stale-unit-tests
 branch: hanf/fix-stale-unit-tests
 plan: null
@@ -16,4 +16,6 @@ task_description: |
 ```text
 discussing  '2026-09-24T05:29:44Z'
 discussion-fix-r1  '2026-09-24T05:40:40Z'
+discussion-fix-r2  '2026-09-24T05:41:20Z'
+discussed  '2026-09-24T05:41:20Z'
 ```

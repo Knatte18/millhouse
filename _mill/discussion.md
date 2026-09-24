@@ -40,7 +40,7 @@ Sources: GitHub issues #1147 and #1146.
 ### millpy-bg ban
 
 - Decision: remove `"millpy-bg"` from `BANNED_LITERALS`; keep `"psmux"` and `"dispatch == subprocess"`.
-  Update the module/function docstrings and comments that mention the ban list only if they name `millpy-bg`.
+  `millpy-bg` appears in that test file only at line 27, so no docstring or comment edit is needed.
 - Rationale: `millpy-bg` is a live, supported helper used by SKILL.md; the dead literals the guard targets are `psmux` and `dispatch == subprocess`, which still pass.
 - Rejected: narrowing to a `millpy-bg` context regex (fragile, guards nothing real); skipping SKILL.md for that literal (weakens the guard on companions for no reason).
 
