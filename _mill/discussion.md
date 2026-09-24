@@ -58,6 +58,9 @@ Three small gaps in the deterministic plan/verify gates, filed as GitHub issues 
   `None` already means "not computed" everywhere downstream (`millpy-implement.py:801`, `:1083`, `millpy-fix.py:455`), which falls back to the strict gate -- the existing fail-safe.
   Concretely the sentinel is `None` as the dict value; the return type becomes `dict[str, list[str] | None]`.
   The pair cache stores the same `None`.
+  Implementation consequences, both tested:
+  the `list(by_pair[pair])` copy in `compute_batch_baselines` must pass `None` through instead of copying it, and the `pair_cache` type annotations (here and at `millpy-implement.py:432`) widen to `dict[tuple[str, Path], list[str] | None]`.
+  The driver (`millpy-implement.py:456`) explicitly skips `_status.set_batch_field` when `batch_result[name]` is `None`, so the key stays absent (a written `None` would still count as "captured" for the idempotence check at `:424`).
 - Rationale: today the short-circuited run yields a single `NONZERO_EXIT: exit 1: (no output)` signature, which will never subset-match the later real failure's signatures, so the waiver silently does the wrong thing.
   "Unknown -> strict" is honest and needs no new downstream branch.
 - Rejected: (a) running each `&&` conjunct independently -- shell quoting inside `sh -c "..."` makes reliable splitting fragile, and conjuncts may depend on each other's side effects.

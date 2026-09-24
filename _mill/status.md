@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
 plan: null
@@ -16,4 +16,6 @@ task_description: |
 ```text
 discussing  '2026-09-24T05:52:09Z'
 discussion-fix-r1  '2026-09-24T06:03:49Z'
+discussion-fix-r2  '2026-09-24T06:04:34Z'
+discussed  '2026-09-24T06:04:34Z'
 ```
