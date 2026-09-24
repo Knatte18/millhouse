@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-approved
 slug: plan-verify-gate-gaps
 branch: hanf/plan-verify-gate-gaps
 plan: _mill/plan
@@ -26,6 +26,7 @@ implementing  '2026-09-24T06:09:47Z'
 approved-plan-validate-checks  '2026-09-24T06:12:09Z'
 approved-baseline-short-circuit  '2026-09-24T06:14:16Z'
 holistic-reviewing  '2026-09-24T06:14:24Z'
+holistic-approved  '2026-09-24T06:14:58Z'
 ```
 
 ## Batches
