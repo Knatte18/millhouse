@@ -198,7 +198,7 @@ def main() -> int:
             f"status.md content unexpected:\n{status_text}",
         )
         _assert(
-            "parent: main" in status_text,
+            "parent_branch: main" in status_text,
             f"status.md missing parent branch:\n{status_text}",
         )
 
