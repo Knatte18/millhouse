@@ -48,14 +48,13 @@ For each round `H` from 1 to `max_holistic_rounds`:
    Two-way branch based on what is on disk in `_mill/reviews/`:
    - **(a) Review file present.**
      Scan `reviews/` for a file matching `*-code-review-r{H}.md` (holistic code review files have format `{ts}-code-review-r{N}.md` -- no batch-name segment, no `-holistic-` substring;
-     per-batch files embed `{batch_name}` so the glob never collides).
-     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", latest=True)` (`"holistic-reviewing"` is the one phase string in this codebase that is reused verbatim across every round -- unlike the per-batch mirror in `SKILL.md`'s Execute step 3, which uses `f"reviewing-{batch_name}-r{N}"`, already unique per round by construction, so it correctly keeps `occurrence=1` unchanged -- so a positional `occurrence=H` silently breaks when an operator manually resumes a `blocked` task without incrementing the round counter, since re-appending the same phase entry shifts every later occurrence index; `latest=True` always resolves to the most recently appended matching entry regardless of how many times the phase string has been appended, which is the correct semantics here);
+     historical per-batch files from older tasks embed a batch name, so the glob never collides with them).
+     If found, validate its freshness: fetch `ref_ts = _status.phase_entry_timestamp(status_path, "holistic-reviewing", latest=True)` (`"holistic-reviewing"` is the one phase string in this codebase that is reused verbatim across every round -- so a positional `occurrence=H` silently breaks when an operator manually resumes a `blocked` task without incrementing the round counter, since re-appending the same phase entry shifts every later occurrence index; `latest=True` always resolves to the most recently appended matching entry regardless of how many times the phase string has been appended, which is the correct semantics here);
      treat the file as this round's review ONLY if `ref_ts` is not None AND the file's mtime (UTC) is at or after `ref_ts`.
      If freshness validation passes, skip the CLI and use that file's verdict directly.
      Proceed to step 4 (verdict branch);
      do NOT execute step 2 (the phase entry was already appended on the original run) and do NOT execute step 3.
      If the file is stale or `ref_ts` is None, fall through to branch (b) handling (fire the CLI).
-     Provide the inline-Python comparison snippet as per `plugins/mill/skills/mill-go-base/SKILL.md`'s per-batch section (Execute step 3 sub-step 1, crash-recovery).
    - **(b) No review file for round H.** Proceed normally to step 2 (append `holistic-reviewing` phase) and step 3 (fire the CLI).
 
    Inline Python helper for branch (a):
@@ -97,7 +96,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
 3. Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately before the Agent-mode dispatch below.
 
-   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]` (no `--batch` flag for holistic scope).
+   Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]`.
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
 
    **Exit handling.**
@@ -159,7 +158,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    ```bash
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
    import _prior_blocking, pathlib
-   digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'), scope='holistic')
+   digest = _prior_blocking.build_digest(pathlib.Path('<reviews_dir-abs-path>'))
    pathlib.Path('<briefs_dir>/prior-blocking-holistic-r{H}.txt').write_text(digest, encoding='utf-8')
    "
    ```
