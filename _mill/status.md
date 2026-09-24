@@ -49,4 +49,5 @@ batches:
 
 ```text
 '2026-09-24T09:21:50Z'  core-helpers  round 1
+'2026-09-24T09:24:28Z'  session-name-callers  round 1
 ```
