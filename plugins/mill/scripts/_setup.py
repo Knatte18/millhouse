@@ -16,6 +16,14 @@ Public API:
     clone_or_init(url, branch, dest) -> dict
     Clone, init-orphan, or pull an existing wiki clone at dest.
     Returns a status dict with "action" and "branch_existed_on_remote".
+
+    SHORT_NAME_RE
+    Pattern a repo short name must fully match: 2-4 ASCII letters or digits.
+
+    set_repo_short_name(config_path, value) -> bool
+    Set ``repo.short_name`` in a config file with a line-level edit that leaves every other
+    line byte-identical. Returns True when the file changed, False when already set.
+    Raises ValueError on an invalid value or an unsupported ``repo:`` layout.
 """
 from __future__ import annotations
 
@@ -28,6 +36,14 @@ import _junction
 import _subprocess_util
 
 _TOKEN_RE = re.compile(r"<([A-Za-z][A-Za-z0-9_]*)>")
+
+SHORT_NAME_RE = re.compile(r"^[A-Za-z0-9]{2,4}$")
+_REPO_LINE_RE = re.compile(r"^repo:\s*(#.*)?$")
+_TOP_LEVEL_KEY_RE = re.compile(r"^repo:")
+_SHORT_NAME_LINE_RE = re.compile(
+    r"^(?P<indent>[ \t]+)short_name:(?P<ws>[ \t]*)"
+    r"(?P<val>\"[^\"]*\"|'[^']*'|[^\s#]*)(?P<rest>.*)$"
+)
 
 
 class WikiSetupError(Exception):
@@ -358,3 +374,78 @@ def create_hub_links(
         print(f"[setup] hardlink created: {link_path} -> {target}", file=sys.stderr)
 
     return {"junctions": created_junctions, "hardlinks": created_hardlinks}
+
+
+def _split_line_ending(line: str) -> tuple[str, str]:
+    """Return ``(text, ending)`` where ``ending`` is ``"\\r\\n"``, ``"\\n"`` or ``""``."""
+    body = line.rstrip("\r\n")
+    return body, line[len(body):]
+
+
+def set_repo_short_name(config_path: Path, value: str) -> bool:
+    """
+    Set ``repo.short_name`` in the YAML file at ``config_path`` by editing lines in place.
+
+    An existing ``short_name:`` line keeps its indent and trailing comment.
+    A ``repo:`` block without the key gains it directly under the ``repo:`` line;
+    a file without ``repo:`` gains both lines at the top.
+    Never round-trips through a YAML dumper, so every other line stays byte-identical.
+
+    Returns:
+        True when the file was rewritten, False when the text was already up to date.
+
+    Raises:
+        ValueError: ``value`` does not match ``SHORT_NAME_RE``, ``repo:`` uses flow style, or the
+            edited text does not parse back to ``repo.short_name == value``.
+    """
+    import yaml
+
+    if not SHORT_NAME_RE.fullmatch(value):
+        raise ValueError(f"invalid short name {value!r}: expected 2-4 letters or digits")
+    # read_bytes avoids universal-newline translation so CRLF files round-trip unchanged.
+    original = config_path.read_bytes().decode("utf-8")
+    lines = original.splitlines(keepends=True)
+    newline = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
+
+    repo_index = next(
+        (i for i, line in enumerate(lines) if _TOP_LEVEL_KEY_RE.match(line)), None
+    )
+    if repo_index is None:
+        lines[0:0] = ["repo:" + newline, f"  short_name: {value}" + newline]
+    else:
+        repo_text, _ = _split_line_ending(lines[repo_index])
+        if not _REPO_LINE_RE.match(repo_text):
+            raise ValueError("top-level 'repo:' has an inline value; flow style is not edited")
+        block_end = repo_index + 1
+        while block_end < len(lines):
+            text, _ = _split_line_ending(lines[block_end])
+            if text.strip() and not text.lstrip().startswith("#") and not text[0] in " \t":
+                break
+            block_end += 1
+        short_index = next(
+            (i for i in range(repo_index + 1, block_end) if _SHORT_NAME_LINE_RE.match(_split_line_ending(lines[i])[0])),
+            None,
+        )
+        if short_index is not None:
+            text, ending = _split_line_ending(lines[short_index])
+            match = _SHORT_NAME_LINE_RE.match(text)
+            lines[short_index] = f"{match['indent']}short_name: {value}{match['rest']}{ending}"
+        else:
+            indent = "  "
+            for i in range(repo_index + 1, block_end):
+                text, _ = _split_line_ending(lines[i])
+                if text.strip() and not text.lstrip().startswith("#"):
+                    indent = text[: len(text) - len(text.lstrip())]
+                    break
+            if not lines[repo_index].endswith(("\n", "\r")):
+                lines[repo_index] += newline
+            lines.insert(repo_index + 1, f"{indent}short_name: {value}{newline}")
+
+    updated = "".join(lines)
+    parsed = yaml.safe_load(updated)
+    if not isinstance(parsed, dict) or (parsed.get("repo") or {}).get("short_name") != value:
+        raise ValueError("edited config does not parse back to the requested repo.short_name")
+    if updated == original:
+        return False
+    config_path.write_bytes(updated.encode("utf-8"))
+    return True
