@@ -72,7 +72,9 @@ batches:
     commit_sha: 00387cb9e217a533af354dc471a3791cb9cc7825
     verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
-    state: pending
+    state: running
+    implementer_session: f52c1d5b-635d-489c-a2ee-092e4aca7323
+    start_sha: 139c203ca630f40117716ee19aac82f94e1a98c1
     verify_baseline_failures: []
 ```
 ## Inferred-success log
