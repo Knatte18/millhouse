@@ -39,7 +39,9 @@ batches:
     review_round: 1
     verify_baseline_failures: []
   - name: spawn-parent-thread
-    state: pending
+    state: running
+    implementer_session: 39931c5a-bb09-4f2c-a465-4342db005524
+    start_sha: dc61c585b3d47606612588233ed856609da145b5
     verify_baseline_failures: []
   - name: templates-skills-fixtures
     state: pending
