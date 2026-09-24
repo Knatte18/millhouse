@@ -51,4 +51,5 @@ batches:
 
 ```text
 '2026-09-24T10:26:37Z'  status-core  round 1
+'2026-09-24T10:28:49Z'  spawn-parent-thread  round 1
 ```
