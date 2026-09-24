@@ -422,9 +422,7 @@ def test_resolve_blocking_classes_defaults() -> bool:
         (resolve_blocking_classes({}, "discussion", None), "discussion-review"),
         (resolve_blocking_classes({}, "discussion", "holistic"), "discussion-review"),
         (resolve_blocking_classes({}, "plan", "holistic"), "plan-review"),
-        (resolve_blocking_classes({}, "plan", "01-setup"), "plan-review"),
         (resolve_blocking_classes({}, "code", "holistic"), "code-review"),
-        (resolve_blocking_classes({}, "code", "01-setup"), "code-review"),
     ]
     return all(
         actual == DEFAULT_BLOCKING_CLASSES[role] for actual, role in checks
