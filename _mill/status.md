@@ -37,7 +37,9 @@ batches:
     commit_sha: 28340e9422db100d8383d5eb0b9ab1e0b22ae4e8
     verify_baseline_failures: []
   - name: code-review-backend
-    state: pending
+    state: running
+    implementer_session: 2db7337e-7dd7-4b18-8dba-724e92ff3ba3
+    start_sha: fbce3371a813e1bce09aa157ddb5cafd3a56d9c2
     verify_baseline_failures: []
   - name: fixer-and-gates
     state: pending
