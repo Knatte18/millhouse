@@ -37,7 +37,9 @@ batches:
     start_sha: bbe6313f3b839e7a92a96d470899acfdeb080785
     commit_sha: b5cd548299393167c218f4e7f5389ff9aef689ba
   - name: keybindings
-    state: pending
+    state: running
+    implementer_session: 0ebbff54-8b9c-4281-9572-ad2fe3a9f592
+    start_sha: b7161c7b62fee2ac2ad146c027dc26e6f93990ac
   - name: session-tasks-cli
     state: pending
   - name: spawn-wiring
