@@ -16,7 +16,35 @@ Report to the log/status: `"Waiting for orchestrator review -- write _mill/orch-
 
 ## Step 2 — Blocking wait for the file
 
-Same idiom as the entry-gate wait in `mill-go-base/SKILL.md` (`Monitor` tool, persistent bash poll, not a fixed `sleep`): poll every 30 seconds for `<worktree_root>/_mill/orch-review.md` to exist, giving up after the configured `pipeline.entry_wait_timeout_minutes` (read from config the same way `mill-go-base`'s entry-gate wait does, rather than hardcoding).
+The wait uses the `Monitor` tool as in the "Entry-gate wait for upstream mill-plan" section of `mill-go-base/SKILL.md`, called as `Monitor(command=cmd, timeout_ms: 1800000, description=...)`.
+`giveup_s` is `pipeline.entry_wait_timeout_minutes * 60`, read from config the same way that `mill-go-base` section does (default 240 when absent), not hardcoded.
+Before the first arm, record `wait_started_epoch` from `date +%s` once, and record the `task_id` the `Monitor` call returns.
+`cmd` is this inline file-exists poll, with `<orch_review_path>` being the orch-review file under `<worktree_root>/_mill/` and `<giveup_s>` substituted:
+
+```bash
+elapsed=0
+while true; do
+  if [ -f "<orch_review_path>" ]; then
+    echo "READY"
+    exit 0
+  fi
+  if [ "$elapsed" -ge <giveup_s> ]; then
+    echo "TIMEOUT after ${elapsed}s waiting for orch-review.md"
+    exit 2
+  fi
+  sleep 30
+  elapsed=$((elapsed + 30))
+done
+```
+
+Branch on the `<event>` content with the same rules as the `mill-go-base` section.
+`READY` continues to Step 3.
+A `TIMEOUT after <N>s ...` line takes the `On timeout:` block below.
+Any other event content is an unexpected early expiry: run `date +%s` and compute `remaining_s = giveup_s - (now - wait_started_epoch)`.
+When `remaining_s <= 0`, take the `On timeout:` block.
+Otherwise re-issue the same `Monitor` call with the poll script's `<giveup_s>` replaced by `remaining_s`, record the new `task_id`, and wait again.
+The second, event-less `<status>completed</status>` notification needs no branch;
+see `plugins/mill/docs/harness-tool-contracts.md` for the two-notification contract.
 
 On timeout: `_status.set_blocked(status_path, "auto: awaiting orchestrator review (orch-review.md) timed out after <N>h", timestamp=_timestamp.now_utc_iso())`, then `git -C <worktree> add <status_path> && git -C <worktree> commit -m "mill-start: blocked (auto: orchestrator review timeout) for <slug>" && git -C <worktree> push`, then halt. Do not retry. This halt message must read differently from `--auto`'s own "discussion review gaps unresolved after N rounds" halt, so an operator reading `status.md` later can tell which condition fired.
 
