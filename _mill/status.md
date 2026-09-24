@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-spawn-parent-thread  '2026-09-24T10:28:49Z'
 approved-templates-skills-fixtures  '2026-09-24T10:30:24Z'
 holistic-reviewing  '2026-09-24T10:30:31Z'
 holistic-approved  '2026-09-24T10:31:08Z'
+done  '2026-09-24T10:31:21Z'
 ```
 
 ## Batches
