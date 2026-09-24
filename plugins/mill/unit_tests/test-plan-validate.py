@@ -9558,9 +9558,17 @@ def test_check_requirements_quote_indent_drift_dirty_over_indent_message_frozen(
             assert len(check_errors) == 1, (
                 f"expected 1 requirements-quote-indent-drift error, got: {check_errors}"
             )
+            batch_lines = batch.splitlines()
+            card_heading = next(
+                i for i, text_line in enumerate(batch_lines) if text_line.startswith("### Card 1")
+            )
+            fence_line = next(
+                i for i, text_line in enumerate(batch_lines, start=1)
+                if i > card_heading and text_line.lstrip().startswith("```")
+            )
             expected = (
-                "card 1's Requirements: fence 1 matches 'src/target.py' after stripping 2 "
-                "leading spaces per line (found N=2)"
+                f"card 1's Requirements: fence 1 (line {fence_line}) matches 'src/target.py' "
+                "after stripping 2 leading spaces per line (found N=2)"
             )
             assert check_errors[0]["message"] == expected, (
                 f"frozen message wording regressed: {check_errors[0]['message']!r}"

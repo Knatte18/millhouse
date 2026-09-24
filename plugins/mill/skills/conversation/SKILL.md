@@ -63,7 +63,7 @@ This is non-negotiable for new skills and applies retroactively — when you tou
 - **Default scratch location:** `.scratch/` in the repo root.
   Use for ephemeral files: materialized reviewer prompts, integration-test fixtures, merge locks, new-thread hand-off prompts, debug dumps.
 - **Task-state files** (`status.md`, `plan/`, `discussion.md`, `reviews/`, `<slug>-result.md`) live in the **wiki** repo.
-  Scripts resolve the wiki path via `_paths.resolve_wiki_path` — the `.millhouse/wiki` junction is IDE/terminal convenience only, never a code path (see CLAUDE.md `## Path invariants`).
+  Scripts resolve the wiki path via `_paths.resolve_wiki_path` — the `.wiki` junction is IDE/terminal convenience only, never a code path (see CLAUDE.md `## Path invariants`).
   Task-state files are NOT under `.scratch/`.
 - **Plugin-managed scratch:** All plugins share `.scratch/` for ephemeral files.
   Subdirectories (e.g. `test-review-<type>-<id>/`, `plans/`, `briefs/`) are created as needed and may be cleaned up at will.

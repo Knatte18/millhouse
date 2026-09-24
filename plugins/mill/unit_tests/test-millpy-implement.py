@@ -1663,6 +1663,101 @@ class TestMillpyImplement(unittest.TestCase):
         self.assertEqual(by_name["batch-three"]["verify_baseline_failures"], [])
         self.assertNotIn("verify_baseline_failures", by_name["batch-two"])
 
+    def _write_baseline_plan(self, module_verify: str, batch_verifies: dict[str, str]) -> Path:
+        """Write an overview plus per-batch files, seed batch status, and return status.md."""
+        plan_dir = self.tmp_path / "task" / "plan"
+        index = ""
+        for name, verify_cmd in batch_verifies.items():
+            (plan_dir / f"{name}.md").write_text(
+                f"```yaml\nbatch: {name}\nverify: {verify_cmd}\n```\n\n# Batch: {name}\n",
+                encoding="utf-8",
+            )
+            index += f"  - name: {name}\n    file: {name}.md\n    depends-on: []\n    verify: null\n"
+        (plan_dir / "00-overview.md").write_text(
+            "# Plan: Test Task\n\n```yaml\ntask: Test Task\nslug: test-slug\napproved: true\n"
+            f"verify: {module_verify}\n```\n\n## Batch Index\n\n```yaml\nbatches:\n{index}```\n",
+            encoding="utf-8",
+        )
+        status_path = self.tmp_path / "task" / "status.md"
+        millpy_implement._status.init_batches(status_path, list(batch_verifies))
+        return status_path
+
+    def test_baseline_stage_short_circuited_compound_batch_left_unset(self):
+        """A compound verify whose run short-circuits leaves its key absent; siblings are captured."""
+        status_path = self._write_baseline_plan(
+            "null", {"batch-compound": "false && true", "batch-plain": "echo ok"}
+        )
+
+        def _fake_run_verify_in(command, cwd, timeout_seconds=None):
+            return (1, "") if command == "false && true" else (0, "")
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement, "_baseline_preflight_skip_reason", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "_run_verify_in",
+                side_effect=_fake_run_verify_in,
+            ),
+        ):
+            rc, out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        lines = [json.loads(l) for l in out.strip().splitlines()]
+        by_substage = {l["substage"]: l for l in lines}
+        self.assertEqual(by_substage["per_batch"]["value"], 1)
+        by_name = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
+        self.assertNotIn("verify_baseline_failures", by_name["batch-compound"])
+        self.assertEqual(by_name["batch-plain"]["verify_baseline_failures"], [])
+
+    def test_baseline_stage_short_circuited_module_seed_is_not_used(self):
+        """A short-circuited compound module-wide seed is not seeded; the batch runs its own verify."""
+        compound = "false && true"
+        status_path = self._write_baseline_plan(compound, {"batch-a": compound})
+        run_mock = unittest.mock.Mock(return_value=(1, ""))
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement, "_baseline_preflight_skip_reason", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline",
+                return_value=("pre-existing-failures", ["NONZERO_EXIT: exit 1: (no output)"]),
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_run_verify_in", run_mock),
+        ):
+            rc, _out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        by_name = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
+        self.assertNotIn("verify_baseline_failures", by_name["batch-a"])
+        self.assertEqual(run_mock.call_args.args[0], compound)
+        self.assertGreaterEqual(run_mock.call_count, 1)
+
+    def test_baseline_stage_non_compound_module_seed_still_used(self):
+        """A non-compound identical command still reuses the module-wide seed without re-running."""
+        plain = "echo suite"
+        seed = ["--- FAIL: TestX (0.01s)"]
+        status_path = self._write_baseline_plan(plain, {"batch-a": plain})
+        run_mock = unittest.mock.Mock(return_value=(1, ""))
+
+        with (
+            unittest.mock.patch.object(
+                millpy_implement, "_baseline_preflight_skip_reason", return_value=None
+            ),
+            unittest.mock.patch.object(
+                millpy_implement._verify_baseline, "compute_baseline",
+                return_value=("pre-existing-failures", seed),
+            ),
+            unittest.mock.patch.object(millpy_implement._verify_baseline, "_run_verify_in", run_mock),
+        ):
+            rc, _out = self._run_main(["--stage", "baseline"])
+
+        self.assertEqual(rc, 0)
+        run_mock.assert_not_called()
+        by_name = {b["name"]: b for b in millpy_implement._status.read_batches(status_path)}
+        self.assertEqual(by_name["batch-a"]["verify_baseline_failures"], seed)
+
     def test_baseline_stage_capture_set_equals_gate_set_not_suppressed_by_later_deletion(self):
         """
         capture-set-equals-gate-set: batch A's `verify:` references a path batch B's `Deletes:`

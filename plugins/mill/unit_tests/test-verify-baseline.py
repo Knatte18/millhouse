@@ -47,11 +47,14 @@ cache empty every time, and where no verify run had any timeout at all: (j) a ca
 "leave the baseline unset" fail-safe instead of being swallowed into a bogus baseline;
 (m) omitting it imposes no ceiling.
 
-Case (o) regresses #1060: a command that fails ahead of its own test stage (e.g. `go vet ./... && go
-test ./...` failing at `go vet`) emits no line `_extract_failure_signatures` recognizes on its own,
+Case (o) regresses #1060: a non-compound command that fails ahead of its own test stage (e.g.
+`go vet ./...` failing) emits no line `_extract_failure_signatures` recognizes on its own,
 so `_signatures_for_pair` synthesizes a `NONZERO_EXIT:` signature instead of an empty list.
 It also documents the accepted limitation that two non-deterministic non-test failures with
 different first output lines persist as two distinct synthetic entries rather than deduping to one.
+
+Case (p) regresses #1144: a compound `&&` command whose baseline is only synthetic `NONZERO_EXIT:`
+signatures short-circuited, so its baseline is "unknown" (`None`) rather than a list.
 """
 from __future__ import annotations
 
@@ -65,7 +68,11 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 from _implementer_common import _extract_failure_signatures
-from _verify_baseline import compute_baseline, compute_batch_baselines
+from _verify_baseline import (
+    _is_short_circuit_baseline,
+    compute_baseline,
+    compute_batch_baselines,
+)
 
 
 def _run_one_compute_baseline_case(
@@ -565,10 +572,12 @@ def _case_m_no_timeout_by_default() -> None:
 
 def _case_o_returncode_synthesizes_signature_for_non_test_failure() -> None:
     """
-    Case (o) (#1060): a command that fails ahead of its own test stage (e.g. `go vet ./... && go
-    test ./...` failing at `go vet`) emits no line `_extract_failure_signatures` recognizes on its
+    Case (o) (#1060): a command that fails ahead of its own test stage (e.g. `go vet ./...`
+    failing) emits no line `_extract_failure_signatures` recognizes on its
     own -- `_signatures_for_pair` now threads each run's own return code through, so the pair still
     yields a synthetic `NONZERO_EXIT:` signature instead of an empty list.
+    The command is deliberately non-compound: a compound `&&` command with only synthetic
+    signatures is "unknown" (`None`), covered by case (p).
 
     Also documents the accepted limitation (see Card 1's Requirements / this batch's Batch Tests):
     when the two corroboration runs of a non-deterministic non-test failure produce different first
@@ -585,7 +594,7 @@ def _case_o_returncode_synthesizes_signature_for_non_test_failure() -> None:
         return_value=(1, "vet: undeclared name: foo\n"),
     ):
         result = compute_batch_baselines(
-            [("vet-batch", "go vet ./... && go test ./...", None)],
+            [("vet-batch", "go vet ./...", None)],
             cwd,
         )
 
@@ -628,6 +637,59 @@ def _case_o_returncode_synthesizes_signature_for_non_test_failure() -> None:
     )
 
 
+def _case_p_short_circuited_compound_baseline_is_unknown() -> None:
+    """
+    Case (p) (#1144): a compound `&&` command failing with only synthetic signatures maps to `None`;
+    real markers, non-compound commands and green runs keep their lists; the detector's truth table
+    holds; a cached `None` in a caller-owned `pair_cache` is honoured without re-running.
+    """
+    cwd = Path("/fake/cwd")
+
+    with patch("_verify_baseline._run_verify_in", return_value=(1, "")):
+        result = compute_batch_baselines([("c", "a && b", None)], cwd)
+    assert result["c"] is None, result["c"]
+
+    marker = "--- FAIL: TestX (0.01s)"
+    with patch("_verify_baseline._run_verify_in", return_value=(1, marker + "\n")):
+        result = compute_batch_baselines([("c", "a && b", None)], cwd)
+    assert result["c"] == [marker], result["c"]
+
+    with patch("_verify_baseline._run_verify_in", return_value=(1, "")):
+        result = compute_batch_baselines([("n", "a", None)], cwd)
+    assert result["n"] == ["NONZERO_EXIT: exit 1: (no output)"], result["n"]
+
+    with patch("_verify_baseline._run_verify_in", return_value=(0, "ok\n")):
+        result = compute_batch_baselines([("g", "a && b", None)], cwd)
+    assert result["g"] == [], result["g"]
+
+    synthetic = "NONZERO_EXIT: exit 1: (no output)"
+    truth_table = [
+        (("a", [synthetic]), False),
+        (("a && b", []), False),
+        (("a && b", [synthetic, marker]), False),
+        (("a && b", [synthetic]), True),
+        (('sh -c "a && b"', [synthetic]), True),
+    ]
+    for (command, signatures), expected in truth_table:
+        actual = _is_short_circuit_baseline(command, signatures)
+        assert actual is expected, (command, signatures, actual)
+
+    fake = MagicMock(return_value=(1, ""))
+    pair_cache: dict = {}
+    with patch("_verify_baseline._run_verify_in", fake):
+        compute_batch_baselines([("x", "a && b", None)], cwd, pair_cache=pair_cache)
+    assert pair_cache == {("a && b", cwd): None}, pair_cache
+    fake.reset_mock()
+    with patch("_verify_baseline._run_verify_in", fake):
+        result = compute_batch_baselines(
+            [("x", "a && b", None), ("y", "a && b", None)], cwd, pair_cache=pair_cache
+        )
+    assert result == {"x": None, "y": None}, result
+    assert fake.call_count == 0, fake.call_count
+
+    print("PASS: case p - short-circuited compound baseline is unknown (None)")
+
+
 def main() -> int:
     try:
         _case_1_two_run_algorithm_against_return_tuple()
@@ -645,6 +707,7 @@ def main() -> int:
         _case_l_timeout_propagates()
         _case_m_no_timeout_by_default()
         _case_o_returncode_synthesizes_signature_for_non_test_failure()
+        _case_p_short_circuited_compound_baseline_is_unknown()
 
         print("All _verify_baseline unit tests passed.")
         return 0

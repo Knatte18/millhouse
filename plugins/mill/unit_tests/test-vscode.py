@@ -5,6 +5,7 @@ Two small helpers consolidated into one file (was test-vscode.py + test-vscode-p
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -47,6 +48,13 @@ def _test_render_settings(errors: list[int]) -> None:
     assert '"**/.wiki/**": true' in result, f"wiki glob missing FAIL: {result}"
     assert '"**/.active/**": true' in result, f"active glob missing FAIL: {result}"
     print("PASS: render_settings includes files.watcherExclude with junction globs")
+
+    # render_settings: runTask shortcuts must reach VS Code when a terminal has focus
+    parsed = json.loads(render_settings(color_hex="#000000", window_title="test"))
+    assert parsed["terminal.integrated.commandsToSkipShell"] == ["workbench.action.tasks.runTask"], (
+        f"commandsToSkipShell FAIL: {parsed}"
+    )
+    print("PASS: render_settings includes commandsToSkipShell with runTask")
 
     # render_settings: neither provided -> ValueError
     try:

@@ -44,13 +44,13 @@ Public API:
     compute_baseline(cwd, module_wide_verify_cmd, *, timeout_seconds=None) -> tuple[str, list[str]]
     Returns (verdict, signatures). Raises subprocess.TimeoutExpired on a
     run exceeding timeout_seconds.
-    compute_batch_baselines(commands, cwd, *, pair_cache=None, timeout_seconds=None) -> dict[str, list[str]]
+    compute_batch_baselines(commands, cwd, *, pair_cache=None, timeout_seconds=None) -> dict[str, list[str] | None]
     Per-batch, multi-command companion to compute_baseline: takes a
     plain cwd (the default working directory used when a given
     command's own cwd_override is None) so many commands can share one
     verify run, and returns a union-of-runs failure-signature list per
     command name instead of a binary "clean"/"pre-existing-failures"
-    verdict.
+    verdict; a short-circuited compound (`&&`) command maps to `None` ("unknown").
     Deduplicates work across names sharing one (command, cwd) pair and
     skips the corroboration re-run when run 1 is green. Pass a
     caller-owned `pair_cache` dict to make that dedup span calls.
@@ -206,9 +206,9 @@ def compute_batch_baselines(
     commands: list[tuple[str, str, Path | None]],
     cwd: Path,
     *,
-    pair_cache: dict[tuple[str, Path], list[str]] | None = None,
+    pair_cache: dict[tuple[str, Path], list[str] | None] | None = None,
     timeout_seconds: float | None = None,
-) -> dict[str, list[str]]:
+) -> dict[str, list[str] | None]:
     """
     Compute per-batch verify-command failure-signature baselines.
 
@@ -260,7 +260,7 @@ def compute_batch_baselines(
             `cwd` directly) or an already-resolved absolute `Path` to run `command` in instead.
         cwd: The default working directory used when a given command's own `cwd_override` is
             `None`.
-        pair_cache: Optional caller-owned `{(command, effective_cwd): signatures}` dict, mutated in
+        pair_cache: Optional caller-owned `{(command, effective_cwd): signatures-or-None}` dict, mutated in
             place, that makes the dedup span every call sharing it -- pass one dict across a whole
             shared-checkout pre-flight.
             `None` (the default) falls back to a call-local cache, i.e. dedup within this call only.
@@ -277,24 +277,50 @@ def compute_batch_baselines(
         A dict keyed by `name`, each value the union (deduplicated, order-preserving) of the runs'
         extracted raw failure-signature lines for that command's `(command, effective_cwd)` pair.
         A command with zero failures maps to `[]` (present, not an absent key).
+        A compound (`&&`) command whose baseline is only synthetic `NONZERO_EXIT:` signatures
+        short-circuited, so its baseline is "unknown" and maps to `None`.
         Each value is an independent list object, never aliased across names -- including across
         names that share one `(command, effective_cwd)` pair.
     """
     by_pair = pair_cache if pair_cache is not None else {}
-    results: dict[str, list[str]] = {}
+    results: dict[str, list[str] | None] = {}
     for name, command, cwd_override in commands:
         effective_cwd = cwd_override if cwd_override is not None else cwd
         pair = (command, effective_cwd)
         if pair not in by_pair:
             by_pair[pair] = _signatures_for_pair(command, effective_cwd, timeout_seconds)
-        # Copy per name: callers treat each value as their own mutable list.
-        results[name] = list(by_pair[pair])
+        cached = by_pair[pair]
+        # Copy per name: callers treat each value as their own mutable list; None passes through.
+        results[name] = None if cached is None else list(cached)
     return results
+
+
+def _is_short_circuit_baseline(command: str, signatures: list[str]) -> bool:
+    """
+    Report whether a baseline looks like a short-circuited compound (`&&`) command.
+
+    A compound `a && b` whose first part fails never runs `b`, so a baseline made only of
+    synthetic `NONZERO_EXIT:` signatures says nothing about the rest of the command.
+    Detection is a plain substring test for `&&`; no shell parsing.
+
+    Args:
+        command: The verify command string, verbatim.
+        signatures: The extracted failure signatures for that command.
+
+    Returns:
+        True when `&&` is in `command`, `signatures` is non-empty, and every entry starts with
+        `NONZERO_EXIT:`.
+    """
+    return (
+        "&&" in command
+        and bool(signatures)
+        and all(signature.startswith("NONZERO_EXIT:") for signature in signatures)
+    )
 
 
 def _signatures_for_pair(
     command: str, effective_cwd: Path, timeout_seconds: float | None = None
-) -> list[str]:
+) -> list[str] | None:
     """
     Run one `(command, effective_cwd)` pair and return its union-of-runs failure signatures.
 
@@ -309,7 +335,8 @@ def _signatures_for_pair(
         timeout_seconds: Per-run wall-clock ceiling, or None for no ceiling.
 
     Returns:
-        The extracted raw failure-signature lines, `[]` when the command produced none.
+        The extracted raw failure-signature lines, `[]` when the command produced none;
+        `None` ("unknown") when the baseline is a short-circuited compound command.
 
     Raises:
         subprocess.TimeoutExpired: A run exceeded `timeout_seconds`.
@@ -324,4 +351,6 @@ def _signatures_for_pair(
                 signatures.append(line)
         if run_index == 0 and rc == 0 and not signatures:
             break
+    if _is_short_circuit_baseline(command, signatures):
+        return None
     return signatures
