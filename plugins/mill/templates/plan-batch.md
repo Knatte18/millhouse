@@ -61,6 +61,7 @@ Inline notes belong in Requirements:.
 When a field has nothing, write the literal "none" on the same line as the field label.
 Moves: sub-bullets use the two-path form `` `old` -> `new` `` rather than a single path.
 Commit: also participates in the "none" convention, but unlike the other fields its "none" is conditional, not free-standing: it is valid only when Edits:/Creates:/Deletes:/Moves: on the same card are all also "none" (enforced by the commit-none-with-content validator check).
+A Commit: none card whose Requirements perform an external, hard-to-reverse side effect (e.g. `gh issue comment`, `gh issue close`) must include, in those Requirements, the concrete state check that detects "already done" (the command and the expected state) — see the mill-plan skill's "Commit: none cards with external side effects" paragraph.
 
 Note for reviewers: the plan-reviewer bulks `Context: ∪ Edits:` (existing files only;
 `Creates:` targets do not exist yet).

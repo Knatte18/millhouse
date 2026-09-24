@@ -220,6 +220,13 @@ the `move-mechanic-missing` validator check enforces this.
 
 **Card numbering is global across batches**: card 1 lives in batch 01, card 7 might live in batch 02, etc. Never restart at 1 inside each batch — the reviewer and implementer cite cards by number and need uniqueness.
 
+**Commit: none cards with external side effects.**
+A Commit: none card leaves no git-log trace, so a re-dispatched implementer cannot tell from history whether its action already ran.
+When such a card's Requirements perform an external, hard-to-reverse side effect (`gh issue comment`, `gh issue close`, a push to another remote, a message, a tracker mutation), spell out in those Requirements the concrete state check that detects "already done".
+Name the command to run and the state it must show, e.g. `gh issue view <n> --json state,comments`: skip the comment when the expected text already appears, skip the close when `state` is `CLOSED`.
+This gives the implementer brief's generic external-side-effect rule an exact check to run.
+This is authoring guidance only; no validator check enforces it, since external side effects are not detectable from card fields.
+
 **Verify command shape.**
 For Python/mill projects: every non-null `verify:` in a per-batch file's frontmatter MUST start with the literal token `PYTHONPATH=` followed by a single space and then the command.
 The empty value on the same line scopes the `PYTHONPATH` reset to that one command, so the test subprocess does not inherit the mill cache scripts dir from the parent shell and tests load worktree modules instead of stale cache modules.
@@ -242,10 +249,22 @@ The default expectation is per-batch scoping.
 If a `verify:` command collects coverage (e.g. `go test -cover`), write the profiling output to a scratch path (e.g. `-coverprofile=.scratch/coverage.out`) so it does not leave an untracked `coverage.out` at the repo root.
 The Handoff terminal gate auto-cleans common ephemeral artifacts (`coverage.out`, `.test`, `.test.exe`, `.prof`, `.cover` suffixes) as a backstop.
 
-**Done-gate reminder.**
-If the plan's batch-verify scopes do not cover the entire module tree (the common case for scoped plans), consider setting `pipeline.done_gate` in `mill-config.yaml` to a cheap repo-wide test command (e.g. `go test ./...` for Go repos, `dotnet test` for .NET solutions). mill-go runs this command from `git_root` before marking the task `done`, catching regressions in packages outside the batch-verify scope.
-Before defaulting `done_gate` to the target language's lint command (Go: `golangci-lint run`; Python: `ruff check .`), first run that candidate command against the current worktree tip (not the plan's own scoped changes) from `git_root` and confirm it exits 0. If it does, default `done_gate` to include it — e.g. `go test ./... && golangci-lint run` — applying even when a repo-wide *test* command is skipped as too slow: author `done_gate: golangci-lint run` (lint-only) rather than leaving it `null`, since linters are fast, unlike full regression suites. If the candidate command does NOT exit 0 (pre-existing repo-wide lint debt unrelated to this task), leave `done_gate: null` and record the finding in the plan overview's Shared Decisions instead of silently making every future task in the hub depend on unrelated debt being fixed first. `csharp-build` defines no lint command today, so C# projects are unaffected by this default.
-Leave `done_gate: null` only when the project has neither a meaningful repo-wide test nor a defined lint command.
+**Done-gate reminder (advisory).**
+mill-plan never writes `mill-config.yaml` (hub, committed, shared by every future task) and never writes `.millhouse/config.local.yaml` for this purpose.
+mill-go gates its pre-done step on the effective `cfg["pipeline"]["done_gate"]` only, and nothing in the plan changes that value.
+Everything below is a recommendation the plan records, not a value the plan applies.
+If the plan's batch-verify scopes do not cover the entire module tree (the common case for scoped plans), recommend a cheap repo-wide test command as `pipeline.done_gate` (e.g. `go test ./...` for Go repos, `dotnet test` for .NET solutions).
+mill-go runs the effective value from `git_root` before marking the task `done`, catching regressions in packages outside the batch-verify scope.
+Before recommending the target language's lint command (Go: `golangci-lint run`; Python: `ruff check .`), first run that candidate command against the current worktree tip (not the plan's own scoped changes) from `git_root` and confirm it exits 0.
+If it does, recommend including it, e.g. `go test ./... && golangci-lint run`.
+That includes a lint-only recommendation (`golangci-lint run`) when a repo-wide *test* command is skipped as too slow, since linters are fast, unlike full regression suites.
+If the candidate command does NOT exit 0 (pre-existing repo-wide lint debt unrelated to this task), recommend no lint command and record the finding in the plan overview's Shared Decisions, so the recommendation does not steer every future task in the hub toward fixing unrelated debt first.
+`csharp-build` defines no lint command today, so C# projects are unaffected by this recommendation.
+Recommend no `done_gate` only when the project has neither a meaningful repo-wide test nor a defined lint command.
+When the recommended value differs from the currently effective `cfg["pipeline"]["done_gate"]`, record a `### Decision:` under the overview's `## Shared Decisions` labelled as a recommendation for the operator.
+It names the recommended command and the currently effective value, and includes the sentence "Not applied: mill-go gates on the effective config value, not this Decision."
+When the task itself needs a repo-wide suite as its acceptance bar, express that as a batch `verify:` command instead, with the justification the `verify-full-suite` skip-check escape hatch requires.
+Never express it as a done_gate Decision, because only `verify:` is executed from the plan.
 
 **Interpreter-naming note.** Every narrative Python call from this point through the end of Phase: Plan (`_plan_dag.extract_batch_index`/`_plan_dag.validate`, `_plan_validate.run`, `_status.update_field`/`_status.append_phase`, and any other `_<module>.<fn>(...)` reference in this phase) is executed by the orchestrator via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON"` — never bare `python3` — matching CLAUDE.md's `## Script invocation` convention and the way every `millpy-bg`/`millpy-review-plan.py` invocation elsewhere in this file already names `$MILL_PYTHON` explicitly. A fresh orchestrator session with no other context has previously hit `ModuleNotFoundError: No module named 'pygit2'` here by reaching for the ambient `python3` instead.
 
