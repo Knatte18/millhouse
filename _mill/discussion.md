@@ -1,7 +1,7 @@
-# Discussion: Prefix session names with repo short name; add MH:orch session
+# Discussion: Prefix session names with repo short name; add mh:orch session
 
 ```yaml
-task: Prefix session names with repo short name; add MH:orch session
+task: Prefix session names with repo short name; add mh:orch session
 slug: session-name-short-prefix
 status: discussing
 parent: main
@@ -22,8 +22,10 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 - Worktree session names become `<short_name>:<slug>:<phase>`, e.g. `mh:remove-batch-review:plan`.
 - Hub session names stay `<short_name>:<phase>`, e.g. `mh:start`.
-- Every session name is lower-cased where it is assembled (`_vscode_tasks.build_command`).
+- Every session name is lower-cased at the one place its prefix is assembled (a new `_vscode_tasks.session_prefix` helper, see Decisions).
   `repo.short_name` in config is unchanged (stays `MH`, still used verbatim in the VS Code window title).
+- `millpy-terminal.py`'s session (today `claude --name <slug>`) becomes `<short_name>:<slug>`, lower-cased, via the same helper.
+- The derived short-name fallback uses the main worktree's directory name, not the current worktree's, wherever this task resolves a short name for a session name.
 - A new hub-only `orch` session task, `mill: orch`, launching a session named `<short_name>:orch` (e.g. `mh:orch`).
 - `spawn.sessions.orch` model/effort config key with a built-in default.
 - `mill-setup` prompts for `repo.short_name` when the hub `mill-config.yaml` has none, and writes it.
@@ -37,6 +39,8 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 - A keybinding for the `orch` task (see Decisions).
 - The `parent-thread` field in `status.md` and the ask-your-parent escalation, tracked separately.
 - The VS Code window title format (`<short_name>: <slug>`), `_vscode.py`, `millpy-color.py`, `millpy-claim.py`.
+  Their own `resolve_short_name(cfg, git_root.name)` calls keep their current repo-name argument.
+- `millpy-vscode.py`: it does not launch `claude`, so it names no session.
 - Changing the set of tasks the hub already gets (start, start-auto, start-orch, plan, go, quick stay on the hub too).
 - Changing `resolve_short_name`'s fallback rule or its return casing.
 
@@ -44,20 +48,31 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 ### Name composition and lower-casing
 
-- Decision: callers pass the full prefix as `name`: `<short>:<slug>` for a worktree, `<short>` for the hub.
-  `build_command` lower-cases the whole composed `"{name}:{phase}"` string, the one assembly point.
-  `_validate_name` runs on the prefix as today; the colon inside it is allowed.
-- Rationale: one assembly site, as the task body asks.
-  Slugs and phases are already lower-case, so lower-casing the whole string only affects the short name.
+- Decision: add `session_prefix(short_name: str, slug: str | None = None) -> str` to `_vscode_tasks.py`.
+  It returns `short_name.lower()` for the hub, or `f"{short_name}:{slug}".lower()` for a worktree.
+  It is the only place a session name is lower-cased.
+  It raises `ValueError` when `short_name` is empty, contains `:`, or contains a character `_validate_name` forbids.
+  `render_tasks`/`write_tasks`/`build_command` keep taking the already-built prefix as `name` and append `:<phase>` without changing case.
+  `_validate_name` still runs on the full prefix in `render_tasks`; the colon between short name and slug is allowed there.
+- Rationale: one assembly site, as the task body asks, shared by the tasks.json writers and `millpy-terminal.py` (whose session has no phase, so the lower-casing cannot live in `build_command`).
+  Slugs and phases are already lower-case, so lower-casing only affects the short name.
   It also avoids depending on whether `SendMessage`/`ListAgents` name lookup is case-sensitive, which is unverified.
-- Rejected: lower-casing inside `resolve_short_name` (it also feeds the window title, which must stay `MH`); passing short name and slug as separate arguments (a wider API change with no gain).
+  Rejecting `:` in the short name covers hand-edited `repo.short_name` values too, not only the mill-setup prompt, so `<short>:<slug>:<phase>` stays unambiguous.
+- Rejected: lower-casing inside `resolve_short_name` (it also feeds the window title, which must stay `MH`); lower-casing in `build_command` (misses the terminal session); leaving hand-edited values unvalidated.
 
 ### Where the prefix is built
 
-- Decision: `millpy-spawn.py` passes `f"{short}:{slug}"` (it already computes `short = resolve_short_name(cfg, git_root.name)` a few lines above the `write_tasks` call).
-  `millpy-session-tasks.py` passes `f"{short}:{slug}"` on a task worktree and `short` on the hub (the `MarkerError` branch).
-  mill-setup Phase 7b already passes the short name for the hub; only the new `hub=True` argument is added there.
-- Rationale: these three are the only `write_tasks` callers, and each already knows whether it is hub or worktree.
+- Decision: every caller builds the prefix with `session_prefix`.
+  `millpy-spawn.py` passes `session_prefix(short, slug)`.
+  `millpy-session-tasks.py` passes `session_prefix(short, slug)` on a task worktree and `session_prefix(short)` on the hub (the `MarkerError` branch).
+  mill-setup Phase 7b passes `session_prefix(resolve_short_name(cfg, '<repo-name>'))` plus the new `hub=True` argument.
+  `millpy-terminal.py` passes `session_prefix(short, selected_slug)` to `claude --name` (both the `nt` and POSIX branches) and prints that name in its "Session name:" line.
+- Decision: the repo-name argument to `resolve_short_name` is `resolve_main_worktree_root(git_root).name` in `millpy-spawn.py`, `millpy-session-tasks.py` and `millpy-terminal.py`, not `git_root.name`.
+  On a task worktree `git_root` is `wts/<slug>`, so `git_root.name` is the slug and the fallback would derive e.g. `SE` from `session-name-short-prefix`.
+  `resolve_main_worktree_root` (`_paths.py`, pygit2 common-dir based) returns the main worktree from any worktree; `millpy-spawn.py` already uses it for its `REPO` token.
+  `millpy-spawn.py` normally runs from the hub, where both are equal, but it switches for correctness when run from a worktree.
+  mill-setup keeps `'<repo-name>'`, which is already the repo name.
+- Rationale: these are the only callers that put a short name into a session name, and each already knows whether it is hub or worktree.
 
 ### Hub-only orch task
 
@@ -72,7 +87,8 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 - Decision: the tasks template `plugins/mill/templates/vscode-tasks.json` gets one extra token, `<HUB_TASKS>`, placed right after the `quick` task object.
   For worktrees it renders as the empty string.
-  For the hub it renders as `,` plus the orch task object, which lives in a new template fragment `plugins/mill/templates/vscode-tasks-orch.json` (rendered with `_render.render`, token `<CMD_ORCH>`).
+  For the hub it renders as the rendered text of a new template fragment `plugins/mill/templates/vscode-tasks-orch.json` (rendered with `_render.render`, token `<CMD_ORCH>`).
+  The fragment itself starts with the separating `,` before the orch task object, so Python adds no JSON syntax of its own.
   The rendered output must stay valid JSON after the `MANAGED_MARKER` line in both modes.
 - Rationale: `_render.py`'s docstring forbids format-specific rendering code outside templates, so the orch task's JSON shape belongs in a template, not in a Python string.
 - Rejected: a second full hub template (duplicates all six task blocks, which can drift); building the orch task dict in Python and `json.dumps`-ing it (format-specific rendering in code).
@@ -118,6 +134,7 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 - Decision: add a small predicate in `_paths.py` next to `resolve_short_name`, e.g. `short_name_is_derived(cfg) -> bool` (true when `repo.short_name` is absent or empty).
   `millpy-spawn.py` and `millpy-session-tasks.py` each print one ASCII-only line to stderr when it is true, naming the derived value and pointing at `repo.short_name` in `mill-config.yaml` / `/mill-setup`.
+  The derived value in the warning is the one computed from the main worktree's name (see "Where the prefix is built"), so it matches the name that was baked in.
   mill-setup's new step covers its own case by prompting, so it does not warn separately.
 - Rationale: spawn and session-tasks are where the short name gets baked into session names, so they cover repos that never re-run mill-setup.
   A warning, not an error: the fallback still produces a working name.
@@ -132,12 +149,16 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
   `_render.render` raises `KeyError` on any unresolved token, so `<HUB_TASKS>` must always be supplied (empty string for worktrees).
   A token whose value is the empty string must not leave a trailing comma or break JSON.
 - `plugins/mill/scripts/_render.py` — the single substitution helper; token grammar `<[A-Z][A-Z0-9_]*>`; strips a leading `<!-- -->` comment.
-- `plugins/mill/scripts/millpy-spawn.py` — around the `_vscode_tasks.write_tasks(tasks_path, slug, ...)` call; `short` is already computed a few lines earlier for `_vscode.write_settings`.
+- `plugins/mill/scripts/millpy-spawn.py` — around the `_vscode_tasks.write_tasks(tasks_path, slug, ...)` call; `short` is already computed a few lines earlier for `_vscode.write_settings`, currently as `resolve_short_name(cfg, git_root.name)`.
+  Switching that one computation to the main worktree's name also changes the short name passed to `_vscode.write_settings`, which is intended: the window title then shows the same short name.
   Module docstring mentions `<slug>:<phase>`.
 - `plugins/mill/scripts/millpy-session-tasks.py` — `slug_from_branch` success = worktree, `MarkerError` = hub.
   Docstring says "The session name is the task slug on a task worktree and the repo short name on the hub."
 - `plugins/mill/scripts/_paths.py` — `resolve_short_name(cfg, repo_name)` at the end of the resolve helpers; exported via the module's `__all__`-style list near the top (add the new predicate there).
 - `plugins/mill/scripts/_setup.py` — mill-setup helpers module; the new `set_repo_short_name` helper goes here.
+- `plugins/mill/scripts/millpy-terminal.py` — picks an active worktree (`selected_path`, `selected_slug`), loads `cfg` from the hub (falling back to `{}` on error, which `resolve_short_name` tolerates), and launches `claude --name <selected_slug>` in two branches (`os.name == "nt"` via `cmd /c`, else direct).
+  It needs imports of `resolve_short_name`, `resolve_main_worktree_root` and `_vscode_tasks.session_prefix`.
+  Its unit test is `plugins/mill/unit_tests/test-millpy-terminal.py`.
 - `plugins/mill/scripts/_vscode_keybindings.py` — no code change; its docstring says "six session tasks", which stays true because the hub-only orch task is not bound.
 - `plugins/mill/skills/mill-setup/SKILL.md` — Phase 3.1 (seed/upsert mill-config.yaml, with a commit), Phase 7 (window title via `resolve_short_name`), Phase 7b (tasks.json: add `hub=True`; update the "six session launch tasks" wording since the hub now gets seven).
   Also the "Helpers used by this skill" line if the new `_setup` helper is referenced.
@@ -159,18 +180,22 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 ## Testing
 
-- `plugins/mill/unit_tests/test-vscode-tasks.py` (TDD candidate): worktree render with prefix `MH:my-task` produces `claude -n "mh:my-task:<phase>"` for every `TASK_SPECS` entry and no orch task; hub render (`hub=True`) with prefix `MH` produces the six tasks named `mh:<phase>` plus `mill: orch` with `claude -n "mh:orch" --model opus --effort high` and no prompt argument; both outputs parse as JSON after the marker line; `spawn.sessions.orch` overrides apply; a forbidden character in the prefix still raises `ValueError`.
+- `plugins/mill/unit_tests/test-vscode-tasks.py` (TDD candidate): worktree render with prefix `session_prefix("MH", "my-task")` produces `claude -n "mh:my-task:<phase>"` for every `TASK_SPECS` entry and no orch task; hub render (`hub=True`) with prefix `session_prefix("MH")` produces the six tasks named `mh:<phase>` plus `mill: orch` with `claude -n "mh:orch" --model opus --effort high` and no prompt argument; both outputs parse as JSON after the marker line; `spawn.sessions.orch` overrides apply; a forbidden character in the prefix still raises `ValueError`.
 - `plugins/mill/unit_tests/test-millpy-session-tasks.py`: worktree case expects `<short>:<slug>:start` lower-cased; hub case expects `hubshort:start` and `hubshort:orch` (the fixture's `HUBSHORT` lower-cased); the derived-fallback warning appears on stderr when `repo.short_name` is unset and not when it is set.
 - `plugins/mill/unit_tests/test-millpy-spawn.py`: the expected commands (currently `test-task:start` etc.) become `<short>:test-task:<phase>` lower-cased; the worktree tasks.json contains no orch task; the fallback warning behaves as above.
 - `plugins/mill/unit_tests/test-vscode-keybindings.py`: no expectation changes; still six bindings.
   Existing tests must still pass.
 - New tests for `_setup.set_repo_short_name` (TDD candidate): replaces an empty `short_name: ""` in the template form, keeping the trailing comment and every other line byte-identical; replaces an existing value; inserts a `repo:` block when absent; idempotent on a second call.
 - New tests for the `_paths` derived-short-name predicate: absent `repo` block, empty string, and set value.
+- `session_prefix` tests in `test-vscode-tasks.py` (TDD candidate): hub form lower-cases `MH` to `mh`; worktree form gives `mh:my-task`; a short name containing `:`, an empty short name, or one with a forbidden character raises `ValueError`.
+- Worktree fallback test (in `test-millpy-session-tasks.py`, and the same shape in `test-millpy-spawn.py`): the current worktree directory is slug-named (e.g. `session-name-short-prefix`), the main worktree is `millhouse`, `repo.short_name` is unset; the rendered names use `mi:` (derived from `millhouse`), not `se:`, and the warning names `MI`.
+- `plugins/mill/unit_tests/test-millpy-terminal.py`: the launched argv carries `--name <short>:<slug>` lower-cased, on both the `nt` and POSIX branches.
 - Run the full suite via `run-all.py`.
 
 ## Q&A log
 
-- **Q:** Where does lower-casing happen? **A:** [auto-pick] In `build_command`, on the whole composed name. **Why:** it is the one assembly point, and config/window title stay `MH`.
+- **Q:** Where does lower-casing happen? **A:** [auto-pick] In a new `_vscode_tasks.session_prefix` helper that every session-naming caller uses (revised after review round 1, from `build_command`, so the phase-less terminal session is covered too). **Why:** one assembly point, and config/window title stay `MH`.
+- **Q:** What happens to `millpy-terminal.py`'s bare-slug session name? **A:** [auto-pick] It becomes `<short>:<slug>` via `session_prefix`. **Why:** it collides across repos the same way (added after review round 1).
 - **Q:** Should the `orch` task go into every worktree or only the hub? **A:** [auto-pick] Hub only, via `hub=True` and a separate hub spec list. **Why:** the orchestrator runs only in the hub, and `TASK_SPECS`/keybindings stay untouched.
 - **Q:** How is the hub-only task rendered? **A:** [auto-pick] A `<HUB_TASKS>` token in the existing template filled from a new orch-task fragment template. **Why:** keeps JSON shape in templates per `_render.py`'s rule without duplicating the six task blocks.
 - **Q:** What does the orch session run on launch? **A:** [auto-pick] Nothing: a named session with model/effort only. **Why:** no `/mill-orch` skill exists, and the orchestrator is human-driven.
