@@ -36,7 +36,7 @@ Three small gaps in the deterministic plan/verify gates, filed as GitHub issues 
 
 ### card-numbering-starts-at-1
 
-- Decision: add a check to `_check_card_numbering` that the smallest card number across all batch files is 1; when it isn't, emit a `card-numbering` error for card 1 (the missing number) with a message in the existing style, e.g. `card 1 breaks sequential numbering within batch <first-batch-stem>` naming the actual minimum.
+- Decision: add a check to `_check_card_numbering` that the smallest card number across all batch files is 1; when it isn't, emit a `card-numbering` error for card 1 (the missing number) with a message in the existing style, e.g. `card 1 breaks sequential numbering within batch <stem>` where `<stem>` is the batch file that contains the minimum card number (not merely the first file in the list), and the message names the actual minimum.
   Skip the check when the plan has zero cards.
 - Rationale: catches the case deterministically at Step 1.5 before any LLM dispatch, and keeps the reviewer checklist wording accurate as written.
 - Rejected: softening the review template wording (option b of the issue) -- leaves a real numbering defect unenforced.
@@ -61,8 +61,14 @@ Three small gaps in the deterministic plan/verify gates, filed as GitHub issues 
 - Rationale: today the short-circuited run yields a single `NONZERO_EXIT: exit 1: (no output)` signature, which will never subset-match the later real failure's signatures, so the waiver silently does the wrong thing.
   "Unknown -> strict" is honest and needs no new downstream branch.
 - Rejected: (a) running each `&&` conjunct independently -- shell quoting inside `sh -c "..."` makes reliable splitting fragile, and conjuncts may depend on each other's side effects.
-- Known trade-off: a compound command whose first conjunct is a genuine pre-existing non-test failure (e.g. `go vet && go test`) no longer gets a `NONZERO_EXIT` waiver; it runs strict.
-  Accepted -- the same short-circuit would hide any later failure anyway.
+- Shared helper: the test is factored into one helper in `_verify_baseline.py`, `_is_short_circuit_baseline(command: str, signatures: list[str]) -> bool` (True when `&&` is in `command` and `signatures` is non-empty and every entry starts with `NONZERO_EXIT:`).
+  `_signatures_for_pair` calls it on its own result.
+- Seeded pair-cache disposition: `_run_per_batch_baseline_standalone` seeds `pair_cache[(module_wide_cmd, cwd)]` with the module-wide half's `list[str]` (`millpy-implement.py:432-435`), which would bypass `_signatures_for_pair`.
+  Apply the same helper at seeding time: when `_is_short_circuit_baseline(seed_cmd, seed_signatures)` is True, do NOT seed that pair; the batch then computes its own result through `_signatures_for_pair`, which returns `None`.
+  The module-wide cached verdict itself (`module_verify_baseline`) is untouched.
+- Known trade-off: any compound (`&&`) command whose only recorded signatures are synthetic `NONZERO_EXIT:` lines runs strict.
+  That covers a pre-existing non-test failure in the first conjunct (e.g. `go vet && go test`) and equally a last-conjunct failure with non-marker output (e.g. `lint && go build` with a compile error).
+  Accepted -- the baseline cannot show which conjuncts were reached, and a shell short-circuit hides any later failure either way.
 - "Top-level `&&`" detection: a simple textual test that `&&` appears in the command string (including inside a `sh -c "..."` quoted body); no shell parsing.
   False positives only cost strictness, never correctness.
 - The module-wide verify path (`compute_baseline`) is untouched: it has no per-conjunct signature use and its verdict is binary.
@@ -75,6 +81,8 @@ Three small gaps in the deterministic plan/verify gates, filed as GitHub issues 
 - `plugins/mill/scripts/_verify_baseline.py`: `compute_batch_baselines`, `_signatures_for_pair`; `_implementer_common._extract_failure_signatures` synthesizes `NONZERO_EXIT: exit <rc>: <first output line>` when returncode is non-zero and no marker line matched.
 - `plugins/mill/scripts/millpy-implement.py:336-470`: `_run_per_batch_baseline_standalone` writes `verify_baseline_failures` via `_status.set_batch_field`; idempotence is by key presence, so an unwritten key is retried on the next baseline invocation (acceptable).
   `module_wide_pair_seed` seeds `pair_cache` with a `list[str]`; the `None` sentinel must not break that.
+- `millpy-fix.py:470-476` unions per-batch `verify_baseline_failures` for the holistic gate and skips falsy values, so a `None` batch contributes nothing to the union while other batches' signatures still count.
+  Accepted as-is: an unknown batch cannot waive anything, which is the strict direction.
 - `millpy-merge-in-subagent.py:244` already sets the field to `None` on recompute, confirming `None` is a valid "unknown" value downstream.
 - Tests: `unit_tests/test-plan-validate-card-numbering.py`, `test-plan-validate.py`, `test-verify-baseline.py`, `test-millpy-implement.py`.
   Run via `uv run --project plugins/mill`; plan `verify:` commands must start with `PYTHONPATH=`.
@@ -91,10 +99,13 @@ Three small gaps in the deterministic plan/verify gates, filed as GitHub issues 
 - Card numbering: plan starting at 2 -> error; starting at 1 -> none; multi-batch plan where batch 2 starts at 1 again is already a cross-batch duplicate (unchanged); empty plan -> no error.
 - Indent drift: for strip-pass, add-pass and sibling-indent errors, assert `line` equals the actual file line of the fence's opening delimiter, including a card with several fences and a card not at the top of the file.
 - Baseline: compound `a && b` where `a` fails with no output -> baseline `None` (key not written by the standalone driver); non-compound failing command -> unchanged NONZERO_EXIT signature; compound command where a real marker line is present -> unchanged; green compound -> `[]`.
+  Seeded pair: a batch whose compound verify command equals the module-wide command, seeded with all-synthetic signatures, is NOT seeded and ends up `None`; a non-compound or marker-bearing seed is still seeded as before.
+  Holistic union (`millpy-fix.py`): a `None` batch alongside a batch with signatures yields only the latter's signatures.
   Existing `pair_cache` dedup and seeding behaviour must still pass.
 
 ## Q&A log
 
 - **Q:** #1142: enforce starts-at-1 mechanically, or reword the review template? **A:** [auto-pick] Enforce mechanically. **Why:** deterministic and free, avoids a wasted LLM round.
 - **Q:** #1144: run conjuncts independently, or treat a short-circuited baseline as unknown? **A:** [auto-pick] Treat as unknown (leave baseline unset -> strict gate). **Why:** reuses the existing `None` fail-safe; splitting shell commands is fragile.
+- **Q:** Seeded module-wide pair_cache bypasses detection: what to do? **A:** [auto-pick] Apply the same helper at seeding time and skip seeding a short-circuit pair. **Why:** one detector, no bypass, module-wide verdict untouched.
 - **Q:** Add `line` to other `_plan_validate` checks too? **A:** [auto-pick] Only the indent-drift family. **Why:** keeps scope to what #1143 actually reports.
