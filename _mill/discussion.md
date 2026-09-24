@@ -96,7 +96,9 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
 - Decision: `--parent NAME` (`default=None`, help text: name of the session spawning this task, recorded as status.md `parent_thread:`).
   Value passed through unchanged except for `strip()`; empty string equals omitted.
   Right after `parse_args`, before the wiki claim or any worktree work, reject a value containing a newline or other control character (`any(ord(c) < 32 or ord(c) == 127 for c in value)`) with `SystemExit` and an ASCII message naming `--parent`.
-  Without this check, `quote_scalar` would raise a bare `ValueError` from `write_initial_status` after the claim and worktree creation.
+  Two reasons, stated separately:
+  a newline would make `_yaml_writer.quote_scalar` raise a bare `ValueError` from `write_initial_status` after the claim and worktree creation (`quote_scalar` raises only on `\n`);
+  other control characters would not crash — `yaml.safe_dump` escapes them (`"\x01"`) — but no real session name contains one, and an escaped row is unreadable, so rejecting them is independent hardening.
   No other format validation — session names are free-form strings produced by `_vscode_tasks` / config.
   `--dry-run` output mentions the value when given.
 - Rationale: scripts cannot read their own session name; the caller supplies it.
@@ -154,7 +156,7 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
   `set_module_verify_baseline(_signatures)` insert after `parent_thread:` when present, else after `parent_branch:`, else after legacy `parent:`.
 - `test-parent-branch.py`: `resolve` and `resolve_dead_parent` with archived status.md content using `parent_branch:` and legacy `parent:`; `expected_slug` mismatch still yields None for both keys; `parent_thread:` row never mistaken for the branch.
 - `test-spawn-core.py`: `write_initial_status` forwards `parent_thread`; default omits the row.
-- `test-millpy-spawn.py`: `--parent mh:orch` reaches `write_initial_status` as `parent_thread`; omitted flag passes `None`; a `--parent` value with a newline exits before any claim or worktree call.
+- `test-millpy-spawn.py`: `--parent mh:orch` reaches `write_initial_status` as `parent_thread`; omitted flag passes `None`; a `--parent` value with a newline, and one with a non-newline control character (e.g. `\x01`), each exit before any claim or worktree call.
 - `integration_tests/test-spawn.py`: spawned status.md contains `parent_branch: main`; with `--parent`, contains `parent_thread:`.
 - Existing merge/cleanup/merge-in tests keep passing; at least one merge path test keeps a legacy `parent:` fixture to prove in-flight worktrees still merge.
 
@@ -167,4 +169,4 @@ Why now: the dependency `session-name-short-prefix` has landed (commit `c1acaa03
 - **Q:** Does `millpy-claim` also get `--parent`? **A:** [auto-pick] No. **Why:** brief scopes the flag to `millpy-spawn`; in-place claim has no orchestrator dispatch path today.
 - **Q:** Should any caller (mill-pool, orch skills) start passing `--parent` now? **A:** [auto-pick] No; only document the flag in `mill-spawn/SKILL.md`. **Why:** brief says no behaviour change; wiring belongs to `parent-thread-escalation`.
 - **Q:** Rename `parent:` in the `discussion.md` and `plan-overview.md` template yaml too? **A:** [auto-pick] Yes, both. **Why:** same value, same meaning; keeps one key name across generated files. No code parses these rows.
-- **Q:** Validate the `--parent` value format? **A:** [auto-pick] Strip, empty equals omitted, reject control characters before the claim; nothing else. **Why:** session names are config-driven free-form strings, but a newline would fail late inside `quote_scalar`.
+- **Q:** Validate the `--parent` value format? **A:** [auto-pick] Strip, empty equals omitted, reject control characters before the claim; nothing else. **Why:** session names are config-driven free-form strings, but a newline would fail late inside `quote_scalar`, and other control characters would render as unreadable escapes.
