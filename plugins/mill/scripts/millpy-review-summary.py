@@ -29,8 +29,8 @@ import yaml
 
 # Matches a per-batch review filename for either plan or code, e.g.
 # 20260418-143300-plan-review-03-templates-r2.md or 20260418-143300-code-review-05-cards-r3.md.
-# Mirrors _review_common.RE_BATCH's type=plan|code alternation so per-batch code reviews (written
-# for every mill-go batch) parse identically to per-batch plan reviews.
+# Per-batch review files are only written by tasks that ran before per-batch review was removed;
+# this parser keeps their reviews dirs summarisable.
 _RE_BATCH = re.compile(
     r"^\d{8}-\d{6}-(?P<type>plan|code)-review-(?P<batch>[a-z0-9-]+)-r(?P<n>\d+)\.md$"
 )

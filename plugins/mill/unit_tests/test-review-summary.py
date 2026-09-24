@@ -208,6 +208,34 @@ def test_build_rows_handles_mixed_formats_without_raising() -> int:
             return 1
 
 
+def test_build_rows_summarises_historical_batch_and_holistic_files() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        reviews_dir = Path(tmp)
+        (reviews_dir / "20260418-100000-code-review-01-alpha-r1.md").write_text(
+            _NEW_FORMAT_FILE, encoding="utf-8"
+        )
+        (reviews_dir / "20260418-100100-code-review-r1.md").write_text(
+            _OLD_FORMAT_FILE, encoding="utf-8"
+        )
+
+        rows = _summary_mod.build_rows(reviews_dir, registry=None)
+
+        try:
+            files = sorted(row["file"] for row in rows)
+            assert files == [
+                "20260418-100000-code-review-01-alpha-r1.md",
+                "20260418-100100-code-review-r1.md",
+            ], f"got {files}"
+            print("PASS test_build_rows_summarises_historical_batch_and_holistic_files")
+            return 0
+        except AssertionError as exc:
+            print(
+                f"FAIL test_build_rows_summarises_historical_batch_and_holistic_files: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+
 def test_build_rows_includes_revise_subdirectory() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         reviews_dir = Path(tmp)
@@ -349,6 +377,7 @@ def main() -> int:
         test_parse_review_filename_rejects_fix_report,
         test_parse_review_filename_rejects_arbitrary_name,
         test_build_rows_handles_mixed_formats_without_raising,
+        test_build_rows_summarises_historical_batch_and_holistic_files,
         test_build_rows_includes_revise_subdirectory,
         test_build_rows_excludes_fix_reports,
         test_rows_sorted_by_round_then_scope_by_default,
