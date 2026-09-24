@@ -36,5 +36,7 @@ batches:
     start_sha: 4c8d8746e00f90e94dfe52e1a5f5c9eb9dad30c8
     commit_sha: 6fd1bc2d6199323601a8155a14167ac01ae89620
   - name: baseline-short-circuit
-    state: pending
+    state: running
+    implementer_session: ff765993-847a-4b65-b606-9fecee8807f1
+    start_sha: 312b36440d0a3df55969c54d766c35b00e358d92
 ```
