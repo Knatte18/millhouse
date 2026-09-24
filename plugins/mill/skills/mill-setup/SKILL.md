@@ -88,7 +88,7 @@ test -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" && echo "${CLAUDE_PLUGIN_ROOT}/
 
 `uv sync` creates `.venv/bin/python` on POSIX (Linux/macOS) and `.venv/Scripts/python.exe` on Windows — checking which one exists is more reliable than branching on `uname`/`$OS`, since it reflects the venv actually on disk rather than the host running the check.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7 — `write_all` on Windows, `write_all_sh` on POSIX), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_vscode_tasks` (Phase 7b), `_vscode_keybindings` (Phase 7b), `_render` (transitively via `_vscode`, `_vscode_tasks`, and `_shortcuts`).
+Helpers used by this skill: `_setup` (Phase 3.1b — `set_repo_short_name`, `SHORT_NAME_RE`; Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7 — `write_all` on Windows, `write_all_sh` on POSIX), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_vscode_tasks` (Phase 7b), `_vscode_keybindings` (Phase 7b), `_render` (transitively via `_vscode`, `_vscode_tasks`, and `_shortcuts`).
 
 ## Phases
 
@@ -244,6 +244,42 @@ If the helper raises `WikiPushError` (from the pull path — `git pull --ff-only
 Substituting at seed time would bake in machine-specific paths.
 If `mill-config.yaml` already exists, the upsert step validates and fills any required top-level blocks that are missing (`paths`, `llm`, `pipeline`, `roles`, `notify`, `spawn`, `groom`, `merge`).
 This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml predates a required schema block.
+
+### Phase 3.1b — Make repo.short_name explicit
+
+1. Read `<cwd>/mill-config.yaml` with `yaml.safe_load` and check `(cfg.get('repo') or {}).get('short_name')`.
+   When it is non-empty, print that it is already set and skip the rest of this phase (silent no-op on re-runs).
+2. Otherwise compute `derived = resolve_short_name(cfg, '<repo-name>')` and test it against `_setup.SHORT_NAME_RE`.
+   This command prints `derived` and whether it matches:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import yaml, _setup; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')) or {}; derived = resolve_short_name(cfg, '<repo-name>'); print(derived, bool(_setup.SHORT_NAME_RE.match(derived)))"
+   ```
+
+3. Prompt the operator per `mill:conversation`'s numbered-list rule.
+   When `derived` matches: `1) <derived> (Recommended) — derived from the repo name` and `2) Other — type a 2-4 character alphanumeric short name`.
+   When it does not match: no recommended option; ask only for a typed value.
+   The value becomes the lower-cased prefix of every Claude Code session name (`<short>:<phase>` on the hub, `<short>:<slug>:<phase>` in worktrees) and stays verbatim in the VS Code window title.
+4. Validate the answer against `^[A-Za-z0-9]{2,4}$`; re-prompt on failure.
+5. Write the value and print the return value:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import _setup; print(_setup.set_repo_short_name(Path(r'<cwd>/mill-config.yaml').resolve(), '<value>'))"
+   ```
+
+   When it prints `True`, stage and commit as Phase 3.1's upsert commit does:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
+   from pathlib import Path
+   import _subprocess_util
+   hub_root = Path(r'<cwd>').resolve()
+   _subprocess_util.run(['git', '-C', str(hub_root), 'add', 'mill-config.yaml'])
+   _subprocess_util.run(['git', '-C', str(hub_root), 'commit', '-m', 'chore: set repo.short_name in mill-config.yaml'])
+   "
+   ```
+
+The helper edits only the `short_name:` line (or inserts a `repo:` block) and preserves every other line and comment.
 
 ### Phase 3.2 — Persist wiki overrides to `config.local.yaml`
 
@@ -523,16 +559,16 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib impo
 ### Phase 7b - VS Code session tasks and shortcuts
 
 1. **tasks.json.**
-   Render the six session launch tasks into `.vscode/tasks.json`:
+   Render the hub's six session launch tasks plus the hub-only `mill: orch` task (session `<short>:orch`, no initial prompt, model/effort from `spawn.sessions.orch`) into `.vscode/tasks.json`:
 
    ```bash
-   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import _config, _paths, _vscode_tasks; from _paths import resolve_short_name; cfg = _config.load_config(hub_root=_paths.resolve_hub_path(), worktree_root=_paths.resolve_git_root()); print(_vscode_tasks.write_tasks(Path('.vscode/tasks.json'), resolve_short_name(cfg, '<repo-name>'), (cfg.get('spawn') or {}).get('sessions')))"
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import _config, _paths, _vscode_tasks; from _paths import resolve_short_name; cfg = _config.load_config(hub_root=_paths.resolve_hub_path(), worktree_root=_paths.resolve_git_root()); print(_vscode_tasks.write_tasks(Path('.vscode/tasks.json'), _vscode_tasks.session_prefix(resolve_short_name(cfg, '<repo-name>')), (cfg.get('spawn') or {}).get('sessions'), hub=True))"
    ```
 
    The config is loaded through `_config.load_config` (template defaults, hub `mill-config.yaml`, `.millhouse/config.local.yaml`), the same layering `millpy-session-tasks` uses, so a re-run never discards local `spawn.sessions` overrides.
    The printed status is `created`, `unchanged`, `updated`, or `replaced`.
    An existing file without the `// managed by mill` first line is backed up to `.vscode/tasks.json.bak` first.
-   The hub's session names use the short name because no task slug exists there.
+   Hub session names are `<short>:<phase>`, lower-cased, while worktree sessions are `<short>:<slug>:<phase>`.
    Model and effort come from `spawn.sessions`;
    re-run mill-setup or `millpy-session-tasks` to refresh them.
 
@@ -545,6 +581,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib impo
    This merges six bindings `alt+shift+1` to `alt+shift+6` (start, start-auto, start-orch, plan, go, quick) into the user-level stable-VS-Code `keybindings.json` inside a `// mill:begin` / `// mill:end` block.
    A key already bound outside the block is skipped with a warning and never overwritten.
    An unparsable file or a missing VS Code user directory skips all six bindings with a warning while mill-setup continues.
+   The `orch` task has no keybinding (it would be a dead key in every task-worktree window) and is launched via Run Task.
    mill-spawn never touches this file.
 
 Manual verification: open a worktree and press `Alt+Shift+4` with editor focus, then with terminal focus.
@@ -627,6 +664,7 @@ Re-running after a partial or complete setup is always safe:
 - Wiki already cloned → pulls latest.
 - `mill-config.yaml` present → block-level upsert run;
   commit only if missing blocks were added (Phase 3.1).
+- `repo.short_name` already set → Phase 3.1b makes no change and does not prompt.
 - `portals/` dir present → created by Phase 4 via `_setup.create_hub_links` (idempotent via `exist_ok=True` on the junction target).
 - `create_hub_links` re-checks each junction and hardlink — skips already-correct ones (Phase 4).
 - `.gitignore` marker block already up-to-date → not rewritten (Phase 4.5b).
