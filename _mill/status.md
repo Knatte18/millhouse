@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: session-name-short-prefix
 branch: hanf/session-name-short-prefix
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-09-24T09:12:43Z'
 plan-review-r1  '2026-09-24T09:18:10Z'
 plan-fix-r1  '2026-09-24T09:18:29Z'
 planned  '2026-09-24T09:18:36Z'
+implementing  '2026-09-24T09:18:54Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: core-helpers
+    state: pending
+  - name: session-name-callers
+    state: pending
+  - name: docs-and-setup
+    state: pending
 ```
