@@ -30,17 +30,26 @@ implementing  '2026-09-24T07:56:40Z'
 ```yaml
 batches:
   - name: plan-review-backend
-    state: pending
+    state: running
+    implementer_session: 94147e4d-dc13-496c-9952-5dfefd1d21d3
+    start_sha: 1398eaf97eb296d792008b51623ae2e7a1994c91
+    verify_baseline_failures: []
   - name: code-review-backend
     state: pending
+    verify_baseline_failures: []
   - name: fixer-and-gates
     state: pending
+    verify_baseline_failures: []
   - name: review-common-and-templates
     state: pending
+    verify_baseline_failures: []
   - name: config
     state: pending
+    verify_baseline_failures: []
   - name: mill-go-skill-text
     state: pending
+    verify_baseline_failures: []
   - name: remaining-skills-docs-and-gate
     state: pending
+    verify_baseline_failures: []
 ```
