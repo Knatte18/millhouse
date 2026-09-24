@@ -71,4 +71,5 @@ batches:
 '2026-09-24T08:02:36Z'  plan-review-backend  round 1
 '2026-09-24T08:05:13Z'  code-review-backend  round 1
 '2026-09-24T08:08:33Z'  fixer-and-gates  round 1
+'2026-09-24T08:12:48Z'  review-common-and-templates  round 1
 ```
