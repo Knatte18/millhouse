@@ -88,7 +88,7 @@ test -f "${CLAUDE_PLUGIN_ROOT}/.venv/bin/python" && echo "${CLAUDE_PLUGIN_ROOT}/
 
 `uv sync` creates `.venv/bin/python` on POSIX (Linux/macOS) and `.venv/Scripts/python.exe` on Windows — checking which one exists is more reliable than branching on `uname`/`$OS`, since it reflects the venv actually on disk rather than the host running the check.
 
-Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7 — `write_all` on Windows, `write_all_sh` on POSIX), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_render` (transitively via `_vscode` and `_shortcuts`).
+Helpers used by this skill: `_setup` (Phase 4 — `create_hub_links`), `_gitignore` (Phase 4.5b), `_shortcuts` (Phase 4.7 — `write_all` on Windows, `write_all_sh` on POSIX), `_winenv` (Phase 4.7, Windows only), `_vscode` (Phase 7), `_vscode_tasks` (Phase 7b), `_vscode_keybindings` (Phase 7b), `_render` (transitively via `_vscode`, `_vscode_tasks`, and `_shortcuts`).
 
 ## Phases
 
@@ -509,7 +509,8 @@ The hub is always coloured `#2d7d46` so the operator can spot it instantly. mill
 | Current state of `.vscode/settings.json` | Action |
 |---|---|
 | Missing | Render template, write file. |
-| Present and `"titleBar.activeBackground": "#2d7d46"` | Skip (idempotent). |
+| Present, `"titleBar.activeBackground": "#2d7d46"`, and `terminal.integrated.commandsToSkipShell` already contains `workbench.action.tasks.runTask` | Skip (idempotent). |
+| Present and green but `commandsToSkipShell` lacks `workbench.action.tasks.runTask` | Back up to `.vscode/settings.json.bak`, then overwrite. |
 | Present with different colour | Back up to `.vscode/settings.json.bak`, then overwrite. |
 | Present but no `titleBar.activeBackground` key | Back up to `.vscode/settings.json.bak`, then overwrite. |
 
@@ -518,6 +519,36 @@ Render and write via `_vscode.write_settings`:
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import yaml; import _vscode; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')); _vscode.write_settings(color_hex='#2d7d46', target=Path('.vscode/settings.json'), short_name=resolve_short_name(cfg, '<repo-name>'))"
 ```
+
+### Phase 7b - VS Code session tasks and shortcuts
+
+1. **tasks.json.**
+   Render the six session launch tasks into `.vscode/tasks.json`:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import _config, _paths, _vscode_tasks; from _paths import resolve_short_name; cfg = _config.load_config(hub_root=_paths.resolve_hub_path(), worktree_root=_paths.resolve_git_root()); print(_vscode_tasks.write_tasks(Path('.vscode/tasks.json'), resolve_short_name(cfg, '<repo-name>'), (cfg.get('spawn') or {}).get('sessions')))"
+   ```
+
+   The config is loaded through `_config.load_config` (template defaults, hub `mill-config.yaml`, `.millhouse/config.local.yaml`), the same layering `millpy-session-tasks` uses, so a re-run never discards local `spawn.sessions` overrides.
+   The printed status is `created`, `unchanged`, `updated`, or `replaced`.
+   An existing file without the `// managed by mill` first line is backed up to `.vscode/tasks.json.bak` first.
+   The hub's session names use the short name because no task slug exists there.
+   Model and effort come from `spawn.sessions`;
+   re-run mill-setup or `millpy-session-tasks` to refresh them.
+
+2. **Keybindings.**
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _vscode_keybindings as k; s, w = k.write_bindings(); print(s); [print('WARNING: ' + x) for x in w]"
+   ```
+
+   This merges six bindings `alt+shift+1` to `alt+shift+6` (start, start-auto, start-orch, plan, go, quick) into the user-level stable-VS-Code `keybindings.json` inside a `// mill:begin` / `// mill:end` block.
+   A key already bound outside the block is skipped with a warning and never overwritten.
+   An unparsable file or a missing VS Code user directory skips all six bindings with a warning while mill-setup continues.
+   mill-spawn never touches this file.
+
+Manual verification: open a worktree and press `Alt+Shift+4` with editor focus, then with terminal focus.
+If the shortcut does not fire with terminal focus, keep the settings entry, tell the user shortcuts work with editor focus or via Run Task, and add no further workaround.
 
 ### Phase 8 — Verify + report
 
@@ -541,6 +572,8 @@ halt with a specific error if any fails:
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
 - `.vscode/settings.json` exists with `titleBar.activeBackground == "#2d7d46"`
+- `.vscode/settings.json` `terminal.integrated.commandsToSkipShell` contains `workbench.action.tasks.runTask`
+- `.vscode/tasks.json` exists and its first line is `// managed by mill`
 
 On success, print a summary:
 
@@ -556,9 +589,13 @@ mill-setup complete.
   Tasks (Home):      <WIKI_PATH>/Home.md  (hardlinked as tasks.md)
   Sidebar:           <WIKI_PATH>/_Sidebar.md
   VS Code:           .vscode/settings.json (titleBar = #2d7d46 green)
+  VS Code tasks:  .vscode/tasks.json (<status>)
+  Keybindings:   <status> (<N> warnings)
   Shortcut wrappers: N .cmd scripts under .millhouse/ (Windows) / N .sh scripts under .millhouse/ (POSIX)
   PYTHONPATH (User): <scripts> (Windows only — omit this line on POSIX)
   MILL_PYTHON:       <python-path>
+
+Keybinding warnings (if any): <one WARNING line each>
 
 Junctions (from mill-config.yaml):
   Hub-scope (created now):
@@ -601,7 +638,11 @@ Re-running after a partial or complete setup is always safe:
   only GitHub-default content is overwritten.
 - `_Sidebar.md` regenerated unconditionally;
   commit only if bytes changed.
-- `.vscode/settings.json` already green → skipped.
+- `.vscode/settings.json` already green and containing `workbench.action.tasks.runTask` in `commandsToSkipShell` → skipped (Phase 7).
+- `.vscode/tasks.json` rewritten only when content differs;
+  an unmarked file is backed up first (Phase 7b).
+- Keybindings block replaced in place;
+  an unchanged file is not rewritten (Phase 7b).
 - Shortcut wrappers (`.cmd` on Windows, `.sh` on POSIX) re-checked against the current latest plugin version on every run — only stale/missing ones are rewritten (Phase 4.7).
 - PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only; that sub-step is a no-op on POSIX).
 - Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value;
