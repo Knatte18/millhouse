@@ -39,6 +39,7 @@ SHORTCUT_SCRIPTS: list[str] = [
     "millpy-terminal",
     "millpy-vscode",
     "millpy-wikipush",
+    "millpy-session-tasks",
 ]
 
 # Template paths relative to this file's package root.

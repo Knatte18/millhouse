@@ -41,7 +41,7 @@ def test_smoke_import() -> None:
     mod = importlib.util.module_from_spec(spec)
     # Provide minimal stubs for the heavy imports so the module loads without a real git repo or wiki on disk.
     stubs = [
-        "_junction", "_setup", "_spawn_core", "_vscode",
+        "_junction", "_setup", "_spawn_core", "_vscode", "_vscode_tasks",
         "_worktree", "_paths", "_sibling", "_subprocess_util",
     ]
     for name in stubs:
@@ -188,6 +188,7 @@ def _run_main_with_mocks(
         "_junction": junction_mock,
         "_tasks_md": tasks_md_mock,
         "_vscode": vscode_mock,
+        "_vscode_tasks": MagicMock(),
         "_worktree": worktree_mock,
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -335,6 +336,7 @@ def test_write_settings_uses_short_name_and_slug() -> None:
         "_junction": MagicMock(),
         "_tasks_md": MagicMock(),
         "_vscode": vscode_mock,
+        "_vscode_tasks": MagicMock(),
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -440,6 +442,7 @@ def test_main_backlog_empty_exits_zero() -> None:
         "_junction": MagicMock(),
         "_tasks_md": tasks_md_mock,
         "_vscode": MagicMock(),
+        "_vscode_tasks": MagicMock(),
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -575,6 +578,7 @@ def test_create_hub_links_called_after_portal_creation() -> None:
         "_junction": junction_mock,
         "_tasks_md": MagicMock(),
         "_vscode": MagicMock(),
+        "_vscode_tasks": MagicMock(),
         "_worktree": MagicMock(),
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -753,12 +757,16 @@ def _run_spawn_real_fs(
     slug: str = "test-task",
     title: str = "Test Task",
     omit_source_config: bool = False,
+    fail_status_write: bool = False,
+    extra_cfg: dict | None = None,
 ) -> tuple[int, Path, MagicMock, MagicMock]:
     """
     Run spawn main() with ``tmpdir`` as the root filesystem.
 
     Mocks all git/wiki/junction operations;
     lets Python file I/O happen.
+    ``fail_status_write`` makes write_initial_status raise so rollback runs;
+    ``extra_cfg`` is merged into the patched merged config.
     Returns ``(exit_code, worktree_path, vscode_mock, setup_mock)``.
     """
     import importlib.util
@@ -796,6 +804,9 @@ def _run_spawn_real_fs(
     spawn_core_mock.capture_parent_branch.return_value = "main"
     spawn_core_mock.write_initial_status.return_value = worktree_path / "status.md"
 
+    if fail_status_write:
+        spawn_core_mock.write_initial_status.side_effect = IOError("simulated status write failure")
+
     vscode_mock = MagicMock()
     setup_mock = MagicMock()
     setup_mock.create_hub_links.return_value = {"junctions": [], "hardlinks": []}
@@ -823,6 +834,8 @@ def _run_spawn_real_fs(
         "_subprocess_util": _make_subprocess_util_stub(),
     }
     saved: dict[str, object] = {}
+    # Other tests leave a bare stub behind; drop it so the real module is imported against the tempdir.
+    saved["_vscode_tasks"] = sys.modules.pop("_vscode_tasks", None)
     for name, stub in stub_map.items():
         saved[name] = sys.modules.get(name)
         sys.modules[name] = stub
@@ -838,6 +851,7 @@ def _run_spawn_real_fs(
         fake_cfg: dict = {}
         if hub_subpath != ".":
             fake_cfg["hub_relative_path"] = hub_subpath
+        fake_cfg.update(extra_cfg or {})
 
         with (
             patch.object(mod, "_load_config", return_value=fake_cfg),
@@ -854,7 +868,10 @@ def _run_spawn_real_fs(
             patch.object(mod, "resolve_short_name", return_value="MI"),
             patch.object(mod, "pick_worktree_color", return_value="#7d2d6b"),
         ):
-            exit_code = mod.main([])
+            try:
+                exit_code = mod.main([])
+            except SystemExit as exc:
+                exit_code = exc.code if isinstance(exc.code, int) else 1
     finally:
         for name, original in saved.items():
             if original is None:
@@ -909,6 +926,13 @@ def test_spawn_standard_layout_regression() -> None:
                 raise AssertionError(
                     f"config.local.yaml has unexpected hub_relative_path={hub_rel!r}"
                 )
+
+        tasks_text = (wt / ".vscode" / "tasks.json").read_text(encoding="utf-8")
+        if not tasks_text.startswith("// managed by mill"):
+            raise AssertionError("tasks.json must start with the managed marker")
+        for command in ("test-task:start", "test-task:plan", "test-task:go", "test-task:quick"):
+            if command not in tasks_text:
+                raise AssertionError(f"tasks.json missing {command!r}")
 
     print("PASS: test_spawn_standard_layout_regression")
 
@@ -966,6 +990,11 @@ def test_spawn_subfolder_install_destination_layout() -> None:
             raise AssertionError(
                 f"create_hub_links first arg should be {dest_hub}, got {first_arg!r}"
             )
+
+        if not (dest_hub / ".vscode" / "tasks.json").is_file():
+            raise AssertionError("tasks.json missing at dest_hub/.vscode")
+        if (wt / ".vscode" / "tasks.json").exists():
+            raise AssertionError("tasks.json must not be written at the worktree root")
 
     print("PASS: test_spawn_subfolder_install_destination_layout")
 
@@ -1248,6 +1277,7 @@ def test_spawn_aborts_when_origin_branch_already_exists() -> None:
         "_junction": junction_mock,
         "_tasks_md": MagicMock(),
         "_vscode": MagicMock(),
+        "_vscode_tasks": MagicMock(),
         "_worktree": worktree_mock,
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -1429,6 +1459,7 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
         "_junction": junction_mock,
         "_tasks_md": MagicMock(),
         "_vscode": MagicMock(),
+        "_vscode_tasks": MagicMock(),
         "_worktree": worktree_mock,
         "_paths": paths_mock,
         "_sibling": types.ModuleType("_sibling"),
@@ -1509,6 +1540,40 @@ def test_spawn_rolls_back_when_write_initial_status_fails() -> None:
     print("PASS: spawn rollback calls remove_safe and set_phase(None) on write_initial_status failure")
 
 
+def test_spawn_removes_tasks_json_when_status_write_fails() -> None:
+    """A failing initial status write rolls back the seeded tasks.json."""
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+            tmpdir, ".", fail_status_write=True
+        )
+        if exit_code == 0:
+            raise AssertionError("expected non-zero exit when status write fails")
+        if (wt / ".vscode" / "tasks.json").exists():
+            raise AssertionError("tasks.json must be removed by rollback")
+    print("PASS: test_spawn_removes_tasks_json_when_status_write_fails")
+
+
+def test_spawn_propagates_session_config_to_tasks_json() -> None:
+    """spawn.sessions from the merged config reaches the rendered go command only."""
+    with _test_helpers.safe_temp_dir() as tmpdir:
+        exit_code, wt, _vscode_mock, _setup_mock = _run_spawn_real_fs(
+            tmpdir,
+            ".",
+            extra_cfg={"spawn": {"sessions": {"go": {"model": "haiku", "effort": "low"}}}},
+        )
+        if exit_code != 0:
+            raise AssertionError(f"expected exit 0, got {exit_code}")
+        import json
+        text = (wt / ".vscode" / "tasks.json").read_text(encoding="utf-8")
+        tasks = json.loads("\n".join(text.splitlines()[1:]))["tasks"]
+        by_label = {task["label"]: task["command"] for task in tasks}
+        if "--model haiku --effort low" not in by_label["mill: go"]:
+            raise AssertionError(f"go command lacks configured model: {by_label['test-task:go']!r}")
+        if "--model haiku" in by_label["mill: plan"]:
+            raise AssertionError("plan must keep its defaults")
+    print("PASS: test_spawn_propagates_session_config_to_tasks_json")
+
+
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
@@ -1534,6 +1599,8 @@ def main() -> int:
         test_spawn_empty_backlog_message_has_no_s_marker,
         test_spawn_aborts_when_origin_branch_already_exists,
         test_spawn_rolls_back_when_write_initial_status_fails,
+        test_spawn_removes_tasks_json_when_status_write_fails,
+        test_spawn_propagates_session_config_to_tasks_json,
     ]
 
     failures: list[str] = []
