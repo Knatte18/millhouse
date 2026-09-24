@@ -119,7 +119,14 @@ date: <UTC YYYY-MM-DD>
 MILL_REVIEW_END
 ~~~
 
-Severity / verdict rules match review-code-batch.md.
+Severity:
+- `BLOCKING` — must fix before the task is approved.
+- `NIT` — record but do not block.
+
+Verdict:
+- `APPROVE` — zero BLOCKINGs.
+- `REQUEST_CHANGES` — one or more BLOCKINGs.
+- `NEED_CONTEXT` — one or more missing source files; orchestrator will re-fire.
 
 **Severity vocabulary is closed.**
 Use ONLY `BLOCKING` or `NIT` as the bracketed label in a finding heading -- never invent another word (e.g. `MAJOR`, `MINOR`, `CRITICAL`, `MEDIUM`, `HIGH`).
