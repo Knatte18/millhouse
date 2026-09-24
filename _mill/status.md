@@ -51,7 +51,9 @@ batches:
     commit_sha: dc5ec740bf72caa99fb2594bdb4552d1af781e19
     verify_baseline_failures: []
   - name: review-common-and-templates
-    state: pending
+    state: running
+    implementer_session: 7a0bf18f-d436-459d-bb1f-d0bf410ce1ad
+    start_sha: 5e9e1047c5928d3b8c491ed4682ec3d9aedc0cae
     verify_baseline_failures: []
   - name: config
     state: pending
