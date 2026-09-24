@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: reviewing-status-core-r1
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -23,6 +23,7 @@ planning  '2026-09-24T10:17:14Z'
 plan-review-r1  '2026-09-24T10:23:22Z'
 planned  '2026-09-24T10:23:34Z'
 implementing  '2026-09-24T10:23:53Z'
+reviewing-status-core-r1  '2026-09-24T10:26:48Z'
 ```
 
 ## Batches
@@ -30,9 +31,11 @@ implementing  '2026-09-24T10:23:53Z'
 ```yaml
 batches:
   - name: status-core
-    state: running
+    state: reviewing
     implementer_session: 707992d5-dc4e-4b1b-a81d-b9a701eaa22d
     start_sha: 7895ba7acc65f7dc0533e4631a297862af324c29
+    commit_sha: acd458a1f7d170752acb7df8d2c22f135cda0736
+    review_round: 1
     verify_baseline_failures: []
   - name: spawn-parent-thread
     state: pending
@@ -41,7 +44,6 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
-
 ## Inferred-success log
 
 ```text
