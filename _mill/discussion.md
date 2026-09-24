@@ -106,8 +106,13 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 - Decision: add `"orch": {"model": "opus", "effort": "high"}` to `DEFAULT_SESSIONS`, and `orch: { model: opus, effort: high }` under `spawn.sessions` in both `plugins/mill/templates/mill-config.yaml` and the hub `mill-config.yaml` (CLAUDE.md: hub file and template must stay in sync).
   Update the template's `sessions` comment to say `orch` applies to the hub only.
+- Decision: `resolve_sessions` gains an optional `phases` argument (an iterable of phase names; default: every key of `DEFAULT_SESSIONS`, so `resolve_sessions(None) == DEFAULT_SESSIONS` still holds).
+  It resolves and validates only those phases.
+  `render_tasks` passes the distinct phases of the spec list it renders: `TASK_SPECS` for a worktree (no `orch`), `HUB_TASK_SPECS` for the hub.
+  An invalid `spawn.sessions.orch` value therefore fails only hub renders, never a worktree spawn or a worktree `millpy-session-tasks` run.
 - Rationale: the orchestrator does judgment-heavy work (hand-written `orch-review`s, triage), so it gets the strongest default.
-  `resolve_sessions` iterates `DEFAULT_SESSIONS`, so the new key is picked up with no other change.
+  Today `resolve_sessions` validates every `DEFAULT_SESSIONS` key before `TASK_SPECS` is read, so without the `phases` scoping a bad hub-only `orch` value in the shared `mill-config.yaml` would break every worktree render for a task it has nothing to do with.
+- Rejected: accepting that a bad `orch` value breaks worktree spawns (collateral failure from config the worktree never uses).
 
 ### No keybinding for orch
 
@@ -183,7 +188,7 @@ The derived short-name fallback (`repo_name[:2].upper()`) can also be wrong (`ly
 
 ## Testing
 
-- `plugins/mill/unit_tests/test-vscode-tasks.py` (TDD candidate): worktree render with prefix `session_prefix("MH", "my-task")` produces `claude -n "mh:my-task:<phase>"` for every `TASK_SPECS` entry and no orch task; hub render (`hub=True`) with prefix `session_prefix("MH")` produces the six tasks named `mh:<phase>` plus `mill: orch` with `claude -n "mh:orch" --model opus --effort high` and no prompt argument; both outputs parse as JSON after the marker line; `spawn.sessions.orch` overrides apply; a forbidden character in the prefix still raises `ValueError`.
+- `plugins/mill/unit_tests/test-vscode-tasks.py` (TDD candidate): worktree render with prefix `session_prefix("MH", "my-task")` produces `claude -n "mh:my-task:<phase>"` for every `TASK_SPECS` entry and no orch task; hub render (`hub=True`) with prefix `session_prefix("MH")` produces the six tasks named `mh:<phase>` plus `mill: orch` with `claude -n "mh:orch" --model opus --effort high` and no prompt argument; both outputs parse as JSON after the marker line; `spawn.sessions.orch` overrides apply; an invalid `spawn.sessions.orch.model` raises `ValueError` for a hub render but not for a worktree render; `resolve_sessions(cfg, phases=...)` resolves only the listed phases, and `resolve_sessions(None)` still equals `DEFAULT_SESSIONS` (the existing test that compares the template's `spawn.sessions` to `DEFAULT_SESSIONS` then also requires `orch` in the template); a forbidden character in the prefix still raises `ValueError`.
 - `plugins/mill/unit_tests/test-millpy-session-tasks.py`: worktree case expects `<short>:<slug>:start` lower-cased; hub case expects `hubshort:start` and `hubshort:orch` (the fixture's `HUBSHORT` lower-cased); the derived-fallback warning appears on stderr when `repo.short_name` is unset and not when it is set.
 - `plugins/mill/unit_tests/test-millpy-spawn.py`: the expected commands (currently `test-task:start` etc.) become `<short>:test-task:<phase>` lower-cased; the worktree tasks.json contains no orch task; the fallback warning behaves as above.
 - `plugins/mill/unit_tests/test-vscode-keybindings.py`: no expectation changes; still six bindings.
