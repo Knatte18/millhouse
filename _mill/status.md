@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: session-naming
 branch: hanf/session-naming
 plan: _mill/plan
@@ -22,4 +22,21 @@ planning  '2026-09-24T06:13:53Z'
 plan-review-r1  '2026-09-24T06:15:19Z'
 plan-fix-r1  '2026-09-24T06:15:28Z'
 planned  '2026-09-24T06:15:35Z'
+implementing  '2026-09-24T06:15:45Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: tasks-render
+    state: pending
+  - name: keybindings
+    state: pending
+  - name: session-tasks-cli
+    state: pending
+  - name: spawn-wiring
+    state: pending
+  - name: setup-docs
+    state: pending
 ```
