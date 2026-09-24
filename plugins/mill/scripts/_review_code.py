@@ -603,7 +603,7 @@ def run(
 
         # Finalize
         result = finalize(
-            cfg, slug, raw, scope="holistic", round_n=round_n, reviews_dir=reviews_dir,
+            cfg, slug, raw, round_n=round_n, reviews_dir=reviews_dir,
             mill_dir=mill_dir, project_root=project_root, wiki_root=wiki_root, git_root=git_root,
             duration_s=duration_s, tool_calls=tool_calls, cost_usd=cost_usd,
         )

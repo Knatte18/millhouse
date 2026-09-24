@@ -227,13 +227,12 @@ def test_review_code_end_to_end(scratch: Path) -> None:
         mill_dir,
         wiki_root,
         project_root,
-        batch_name="foundation",
     )
     _assert(result.verdict == "APPROVE", f"unexpected verdict: {result.verdict}")
     _assert(result.type == "code", f"unexpected type: {result.type}")
-    review_files = list(reviews_dir.glob("*-code-review-foundation-r1.md"))
+    review_files = list(reviews_dir.glob("*-code-review-r1.md"))
     _assert(len(review_files) == 1, f"expected 1 review file, got {review_files}")
-    print("PASS: _review_code end-to-end with stub reviewer (per-batch)")
+    print("PASS: _review_code end-to-end with stub reviewer (holistic)")
 
 
 def test_notify_stdout(capsys_like: Path) -> None:

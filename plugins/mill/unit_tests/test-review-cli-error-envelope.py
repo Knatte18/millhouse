@@ -228,7 +228,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
             verdict="ERROR",
             blocking_count=0,
             reviews=[{
-                "scope": "batch",
+                "scope": "holistic",
                 "verdict": "ERROR",
                 "file": None,
                 "error": "parse_verdict failed",
@@ -293,7 +293,7 @@ class TestReviewCliErrorEnvelope(unittest.TestCase):
             verdict="APPROVE",
             blocking_count=0,
             reviews=[{
-                "scope": "batch",
+                "scope": "holistic",
                 "verdict": "APPROVE",
                 "file": "/tmp/code.md",
                 "session_id": "def",
