@@ -57,9 +57,38 @@ def main() -> int:
         assert out.startswith("# Status\n"), "Leading HTML comment should be stripped"
         assert "Fix bug in widget handler" in out
         assert "2026-04-22T14:32:05Z" in out
-        assert "parent: main" in out
+        assert "parent_branch: main" in out
+        assert not any(line.startswith("parent:") for line in out.splitlines()), (
+            "legacy parent: row must not be rendered"
+        )
         assert "<TASK_TITLE>" not in out and "<TIMESTAMP>" not in out
         print("PASS: render_initial() substitutes tokens and strips header")
+
+        # parent_thread: optional row placed immediately after parent_branch:.
+        out_thread = render_initial(
+            "T", "D", "2026-04-22T14:32:05Z", "main",
+            slug="t-slug", branch="hanf/t-slug", parent_thread="mh:orch",
+        )
+        thread_lines = out_thread.splitlines()
+        branch_idx = next(i for i, ln in enumerate(thread_lines) if ln.startswith("parent_branch:"))
+        assert thread_lines[branch_idx + 1] == "parent_thread: 'mh:orch'", (
+            f"parent_thread row misplaced: {thread_lines[branch_idx + 1]!r}"
+        )
+        with tempfile.TemporaryDirectory() as tmp_thread:
+            sp_thread = Path(tmp_thread) / "status.md"
+            sp_thread.write_text(out_thread, encoding="utf-8")
+            assert read(sp_thread)["parent_thread"] == "mh:orch"
+        print("PASS: render_initial parent_thread row follows parent_branch and round-trips")
+
+        for empty_thread in (None, "", "   "):
+            out_empty = render_initial(
+                "T", "D", "2026-04-22T14:32:05Z", "main",
+                slug="t-slug", branch="hanf/t-slug", parent_thread=empty_thread,
+            )
+            assert not any(ln.startswith("parent_thread:") for ln in out_empty.splitlines()), (
+                f"parent_thread={empty_thread!r} must not render a row"
+            )
+        print("PASS: render_initial omits parent_thread row for None/empty/whitespace")
 
         # Colon in task_title: YAML must parse cleanly.
         out_colon = render_initial(
@@ -580,7 +609,7 @@ def main() -> int:
             assert isinstance(r["yaml"], dict), "yaml should be a dict"
             assert r["yaml"]["phase"] == "discussed", f"phase mismatch: {r['yaml']['phase']}"
             assert r["yaml"]["task"] == "Full task", f"task mismatch: {r['yaml']['task']}"
-            assert "parent" in r["yaml"], "parent key should be present"
+            assert "parent_branch" in r["yaml"], "parent_branch key should be present"
             assert isinstance(r["timeline"], list), "timeline should be a list"
             assert len(r["timeline"]) == 2, f"expected 2 timeline entries, got {len(r['timeline'])}"
             assert any("discussing" in line for line in r["timeline"]), "discussing entry missing"
@@ -856,7 +885,7 @@ def main() -> int:
             assert result["phase"] == "discussing", f"phase mismatch: {result.get('phase')!r}"
             assert result["slug"] == "test-slug", f"slug mismatch: {result.get('slug')!r}"
             assert result["branch"] == "hanf/test-slug", f"branch mismatch: {result.get('branch')!r}"
-            assert result["parent"] == "main", f"parent mismatch: {result.get('parent')!r}"
+            assert result["parent_branch"] == "main", f"parent_branch mismatch: {result.get('parent_branch')!r}"
             assert result["task"] == "Test Task", f"task mismatch: {result.get('task')!r}"
             assert "task_description" in result, "task_description key missing"
             assert "plan" in result, "plan key missing"

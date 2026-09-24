@@ -15,7 +15,7 @@ Keeping ``batches:`` in its own section lets us parse and rewrite just that bloc
 the top block.
 
 Public API:
-    render_initial(task_title, task_description, timestamp, parent_branch, slug, branch) -> str
+    render_initial(task_title, task_description, timestamp, parent_branch, slug, branch, *, parent_thread=None) -> str
     read(status_path) -> dict
     read_full(status_path) -> dict
     read_parent_branch(status_path) -> str | None
@@ -120,6 +120,8 @@ def render_initial(
     parent_branch: str,
     slug: str,
     branch: str,
+    *,
+    parent_thread: str | None = None,
 ) -> str:
     """
     Render the phase=discussing status.md for ``task_title``.
@@ -137,11 +139,17 @@ def render_initial(
             the template's `` `` indent applies to the first line only, so multi-line values remain
                 valid YAML only when the caller does not include leading spaces.
         timestamp: ISO-8601 UTC timestamp for the timeline entry, e.g. ``"2026-04-22T14:32:05Z"``.
-        parent_branch: The branch the hub was on at spawn time.
+        parent_branch: The branch the hub was on at spawn time, written as the ``parent_branch:`` key.
             mill-merge / mill-cleanup read this to know where to merge back to.
+        parent_thread: The spawning session's name, recorded for the follow-up escalation task.
+            The ``parent_thread:`` row is omitted when ``None`` or empty.
 
     Returns:
         The rendered status.md text, including trailing newline.
+
+    Raises:
+        KeyError: the template has an unresolved token.
+        ValueError: ``parent_thread`` is set but the template has no ``parent_branch:`` row.
     """
     template = _TEMPLATE_PATH.read_text(encoding="utf-8")
     body = _strip_leading_comment(template)
@@ -162,6 +170,15 @@ def render_initial(
     if unresolved:
         raise KeyError(
             f"Unresolved tokens in status template: {unresolved!r}"
+        )
+    if isinstance(parent_thread, str) and parent_thread.strip():
+        body_lines = body.split("\n")
+        for index, line in enumerate(body_lines):
+            if re.match(r"^parent_branch:\s*", line):
+                body_lines.insert(index + 1, f"parent_thread: {quote_scalar(parent_thread.strip())}")
+                return "\n".join(body_lines)
+        raise ValueError(
+            f"No parent_branch: row in {_TEMPLATE_PATH.name}; cannot place parent_thread (template drift)"
         )
     return body
 
