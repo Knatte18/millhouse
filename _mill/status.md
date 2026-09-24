@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-core-helpers
 slug: session-name-short-prefix
 branch: hanf/session-name-short-prefix
 plan: _mill/plan
@@ -22,6 +22,7 @@ plan-review-r1  '2026-09-24T09:18:10Z'
 plan-fix-r1  '2026-09-24T09:18:29Z'
 planned  '2026-09-24T09:18:36Z'
 implementing  '2026-09-24T09:18:54Z'
+approved-core-helpers  '2026-09-24T09:21:58Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-09-24T09:18:54Z'
 ```yaml
 batches:
   - name: core-helpers
-    state: running
+    state: approved
     implementer_session: de75e4bb-2517-4295-a3bf-4d7337f258c2
     start_sha: d13bf2d58474efd28b92d33a430d333af63c7d7a
+    commit_sha: e5b1e07730530835f30d7e8beffe9a32fb13c5a2
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
     exit 1: --only: unknown test file(s): [''test-paths-short-name.py'', ''test-setup-short-name.py'']']
   - name: session-name-callers
@@ -41,7 +43,6 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
-
 ## Inferred-success log
 
 ```text
