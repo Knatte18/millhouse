@@ -53,3 +53,9 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-24T08:02:36Z'  plan-review-backend  round 1
+```
