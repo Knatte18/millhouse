@@ -3,7 +3,7 @@
 ```yaml
 task: 'status.md: rename parent to parent_branch, add parent_thread'
 slug: status-parent-fields
-approved: false
+approved: true
 started: 20260924-101441
 parent: main
 root: ""
