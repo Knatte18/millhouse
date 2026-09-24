@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-inferred-success-log
 slug: mill-go-plan-doc-gaps
 branch: hanf/mill-go-plan-doc-gaps
 plan: _mill/plan
@@ -22,6 +22,7 @@ planning  '2026-09-24T06:34:15Z'
 plan-review-r1  '2026-09-24T06:35:21Z'
 planned  '2026-09-24T06:35:31Z'
 implementing  '2026-09-24T06:35:44Z'
+approved-inferred-success-log  '2026-09-24T06:37:02Z'
 ```
 
 ## Batches
@@ -29,9 +30,10 @@ implementing  '2026-09-24T06:35:44Z'
 ```yaml
 batches:
   - name: inferred-success-log
-    state: running
+    state: approved
     implementer_session: 8e8bc564-1ae7-429c-a407-3440ad7d3424
     start_sha: 99cd20a855faae218de0b14c8d74e571e1e10cf6
+    commit_sha: adf8050d2c2b00d323153945cebb073e192a58dd
   - name: commit-none-and-done-gate
     state: pending
 ```
