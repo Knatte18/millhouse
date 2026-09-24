@@ -167,6 +167,14 @@ def _test_merge_parse_errors() -> None:
         raise AssertionError(f"expected KeybindingsParseError for {bad!r}")
 
 
+def _test_marker_inside_string_ignored() -> None:
+    text = '[\n  { "key": "ctrl+k", "command": "a.b", "when": "' + BLOCK_BEGIN + '" }\n]\n'
+    merged, _warnings = merge_bindings(text)
+    assert merged.count(BLOCK_BEGIN) == 2
+    assert merged.startswith('[\n  { "key": "ctrl+k", "command": "a.b", "when": "')
+    assert len(_mill_keys(merged)) == 7
+
+
 def _test_write_bindings() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         user_dir = Path(tmpdir) / "User"
@@ -210,6 +218,7 @@ TESTS = [
     _test_merge_conflicts,
     _test_merge_all_conflicting_removes_block,
     _test_merge_parse_errors,
+    _test_marker_inside_string_ignored,
     _test_write_bindings,
 ]
 

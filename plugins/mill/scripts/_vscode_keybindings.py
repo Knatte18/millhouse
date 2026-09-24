@@ -151,12 +151,32 @@ def _find_top_level_array_end(text: str) -> tuple[int, int]:
     raise KeybindingsParseError("could not find the closing bracket of the top-level array")
 
 
+def _find_comment_marker(text: str, marker: str, start: int = 0) -> int:
+    """Return the index of the first ``marker`` at or after ``start`` inside a comment, or -1."""
+    span_start = -1
+    span_chars: list[str] = []
+    for index, char, kind in _scan(text):
+        if kind == _COMMENT:
+            if span_start == -1:
+                span_start = index
+            span_chars.append(char)
+            if index != len(text) - 1:
+                continue
+        if span_start != -1:
+            found = "".join(span_chars).find(marker, max(0, start - span_start))
+            if found != -1:
+                return span_start + found
+            span_start = -1
+            span_chars = []
+    return -1
+
+
 def _find_block(text: str) -> tuple[int, int] | None:
     """Return the ``(start, end)`` span of the mill block: begin-line start to end-line end."""
-    begin = text.find(BLOCK_BEGIN)
+    begin = _find_comment_marker(text, BLOCK_BEGIN)
     if begin == -1:
         return None
-    end_marker = text.find(BLOCK_END, begin)
+    end_marker = _find_comment_marker(text, BLOCK_END, begin)
     if end_marker == -1:
         raise KeybindingsParseError(f"found {BLOCK_BEGIN} without a matching {BLOCK_END}")
     start = text.rfind("\n", 0, begin) + 1
