@@ -63,7 +63,7 @@ Why now: all three were filed on 2026-09-23 from live runs; #1145 nearly caused 
 
 ### commit-none-external-check-in-plan
 
-- Decision: mill-plan's card-authoring guidance, next to where Commit: none cards are discussed, and `templates/plan-batch.md`'s Commit: none convention paragraph each get one rule: a Commit: none card whose Requirements perform an external side effect must include, in those Requirements, the concrete state check that detects "already done" (the command and the expected state), so the implementer's generic rule has an exact check to run.
+- Decision: mill-plan's card-authoring guidance (a new `**Commit: none cards with external side effects.**` paragraph in Phase: Plan, placed per Technical context) and `templates/plan-batch.md`'s Commit: none convention paragraph each get one rule: a Commit: none card whose Requirements perform an external side effect must include, in those Requirements, the concrete state check that detects "already done" (the command and the expected state), so the implementer's generic rule has an exact check to run.
   Guidance only — no new `_plan_validate` check (external side effects are not mechanically detectable from card fields).
 - Rationale: the #1145 incident was manually fixed by exactly this — adding a `gh issue view` state comparison to the card's Requirements; making the planner write it up front turns the implementer rule from judgment into a concrete step.
 - Rejected: a validator check keyed on `gh`/`curl` substrings in Requirements (false positives/negatives, brittle).
@@ -89,7 +89,8 @@ Why now: all three were filed on 2026-09-23 from live runs; #1145 nearly caused 
 - Where `inferred: True` is emitted: `plugins/mill/scripts/_implementer_common.py` `finalize_from_output` — no-JSON commit-count recount paths and the `card_commit_messages` full-history fallback on a self-reported success (docstring ~line 1845-1850). Some `inferred: True` envelopes are `status: stuck` (dirty tree, scope violations); the step-6 rule applies only to `status: success`.
 - `plugins/mill/scripts/_status.py` `append_inferred_success_log` (~line 1388); docstring lines ~1400-1404 carry the stale "step 4(b) and step 6.5" caller reference.
 - `plugins/mill/templates/implementer-brief.md` `## Implementation discipline`: "Resume-after-incomplete" paragraph (~lines 59-66) including the "(re-)performed" sentence; Commit: none also appears at ~lines 143-144 and ~167 (count/commit_sha rules — unchanged).
-- `plugins/mill/skills/mill-plan/SKILL.md`: "Done-gate reminder" block (~lines 245-248); Commit: none appears in the Step 1.5 fix table row `commit-none-with-content` (~line 385). No dedicated Commit: none authoring paragraph exists in Phase: Plan — mill-plan picks the placement (next to the Done-gate/verify guidance area or where card authoring is described).
+- `plugins/mill/skills/mill-plan/SKILL.md`: "Done-gate reminder" block (~lines 245-248); Commit: none appears in the Step 1.5 fix table row `commit-none-with-content` (~line 385). No dedicated Commit: none authoring paragraph exists in Phase: Plan.
+  Place the new rule as its own bold-titled paragraph, `**Commit: none cards with external side effects.**`, in Phase: Plan's card-authoring area: immediately after the `**Renames and Moves.**` block (i.e. after its trailing "**Card numbering is global across batches**" line) and before `**Verify command shape.**`.
 - `plugins/mill/templates/plan-batch.md` ~line 63: the Commit: none convention paragraph.
 - No unit test pins the text of any of these SKILL/template passages (checked `unit_tests/` for the affected phrases).
 - mill-go-base Stuck escalation re-fire text (~lines 886, 917) stays unchanged — the brief rule covers it.
