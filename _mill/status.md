@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: status-parent-fields
 branch: hanf/status-parent-fields
 plan: _mill/plan
@@ -21,4 +21,5 @@ discussion-fix-r3  '2026-09-24T10:12:00Z'
 discussed  '2026-09-24T10:12:00Z'
 planning  '2026-09-24T10:17:14Z'
 plan-review-r1  '2026-09-24T10:23:22Z'
+planned  '2026-09-24T10:23:34Z'
 ```
