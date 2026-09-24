@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-plan-review-backend
 slug: remove-batch-review
 branch: hanf/remove-batch-review
 plan: _mill/plan
@@ -23,6 +23,7 @@ planning  '2026-09-24T07:51:16Z'
 plan-review-r1  '2026-09-24T07:56:19Z'
 planned  '2026-09-24T07:56:29Z'
 implementing  '2026-09-24T07:56:40Z'
+approved-plan-review-backend  '2026-09-24T08:02:47Z'
 ```
 
 ## Batches
@@ -30,9 +31,10 @@ implementing  '2026-09-24T07:56:40Z'
 ```yaml
 batches:
   - name: plan-review-backend
-    state: running
+    state: approved
     implementer_session: 94147e4d-dc13-496c-9952-5dfefd1d21d3
     start_sha: 1398eaf97eb296d792008b51623ae2e7a1994c91
+    commit_sha: 28340e9422db100d8383d5eb0b9ab1e0b22ae4e8
     verify_baseline_failures: []
   - name: code-review-backend
     state: pending
@@ -53,7 +55,6 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
-
 ## Inferred-success log
 
 ```text
