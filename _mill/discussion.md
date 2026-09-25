@@ -161,7 +161,9 @@ This task makes the autonomous skills ask that session for guidance before halti
 
 ### one-escalation-per-site
 
-- Decision: each converted site escalates at most once per failure site per run: once per batch in mill-go, once per review loop in mill-plan/mill-start/holistic review, once per run in mill-quick.
+- Decision: each converted site escalates at most once per failure site per run: once per batch in mill-go (`go-batch`), once per review loop in mill-plan/mill-start/holistic review (`plan-cap`, `start-cap`, `go-holistic-cap`), once per run in mill-quick (`quick-gate`), and once per gate per Phase: Handoff run for `go-handoff-gate` — the "unfixed nits" halt and the done-gate-after-fixer halt each get their own single escalation, so a run that clears unfixed nits via `retry` and later fails the done gate may ask once more for that gate.
+  Per-gate rather than shared because the two gates fail for unrelated reasons (review NITs vs. a failing test command), and guidance for one says nothing about the other;
+  the total is still bounded at two per handoff run.
   If the retried or re-reviewed step fails again, the site halts as today without asking again.
 - Rationale: bounds parent traffic and guarantees termination.
 - Rejected: unlimited escalations — an unhelpful parent could loop a task forever.
