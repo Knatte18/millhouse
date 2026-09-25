@@ -23,6 +23,7 @@ This task makes the autonomous skills ask that session for guidance before halti
 
 - `_status.read_parent_thread(status_path) -> str | None`.
 - A new helper module `plugins/mill/scripts/_ask_parent.py` and CLI `plugins/mill/scripts/millpy-ask-parent.py` with `prepare` and `consume` subcommands (see Decisions).
+- An optional `--parent-guidance <path>` flag on `millpy-fix.py` plus a `<PARENT_GUIDANCE>` token in its fixer brief template(s) (see `fixer-guidance-channel`).
 - A new on-demand skill `plugins/mill/skills/ask-parent/SKILL.md` holding the whole escalation procedure (send, wait, consume, branch).
 - New config key `pipeline.parent_escalation_timeout_minutes` in both the hub `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml`.
 - Wiring the escalation into the converted halt sites listed under the `converted-sites` Decision.
@@ -129,7 +130,7 @@ This task makes the autonomous skills ask that session for guidance before halti
   everything else is pure logic and unit-testable.
   Paths resolve through `_paths.py` per the repo's path invariants;
   stdout is ASCII only.
-- Rejected: inlining the procedure into each skill — six copies drift.
+- Rejected: inlining the procedure into each skill — one copy per converted site drifts.
 
 ### ask-parent-skill
 
@@ -153,7 +154,7 @@ This task makes the autonomous skills ask that session for guidance before halti
 - Decision: at each converted site, the escalation runs before the site's `set_blocked` / `set_batch_field(..., "blocked")` / commit, so `retry` and `approve` have nothing to undo.
   Where the current text records the block first and then jumps to a shared funnel (mill-go-base's per-stuck-type bullets all set batch state `blocked` then "go to *Blocked*"), restructure so the bullets compute `blocked_reason` and go to *Blocked*, and *Blocked* runs the escalation first, then records state.
   No `_status.append_phase` call happens during the wait: `append_phase` overwrites `phase:`, which entry gates read.
-  The `handoff.md` halts (`go-handoff-gate`) never call `set_blocked`;
+  The `handoff.md` halts (`go-handoff-nits`, `go-handoff-done-gate`) never call `set_blocked`;
   they call `_notify.notify(...)` then `millpy-builder-lock.py release`, then halt.
   There the escalation runs before that notify + release pair, and the builder lock stays held for the whole wait (the lock is per-worktree, so holding it blocks nothing else).
   The same ordering applies at *Blocked* in mill-go-base: escalate first, then notify, release the lock, and tell the user only when the halt proceeds.
@@ -173,12 +174,24 @@ This task makes the autonomous skills ask that session for guidance before halti
 
 ### one-escalation-per-site
 
-- Decision: each converted site escalates at most once per failure site per run: once per batch in mill-go (`go-batch`), once per review loop in mill-plan/mill-start/holistic review (`plan-cap`, `start-cap`, `go-holistic-cap`), once per run in mill-quick (`quick-gate`), and once per gate per Phase: Handoff run for `go-handoff-gate` — the "unfixed nits" halt and the done-gate-after-fixer halt each get their own single escalation, so a run that clears unfixed nits via `retry` and later fails the done gate may ask once more for that gate.
+- Decision: each converted site escalates at most once per failure site per run: once per batch in mill-go (`go-batch`), once per review loop in mill-plan/mill-start/holistic review (`plan-cap`, `start-cap`, `go-holistic-cap`), once per run in mill-quick (`quick-gate`), and once each per Phase: Handoff run for `go-handoff-nits` and `go-handoff-done-gate` — a run that clears unfixed nits via `retry` and later fails the done gate may ask once more for that gate.
   Per-gate rather than shared because the two gates fail for unrelated reasons (review NITs vs. a failing test command), and guidance for one says nothing about the other;
   the total is still bounded at two per handoff run.
   If the retried or re-reviewed step fails again, the site halts as today without asking again.
 - Rationale: bounds parent traffic and guarantees termination.
 - Rejected: unlimited escalations — an unhelpful parent could loop a task forever.
+
+### fixer-guidance-channel
+
+- Decision: add an optional `--parent-guidance <path>` flag to `plugins/mill/scripts/millpy-fix.py`, mirroring `--prior-blocking`: when the path is a non-empty file, its text renders into a new `<PARENT_GUIDANCE>` token in `plugins/mill/templates/fixer-holistic-brief.md` (and any other fixer brief template `millpy-fix.py` renders, so the token is never left unsubstituted);
+  absent or empty renders as `(none)`.
+  The template places it under a short heading telling the fixer this is operator-level direction from the parent session that overrides its own judgment where they conflict.
+  The orchestrator writes the file to `<briefs_dir>/parent-guidance-<scope>-r<H>.txt` (same directory and naming pattern as the prior-blocking digest), so it is committed with `_mill/briefs/` as the audit trail.
+- Rationale: `millpy-fix.py` accepts only `--review-file`, `--round`, `--nits-only`, `--prior-blocking` today, so a CLI-dispatched fixer has no free-text slot;
+  `--prior-blocking` is a fixed-format digest and must not be overloaded.
+  The `mill-done-gate-fixer` dispatch is an `Agent` call with a free-text brief, so it needs no CLI change.
+- Rejected: appending the guidance to the committed review file — mutates a reviewer-authored audit artifact.
+  Rejected: the orchestrator applying NIT fixes itself — the mill-go orchestrator never edits task code.
 
 ### converted-sites
 
@@ -188,8 +201,9 @@ This task makes the autonomous skills ask that session for guidance before halti
   | Site id | Location | Accepted actions | Effect of `retry` / `approve` |
   |---|---|---|---|
   | `go-batch` | `mill-go-base/SKILL.md` `### Blocked` (covers every `### Stuck escalation` branch: infrastructure after re-fire, transient, incomplete, verify/logic after self-resolve) | `retry`, `halt` | `retry`: apply the guidance (plan-file edits, a `## Prior failure` bullet quoting the guidance), commit with message `<VARIANT_LABEL>: parent-guided retry ({batch_name})` — no `append_phase` call (see `no-new-phase-strings`) — then re-fire the implementer for the batch under the same re-dispatch rules as the existing verify/logic self-resolve re-fire (fresh session; for `incomplete`, the `start_sha`-preserving resume path instead). mill-go-base has no `Commit: none` idempotency guard today, so a re-fire can repeat an uncommitted external action exactly as the self-resolve re-fire can; this task inherits that behaviour and adds no guard. |
-  | `go-holistic-cap` | `mill-go-base/holistic-review.md` round-cap exhausted with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: run the same terminal actions the `auto_approve_on_cap: true` branch runs, with commit-message suffix `(approved by parent)`. `retry`: one extra holistic round with the guidance passed to the fixer. |
-  | `go-handoff-gate` | `mill-go-base/handoff.md` done-gate still `blocked` after the one fixer dispatch, and the "unfixed nits" halt | `retry`, `halt` | `retry`: dispatch the fixer once more with the guidance, then re-run the gate. |
+  | `go-holistic-cap` | `mill-go-base/holistic-review.md` round-cap exhausted with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: run the same terminal actions the `auto_approve_on_cap: true` branch runs, with commit-message suffix `(approved by parent)`. `retry`: write the guidance to a parent-guidance file, re-dispatch the holistic fixer (`millpy-fix.py --scope holistic --review-file <last round's review> --round <H> ...`, the same args as step 4's fixer) with `--parent-guidance <path>` added (see `fixer-guidance-channel`), then run one extra holistic review round `H+1`. |
+  | `go-handoff-nits` | `mill-go-base/handoff.md` "unfixed nits" halt (after the self-resolve NIT-fix pass) | `retry`, `halt` | `retry`: write the guidance to a parent-guidance file and re-dispatch the same `millpy-fix.py --scope holistic ... --nits-only --prior-blocking <digest>` pass with `--parent-guidance <path>` added (see `fixer-guidance-channel`), then re-run `_nit_gate.compute_unfixed_nits`. |
+  | `go-handoff-done-gate` | `mill-go-base/handoff.md` done-gate still `result: blocked` after the one `mill-done-gate-fixer` dispatch | `retry`, `halt` | `retry`: dispatch `Agent(subagent_type: "mill-done-gate-fixer")` once more, with the guidance appended verbatim to its free-text brief under a `Parent guidance:` heading, then re-run the gate. Escalates only when `<git_root>/.claude/agents/mill-done-gate-fixer.md` exists; when it does not (handoff step 3's no-fixer branch), there is nothing to re-dispatch and the halt stays user-only. |
   | `plan-cap` | `mill-plan/SKILL.md` step 6 max-rounds escape (the `"max-rounds exhausted"` block) | `approve`, `retry`, `halt` | Reuse mill-plan's own in-session override procedures (Phase: Plan Review), treating the parent's reply as the live operator instruction they already accept. `approve`: run the "Live operator waiver of step 6" implicit-approve-at-cap path (direct-`Edit` `approved: true` in `plan/00-overview.md`, commit, push, Handoff), with the commit-message parenthetical reading `(parent waived remaining BLOCKINGs at round cap)` so the audit trail names who waived. It does not re-enter through the Entry step 4 `--approve` pre-check, whose `phase == "blocked"` / `"max-rounds exhausted"` conditions do not hold because the block is not yet recorded. `retry`: apply the guidance to the plan files first, then bind `operator_max_review_rounds = <current effective cap> + 1` per "Live operator-raised round-cap override" (its precedence over `max_review_rounds` / `local_max_review_rounds` and its `--max-rounds <operator_max_review_rounds>` threading through every prepare/finalize and Step 3.5 retry site apply unchanged) and continue the loop. |
   | `start-cap` | `mill-start/SKILL.md` `--auto`/`--orch` non-progress cap branch with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: the same terminal actions as the `auto_approve_on_cap: true` branch, commit-message suffix `(approved by parent)`. `retry`: one extra round with the guidance applied to `discussion.md` first, passing `--max-rounds <current round + 1>` with the same threading mill-start's own "Auto mode non-progress-extension round" uses (the extension round may already have been spent, so the cap is computed from the current round, not `max_review_rounds`). |
   | `quick-gate` | `mill-quick/SKILL.md` done-gate failure | `retry`, `halt` | `retry`: apply the guidance as a fix, commit, re-run the done gate once. |
@@ -257,6 +271,10 @@ This task makes the autonomous skills ask that session for guidance before halti
     malformed/missing yaml block -> `halt`;
     guidance extracted;
     file deleted after read.
+- `millpy-fix.py --parent-guidance` (TDD): non-empty file renders into the brief;
+  absent flag and empty file render `(none)`;
+  every template `millpy-fix.py` renders has the token substituted (no literal `<PARENT_GUIDANCE>` left in a rendered brief).
+  Follow the existing `--prior-blocking` tests' fixture shape.
 - Config: the new key exists in both `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml` (extend the existing hub/template sync test if one exists).
 - Skill wiring is prose;
   no automated test beyond any existing skill-text lint.
@@ -269,6 +287,6 @@ This task makes the autonomous skills ask that session for guidance before halti
 - **Q:** What timeout, and can it be disabled? **A:** [auto-pick] New `pipeline.parent_escalation_timeout_minutes`, default 60, `0` disables. **Why:** bounded autonomous runs; a switch for repos that want today's behaviour.
 - **Q:** What if `parent_thread` names a session that no longer exists? **A:** [auto-pick] Halt as today, with ` (parent_thread <name> unreachable)` appended to `blocked_reason`. **Why:** the `SendMessage` error is authoritative; the suffix tells the operator no one was asked.
 - **Q:** How is the reply structured? **A:** [auto-pick] Fenced yaml `action: retry|approve|halt` plus free-text guidance; anything malformed or not accepted by the site means `halt`. **Why:** mechanical branching with a safe default.
-- **Q:** Which halt sites convert? **A:** [auto-pick] The six in the `converted-sites` table; infrastructure/precondition halts stay user-only. **Why:** a parent can unblock judgment failures, not logouts or rate limits.
+- **Q:** Which halt sites convert? **A:** [auto-pick] The sites in the `converted-sites` table; infrastructure/precondition halts stay user-only. **Why:** a parent can unblock judgment failures, not logouts or rate limits.
 - **Q:** How many escalations per failure? **A:** [auto-pick] One per site per run. **Why:** guarantees termination and bounds parent traffic.
 - **Q:** Is a parent-side skill needed? **A:** [auto-pick] No; the message is self-describing. **Why:** YAGNI; the parent may be a human-driven session.
